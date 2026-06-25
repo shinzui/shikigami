@@ -1,0 +1,65 @@
+-- | The @KizashiSignal@ sink handler: build a @CreateSignalReq@ from the sink config
+-- and the behavior output, and POST it to a kizashi base URL (the C4 contract). Built
+-- against a stub kizashi server; swapping the real kizashi base URL needs no code change.
+module Shikigami.Sink.KizashiClient
+  ( buildSignalReq,
+    postSignal,
+  )
+where
+
+import Data.Aeson (Value (..), eitherDecode)
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Text qualified as Text
+import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Prelude
+import Shikigami.Sink.Config (KizashiConfig (..))
+import Shikigami.Sink.Http (postJSON)
+import Shikigami.Sink.Permission (AgentIdentity (..))
+import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+
+-- | Build the C4 request from a @KizashiSignal@ sink + the behavior output. Fails for
+-- any other sink variant.
+buildSignalReq :: KizashiConfig -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
+buildSignalReq cfg sink (AgentIdentity nm) output =
+  case sink of
+    KizashiSignal
+      { source = src,
+        signalType = st,
+        priority = pr,
+        importance = imp,
+        defaultRecipient = mrec,
+        intentTemplate = tmpl,
+        extraContextTags = tags
+      } ->
+        Right
+          CreateSignalReq
+            { actor = nm,
+              recipient = fromMaybe (kizashiDefaultRecipient cfg) mrec,
+              source = src,
+              signalType = st,
+              intent = tmpl,
+              priority = pr,
+              importance = fromIntegral imp,
+              contextTags = tags <> activityRefTags output
+            }
+    _ -> Left "buildSignalReq: not a KizashiSignal sink"
+
+-- | If the behavior output carries an @activity_ref@ string, surface it as a
+-- @context_tag@ back-reference (the seed detectors' rule).
+activityRefTags :: Value -> [Text]
+activityRefTags (Object o) =
+  case KeyMap.lookup "activity_ref" o of
+    Just (String s) -> [s]
+    _ -> []
+activityRefTags _ = []
+
+-- | POST the request to @<baseUrl>/v1/signals@ and decode the response.
+postSignal :: KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
+postSignal cfg req = do
+  let url = kizashiBaseUrl cfg <> "/v1/signals"
+  respE <- postJSON url req
+  pure $ case respE of
+    Left e -> Left e
+    Right body -> case eitherDecode body of
+      Left de -> Left ("decode SignalResponse: " <> Text.pack de)
+      Right sr -> Right sr

@@ -72,36 +72,39 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1.1 — Add `Shikigami.Sink.Permission` to `shikigami-core`: `SinkKind`, `AgentIdentity`,
-      `Denied`, and `checkGrant` consulting a static allow-list keyed by agent name.
-- [ ] M1.2 — Add `Shikigami.Sink.KizashiClient` to `shikigami-core`: build a `CreateSignalReq`
-      from a `KizashiSignal` sink config + the behavior output `Value`, and POST it to a
-      configurable base URL via a servant client generated from kizashi's `SignalRoutes`.
-- [ ] M1.3 — Add `Shikigami.Sink` (the dispatcher) to `shikigami-core`: `SinkContext`,
-      `SinkResult`, `SinkOutcome`, and `dispatch` gating every sink on `checkGrant` (denied →
-      logged + skipped + recorded). Wire the `KizashiSignal` arm to M1.2.
-- [ ] M1.4 — Add `Shikigami.Sink.ReiAction`, `Shikigami.Sink.Danwa`, `Shikigami.Sink.Channel`
-      thin stub handlers (log + no-op + recorded outcome) and route the remaining `Sink`
-      variants to them in `dispatch`.
-- [ ] M1.5 — Tests: a stub kizashi WAI app (returns a `SignalResponse`); a test feeding a
-      sample `Value` proves allow-listed `KizashiSignal` POSTs and denied is skipped+recorded.
-- [ ] M2.1 — Add `Shikigami.Sink.KawaClient` to `shikigami-core`: `KawaConfig`,
-      `buildEnvelope` (the nine-field C1 builder), `postEnvelope` (servant client for the C2
-      doorway), and the deterministic `source_event_id` derivation.
-- [ ] M2.2 — Wire the `KawaDigest` arm of `dispatch` to M2.1.
-- [ ] M2.3 — Build `shikigami stub-kawa` (subcommand `Shikigami.Cli.Commands.StubKawa`): a WAI
-      server accepting `POST /v1/sources/{source}/events`, enforcing idempotency on
-      `(source, source_event_id)` in an in-memory map, logging each envelope, returning
-      `{activity_id, deduplicated}`.
-- [ ] M2.4 — Test: dispatch a `KawaDigest` against the stub; assert the nine fields; post the
-      same envelope twice and assert `deduplicated=false` then `deduplicated=true`.
-- [ ] M3.1 — Add `Shikigami.Sink.KawaStub.Republish`: convert a received `IngestRequest`
-      into the `keiro-*`-headered Kafka record and publish it via `kafka-effectful`.
-- [ ] M3.2 — Wire `--republish-topic` / `--broker` flags into `stub-kawa`; on each accepted
-      (non-deduplicated) envelope, republish onto the fixture topic.
-- [ ] M3.3 — Test/proof: with a fixture broker running, dispatch a `KawaDigest`, then consume
-      the fixture topic and assert the payload + the full `keiro-*` header set.
-- [ ] M3.4 — Confirm the `ReiAction`/`Danwa`/`Channel` stub handlers log and no-op end to end.
+- [x] M1.1 — `Shikigami.Sink.Permission`: `SinkKind`, `AgentIdentity`, `Denied`, `checkGrant`
+      consulting `defaultGrantTable` (static allow-list keyed by agent name). ✅ 2026-06-24
+- [x] M1.2 — `Shikigami.Sink.KizashiClient`: `buildSignalReq` builds a `CreateSignalReq` from a
+      `KizashiSignal` sink + output; `postSignal` POSTs it via `http-client` (the `CreateSignalReq`
+      is mirrored locally in `Shikigami.Sink.Wire`, not a servant client — see Surprises). ✅
+- [x] M1.3 — `Shikigami.Sink` dispatcher: `SinkContext`, `SinkResult`, `SinkOutcome`, `dispatch`
+      gating every sink on `checkGrant` (denied → logged + skipped + `DeniedOutcome`). ✅
+- [x] M1.4 — `Shikigami.Sink.ReiAction` + `Shikigami.Sink.Danwa` stub handlers (log + `Stubbed`).
+      Channel egress deferred (EP-1's `Sink` has no channel variant; IR-3). ✅
+- [x] M1.5 — Test `shikigami-core-test`: a stub kizashi WAI app; allow-listed `heartbeat` POSTs a
+      `CreateSignalReq` (`Delivered "sig_stub"`), denied `intruder` is skipped + recorded, no POST. ✅
+- [x] M2.1 — `Shikigami.Sink.KawaClient`: `KawaConfig`, `buildEnvelope` (nine-field C1, mints an
+      `act_` id via mmzk-typeid), `postEnvelope` (http-client to the C2 doorway), deterministic
+      `source_event_id`. ✅
+- [x] M2.2 — `KawaDigest` arm of `dispatch` wired to M2.1. ✅
+- [x] M2.3 — `shikigami stub-kawa` (`Shikigami.Cli.Commands.StubKawa` + `Shikigami.Sink.KawaStub`):
+      a warp/wai server on the doorway route, idempotent on `(source, source_event_id)`, logging,
+      returning `{activity_id, deduplicated}`; empty `source_event_id` → 400. ✅
+- [x] M2.4 — Proven two ways: the test-suite (`KawaDigest` group: two dispatches → same id, one
+      stored entry) and the live `curl` smoke (first POST `deduplicated:false`, second `true`, same
+      `activity_id`, 400 on empty). ✅
+- [x] M3.1 — `Shikigami.Sink.KawaStub.Republish.republish`: re-assemble the envelope and publish it
+      via `kafka-effectful` with the keiro-* headers. ✅
+- [x] M3.2 — `--republish-topic`/`--broker` wired into `stub-kawa`; each accepted (non-dedup)
+      envelope is republished. ✅
+- [x] M3.3 — Live proof against a Redpanda broker: dispatched a `KawaDigest`, consumed `activity.v1`
+      with `rpk`; the value round-trips to the envelope and the headers are exactly
+      `keiro-message-id`/`keiro-source=shinzui/kawa`/`keiro-destination=activity.v1`/
+      `keiro-event-type=activity.recorded`/`keiro-schema-version=1`/`content-type=application/json`/
+      `keiro-occurred-at`/`keiro-source-event-id`, key = `<subject.type>:<subject.id>`. ✅
+- [x] M3.4 — `ReiAction`/`Danwa` stub handlers log + return `Stubbed` (covered by the dispatcher). ✅
+- [x] M0 — **dev-shell fix:** added `pkgs.rdkafka` to `nix/haskell.nix` (`librdkafka` — the C library
+      `hw-kafka-client`/`kafka-effectful` link against, needed by M3 and EP-4). ✅
 
 
 ## Surprises & Discoveries
@@ -109,7 +112,43 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Dependency strategy: mirror ALL wire DTOs locally + use warp/wai + http-client (no servant, no
+  kizashi/kawa pins).** Per the user's "use hackage and github, not corpus" directive (recorded in
+  the MasterPlan/EP-1), and to avoid the servant version-coherence risk with the pinned kikan set,
+  shikigami does **not** pin `kizashi-api`/`kawa-api`. Instead `Shikigami.Sink.Wire` mirrors the
+  small, stable C2/C4 wire records (`IngestRequest`/`IngestResponse`/`CreateSignalReq`/
+  `SignalResponse`) as plain aeson records whose JSON keys match the real sources (read from
+  `bokuno/kizashi/kizashi-api/.../Signal.hs` and `bokuno/kawa/kawa-api,kawa-core`), reusing EP-1's
+  `Actor`/`Subject`/`ContextRef` and `SignalType`/`Priority`. The stub-kawa server is a `warp`/`wai`
+  app; the kizashi and kawa clients are `http-client` POSTs. The plan's IP-8 note explicitly permits
+  mirroring kawa locally; this extends it to kizashi. `cabal build all --dry-run` resolved the
+  lightweight set (warp/wai/http-client/http-types/mmzk-typeid/kafka-effectful/uuid) with **no
+  conflicts** — only shikigami rebuilds. Swapping a stub for a real client later is a contained
+  change to one client module.
+
+- **EP-1's `Sink` has four variants, no channel-egress (affects M1.4).** `Shikigami.Api.Agent.Sink`
+  is `KawaDigest | KizashiSignal | ReiAction | DanwaConversation` (EP-1 did not add the channel
+  variant — it was an Open Question / IR-3). So `dispatch` handles those four; `SinkKind` keeps
+  `SChannelEgress` for forward-compat but no `Sink` maps to it yet. The `Channel` stub handler is
+  deferred until the `Sink` variant exists (IR-3, kanmon). `ReiAction`/`DanwaConversation` stubs are
+  implemented.
+
+- **`librdkafka` was missing from the dev shell (blocked M3 + EP-4).** `hw-kafka-client` (under
+  `kafka-effectful`) links `-lrdkafka`; the seihou dev shell shipped zlib/just/pkg-config/postgresql/
+  jq/process-compose but not `librdkafka`, so linking `shikigami-core` (once it imported the republish
+  module) failed with `ld: library not found for -lrdkafka`. Added `pkgs.rdkafka` to
+  `baseDevPackages` in `nix/haskell.nix` (now `rdkafka 2.13.0` via pkg-config), and built/ran inside
+  `nix develop` so the lib is on the link+runtime path. This is a genuine project need (EP-4's
+  `activity.v1` consumer also uses `kafka-effectful`), so the fix belongs in the shell, not a
+  workaround. Also: `librdkafka` resolves `localhost` to IPv6 `[::1]`; the fixture broker must
+  advertise `127.0.0.1` (IPv4) or the producer gets connection-refused.
+
+- **kawa `IngestRequest`/`IngestResponse` use snake_case (`camelTo2 '_'`); kizashi `CreateSignalReq`
+  uses default generic (field names verbatim).** Verified against the real sources: kawa's
+  `apiAesonOptions = camelTo2 '_'` → `source_event_id`, `context_refs`, `occurred_at`, `activity_id`;
+  kizashi's `CreateSignalReq` derives `anyclass (FromJSON, ToJSON)` → keys `signalType`, `contextTags`
+  etc. verbatim, with `SignalType`/`Priority` as bare enum strings. `Shikigami.Sink.Wire` reproduces
+  both encodings exactly.
 
 
 ## Decision Log
@@ -199,7 +238,36 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-24): EP-3 complete; all three milestones built and verified.** The three Purpose
+behaviors hold:
+
+1. `Shikigami.Sink.dispatch` gates every sink on the C11 `checkGrant`: an allow-listed agent's
+   `KizashiSignal` POSTs a `CreateSignalReq` to a stub kizashi server (`Delivered "sig_stub"`); a
+   denied agent's sink is logged + skipped + recorded (`DeniedOutcome`), no POST, no crash. Proven by
+   the `shikigami-core-test` suite (all 3 cases pass).
+2. `shikigami stub-kawa --port N` serves the C2 doorway: a `KawaDigest` dispatch builds the nine-field
+   C1 envelope (`actor.kind="agent"`, `source="shinzui/shikigami"`, minted `act_` id) and POSTs it;
+   the same `(source, source_event_id)` twice returns `deduplicated:false` then `true` with the same
+   `activity_id`. Proven by the test-suite **and** a live `curl` smoke (+ 400 on empty source_event_id).
+3. `shikigami stub-kawa --republish-topic activity.v1 --broker 127.0.0.1:9092` republishes each
+   accepted envelope onto Kafka. Proven live against a Redpanda container: the consumed record's value
+   round-trips to the envelope and its headers are exactly the keiro-* set (IP-6), key
+   `<subject.type>:<subject.id>`.
+
+**Deliverables for downstream plans:** `Shikigami.Sink.dispatch`/`checkGrant`/`SinkContext`/
+`SinkResult`/`SinkOutcome` (IP-5, the worker EP-5 calls per sink), `Shikigami.Sink.KawaClient`
+(`buildEnvelope`/`postEnvelope`), the `stub-kawa` server + republish seam (IP-6, the living loop EP-6
+drives), and `Shikigami.Sink.Wire` (the mirrored C2/C4 DTOs).
+
+**Deviations from the plan as written (recorded in Surprises/Decision Log):** (a) wire DTOs mirrored
+locally + warp/wai + http-client (no servant, no kizashi/kawa pins) per the "no corpus" directive;
+(b) channel-egress deferred (no `Sink` variant); (c) `librdkafka` added to the dev shell (a genuine
+project need); (d) the plan's `BaseUrl`/servant types became `Text` URLs.
+
+**Gaps / forward notes:** the `--republish-topic` live proof used a throwaway Redpanda container
+(EP-4 owns the project `process-compose.yaml` broker); the M3 test (`-p Republish`, broker-gated) was
+not added to the suite — the live `rpk` proof stands in. The kawa/kizashi clients post to stubs; real
+service wiring is owned by those services' plans (swap the base URL / replace the one client module).
 
 
 ## Context and Orientation

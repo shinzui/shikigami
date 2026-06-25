@@ -29,6 +29,9 @@
         pkgs.postgresql
         pkgs.jq
         pkgs.process-compose
+        # librdkafka: the C library hw-kafka-client / kafka-effectful link against
+        # (EP-3 --republish-topic and EP-4's activity.v1 stream consumer).
+        pkgs.rdkafka
       ];
 
       shellHook = ''
