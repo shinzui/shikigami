@@ -18,7 +18,7 @@ data Command
   | StubKawa Int (Maybe String) (Maybe String)
   | EnqueueRun String (Maybe String)
   | PublishFixture FilePath Text Text
-  | ConsumeStream FilePath Text Text Text
+  | ConsumeStream FilePath Text Text Text Bool
   | Worker FilePath Text Text
 
 main :: IO ()
@@ -90,6 +90,7 @@ parser =
                   <*> strOption (long "broker" <> metavar "HOST:PORT" <> value "127.0.0.1:9092" <> help "Kafka broker")
                   <*> strOption (long "topic" <> metavar "TOPIC" <> value "activity.v1" <> help "Topic")
                   <*> strOption (long "group" <> metavar "GROUP" <> value "shikigami-stream" <> help "Consumer group id")
+                  <*> switch (long "include-agent-actors" <> help "Match agent-produced activities too (meta-detectors; off by default = feedback guard)")
               )
               (progDesc "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs")
           )
@@ -112,5 +113,5 @@ run (AgentRun agentArg fromActivity) = runAgentRun agentArg fromActivity
 run (StubKawa port topic broker) = runStubKawaCmd port topic broker
 run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
-run (ConsumeStream agentsDir broker topic grp) = runConsumeStream agentsDir broker topic grp
+run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
 run (Worker agentsDir kawaUrl kizashiUrl) = runWorkerCmd agentsDir kawaUrl kizashiUrl

@@ -42,7 +42,7 @@ import Kioku.App (AppEnv, runAppIO)
 import Shikigami.Api.Activity (ActivityEnvelope)
 import Shikigami.Api.Agent (AgentDecl (..), StreamMatch, Trigger (..))
 import Shikigami.Prelude
-import Shikigami.Trigger.Stream (matchesStream)
+import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 import System.IO (hPutStrLn, stderr)
 
 -- | Where to consume the activity stream.
@@ -63,8 +63,8 @@ data StreamHit = StreamHit
 -- | Subscribe to the activity stream and report each declared stream agent that
 -- matches an incoming envelope. Decodes via the keiro inbox; a re-delivery is logged
 -- and not re-fired. Runs forever.
-subscribeActivityStream :: AppEnv -> StreamConfig -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream appEnv cfg agents onHit = do
+subscribeActivityStream :: AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream appEnv cfg include agents onHit = do
   let props =
         brokersList [BrokerAddress (streamBroker cfg)]
           <> groupId (ConsumerGroupId (streamGroupId cfg))
@@ -81,18 +81,19 @@ subscribeActivityStream appEnv cfg agents onHit = do
       case mr of
         Nothing -> loop
         Just record -> do
-          liftIO (processRecord appEnv agents onHit record)
+          liftIO (processRecord appEnv include agents onHit record)
           commitOffsetMessage OffsetCommit record
           loop
 
 -- | Decode one record through the keiro inbox and fire the matching agents.
 processRecord ::
   AppEnv ->
+  IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
   IO ()
-processRecord appEnv agents onHit record = do
+processRecord appEnv include agents onHit record = do
   now <- getCurrentTime
   let TopicName topicT = crTopic record
       PartitionId partI = crPartition record
@@ -112,7 +113,7 @@ processRecord appEnv agents onHit record = do
     Right (event, kref) -> do
       res <-
         runAppIO appEnv $
-          runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref) (inboxHandler agents)
+          runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref) (inboxHandler include agents)
       case res of
         Right (Right (InboxProcessed hits)) -> mapM_ onHit hits
         Right (Right InboxDuplicate) -> hPutStrLn stderr "[stream] deduped (InboxDuplicate)"
@@ -122,8 +123,8 @@ processRecord appEnv agents onHit record = do
 
 -- | The inbox handler (runs in the inbox DB transaction): decode the envelope and
 -- collect the matching stream agents. Pure work wrapped in @pure@.
-inboxHandler :: [AgentDecl] -> IntegrationEvent -> Tx.Transaction [StreamHit]
-inboxHandler agents event =
+inboxHandler :: IncludeAgentActors -> [AgentDecl] -> IntegrationEvent -> Tx.Transaction [StreamHit]
+inboxHandler include agents event =
   case decodeJsonIntegrationEvent event of
     Left _ -> pure []
     Right env ->
@@ -131,7 +132,7 @@ inboxHandler agents event =
         [ StreamHit (name a) env
         | a <- agents,
           Just m <- [streamMatchOf a],
-          matchesStream m env
+          matchesStreamWith include m env
         ]
 
 -- | The 'StreamMatch' of an agent, if its trigger is a stream trigger.

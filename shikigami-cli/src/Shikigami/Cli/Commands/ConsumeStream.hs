@@ -12,6 +12,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Trigger.Consumer (StreamConfig (..), StreamHit (..), subscribeActivityStream)
 import Shikigami.Trigger.Enqueue (enqueueRunJob, runJobFromEnvelope)
+import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import System.Directory (listDirectory)
 import System.Environment (getEnv)
 import System.FilePath ((</>))
@@ -21,9 +22,10 @@ import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 -- activity.v1 stream consumer; for each declared stream agent that matches an incoming
 -- envelope, log the match and enqueue a run job (the stream→queue path). EP-5 folds
 -- this into the full @worker@.
-runConsumeStream :: FilePath -> Text -> Text -> Text -> IO ()
-runConsumeStream agentsDir broker topic grp = do
+runConsumeStream :: FilePath -> Text -> Text -> Text -> Bool -> IO ()
+runConsumeStream agentsDir broker topic grp includeAgentActors = do
   hSetBuffering stdout LineBuffering
+  let include = if includeAgentActors then IncludeAgentActors else ExcludeAgentActors
   agents <- loadAgents agentsDir
   putStrLn
     ( "[stream] loaded "
@@ -47,7 +49,7 @@ runConsumeStream agentsDir broker topic grp = do
                 Right mid -> putStrLn ("[stream]   enqueued run job " <> show mid)
                 Left e -> putStrLn ("[stream]   enqueue failed: " <> show e)
             Nothing -> pure ()
-    subscribeActivityStream appEnv cfg agents onHit
+    subscribeActivityStream appEnv cfg include agents onHit
 
 -- | Load every @*.dhall@ manifest in a directory (skipping ones that fail to parse).
 loadAgents :: FilePath -> IO [AgentDecl]
