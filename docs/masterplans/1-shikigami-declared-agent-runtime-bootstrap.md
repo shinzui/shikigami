@@ -143,7 +143,7 @@ consumes it (see Decision Log and Integration Point IP-3).
 |---|-------|------|-----------|-----------|--------|
 | 1 | Scaffold, Agent Schema, Loader, and Validate CLI | docs/plans/1-scaffold-agent-schema-loader-and-validate-cli.md | None | None | Complete |
 | 2 | Behavior Runner and kioku Session and Memory Integration | docs/plans/2-behavior-runner-and-kioku-session-and-memory-integration.md | EP-1 | None | Complete |
-| 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Not Started |
+| 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Complete |
 | 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | Not Started |
 | 5 | The Supervised Worker and Run Orchestration | docs/plans/5-the-supervised-worker-and-run-orchestration.md | EP-2, EP-3, EP-4 | None | Not Started |
 | 6 | End-to-End Living-Loop Proof and Detector Conformance | docs/plans/6-end-to-end-living-loop-proof-and-detector-conformance.md | EP-5 | None | Not Started |
@@ -318,8 +318,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: `schema/Agent.dhall` (C5) + `shikigami-api` wire types + `Shikigami.Agent.Loader` exist; `shikigami validate <file>` parses a manifest or prints a typed error
 - [x] EP-2: `Shikigami.Behavior.Run` dispatches both arms (handan `noop-summary` stub; baikai skill via stub provider)
 - [x] EP-2: a run opens a kioku session, recalls the agent's prior memory, records the output as memory, and completes the session (replacing `agent_runs`); memory persists across runs
-- [ ] EP-3: `Shikigami.Sink.dispatch` implements KawaDigest + KizashiSignal (against stubs), stubs ReiAction/Danwa/ChannelEgress, gated by `checkGrant`; denied sink is skipped + recorded
-- [ ] EP-3: `shikigami stub-kawa` accepts the C2 doorway, enforces idempotency, and `--republish-topic` re-publishes onto fixture `activity.v1`
+- [x] EP-3: `Shikigami.Sink.dispatch` implements KawaDigest + KizashiSignal (against stubs), stubs ReiAction/Danwa, gated by `checkGrant`; denied sink is skipped + recorded
+- [x] EP-3: `shikigami stub-kawa` accepts the C2 doorway, enforces idempotency, and `--republish-topic` re-publishes onto fixture `activity.v1` (proven live against Redpanda)
 - [ ] EP-4: `isDue` (cron) + `matchesStream` (AND of predicates, feedback guard) unit-tested; `activity.v1` consumer via kafka-effectful + keiro inbox dedupe decodes a fixture envelope
 - [ ] EP-4: addressed-event inbox + `publish-fixture` CLI + `process-compose.yaml` Redpanda broker; a fired trigger enqueues a run job (IP-7)
 - [ ] EP-5: shibuya `QueueProcessor` worker drains a run job, calls `runBehavior`, dispatches sinks, records the kioku session; `AckRetry`/`AckDeadLetter` on failure
@@ -367,6 +367,13 @@ interactions between child plans. Provide concise evidence.
   `publish-fixture` producer + `activity.v1` consumer (EP-4) derive the required `keiro-*` headers
   from the same keiro source of truth, so the producer/consumer sides agree by construction (IP-6).
   Confirmed during cross-plan review.
+
+- **`librdkafka` added to the dev shell (affects EP-3, EP-4).** `hw-kafka-client` (under
+  `kafka-effectful`) links `-lrdkafka`, which the seihou dev shell did not provide — linking failed
+  with `ld: library not found for -lrdkafka`. EP-3 added `pkgs.rdkafka` to `nix/haskell.nix`
+  `baseDevPackages`; all kafka-touching builds/runs use `nix develop` so the lib is on the link+runtime
+  path. EP-4's `activity.v1` consumer relies on the same fix. Note: `librdkafka` resolves `localhost`
+  → IPv6 `[::1]`; fixture brokers must advertise `127.0.0.1`.
 
 - **Dependencies are pinned by GitHub commit + Hackage, not local-path/corpus (affects ALL plans;
   IP-8 superseded).** During EP-1 the user directed "use hackage and github for dependencies and not
