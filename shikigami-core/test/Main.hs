@@ -7,10 +7,12 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (hContentType, status200, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..))
+import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Sink
   ( AgentIdentity (..),
     KawaConfig (..),
@@ -22,11 +24,80 @@ import Shikigami.Sink
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+import Shikigami.Trigger.Schedule (isDue, parseCron)
+import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
 main :: IO ()
-main = defaultMain (testGroup "Sink" [kizashiTests, kawaTests])
+main =
+  defaultMain
+    ( testGroup
+        "shikigami"
+        [ testGroup "Sink" [kizashiTests, kawaTests],
+          testGroup "Trigger" [scheduleTests, streamTests]
+        ]
+    )
+
+-- ── Trigger.Schedule ────────────────────────────────────────────────────────
+
+atHour :: Int -> UTCTime
+atHour h = UTCTime (fromGregorian 2026 6 20) (secondsToDiffTime (fromIntegral h * 3600))
+
+scheduleTests :: TestTree
+scheduleTests =
+  testGroup
+    "Schedule"
+    [ testCase "every-minute cron is always due" $
+        case parseCron "* * * * *" of
+          Right c -> assertBool "due at any time" (isDue c (atHour 3))
+          Left e -> assertBool ("parse failed: " <> show e) False,
+      testCase "0 9 * * * is due at 09:00, not at 10:00" $
+        case parseCron "0 9 * * *" of
+          Right c -> do
+            assertBool "due at 09:00" (isDue c (atHour 9))
+            assertBool "not due at 10:00" (not (isDue c (atHour 10)))
+          Left e -> assertBool ("parse failed: " <> show e) False,
+      testCase "malformed cron fails to parse" $
+        case parseCron "not a cron" of
+          Left _ -> pure ()
+          Right _ -> assertBool "expected parse failure" False
+    ]
+
+-- ── Trigger.Stream ──────────────────────────────────────────────────────────
+
+envelopeWith :: Text -> Text -> Text -> Text -> ActivityEnvelope
+envelopeWith actorKind verbV sourceV subjType =
+  ActivityEnvelope
+    { activityId = "act_seed",
+      occurredAt = "2026-06-20T07:00:00Z",
+      source = sourceV,
+      actor = Actor {kind = actorKind, id = "someone", session = Nothing},
+      subject = Subject {subjectType = subjType, subjectId = "i-1"},
+      verb = verbV,
+      payload = object [],
+      contextRefs = [],
+      idempotencyKey = "act_seed"
+    }
+
+matchAll :: StreamMatch
+matchAll = StreamMatch {verb = Just "intention.declared", source = Nothing, subjectType = Just "intention", verbs = []}
+
+streamTests :: TestTree
+streamTests =
+  testGroup
+    "Stream"
+    [ testCase "matches on verb + subjectType (human actor)" $
+        assertBool "should match" (matchesStream matchAll (envelopeWith "human" "intention.declared" "shinzui/rei" "intention")),
+      testCase "absent predicate is ignored (source = Nothing)" $
+        assertBool "should match regardless of source" (matchesStream matchAll (envelopeWith "human" "intention.declared" "any/source" "intention")),
+      testCase "non-match on differing verb" $
+        assertBool "should not match" (not (matchesStream matchAll (envelopeWith "human" "ticket.received" "shinzui/rei" "intention"))),
+      testCase "feedback guard: actor.kind=agent excluded by default" $
+        assertBool "agent actor excluded" (not (matchesStream matchAll (envelopeWith "agent" "intention.declared" "shinzui/rei" "intention"))),
+      testCase "opt-in includes agent actors" $
+        assertBool "agent actor included with opt-in" (matchesStreamWith IncludeAgentActors matchAll (envelopeWith "agent" "intention.declared" "shinzui/rei" "intention"))
+    ]
 
 -- | A stub kizashi server: records each CreateSignalReq and returns a fixed response.
 stubKizashiApp :: IORef [CreateSignalReq] -> Application

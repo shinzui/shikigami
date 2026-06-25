@@ -44,6 +44,8 @@ library
     Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
     Shikigami.Sink.Wire
+    Shikigami.Trigger.Schedule
+    Shikigami.Trigger.Stream
 
   build-depends:
     , aeson            >=2.2
@@ -51,6 +53,7 @@ library
     , base             >=4.21 && <5
     , bytestring
     , containers       >=0.6
+    , cron
     , dhall            >=1.42
     , directory        >=1.3
     , effectful
@@ -89,5 +92,6 @@ test-suite shikigami-core-test
     , tasty
     , tasty-hunit
     , text
+    , time
     , wai
     , warp

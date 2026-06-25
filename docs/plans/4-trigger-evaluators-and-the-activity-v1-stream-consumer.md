@@ -57,13 +57,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the `cron` Hackage dependency and `Shikigami.Trigger.Schedule` with
-      `isDue :: CronSchedule -> UTCTime -> Bool` (real five-field cron strings).
-- [ ] M1: add `Shikigami.Trigger.Stream.matchesStream :: StreamMatch -> ActivityEnvelope -> Bool`
-      (AND of present predicates + the `actor.kind="agent"` feedback guard).
-- [ ] M1: tasty/hedgehog unit tests in `shikigami-core/test` covering cron due/not-due and the
-      matcher cases (verb/source/subjectType match; absent predicate ignored; agent excluded; opt-in
-      override).
+- [x] M1: added the `cron` Hackage dependency (cron-0.7.2) and `Shikigami.Trigger.Schedule` with
+      `parseCron`/`isDue :: CronSchedule -> UTCTime -> Bool` (real five-field cron strings). ✅ 2026-06-24
+- [x] M1: added `Shikigami.Trigger.Stream.matchesStream :: StreamMatch -> ActivityEnvelope -> Bool`
+      (AND of present predicates + multi-verb list + the `actor.kind="agent"` feedback guard), plus
+      `matchesStreamWith`/`IncludeAgentActors`. ✅
+- [x] M1: tasty unit tests in `shikigami-core/test` — 8 cases (cron every-minute/0 9 * * * due+not-due/
+      malformed; stream verb+subject match, absent-predicate ignored, non-match, agent excluded, opt-in
+      include) all pass. ✅
 - [ ] M2: add `process-compose.yaml` Redpanda broker process and a `just kafka-topic` helper that
       creates the `activity.v1` topic.
 - [ ] M2: add the `Shikigami.Trigger.Stream.subscribeActivityStream` consumer (kafka-effectful direct)
