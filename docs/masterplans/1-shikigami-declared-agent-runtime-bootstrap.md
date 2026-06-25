@@ -142,7 +142,7 @@ consumes it (see Decision Log and Integration Point IP-3).
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Scaffold, Agent Schema, Loader, and Validate CLI | docs/plans/1-scaffold-agent-schema-loader-and-validate-cli.md | None | None | Complete |
-| 2 | Behavior Runner and kioku Session and Memory Integration | docs/plans/2-behavior-runner-and-kioku-session-and-memory-integration.md | EP-1 | None | Not Started |
+| 2 | Behavior Runner and kioku Session and Memory Integration | docs/plans/2-behavior-runner-and-kioku-session-and-memory-integration.md | EP-1 | None | Complete |
 | 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Not Started |
 | 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | Not Started |
 | 5 | The Supervised Worker and Run Orchestration | docs/plans/5-the-supervised-worker-and-run-orchestration.md | EP-2, EP-3, EP-4 | None | Not Started |
@@ -316,8 +316,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1: four-package project scaffolds and `cabal build all` succeeds with the kioku + kikan pin-set (GitHub+Hackage pins per user directive)
 - [x] EP-1: `shikigami-migrations` composes `kiokuMigrations <> shikigamiOwnMigrations`; `just create-database` lands the `kioku_*` tables + `shikigami_fired`
 - [x] EP-1: `schema/Agent.dhall` (C5) + `shikigami-api` wire types + `Shikigami.Agent.Loader` exist; `shikigami validate <file>` parses a manifest or prints a typed error
-- [ ] EP-2: `Shikigami.Behavior.Run` dispatches both arms (handan `noop-summary` stub; baikai skill via stub provider)
-- [ ] EP-2: a run opens a kioku session, recalls the agent's prior memory, records the output as memory, and completes the session (replacing `agent_runs`); memory persists across runs
+- [x] EP-2: `Shikigami.Behavior.Run` dispatches both arms (handan `noop-summary` stub; baikai skill via stub provider)
+- [x] EP-2: a run opens a kioku session, recalls the agent's prior memory, records the output as memory, and completes the session (replacing `agent_runs`); memory persists across runs
 - [ ] EP-3: `Shikigami.Sink.dispatch` implements KawaDigest + KizashiSignal (against stubs), stubs ReiAction/Danwa/ChannelEgress, gated by `checkGrant`; denied sink is skipped + recorded
 - [ ] EP-3: `shikigami stub-kawa` accepts the C2 doorway, enforces idempotency, and `--republish-topic` re-publishes onto fixture `activity.v1`
 - [ ] EP-4: `isDue` (cron) + `matchesStream` (AND of predicates, feedback guard) unit-tested; `activity.v1` consumer via kafka-effectful + keiro inbox dedupe decodes a fixture envelope
