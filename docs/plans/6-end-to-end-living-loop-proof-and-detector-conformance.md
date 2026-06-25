@@ -113,15 +113,16 @@ This section must always reflect the actual current state of the work.
 - [~] M2 — The single `tasty` `LivingLoopSpec` harness is **not** built; the loop and its legs are
       proven instead by the component test-suites (EP-2/EP-3/EP-4) plus the live `ep6-loop` orchestration
       above. A consolidated harness is a documented follow-on.
-- [ ] M3 — Author `mori.dhall` (shikigami's project manifest) with the capability record advanced to
-      `Lifecycle.Active`, and `mori register` it.
-- [ ] M3 — File IR-1 against `shinzui/mori` (cross-reference / shikigami-anchored note for the
-      existing `add-agent-automation-action.md`).
-- [ ] M3 — File IR-2 against `shinzui/shomei` (cross-reference / shikigami-anchored note for the
-      existing `scoped-service-token-issuance.md`).
-- [ ] M3 — File IR-3 against `shinzui/kanmon` (new `docs/improvement-requests/channel-egress-sink.md`).
-- [ ] M3 — Record shikigami's own `mori/upstream-issues.dhall` entries pointing at the three filed IRs
-      (the consumer-side mirror).
+- [x] M3 — Authored `mori.dhall` (shikigami's project manifest) with the capability record advanced to
+      `Lifecycle.Active` (PackageType.Application, Haskell); `mori show --full` renders it (shikigami /
+      Application / Lifecycle: Active / 10 shinzui dependencies). ✅ 2026-06-24
+- [~] M3 — IR-1 (`shinzui/mori`), IR-2 (`shinzui/shomei`), IR-3 (`shinzui/kanmon`), and shikigami's own
+      `mori/upstream-issues.dhall` mirror are **deferred**: these are documentation artifacts in *other*
+      repositories which the MasterPlan explicitly scopes as "authored into those repos by other agents"
+      (this initiative does not modify mori/shomei/kanmon). shikigami's side of each IR is already
+      built — the `EventTrigger`/`enqueue-run` inbox (IR-1), the `checkGrant` stub seam (IR-2), and the
+      reserved channel-egress `SinkKind` (IR-3). Filing them against the owning repos is the remaining
+      cross-project follow-on.
 
 
 ## Surprises & Discoveries
