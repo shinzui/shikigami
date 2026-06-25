@@ -1,0 +1,38 @@
+cabal-version: 3.0
+name:          shikigami-api
+version:       0.1.0.0
+synopsis:      Shikigami declared-agent wire types (client-safe)
+build-type:    Simple
+
+common common
+  default-language:   GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    OverloadedLabels
+    OverloadedStrings
+
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+library
+  import:          common
+  hs-source-dirs:  src
+  exposed-modules: Shikigami.Prelude
+
+  -- added in M3:
+  -- Shikigami.Api.Agent
+  -- Shikigami.Api.Activity
+  build-depends:
+    , aeson         >=2.2
+    , base          >=4.21 && <5
+    , containers    >=0.6
+    , dhall         >=1.42
+    , generic-lens  >=2.2
+    , lens          >=5.2
+    , text          >=2.1
+    , time          >=1.12
+    , uuid          >=1.3
