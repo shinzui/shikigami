@@ -144,7 +144,7 @@ consumes it (see Decision Log and Integration Point IP-3).
 | 1 | Scaffold, Agent Schema, Loader, and Validate CLI | docs/plans/1-scaffold-agent-schema-loader-and-validate-cli.md | None | None | Complete |
 | 2 | Behavior Runner and kioku Session and Memory Integration | docs/plans/2-behavior-runner-and-kioku-session-and-memory-integration.md | EP-1 | None | Complete |
 | 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Complete |
-| 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | In Progress |
+| 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | Complete |
 | 5 | The Supervised Worker and Run Orchestration | docs/plans/5-the-supervised-worker-and-run-orchestration.md | EP-2, EP-3, EP-4 | None | Not Started |
 | 6 | End-to-End Living-Loop Proof and Detector Conformance | docs/plans/6-end-to-end-living-loop-proof-and-detector-conformance.md | EP-5 | None | Not Started |
 
@@ -320,8 +320,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2: a run opens a kioku session, recalls the agent's prior memory, records the output as memory, and completes the session (replacing `agent_runs`); memory persists across runs
 - [x] EP-3: `Shikigami.Sink.dispatch` implements KawaDigest + KizashiSignal (against stubs), stubs ReiAction/Danwa, gated by `checkGrant`; denied sink is skipped + recorded
 - [x] EP-3: `shikigami stub-kawa` accepts the C2 doorway, enforces idempotency, and `--republish-topic` re-publishes onto fixture `activity.v1` (proven live against Redpanda)
-- [ ] EP-4: `isDue` (cron) + `matchesStream` (AND of predicates, feedback guard) unit-tested; `activity.v1` consumer via kafka-effectful + keiro inbox dedupe decodes a fixture envelope
-- [ ] EP-4: addressed-event inbox + `publish-fixture` CLI + `process-compose.yaml` Redpanda broker; a fired trigger enqueues a run job (IP-7)
+- [x] EP-4: `isDue` (cron) + `matchesStream` (AND of predicates, feedback guard) unit-tested; `activity.v1` consumer via kafka-effectful + keiro inbox dedupe decodes a fixture envelope (proven live on Redpanda)
+- [x] EP-4: addressed-event `enqueue-run` + `publish-fixture`/`consume-stream` CLIs; a fired trigger enqueues a run job on `shikigami_run_jobs` (IP-7). (process-compose Redpanda deferred; docker broker used for the proof)
 - [ ] EP-5: shibuya `QueueProcessor` worker drains a run job, calls `runBehavior`, dispatches sinks, records the kioku session; `AckRetry`/`AckDeadLetter` on failure
 - [ ] EP-5: suppression gate (`shikigami_fired`) prevents duplicate signals; `shikigami worker --agents <dir>` runs end to end
 - [ ] EP-6: seed detectors re-pointed at `schema/Agent.dhall` and validate/run unchanged
@@ -367,6 +367,21 @@ interactions between child plans. Provide concise evidence.
   `publish-fixture` producer + `activity.v1` consumer (EP-4) derive the required `keiro-*` headers
   from the same keiro source of truth, so the producer/consumer sides agree by construction (IP-6).
   Confirmed during cross-plan review.
+
+- **IP-6 correction: the `keiro-source-event-id` header is OMITTED (affects EP-3, EP-4).** The keiro
+  inbox parses `keiro-source-event-id` as a UUID (`EventId`); shikigami's `source_event_id`/
+  `idempotency_key` is not a UUID, so publishing it makes `integrationEventFromKafka` fail with
+  `InvalidUuidHeader`. It is optional, and the consumer dedupes on `keiro-message-id`
+  (`PreferIntegrationMessageId`, which keiro reads as `Text`), so both `stub-kawa --republish` (EP-3)
+  and `publish-fixture` (EP-4) now omit it. The required keiro header set is `keiro-message-id`,
+  `keiro-source`, `keiro-destination`, `keiro-event-type`, `keiro-schema-version`, `content-type`
+  (+ optional `keiro-occurred-at`). Discovered when EP-4's consumer rejected the first fixtures.
+
+- **pgmq schema installed via codd, not `pgmq-migration` (affects EP-4, EP-5).** `pgmq-migration`'s
+  `hasql-migration` dep fails to build (crypton/memory `ByteArrayAccess (Digest MD5)`), and the nix
+  postgres has no `pgmq` extension. EP-4 vendored pgmq's `pgmq.sql` as a codd migration in
+  `shikigami-migrations` (`pgmq-schema.sql`); `enqueueRunJob` only does `createQueue` + `sendMessage`.
+  EP-5's worker drains the same `shikigami_run_jobs` queue.
 
 - **`librdkafka` added to the dev shell (affects EP-3, EP-4).** `hw-kafka-client` (under
   `kafka-effectful`) links `-lrdkafka`, which the seihou dev shell did not provide — linking failed
