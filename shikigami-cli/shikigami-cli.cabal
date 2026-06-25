@@ -24,6 +24,7 @@ library
   exposed-modules:
     Shikigami.Cli
     Shikigami.Cli.Commands.AgentRun
+    Shikigami.Cli.Commands.EnqueueRun
     Shikigami.Cli.Commands.RunBehavior
     Shikigami.Cli.Commands.StubKawa
     Shikigami.Cli.Commands.Validate

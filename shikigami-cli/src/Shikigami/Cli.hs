@@ -2,6 +2,7 @@ module Shikigami.Cli (main) where
 
 import Options.Applicative
 import Shikigami.Cli.Commands.AgentRun (runAgentRun)
+import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.RunBehavior (runRunBehavior)
 import Shikigami.Cli.Commands.StubKawa (runStubKawaCmd)
 import Shikigami.Cli.Commands.Validate (runValidate)
@@ -11,6 +12,7 @@ data Command
   | RunBehavior FilePath (Maybe String)
   | AgentRun String (Maybe FilePath)
   | StubKawa Int (Maybe String) (Maybe String)
+  | EnqueueRun String (Maybe String)
 
 main :: IO ()
 main = run =<< execParser opts
@@ -54,6 +56,15 @@ parser =
               )
               (progDesc "Run the kawa ingest doorway stub (C2), optionally republishing to a topic")
           )
+        <> command
+          "enqueue-run"
+          ( info
+              ( EnqueueRun
+                  <$> argument str (metavar "AGENT")
+                  <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Addressed run payload as JSON"))
+              )
+              (progDesc "Enqueue an addressed run job for a named agent (IP-7)")
+          )
     )
 
 run :: Command -> IO ()
@@ -61,3 +72,4 @@ run (Validate file) = runValidate file
 run (RunBehavior file payload) = runRunBehavior file payload
 run (AgentRun agentArg fromActivity) = runAgentRun agentArg fromActivity
 run (StubKawa port topic broker) = runStubKawaCmd port topic broker
+run (EnqueueRun agent payload) = runEnqueueRun agent payload

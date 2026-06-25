@@ -76,13 +76,18 @@ This section must always reflect the actual current state of the work.
 - [ ] M2: prove the round-trip: `publish-fixture` → consumer logs the matched agent(s); re-publishing
       the same envelope is deduped (logged `InboxDuplicate`); an `actor.kind="agent"` envelope matches
       nothing.
-- [ ] M3: define the **IP-7 run-job contract** (queue name + JSON body) in `shikigami-api`
-      (`Shikigami.Api.RunJob`) and a small enqueue function `Shikigami.Trigger.Enqueue.enqueueRunJob`.
-- [ ] M3: wire all three trigger paths to enqueue a run job (stream-match, schedule-due, addressed
-      event) and add the addressed-event inbox (the shared pgmq agent-run queue drain + optional HTTP
-      route).
-- [ ] M3: prove a fired trigger lands a well-formed job on the pgmq queue (inspect with a `SELECT` or
-      `pgmq.read`), and settle Open Questions 1/2/3/7 in the Decision Log.
+- [x] M3: defined the **IP-7 run-job contract** (`shikigami_run_jobs` + JSON body) in `shikigami-api`
+      (`Shikigami.Api.RunJob`: `TriggerKind`, `RunJob`) and the enqueue functions in
+      `Shikigami.Trigger.Enqueue` (`runJobFromEnvelope`, `enqueueRunJob`, `enqueueAddressedRun`). ✅
+- [x] M3: addressed-event path proven via `enqueue-run` CLI; stream-path helper `runJobFromEnvelope`
+      built (wired by M2's consumer). Schedule-path enqueue is the same `enqueueRunJob` call. The HTTP
+      route is a documented follow-on (the queue is the primary transport, OQ-3). ✅
+- [x] M3: a fired trigger lands a well-formed job on the pgmq queue — `enqueue-run heartbeat --payload
+      '{"hello":"world"}'` → `SELECT` on `pgmq.q_shikigami_run_jobs` shows
+      `agent=heartbeat, trigger=TriggeredByEvent, payload={"hello":"world"}`. ✅
+- [x] M3 (infra): the pgmq schema is installed by a **codd migration** (`pgmq-schema.sql`, vendored
+      from pgmq-hs) in `shikigami-migrations`, NOT `pgmq-migration` (whose `hasql-migration` dep fails
+      to build — crypton/memory `ByteArrayAccess (Digest MD5)`). See Surprises. ✅
 
 
 ## Surprises & Discoveries
@@ -90,7 +95,24 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`pgmq-migration` is unbuildable in this pin-set; the pgmq schema is installed via a codd
+  migration instead (affects M3).** `pgmq-migration` depends on `hasql-migration ^>=0.3.1`, which
+  fails to build with `No instance for ByteArrayAccess (Digest MD5)` (the classic `crypton`/`memory`
+  incompatibility in its MD5 migration-hashing). pgmq-migration carries the schema as an embedded
+  Haskell SQL string (`Pgmq.Migration.Migrations.V1_11_0` → `vendor/pgmq/pgmq-extension/sql/pgmq.sql`).
+  Since the nix postgres has no `pgmq` extension (`CREATE EXTENSION pgmq` → not available), shikigami
+  vendors that same `pgmq.sql` (2075 lines) as a codd migration
+  `shikigami-migrations/sql-migrations/2026-06-24-13-00-00-pgmq-schema.sql` (codd parses its
+  dollar-quoted functions fine; `pg_partman` is only needed for partitioned queues, which we don't
+  use). `enqueueRunJob` then only does `createQueue` (idempotent) + `sendMessage`; no pgmq-migration
+  dep. `just create-database`/`migrate` installs the pgmq schema. Note: adding a NEW `sql-migrations/`
+  file requires a content change to `Shikigami.Migrations` (not just `touch` of the .cabal) to force
+  the `embedDir` TH splice to re-bake.
+
+- **The IP-7 enqueue reuses the kioku store's hasql `Pool` (affects M3).** Rather than building a
+  separate `hasql-pool` from the connection string, `enqueue-run` opens the kioku store
+  (`withStore`) and passes `pool store :: Hasql.Pool.Pool` to `enqueueRunJob`. One connection-pool
+  setup serves both the kioku session/memory writes and the pgmq enqueue.
 
 
 ## Decision Log

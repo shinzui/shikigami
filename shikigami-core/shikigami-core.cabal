@@ -44,6 +44,7 @@ library
     Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
     Shikigami.Sink.Wire
+    Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
 
@@ -59,6 +60,7 @@ library
     , effectful
     , filepath         >=1.4
     , handan-core
+    , hasql-pool
     , http-client
     , http-types
     , hw-kafka-client
@@ -66,6 +68,7 @@ library
     , kioku-api
     , kioku-core
     , mmzk-typeid
+    , pgmq-hasql
     , shikigami-api
     , shikumi
     , text             >=2.1

@@ -56,5 +56,7 @@ runShikigamiMigrationsNoCheck settings connectTimeout =
     migrations <- shikigamiMigrations
     applyMigrationsNoCheck settings (Just migrations) connectTimeout (const (pure SchemasNotVerified))
 
+-- Embeds sql-migrations/*.sql at compile time: shikigami_fired + the pgmq schema
+-- (pgmq-schema.sql, applied via codd in lieu of the unbuildable pgmq-migration).
 embeddedFiles :: [(FilePath, ByteString)]
 embeddedFiles = sortOn fst $(embedDir "sql-migrations")
