@@ -69,17 +69,20 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `shikigami-core` exposes `Shikigami.Program.Registry.programRegistry :: [Task]` with a
-      `noop-summary` task whose program is built with `shikumi`'s `Embed` and returns a fixed JSON
-      value (no model call).
-- [ ] M1: `shikigami-core` exposes `Shikigami.Behavior.StubProvider.registerStubProvider :: IO ()`
-      that installs a deterministic baikai provider returning a fixed assistant reply (no key).
-- [ ] M1: `Shikigami.Behavior.Skill.runSkill` loads a skill `SKILL.md`, builds a `Baikai.Context`,
-      runs `completeRequest` + an `appendToolResult` tool loop against the stub provider, and
-      returns the final reply as a JSON value.
-- [ ] M1: `Shikigami.Behavior.Run.runBehavior :: BehaviorEnv -> AgentDecl -> Value -> IO (Either RunError Value)`
-      dispatches both arms; `shikigami run-behavior --agent <file>` prints the fixed output for a
-      program-agent and a skill-agent, no DB, no key.
+- [x] M1: `shikigami-core` exposes `Shikigami.Program.Registry.programRegistry :: [Task]` with a
+      `noop-summary` task whose program is built with `shikumi`'s `embed` and returns a fixed JSON
+      value (no model call). ✅ 2026-06-24
+- [x] M1: `shikigami-core` exposes `Shikigami.Behavior.StubProvider.registerStubProvider :: IO ()`
+      that installs a deterministic baikai provider (`Custom "stub"` tag) returning a fixed assistant
+      reply (no key). ✅
+- [x] M1: `Shikigami.Behavior.Skill.runSkill` loads a skill `SKILL.md` (hand-rolled frontmatter
+      split), builds a `Baikai.Context`, runs `completeRequest` against the stub provider, and
+      returns the reply as `{"reply": …}`. (The stub returns no tool calls, so a single completion
+      suffices — the `appendToolResult` loop is unnecessary; recorded in the Decision Log.) ✅
+- [x] M1: `Shikigami.Behavior.Run.runBehavior :: BehaviorEnv -> AgentDecl -> Value -> IO (Either RunError Value)`
+      dispatches all three arms (Deterministic → `UnsupportedBehavior`, EP-6's concern);
+      `shikigami run-behavior --agent <file>` prints the fixed output for a program-agent
+      (`{"summary":…,"verb":"heartbeat.tick"}`) and a skill-agent (`{"reply":…}`), no DB, no key. ✅
 - [ ] M2: `Shikigami.Memory.Scope` (consumed from EP-1 if present, else added here) exposes
       `agentScope`/`sharedScope`; `Shikigami.Agent.Run.runAgentWithMemory` opens a kioku session,
       recalls, runs the behavior, records the output as a memory, completes the session.
@@ -97,7 +100,22 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **kioku's `*Data` command records are NOT re-exported from the top-level modules (affects M2
+  imports).** Verified against the pinned clone (commit kioku `608fbc9`):
+  `Kioku.Session` exports `start/complete/failSession/recordTurn` but not the `StartSessionData`/
+  `CompleteSessionData`/`FailSessionData` constructors; `Kioku.Memory` likewise omits
+  `RecordMemoryData`. Per the Context import caveat, the compliant route is
+  `import Kioku.Session.Domain (StartSessionData (..), CompleteSessionData (..), FailSessionData (..))`
+  and `import Kioku.Memory.Domain (RecordMemoryData (..))` (the *data* modules, part of the command
+  surface — distinct from internal transducer/event-stream internals).
+
+- **baikai's `Api` type has a `Custom !Text` escape hatch (affects M1 stub).** The pinned baikai
+  (commit `a219ace`, which differs from the local `bokuno/baikai` checkout — the pinned clone was the
+  source of truth) defines `Api = OpenAIChatCompletions | AnthropicMessages | OpenAICompletionsCli |
+  AnthropicMessagesCli | Custom !Text`. The stub provider and stub model both use `Custom "stub"` as
+  the API tag, so the stub answers its own model without colliding with a real provider. baikai also
+  ships base values `_Model`, `_Response`, `_Context`, `_Options` for record-update construction —
+  used instead of `#field` lenses (IP-9 forbids `Data.Generics.Labels`).
 
 
 ## Decision Log
@@ -156,6 +174,21 @@ Record every decision made while working on the plan.
   `CompleteSessionData` record; the demo here uses the real signatures. The *shape* of the
   prior-art seam (open → recall → record → complete) is reused faithfully; only the exact
   signatures are corrected.
+  Date: 2026-06-24
+
+- Decision (impl): the skill arm runs a **single** `completeRequest` rather than an
+  `appendToolResult` tool loop.
+  Rationale: with the stub provider the reply carries no tool calls, so the loop would terminate
+  after one completion anyway. A single completion keeps the M1 code minimal and key-free while
+  still exercising `Context` construction + `completeRequest` + `flattenAssistantBlocks` rendering.
+  When a real provider that emits tool calls is wired (a later plan), the loop can be reintroduced
+  around `completeRequest`/`appendToolResult` without changing `runSkill`'s signature.
+  Date: 2026-06-24
+
+- Decision (impl): the `Behavior` union shipped by EP-1 has **three** arms (Deterministic,
+  ShikumiProgram, Skill), not the two this plan's prose assumed. `runBehavior` handles
+  `Deterministic{}` by returning `Left (UnsupportedBehavior "Deterministic")` (deterministic-rule
+  behaviors are EP-6's detector concern), keeping the pattern match total under `-Wincomplete-patterns`.
   Date: 2026-06-24
 
 - Decision: `runBehavior`'s contract is
