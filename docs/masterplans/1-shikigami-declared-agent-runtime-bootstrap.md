@@ -141,7 +141,7 @@ consumes it (see Decision Log and Integration Point IP-3).
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Scaffold, Agent Schema, Loader, and Validate CLI | docs/plans/1-scaffold-agent-schema-loader-and-validate-cli.md | None | None | In Progress |
+| 1 | Scaffold, Agent Schema, Loader, and Validate CLI | docs/plans/1-scaffold-agent-schema-loader-and-validate-cli.md | None | None | Complete |
 | 2 | Behavior Runner and kioku Session and Memory Integration | docs/plans/2-behavior-runner-and-kioku-session-and-memory-integration.md | EP-1 | None | Not Started |
 | 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Not Started |
 | 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | Not Started |
@@ -313,9 +313,9 @@ and the channel-egress sink variant (IR-3).
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: four-package project scaffolds and `cabal build all` succeeds with the kioku + kikan pin-set
-- [ ] EP-1: `shikigami-migrations` composes `kiokuMigrations <> shikigamiOwnMigrations`; `just create-database` lands the `kioku_*` tables + `shikigami_fired`
-- [ ] EP-1: `schema/Agent.dhall` (C5) + `shikigami-api` wire types + `Shikigami.Agent.Loader` exist; `shikigami validate <file>` parses a manifest or prints a typed error
+- [x] EP-1: four-package project scaffolds and `cabal build all` succeeds with the kioku + kikan pin-set (GitHub+Hackage pins per user directive)
+- [x] EP-1: `shikigami-migrations` composes `kiokuMigrations <> shikigamiOwnMigrations`; `just create-database` lands the `kioku_*` tables + `shikigami_fired`
+- [x] EP-1: `schema/Agent.dhall` (C5) + `shikigami-api` wire types + `Shikigami.Agent.Loader` exist; `shikigami validate <file>` parses a manifest or prints a typed error
 - [ ] EP-2: `Shikigami.Behavior.Run` dispatches both arms (handan `noop-summary` stub; baikai skill via stub provider)
 - [ ] EP-2: a run opens a kioku session, recalls the agent's prior memory, records the output as memory, and completes the session (replacing `agent_runs`); memory persists across runs
 - [ ] EP-3: `Shikigami.Sink.dispatch` implements KawaDigest + KizashiSignal (against stubs), stubs ReiAction/Danwa/ChannelEgress, gated by `checkGrant`; denied sink is skipped + recorded
@@ -367,6 +367,18 @@ interactions between child plans. Provide concise evidence.
   `publish-fixture` producer + `activity.v1` consumer (EP-4) derive the required `keiro-*` headers
   from the same keiro source of truth, so the producer/consumer sides agree by construction (IP-6).
   Confirmed during cross-plan review.
+
+- **Dependencies are pinned by GitHub commit + Hackage, not local-path/corpus (affects ALL plans;
+  IP-8 superseded).** During EP-1 the user directed "use hackage and github for dependencies and not
+  use corpus ones." `cabal.project` now pins the co-developed shinzui deps by GitHub
+  `source-repository-package` git stanza (kioku `608fbc9` = origin/master, since the local lead is
+  docs-only; handan `d25fac3`; shikumi `36496de`; kafka-effectful `f34a43c`; baikai `a219ace` via
+  kioku's kikan block) and `dhall` from Hackage — the kikan git block stays byte-identical to kioku's.
+  Two path typos in the original plan were corrected (`handan-core`, not `handan/handan`;
+  `kafka-effectful` at repo root). **Bonus:** because handan/kafka-effectful/baikai are now
+  `source-repository-package` stanzas rather than `packages:` entries, `cabal build all` only builds
+  what EP-1 actually depends on (dhall, kioku, shikumi); EP-2/EP-4 build the rest when they import them.
+  Every sibling plan inherits this `cabal.project` unchanged. See EP-1's Decision Log.
 
 - **IR-1 (mori) and IR-2 (shomei) already exist as improvement-request docs; IR-3 (kanmon) is new
   (affects EP-6).** EP-6 found `docs/improvement-requests/*.md` already present in the mori and shomei
