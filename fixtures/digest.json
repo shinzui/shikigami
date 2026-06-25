@@ -1,0 +1,11 @@
+{
+  "activity_id": "0192f000-0000-7000-8000-000000000001",
+  "occurred_at": "2026-06-24T07:00:00Z",
+  "source": "shinzui/shikigami",
+  "actor": { "kind": "agent", "id": "heartbeat" },
+  "subject": { "type": "intention", "id": "intention_01jrei" },
+  "verb": "digest.produced",
+  "payload": { "summary": "intention has had no action for 7 days" },
+  "context_refs": [],
+  "idempotency_key": "heartbeat:0192f000"
+}

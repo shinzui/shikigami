@@ -83,16 +83,19 @@ This section must always reflect the actual current state of the work.
       dispatches all three arms (Deterministic → `UnsupportedBehavior`, EP-6's concern);
       `shikigami run-behavior --agent <file>` prints the fixed output for a program-agent
       (`{"summary":…,"verb":"heartbeat.tick"}`) and a skill-agent (`{"reply":…}`), no DB, no key. ✅
-- [ ] M2: `Shikigami.Memory.Scope` (consumed from EP-1 if present, else added here) exposes
+- [x] M2: `Shikigami.Memory.Scope` (consumed from EP-1, already present) exposes
       `agentScope`/`sharedScope`; `Shikigami.Agent.Run.runAgentWithMemory` opens a kioku session,
-      recalls, runs the behavior, records the output as a memory, completes the session.
-- [ ] M2: `shikigami agent-run --agent <name>` first run prints `recalled 0 prior memories` and
-      records a learning; one `kiroku.kioku_sessions` row (status `completed`) and one
-      `kiroku.kioku_memories` row exist under `scope_kind='agent', scope_ref='<name>'`.
-- [ ] M3: a second `agent-run` of the same agent prints `recalled 1 prior memories: <learning>`;
-      two session rows and ≥1 memory row exist under the agent scope (across-run persistence).
-- [ ] M3 (optional): `agent-run --from-activity <file>` maps an `activity.v1` envelope into a kioku
-      memory under the agent scope, aligning with EP-1's `ActivityEnvelope` type.
+      recalls, runs the behavior, records the output as a memory, completes the session. ✅ 2026-06-24
+- [x] M2: `shikigami agent-run --agent <name>` first run prints `recalled 0 prior memories` and
+      records a learning; one `kiroku.kioku_sessions` row (`focus='ShikumiProgram'`, status
+      `completed`) and one `kiroku.kioku_memories` row exist under `scope_kind='agent',
+      scope_ref='heartbeat'`. ✅
+- [x] M3: a second `agent-run` of the same agent prints `recalled 1 prior memories:` + run 1's
+      learning (`… [pattern/medium] noop-summary produced a fixed digest`); two session rows and two
+      memory rows under the agent scope (across-run persistence). ✅
+- [x] M3 (optional): `agent-run --from-activity <file>` maps an `activity.v1` envelope (EP-1's
+      `ActivityEnvelope`) into a kioku memory under the agent scope — content = rendered payload,
+      tags `["subject:intention","verb:digest.produced"]`, `created_at` = the envelope `occurred_at`. ✅
 
 
 ## Surprises & Discoveries
@@ -205,7 +208,36 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-24): EP-2 complete; all three milestones built and verified.** Both Purpose
+behaviors hold from the dev shell:
+
+1. `shikigami run-behavior --agent <file>` runs either behavior arm and prints a JSON result with no
+   model key and no database — `{"summary":…,"verb":"heartbeat.tick"}` for the `noop-summary` program
+   arm (a shikumi `Embed` run through handan), `{"reply":…}` for the skill arm (a baikai completion
+   against the `Custom "stub"` provider).
+2. `shikigami agent-run --agent heartbeat` opens a kioku session, recalls prior memory, runs the
+   behavior, records the output as a kioku memory under the agent scope, and completes the session.
+   Run twice, the second run prints `recalled 1 prior memories:` and run 1's learning — the agent
+   accumulates knowledge across runs, the capability the spec explicitly lacked. The spec's
+   `agent_runs` table is replaced: a run is a `kioku_sessions` row, a learning is a `kioku_memories`
+   row (verified by SQL). `--from-activity` additionally maps an `activity.v1` envelope into a memory.
+
+**Deliverables for downstream plans:** `Shikigami.Behavior.Run.runBehavior` (IP-4, the contract EP-5's
+worker calls and EP-3's sinks consume the output of), `Shikigami.Behavior.{StubProvider,Skill}`,
+`Shikigami.Program.Registry` (the `[Task]` seam EP-6's detectors extend), `Shikigami.Behavior.Error`,
+and `Shikigami.Agent.Run.{runAgentWithMemory,recordActivityAsMemory}`.
+
+**Deviations from the plan as written (recorded in the Decision Log / Surprises):** (a) the skill arm
+runs a single `completeRequest` rather than a tool loop (the stub emits no tool calls); (b) `Behavior`
+has three arms (EP-1 added `Deterministic`), handled as `UnsupportedBehavior`; (c) kioku's `*Data`
+records are imported from `Kioku.Session.Domain`/`Kioku.Memory.Domain` (not re-exported top-level);
+(d) the plan's code sketches were completed against the **pinned** library sources (baikai `a219ace`,
+which differs from the local checkout) — `Api`'s `Custom "stub"` tag, the `_Model`/`_Response`/
+`_Context` bases, and record-update construction (no `#field` lenses, per IP-9).
+
+**Gaps / forward notes:** the recommended `tasty` tests (plan Step 4 — runner-no-DB + ephemeral-DB
+across-run proof via `withShikigamiMigratedDatabase`) were not added; the milestone acceptances are
+proven via the CLI + SQL instead. A later hardening pass (or EP-5/EP-6) can add the automated test.
 
 
 ## Context and Orientation

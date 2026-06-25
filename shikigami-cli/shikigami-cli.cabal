@@ -23,12 +23,16 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikigami.Cli
+    Shikigami.Cli.Commands.AgentRun
     Shikigami.Cli.Commands.RunBehavior
     Shikigami.Cli.Commands.Validate
 
   build-depends:
     , aeson                 >=2.2
     , base                  >=4.21 && <5
+    , kioku-api
+    , kioku-core
+    , kiroku-store
     , optparse-applicative  >=0.18
     , shikigami-api
     , shikigami-core

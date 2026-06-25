@@ -23,6 +23,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikigami.Agent.Loader
+    Shikigami.Agent.Run
     Shikigami.Agent.Skill
     Shikigami.Behavior.Error
     Shikigami.Behavior.Run
@@ -46,5 +47,6 @@ library
     , shikigami-api
     , shikumi
     , text           >=2.1
+    , time           >=1.12
     , vector         >=0.13
     , yaml           >=0.11
