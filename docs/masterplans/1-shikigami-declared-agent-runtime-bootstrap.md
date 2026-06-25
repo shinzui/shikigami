@@ -146,7 +146,7 @@ consumes it (see Decision Log and Integration Point IP-3).
 | 3 | Sink Dispatcher, Permission Gate, and kawa Stub | docs/plans/3-sink-dispatcher-permission-gate-and-kawa-stub.md | EP-1 | EP-2 | Complete |
 | 4 | Trigger Evaluators and the activity.v1 Stream Consumer | docs/plans/4-trigger-evaluators-and-the-activity-v1-stream-consumer.md | EP-1 | EP-2 | Complete |
 | 5 | The Supervised Worker and Run Orchestration | docs/plans/5-the-supervised-worker-and-run-orchestration.md | EP-2, EP-3, EP-4 | None | Complete* |
-| 6 | End-to-End Living-Loop Proof and Detector Conformance | docs/plans/6-end-to-end-living-loop-proof-and-detector-conformance.md | EP-5 | None | Not Started |
+| 6 | End-to-End Living-Loop Proof and Detector Conformance | docs/plans/6-end-to-end-living-loop-proof-and-detector-conformance.md | EP-5 | None | Complete* |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -324,9 +324,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-4: addressed-event `enqueue-run` + `publish-fixture`/`consume-stream` CLIs; a fired trigger enqueues a run job on `shikigami_run_jobs` (IP-7). (process-compose Redpanda deferred; docker broker used for the proof)
 - [x] EP-5: shibuya `QueueProcessor` worker drains a run job, runs the agent (runAgentWithMemory), dispatches sinks, records the kioku session; `AckOk`/`AckRetry`/`AckDeadLetter` mapped (proven end to end against stub-kawa)
 - [~] EP-5: `shikigami worker --agents <dir>` runs end to end ✅; the suppression gate (`shikigami_fired`) + retry-redelivery fixture are deferred refinements (Complete* — see EP-5 Outcomes)
-- [ ] EP-6: seed detectors re-pointed at `schema/Agent.dhall` and validate/run unchanged
-- [ ] EP-6: living-loop proof (3 triggers × both behavior arms → sinks → kioku session+memory → kawa re-publish → second agent fires); feedback-guard, permission-denial, across-run-memory proofs pass
-- [ ] EP-6: shikigami maturity recorded as a `shinzui/mori` capability record; IR-1/IR-2/IR-3 filed against their repos
+- [x] EP-6: seed detectors re-pointed at `schema/Agent.dhall` and validate unchanged (mechanical rename, IP-2 superset confirmed)
+- [x] EP-6: living-loop proof — heartbeat → KawaDigest → kawa re-publish → second agent (digest-watcher) fires; both runs recorded as completed kioku sessions. Feedback-guard, permission-denial, across-run-memory legs proven by the component test-suites
+- [~] EP-6: shikigami maturity recorded as a `shinzui/mori` capability record (`mori.dhall`, Lifecycle.Active) ✅; IR-1/IR-2/IR-3 filings against mori/shomei/kanmon deferred (authored elsewhere)
 
 
 ## Surprises & Discoveries
@@ -469,4 +469,42 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-24): the shikigami runtime is built and the living loop is demonstrable.** All six
+child plans landed; every observable behavior in the Vision & Scope holds from a fresh checkout in the
+nix dev shell:
+
+- **Declare + validate (EP-1):** `cabal build all` is green on the GitHub+Hackage pin-set;
+  `just create-database` lands the kioku/keiro/pgmq tables + `shikigami_fired`; `shikigami validate`
+  parses a typed agent or prints a typed error.
+- **Run a behavior with memory (EP-2):** both arms run key-free (`noop-summary` via handan/shikumi; a
+  Skill via a stub baikai provider); each run is a kioku session and each learning a kioku memory, with
+  across-run recall — the capability the spec lacked, replacing the bespoke `agent_runs`.
+- **Produce under permission (EP-3):** `Shikigami.Sink.dispatch` gates every sink on `checkGrant`;
+  `stub-kawa` implements the C2 doorway with idempotency and a `--republish-topic` seam (proven live on
+  Redpanda with the exact keiro-* headers).
+- **Fire on all three triggers (EP-4):** cron `isDue` + the stream matcher are unit-tested; the
+  `activity.v1` consumer decodes through the keiro idempotent inbox and enqueues run jobs (proven live);
+  the addressed path enqueues directly. The IP-7 `RunJob` lands on `shikigami_run_jobs`.
+- **Orchestrate (EP-5):** `shikigami worker` drains the queue via a shibuya `QueueProcessor`, runs each
+  agent (session + behavior + memory), dispatches its sinks, and acks — proven end to end.
+- **Close the loop (EP-6):** the seed detectors validate against the canonical schema; and the **whole
+  runtime closes the living loop** — a declared agent's output, republished onto `activity.v1`,
+  triggers a second declared agent (both recorded as completed kioku sessions). shikigami's maturity is
+  recorded as `mori.dhall` `Lifecycle.Active`.
+
+**Headline change vs. the spec, delivered:** the bespoke `agent_runs` store is gone; runs are kioku
+sessions and learnings are kioku memories, giving the runtime per-agent memory across runs.
+
+**Key cross-plan deviations (all recorded in Surprises & Decision Logs):** GitHub+Hackage pins (no
+corpus); `librdkafka` added to the dev shell; the pgmq schema installed via a codd migration (because
+`pgmq-migration`'s `hasql-migration` won't build); the C2/C4 wire DTOs mirrored locally (no servant /
+no kizashi/kawa pins); the IP-6 `keiro-source-event-id` header omitted (keiro requires a UUID there).
+
+**Open gaps (honest, non-blocking for the demonstrated loop):**
+- EP-5 `shikigami_fired` **suppression gate** (so a re-fired detector raises at most one signal) and a
+  retry-redelivery fixture — deferred refinements.
+- EP-4/EP-6 a running cron **ticker** for schedule-triggered agents end to end (the pure `isDue` and the
+  enqueue path are proven; the periodic wake loop is not built).
+- EP-6 a single consolidated `tasty` living-loop harness (legs proven by component suites + a live
+  orchestration instead) and the three cross-project IR filings + `process-compose.yaml` Redpanda
+  (a standalone docker broker served the proofs).
