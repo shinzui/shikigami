@@ -19,12 +19,15 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Time.Format.ISO8601 (iso8601ParseM)
+import Kioku.Api.Scope (MemoryScope)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
 import Kioku.App (AppEnv, runAppIO)
 import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
+import Kioku.Memory.Embedding qualified as Embedding
 import Kioku.Recall qualified as Recall
+import Kioku.Recall.Capability qualified as RecallCapability
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
 import Shikigami.Api.Activity (ActivityEnvelope (..), Subject (..))
@@ -64,10 +67,7 @@ runAgentWithMemory appEnv behEnv decl payload = do
             startedAt = startedAt'
           }
   -- 2. recall what this agent already knows (empty on the first ever run)
-  priorE <- runAppIO appEnv $ Recall.getActiveByScope scope'
-  let prior = case priorE of
-        Right (Right ms) -> ms
-        _ -> []
+  prior <- recallPriorLearnings appEnv scope' (recallQuery decl focusTxt)
   -- 3. run the behavior
   behaviorE <- runBehavior behEnv decl payload
   case behaviorE of
@@ -178,3 +178,37 @@ renderLearning v = case v of
 renderMemoryRecord :: MemoryRecord -> Text
 renderMemoryRecord (MemoryRecord {memoryId = mid, memoryType = mt, confidence = cf, content = c}) =
   mid <> " [" <> mt <> "/" <> cf <> "] " <> c
+
+recallPriorLearnings :: AppEnv -> MemoryScope -> Text -> IO [MemoryRecord]
+recallPriorLearnings appEnv scope' query = do
+  cfg <- Embedding.resolveEmbeddingConfig
+  capability <-
+    runAppIO appEnv RecallCapability.detectVectorCapability <&> \case
+      Right cap -> cap
+      Left _ -> RecallCapability.VectorExtensionUnavailable
+  recalled <-
+    runAppIO appEnv $
+      Recall.recall
+        (Embedding.toEmbeddingModel cfg)
+        capability
+        Recall.RecallRequest
+          { scope = scope',
+            query,
+            strategy = Recall.Hybrid,
+            maxResults = 10
+          }
+  case recalled of
+    Right hits
+      | not (null hits) -> pure (Recall.memory <$> hits)
+    _ -> recallActiveByScope appEnv scope'
+
+recallActiveByScope :: AppEnv -> MemoryScope -> IO [MemoryRecord]
+recallActiveByScope appEnv scope' = do
+  priorE <- runAppIO appEnv $ Recall.getActiveByScope scope'
+  pure $ case priorE of
+    Right (Right ms) -> ms
+    _ -> []
+
+recallQuery :: AgentDecl -> Text -> Text
+recallQuery decl focusTxt =
+  Text.unwords [name decl, focusTxt, "summary digest learning prior memory"]
