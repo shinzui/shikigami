@@ -57,32 +57,56 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the `shikigami-worker` library component (or `Shikigami.Worker` modules in
-  `shikigami-core`) with the run-job wire type and the queue-name constant matching the IP-7
-  contract.
-- [ ] M1: build a `shinzui/shibuya` `QueueProcessor` over the `shinzui/pgmq-hs` run-job queue with a
-  no-op `Handler` that decodes the job, logs it, and returns `AckOk`.
-- [ ] M1: wire the worker boot (`runApp`/effect stack) and a `shikigami worker` CLI subcommand
-  skeleton; enqueue one job and watch the worker drain it.
-- [ ] M2: replace the no-op handler with full orchestration — open a `kioku` session, call
-  `Shikigami.Behavior.Run.runBehavior`, dispatch each `Sink` via `Shikigami.Sink.dispatch`, complete
-  the session.
-- [ ] M2: map run/sink outcomes to `AckDecision` — success → `AckOk`; transient sink failure →
-  `AckRetry` with backoff; permanent failure (malformed job / poison) → `AckDeadLetter`; on a run
-  error, fail the kioku session.
-- [ ] M2: prove end-to-end with one declared agent (a `kioku_sessions` row + a sink-stub hit), plus
-  a transient-failure → `AckRetry` case and a permanent-failure → `AckDeadLetter` case.
-- [ ] M3: add the suppression gate (`shikigami_fired`) — `alreadyFired` SELECT before a signal sink
-  and `recordFired` `INSERT … ON CONFLICT DO NOTHING` after.
-- [ ] M3: `shikigami worker --agents <dir>` loads a directory of agents and runs the loop; fire the
-  same agent twice and observe one signal + one `shikigami_fired` row.
-- [ ] M3: worker tests under `shikigami-core`/`shikigami-cli` pass against an ephemeral Postgres.
+- [x] M1: `Shikigami.Worker` (in `shikigami-core`) consumes EP-4's IP-7 `Shikigami.Api.RunJob` and
+  `runQueueName` (it does NOT redefine the run-job type — EP-4 owns IP-7). ✅ 2026-06-24
+- [x] M1: a `shinzui/shibuya` `QueueProcessor` over `pgmq-effectful` drains `shikigami_run_jobs`; the
+  handler decodes the job and (M2) orchestrates. Boot via
+  `runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq pool . runTracingNoop $ pgmqAdapter →
+  mkProcessor → runApp IgnoreFailures 100 [..] → waitApp`. ✅
+- [x] M1: `shikigami worker --agents <dir> [--kawa-url U --kizashi-url U]` CLI boots it; a job
+  enqueued via `enqueue-run` is drained. ✅
+- [x] M2: full orchestration — `handleRunJob` decodes the `RunJob`, resolves the agent, calls
+  `Shikigami.Agent.Run.runAgentWithMemory` (the EP-2 session+behavior+memory bracket), then dispatches
+  each `Sink` via `Shikigami.Sink.dispatch` with the behavior output. ✅
+- [x] M2: outcomes mapped to `AckDecision` — success → `AckOk`; transient sink/behavior failure →
+  `AckRetry`; malformed job → `AckDeadLetter (InvalidPayload …)`; unknown agent →
+  `AckDeadLetter (PoisonPill …)`. ✅
+- [x] M2: proven end-to-end — `enqueue-run heartbeat` → worker drains it → `sink=SKawaDigest ->
+  Delivered "act_…"` (POSTed to a running `stub-kawa`) → `-> AckOk`; a `kioku_sessions` row exists
+  with `status='completed'`; the queue drains to 0 rows. ✅
+- [~] M2: the transient→`AckRetry` and permanent→`AckDeadLetter` *fixtures* are coded
+  (`classifyAck`/decode-fail/unknown-agent arms) but not yet exercised with a dedicated failing-sink
+  run — the happy path + the dead-letter decode arm are proven; the retry-redelivery fixture is a
+  documented follow-on.
+- [~] M3: the suppression gate (`shikigami_fired` SELECT-before/INSERT-after around signal sinks) and
+  the worker-test-suite are **deferred** — the core drain→run→dispatch→ack→session loop is proven;
+  suppression matters for the EP-6 detector agents and can be added as a focused refinement. Recorded
+  as a gap in Outcomes.
 
 
 ## Surprises & Discoveries
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+- **The worker reuses EP-4's `Shikigami.Api.RunJob`, not the plan-text shape.** This plan's prose
+  sketched a `RunJob { agentName, occurrence, triggerKind="schedule", payload, idempotencyKey }`, but
+  EP-4 already defined and **proved** the IP-7 type as `Shikigami.Api.RunJob { agentName, triggerKind
+  (TriggeredBy…), occurredAt, triggerPayload, idempotencyKey }`. Since EP-4 owns IP-7, the worker
+  imports and decodes EP-4's type verbatim — no second `Shikigami.Worker.Job.RunJob`. The handler reads
+  `triggerPayload` as the behavior input.
+
+- **The worker reuses EP-2's `runAgentWithMemory` rather than re-bracketing the session.** EP-2's
+  `runAgentWithMemory` already opens a kioku session, recalls, runs the behavior, records the output as
+  memory, and completes the session. So the worker calls it directly and then dispatches the returned
+  `behaviorOutput` through the sinks — the sinks fire *after* the session completes (a small ordering
+  difference from this plan's prose, which is fine: the session records the run; sinks are the outputs).
+  This avoids duplicating EP-2's session/memory logic in the worker.
+
+- **shibuya + pgmq-effectful build cleanly (no `hasql-migration`).** Unlike `pgmq-migration` (EP-4's
+  blocker), `shibuya-core`/`shibuya-pgmq-adapter`/`pgmq-effectful` have clean deps; they compiled
+  first time. The effect stack is `runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq pool .
+  runTracingNoop` (no-op tracer), per the shibuya-pgmq-example consumer.
 
 (None yet.)
 
@@ -144,6 +168,23 @@ Record every decision made while working on the plan.
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
+
+**Outcome (2026-06-24): EP-5 worker built and proven end-to-end (M1 + M2 core).** `shikigami worker`
+boots a shibuya `QueueProcessor` over the `shikigami_run_jobs` pgmq queue; for each drained job it
+resolves the agent, runs it with memory (EP-2), dispatches its sinks (EP-3), and acks. Proven:
+`enqueue-run heartbeat` → the worker drains the job → `sink=SKawaDigest -> Delivered "act_…"` (POSTed
+to a running `stub-kawa`) → `-> AckOk`; a `kioku_sessions` row is `completed`; the queue drains to 0.
+
+**Deliverables for EP-6:** `shikigami worker` — the run side of the living loop (trigger → enqueue →
+worker → behavior → sinks → republish → next agent).
+
+**Gaps (deferred refinements, recorded honestly):** (a) the **suppression gate** (`shikigami_fired`
+SELECT-before/INSERT-after around signal sinks) is not yet wired into the worker — it matters for the
+EP-6 detector agents that raise signals, and is a focused add to `runOneAgent`; (b) the
+transient-failure→`AckRetry` *redelivery* fixture and the dedicated worker test-suite are not yet
+run (the decode→dead-letter arm and the happy path are proven); (c) the worker runs only the queue
+path — co-hosting EP-4's stream consumer in one process is a wiring follow-on (for now `consume-stream`
+and `worker` run as two processes).
 
 (To be filled during and after implementation.)
 

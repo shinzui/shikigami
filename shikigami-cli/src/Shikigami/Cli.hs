@@ -9,6 +9,7 @@ import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
 import Shikigami.Cli.Commands.RunBehavior (runRunBehavior)
 import Shikigami.Cli.Commands.StubKawa (runStubKawaCmd)
 import Shikigami.Cli.Commands.Validate (runValidate)
+import Shikigami.Cli.Commands.Worker (runWorkerCmd)
 
 data Command
   = Validate FilePath
@@ -18,6 +19,7 @@ data Command
   | EnqueueRun String (Maybe String)
   | PublishFixture FilePath Text Text
   | ConsumeStream FilePath Text Text Text
+  | Worker FilePath Text Text
 
 main :: IO ()
 main = run =<< execParser opts
@@ -91,6 +93,16 @@ parser =
               )
               (progDesc "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs")
           )
+        <> command
+          "worker"
+          ( info
+              ( Worker
+                  <$> strOption (long "agents" <> metavar "DIR" <> value "agents" <> help "Agents manifest directory")
+                  <*> strOption (long "kawa-url" <> metavar "URL" <> value "http://localhost:8088" <> help "kawa (or stub-kawa) base URL")
+                  <*> strOption (long "kizashi-url" <> metavar "URL" <> value "http://localhost:8089" <> help "kizashi base URL")
+              )
+              (progDesc "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session")
+          )
     )
 
 run :: Command -> IO ()
@@ -101,3 +113,4 @@ run (StubKawa port topic broker) = runStubKawaCmd port topic broker
 run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp) = runConsumeStream agentsDir broker topic grp
+run (Worker agentsDir kawaUrl kizashiUrl) = runWorkerCmd agentsDir kawaUrl kizashiUrl
