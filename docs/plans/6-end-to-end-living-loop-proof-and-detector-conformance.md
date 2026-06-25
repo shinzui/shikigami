@@ -70,20 +70,18 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1 — Confirm EP-1's canonical `schema/Agent.dhall` exists and can express both seed detectors
-      (a deterministic-rule behavior, an `activity.v1` observe trigger with `subjectType`/`verbs`, and
-      a kizashi-signal sink with recipient routing). If a field is missing, record the gap and amend
-      EP-1's deliverable (per IP-2) rather than redesigning here.
-- [ ] M1 — Re-point `agents/detectors/stalled-intention.dhall` from `let Schema = ./schema.dhall` to
-      an import of `../../schema/Agent.dhall`; adapt singular `sink` to `sinks = [ … ]`; align
-      `Observe`→`Stream`, `Deterministic`→canonical behavior variant, `RaiseSignal`→`KizashiSignal`.
-- [ ] M1 — Re-point `agents/detectors/at-risk-customer.dhall` the same way (its behavior uses the
-      program arm).
-- [ ] M1 — Delete or retire the placeholder `agents/detectors/schema.dhall` and update
-      `agents/detectors/README.md` to say the re-point happened.
-- [ ] M1 — `shikigami validate agents/detectors/stalled-intention.dhall` prints the parsed declaration
-      and exits 0; same for `at-risk-customer.dhall`. Both load through `Shikigami.Agent.Loader`
-      unchanged.
+- [x] M1 — Confirmed EP-1's canonical `schema/Agent.dhall` expresses both seeds: `Behavior.Deterministic
+      { rule, params }`, `Behavior.ShikumiProgram { task, preferEnrichment, grounding, enabledBy }`,
+      `Trigger.Stream { match : StreamMatch { verb, source, subjectType, verbs } }`, and
+      `Sink.KizashiSignal { … rich RaiseSignal fields … }`. No gap — the superset claim (IP-2) holds. ✅
+- [x] M1 — Re-pointed `agents/detectors/stalled-intention.dhall` to `../../schema/Agent.dhall`
+      (`Observe`→`Stream { match }`, singular `sink`→`sinks = [ … ]`, `RaiseSignal`→`KizashiSignal`). ✅
+- [x] M1 — Re-pointed `agents/detectors/at-risk-customer.dhall` (`Program { program }`→
+      `ShikumiProgram { task }`). ✅
+- [x] M1 — Retired the placeholder `agents/detectors/schema.dhall` (tombstone pointing at the canonical
+      schema) and updated `agents/detectors/README.md` to record the re-point. ✅
+- [x] M1 — `shikigami validate agents/detectors/stalled-intention.dhall` and `… at-risk-customer.dhall`
+      both print the parsed `AgentDecl` and exit 0, through the EP-1 loader unchanged. ✅
 - [ ] M2 — Author the `triage-note` skill directory (`agents/skills/triage-note/SKILL.md`) and the
       proof agents under `agents/proof/` (`noop-heartbeat.dhall`, `triage-note.dhall`,
       `digest-watcher.dhall`, `addressed-echo.dhall`).

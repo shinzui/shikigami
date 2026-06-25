@@ -19,7 +19,7 @@
 -- Origin: docs/plans/12-the-intelligence-layer-continuous-observation-to-signals.md
 -- (EP-5), Milestone 1. Conforms to awareness.md Source-1.
 
-let Schema = ./schema.dhall
+let Schema = ../../schema/Agent.dhall
 
 let Agent = Schema.Agent
 
@@ -41,10 +41,13 @@ in    Agent::{
         -- activities about an intention: the declaration enters the per-subject
         -- window; a later `action.recorded` clears the stalled condition.
         trigger =
-          Trigger.Observe
-            { topic = "activity.v1"
-            , subjectType = Some "intention"
-            , verbs = [ "intention.declared", "action.recorded" ]
+          Trigger.Stream
+            { match =
+                { verb = None Text
+                , source = None Text
+                , subjectType = Some "intention"
+                , verbs = [ "intention.declared", "action.recorded" ]
+                }
             }
       , -- BEHAVIOR (C5): a deterministic rule, parameterized by N days. Over the
         -- subject's window, if there is an `intention.declared` with no later
@@ -66,16 +69,17 @@ in    Agent::{
         -- `recipient` is the intention owner (the declaration's `actor.id`,
         -- falling back to the configured default); contextTags ALWAYS include
         -- `activity://<activity_id>` (C4 back-reference).
-        sink =
-          Sink.RaiseSignal
-            { source = "shinzui/shikigami"
-            , signalType = SignalType.Reminder
-            , priority = Priority.Normal
-            , importance = 45
-            , recipientFrom = Schema.RecipientFrom.SubjectOwner
-            , defaultRecipient = Some "person:nadeem"
-            , intentTemplate =
-                "intention '{subject.title}' has had no action for {params.staleAfterDays} days"
-            , extraContextTags = [ "verb:intention.at_risk", "subject:intention" ]
-            }
+        sinks =
+          [ Sink.KizashiSignal
+              { source = "shinzui/shikigami"
+              , signalType = SignalType.Reminder
+              , priority = Priority.Normal
+              , importance = 45
+              , recipientFrom = Schema.RecipientFrom.SubjectOwner
+              , defaultRecipient = Some "person:nadeem"
+              , intentTemplate =
+                  "intention '{subject.title}' has had no action for {params.staleAfterDays} days"
+              , extraContextTags = [ "verb:intention.at_risk", "subject:intention" ]
+              }
+          ]
       }

@@ -18,7 +18,7 @@ import Data.Aeson qualified as Aeson
 import Data.List (find)
 import Data.Text qualified as Text
 import Data.Time.Clock (secondsToNominalDiffTime)
-import Effectful (IOE, liftIO, runEff, (:>))
+import Effectful (IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Hasql.Pool (Pool)
 import Kioku.App (AppEnv)

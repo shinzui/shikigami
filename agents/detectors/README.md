@@ -1,5 +1,13 @@
 # Detectors — the intelligence layer as declared agents
 
+> **Re-pointed at the canonical schema (2026-06-24, EP-6 M1).** These seed detectors
+> now import the runtime's canonical C5 schema at `../../schema/Agent.dhall` (EP-1)
+> instead of the local placeholder `./schema.dhall` (now retired). The change was a
+> mechanical rename — `Observe`→`Stream { match }`, `Program { program }`→
+> `ShikumiProgram { task }`, `RaiseSignal`→`KizashiSignal`, singular `sink`→
+> `sinks = [ … ]` — exactly as MasterPlan IP-2 promised; both files validate through
+> `shikigami validate` unchanged.
+
 A **detector** is a [declared agent](../) whose whole job is to *watch the unified
 activity stream and raise a signal when a pattern matters*. The intelligence layer
 is exactly a small **set of detectors declared as agents** on the shikigami
