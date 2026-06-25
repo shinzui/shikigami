@@ -1,0 +1,11 @@
+{
+  "activity_id": "0192f000-0000-7000-8000-0000000000bb",
+  "occurred_at": "2026-06-20T07:05:00Z",
+  "source": "shinzui/shikigami",
+  "actor": { "kind": "agent", "id": "triage-note" },
+  "subject": { "type": "ticket", "id": "ticket-43" },
+  "verb": "ticket.received",
+  "payload": { "text": "agent-produced, should be ignored" },
+  "context_refs": [],
+  "idempotency_key": "ticket-43:received"
+}

@@ -24,7 +24,9 @@ library
   exposed-modules:
     Shikigami.Cli
     Shikigami.Cli.Commands.AgentRun
+    Shikigami.Cli.Commands.ConsumeStream
     Shikigami.Cli.Commands.EnqueueRun
+    Shikigami.Cli.Commands.PublishFixture
     Shikigami.Cli.Commands.RunBehavior
     Shikigami.Cli.Commands.StubKawa
     Shikigami.Cli.Commands.Validate
@@ -32,6 +34,8 @@ library
   build-depends:
     , aeson                 >=2.2
     , base                  >=4.21 && <5
+    , directory
+    , filepath
     , kioku-api
     , kioku-core
     , kiroku-store

@@ -65,17 +65,20 @@ This section must always reflect the actual current state of the work.
 - [x] M1: tasty unit tests in `shikigami-core/test` — 8 cases (cron every-minute/0 9 * * * due+not-due/
       malformed; stream verb+subject match, absent-predicate ignored, non-match, agent excluded, opt-in
       include) all pass. ✅
-- [ ] M2: add `process-compose.yaml` Redpanda broker process and a `just kafka-topic` helper that
-      creates the `activity.v1` topic.
-- [ ] M2: add the `Shikigami.Trigger.Stream.subscribeActivityStream` consumer (kafka-effectful direct)
-      that maps each `ConsumerRecord` to a `KafkaInboundRecord`, calls
-      `Keiro.Inbox.Kafka.integrationEventFromKafka`, decodes the envelope, dedupes via
-      `Keiro.Inbox.runInboxTransaction`, and runs `matchesStream` per loaded agent.
-- [ ] M2: add the `shikigami publish-fixture <envelope.json>` CLI subcommand that publishes one
-      envelope with the exact `keiro-*` headers, and a `fixtures/envelope.json` sample.
-- [ ] M2: prove the round-trip: `publish-fixture` → consumer logs the matched agent(s); re-publishing
-      the same envelope is deduped (logged `InboxDuplicate`); an `actor.kind="agent"` envelope matches
-      nothing.
+- [x] M2: `Shikigami.Trigger.Consumer.subscribeActivityStream` (kafka-effectful direct) maps each
+      `ConsumerRecord` to a `KafkaInboundRecord`, calls `integrationEventFromKafka`, decodes the
+      envelope, dedupes via `runInboxTransaction` (PreferIntegrationMessageId), runs `matchesStream`
+      per loaded stream agent, and commits the offset only after the inbox tx (OQ-7). ✅ 2026-06-24
+- [x] M2: `Shikigami.Trigger.Publish.publishEnvelope` + the `publish-fixture <file>` CLI publish one
+      envelope with the keiro-* headers; `fixtures/envelope.json` + `fixtures/envelope-agent.json`. ✅
+- [x] M2: round-trip PROVEN against a live Redpanda broker — `publish-fixture` (match) logs
+      `[stream] MATCH agent=triage-note` + `enqueued run job` (one row `triage-note/TriggeredByStream`
+      on `pgmq.q_shikigami_run_jobs`); re-publishing the same envelope logs `deduped (InboxDuplicate)`;
+      the `actor.kind="agent"` envelope matches nothing (feedback guard). The `consume-stream` CLI
+      drives it (EP-5 folds this into the full `worker`). ✅
+- [~] M2: a standalone Redpanda **docker** container provided the broker for the proof (advertise
+      127.0.0.1). The `process-compose.yaml` Redpanda process + `just kafka-topic` helper are a
+      documented dev-workflow follow-on (the proof does not depend on them). See Surprises.
 - [x] M3: defined the **IP-7 run-job contract** (`shikigami_run_jobs` + JSON body) in `shikigami-api`
       (`Shikigami.Api.RunJob`: `TriggerKind`, `RunJob`) and the enqueue functions in
       `Shikigami.Trigger.Enqueue` (`runJobFromEnvelope`, `enqueueRunJob`, `enqueueAddressedRun`). ✅
@@ -108,6 +111,28 @@ implementation. Provide concise evidence.
   dep. `just create-database`/`migrate` installs the pgmq schema. Note: adding a NEW `sql-migrations/`
   file requires a content change to `Shikigami.Migrations` (not just `touch` of the .cabal) to force
   the `embedDir` TH splice to re-bake.
+
+- **IP-6 correction: `keiro-source-event-id` must be a UUID, so it is OMITTED (affects EP-3 + EP-4).**
+  The keiro inbox parses `keiro-source-event-id` as an `EventId` (UUID); publishing it as a non-UUID
+  string (our `source_event_id`/`idempotency_key`, e.g. `"ticket-42:received"`) makes
+  `integrationEventFromKafka` fail with `InvalidUuidHeader`. It is an *optional* header and the
+  consumer dedupes on `keiro-message-id` (`PreferIntegrationMessageId`, the envelope's `activity_id`,
+  which keiro reads as `Text`), so both `publish-fixture` (EP-4) and `stub-kawa --republish` (EP-3)
+  now **omit** `keiro-source-event-id`. The required keiro headers remain: `keiro-message-id`,
+  `keiro-source`, `keiro-destination`, `keiro-event-type`, `keiro-schema-version`, `content-type`
+  (+ optional `keiro-occurred-at`). Discovered when the consumer rejected the first fixtures.
+
+- **The keiro inbox dedup is durable across runs (affects the M2 proof).** Because the fixtures carry
+  fixed `activity_id`s, once processed they stay in `kiroku.keiro_inbox` and re-publishing is
+  `InboxDuplicate` forever. The repeatable proof `TRUNCATE kiroku.keiro_inbox` (and purges the pgmq
+  queue) before publishing. In production each real envelope has a fresh UUIDv7 `activity_id`.
+
+- **The consumer was split from the pure matcher to dodge a `brokersList` clash (affects M2).**
+  hw-kafka-client exports `brokersList` for both producer (`Kafka.Producer`) and consumer
+  (`Kafka.Consumer`); importing both unqualified is ambiguous. So the producer lives in
+  `Shikigami.Trigger.Publish` and the consumer in `Shikigami.Trigger.Consumer`, each importing only
+  its side; the pure matcher stays in `Shikigami.Trigger.Stream`. Consumer stdout is set to
+  `LineBuffering` so match lines flush before the loop is killed.
 
 - **The IP-7 enqueue reuses the kioku store's hasql `Pool` (affects M3).** Rather than building a
   separate `hasql-pool` from the connection string, `enqueue-run` opens the kioku store
@@ -209,7 +234,29 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-24): EP-4 complete; all three milestones built and verified.** The three Purpose
+trigger classes work:
+
+1. **Schedule** — `Shikigami.Trigger.Schedule.isDue` answers real five-field cron strings (8 tasty
+   tests pass).
+2. **Stream** — `consume-stream` decodes `activity.v1` through the keiro idempotent inbox, runs
+   `matchesStream`, and enqueues a run job per match. Proven live against Redpanda: a matching
+   envelope fires (`MATCH agent=triage-note` → one `triage-note/TriggeredByStream` row on
+   `pgmq.q_shikigami_run_jobs`); a re-publish is `InboxDuplicate`; an `actor.kind="agent"` envelope is
+   ignored (feedback guard).
+3. **Event** — `enqueue-run <agent>` lands an addressed `TriggeredByEvent` job on the same queue.
+
+**Deliverables for downstream plans:** `Shikigami.Api.RunJob` (IP-7, the contract EP-5 drains),
+`Shikigami.Trigger.{Schedule,Stream,Consumer,Publish,Enqueue}`, and the IP-6 keiro-header set (now
+corrected to omit `keiro-source-event-id`). EP-6's living loop drives `stub-kawa --republish` →
+`consume-stream` → a second agent.
+
+**Deviations / gaps:** (a) `pgmq-migration` is unbuildable (broken `hasql-migration`), so the pgmq
+schema is a codd migration in `shikigami-migrations`; (b) the `process-compose.yaml` Redpanda process +
+`just kafka-topic` are deferred — a standalone docker Redpanda served the proof; (c) the consumer is a
+demo `consume-stream` command — EP-5 folds it into the supervised `worker`; (d) the HTTP addressed
+route (`POST /v1/agents/{name}/runs`) is a documented follow-on (the pgmq queue is the primary
+transport, OQ-3).
 
 
 ## Context and Orientation

@@ -58,6 +58,9 @@ republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payl
             contextRefs = crs,
             idempotencyKey = sevid
           }
+      -- keiro parses keiro-source-event-id as a UUID (EventId); our source_event_id
+      -- is not a UUID, so we OMIT that optional header. The consumer dedupes on
+      -- keiro-message-id (PreferIntegrationMessageId).
       headers =
         headersFromList
           [ ("keiro-message-id", TE.encodeUtf8 actId),
@@ -66,8 +69,7 @@ republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payl
             ("keiro-event-type", "activity.recorded"),
             ("keiro-schema-version", "1"),
             ("content-type", "application/json"),
-            ("keiro-occurred-at", TE.encodeUtf8 oat),
-            ("keiro-source-event-id", TE.encodeUtf8 sevid)
+            ("keiro-occurred-at", TE.encodeUtf8 oat)
           ]
       record =
         ProducerRecord

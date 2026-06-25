@@ -1,0 +1,11 @@
+{
+  "activity_id": "0192f000-0000-7000-8000-0000000000aa",
+  "occurred_at": "2026-06-20T07:00:00Z",
+  "source": "shinzui/kawa",
+  "actor": { "kind": "human", "id": "person:nadeem" },
+  "subject": { "type": "ticket", "id": "ticket-42" },
+  "verb": "ticket.received",
+  "payload": { "text": "printer is broken" },
+  "context_refs": [],
+  "idempotency_key": "ticket-42:received"
+}
