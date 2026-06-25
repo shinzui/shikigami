@@ -93,20 +93,25 @@ This section must always reflect the actual current state of the work.
       `kioku_turns` (+ extra kioku tables), `shikigami_fired` exists, `agent_runs` absent; re-run is a
       no-op (`[0 found]`).
 
-### Milestone M3 — schema, wire types, loader, validate CLI
+### Milestone M3 — schema, wire types, loader, validate CLI ✅ (2026-06-24)
 
-- [ ] Author `schema/Agent.dhall` as the canonical C5 superset (reconciles spec + seed detectors).
-- [ ] Create `shikigami-api/src/Shikigami/Api/Agent.hs` (wire types + `FromDhall` + `aeson`).
-- [ ] Create `shikigami-api/src/Shikigami/Api/Activity.hs` (the nine-field `ActivityEnvelope`, IP-6).
-- [ ] Create `shikigami-core/src/Shikigami/Agent/Loader.hs` (`loadAgent`, `LoadError`).
-- [ ] Create `shikigami-core/src/Shikigami/Agent/Skill.hs` (`SKILL.md` front-matter validation).
-- [ ] Create `shikigami-cli/src/Shikigami/Cli/Commands/Validate.hs`, `Shikigami/Cli.hs`,
-      `app/Main.hs`.
-- [ ] Author `agents/heartbeat.dhall` and `agents/triage-note.dhall` sample manifests + a skill dir.
-- [ ] Run `cabal run shikigami -- validate agents/heartbeat.dhall`; confirm the printed manifest +
-      `OK`.
-- [ ] Run `validate` on a malformed file; confirm non-zero exit + typed error.
-- [ ] Run `validate` on a skill-agent with a valid + an invalid `SKILL.md`; confirm both behaviors.
+- [x] Author `schema/Agent.dhall` as the canonical C5 superset (reconciles spec + seed detectors).
+- [x] Create `shikigami-api/src/Shikigami/Api/Agent.hs` (wire types + `FromDhall` + `aeson`).
+- [x] Create `shikigami-api/src/Shikigami/Api/Activity.hs` (the nine-field `ActivityEnvelope`, IP-6).
+- [x] Create `shikigami-core/src/Shikigami/Agent/Loader.hs` (`loadAgent`, `LoadError`).
+- [x] Create `shikigami-core/src/Shikigami/Agent/Skill.hs` (`SKILL.md` front-matter validation;
+      `checkFields` implemented via aeson `KeyMap` lookups; `SkillNameMismatch` made positional to keep
+      the `-Wpartial-fields` foundation warning-clean).
+- [x] Create `shikigami-cli/src/Shikigami/Cli/Commands/Validate.hs`, `Shikigami/Cli.hs`,
+      `app/Main.hs` (the M1 `app/Main.hs` already calls `Cli.main`; only the library changed).
+- [x] Author `agents/heartbeat.dhall`, `agents/triage-note.dhall`, `agents/broken.dhall` + the
+      `agents/skills/triage-note/SKILL.md` skill dir.
+- [x] `cabal run shikigami -- validate agents/heartbeat.dhall` prints the `AgentDecl` + `OK: 1 agent
+      parsed.`, exit 0.
+- [x] `validate agents/broken.dhall` prints Dhall's typed "Expression doesn't match annotation"
+      (behavior vs behaviour) error, exit 1.
+- [x] `validate agents/triage-note.dhall` reports `OK: 1 agent parsed (skill … valid).`; corrupting
+      the skill `name:` yields `SkillNameMismatch "triage-note" "wrong"`, exit 1; restored.
 
 
 ## Surprises & Discoveries
@@ -245,7 +250,37 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-24): EP-1 complete; all three milestones built and verified.** The five
+observable behaviors in Purpose / Big Picture all hold from a fresh dev shell:
+
+1. `cabal build all` is green and idempotent (`Up to date` on the second run), warning-clean, against
+   the coherent kioku + kikan + handan + shikumi + kafka-effectful + dhall pin-set.
+2. `just create-database` lands the `kioku_*` read-model tables and `shikigami_fired` in the `kiroku`
+   schema, with **no** `agent_runs` table; re-run is a no-op.
+3. `validate agents/heartbeat.dhall` prints the typed `AgentDecl` and `OK: 1 agent parsed.` (exit 0).
+4. `validate agents/broken.dhall` prints Dhall's precise "Expression doesn't match annotation"
+   (`behavior` vs `behaviour`) and exits 1 — a structured error, not a crash.
+5. `validate agents/triage-note.dhall` additionally validates the `SKILL.md` front-matter; a corrupted
+   `name:` yields `SkillNameMismatch` and exit 1.
+
+**Deliverables for downstream plans:** `Shikigami.Api.Agent` (IP-1 wire types), `Shikigami.Api.Activity`
+(IP-6 envelope), `schema/Agent.dhall` (IP-2 canonical C5 superset), `Shikigami.Agent.Loader`,
+`Shikigami.Agent.Skill`, `Shikigami.Memory.Scope` (IP-3), the `shikigami_fired` migration and
+`Shikigami.Migrations`/`TestSupport`, and the GitHub+Hackage `cabal.project` pin-set (IP-8) every
+sibling plan inherits.
+
+**Deviations from the plan as written (all recorded in the Decision Log / Surprises):** (a) dependency
+pins moved from local-path/corpus to **GitHub git stanzas + Hackage `dhall`** at the user's request —
+this also made `cabal build all` lighter (handan/kafka-effectful/baikai are fetched for the solve but
+not built until EP-2/EP-4). (b) Two IP-8 paths were corrected (`handan-core`; `kafka-effectful` at repo
+root). (c) The plan's `Loader`/`Skill`/`Validate` code sketches (which left `checkFields = undefined`,
+a `fromString` placeholder, and `toString = id`) were completed into compiling implementations.
+
+**Gaps / forward notes:** the test-support sublibrary `withShikigamiMigratedDatabase` is built but no
+`tasty`/`hspec` test calls it yet (the plan flagged this as an optional CI-style check); EP-2+ can add
+the test. kioku ships additional read-model tables (`kioku_personas`, `kioku_scenes`,
+`kioku_consolidation_decisions`) beyond the three the plan named — harmless, present because they are
+part of `kiokuMigrations`.
 
 
 ## Context and Orientation

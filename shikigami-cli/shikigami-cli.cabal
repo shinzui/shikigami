@@ -21,9 +21,10 @@ common common
 library
   import:          common
   hs-source-dirs:  src
-  exposed-modules: Shikigami.Cli
+  exposed-modules:
+    Shikigami.Cli
+    Shikigami.Cli.Commands.Validate
 
-  -- added in M3: Shikigami.Cli.Commands.Validate
   build-depends:
     , base                  >=4.21 && <5
     , optparse-applicative  >=0.18

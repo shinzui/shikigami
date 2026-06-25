@@ -21,11 +21,11 @@ common common
 library
   import:          common
   hs-source-dirs:  src
-  exposed-modules: Shikigami.Prelude
+  exposed-modules:
+    Shikigami.Api.Activity
+    Shikigami.Api.Agent
+    Shikigami.Prelude
 
-  -- added in M3:
-  -- Shikigami.Api.Agent
-  -- Shikigami.Api.Activity
   build-depends:
     , aeson         >=2.2
     , base          >=4.21 && <5

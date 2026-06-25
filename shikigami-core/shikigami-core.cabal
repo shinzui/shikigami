@@ -22,10 +22,11 @@ library
   import:          common
   hs-source-dirs:  src
   exposed-modules:
+    Shikigami.Agent.Loader
+    Shikigami.Agent.Skill
     Shikigami.Core
     Shikigami.Memory.Scope
 
-  -- added in M3: Shikigami.Agent.Loader, Shikigami.Agent.Skill
   build-depends:
     , aeson          >=2.2
     , base           >=4.21 && <5
