@@ -85,11 +85,22 @@ This section must always reflect the actual current state of the work.
       and either starts a new conversation run or resumes the parked one, by enqueuing onto
       `shikigami_run_jobs` (`Shikigami.Trigger.Enqueue.enqueueAddressedRun`). Carry
       `conversationId`, `messageId`, `author`, and `content` in the run payload.
-- [ ] **M3 — Durable conversation workflow (depends on plan 7).** Add
-      `Shikigami.Agent.Conversation` that runs a long-lived keiro workflow keyed to a danwa
-      `conversationId`: ensure one kioku session for the thread; per human turn record a
-      `user` turn, run the agentic turn, record an `assistant` turn, post the reply, then
-      `awaitInput` to **suspend** until the next human turn.
+- [x] **M3 slice — Addressed message jobs run as conversation turns.** Added
+      `shikigami-core/src/Shikigami/Agent/Conversation.hs` with `ConversationEnv`,
+      `ConversationTurnResult`, and `runConversationTurn`; `Shikigami.Worker.handleRunJob`
+      now detects an `AddressedMessage` trigger payload, resolves the declared agent,
+      ensures/reuses one running kioku session whose `subjectRef` is the danwa
+      `conversationId`, records `user` and `assistant` turns, runs the behavior, and replies
+      to the triggering danwa message via the M1 `postReply` client.
+      Validated with `nix develop --command cabal build all` and
+      `nix develop --command cabal test shikigami-core-test`.
+      Completed: 2026-06-27T19:18:36Z.
+- [ ] **M3 remaining — Durable park/resume loop.** Promote the conversation turn runner
+      into the long-lived keiro workflow keyed by `danwa-conversation:<conversationId>`:
+      use `awaitInput` to suspend after each assistant reply, have the M2 bridge call
+      `deliverInput` for already-parked workflows before enqueueing a new start job, and
+      move reply delivery from the current synchronous `postReply` call into the plan 7
+      transactional outbox path.
 - [ ] **M4 — End-to-end acceptance.** Post two human messages; show two danwa replies, four
       `kioku_turns` rows for one session, and a workflow journal proving the park-between-turns.
 - [ ] **Dependency tracking.** Confirm plan 7 ("Agent runs as durable keiro workflows")
@@ -210,6 +221,15 @@ Record every decision made while working on the plan.
   enqueueing, so a repeated observation is skipped before pgmq send.
   Date: 2026-06-27
 
+- Decision: Land M3 in two slices: first the concrete conversation-turn behavior in
+  `Shikigami.Agent.Conversation`, then the durable `awaitInput` loop.
+  Rationale: The first slice makes addressed danwa jobs observably different from batch
+  jobs immediately: they reuse one kioku session per conversation, record human/assistant
+  turns, and reply to the same danwa thread. The remaining slice is still required for the
+  headline park-between-turns behavior because the current slice posts synchronously and
+  returns after one turn.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -227,6 +247,10 @@ Compare the result against the original purpose.
   payload names a configured agent participant, maps that participant to a declared agent,
   enqueues one addressed run job with the normalized message payload, and proves repeated
   observation is idempotent in `shikigami-core-test`.
+- M3 has a working conversation-turn runner but not yet the durable parked loop. Addressed
+  jobs now record turns into a kioku session keyed by the danwa conversation and reply under
+  the human message; the next step is replacing the one-turn return with `awaitInput`
+  suspension and `deliverInput` resume.
 
 
 ## Context and Orientation
@@ -765,6 +789,16 @@ psql -d shikigami -c "select turn_index, role, left(content,40) from kioku_turns
   where session_id='<sid>' order by turn_index;"     # expect user/assistant/user/assistant
 
 # Observe the park-between-turns in the keiro workflow journal (command per plan 7).
+```
+
+Partial M3 validation transcript:
+
+```text
+$ nix develop --command cabal test shikigami-core-test
+All 21 tests passed
+
+$ nix develop --command cabal build all
+Building executable 'shikigami' for shikigami-cli-0.1.0.0...
 ```
 
 

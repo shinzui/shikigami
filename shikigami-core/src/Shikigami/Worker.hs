@@ -15,6 +15,7 @@ import Control.Concurrent.Async (concurrently_)
 import Control.Monad (forever)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.List (find)
 import Data.Text qualified as Text
 import Data.Time.Clock (secondsToNominalDiffTime)
 import Effectful (IOE, runEff, (:>))
@@ -35,12 +36,14 @@ import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig)
+import Shikigami.Trigger.Danwa (AddressedMessage)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import System.IO (hPutStrLn, stderr)
 
@@ -120,7 +123,30 @@ handleRunJob env payloadV =
     Aeson.Error e -> do
       hPutStrLn stderr ("[shikigami.worker] invalid run job (dead-letter): " <> e)
       pure (AckDeadLetter (InvalidPayload (Text.pack e)))
-    Aeson.Success job -> runOneAgent env job
+    Aeson.Success job ->
+      case Aeson.fromJSON (triggerPayload job) of
+        Aeson.Success addressed -> runConversationAgent env job addressed
+        Aeson.Error _ -> runOneAgent env job
+
+runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO AckDecision
+runConversationAgent env job addressed =
+  case find ((== agentName job) . name) (agents env) of
+    Nothing -> pure (AckDeadLetter (PoisonPill ("unknown agent " <> agentName job)))
+    Just decl -> do
+      result <-
+        Conversation.runConversationTurn
+          Conversation.ConversationEnv
+            { Conversation.appEnv = appEnv env,
+              Conversation.behaviorEnv = behaviorEnv env,
+              Conversation.danwa = danwa env
+            }
+          decl
+          addressed
+      case result of
+        Left err -> do
+          hPutStrLn stderr ("[shikigami.worker] conversation turn failed (retry): " <> Text.unpack err)
+          pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+        Right _ -> pure AckOk
 
 -- | Run a resolved agent and dispatch its sinks.
 runOneAgent :: WorkerEnv -> RunJob -> IO AckDecision

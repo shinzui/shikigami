@@ -23,6 +23,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikigami.Agent.Approval
+    Shikigami.Agent.Conversation
     Shikigami.Agent.Loader
     Shikigami.Agent.Run
     Shikigami.Agent.Skill
