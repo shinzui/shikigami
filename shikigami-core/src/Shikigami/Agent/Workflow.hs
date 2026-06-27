@@ -6,7 +6,11 @@ module Shikigami.Agent.Workflow
     agentRunWorkflow,
     runAgentRunWorkflow,
     agentRunRegistry,
+    PreparedSinkIntent,
     enqueueSinkIntentStep,
+    enqueuePreparedSinkIntentTx,
+    prepareSinkIntent,
+    preparedSinkResult,
     publishSinkIntent,
   )
 where
@@ -25,6 +29,7 @@ import Data.Time (NominalDiffTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
+import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), decodeJsonIntegrationEvent, encodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx)
 import Keiro.Workflow
@@ -94,6 +99,11 @@ data SinkIntent = SinkIntent
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+data PreparedSinkIntent = PreparedSinkIntent
+  { sinkResult :: !SinkResult,
+    outboxMessage :: !(Maybe OutboxMessage)
+  }
 
 defaultAgentRunHooks :: AgentRunHooks
 defaultAgentRunHooks =
@@ -362,33 +372,13 @@ enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTar
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  let kind = sinkKindOf sink
-      messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
-      outboxId = deterministicOutboxIdForMessage messageId
-      deniedResult reason = SinkResult kind (DeniedOutcome reason)
-      deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
-      buildMessage =
-        checkGrant (AgentIdentity agentName') kind <&> \case
-          Left (Denied reason) -> (deniedResult reason, Nothing)
-          Right () ->
-            let intent =
-                  SinkIntent
-                    { agent = agentName',
-                      runId = runIdText,
-                      ordinal,
-                      occurredAt = occurredAt',
-                      danwaTarget = danwaTarget',
-                      sink,
-                      output
-                    }
-                event = sinkIntentEvent messageId runIdText now intent
-             in (deliveredResult, Just (OutboxMessage outboxId event))
-  (result, mMessage) <- liftIO buildMessage
+  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now)
+  let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
     appendTx >>= \case
       JournalAppended {} -> do
-        traverse_ enqueueOutboxTx mMessage
+        enqueuePreparedSinkIntentTx prepared
         pure (Right result)
       JournalAlreadyPresent stored ->
         case parseEither Aeson.parseJSON stored of
@@ -399,6 +389,54 @@ enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTar
   case txResult of
     Right result' -> pure result'
     Left err -> liftIO (ioError (userError (Text.unpack err)))
+
+prepareSinkIntent ::
+  WorkflowId ->
+  StepName ->
+  Text ->
+  Text ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Sink ->
+  Value ->
+  UTCTime ->
+  IO PreparedSinkIntent
+prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now = do
+  let kind = sinkKindOf sink
+      messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
+      outboxId = deterministicOutboxIdForMessage messageId
+      deniedResult reason = SinkResult kind (DeniedOutcome reason)
+      deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
+  checkGrant (AgentIdentity agentName') kind <&> \case
+    Left (Denied reason) ->
+      PreparedSinkIntent
+        { sinkResult = deniedResult reason,
+          outboxMessage = Nothing
+        }
+    Right () ->
+      let intent =
+            SinkIntent
+              { agent = agentName',
+                runId = runIdText,
+                ordinal,
+                occurredAt = occurredAt',
+                danwaTarget = danwaTarget',
+                sink,
+                output
+              }
+          event = sinkIntentEvent messageId runIdText now intent
+       in PreparedSinkIntent
+            { sinkResult = deliveredResult,
+              outboxMessage = Just (OutboxMessage outboxId event)
+            }
+
+preparedSinkResult :: PreparedSinkIntent -> SinkResult
+preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult
+
+enqueuePreparedSinkIntentTx :: PreparedSinkIntent -> Tx.Transaction ()
+enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage} =
+  traverse_ enqueueOutboxTx outboxMessage
 
 sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
 sinkIntentEvent messageId runId occurredAt intent =

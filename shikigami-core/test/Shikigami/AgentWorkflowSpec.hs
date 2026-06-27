@@ -156,6 +156,10 @@ tests =
                       Right keys -> do
                         assertBool "first turn result is journaled" (Map.member "turn-result:msg_human_1" keys)
                         assertBool "second turn result is journaled after resume" (Map.member "turn-result:msg_human_2" keys)
+                        assertBool "first assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply:msg_human_1" keys)
+                        assertBool "second assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply:msg_human_2" keys)
+                        assertBool "first reply is not journaled as a separate sink step" (not (Map.member "danwa-reply:msg_human_1" keys))
+                        assertBool "second reply is not journaled as a separate sink step" (not (Map.member "danwa-reply:msg_human_2" keys))
                         assertBool "first park allocated an input awakeable" (any (Text.isPrefixOf "awkid:next-message:1") (Map.keys keys))
                       Left err -> assertFailure ("loadStepIndex failed: " <> show err)
                   other -> assertFailure ("conversation turns should succeed, got " <> show other)

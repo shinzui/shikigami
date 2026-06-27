@@ -14,11 +14,14 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Bifunctor (first)
+import Data.Foldable (traverse_)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, runEff, (:>))
-import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
+import Keiro.Projection (InlineProjection (InlineProjection, apply))
 import Keiro.Workflow
   ( StepName (..),
     Workflow,
@@ -33,10 +36,12 @@ import Keiro.Workflow
 import Keiro.Workflow.Awakeable (AwakeableId, signalAwakeable)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects, AppEnv (..), runAppIO)
+import Kioku.Distill.Timer (l1TimerScheduleProjection)
 import Kioku.Id (SessionId, genSessionId, idText, parseId)
 import Kioku.Session qualified as Session
-import Kioku.Session.Domain (RecordTurnData (..), StartSessionData (..))
-import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..))
+import Kioku.Session.Domain (RecordTurnData (..), SessionCommand (..), StartSessionData (..))
+import Kioku.Session.EventStream (sessionEventStream, sessionStream)
+import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..), sessionInlineProjection)
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracing)
@@ -160,27 +165,12 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
       liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (behaviorPayload msg prior))
   output <- either (liftIO . ioError . userError . Text.unpack) pure outputE
   let replyText = renderLearning output
-  asstTurn <-
-    step (StepName ("record-assistant:" <> msgMessageId)) $
-      liftIO do
-        turns <- loadTurns env sid
-        let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-        recordTurnOnce env sid ("danwa:assistant:" <> msgMessageId) (Just (userTurnIndex + 1)) "assistant" replyText turns
-  sinkResult <-
-    AgentWorkflow.enqueueSinkIntentStep
-      (StepName ("danwa-reply:" <> msgMessageId))
-      (name decl)
-      (idText sid)
-      0
-      Nothing
-      ( Just
-          DanwaTarget
-            { conversationId = msgConversationId,
-              parentMessageId = Just msgMessageId
-            }
-      )
-      Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
-      (Aeson.object ["reply" Aeson..= replyText])
+  (asstTurn, sinkResult) <-
+    step (assistantReplyStepName msgMessageId) do
+      turns <- liftIO (loadTurns env sid)
+      let RecordedTurn {turnIndex = userTurnIndex} = userTurn
+      assistantAndReplyE <- recordAssistantTurnAndEnqueueReply decl sid msg replyText userTurnIndex turns
+      either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
   let replyMessageId = sinkResultDetail sinkResult
       RecordedTurn {turnId = recordedUserTurnId} = userTurn
       RecordedTurn {turnId = recordedAsstTurnId} = asstTurn
@@ -252,6 +242,14 @@ nextMessageStepName ordinal =
 turnResultStepName :: Text -> StepName
 turnResultStepName msgMessageId =
   StepName ("turn-result:" <> msgMessageId)
+
+assistantReplyStepName :: Text -> StepName
+assistantReplyStepName msgMessageId =
+  StepName ("record-assistant-and-reply:" <> msgMessageId)
+
+replySinkStepName :: Text -> StepName
+replySinkStepName msgMessageId =
+  StepName ("danwa-reply:" <> msgMessageId)
 
 behaviorPayload :: AddressedMessage -> [TurnRow] -> Value
 behaviorPayload AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, author = msgAuthor, content = msgContent, agentParticipant = msgAgentParticipant} priorTurns =
@@ -326,6 +324,94 @@ recordTurnOnce env sid turnId desiredIndex role content turns =
       let turnIndex = fromMaybe (length turns) desiredIndex
       requireRight =<< recordTurn env sid turnId turnIndex role content
       pure RecordedTurn {turnId, turnIndex}
+
+recordAssistantTurnAndEnqueueReply ::
+  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  AgentDecl ->
+  SessionId ->
+  AddressedMessage ->
+  Text ->
+  Int ->
+  [TurnRow] ->
+  Eff es (Either Text (RecordedTurn, SinkResult))
+recordAssistantTurnAndEnqueueReply decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
+  case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
+    Just TurnRow {turnIndex = existingTurnIndex} -> do
+      now <- liftIO getCurrentTime
+      prepared <- liftIO (prepareConversationReplySinkIntent decl sid msg replyText now)
+      pure (Right (RecordedTurn {turnId, turnIndex = existingTurnIndex}, AgentWorkflow.preparedSinkResult prepared))
+    Nothing -> do
+      now <- liftIO getCurrentTime
+      prepared <- liftIO (prepareConversationReplySinkIntent decl sid msg replyText now)
+      existing <- Session.getById sid
+      case existing of
+        Left err -> pure (Left (Text.pack (show err)))
+        Right Nothing -> pure (Left "SessionNotFound")
+        Right (Just SessionRow {status = rowStatus})
+          | rowStatus /= "running" -> pure (Left "SessionNotRunning")
+          | otherwise -> appendAssistantTurn now prepared
+  where
+    turnId = "danwa:assistant:" <> msgMessageId
+    turnIndex = userTurnIndex + 1
+
+    appendAssistantTurn recordedAt prepared = do
+      commandResult <-
+        runCommandWithSqlEvents
+          defaultRunCommandOptions
+          sessionEventStream
+          (sessionStream sid)
+          ( RecordTurn
+              RecordTurnData
+                { sessionId = sid,
+                  turnId,
+                  turnIndex,
+                  role = "assistant",
+                  content = replyText,
+                  toolSummary = Nothing,
+                  promptTokens = Nothing,
+                  outputTokens = Nothing,
+                  recordedAt
+                }
+          )
+          ( \pairs _appendResult -> do
+              applyInlineProjections pairs [sessionInlineProjection, l1TimerScheduleProjection]
+              AgentWorkflow.enqueuePreparedSinkIntentTx prepared
+          )
+      pure case commandResult of
+        Left err -> Left (Text.pack (show err))
+        Right _ -> Right (RecordedTurn {turnId, turnIndex}, AgentWorkflow.preparedSinkResult prepared)
+
+    applyInlineProjections pairs projections =
+      traverse_
+        ( \InlineProjection {apply = applyProjection} ->
+            traverse_ (uncurry applyProjection) pairs
+        )
+        projections
+
+prepareConversationReplySinkIntent ::
+  AgentDecl ->
+  SessionId ->
+  AddressedMessage ->
+  Text ->
+  UTCTime ->
+  IO AgentWorkflow.PreparedSinkIntent
+prepareConversationReplySinkIntent decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
+  AgentWorkflow.prepareSinkIntent
+    (conversationWorkflowId msg)
+    (replySinkStepName msgMessageId)
+    (name decl)
+    (idText sid)
+    0
+    Nothing
+    ( Just
+        DanwaTarget
+          { conversationId = msgConversationId,
+            parentMessageId = Just msgMessageId
+          }
+    )
+    Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
+    (Aeson.object ["reply" Aeson..= replyText])
+    now
 
 recordTurn :: ConversationEnv -> SessionId -> Text -> Int -> Text -> Text -> IO (Either Text ())
 recordTurn env sid turnId turnIndex role content = do

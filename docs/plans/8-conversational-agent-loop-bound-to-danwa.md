@@ -106,13 +106,19 @@ This section must always reflect the actual current state of the work.
       including the two-turn conversation workflow test and bridge delivery-before-enqueue
       test) and `nix develop --command cabal build all`.
       Completed: 2026-06-27T22:22:24Z.
-- [ ] **M3 hardening — co-transactional assistant turn and reply outbox.** The current
-      implementation records the assistant turn in one durable workflow step and enqueues
-      the danwa reply outbox row in the immediately following durable workflow step. This is
-      crash-recoverable and covered by tests, but it is not yet the stricter plan wording
-      that places `Kioku.Session.recordTurn` and `Keiro.Outbox.enqueueOutboxTx` in one
-      database transaction. Completing this requires either a kioku transaction hook for
-      `recordTurn` or a shikigami-local lower-level command wrapper.
+- [x] **M3 hardening — co-transactional assistant turn and reply outbox.** Replaced the
+      separate `record-assistant:<messageId>` workflow step plus `danwa-reply:<messageId>`
+      outbox step with one `record-assistant-and-reply:<messageId>` workflow step. The step
+      now uses `Keiro.Command.runCommandWithSqlEvents` against `Kioku.Session.EventStream`
+      so the `RecordTurn` append, `sessionInlineProjection`, `l1TimerScheduleProjection`,
+      and `Keiro.Outbox.enqueueOutboxTx` all run in the command append transaction. The
+      sink intent preparation remains shared with the normal agent-run outbox path via
+      `Shikigami.Agent.Workflow.prepareSinkIntent`. A replay after the command transaction
+      commits but before the workflow step journals sees the existing assistant turn and
+      returns the same deterministic `outbox:` handle without enqueueing a duplicate row.
+      Validated with `nix fmt`, `nix develop --command cabal test shikigami-core-test` (28
+      tests), and `nix develop --command cabal build all`.
+      Completed: 2026-06-27T23:06:00Z.
 - [ ] **M4 — End-to-end acceptance.** Post two human messages; show two danwa replies, four
       `kioku_turns` rows for one session, and a workflow journal proving the park-between-turns.
 - [x] **Dependency tracking.** Confirmed plan 7 ("Agent runs as durable keiro workflows")
@@ -164,6 +170,13 @@ implementation. Provide concise evidence.
   helper to `Shikigami.Agent.Workflow.Input` and left `Shikigami.Agent.Approval` re-exporting
   the same names. Evidence: `nix develop --command cabal test shikigami-core-test` passed
   the existing approval tests plus the new conversation workflow tests.
+
+- Kioku's public `Session.recordTurn` intentionally owns its transaction through
+  `runCommandWithProjections`, but the lower-level pieces it uses are exported:
+  `Kioku.Session.EventStream.sessionEventStream`/`sessionStream`,
+  `Kioku.Session.Domain.RecordTurn`, `Kioku.Session.ReadModel.sessionInlineProjection`, and
+  `Kioku.Distill.Timer.l1TimerScheduleProjection`. This allowed shikigami to add the reply
+  outbox enqueue to the same command append transaction without changing kioku.
 
 
 ## Decision Log
@@ -271,6 +284,16 @@ Record every decision made while working on the plan.
   and obtains the real danwa message id.
   Date: 2026-06-27
 
+- Decision: For conversation replies, use `Keiro.Command.runCommandWithSqlEvents` directly
+  rather than `Kioku.Session.recordTurn`, and apply the same Kioku inline projections plus
+  `Keiro.Outbox.enqueueOutboxTx` in that callback.
+  Rationale: `Session.recordTurn` cannot accept an additional in-transaction side effect,
+  while `runCommandWithSqlEvents` is the primitive Kioku's projection runner uses. This
+  gives the plan's required atomicity for assistant-turn event append, turn read-model
+  projection, timer projection, and reply outbox enqueue, while preserving Kioku's command
+  transducer and event stream.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -297,9 +320,12 @@ Compare the result against the original purpose.
   records both human and assistant turns into one running kioku session, enqueues the
   assistant reply through the sink outbox, then parks on a `next-message:<n>` awakeable. The
   danwa bridge now tries to deliver an addressed message to an already-parked conversation
-  workflow before enqueueing a new run job. The live danwa-server M4 acceptance remains open,
-  and the stricter assistant-turn/outbox single-transaction coupling remains a hardening
-  item because kioku's public `recordTurn` API owns its transaction internally.
+  workflow before enqueueing a new run job.
+- M3 hardening is complete. Assistant-turn recording and reply outbox enqueue now commit in
+  one SQL transaction using Keiro's command callback. The workflow journals one combined
+  `record-assistant-and-reply:<messageId>` step for replay; the deterministic outbox handle
+  keeps crash recovery idempotent if the command transaction commits before the workflow
+  step journal does. The live danwa-server M4 acceptance remains open.
 
 
 ## Context and Orientation
