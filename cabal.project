@@ -37,6 +37,14 @@ source-repository-package
   location: https://github.com/shinzui/kafka-effectful.git
   tag: f34a43cd476f7234848def9c0f08c54a1b67028e
 
+-- danwa — conversation substrate client used by ExecPlan 8's CLI spike and,
+-- later, the real DanwaConversation sink. Pinned to current origin/master.
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/danwa.git
+  tag: 301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9
+  subdir: danwa-core danwa-api danwa-client
+
 -- ↓↓↓ The kikan pin block, copied byte-identically from
 --    https://github.com/shinzui/kioku.git:cabal.project (its source-repository-package
 --    stanzas + footer). This is the coherent kikan set kioku was built against,

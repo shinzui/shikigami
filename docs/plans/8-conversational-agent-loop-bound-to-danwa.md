@@ -49,7 +49,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M0 — Danwa binding spike.** Add a throwaway CLI subcommand (or test) that uses
+- [x] **M0 — Danwa binding spike.** Added
+      `shikigami-cli/src/Shikigami/Cli/Commands/DanwaSpike.hs`, wired the
+      `danwa-spike` subcommand through `shikigami-cli/src/Shikigami/Cli.hs`, added
+      `danwa-api`/`danwa-client` to `shikigami-cli/shikigami-cli.cabal`, pinned danwa
+      packages in `cabal.project`, and verified with
+      `nix develop --command cabal build shikigami-cli`.
+      Completed: 2026-06-27T18:58:25Z.
+      Original scope: Add a throwaway CLI subcommand (or test) that uses
       `Danwa.Client` to start a conversation, join an `Agent` participant, post a human
       message, and post an agent reply; observe the rows in `danwa.danwa_messages`. Proves
       the danwa API end to end before any loop work.
@@ -83,7 +90,14 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Plain `cabal build shikigami-cli` outside the Nix dev shell failed while relinking
+  `shikigami-core` because the local shell could not find `librdkafka`; the documented
+  `nix develop --command cabal build shikigami-cli` path succeeded. Evidence:
+
+  ```text
+  ld: library not found for -lrdkafka
+  clang: error: linker command failed with exit code 1
+  ```
 
 
 ## Decision Log
@@ -132,13 +146,24 @@ Record every decision made while working on the plan.
   `MessageAddressedToAgent` integration event is danwa-side work tracked as a dependency.
   Date: 2026-06-27
 
+- Decision: Pin `danwa-core`, `danwa-api`, and `danwa-client` in `cabal.project` as a
+  source-repository-package from `https://github.com/shinzui/danwa.git` at commit
+  `301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9`, and depend on `danwa-api`/`danwa-client`
+  from `shikigami-cli`.
+  Rationale: M0 needs the real typed client and request/response DTOs to compile in this
+  repository, and `git ls-remote` confirmed that commit is current `origin/master`.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- M0 delivered a working CLI spike surface named `danwa-spike`. The implementation has not
+  been exercised against a live danwa server in this session, but it compiles against the
+  real `Danwa.Client` API and is ready for the M0 runtime acceptance check once
+  `danwa-server` is running.
 
 
 ## Context and Orientation
@@ -582,6 +607,16 @@ cabal run shikigami -- danwa-spike \
 #   posted agent reply   msg_01h...B
 psql -d danwa -c "select author, left(content,30) from danwa.danwa_messages order by posted_at;"
 # expected: two rows, authors part_human1 then part_agent1
+```
+
+Implementation build transcript:
+
+```text
+$ nix develop --command cabal build shikigami-cli
+Build profile: -w ghc-9.12.4 -O1
+...
+Building executable 'shikigami' for shikigami-cli-0.1.0.0...
+[2 of 2] Linking .../x/shikigami/build/shikigami/shikigami [Library changed]
 ```
 
 ### M1 — real sink (verify Delivered)

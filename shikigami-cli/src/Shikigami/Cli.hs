@@ -4,6 +4,7 @@ import Data.Text (Text)
 import Options.Applicative
 import Shikigami.Cli.Commands.AgentRun (runAgentRun)
 import Shikigami.Cli.Commands.ConsumeStream (runConsumeStream)
+import Shikigami.Cli.Commands.DanwaSpike (runDanwaSpike)
 import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
 import Shikigami.Cli.Commands.RunBehavior (runRunBehavior)
@@ -20,6 +21,7 @@ data Command
   | PublishFixture FilePath Text Text
   | ConsumeStream FilePath Text Text Text Bool
   | Worker FilePath Text Text
+  | DanwaSpike String String String
 
 main :: IO ()
 main = run =<< execParser opts
@@ -73,6 +75,16 @@ parser =
               (progDesc "Enqueue an addressed run job for a named agent (IP-7)")
           )
         <> command
+          "danwa-spike"
+          ( info
+              ( DanwaSpike
+                  <$> strOption (long "danwa-url" <> metavar "URL" <> help "danwa server base URL")
+                  <*> strOption (long "human" <> metavar "PARTICIPANT" <> help "Human participant id, e.g. part_...")
+                  <*> strOption (long "agent" <> metavar "PARTICIPANT" <> help "Agent participant id, e.g. part_...")
+              )
+              (progDesc "Spike the danwa HTTP client by posting a human message and agent reply")
+          )
+        <> command
           "publish-fixture"
           ( info
               ( PublishFixture
@@ -115,3 +127,4 @@ run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
 run (Worker agentsDir kawaUrl kizashiUrl) = runWorkerCmd agentsDir kawaUrl kizashiUrl
+run (DanwaSpike danwaUrl human agent) = runDanwaSpike danwaUrl human agent
