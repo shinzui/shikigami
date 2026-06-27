@@ -34,9 +34,9 @@ runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent = do
               appEnv,
               agents,
               behaviorEnv = behEnv,
-              kizashi = KizashiConfig {kizashiBaseUrl = kizashiUrl, kizashiDefaultRecipient = "recipient:default"},
-              kawa = KawaConfig {kawaBaseUrl = kawaUrl, kawaSourceSegment = "shinzui/shikigami"},
-              danwa = DanwaConfig {danwaBaseUrl = danwaUrl, danwaAgentParticipant = danwaAgent}
+              kizashi = KizashiConfig {baseUrl = kizashiUrl, defaultRecipient = "recipient:default"},
+              kawa = KawaConfig {baseUrl = kawaUrl, sourceSegment = "shinzui/shikigami"},
+              danwa = DanwaConfig {baseUrl = danwaUrl, agentParticipant = danwaAgent}
             }
     runWorker env
 

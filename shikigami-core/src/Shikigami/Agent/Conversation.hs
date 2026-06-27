@@ -32,24 +32,24 @@ data ConversationEnv = ConversationEnv
   }
 
 data ConversationTurnResult = ConversationTurnResult
-  { ctrSessionId :: !SessionId,
-    ctrUserTurnId :: !Text,
-    ctrAsstTurnId :: !Text,
-    ctrReplyMessageId :: !Text
+  { sessionId :: !SessionId,
+    userTurnId :: !Text,
+    asstTurnId :: !Text,
+    replyMessageId :: !Text
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 runConversationTurn :: ConversationEnv -> AgentDecl -> AddressedMessage -> IO (Either Text ConversationTurnResult)
-runConversationTurn env decl msg = do
-  sessionE <- resolveSession env decl (amConversationId msg)
+runConversationTurn env decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
+  sessionE <- resolveSession env decl msgConversationId
   case sessionE of
     Left err -> pure (Left err)
     Right sid -> do
       turns <- loadTurns env sid
-      let userTurnId = "danwa:user:" <> amMessageId msg
+      let userTurnId = "danwa:user:" <> msgMessageId
           userIndex = length turns
-      recordE <- recordTurn env sid userTurnId userIndex "user" (amContent msg)
+      recordE <- recordTurn env sid userTurnId userIndex "user" msgContent
       case recordE of
         Left err -> pure (Left err)
         Right () -> do
@@ -58,7 +58,7 @@ runConversationTurn env decl msg = do
             Left err -> pure (Left err)
             Right output -> do
               let replyText = renderLearning output
-                  asstTurnId = "danwa:assistant:" <> amMessageId msg
+                  asstTurnId = "danwa:assistant:" <> msgMessageId
                   asstIndex = userIndex + 1
               asstE <- recordTurn env sid asstTurnId asstIndex "assistant" replyText
               case asstE of
@@ -68,8 +68,8 @@ runConversationTurn env decl msg = do
                     postReply
                       (danwa env)
                       DanwaTarget
-                        { dtConversationId = amConversationId msg,
-                          dtParentMessageId = Just (amMessageId msg)
+                        { conversationId = msgConversationId,
+                          parentMessageId = Just msgMessageId
                         }
                       replyText
                   pure $
@@ -78,10 +78,10 @@ runConversationTurn env decl msg = do
                       Right replyMessageId ->
                         Right
                           ConversationTurnResult
-                            { ctrSessionId = sid,
-                              ctrUserTurnId = userTurnId,
-                              ctrAsstTurnId = asstTurnId,
-                              ctrReplyMessageId = replyMessageId
+                            { sessionId = sid,
+                              userTurnId = userTurnId,
+                              asstTurnId = asstTurnId,
+                              replyMessageId = replyMessageId
                             }
 
 resolveSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)

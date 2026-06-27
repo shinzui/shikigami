@@ -27,22 +27,22 @@ import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey)
 import System.IO (hPutStrLn, stderr)
 
 data AddressedMessage = AddressedMessage
-  { amConversationId :: !Text,
-    amMessageId :: !Text,
-    amAuthor :: !Text,
-    amContent :: !Text,
-    amAgentParticipant :: !Text
+  { conversationId :: !Text,
+    messageId :: !Text,
+    author :: !Text,
+    content :: !Text,
+    agentParticipant :: !Text
   }
   deriving stock (Eq, Show)
 
 instance ToJSON AddressedMessage where
   toJSON msg =
     object
-      [ "conversationId" .= amConversationId msg,
-        "messageId" .= amMessageId msg,
-        "author" .= amAuthor msg,
-        "content" .= amContent msg,
-        "agentParticipant" .= amAgentParticipant msg
+      [ "conversationId" .= conversationId msg,
+        "messageId" .= messageId msg,
+        "author" .= author msg,
+        "content" .= content msg,
+        "agentParticipant" .= agentParticipant msg
       ]
 
 instance FromJSON AddressedMessage where
@@ -56,15 +56,15 @@ instance FromJSON AddressedMessage where
         <*> o .: "agentParticipant"
 
 data DanwaBridgeConfig = DanwaBridgeConfig
-  { bridgeAgentMap :: ![(Text, Text)],
-    bridgePollIntervalMicros :: !Int
+  { agentMap :: ![(Text, Text)],
+    pollIntervalMicros :: !Int
   }
   deriving stock (Eq, Show)
 
 runDanwaBridge :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO ()
 runDanwaBridge cfg shikigamiPool danwaPool agents = forever do
   _ <- runDanwaBridgeOnce cfg shikigamiPool danwaPool agents
-  threadDelay (bridgePollIntervalMicros cfg)
+  threadDelay (pollIntervalMicros cfg)
 
 runDanwaBridgeOnce :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO [(AddressedMessage, Either UsageError MessageId)]
 runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
@@ -74,10 +74,10 @@ runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
     forM detected \msg ->
       case resolveAgent cfg agents msg of
         Nothing -> do
-          hPutStrLn stderr ("[danwa-bridge] no declared agent for participant " <> Text.unpack (amAgentParticipant msg))
+          hPutStrLn stderr ("[danwa-bridge] no declared agent for participant " <> Text.unpack (agentParticipant msg))
           pure []
         Just agent -> do
-          let key = agent <> ":" <> amMessageId msg
+          let key = agent <> ":" <> messageId msg
           claimed <- claimSeen shikigamiPool key
           if not claimed
             then pure []
@@ -88,7 +88,7 @@ runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
 detectAddressed :: DanwaBridgeConfig -> Pool -> IO [AddressedMessage]
 detectAddressed cfg danwaPool = do
   fmap concat $
-    forM (fst <$> bridgeAgentMap cfg) \participant ->
+    forM (fst <$> agentMap cfg) \participant ->
       Pool.use danwaPool (Session.statement participant selectAddressedStmt) <&> \case
         Right rows -> rows
         Left _ ->
@@ -98,7 +98,7 @@ detectAddressed cfg danwaPool = do
 
 resolveAgent :: DanwaBridgeConfig -> [AgentDecl] -> AddressedMessage -> Maybe Text
 resolveAgent cfg agents msg = do
-  agentName <- lookup (amAgentParticipant msg) (bridgeAgentMap cfg)
+  agentName <- lookup (agentParticipant msg) (agentMap cfg)
   declared <- find ((== agentName) . name) agents
   pure (name declared)
 

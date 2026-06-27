@@ -39,12 +39,12 @@ runConsumeStream agentsDir broker topic grp includeAgentActors = do
   withStore (defaultConnectionSettings connStr) $ \st -> do
     tr <- noopTracer
     let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
-        cfg = StreamConfig {streamBroker = broker, streamTopic = topic, streamGroupId = grp}
+        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = grp}
         onHit hit = do
-          putStrLn ("[stream] MATCH agent=" <> Text.unpack (hitAgentName hit))
-          case find ((== hitAgentName hit) . name) agents of
+          putStrLn ("[stream] MATCH agent=" <> Text.unpack (agentName hit))
+          case find ((== agentName hit) . name) agents of
             Just decl -> do
-              r <- enqueueRunJob (pool st) (runJobFromEnvelope decl (hitEnvelope hit))
+              r <- enqueueRunJob (pool st) (runJobFromEnvelope decl (envelope hit))
               case r of
                 Right mid -> putStrLn ("[stream]   enqueued run job " <> show mid)
                 Left e -> putStrLn ("[stream]   enqueue failed: " <> show e)

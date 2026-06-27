@@ -28,8 +28,8 @@ import Shikigami.Program.Registry (lookupTask)
 -- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once) and
 -- the model the skill arm dispatches with. Built once at worker startup.
 data BehaviorEnv = BehaviorEnv
-  { behaviorRuntime :: !Runtime,
-    behaviorModel :: !Model
+  { runtime :: !Runtime,
+    model :: !Model
   }
 
 -- | Build the env once: construct the handan 'Runtime' and register the stub baikai
@@ -38,7 +38,7 @@ newBehaviorEnv :: IO BehaviorEnv
 newBehaviorEnv = do
   rt <- newRuntime
   registerStubProvider
-  pure BehaviorEnv {behaviorRuntime = rt, behaviorModel = stubModel}
+  pure BehaviorEnv {runtime = rt, model = stubModel}
 
 -- | Dispatch on the behavior union. The input @Value@ is the trigger payload; the
 -- output @Value@ is the behavior's result.
@@ -48,9 +48,9 @@ runBehavior env decl payload =
     ShikumiProgram {task = t} ->
       case lookupTask t of
         Nothing -> pure (Left (UnknownTask t))
-        Just tk -> runProgramTask (behaviorRuntime env) tk payload
+        Just tk -> runProgramTask (runtime env) tk payload
     Skill {path = p} ->
-      runSkill (behaviorModel env) (SkillDir (Text.unpack p)) payload
+      runSkill (model env) (SkillDir (Text.unpack p)) payload
     Deterministic {} ->
       -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
       pure (Left (UnsupportedBehavior "Deterministic"))

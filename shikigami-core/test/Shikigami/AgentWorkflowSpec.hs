@@ -48,7 +48,7 @@ tests =
 
             case (firstRun, second) of
               (Right (Completed (Right firstResult)), Right (Completed (Right secondResult))) -> do
-                assertEqual "open-session replayed the original session id" (runSessionId firstResult) (runSessionId secondResult)
+                assertEqual "open-session replayed the original session id" (sessionId firstResult) (sessionId secondResult)
                 assertEqual "dispatch-sinks enqueued one stable outbox row" (Right 1) (length <$> outboxRows)
               other -> assertEqual "both workflow runs complete successfully" "completed twice" (show other),
       testCase "resumes after a crash without rerunning journaled step bodies" do
@@ -213,9 +213,9 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
     { appEnv,
       behaviorEnv,
       agents = [decl],
-      kizashi = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "recipient"},
-      kawa = KawaConfig {kawaBaseUrl = "http://localhost:1", kawaSourceSegment = "shinzui/shikigami"},
-      danwa = DanwaConfig {danwaBaseUrl = "http://localhost:1", danwaAgentParticipant = "part_agent_test"},
+      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
+      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       hooks,
       approval,
       deadline
@@ -237,9 +237,9 @@ approvalEnv aidRef currentSession =
 approvalRequest :: ApprovalRequest
 approvalRequest =
   ApprovalRequest
-    { approvalPrompt = "Dispatch heartbeat digest?",
-      approvalContext = object ["source" .= ("test" :: Text)],
-      approvalChannel = ViaDanwa
+    { prompt = "Dispatch heartbeat digest?",
+      context = object ["source" .= ("test" :: Text)],
+      channel = ViaDanwa
     }
 
 readCapturedAwakeable :: IORef (Maybe AwakeableId) -> IO AwakeableId

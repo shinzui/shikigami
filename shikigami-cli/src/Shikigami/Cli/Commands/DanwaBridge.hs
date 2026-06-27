@@ -28,8 +28,8 @@ runDanwaBridgeCmd agentsDir danwaConn mappingsRaw = do
     withStore (defaultConnectionSettings danwaConn) \danwaStore ->
       runDanwaBridge
         DanwaBridgeConfig
-          { bridgeAgentMap = mappings,
-            bridgePollIntervalMicros = 1_000_000
+          { agentMap = mappings,
+            pollIntervalMicros = 1_000_000
           }
         (pool shikigamiStore)
         (pool danwaStore)

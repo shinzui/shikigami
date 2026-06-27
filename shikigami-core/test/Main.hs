@@ -121,8 +121,8 @@ danwaBridgeTests =
             assertBool "fixture setup succeeds" (either (const False) (const True) setup)
             let cfg =
                   DanwaBridgeConfig
-                    { bridgeAgentMap = [("part_agent_test", "heartbeat")],
-                      bridgePollIntervalMicros = 1_000_000
+                    { agentMap = [("part_agent_test", "heartbeat")],
+                      pollIntervalMicros = 1_000_000
                     }
             first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
             second <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
@@ -210,27 +210,27 @@ sampleKizashiSink =
 ctxFor :: AgentIdentity -> KizashiConfig -> KawaConfig -> SinkContext
 ctxFor ident kz kw =
   SinkContext
-    { sinkCtxIdentity = ident,
-      sinkCtxRunId = "run-1",
-      sinkCtxOrdinal = 0,
-      sinkCtxKizashi = kz,
-      sinkCtxKawa = kw,
-      sinkCtxDanwa = DanwaConfig {danwaBaseUrl = "http://localhost:1", danwaAgentParticipant = "part_agent_test"},
-      sinkCtxDanwaTarget = Nothing,
-      sinkCtxOccurredAt = Nothing
+    { identity = ident,
+      runId = "run-1",
+      ordinal = 0,
+      kizashi = kz,
+      kawa = kw,
+      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      danwaTarget = Nothing,
+      occurredAt = Nothing
     }
 
 dummyKawa :: KawaConfig
-dummyKawa = KawaConfig {kawaBaseUrl = "http://localhost:1", kawaSourceSegment = "shinzui/shikigami"}
+dummyKawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"}
 
 dummyKizashi :: KizashiConfig
-dummyKizashi = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "recipient_default"}
+dummyKizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
 
 ctxForDanwa :: AgentIdentity -> DanwaConfig -> Maybe DanwaTarget -> SinkContext
 ctxForDanwa ident danwa target =
   (ctxFor ident dummyKizashi dummyKawa)
-    { sinkCtxDanwa = danwa,
-      sinkCtxDanwaTarget = target
+    { danwa = danwa,
+      danwaTarget = target
     }
 
 kizashiTests :: TestTree
@@ -240,10 +240,10 @@ kizashiTests =
     [ testCase "allow-listed: POSTs a CreateSignalReq, outcome Delivered" $ do
         ref <- newIORef []
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
-          let kz = KizashiConfig {kizashiBaseUrl = baseUrl port, kizashiDefaultRecipient = "recipient_default"}
+          let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
               ctx = ctxFor (AgentIdentity "heartbeat") kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
-          sinkResultOutcome r @?= Delivered "sig_stub"
+          outcome r @?= Delivered "sig_stub"
           reqs <- readIORef ref
           assertEqual "one signal recorded" 1 (length reqs)
           case reqs of
@@ -252,10 +252,10 @@ kizashiTests =
       testCase "denied: skipped and recorded, no POST" $ do
         ref <- newIORef []
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
-          let kz = KizashiConfig {kizashiBaseUrl = baseUrl port, kizashiDefaultRecipient = "recipient_default"}
+          let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
               ctx = ctxFor (AgentIdentity "intruder") kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
-          case sinkResultOutcome r of
+          case outcome r of
             DeniedOutcome _ -> pure ()
             other -> assertBool ("expected DeniedOutcome, got " <> show other) False
           reqs <- readIORef ref
@@ -269,13 +269,13 @@ kawaTests =
     [ testCase "dispatch builds + posts envelope; idempotent on (source, source_event_id)" $ do
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
         testWithApplication (pure (stubKawaApplication store Nothing)) $ \port -> do
-          let kw = KawaConfig {kawaBaseUrl = baseUrl port, kawaSourceSegment = "shinzui/shikigami"}
-              dummyKz = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "r"}
+          let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
+              dummyKz = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "r"}
               ctx = ctxFor (AgentIdentity "heartbeat") dummyKz kw
               sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
           r1 <- Sink.dispatch ctx sink sampleOutput
           r2 <- Sink.dispatch ctx sink sampleOutput
-          case (sinkResultOutcome r1, sinkResultOutcome r2) of
+          case (outcome r1, outcome r2) of
             (Delivered a1, Delivered a2) -> do
               assertBool "activity id non-empty" (not (Text.null a1))
               assertEqual "same activity id on retry (deduplicated)" a1 a2
@@ -343,22 +343,22 @@ danwaTests =
     [ testCase "targeted reply posts through danwa and returns Delivered msg id" do
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
-          let cfg = DanwaConfig {danwaBaseUrl = baseUrl port, danwaAgentParticipant = "part_agent_test"}
-              target = Just DanwaTarget {dtConversationId = "conv_target", dtParentMessageId = Just "msg_parent"}
+          let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
+              target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
               ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg target
               sink = DanwaConversation {topic = "support"}
           r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
-          sinkResultOutcome r @?= Delivered "msg_reply"
+          outcome r @?= Delivered "msg_reply"
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs),
       testCase "untargeted sink starts a conversation before posting" do
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
-          let cfg = DanwaConfig {danwaBaseUrl = baseUrl port, danwaAgentParticipant = "part_agent_test"}
+          let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
               sink = DanwaConversation {topic = "support"}
           r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
-          sinkResultOutcome r @?= Delivered "msg_stub"
+          outcome r @?= Delivered "msg_stub"
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
     ]
@@ -366,5 +366,5 @@ danwaTests =
 sampleOutput :: Data.Aeson.Value
 sampleOutput = object ["summary" .= ("heartbeat ok" :: Text), "activity_ref" .= ("activity://act_seed" :: Text)]
 
-baseUrl :: Int -> Text
-baseUrl port = "http://localhost:" <> Text.pack (show port)
+testBaseUrl :: Int -> Text
+testBaseUrl port = "http://localhost:" <> Text.pack (show port)

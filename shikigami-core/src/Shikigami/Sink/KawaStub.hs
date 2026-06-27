@@ -35,9 +35,9 @@ import System.IO (hPutStrLn, stderr)
 type Republisher = IngestRequest -> Text -> IO ()
 
 data StubKawaOptions = StubKawaOptions
-  { stubPort :: !Int,
-    stubRepublishTopic :: !(Maybe Text),
-    stubBroker :: !(Maybe Text)
+  { port :: !Int,
+    republishTopic :: !(Maybe Text),
+    broker :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
@@ -83,10 +83,10 @@ textResp status t = responseLBS status [(hContentType, "text/plain; charset=utf-
 runStubKawa :: StubKawaOptions -> IO ()
 runStubKawa opts = do
   ref <- newIORef Map.empty
-  mRepub <- case (stubRepublishTopic opts, stubBroker opts) of
+  mRepub <- case (republishTopic opts, broker opts) of
     (Just topic, Just broker) -> do
       hPutStrLn stderr ("[stub-kawa] republishing accepted envelopes to topic " <> Text.unpack topic <> " on broker " <> Text.unpack broker)
       pure (Just (mkRepublisher broker topic))
     _ -> pure Nothing
-  hPutStrLn stderr ("stub-kawa listening on :" <> show (stubPort opts) <> " (doorway POST /v1/sources/{source}/events)")
-  Warp.run (stubPort opts) (stubKawaApplication ref mRepub)
+  hPutStrLn stderr ("stub-kawa listening on :" <> show (port opts) <> " (doorway POST /v1/sources/{source}/events)")
+  Warp.run (port opts) (stubKawaApplication ref mRepub)

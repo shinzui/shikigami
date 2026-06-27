@@ -39,7 +39,7 @@ sinkKindOf = \case
 dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
 dispatch ctx sink output = do
   let kind = sinkKindOf sink
-  grant <- checkGrant (sinkCtxIdentity ctx) kind
+  grant <- checkGrant (identity ctx) kind
   case grant of
     Left (Denied reason) -> do
       hPutStrLn stderr ("[sink] skipped (denied): " <> Text.unpack reason)
@@ -51,15 +51,15 @@ runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome
 runSink ctx sink output = case sink of
   KawaDigest {} -> do
     env <- buildEnvelope ctx sink output
-    r <- postEnvelope (sinkCtxKawa ctx) env
+    r <- postEnvelope (kawa ctx) env
     pure (either (Failed . renderKawaError) Delivered r)
   KizashiSignal {} ->
-    case buildSignalReq (sinkCtxKizashi ctx) sink (sinkCtxIdentity ctx) output of
+    case buildSignalReq (kizashi ctx) sink (identity ctx) output of
       Left e -> pure (Failed e)
       Right req -> do
-        r <- postSignal (sinkCtxKizashi ctx) req
+        r <- postSignal (kizashi ctx) req
         pure (either Failed (Delivered . signalId) r)
-  ReiAction {} -> Stubbed <$ runReiActionStub (sinkCtxIdentity ctx) sink output
+  ReiAction {} -> Stubbed <$ runReiActionStub (identity ctx) sink output
   DanwaConversation {} -> do
-    r <- runDanwa (sinkCtxDanwa ctx) (sinkCtxIdentity ctx) (sinkCtxDanwaTarget ctx) sink output
+    r <- runDanwa (danwa ctx) (identity ctx) (danwaTarget ctx) sink output
     pure (either Failed Delivered r)

@@ -20,7 +20,7 @@ import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 -- | Build the C4 request from a @KizashiSignal@ sink + the behavior output. Fails for
 -- any other sink variant.
 buildSignalReq :: KizashiConfig -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
-buildSignalReq cfg sink (AgentIdentity nm) output =
+buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} sink (AgentIdentity nm) output =
   case sink of
     KizashiSignal
       { source = src,
@@ -34,7 +34,7 @@ buildSignalReq cfg sink (AgentIdentity nm) output =
         Right
           CreateSignalReq
             { actor = nm,
-              recipient = fromMaybe (kizashiDefaultRecipient cfg) mrec,
+              recipient = fromMaybe fallbackRecipient mrec,
               source = src,
               signalType = st,
               intent = tmpl,
@@ -56,7 +56,7 @@ activityRefTags _ = []
 -- | POST the request to @<baseUrl>/v1/signals@ and decode the response.
 postSignal :: KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
 postSignal cfg req = do
-  let url = kizashiBaseUrl cfg <> "/v1/signals"
+  let url = baseUrl cfg <> "/v1/signals"
   respE <- postJSON url req
   pure $ case respE of
     Left e -> Left e

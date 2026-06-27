@@ -42,7 +42,7 @@ import Shikigami.Prelude
 
 -- | The result of an agent run with memory.
 data AgentRunResult = AgentRunResult
-  { runSessionId :: !SessionId,
+  { sessionId :: !SessionId,
     recalledPrior :: ![MemoryRecord], -- what the agent remembered from earlier runs
     behaviorOutput :: !Value, -- the behavior's result value
     recordedMemId :: !(Maybe MemoryId) -- the learning recorded this run (Nothing on failure)
@@ -122,7 +122,7 @@ runAgentWithMemory appEnv behEnv decl payload = do
       pure
         ( Right
             AgentRunResult
-              { runSessionId = sid,
+              { sessionId = sid,
                 recalledPrior = prior,
                 behaviorOutput = output,
                 recordedMemId = Just mid

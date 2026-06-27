@@ -12,7 +12,7 @@ runStubKawaCmd :: Int -> Maybe String -> Maybe String -> IO ()
 runStubKawaCmd port mtopic mbroker =
   runStubKawa
     StubKawaOptions
-      { stubPort = port,
-        stubRepublishTopic = Text.pack <$> mtopic,
-        stubBroker = Text.pack <$> mbroker
+      { port = port,
+        republishTopic = Text.pack <$> mtopic,
+        broker = Text.pack <$> mbroker
       }

@@ -13,9 +13,8 @@ module Shikigami.Trigger.Consumer
 where
 
 import Data.ByteString (ByteString)
-import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
-import Effectful (Eff, IOE, liftIO, runEff, (:>))
+import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runError)
 import Hasql.Transaction qualified as Tx
 import Kafka.Consumer
@@ -47,16 +46,16 @@ import System.IO (hPutStrLn, stderr)
 
 -- | Where to consume the activity stream.
 data StreamConfig = StreamConfig
-  { streamBroker :: !Text, -- "host:port"
-    streamTopic :: !Text, -- "activity.v1"
-    streamGroupId :: !Text
+  { broker :: !Text, -- "host:port"
+    topic :: !Text, -- "activity.v1"
+    consumerGroupId :: !Text
   }
   deriving stock (Eq, Show)
 
 -- | A matched (agent, envelope) pair the consumer reports.
 data StreamHit = StreamHit
-  { hitAgentName :: !Text,
-    hitEnvelope :: !ActivityEnvelope
+  { agentName :: !Text,
+    envelope :: !ActivityEnvelope
   }
   deriving stock (Eq, Show)
 
@@ -64,12 +63,12 @@ data StreamHit = StreamHit
 -- matches an incoming envelope. Decodes via the keiro inbox; a re-delivery is logged
 -- and not re-fired. Runs forever.
 subscribeActivityStream :: AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream appEnv cfg include agents onHit = do
+subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} include agents onHit = do
   let props =
-        brokersList [BrokerAddress (streamBroker cfg)]
-          <> groupId (ConsumerGroupId (streamGroupId cfg))
+        brokersList [BrokerAddress streamBroker]
+          <> groupId (ConsumerGroupId streamGroup)
           <> noAutoCommit
-      sub = topics [TopicName (streamTopic cfg)] <> offsetReset Earliest
+      sub = topics [TopicName streamTopic] <> offsetReset Earliest
   result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
   case result of
     Left err -> hPutStrLn stderr ("[stream] consumer error: " <> show err)

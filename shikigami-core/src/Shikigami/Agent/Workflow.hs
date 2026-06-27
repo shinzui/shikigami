@@ -158,7 +158,7 @@ runResolvedAgent deps job decl = do
       pure
         ( Right
             AgentRunResult
-              { runSessionId = sid,
+              { sessionId = sid,
                 recalledPrior = prior,
                 behaviorOutput = output,
                 recordedMemId = mem
@@ -332,7 +332,7 @@ deterministicOutboxId workflowId ordinal =
         Text.unpack ("shikigami:sink:" <> sinkMessageId workflowId ordinal)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent deps row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -340,18 +340,18 @@ publishSinkIntent deps row =
           result <-
             dispatch
               SinkContext
-                { sinkCtxIdentity = AgentIdentity agent,
-                  sinkCtxRunId = runId,
-                  sinkCtxOrdinal = ordinal,
-                  sinkCtxKizashi = kizashi deps,
-                  sinkCtxKawa = kawa deps,
-                  sinkCtxDanwa = danwa deps,
-                  sinkCtxDanwaTarget = danwaTarget,
-                  sinkCtxOccurredAt = occurredAt
+                { identity = AgentIdentity agent,
+                  runId = runId,
+                  ordinal = ordinal,
+                  kizashi = depsKizashi,
+                  kawa = depsKawa,
+                  danwa = depsDanwa,
+                  danwaTarget = danwaTarget,
+                  occurredAt = occurredAt
                 }
               sink
               output
-          pure $ case sinkResultOutcome result of
+          pure $ case outcome result of
             Failed err -> PublishFailed err
             _ -> PublishSucceeded
 

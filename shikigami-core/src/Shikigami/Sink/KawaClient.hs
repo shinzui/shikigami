@@ -39,12 +39,12 @@ renderKawaError (KawaDecodeError t) = "decode IngestResponse: " <> t
 -- @actor.kind = "agent"@, @source = "shinzui/shikigami"@, @idempotency_key@ = the
 -- deterministic @source_event_id@.
 buildEnvelope :: SinkContext -> Sink -> Value -> IO ActivityEnvelope
-buildEnvelope ctx sink output =
+buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredAt} sink output =
   case sink of
     KawaDigest {subjectType = sty, verb = vb} -> do
       actId <- genKindID @"act"
-      now <- maybe getCurrentTime pure (sinkCtxOccurredAt ctx)
-      let nm = agentName (sinkCtxIdentity ctx)
+      now <- maybe getCurrentTime pure ctxOccurredAt
+      let nm = agentName ctxIdentity
       pure
         ActivityEnvelope
           { activityId = toText actId,
@@ -84,9 +84,9 @@ projectIngest (ActivityEnvelope {verb = vb, actor = ac, subject = sj, payload = 
 -- | POST the envelope (projected to an @IngestRequest@) to @/v1/sources/{source}/events@
 -- and return the canonical activity id.
 postEnvelope :: KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
-postEnvelope cfg env = do
+postEnvelope KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
   let req = projectIngest env
-      url = kawaBaseUrl cfg <> "/v1/sources/" <> Text.replace "/" "%2F" (kawaSourceSegment cfg) <> "/events"
+      url = cfgBaseUrl <> "/v1/sources/" <> Text.replace "/" "%2F" cfgSourceSegment <> "/events"
   respE <- postJSON url req
   pure $ case respE of
     Left e -> Left (KawaHttpError e)

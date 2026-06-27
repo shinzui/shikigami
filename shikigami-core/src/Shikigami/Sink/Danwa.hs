@@ -31,15 +31,15 @@ runDanwa cfg identity target sink output =
     _ -> pure (Left "runDanwa: not a DanwaConversation sink")
 
 postReply :: DanwaConfig -> DanwaTarget -> Text -> IO (Either Text Text)
-postReply cfg (DanwaTarget {dtConversationId = cid, dtParentMessageId = parent}) content = do
+postReply cfg (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
   result <-
-    Danwa.runDanwa (Text.unpack (danwaBaseUrl cfg)) $
+    Danwa.runDanwa (Text.unpack (baseUrl cfg)) $
       case parent of
         Nothing ->
           Danwa.postMessage
             cid
             Msg.PostMessageRequest
-              { Msg.author = danwaAgentParticipant cfg,
+              { Msg.author = agentParticipant cfg,
                 Msg.content = content
               }
         Just parentMessageId ->
@@ -47,7 +47,7 @@ postReply cfg (DanwaTarget {dtConversationId = cid, dtParentMessageId = parent})
             cid
             parentMessageId
             Msg.PostMessageRequest
-              { Msg.author = danwaAgentParticipant cfg,
+              { Msg.author = agentParticipant cfg,
                 Msg.content = content
               }
   pure $ case result of
@@ -61,11 +61,11 @@ postToFreshConversation cfg (AgentIdentity _agentName) sink content =
   case sink of
     DanwaConversation {} -> do
       result <-
-        Danwa.runDanwa (Text.unpack (danwaBaseUrl cfg)) do
+        Danwa.runDanwa (Text.unpack (baseUrl cfg)) do
           conversation <-
             Danwa.startConversation
               Conv.StartConversationRequest
-                { Conv.startedBy = danwaAgentParticipant cfg,
+                { Conv.startedBy = agentParticipant cfg,
                   Conv.kind = "thread",
                   Conv.parentConversationId = Nothing
                 }
@@ -74,14 +74,14 @@ postToFreshConversation cfg (AgentIdentity _agentName) sink content =
             Danwa.joinConversation
               cid
               Conv.JoinConversationRequest
-                { Conv.participantId = danwaAgentParticipant cfg,
+                { Conv.participantId = agentParticipant cfg,
                   Conv.participantType = "agent"
                 }
           response <-
             Danwa.postMessage
               cid
               Msg.PostMessageRequest
-                { Msg.author = danwaAgentParticipant cfg,
+                { Msg.author = agentParticipant cfg,
                   Msg.content = content
                 }
           let Msg.MessageResponse {Msg.messageId = mid} = response

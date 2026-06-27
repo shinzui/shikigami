@@ -51,9 +51,9 @@ import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind)
 
 data ApprovalRequest = ApprovalRequest
-  { approvalPrompt :: !Text,
-    approvalContext :: !Value,
-    approvalChannel :: !ApprovalChannel
+  { prompt :: !Text,
+    context :: !Value,
+    channel :: !ApprovalChannel
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -112,7 +112,7 @@ awaitApproval env stepName req deadline = do
     step (notifyStepName stepName) $
       liftIO do
         recordPark env (currentSession env) aid req
-        postAsk env (approvalChannel req) req aid
+        postAsk env (channel req) req aid
   traverse_ (armApprovalDeadline stepName aid) deadline
   awaitAnswer
 

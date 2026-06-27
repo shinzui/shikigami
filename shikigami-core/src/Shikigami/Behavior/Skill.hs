@@ -36,10 +36,10 @@ newtype SkillDir = SkillDir FilePath
 -- | The parsed @SKILL.md@: required name + description from the YAML frontmatter, plus
 -- the Markdown instruction body and any declared allowed-tools.
 data SkillManifest = SkillManifest
-  { skillName :: !Text,
-    skillDescription :: !Text,
-    skillBody :: !Text,
-    skillAllowedTools :: ![Text]
+  { name :: !Text,
+    description :: !Text,
+    body :: !Text,
+    allowedTools :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -68,10 +68,10 @@ parseManifest t =
             (Just n, Just d) ->
               Right
                 SkillManifest
-                  { skillName = n,
-                    skillDescription = d,
-                    skillBody = Text.unlines bodyLines,
-                    skillAllowedTools = []
+                  { name = n,
+                    description = d,
+                    body = Text.unlines bodyLines,
+                    allowedTools = []
                   }
             _ -> Left (SkillLoadFailed "SKILL.md frontmatter missing name or description")
     _ -> Left (SkillLoadFailed "SKILL.md missing frontmatter")
@@ -93,8 +93,8 @@ runSkill model dir payload = do
     Right manifest -> do
       let ctx =
             _Context
-              { systemPrompt = Just (skillDescription manifest),
-                messages = V.singleton (user (skillBody manifest <> "\n\nTrigger payload: " <> renderPayload payload)),
+              { systemPrompt = Just (description manifest),
+                messages = V.singleton (user (body manifest <> "\n\nTrigger payload: " <> renderPayload payload)),
                 tools = V.empty
               }
       resp <- completeRequest model ctx _Options

@@ -17,8 +17,8 @@ import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
 -- absent parent means "post a top-level message in the conversation".
 data DanwaTarget = DanwaTarget
-  { dtConversationId :: !Text,
-    dtParentMessageId :: !(Maybe Text)
+  { conversationId :: !Text,
+    parentMessageId :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -27,14 +27,14 @@ data DanwaTarget = DanwaTarget
 -- ordinal (for the deterministic @source_event_id@), the endpoint configs, and the
 -- run timestamp.
 data SinkContext = SinkContext
-  { sinkCtxIdentity :: !AgentIdentity,
-    sinkCtxRunId :: !Text,
-    sinkCtxOrdinal :: !Int,
-    sinkCtxKizashi :: !KizashiConfig,
-    sinkCtxKawa :: !KawaConfig,
-    sinkCtxDanwa :: !DanwaConfig,
-    sinkCtxDanwaTarget :: !(Maybe DanwaTarget),
-    sinkCtxOccurredAt :: !(Maybe UTCTime)
+  { identity :: !AgentIdentity,
+    runId :: !Text,
+    ordinal :: !Int,
+    kizashi :: !KizashiConfig,
+    kawa :: !KawaConfig,
+    danwa :: !DanwaConfig,
+    danwaTarget :: !(Maybe DanwaTarget),
+    occurredAt :: !(Maybe UTCTime)
   }
 
 -- | The outcome of one sink dispatch. @DeniedOutcome@ is distinct from the permission
@@ -48,8 +48,8 @@ data SinkOutcome
   deriving anyclass (ToJSON, FromJSON)
 
 data SinkResult = SinkResult
-  { sinkResultKind :: !SinkKind,
-    sinkResultOutcome :: !SinkOutcome
+  { kind :: !SinkKind,
+    outcome :: !SinkOutcome
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -58,4 +58,4 @@ data SinkResult = SinkResult
 -- of the same run re-POSTs the same key, so the doorway dedups it.
 mkSourceEventId :: SinkContext -> Text
 mkSourceEventId ctx =
-  agentName (sinkCtxIdentity ctx) <> ":" <> sinkCtxRunId ctx <> ":" <> Text.pack (show (sinkCtxOrdinal ctx))
+  agentName (identity ctx) <> ":" <> runId ctx <> ":" <> Text.pack (show (ordinal ctx))

@@ -57,7 +57,7 @@ runAgentRun agentArg mActivity = do
                 hPutStrLn stderr ("agent-run: " <> Text.unpack e)
                 exitFailure
               Right r -> do
-                putStrLn ("agent " <> show (name decl) <> " run " <> Text.unpack (idText (runSessionId r)))
+                putStrLn ("agent " <> show (name decl) <> " run " <> Text.unpack (idText (sessionId r)))
                 putStrLn ("recalled " <> show (length (recalledPrior r)) <> " prior memories:")
                 mapM_ (TIO.putStrLn . ("  - " <>) . renderMemoryRecord) (recalledPrior r)
                 maybe
