@@ -15,6 +15,7 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (.
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
+import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChildrenOfParent)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -149,9 +150,29 @@ tests =
                     parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
                     webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" 0
                     codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" 1
+                    WorkflowId webWorkflowIdText = webWorkflowId
+                    WorkflowId codeWorkflowIdText = codeWorkflowId
+                    expectedRunningChildLinks =
+                      Set.fromList
+                        [ ("shikigami.agent-run", webWorkflowIdText, "running"),
+                          ("shikigami.agent-run", codeWorkflowIdText, "running")
+                        ]
 
                 parked <- runAgentRunWorkflow deps researchSupervisorJob
                 assertEqual "research supervisor parks after spawning children" (Right Suspended) parked
+                childLinksAfterPark <- runAppIO appEnv (lookupChildrenOfParent "research-supervisor:test-fanout" "shikigami.agent-run")
+                assertEqual
+                  "initial park creates two running child workflow links"
+                  (Right expectedRunningChildLinks)
+                  (childLinkSummary <$> childLinksAfterPark)
+
+                replayedWhileChildrenPending <- runAgentRunWorkflow deps researchSupervisorJob
+                assertEqual "parent replay while children are pending parks again" (Right Suspended) replayedWhileChildrenPending
+                childLinksAfterReplay <- runAppIO appEnv (lookupChildrenOfParent "research-supervisor:test-fanout" "shikigami.agent-run")
+                assertEqual
+                  "parent replay does not duplicate delegated children"
+                  (childLinkSummary <$> childLinksAfterPark)
+                  (childLinkSummary <$> childLinksAfterReplay)
 
                 webRun <-
                   runAppIO appEnv $
@@ -393,6 +414,20 @@ lineageSummary rows =
     [ (agentId, parentSessionId, delegationDepth)
     | SessionRow {agentId, parentSessionId, delegationDepth} <- rows
     ]
+
+childLinkSummary :: [ChildRow] -> Set.Set (Text, Text, Text)
+childLinkSummary rows =
+  Set.fromList
+    [ (childName, childId, childStatusText status)
+    | ChildRow {childName, childId, status} <- rows
+    ]
+
+childStatusText :: ChildStatus -> Text
+childStatusText = \case
+  Running -> "running"
+  ChildCompleted -> "completed"
+  ChildCancelled -> "cancelled"
+  ChildFailed -> "failed"
 
 fireDueApprovalTimer :: AppEnv -> IO ()
 fireDueApprovalTimer appEnv = do

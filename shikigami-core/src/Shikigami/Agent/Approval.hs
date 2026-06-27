@@ -47,6 +47,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind)
 
@@ -217,6 +218,3 @@ parseApprovalTimeoutPayload value = do
 
 approvalTimeoutKind :: Text
 approvalTimeoutKind = "shikigami.approval-timeout"
-
-agentRunWorkflowName :: WorkflowName
-agentRunWorkflowName = WorkflowName "shikigami.agent-run"
