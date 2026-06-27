@@ -295,7 +295,10 @@ job =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-workflow-replay"
+      idempotencyKey = "heartbeat:test-workflow-replay",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
 
 crashJob :: RunJob
@@ -305,7 +308,10 @@ crashJob =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-workflow-crash-resume"
+      idempotencyKey = "heartbeat:test-workflow-crash-resume",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
 
 approvalJob :: RunJob
@@ -315,7 +321,10 @@ approvalJob =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-approval-approved"
+      idempotencyKey = "heartbeat:test-approval-approved",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
 
 rejectedJob :: RunJob
@@ -325,7 +334,10 @@ rejectedJob =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-approval-rejected"
+      idempotencyKey = "heartbeat:test-approval-rejected",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
 
 timeoutJob :: RunJob
@@ -335,7 +347,10 @@ timeoutJob =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-approval-timeout"
+      idempotencyKey = "heartbeat:test-approval-timeout",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
 
 answeredBeforeDeadlineJob :: RunJob
@@ -345,5 +360,8 @@ answeredBeforeDeadlineJob =
       triggerKind = TriggeredByEvent,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:test-approval-before-deadline"
+      idempotencyKey = "heartbeat:test-approval-before-deadline",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }

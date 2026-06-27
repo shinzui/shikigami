@@ -53,8 +53,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M1 — delegation context and depth bound (pure core).** Add `Shikigami.Agent.Delegate.Context` with `DelegateCtx`, `maxDelegationDepth = 4`, and the `DelegationDepthExceeded` error; extend `Shikigami.Api.RunJob.TriggerKind` with `TriggeredByDelegation` and add the optional delegation fields (`parentSessionId`, `parentRunWorkflowId`, `delegationDepth`) to `RunJob`. Unit tests prove depth admits 0..3 and rejects 4.
-- [ ] **M2 — kioku parent/child lineage (dependency).** Extend kioku's `StartSessionData` / `SessionStartedData` / `SessionRow` with `parentSessionId` and `delegationDepth`; add a `getDelegationChildren` read model. Verify via a kioku test that a child session row carries its parent id and depth.
+- [x] **M1 — delegation context and depth bound (pure core).** Completed 2026-06-27T20:34:00Z. Added `Shikigami.Agent.Delegate.Context` with `DelegateCtx`, `maxDelegationDepth = 4`, `DelegationDepthExceeded`, and `checkDepth`; extended `Shikigami.Api.RunJob.TriggerKind` with `TriggeredByDelegation`; added optional `parentSessionId`, `parentRunWorkflowId`, and `delegationDepth` fields to `RunJob`; set existing producers and tests to `Nothing`; added the `Delegate.Context` unit tests. Validation: `nix develop -c cabal build shikigami-api shikigami-core` succeeded and `nix develop -c cabal test all` passed all 24 tests.
+- [x] **M2a — kioku parent/child lineage implementation (dependency).** Completed 2026-06-27T20:42:54Z in `/Users/shinzui/Keikaku/bokuno/kioku` and committed as `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1` (`feat(session): add delegation lineage`). Extended `StartSessionData`, `SessionStartedData`, and `SessionRow` with `parentSessionId` and `delegationDepth`; added backwards-compatible decoding for old `SessionStarted` events; added the `getDelegationChildren` read model; added the `2026-06-27-20-35-00-kioku-session-delegation-lineage.sql` migration; and added `Session.Lineage` tests. Validation: `nix develop -c cabal build all` and `nix develop -c cabal test all` passed in the kioku repo.
+- [ ] **M2b — shikigami kioku pin update.** Shikigami currently pins kioku through a GitHub `source-repository-package` tag in `cabal.project`. Update that tag to `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1` after the commit is available from `https://github.com/shinzui/kioku.git`, or deliberately switch to a local dependency override with an explicit Decision Log entry if local-only development is desired. Until this is done, shikigami builds still resolve the older kioku API and M3 cannot compile against the new `StartSessionData` fields.
 - [ ] **M3 — the `delegate` primitive over keiro child workflows.** Add `Shikigami.Agent.Delegate` with `delegate` and `awaitDelegated`, built on `Keiro.Workflow.Child.spawnChild` / `awaitChild`; derive a replay-stable child workflow id; register the agent-run workflow in the resume worker's registry so children resolve. Depends on plan 7. Verify a supervisor workflow spawns a child, suspends, and resumes with the child result.
 - [ ] **M4 — end-to-end supervisor demo, crash/resume, lineage inspection.** Add `agents/proof/research-supervisor.dhall` + two specialists; show the fan-out/await/synthesize log, the parent/child rows in kioku, and a kill-mid-delegation resume.
 
@@ -66,7 +67,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery (2026-06-27T20:34:00Z): Running `cabal build shikigami-api shikigami-core`
+  directly from the ambient shell compiled the Haskell modules but failed at the linker with
+  `ld: library not found for -lrdkafka`. The same build succeeded with
+  `nix develop -c cabal build shikigami-api shikigami-core`, confirming the plan's Nix dev-shell
+  requirement is necessary for local validation.
+
+- Discovery (2026-06-27T20:42:54Z): `kioku-migrations/src/Kioku/Migrations.hs` embeds SQL
+  migrations with Template Haskell. Adding the lineage SQL file alone did not update the embedded
+  migration list; the first kioku test run applied only 23 migrations and failed with
+  `column "parent_session_id" does not exist`. Touching the source binding comment rebuilt the
+  embed list, after which tests saw 24 migrations and passed.
 
 
 ## Decision Log
@@ -80,6 +91,32 @@ Record every decision made while working on the plan.
   Rationale: The audit of plans 7–11 found this plan implied plan 7 keys its registry by agent name;
   plan 7 actually uses one constant workflow name and carries agent identity in the journaled `RunJob`.
   Pinning to plan 7's actual registry keeps the plans coherent and the child-spawn mechanism correct.
+  Date: 2026-06-27
+
+- Decision (M1 implementation, 2026-06-27): Treat `maxDelegationDepth = 4` as an exclusive
+  attempted-child-depth ceiling: current depths 0, 1, and 2 may create children at depths 1, 2,
+  and 3 respectively; a current depth of 3 rejects attempted depth 4 with
+  `DelegationDepthExceeded 4`.
+  Rationale: The plan's rationale says the four practical levels are supervisor → lead → worker
+  → helper. With top-level runs at depth 0, the helper is depth 3; allowing a depth-3 run to
+  create depth 4 would add a fifth level. This resolves the checklist/prose ambiguity in favor
+  of the explicit "attempted depth 4 fails" validation wording.
+  Date: 2026-06-27
+
+- Decision (M2 implementation, 2026-06-27): Use `text` for `kioku_sessions.parent_session_id`
+  rather than `uuid`.
+  Rationale: The existing `kioku_sessions.session_id` column is `text` and all read-model encoders
+  pass `SessionId` through `idText`. Matching the existing column type keeps parent lookups simple
+  and avoids an artificial cast or malformed UUID assumption for TypeID-formatted session ids.
+  Date: 2026-06-27
+
+- Decision (M2 implementation, 2026-06-27): Do not rewrite shikigami's kioku dependency to a local
+  filesystem path just to consume the freshly committed local kioku change.
+  Rationale: `cabal.project` explicitly documents co-developed dependencies as GitHub
+  `source-repository-package` pins. Pointing the committed shikigami config at a local checkout
+  would make the repository non-portable. The remaining pin step should update the GitHub tag once
+  `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1` is available from that remote, or be changed
+  deliberately with an explicit local-development override.
   Date: 2026-06-27
 
 - Decision: Add an *imperative* `delegate` primitive alongside the existing stream coupling,
@@ -130,7 +167,32 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Outcome (M1, 2026-06-27T20:34:00Z): The pure delegation context and additive run-job wire
+  fields are in place. Existing stream and addressed-run producers continue to produce
+  top-level jobs by setting the delegation fields to `Nothing`. The depth bound is covered by
+  the `Delegate.Context` tasty group, and the full shikigami test suite passed in the Nix
+  development environment:
+
+```text
+Delegate.Context
+  checkDepth admits child depths 1 through 3:              OK
+  checkDepth rejects attempted depth 4:                    OK
+  checkDepth rejects deeper attempts with attempted depth:  OK
+
+All 24 tests passed
+```
+
+- Outcome (M2a, 2026-06-27T20:42:54Z): Kioku can now record delegation lineage independently of
+  `previousSessionId`. A child session row carries `parentSessionId = Just parent` and
+  `delegationDepth = 1`, `getDelegationChildren parent` returns the direct children, and the old
+  `getChain` query still follows only `previousSessionId`. The full kioku validation passed:
+
+```text
+Session.Lineage
+  child sessions record parent id and delegation depth: OK
+
+All 9 tests passed
+```
 
 
 ## Context and Orientation

@@ -17,6 +17,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..), Trigger (..))
+import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink
   ( AgentIdentity (..),
@@ -45,6 +46,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaBridgeTests],
+          DelegateContextSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
         ]

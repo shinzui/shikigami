@@ -11,7 +11,7 @@ import Data.Aeson (Value)
 import Shikigami.Prelude
 
 -- | Which trigger class produced the job.
-data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent
+data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -21,7 +21,10 @@ data RunJob = RunJob
     triggerKind :: !TriggerKind,
     occurredAt :: !UTCTime,
     triggerPayload :: !Value,
-    idempotencyKey :: !Text
+    idempotencyKey :: !Text,
+    parentSessionId :: !(Maybe Text),
+    parentRunWorkflowId :: !(Maybe Text),
+    delegationDepth :: !(Maybe Int)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

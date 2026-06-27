@@ -36,7 +36,10 @@ runJobFromEnvelope decl env =
       triggerKind = TriggeredByStream,
       occurredAt = fromMaybe epoch (iso8601ParseM (Text.unpack envOccurredAt)),
       triggerPayload = toJSON env,
-      idempotencyKey = name decl <> ":" <> envActivityId
+      idempotencyKey = name decl <> ":" <> envActivityId,
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
     }
   where
     ActivityEnvelope {activityId = envActivityId, occurredAt = envOccurredAt} = env
@@ -72,5 +75,8 @@ enqueueAddressedRunWithKey pool agent payload key = do
         triggerKind = TriggeredByEvent,
         occurredAt = now,
         triggerPayload = payload,
-        idempotencyKey = key
+        idempotencyKey = key,
+        parentSessionId = Nothing,
+        parentRunWorkflowId = Nothing,
+        delegationDepth = Nothing
       }
