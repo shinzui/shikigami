@@ -6,6 +6,7 @@ module Shikigami.Agent.Workflow
     agentRunWorkflow,
     runAgentRunWorkflow,
     agentRunRegistry,
+    enqueueSinkIntentStep,
     publishSinkIntent,
   )
 where
@@ -346,6 +347,59 @@ enqueueSinkIntents job decl sid output = do
               outboxId = deterministicOutboxId workflowId ordinal
            in (SinkResult kind (Delivered ("outbox:" <> messageId)), Just (OutboxMessage outboxId event))
 
+enqueueSinkIntentStep ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  StepName ->
+  Text ->
+  Text ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Sink ->
+  Value ->
+  Eff es SinkResult
+enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output = do
+  (workflowName, workflowId) <- currentWorkflow
+  generation <- currentRunGeneration
+  now <- liftIO getCurrentTime
+  let kind = sinkKindOf sink
+      messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
+      outboxId = deterministicOutboxIdForMessage messageId
+      deniedResult reason = SinkResult kind (DeniedOutcome reason)
+      deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
+      buildMessage =
+        checkGrant (AgentIdentity agentName') kind <&> \case
+          Left (Denied reason) -> (deniedResult reason, Nothing)
+          Right () ->
+            let intent =
+                  SinkIntent
+                    { agent = agentName',
+                      runId = runIdText,
+                      ordinal,
+                      occurredAt = occurredAt',
+                      danwaTarget = danwaTarget',
+                      sink,
+                      output
+                    }
+                event = sinkIntentEvent messageId runIdText now intent
+             in (deliveredResult, Just (OutboxMessage outboxId event))
+  (result, mMessage) <- liftIO buildMessage
+  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
+  txResult <- runTransaction do
+    appendTx >>= \case
+      JournalAppended {} -> do
+        traverse_ enqueueOutboxTx mMessage
+        pure (Right result)
+      JournalAlreadyPresent stored ->
+        case parseEither Aeson.parseJSON stored of
+          Right replayed -> pure (Right replayed)
+          Left err -> pure (Left ("sink intent replay decode failed: " <> Text.pack err))
+      JournalAppendConflict err ->
+        pure (Left ("sink intent journal append conflict: " <> Text.pack (show err)))
+  case txResult of
+    Right result' -> pure result'
+    Left err -> liftIO (ioError (userError (Text.unpack err)))
+
 sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
 sinkIntentEvent messageId runId occurredAt intent =
   encodeJsonIntegrationEvent
@@ -375,10 +429,14 @@ sinkMessageId workflowId ordinal =
 
 deterministicOutboxId :: WorkflowId -> Int -> OutboxId
 deterministicOutboxId workflowId ordinal =
+  deterministicOutboxIdForMessage (sinkMessageId workflowId ordinal)
+
+deterministicOutboxIdForMessage :: Text -> OutboxId
+deterministicOutboxIdForMessage messageId =
   OutboxId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       fmap (fromIntegral . fromEnum) $
-        Text.unpack ("shikigami:sink:" <> sinkMessageId workflowId ordinal)
+        Text.unpack ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
 publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa} row =

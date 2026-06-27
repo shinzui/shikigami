@@ -17,7 +17,6 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (traverse_)
-import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID.V5 qualified as UUID.V5
@@ -31,11 +30,9 @@ import Keiro.Workflow
     WorkflowJournalEvent (StepRecorded),
     WorkflowName (..),
     appendJournalEntryReturningId,
-    awakeableAllocStepPrefix,
     awakeableStepPrefix,
     currentRunGeneration,
     currentWorkflow,
-    loadStepIndex,
     step,
   )
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, awakeableNamed, signalAwakeable)
@@ -47,7 +44,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
-import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind)
 
@@ -116,26 +113,6 @@ awaitApproval env stepName req deadline = do
         postAsk env (channel req) req aid
   traverse_ (armApprovalDeadline stepName aid) deadline
   awaitAnswer
-
-awaitInput ::
-  (Workflow :> es, Store :> es, IOE :> es, FromJSON a) =>
-  StepName ->
-  Eff es a
-awaitInput stepName = do
-  (_aid, awaitAnswer) <- awakeableNamed stepName
-  awaitAnswer
-
-deliverInput ::
-  (Store :> es, IOE :> es, ToJSON a) =>
-  WorkflowId ->
-  StepName ->
-  a ->
-  Eff es Bool
-deliverInput workflowId stepName value = do
-  stepIndex <- loadStepIndex agentRunWorkflowName workflowId 0
-  case Map.lookup (awakeableAllocStepPrefix <> unStepName stepName) stepIndex >>= parseMaybe Aeson.parseJSON of
-    Nothing -> pure False
-    Just aid -> signalAwakeable aid value
 
 resolveApproval :: AppEnv -> AwakeableId -> ApprovalDecision -> IO Bool
 resolveApproval appEnv aid decision = do

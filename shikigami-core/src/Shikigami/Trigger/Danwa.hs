@@ -1,6 +1,7 @@
 module Shikigami.Trigger.Danwa
   ( AddressedMessage (..),
     DanwaBridgeConfig (..),
+    DanwaBridgeResult (..),
     detectAddressed,
     runDanwaBridgeOnce,
     runDanwaBridge,
@@ -57,16 +58,20 @@ instance FromJSON AddressedMessage where
 
 data DanwaBridgeConfig = DanwaBridgeConfig
   { agentMap :: ![(Text, Text)],
-    pollIntervalMicros :: !Int
+    pollIntervalMicros :: !Int,
+    deliverAddressed :: !(AddressedMessage -> IO Bool)
   }
-  deriving stock (Eq, Show)
+
+data DanwaBridgeResult
+  = DeliveredToConversation
+  | EnqueuedRun !(Either UsageError MessageId)
 
 runDanwaBridge :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO ()
 runDanwaBridge cfg shikigamiPool danwaPool agents = forever do
   _ <- runDanwaBridgeOnce cfg shikigamiPool danwaPool agents
   threadDelay (pollIntervalMicros cfg)
 
-runDanwaBridgeOnce :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO [(AddressedMessage, Either UsageError MessageId)]
+runDanwaBridgeOnce :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO [(AddressedMessage, DanwaBridgeResult)]
 runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
   ensureSeenTable shikigamiPool
   detected <- detectAddressed cfg danwaPool
@@ -82,8 +87,12 @@ runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
           if not claimed
             then pure []
             else do
-              result <- enqueueAddressedRunWithKey shikigamiPool agent (toJSON msg) key
-              pure [(msg, result)]
+              delivered <- deliverAddressed cfg msg
+              if delivered
+                then pure [(msg, DeliveredToConversation)]
+                else do
+                  result <- enqueueAddressedRunWithKey shikigamiPool agent (toJSON msg) key
+                  pure [(msg, EnqueuedRun result)]
 
 detectAddressed :: DanwaBridgeConfig -> Pool -> IO [AddressedMessage]
 detectAddressed cfg danwaPool = do

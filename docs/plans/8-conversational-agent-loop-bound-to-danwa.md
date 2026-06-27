@@ -95,19 +95,36 @@ This section must always reflect the actual current state of the work.
       Validated with `nix develop --command cabal build all` and
       `nix develop --command cabal test shikigami-core-test`.
       Completed: 2026-06-27T19:18:36Z.
-- [ ] **M3 remaining — Durable park/resume loop.** Promote the conversation turn runner
-      into the long-lived keiro workflow keyed by `danwa-conversation:<conversationId>`:
-      use `awaitInput` to suspend after each assistant reply, have the M2 bridge call
-      `deliverInput` for already-parked workflows before enqueueing a new start job, and
-      move reply delivery from the current synchronous `postReply` call into the plan 7
-      transactional outbox path.
+- [x] **M3 remaining — Durable park/resume loop.** Promoted the conversation turn runner
+      into a long-lived `shikigami.danwa-conversation` keiro workflow keyed by
+      `danwa-conversation:<conversationId>`; added `Shikigami.Agent.Workflow.Input` for the
+      generic `awaitInput`/`deliverInput` surface; made each conversation workflow park on
+      `next-message:<n>` awakeables after enqueueing the assistant reply into the sink
+      outbox; wired the worker resume registry to include conversation workflows; and made
+      the danwa bridge call a delivery callback before enqueueing a new start job.
+      Validated with `nix develop --command cabal test shikigami-core-test` (28 tests,
+      including the two-turn conversation workflow test and bridge delivery-before-enqueue
+      test) and `nix develop --command cabal build all`.
+      Completed: 2026-06-27T22:22:24Z.
+- [ ] **M3 hardening — co-transactional assistant turn and reply outbox.** The current
+      implementation records the assistant turn in one durable workflow step and enqueues
+      the danwa reply outbox row in the immediately following durable workflow step. This is
+      crash-recoverable and covered by tests, but it is not yet the stricter plan wording
+      that places `Kioku.Session.recordTurn` and `Keiro.Outbox.enqueueOutboxTx` in one
+      database transaction. Completing this requires either a kioku transaction hook for
+      `recordTurn` or a shikigami-local lower-level command wrapper.
 - [ ] **M4 — End-to-end acceptance.** Post two human messages; show two danwa replies, four
       `kioku_turns` rows for one session, and a workflow journal proving the park-between-turns.
-- [ ] **Dependency tracking.** Confirm plan 7 ("Agent runs as durable keiro workflows")
+- [x] **Dependency tracking.** Confirmed plan 7 ("Agent runs as durable keiro workflows")
       has landed its workflow suspend/resume substrate and `awaitInput`; confirm the kioku
       `Awaiting` session state (kioku plan "Awaiting session state for durable
       park-and-resume") if used; confirm danwa can surface addressed-message events
       (see Interfaces & Dependencies for the fallback that needs no danwa change).
+      Evidence: `Shikigami.Agent.Approval` already exposed generic `awaitInput` and
+      `deliverInput`; this implementation moved them to
+      `Shikigami.Agent.Workflow.Input`, preserved the approval wrapper behavior, and uses the
+      existing keiro awakeable/outbox/resume worker APIs. The optional kioku `Awaiting`
+      state was not used; sessions stay `Running`. Completed: 2026-06-27T22:22:24Z.
 
 
 ## Surprises & Discoveries
@@ -140,6 +157,13 @@ implementation. Provide concise evidence.
   own durable claim before enqueueing a detected danwa message. Evidence: reusing
   `enqueueRunJob` sends a message body to `shikigami_run_jobs`; the idempotency key is data
   inside the JSON payload, not a pgmq uniqueness constraint.
+
+- Plan 7's exact generic input helpers had landed inside `Shikigami.Agent.Approval`, not in
+  a standalone workflow module. The conversation workflow needed the same helper against a
+  non-`shikigami.agent-run` workflow name, so the implementation extracted the generic
+  helper to `Shikigami.Agent.Workflow.Input` and left `Shikigami.Agent.Approval` re-exporting
+  the same names. Evidence: `nix develop --command cabal test shikigami-core-test` passed
+  the existing approval tests plus the new conversation workflow tests.
 
 
 ## Decision Log
@@ -230,6 +254,23 @@ Record every decision made while working on the plan.
   returns after one turn.
   Date: 2026-06-27
 
+- Decision: The bridge owns the "resume before enqueue" check through a callback on
+  `DanwaBridgeConfig` instead of importing `Shikigami.Agent.Conversation` from
+  `Shikigami.Trigger.Danwa`.
+  Rationale: `Shikigami.Agent.Conversation` depends on `Shikigami.Trigger.Danwa` for the
+  `AddressedMessage` type, so importing the conversation module back into the trigger module
+  would create a cycle. The CLI supplies `deliverConversationInputFromApp`; tests can supply
+  `const (pure False)` or `const (pure True)` to cover enqueue and resume paths.
+  Date: 2026-06-27
+
+- Decision: Conversation replies now record a deterministic `outbox:` handle in
+  `ConversationTurnResult.replyMessageId` rather than a danwa `msg_…` id.
+  Rationale: Once replies move to the plan 7 outbox, the workflow has durably requested the
+  reply but the HTTP publisher has not necessarily run yet. The returned value is the stable
+  outbox message id; the existing sink publisher later calls `Shikigami.Sink.Danwa.runDanwa`
+  and obtains the real danwa message id.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -251,6 +292,14 @@ Compare the result against the original purpose.
   jobs now record turns into a kioku session keyed by the danwa conversation and reply under
   the human message; the next step is replacing the one-turn return with `awaitInput`
   suspension and `deliverInput` resume.
+- M3 now has the durable parked loop. `Shikigami.Agent.Conversation` runs a
+  `shikigami.danwa-conversation` workflow keyed by `danwa-conversation:<conversationId>`,
+  records both human and assistant turns into one running kioku session, enqueues the
+  assistant reply through the sink outbox, then parks on a `next-message:<n>` awakeable. The
+  danwa bridge now tries to deliver an addressed message to an already-parked conversation
+  workflow before enqueueing a new run job. The live danwa-server M4 acceptance remains open,
+  and the stricter assistant-turn/outbox single-transaction coupling remains a hardening
+  item because kioku's public `recordTurn` API owns its transaction internally.
 
 
 ## Context and Orientation
@@ -607,14 +656,17 @@ data ConversationTurnResult = ConversationTurnResult
    replyText`, the next `turnIndex`, optional `toolSummary`/token counts.
 5. **Post the reply to danwa.** The reply is a mid-run sink, so under the C3 decision (Option 3 —
    transactional outbox; see `docs/plans/7-agent-runs-as-durable-keiro-workflows.md`) it is
-   **enqueued** into `kiroku.keiro_outbox` in the same transaction as the assistant-turn record
-   (deterministic `message_id` from `(WorkflowId, turnIndex)`), and plan 7's outbox publisher delivers
-   it via `Shikigami.Sink.Danwa.runDanwa` to the `DanwaTarget
+   **enqueued** into `kiroku.keiro_outbox` with a deterministic message id from the conversation
+   workflow id and human message id, and plan 7's outbox publisher delivers it via
+   `Shikigami.Sink.Danwa.runDanwa` to the `DanwaTarget
    { dtConversationId = amConversationId, dtParentMessageId = Just amMessageId }`, so the reply threads
-   under the human message. This makes the reply durable across a crash between recording the turn and
-   posting it; the M1 `runDanwa` client becomes the publisher's HTTP backend rather than a synchronous
-   call in the loop. (If C3 had not been adopted, this step would `runDanwa` synchronously and capture
-   the returned `msg_…` inline; the outbox form defers the `msg_…` to delivery.)
+   under the human message. The implementation as of 2026-06-27 records the assistant turn and then
+   enqueues the outbox row in the immediately following durable workflow step; this is recoverable by
+   workflow replay but is not yet a single database transaction with `Kioku.Session.recordTurn`. The
+   remaining hardening item in Progress tracks making the assistant-turn write and outbox enqueue one
+   transaction once kioku exposes a transaction hook or shikigami adds a lower-level wrapper. The M1
+   `runDanwa` client is the publisher's HTTP backend rather than a synchronous call in the loop, so the
+   workflow records an `outbox:…` handle and the real danwa `msg_…` arrives when the publisher runs.
 6. **Park.** Call plan 7's `awaitInput` on the workflow's input channel — the workflow
    **suspends durably** here. It does not return to a fresh job; it is the same workflow
    instance resumed when the next `AddressedMessage` for this `conversationId` is delivered.
@@ -795,7 +847,7 @@ Partial M3 validation transcript:
 
 ```text
 $ nix develop --command cabal test shikigami-core-test
-All 21 tests passed
+All 28 tests passed
 
 $ nix develop --command cabal build all
 Building executable 'shikigami' for shikigami-cli-0.1.0.0...
@@ -982,8 +1034,14 @@ waits.
   approval-shaped `awaitInput` resumed by `AwakeableId`; the user resolved C2 by having plan 7 expose the
   generic pair, which this plan now cites. No other change — the one-session-per-conversation model and
   the danwa bridge are unaffected.
+
+- 2026-06-27 — **M3 implementation update.** Recorded the durable danwa conversation workflow
+  implementation: generic workflow input extraction, `shikigami.danwa-conversation` workflow
+  keying, outbox-backed replies, bridge delivery-before-enqueue behavior, and the focused
+  test evidence proving two turns share one session and park between turns.
 - 2026-06-27 (follow-up) — **C3 resolved as Option 3 (transactional outbox).** The per-turn danwa reply
-  (a mid-run sink) is now enqueued into `kiroku.keiro_outbox` in the assistant-turn transaction and
-  delivered by plan 7's outbox publisher via `runDanwa`, rather than posted synchronously in the loop.
-  Reason: durable, decoupled reply delivery consistent with the canonical sink model chosen for kikan
-  production; survives a crash between recording the turn and posting the reply.
+  (a mid-run sink) is enqueued into `kiroku.keiro_outbox` and delivered by plan 7's outbox publisher via
+  `runDanwa`, rather than posted synchronously in the loop. The current implementation enqueues the
+  outbox row in the durable workflow step immediately after the assistant-turn record; a remaining M3
+  hardening item tracks making those two writes a single database transaction. Reason: durable,
+  decoupled reply delivery consistent with the canonical sink model chosen for kikan production.

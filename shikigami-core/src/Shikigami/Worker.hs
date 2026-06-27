@@ -16,6 +16,7 @@ import Control.Monad (forever)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.List (find)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time.Clock (secondsToNominalDiffTime)
 import Effectful (IOE, runEff, (:>))
@@ -83,7 +84,15 @@ runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env = do
   hPutStrLn stderr "[shikigami.worker] starting keiro workflow resume worker"
   let deps = agentRunDeps env
-  result <- runAppIO (appEnv env) (runWorkflowResumeWorker (AgentWorkflow.agentRunRegistry deps))
+      conversationEnv =
+        Conversation.ConversationEnv
+          { Conversation.appEnv = appEnv env,
+            Conversation.behaviorEnv = behaviorEnv env,
+            Conversation.danwa = danwa env,
+            Conversation.agents = agents env
+          }
+      registry = AgentWorkflow.agentRunRegistry deps `Map.union` Conversation.conversationRegistry conversationEnv
+  result <- runAppIO (appEnv env) (runWorkflowResumeWorker registry)
   case result of
     Left err -> hPutStrLn stderr ("[shikigami.worker] resume worker store error: " <> show err)
     Right () -> pure ()
@@ -138,7 +147,8 @@ runConversationAgent env job addressed =
           Conversation.ConversationEnv
             { Conversation.appEnv = appEnv env,
               Conversation.behaviorEnv = behaviorEnv env,
-              Conversation.danwa = danwa env
+              Conversation.danwa = danwa env,
+              Conversation.agents = agents env
             }
           decl
           addressed

@@ -33,7 +33,7 @@ import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
-import Shikigami.Trigger.Danwa (DanwaBridgeConfig (..), runDanwaBridgeOnce)
+import Shikigami.Trigger.Danwa (DanwaBridgeConfig (..), DanwaBridgeResult (..), runDanwaBridgeOnce)
 import Shikigami.Trigger.Schedule (isDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -124,12 +124,28 @@ danwaBridgeTests =
             let cfg =
                   DanwaBridgeConfig
                     { agentMap = [("part_agent_test", "heartbeat")],
-                      pollIntervalMicros = 1_000_000
+                      pollIntervalMicros = 1_000_000,
+                      deliverAddressed = const (pure False)
                     }
             first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
             second <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
             assertEqual "first bridge pass enqueues one addressed run" 1 (length first)
-            assertEqual "second bridge pass is idempotent" 0 (length second)
+            assertEqual "second bridge pass is idempotent" 0 (length second),
+      testCase "addressed message is delivered to parked workflow before enqueueing" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            setup <- Pool.use (pool store) (Session.script danwaBridgeFixtureSql)
+            assertBool "fixture setup succeeds" (either (const False) (const True) setup)
+            let cfg =
+                  DanwaBridgeConfig
+                    { agentMap = [("part_agent_test", "heartbeat")],
+                      pollIntervalMicros = 1_000_000,
+                      deliverAddressed = const (pure True)
+                    }
+            first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
+            case first of
+              [(_, DeliveredToConversation)] -> pure ()
+              _ -> assertBool "expected delivery to parked workflow" False
     ]
 
 danwaBridgeFixtureSql :: Text

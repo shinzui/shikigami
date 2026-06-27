@@ -8,6 +8,7 @@ import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef,
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
 import Keiro.Outbox (listOutbox)
@@ -22,8 +23,10 @@ import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId, idText)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
+import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -35,6 +38,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Trigger.Danwa (AddressedMessage (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -107,6 +111,55 @@ tests =
             assertEqual "one row per completed lifecycle step" (Right expectedLifecycleSteps) stepKeys
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "recovered run enqueued one stable outbox row" (Right 1) (length <$> outboxRows),
+      testGroup
+        "Conversation"
+        [ testCase "parks and resumes a danwa conversation as one workflow session" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                    env =
+                      Conversation.ConversationEnv
+                        { Conversation.appEnv = appEnv,
+                          Conversation.behaviorEnv = behaviorEnv,
+                          Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+                          Conversation.agents = [conversationDecl]
+                        }
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                secondTurn <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
+
+                case (firstTurn, secondTurn) of
+                  (Right firstResult, Right secondResult) -> do
+                    assertEqual "second human turn reuses the first kioku session" (Conversation.sessionId firstResult) (Conversation.sessionId secondResult)
+                    assertBool "first reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_1" `Text.isPrefixOf` Conversation.replyMessageId firstResult)
+                    assertBool "second reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_2" `Text.isPrefixOf` Conversation.replyMessageId secondResult)
+
+                    turns <- runAppIO appEnv (Session.getTurns (Conversation.sessionId firstResult))
+                    case turns of
+                      Right (Right rows) ->
+                        assertEqual
+                          "one conversation session records user/assistant/user/assistant"
+                          [("user", 0), ("assistant", 1), ("user", 2), ("assistant", 3)]
+                          (turnRoleIndex <$> rows)
+                      other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other))
+
+                    outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                    assertEqual "two danwa replies are queued through the outbox" (Right 2) (length <$> outboxRows)
+
+                    pending <- runAppIO appEnv countPendingAwakeables
+                    assertEqual "workflow parks again after the second reply" (Right 1) pending
+
+                    stepKeys <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId firstAddressedMessage) 0)
+                    case stepKeys of
+                      Right keys -> do
+                        assertBool "first turn result is journaled" (Map.member "turn-result:msg_human_1" keys)
+                        assertBool "second turn result is journaled after resume" (Map.member "turn-result:msg_human_2" keys)
+                        assertBool "first park allocated an input awakeable" (any (Text.isPrefixOf "awkid:next-message:1") (Map.keys keys))
+                      Left err -> assertFailure ("loadStepIndex failed: " <> show err)
+                  other -> assertFailure ("conversation turns should succeed, got " <> show other)
+        ],
       testGroup
         "Delegate"
         [ testCase "parent suspends awaiting delegated child and resumes with child output" do
@@ -429,6 +482,9 @@ childStatusText = \case
   ChildCancelled -> "cancelled"
   ChildFailed -> "failed"
 
+turnRoleIndex :: TurnRow -> (Text, Int)
+turnRoleIndex TurnRow {role, turnIndex} = (role, turnIndex)
+
 fireDueApprovalTimer :: AppEnv -> IO ()
 fireDueApprovalTimer appEnv = do
   now <- getCurrentTime
@@ -467,6 +523,33 @@ decl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}]
+    }
+
+conversationDecl :: AgentDecl
+conversationDecl =
+  decl
+    { trigger = Event {eventType = "danwa.message-addressed"},
+      sinks = [DanwaConversation {topic = "support"}]
+    }
+
+firstAddressedMessage :: AddressedMessage
+firstAddressedMessage =
+  AddressedMessage
+    { conversationId = "conv_thread_1",
+      messageId = "msg_human_1",
+      author = "part_human_test",
+      content = "first question",
+      agentParticipant = "part_agent_test"
+    }
+
+secondAddressedMessage :: AddressedMessage
+secondAddressedMessage =
+  AddressedMessage
+    { conversationId = "conv_thread_1",
+      messageId = "msg_human_2",
+      author = "part_human_test",
+      content = "follow up",
+      agentParticipant = "part_agent_test"
     }
 
 job :: RunJob

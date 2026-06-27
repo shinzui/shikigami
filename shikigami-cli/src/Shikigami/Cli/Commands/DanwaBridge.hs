@@ -6,7 +6,9 @@ where
 import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Conversation (deliverConversationInputFromApp)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Api.Agent (AgentDecl)
 import Shikigami.Trigger.Danwa (DanwaBridgeConfig (..), runDanwaBridge)
@@ -24,12 +26,15 @@ runDanwaBridgeCmd agentsDir danwaConn mappingsRaw = do
   putStrLn ("[danwa-bridge] loaded " <> show (length agents) <> " agents")
   putStrLn ("[danwa-bridge] configured " <> show (length mappings) <> " participant mappings")
   shikigamiConn <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
-  withStore (defaultConnectionSettings shikigamiConn) \shikigamiStore ->
+  withStore (defaultConnectionSettings shikigamiConn) \shikigamiStore -> do
+    tracer <- noopTracer
+    let appEnv = AppEnv {store = shikigamiStore, tracer, metrics = Nothing}
     withStore (defaultConnectionSettings danwaConn) \danwaStore ->
       runDanwaBridge
         DanwaBridgeConfig
           { agentMap = mappings,
-            pollIntervalMicros = 1_000_000
+            pollIntervalMicros = 1_000_000,
+            deliverAddressed = deliverConversationInputFromApp appEnv
           }
         (pool shikigamiStore)
         (pool danwaStore)

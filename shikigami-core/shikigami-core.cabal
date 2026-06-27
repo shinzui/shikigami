@@ -30,6 +30,7 @@ library
     Shikigami.Agent.Run
     Shikigami.Agent.Skill
     Shikigami.Agent.Workflow
+    Shikigami.Agent.Workflow.Input
     Shikigami.Agent.Workflow.Name
     Shikigami.Behavior.Error
     Shikigami.Behavior.Run
