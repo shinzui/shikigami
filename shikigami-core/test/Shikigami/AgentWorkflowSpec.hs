@@ -8,16 +8,17 @@ import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef,
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
-import Data.Time (UTCTime (..), fromGregorian)
+import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), completedStepName, loadStepIndex)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRunRegistry, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
@@ -149,6 +150,52 @@ tests =
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "rejected sink is suppressed" (Right 0) (length <$> afterOutbox)
+        ],
+      testGroup
+        "Deadline"
+        [ testCase "timeout resumes and suppresses sink dispatch" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                aidRef <- newIORef Nothing
+                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                    deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
+
+                parked <- runAgentRunWorkflow deps timeoutJob
+                case parked of
+                  Right Suspended -> pure ()
+                  other -> assertEqual "workflow parks for approval deadline" "Suspended" (show other)
+
+                fireDueApprovalTimer appEnv
+                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+                assertEqual "resume pass completes the timed-out workflow" (Right 1) (completed <$> resumed)
+
+                afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                assertEqual "timed-out sink is suppressed" (Right 0) (length <$> afterOutbox),
+          testCase "approved answer before deadline wins over late timer" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                aidRef <- newIORef Nothing
+                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                    deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
+
+                parked <- runAgentRunWorkflow deps answeredBeforeDeadlineJob
+                case parked of
+                  Right Suspended -> pure ()
+                  other -> assertEqual "workflow parks for approval deadline" "Suspended" (show other)
+
+                aid <- readCapturedAwakeable aidRef
+                resolved <- resolveApproval appEnv aid (Approved (object ["approved" .= True]))
+                assertBool "approval signal resolves before deadline" resolved
+                fireDueApprovalTimer appEnv
+                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+                assertEqual "resume pass completes the approved workflow" (Right 1) (completed <$> resumed)
+
+                afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                assertEqual "approved sink still dispatches once" (Right 1) (length <$> afterOutbox)
         ]
     ]
 
@@ -158,6 +205,10 @@ testDeps appEnv behaviorEnv hooks =
 
 testDepsWithApproval :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> AgentRunDeps
 testDepsWithApproval appEnv behaviorEnv hooks approval =
+  testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval Nothing
+
+testDepsWithApprovalAndDeadline :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> Maybe NominalDiffTime -> AgentRunDeps
+testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
@@ -165,7 +216,8 @@ testDepsWithApproval appEnv behaviorEnv hooks approval =
       kizashi = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "recipient"},
       kawa = KawaConfig {kawaBaseUrl = "http://localhost:1", kawaSourceSegment = "shinzui/shikigami"},
       hooks,
-      approval
+      approval,
+      deadline
     }
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> ApprovalEnv
@@ -194,6 +246,12 @@ readCapturedAwakeable aidRef =
   readIORef aidRef >>= \case
     Just aid -> pure aid
     Nothing -> ioError (userError "approval park should capture awakeable id")
+
+fireDueApprovalTimer :: AppEnv -> IO ()
+fireDueApprovalTimer appEnv = do
+  now <- getCurrentTime
+  fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) approvalTimeoutFireAction)
+  assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
 
 loadLifecycleStepKeys :: AppEnv -> RunJob -> IO (Either String (Set.Set Text))
 loadLifecycleStepKeys appEnv runJob = do
@@ -267,4 +325,24 @@ rejectedJob =
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-approval-rejected"
+    }
+
+timeoutJob :: RunJob
+timeoutJob =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "heartbeat:test-approval-timeout"
+    }
+
+answeredBeforeDeadlineJob :: RunJob
+answeredBeforeDeadlineJob =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "heartbeat:test-approval-before-deadline"
     }

@@ -96,11 +96,14 @@ This section must always reflect the actual current state of the work.
       `signalAwakeable` resumes it to completion. Completed 2026-06-27T18:37:56Z;
       validation command:
       `nix develop -c cabal test shikigami-core-test --test-options='-p Approval'`.
-- [ ] **M4**: Add deadline support: arm a keiro timer when `awaitApproval` is given a
+- [x] **M4**: Add deadline support: arm a keiro timer when `awaitApproval` is given a
       deadline; run keiro's `runWorkflowTimerWorker` in the worker process; on fire the
-      timer signals the awakeable with a `TimedOut` decision.
-- [ ] **M4**: Test — a parked run with a short deadline resumes with `TimedOut` when no
-      answer arrives.
+      timer signals the awakeable with a `TimedOut` decision. Completed
+      2026-06-27T18:45:33Z.
+- [x] **M4**: Test — a parked run with a short deadline resumes with `TimedOut` when no
+      answer arrives, and an answer before the deadline wins over the late timer. Completed
+      2026-06-27T18:45:33Z; validation command:
+      `nix develop -c cabal test shikigami-core-test --test-options='-p Deadline'`.
 
 
 ## Surprises & Discoveries
@@ -173,6 +176,16 @@ Record every decision made while working on the plan.
   Rationale: `awakeableNamed` already records the stable allocation in the workflow journal,
   so reusing that durable fact avoids a second source of truth while preserving the plan's
   public `WorkflowId` + `StepName` addressing.
+  Date: 2026-06-27
+
+- Decision (implementation, 2026-06-27): Approval deadlines use a direct keiro timer with a
+  shikigami payload (`kind = "shikigami.approval-timeout"`) rather than `sleepNamed`. The timer
+  fire action resolves the same approval awakeable with `TimedOut` and returns the deterministic
+  wake journal event id so keiro can mark the timer fired.
+  Rationale: `sleepNamed` represents a sequential wait in the workflow body; approval needs a
+  race between an external answer and a deadline against the same awakeable. A direct timer
+  preserves single-transition semantics: an approved/rejected answer before the deadline wins,
+  and the late timer reuses the stored awakeable payload as a no-op journal repair.
   Date: 2026-06-27
 
 - Decision (cross-plan coherence review, 2026-06-27, resolving audit item **C3**): Dispatch sinks via a
@@ -851,11 +864,13 @@ payloads, calls `signalAwakeable aid TimedOut`. Because `signalAwakeable` is ide
 single-transition, whichever of the human answer or the timer fires first wins; the loser is a
 no-op.
 
-The exact timer-arming call is determined during implementation by reading
-`/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Sleep.hs` and the `keiro_timers`
-schema: either `sleepNamed` with a follow-on step that signals on wake, or a directly-inserted
-timer row routed to the fallback fire action. The plan's M4 first task is a 30-minute spike to
-pick the cleaner of the two against the real API, recorded in the Decision Log.
+The implementation uses a directly inserted keiro timer row routed through
+`runWorkflowTimerWorker`'s fallback fire action. `sleepNamed` was rejected for this case
+because approval deadlines are a race against the same awakeable, not a sequential workflow
+sleep. The timer payload carries `kind = "shikigami.approval-timeout"` and the opaque
+`AwakeableId`; firing it calls the approval timeout fire action, which signals the awakeable
+with `TimedOut` and returns the deterministic wake journal event id so the timer can be marked
+fired.
 
 **Commands.** `cabal build shikigami-core`; `cabal test shikigami-core-test
 --test-options='-p Deadline'`.
@@ -998,7 +1013,7 @@ Expected `pending` while parked, `completed` after the answer.
 
 ### Step 4 — M4 deadline
 
-First spike the timer-arming approach (Decision Log entry), then implement it and run
+Implement the direct approval-timeout timer fire action described in the Decision Log and run
 `runWorkflowTimerWorker` in `runWorker`. Build and test:
 
 ```bash

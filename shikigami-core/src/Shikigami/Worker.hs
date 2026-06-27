@@ -23,6 +23,7 @@ import Hasql.Pool (Pool)
 import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Keiro.Workflow.Resume (runWorkflowResumeWorker)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEnv, runAppIO)
 import Pgmq.Effectful.Interpreter (PgmqRuntimeError, runPgmq)
 import Shibuya.Adapter.Pgmq (pgmqAdapter)
@@ -58,7 +59,7 @@ data WorkerEnv = WorkerEnv
 runWorker :: WorkerEnv -> IO ()
 runWorker env = do
   hPutStrLn stderr "[shikigami.worker] starting; draining shikigami_run_jobs"
-  concurrently_ (runQueueWorker env) (concurrently_ (runResumeWorker env) (runOutboxPublisher env))
+  concurrently_ (runQueueWorker env) (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runApprovalTimerWorker env)))
 
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
@@ -92,6 +93,17 @@ runOutboxPublisher env = do
     case result of
       Left err -> hPutStrLn stderr ("[shikigami.worker] outbox publisher store error: " <> show err)
       Right _summary -> pure ()
+    threadDelay 1_000_000
+
+runApprovalTimerWorker :: WorkerEnv -> IO ()
+runApprovalTimerWorker env = do
+  hPutStrLn stderr "[shikigami.worker] starting approval timeout timer worker"
+  forever do
+    now <- getCurrentTime
+    result <- runAppIO (appEnv env) (runWorkflowTimerWorker Nothing now Approval.approvalTimeoutFireAction)
+    case result of
+      Left err -> hPutStrLn stderr ("[shikigami.worker] approval timer worker store error: " <> show err)
+      Right _row -> pure ()
     threadDelay 1_000_000
 
 -- | The shibuya handler: lift the (IO) orchestration into the worker's effect row.
@@ -141,5 +153,6 @@ agentRunDeps env =
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-      AgentWorkflow.approval = Approval.defaultApprovalEnv
+      AgentWorkflow.approval = Approval.defaultApprovalEnv,
+      AgentWorkflow.deadline = Nothing
     }

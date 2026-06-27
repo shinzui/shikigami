@@ -20,6 +20,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Data.Time (NominalDiffTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -68,7 +69,8 @@ data AgentRunDeps = AgentRunDeps
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     hooks :: !AgentRunHooks,
-    approval :: !(SessionId -> ApprovalEnv)
+    approval :: !(SessionId -> ApprovalEnv),
+    deadline :: !(Maybe NominalDiffTime)
   }
 
 data AgentRunHooks = AgentRunHooks
@@ -193,7 +195,7 @@ approveSinks deps sid job decl output =
       case requirement of
         ApprovalNotRequired -> pure (Just sink)
         ApprovalRequired request -> do
-          decision <- awaitApproval env (approvalStepName ordinal kind) request Nothing
+          decision <- awaitApproval env (approvalStepName ordinal kind) request (deadline deps)
           pure case decision of
             Approved _ -> Just sink
             Rejected _ -> Nothing
