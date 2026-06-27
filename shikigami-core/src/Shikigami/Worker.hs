@@ -138,5 +138,6 @@ agentRunDeps env =
       AgentWorkflow.behaviorEnv = behaviorEnv env,
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,
-      AgentWorkflow.kawa = kawa env
+      AgentWorkflow.kawa = kawa env,
+      AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks
     }

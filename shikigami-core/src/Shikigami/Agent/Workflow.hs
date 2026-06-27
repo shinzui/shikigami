@@ -1,5 +1,7 @@
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
+    AgentRunHooks (..),
+    defaultAgentRunHooks,
     agentRunWorkflowName,
     agentRunWorkflow,
     runAgentRunWorkflow,
@@ -62,7 +64,13 @@ data AgentRunDeps = AgentRunDeps
     behaviorEnv :: !BehaviorEnv,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
-    kawa :: !KawaConfig
+    kawa :: !KawaConfig,
+    hooks :: !AgentRunHooks
+  }
+
+data AgentRunHooks = AgentRunHooks
+  { beforeStepBody :: !(StepName -> IO ()),
+    afterStepBody :: !(StepName -> IO ())
   }
 
 data SinkIntent = SinkIntent
@@ -76,6 +84,13 @@ data SinkIntent = SinkIntent
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+defaultAgentRunHooks :: AgentRunHooks
+defaultAgentRunHooks =
+  AgentRunHooks
+    { beforeStepBody = \_ -> pure (),
+      afterStepBody = \_ -> pure ()
+    }
+
 agentRunWorkflowName :: WorkflowName
 agentRunWorkflowName = WorkflowName "shikigami.agent-run"
 
@@ -84,8 +99,8 @@ agentRunWorkflow ::
   Maybe RunJob ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 agentRunWorkflow deps mJob = do
-  job <- step (StepName "ingest-job") (ingestJob mJob)
-  mDecl <- step (StepName "lookup-agent") (pure (find ((== agentName job) . name) (agents deps)))
+  job <- runStep deps (StepName "ingest-job") (ingestJob mJob)
+  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . name) (agents deps)))
   case mDecl of
     Nothing -> pure (Left ("unknown agent " <> agentName job))
     Just decl -> runResolvedAgent deps job decl
@@ -120,18 +135,18 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 runResolvedAgent deps job decl = do
-  sid <- step (StepName "open-session") (openSession deps decl)
-  prior <- step (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
-  behaviorE <- step (StepName "run-behavior") (runBehaviorStep deps decl job)
+  sid <- runStep deps (StepName "open-session") (openSession deps decl)
+  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
+  behaviorE <- runStep deps (StepName "run-behavior") (runBehaviorStep deps decl job)
   case behaviorE of
     Left err -> do
-      _ <- step (StepName "fail-session") (failSession deps sid err)
+      _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
       pure (Left err)
     Right output -> do
       sinkResults <- enqueueSinkIntents job decl sid output
       liftIO (traverse_ (logSinkResult job) sinkResults)
-      mem <- step (StepName "record") (recordLearning deps decl sid output)
-      _ <- step (StepName "complete") (completeSession deps sid)
+      mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
+      _ <- runStep deps (StepName "complete") (completeSession deps sid)
       pure
         ( Right
             AgentRunResult
@@ -141,6 +156,19 @@ runResolvedAgent deps job decl = do
                 recordedMemId = mem
               }
         )
+
+runStep ::
+  (Workflow :> es, IOE :> es, ToJSON a, FromJSON a) =>
+  AgentRunDeps ->
+  StepName ->
+  Eff es a ->
+  Eff es a
+runStep deps stepName action =
+  step stepName do
+    liftIO (beforeStepBody (hooks deps) stepName)
+    result <- action
+    liftIO (afterStepBody (hooks deps) stepName)
+    pure result
 
 openSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> Eff es SessionId
 openSession deps decl = liftIO do
@@ -192,7 +220,7 @@ enqueueSinkIntents job decl sid output = do
   let results = fst <$> prepared
       messages = mapMaybe snd prepared
       encoded = Aeson.toJSON results
-  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded "dispatch-sinks" encoded now)
+  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName dispatchSinksStep) encoded now)
   txResult <- runTransaction do
     appendTx >>= \case
       JournalAppended {} -> do
@@ -208,6 +236,7 @@ enqueueSinkIntents job decl sid output = do
     Right results' -> pure results'
     Left err -> liftIO (ioError (userError (Text.unpack err)))
   where
+    dispatchSinksStep = StepName "dispatch-sinks"
     runIdText = idText sid
 
     buildSinkIntent workflowId (ordinal, sink) = do

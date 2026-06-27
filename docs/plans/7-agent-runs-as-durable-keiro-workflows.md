@@ -78,11 +78,12 @@ This section must always reflect the actual current state of the work.
       registry) as a second component in the worker process. Completed 2026-06-27T18:18:01Z.
 - [x] **M2**: Implement the transactional sink outbox path for `dispatch-sinks` and run an
       outbox publisher loop in the worker process. Completed 2026-06-27T18:18:01Z.
-- [ ] **M2**: Test — existing run behavior unchanged; a multi-step run killed mid-flight
-      resumes without repeating completed steps. Current coverage: `AgentWorkflow` verifies a
-      completed workflow replays lifecycle steps for the same run id, and the full
-      `shikigami-core-test` suite reports `All 13 tests passed`; remaining coverage is an
-      explicit fault-injection crash-resume test for an unfinished run.
+- [x] **M2**: Test — existing run behavior unchanged; a multi-step run killed mid-flight
+      resumes without repeating completed steps. Completed 2026-06-27T18:30:55Z. Coverage:
+      `AgentWorkflow` verifies a completed workflow replays lifecycle steps for the same run
+      id, and a fault-injection test crashes the first `run-behavior` body invocation, reruns
+      the same `WorkflowId`, verifies previously journaled step bodies did not rerun, and
+      checks the keiro step index contains one row per completed lifecycle step.
 - [ ] **M3**: Add `shikigami-core/src/Shikigami/Agent/Approval.hs`: the `awaitApproval` /
       `awaitInput` combinator built on keiro `awakeableNamed`; a policy hook
       `requiresApproval` (static stub now, `en` later); a park-state hook (log stub now,
@@ -142,7 +143,7 @@ Record every decision made while working on the plan.
 - Decision (implementation, 2026-06-27): New records introduced by this plan follow the
   repository record convention from `/Users/shinzui/Keikaku/bokuno/haskell-jitsurei/core/record-patterns.md`:
   no field prefixes, strict fields, and explicit deriving strategies. `AgentRunDeps` therefore uses
-  `appEnv`, `behaviorEnv`, `agents`, `kizashi`, and `kawa`, not the earlier plan sketch's
+  `appEnv`, `behaviorEnv`, `agents`, `kizashi`, `kawa`, and `hooks`, not the earlier plan sketch's
   `ard*` field names.
   Rationale: prefixed record fields conflict with the shared Haskell convention and make later
   generic-lens `#field` access inconsistent. The plan and implementation were corrected when this was
@@ -636,7 +637,8 @@ agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 ```
 
 where `AgentRunDeps` bundles what the steps need (the `AppEnv`, the `BehaviorEnv`, the list of
-`AgentDecl`s for name lookup, and the sink config). The workflow body performs the same
+`AgentDecl`s for name lookup, the sink config, and no-op production hooks used by tests for
+fault injection). The workflow body performs the same
 sequence as `runAgentWithMemory`, but each phase is a `step`:
 
 ```haskell
@@ -1113,7 +1115,15 @@ data AgentRunDeps = AgentRunDeps
   , agents      :: ![AgentDecl]
   , kizashi     :: !KizashiConfig
   , kawa        :: !KawaConfig
+  , hooks       :: !AgentRunHooks
   }
+
+data AgentRunHooks = AgentRunHooks
+  { beforeStepBody :: !(StepName -> IO ())
+  , afterStepBody  :: !(StepName -> IO ())
+  }
+
+defaultAgentRunHooks :: AgentRunHooks
 
 agentRunWorkflowName :: WorkflowName
 
