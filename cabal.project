@@ -9,12 +9,12 @@ with-compiler: ghc-9.12.4
 -- Co-developed shinzui dependencies pinned by GitHub commit (no local-path /
 -- corpus checkouts). dhall comes from Hackage (see build-depends bounds).
 
--- kioku — reusable event-sourced memory/session library. Pinned at origin/master;
--- the local working tree is 3 docs-only commits ahead (no Haskell delta).
+-- kioku — reusable event-sourced memory/session library. Pinned to the
+-- delegation-lineage commit required by ExecPlan 9.
 source-repository-package
   type: git
   location: https://github.com/shinzui/kioku.git
-  tag: 608fbc98e2191bc83b353b14e2c6ba98d543d715
+  tag: 8bcfc282484dd59b0a0b25530cca4f3ad9034ce1
   subdir: kioku-api kioku-core kioku-cli kioku-migrations
 
 -- handan — typed-program runtime (used by EP-2's behavior runner).

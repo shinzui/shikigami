@@ -70,6 +70,8 @@ runAgentWithMemory appEnv behEnv decl payload = do
             scope = scope',
             subjectRef = Just (idText sid),
             previousSessionId = Nothing,
+            parentSessionId = Nothing,
+            delegationDepth = 0,
             startedAt = startedAt'
           }
   -- 2. recall what this agent already knows (empty on the first ever run)

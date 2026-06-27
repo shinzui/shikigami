@@ -43,7 +43,7 @@ import Keiro.Workflow
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..))
-import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
+import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText, parseId)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session qualified as Session
@@ -142,7 +142,7 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 runResolvedAgent deps job decl = do
-  sid <- runStep deps (StepName "open-session") (openSession deps decl)
+  sid <- runStep deps (StepName "open-session") (openSession deps job decl)
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
   behaviorE <- runStep deps (StepName "run-behavior") (runBehaviorStep deps decl job)
   case behaviorE of
@@ -206,11 +206,19 @@ approveSinks deps sid job decl output =
     approvalStepName ordinal kind =
       StepName ("approval:" <> sinkKindText kind <> ":" <> Text.pack (show ordinal))
 
-openSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> Eff es SessionId
-openSession deps decl = liftIO do
+openSession :: (IOE :> es) => AgentRunDeps -> RunJob -> AgentDecl -> Eff es SessionId
+openSession deps job decl = liftIO do
   startedAt' <- getCurrentTime
   sid <- genSessionId
   let focusTxt = behaviorKindText (behavior decl)
+      RunJob {parentSessionId = jobParentSessionId, delegationDepth = jobDelegationDepth} = job
+  parsedParent <-
+    case jobParentSessionId of
+      Nothing -> pure Nothing
+      Just raw ->
+        case parseId raw of
+          Right parsed -> pure (Just parsed)
+          Left err -> ioError (userError ("invalid parentSessionId on RunJob: " <> Text.unpack err))
   _ <-
     Session.start
       StartSessionData
@@ -220,6 +228,8 @@ openSession deps decl = liftIO do
           scope = agentScope (name decl),
           subjectRef = Just (idText sid),
           previousSessionId = Nothing,
+          parentSessionId = parsedParent,
+          delegationDepth = fromMaybe 0 jobDelegationDepth,
           startedAt = startedAt'
         }
       & runKioku deps

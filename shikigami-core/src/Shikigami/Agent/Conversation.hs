@@ -114,6 +114,8 @@ startSession env decl conversationId = do
             scope = agentScope (name decl),
             subjectRef = Just conversationId,
             previousSessionId = Nothing,
+            parentSessionId = Nothing,
+            delegationDepth = 0,
             startedAt = now
           }
   pure case result of
