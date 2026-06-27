@@ -54,6 +54,7 @@ defaultGrantTable :: Map Text (Set SinkKind)
 defaultGrantTable =
   Map.fromList
     [ ("heartbeat", Set.fromList [SKawaDigest, SKizashiSignal, SReiAction, SDanwaConversation]),
+      ("danwa-heartbeat", Set.fromList [SDanwaConversation]),
       ("triage-note", Set.fromList [SKizashiSignal, SReiAction]),
       ("stalled-intention", Set.fromList [SKizashiSignal]),
       ("at-risk-customer", Set.fromList [SKizashiSignal])

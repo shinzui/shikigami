@@ -145,7 +145,22 @@ danwaBridgeTests =
             first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
             case first of
               [(_, DeliveredToConversation)] -> pure ()
-              _ -> assertBool "expected delivery to parked workflow" False
+              _ -> assertBool "expected delivery to parked workflow" False,
+      testCase "mention detection falls back to danwa event store when read models are unavailable" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            setup <- Pool.use (pool store) (Session.script danwaBridgeEventFixtureSql)
+            assertBool "fixture setup succeeds" (either (const False) (const True) setup)
+            let cfg =
+                  DanwaBridgeConfig
+                    { agentMap = [("part_agent_event", "heartbeat")],
+                      pollIntervalMicros = 1_000_000,
+                      deliverAddressed = const (pure False)
+                    }
+            first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
+            second <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
+            assertEqual "event-store fallback enqueues one addressed run" 1 (length first)
+            assertEqual "event-store fallback remains idempotent" 0 (length second)
     ]
 
 danwaBridgeFixtureSql :: Text
@@ -187,6 +202,21 @@ danwaBridgeFixtureSql =
     ('emb_bridge_1', 'message', 'msg_bridge_1', 'mention', 'part_human_test',
      '{"mentionedParticipantId":"part_agent_test"}'::jsonb, '2026-06-27T00:00:00Z', '2026-06-27T00:00:00Z')
   ON CONFLICT (embellishment_id) DO NOTHING;
+  """
+
+danwaBridgeEventFixtureSql :: Text
+danwaBridgeEventFixtureSql =
+  """
+  INSERT INTO kiroku.events
+    (event_id, event_type, causation_id, correlation_id, data, metadata, created_at)
+  VALUES
+    ('00000000-0000-7000-8000-000000000101'::uuid, 'MessagePosted', NULL, NULL,
+     '{"kind":"MessagePosted","messageId":"msg_bridge_event_1","conversationId":"conv_bridge_event_1","author":"part_human_event","parentMessageId":"","content":"please help from events","commandId":"cmd_bridge_event_1"}'::jsonb,
+     '{}'::jsonb, '2026-06-27T00:00:00Z'),
+    ('00000000-0000-7000-8000-000000000102'::uuid, 'EmbellishmentAdded', NULL, NULL,
+     '{"kind":"mention","embellishmentId":"emb_bridge_event_1","targetType":"message","targetId":"msg_bridge_event_1","addedBy":"part_human_event","payloadJson":"{\\"mentionedParticipantId\\":\\"part_agent_event\\"}","commandId":"cmd_bridge_event_2"}'::jsonb,
+     '{}'::jsonb, '2026-06-27T00:00:01Z')
+  ON CONFLICT (event_id) DO NOTHING;
   """
 
 bridgeAgentDecl :: AgentDecl

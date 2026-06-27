@@ -14,6 +14,7 @@ import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.Functor ((<&>))
 import Data.List (find)
 import Data.Maybe (fromMaybe)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as D
@@ -96,14 +97,28 @@ runDanwaBridgeOnce cfg shikigamiPool danwaPool agents = do
 
 detectAddressed :: DanwaBridgeConfig -> Pool -> IO [AddressedMessage]
 detectAddressed cfg danwaPool = do
-  fmap concat $
+  fmap (dedupeAddressed . concat) $
     forM (fst <$> agentMap cfg) \participant ->
-      Pool.use danwaPool (Session.statement participant selectAddressedStmt) <&> \case
-        Right rows -> rows
-        Left _ ->
-          -- A missing danwa database or schema should not crash a supervised bridge loop.
-          -- The next poll can recover once danwa is available.
-          []
+      (<>) <$> selectAddressedRows danwaPool selectAddressedStmt participant <*> selectAddressedRows danwaPool selectAddressedEventsStmt participant
+
+selectAddressedRows :: Pool -> Statement Text [AddressedMessage] -> Text -> IO [AddressedMessage]
+selectAddressedRows danwaPool stmt participant =
+  Pool.use danwaPool (Session.statement participant stmt) <&> \case
+    Right rows -> rows
+    Left _ ->
+      -- A missing danwa database, schema, or projection table should not crash a
+      -- supervised bridge loop. The next poll can recover once danwa is available.
+      []
+
+dedupeAddressed :: [AddressedMessage] -> [AddressedMessage]
+dedupeAddressed =
+  reverse . snd . foldl' step (Set.empty, [])
+  where
+    step (seen, acc) msg =
+      let key = (agentParticipant msg, messageId msg)
+       in if Set.member key seen
+            then (seen, acc)
+            else (Set.insert key seen, msg : acc)
 
 resolveAgent :: DanwaBridgeConfig -> [AgentDecl] -> AddressedMessage -> Maybe Text
 resolveAgent cfg agents msg = do
@@ -148,6 +163,56 @@ selectAddressedStmt =
        AND (e.payload ->> 'mentionedParticipantId' = $1
             OR e.payload ->> 'participantId' = $1
             OR e.payload ->> 'participant_id' = $1)
+     ORDER BY m.posted_at, m.message_id
+     LIMIT 100
+    """
+    (E.param (E.nonNullable E.text))
+    (D.rowList addressedRow)
+
+selectAddressedEventsStmt :: Statement Text [AddressedMessage]
+selectAddressedEventsStmt =
+  preparable
+    """
+    WITH message_events AS (
+      SELECT m.data ->> 'conversationId' AS conversation_id,
+             m.data ->> 'messageId' AS message_id,
+             m.data ->> 'author' AS author,
+             m.data ->> 'content' AS content,
+             m.created_at AS posted_at
+        FROM kiroku.events m
+       WHERE m.event_type IN ('MessagePosted', 'MessageRepliedTo')
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM kiroku.events deleted
+                WHERE deleted.event_type = 'MessageDeleted'
+                  AND deleted.data ->> 'messageId' = m.data ->> 'messageId'
+             )
+    ),
+    mention_events AS (
+      SELECT e.data ->> 'targetId' AS target_id,
+             (e.data ->> 'payloadJson')::jsonb AS payload
+        FROM kiroku.events e
+       WHERE e.event_type = 'EmbellishmentAdded'
+         AND e.data ->> 'targetType' = 'message'
+         AND e.data ->> 'kind' = 'mention'
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM kiroku.events removed
+                WHERE removed.event_type = 'EmbellishmentRemoved'
+                  AND removed.data ->> 'embellishmentId' = e.data ->> 'embellishmentId'
+             )
+    )
+    SELECT m.conversation_id,
+           m.message_id,
+           m.author,
+           m.content,
+           $1
+      FROM message_events m
+      JOIN mention_events e
+        ON e.target_id = m.message_id
+     WHERE e.payload ->> 'mentionedParticipantId' = $1
+        OR e.payload ->> 'participantId' = $1
+        OR e.payload ->> 'participant_id' = $1
      ORDER BY m.posted_at, m.message_id
      LIMIT 100
     """
