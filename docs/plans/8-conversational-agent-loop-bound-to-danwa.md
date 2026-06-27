@@ -119,8 +119,18 @@ This section must always reflect the actual current state of the work.
       Validated with `nix fmt`, `nix develop --command cabal test shikigami-core-test` (28
       tests), and `nix develop --command cabal build all`.
       Completed: 2026-06-27T23:06:00Z.
-- [ ] **M4 — End-to-end acceptance.** Post two human messages; show two danwa replies, four
-      `kioku_turns` rows for one session, and a workflow journal proving the park-between-turns.
+- [ ] **M4 — End-to-end acceptance.** Core live loop validated with direct addressed-job
+      enqueueing against a live `danwa-server`: two human messages in one danwa conversation
+      produced two `MessageRepliedTo` events from `part_agent_m4`; the shikigami database
+      recorded four `kioku_turns` rows in one running session; and the
+      `shikigami.danwa-conversation` workflow journal shows `next-message:1` parking between
+      the first and second turn. The exact bridge-driven acceptance remains open because the
+      local danwa dev database's projection worker advanced `danwa-*-projection`
+      subscriptions without materializing rows in `danwa.danwa_messages` /
+      `danwa.danwa_embellishments`, so the bridge had no read-model rows to poll. Captured:
+      2026-06-27T23:37:00Z.
+      Remaining: repair or reset the local danwa read-model/projection state, then rerun the
+      same two-turn check through `danwa-bridge` rather than direct `enqueue-run`.
 - [x] **Dependency tracking.** Confirmed plan 7 ("Agent runs as durable keiro workflows")
       has landed its workflow suspend/resume substrate and `awaitInput`; confirm the kioku
       `Awaiting` session state (kioku plan "Awaiting session state for durable
@@ -177,6 +187,16 @@ implementation. Provide concise evidence.
   `Kioku.Session.Domain.RecordTurn`, `Kioku.Session.ReadModel.sessionInlineProjection`, and
   `Kioku.Distill.Timer.l1TimerScheduleProjection`. This allowed shikigami to add the reply
   outbox enqueue to the same command append transaction without changing kioku.
+
+- The local long-lived dev databases had drifted from the current source pins. The danwa
+  database had event-store rows and accepted HTTP writes, but its `danwa.danwa_messages` and
+  `danwa.danwa_embellishments` read-model tables were initially missing because `just
+  create-database` failed in the pgmq migration on an existing `pgmq.message_record` type.
+  Applying the idempotent read-model DDL restored the tables, but the projection worker then
+  advanced the `danwa-*-projection` checkpoints without materializing rows. Separately, the
+  shikigami database had `kioku-session-by-id` metadata at `kioku-session-v1` while the
+  pinned Kioku code expected `kioku-session-v2`; updating that metadata row after confirming
+  the v2 columns allowed a fresh conversation workflow to run.
 
 
 ## Decision Log
@@ -326,6 +346,16 @@ Compare the result against the original purpose.
   `record-assistant-and-reply:<messageId>` step for replay; the deterministic outbox handle
   keeps crash recovery idempotent if the command transaction commits before the workflow
   step journal does. The live danwa-server M4 acceptance remains open.
+- M4 has a partial live-runtime result. With `danwa-server`, `danwa-worker`,
+  `shikigami worker`, and `danwa-bridge` running, the bridge could not observe the fresh
+  human messages because the local danwa read-model projection did not populate
+  `danwa.danwa_messages` / `danwa.danwa_embellishments`. Bypassing only that bridge input by
+  direct `enqueue-run` proved the rest of the live loop: the same conversation id
+  `conv_01kw5mmc97e8jrw5z9x9vck1g4` produced two Danwa `MessageRepliedTo` events, four
+  Kioku turns in session `kioku_session_01kw5mms8teh0shw8kbyht9a3d`, and one workflow that
+  parked on `next-message:1` before resuming for the second message and parking on
+  `next-message:2`. Full M4 remains open until the danwa read-model projection state is
+  repaired and the same run is driven by `danwa-bridge`.
 
 
 ## Context and Orientation
