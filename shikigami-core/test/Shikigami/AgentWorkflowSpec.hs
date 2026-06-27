@@ -25,7 +25,7 @@ import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink (..), Trigger (.
 import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink.Config (KawaConfig (..), KizashiConfig (..))
+import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
@@ -215,6 +215,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       agents = [decl],
       kizashi = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "recipient"},
       kawa = KawaConfig {kawaBaseUrl = "http://localhost:1", kawaSourceSegment = "shinzui/shikigami"},
+      danwa = DanwaConfig {danwaBaseUrl = "http://localhost:1", danwaAgentParticipant = "part_agent_test"},
       hooks,
       approval,
       deadline

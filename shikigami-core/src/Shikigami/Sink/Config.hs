@@ -2,10 +2,11 @@
 module Shikigami.Sink.Config
   ( KizashiConfig (..),
     KawaConfig (..),
+    DanwaConfig (..),
   )
 where
 
-import Data.Text (Text)
+import Shikigami.Prelude
 
 -- | Where to POST kizashi signals, plus a fallback recipient.
 data KizashiConfig = KizashiConfig
@@ -20,3 +21,11 @@ data KawaConfig = KawaConfig
     kawaSourceSegment :: !Text -- the {source} segment, e.g. "shinzui/shikigami"
   }
   deriving stock (Eq, Show)
+
+-- | Where to POST danwa messages, plus the agent participant id used as author.
+data DanwaConfig = DanwaConfig
+  { danwaBaseUrl :: !Text, -- e.g. "http://localhost:8080"
+    danwaAgentParticipant :: !Text -- e.g. "part_..."
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)

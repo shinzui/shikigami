@@ -59,7 +59,7 @@ import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
-import Shikigami.Sink (KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
+import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 
 data AgentRunDeps = AgentRunDeps
@@ -68,6 +68,7 @@ data AgentRunDeps = AgentRunDeps
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
+    danwa :: !DanwaConfig,
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime)
@@ -83,6 +84,7 @@ data SinkIntent = SinkIntent
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
+    danwaTarget :: !(Maybe DanwaTarget),
     sink :: !Sink,
     output :: !Value
   }
@@ -286,6 +288,7 @@ enqueueSinkIntents job decl sid output = do
                     runId = runIdText,
                     ordinal,
                     occurredAt = Just jobOccurredAt,
+                    danwaTarget = Nothing,
                     sink,
                     output
                   }
@@ -333,7 +336,7 @@ publishSinkIntent deps row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right SinkIntent {agent, runId, ordinal, occurredAt, sink, output} -> liftIO do
+        Right SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, sink, output} -> liftIO do
           result <-
             dispatch
               SinkContext
@@ -342,6 +345,8 @@ publishSinkIntent deps row =
                   sinkCtxOrdinal = ordinal,
                   sinkCtxKizashi = kizashi deps,
                   sinkCtxKawa = kawa deps,
+                  sinkCtxDanwa = danwa deps,
+                  sinkCtxDanwaTarget = danwaTarget,
                   sinkCtxOccurredAt = occurredAt
                 }
               sink

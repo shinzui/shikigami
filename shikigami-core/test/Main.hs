@@ -8,14 +8,16 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Network.HTTP.Types (hContentType, status200, status400, status404)
-import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
+import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
+import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Sink
   ( AgentIdentity (..),
+    DanwaConfig (..),
+    DanwaTarget (..),
     KawaConfig (..),
     KizashiConfig (..),
     SinkContext (..),
@@ -36,7 +38,7 @@ main =
   defaultMain
     ( testGroup
         "shikigami"
-        [ testGroup "Sink" [kizashiTests, kawaTests],
+        [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests],
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
@@ -137,11 +139,23 @@ ctxFor ident kz kw =
       sinkCtxOrdinal = 0,
       sinkCtxKizashi = kz,
       sinkCtxKawa = kw,
+      sinkCtxDanwa = DanwaConfig {danwaBaseUrl = "http://localhost:1", danwaAgentParticipant = "part_agent_test"},
+      sinkCtxDanwaTarget = Nothing,
       sinkCtxOccurredAt = Nothing
     }
 
 dummyKawa :: KawaConfig
 dummyKawa = KawaConfig {kawaBaseUrl = "http://localhost:1", kawaSourceSegment = "shinzui/shikigami"}
+
+dummyKizashi :: KizashiConfig
+dummyKizashi = KizashiConfig {kizashiBaseUrl = "http://localhost:1", kizashiDefaultRecipient = "recipient_default"}
+
+ctxForDanwa :: AgentIdentity -> DanwaConfig -> Maybe DanwaTarget -> SinkContext
+ctxForDanwa ident danwa target =
+  (ctxFor ident dummyKizashi dummyKawa)
+    { sinkCtxDanwa = danwa,
+      sinkCtxDanwaTarget = target
+    }
 
 kizashiTests :: TestTree
 kizashiTests =
@@ -192,6 +206,85 @@ kawaTests =
             other -> assertBool ("expected two Delivered, got " <> show other) False
           m <- readIORef store
           assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m)
+    ]
+
+-- | A small danwa-compatible HTTP stub for the sink client. It records message request
+-- bodies and returns fixed TypeID-shaped ids.
+stubDanwaApp :: IORef [Value] -> Application
+stubDanwaApp ref req respond =
+  case (requestMethod req, pathInfo req) of
+    ("POST", ["conversations"]) ->
+      respond
+        ( responseLBS
+            status200
+            [(hContentType, "application/json")]
+            ( encode
+                ( object
+                    [ "conversationId" .= ("conv_stub" :: Text),
+                      "status" .= ("active" :: Text),
+                      "kind" .= ("thread" :: Text),
+                      "startedBy" .= ("part_agent_test" :: Text),
+                      "parentConversationId" .= ("" :: Text)
+                    ]
+                )
+            )
+        )
+    ("POST", ["conversations", "conv_stub", "participants"]) ->
+      respond (responseLBS status204 [] "")
+    ("POST", ["conversations", "conv_stub", "messages"]) ->
+      respondMessage ref req "conv_stub" "msg_stub" respond
+    ("POST", ["conversations", "conv_target", "messages", "msg_parent", "replies"]) ->
+      respondMessage ref req "conv_target" "msg_reply" respond
+    _ -> respond (responseLBS status404 [] "not found")
+
+respondMessage :: IORef [Value] -> Request -> Text -> Text -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+respondMessage ref req cid mid respond = do
+  body <- strictRequestBody req
+  case eitherDecode body of
+    Right value -> do
+      modifyIORef' ref (value :)
+      respond
+        ( responseLBS
+            status200
+            [(hContentType, "application/json")]
+            ( encode
+                ( object
+                    [ "messageId" .= mid,
+                      "conversationId" .= cid,
+                      "author" .= ("part_agent_test" :: Text),
+                      "content" .= ("reply text" :: Text),
+                      "postedAt" .= ("2026-06-27T00:00:00Z" :: Text)
+                    ]
+                )
+            )
+        )
+    Left err -> respond (responseLBS status400 [] (LBS8.pack err))
+
+danwaTests :: TestTree
+danwaTests =
+  testGroup
+    "DanwaConversation"
+    [ testCase "targeted reply posts through danwa and returns Delivered msg id" do
+        ref <- newIORef []
+        testWithApplication (pure (stubDanwaApp ref)) \port -> do
+          let cfg = DanwaConfig {danwaBaseUrl = baseUrl port, danwaAgentParticipant = "part_agent_test"}
+              target = Just DanwaTarget {dtConversationId = "conv_target", dtParentMessageId = Just "msg_parent"}
+              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg target
+              sink = DanwaConversation {topic = "support"}
+          r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
+          sinkResultOutcome r @?= Delivered "msg_reply"
+          reqs <- readIORef ref
+          assertEqual "one danwa message recorded" 1 (length reqs),
+      testCase "untargeted sink starts a conversation before posting" do
+        ref <- newIORef []
+        testWithApplication (pure (stubDanwaApp ref)) \port -> do
+          let cfg = DanwaConfig {danwaBaseUrl = baseUrl port, danwaAgentParticipant = "part_agent_test"}
+              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
+              sink = DanwaConversation {topic = "support"}
+          r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          sinkResultOutcome r @?= Delivered "msg_stub"
+          reqs <- readIORef ref
+          assertEqual "one danwa message recorded" 1 (length reqs)
     ]
 
 sampleOutput :: Data.Aeson.Value

@@ -60,12 +60,16 @@ This section must always reflect the actual current state of the work.
       `Danwa.Client` to start a conversation, join an `Agent` participant, post a human
       message, and post an agent reply; observe the rows in `danwa.danwa_messages`. Proves
       the danwa API end to end before any loop work.
-- [ ] **M1 — Real `DanwaConversation` sink.** Replace `runDanwaStub` in
+- [x] **M1 — Real `DanwaConversation` sink.** Replaced `runDanwaStub` in
       `shikigami-core/src/Shikigami/Sink/Danwa.hs` with a handler that posts the behavior
-      output into a danwa thread via `Danwa.Client.postMessage`/`replyToMessage`. Add
-      `DanwaConfig` to `Shikigami.Sink.Config`, thread it through `SinkContext`, and change
-      the `DanwaConversation {}` arm of `Shikigami.Sink.runSink` from `Stubbed` to
-      `Delivered`/`Failed`.
+      output into a danwa thread via `Danwa.Client.postMessage`/`replyToMessage`; added
+      `DanwaConfig` and `DanwaTarget`, threaded danwa config through `WorkerEnv`,
+      `AgentRunDeps`, `SinkIntent`, and `SinkContext`; changed the `DanwaConversation {}`
+      arm of `Shikigami.Sink.runSink` from `Stubbed` to `Delivered`/`Failed`; added WAI
+      stub-backed tests for targeted replies and fresh-thread fallback.
+      Validated with `nix develop --command cabal build all` and
+      `nix develop --command cabal test shikigami-core-test`.
+      Completed: 2026-06-27T19:06:10Z.
 - [ ] **M2 — Conversational trigger (addressed message → run/resume).** A new module
       `Shikigami.Trigger.Danwa` that detects a danwa message addressed to a declared agent
       and either starts a new conversation run or resumes the parked one, by enqueuing onto
@@ -97,6 +101,18 @@ implementation. Provide concise evidence.
   ```text
   ld: library not found for -lrdkafka
   clang: error: linker command failed with exit code 1
+  ```
+
+- `Danwa.Conversation.Api.StartConversationRequest` has `startedBy`, `kind`, and
+  `parentConversationId`; it has no durable `topic` field. Evidence from
+  `/Users/shinzui/Keikaku/bokuno/danwa/danwa-api/src/Danwa/Conversation/Api.hs`:
+
+  ```haskell
+  data StartConversationRequest = StartConversationRequest
+    { startedBy :: !Text,
+      kind :: !Text,
+      parentConversationId :: !(Maybe Text)
+    }
   ```
 
 
@@ -154,6 +170,23 @@ Record every decision made while working on the plan.
   repository, and `git ls-remote` confirmed that commit is current `origin/master`.
   Date: 2026-06-27
 
+- Decision: Implement shikigami's sink function as
+  `runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)`
+  instead of hiding the optional target outside the signature.
+  Rationale: The target lives on `SinkContext`, and making it an explicit argument keeps
+  the pure dispatcher-to-client handoff visible. It also lets M3's conversational workflow
+  supply `DanwaTarget { dtConversationId, dtParentMessageId }` through the existing outbox
+  `SinkIntent` payload.
+  Date: 2026-06-27
+
+- Decision: For an untargeted `DanwaConversation` sink, start a fresh danwa conversation
+  with `kind = "thread"`, join the configured agent participant, and post the behavior
+  output as the first message; do not try to persist `Sink.topic` into danwa.
+  Rationale: danwa does not expose a topic field on `StartConversationRequest`. Targeted
+  conversational replies carry the actual thread identity via `DanwaTarget`, so the topic
+  remains only shikigami declaration metadata until danwa grows a first-class title/topic.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -164,6 +197,9 @@ Compare the result against the original purpose.
   been exercised against a live danwa server in this session, but it compiles against the
   real `Danwa.Client` API and is ready for the M0 runtime acceptance check once
   `danwa-server` is running.
+- M1 made `DanwaConversation` a real delivered sink. The implementation posts targeted
+  replies when `SinkContext` carries a `DanwaTarget`, starts a fresh danwa thread for
+  untargeted one-shot runs, and is covered by `shikigami-core-test` WAI stub tests.
 
 
 ## Context and Orientation
@@ -390,10 +426,11 @@ into a danwa thread. This is the outbound half of the two-way binding.
 
 **What exists at the end.** `runDanwaStub` is gone; in its place
 `shikigami-core/src/Shikigami/Sink/Danwa.hs` exposes
-`runDanwa :: DanwaConfig -> AgentIdentity -> Sink -> Value -> IO (Either Text Text)` that,
-for a `DanwaConversation` sink, resolves the target conversation (from the sink/`SinkContext`)
-and posts the rendered output via `Danwa.Client.postMessage` (or `replyToMessage` when a
-parent message id is present), returning the new `msg_…` id on success.
+`runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)`
+that, for a `DanwaConversation` sink, resolves the target conversation from the
+`Maybe DanwaTarget` supplied by `SinkContext` and posts the rendered output via
+`Danwa.Client.postMessage` (or `replyToMessage` when a parent message id is present),
+returning the new `msg_…` id on success.
 
 **Edits.**
 
@@ -635,6 +672,24 @@ cabal run shikigami -- enqueue-run --agent <agentName> --payload '{"reply":"hell
 #   [shikigami.sink] agent=<agentName> sink=SDanwaConversation -> Delivered msg_01h...
 ```
 
+Implementation validation transcript:
+
+```text
+$ nix develop --command cabal build all
+Build profile: -w ghc-9.12.4 -O1
+...
+Building executable 'shikigami-migrate' for shikigami-migrations-0.1.0.0...
+
+$ nix develop --command cabal test shikigami-core-test
+shikigami
+  Sink
+    DanwaConversation
+      targeted reply posts through danwa and returns Delivered msg id: OK
+      untargeted sink starts a conversation before posting:            OK
+...
+All 20 tests passed
+```
+
 ### M2 — trigger / bridge (verify a job appears, idempotently)
 
 ```bash
@@ -745,9 +800,9 @@ which still posts a reply via the M1 sink — losing only the multi-turn memory 
 - `shikigami-core/src/Shikigami/Sink/Config.hs` — add
   `data DanwaConfig = DanwaConfig { danwaBaseUrl :: !Text, danwaAgentParticipant :: !Text }`.
 - `shikigami-core/src/Shikigami/Sink/Danwa.hs` — replace `runDanwaStub` with
-  `runDanwa :: DanwaConfig -> AgentIdentity -> Sink -> Value -> IO (Either Text Text)` and a
-  helper `postReply :: DanwaConfig -> DanwaTarget -> Text -> IO (Either Text Text)` over
-  `Danwa.Client.postMessage`/`replyToMessage`.
+  `runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)`
+  and a helper `postReply :: DanwaConfig -> DanwaTarget -> Text -> IO (Either Text Text)`
+  over `Danwa.Client.postMessage`/`replyToMessage`.
 - `shikigami-core/src/Shikigami/Sink/Types.hs` — extend `SinkContext` with `sinkCtxDanwa ::
   !DanwaConfig` and `sinkCtxDanwaTarget :: !(Maybe DanwaTarget)`; add
   `data DanwaTarget = DanwaTarget { dtConversationId :: !Text, dtParentMessageId :: !(Maybe Text) }`.

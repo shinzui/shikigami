@@ -20,7 +20,7 @@ data Command
   | EnqueueRun String (Maybe String)
   | PublishFixture FilePath Text Text
   | ConsumeStream FilePath Text Text Text Bool
-  | Worker FilePath Text Text
+  | Worker FilePath Text Text Text Text
   | DanwaSpike String String String
 
 main :: IO ()
@@ -113,6 +113,8 @@ parser =
                   <$> strOption (long "agents" <> metavar "DIR" <> value "agents" <> help "Agents manifest directory")
                   <*> strOption (long "kawa-url" <> metavar "URL" <> value "http://localhost:8088" <> help "kawa (or stub-kawa) base URL")
                   <*> strOption (long "kizashi-url" <> metavar "URL" <> value "http://localhost:8089" <> help "kizashi base URL")
+                  <*> strOption (long "danwa-url" <> metavar "URL" <> value "http://localhost:8080" <> help "danwa base URL")
+                  <*> strOption (long "danwa-agent" <> metavar "PARTICIPANT" <> value "part_shikigami" <> help "danwa agent participant id used as message author")
               )
               (progDesc "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session")
           )
@@ -126,5 +128,5 @@ run (StubKawa port topic broker) = runStubKawaCmd port topic broker
 run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
-run (Worker agentsDir kawaUrl kizashiUrl) = runWorkerCmd agentsDir kawaUrl kizashiUrl
+run (Worker agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent) = runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent
 run (DanwaSpike danwaUrl human agent) = runDanwaSpike danwaUrl human agent

@@ -17,9 +17,8 @@ where
 import Data.Aeson (Value)
 import Data.Text qualified as Text
 import Shikigami.Api.Agent (Sink (..))
-import Shikigami.Prelude
 import Shikigami.Sink.Config
-import Shikigami.Sink.Danwa (runDanwaStub)
+import Shikigami.Sink.Danwa (runDanwa)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
 import Shikigami.Sink.KizashiClient (buildSignalReq, postSignal)
 import Shikigami.Sink.Permission
@@ -61,4 +60,6 @@ runSink ctx sink output = case sink of
         r <- postSignal (sinkCtxKizashi ctx) req
         pure (either Failed (Delivered . signalId) r)
   ReiAction {} -> Stubbed <$ runReiActionStub (sinkCtxIdentity ctx) sink output
-  DanwaConversation {} -> Stubbed <$ runDanwaStub (sinkCtxIdentity ctx) sink output
+  DanwaConversation {} -> do
+    r <- runDanwa (sinkCtxDanwa ctx) (sinkCtxIdentity ctx) (sinkCtxDanwaTarget ctx) sink output
+    pure (either Failed Delivered r)

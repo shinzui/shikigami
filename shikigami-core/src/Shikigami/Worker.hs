@@ -40,7 +40,7 @@ import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Prelude
-import Shikigami.Sink (KawaConfig, KizashiConfig)
+import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import System.IO (hPutStrLn, stderr)
 
@@ -51,7 +51,8 @@ data WorkerEnv = WorkerEnv
     agents :: ![AgentDecl],
     behaviorEnv :: !BehaviorEnv,
     kizashi :: !KizashiConfig,
-    kawa :: !KawaConfig
+    kawa :: !KawaConfig,
+    danwa :: !DanwaConfig
   }
 
 -- | Boot the worker: build the pgmq adapter over @shikigami_run_jobs@, wrap the
@@ -152,6 +153,7 @@ agentRunDeps env =
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,
+      AgentWorkflow.danwa = danwa env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing
