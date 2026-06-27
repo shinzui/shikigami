@@ -47,6 +47,7 @@ library
     Shikigami.Sink.Types
     Shikigami.Sink.Wire
     Shikigami.Trigger.Consumer
+    Shikigami.Trigger.Danwa
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Publish
     Shikigami.Trigger.Schedule
@@ -68,6 +69,7 @@ library
     , effectful
     , filepath              >=1.4
     , handan-core
+    , hasql
     , hasql-pool
     , hasql-transaction
     , http-client
@@ -110,6 +112,8 @@ test-suite shikigami-core-test
     , bytestring
     , containers
     , effectful
+    , hasql
+    , hasql-pool
     , http-types
     , keiro
     , kioku-api

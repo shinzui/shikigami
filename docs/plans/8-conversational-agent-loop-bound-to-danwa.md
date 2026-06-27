@@ -70,7 +70,17 @@ This section must always reflect the actual current state of the work.
       Validated with `nix develop --command cabal build all` and
       `nix develop --command cabal test shikigami-core-test`.
       Completed: 2026-06-27T19:06:10Z.
-- [ ] **M2 — Conversational trigger (addressed message → run/resume).** A new module
+- [x] **M2 — Conversational trigger (addressed message → run/resume).** Added
+      `shikigami-core/src/Shikigami/Trigger/Danwa.hs` with `AddressedMessage`,
+      `DanwaBridgeConfig`, `detectAddressed`, `runDanwaBridgeOnce`, and `runDanwaBridge`;
+      added `enqueueAddressedRunWithKey` so the bridge can set
+      `idempotencyKey = agentName <> ":" <> messageId`; added a `danwa-bridge` CLI command
+      that polls danwa read-model mentions and enqueues addressed run jobs; persisted
+      bridge idempotency in `shikigami_danwa_bridge_seen`.
+      Validated with `nix develop --command cabal build all` and
+      `nix develop --command cabal test shikigami-core-test`.
+      Completed: 2026-06-27T19:13:25Z.
+      Original scope: A new module
       `Shikigami.Trigger.Danwa` that detects a danwa message addressed to a declared agent
       and either starts a new conversation run or resumes the parked one, by enqueuing onto
       `shikigami_run_jobs` (`Shikigami.Trigger.Enqueue.enqueueAddressedRun`). Carry
@@ -114,6 +124,11 @@ implementation. Provide concise evidence.
       parentConversationId :: !(Maybe Text)
     }
   ```
+
+- pgmq `sendMessage` does not deduplicate on `RunJob.idempotencyKey`; the bridge needs its
+  own durable claim before enqueueing a detected danwa message. Evidence: reusing
+  `enqueueRunJob` sends a message body to `shikigami_run_jobs`; the idempotency key is data
+  inside the JSON payload, not a pgmq uniqueness constraint.
 
 
 ## Decision Log
@@ -187,6 +202,14 @@ Record every decision made while working on the plan.
   remains only shikigami declaration metadata until danwa grows a first-class title/topic.
   Date: 2026-06-27
 
+- Decision: Persist M2 bridge idempotency in a shikigami-owned table
+  `shikigami_danwa_bridge_seen(idempotency_key text primary key, seen_at timestamptz)`,
+  created idempotently when the bridge starts.
+  Rationale: The bridge can safely rescan danwa read-model rows on every poll and still
+  satisfy "same message id produces no second job"; `agentName:messageId` is claimed before
+  enqueueing, so a repeated observation is skipped before pgmq send.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -200,6 +223,10 @@ Compare the result against the original purpose.
 - M1 made `DanwaConversation` a real delivered sink. The implementation posts targeted
   replies when `SinkContext` carries a `DanwaTarget`, starts a fresh danwa thread for
   untargeted one-shot runs, and is covered by `shikigami-core-test` WAI stub tests.
+- M2 delivered the polling trigger bridge. It detects `mention` embellishments whose JSON
+  payload names a configured agent participant, maps that participant to a declared agent,
+  enqueues one addressed run job with the normalized message payload, and proves repeated
+  observation is idempotent in `shikigami-core-test`.
 
 
 ## Context and Orientation
@@ -695,13 +722,29 @@ All 20 tests passed
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/shikigami
 # run the danwa→shikigami bridge (poller) — flag names finalized during implementation:
-cabal run shikigami -- danwa-bridge --danwa-url http://localhost:PORT \
+cabal run shikigami -- danwa-bridge --agents ./fixtures/agents \
+  --danwa-db "$DANWA_PG_CONNECTION_STRING" \
   --map part_agent1=<agentName>
 # post a human message in danwa that mentions part_agent1 (via the spike or danwa UI/HTTP),
 # then inspect the run queue:
 psql -d shikigami -c "select message from pgmq.q_shikigami_run_jobs;"
 # expected: one job whose payload has conversationId/messageId/author/content
 # re-deliver the SAME message id -> still exactly one job (idempotency by agentName:messageId)
+```
+
+Implementation validation transcript:
+
+```text
+$ nix develop --command cabal test shikigami-core-test
+shikigami
+  Trigger
+    DanwaBridge
+      mention detection enqueues once for a repeated observation: OK
+...
+All 21 tests passed
+
+$ nix develop --command cabal build all
+Building executable 'shikigami' for shikigami-cli-0.1.0.0...
 ```
 
 ### M3/M4 — end-to-end
@@ -809,9 +852,11 @@ which still posts a reply via the M1 sink — losing only the multi-turn memory 
 - `shikigami-core/src/Shikigami/Sink.hs` — `runSink`'s `DanwaConversation {}` arm calls
   `runDanwa` and maps to `Delivered`/`Failed`.
 - `shikigami-core/src/Shikigami/Trigger/Danwa.hs` (new) — `AddressedMessage`,
-  `DanwaBridgeConfig`, `detectAddressed :: DanwaBridgeConfig -> ... -> IO [AddressedMessage]`,
-  and `runDanwaBridge :: DanwaBridgeConfig -> Pool -> [AgentDecl] -> IO ()` (calls
-  `Shikigami.Trigger.Enqueue.enqueueAddressedRun`).
+  `DanwaBridgeConfig`, `detectAddressed :: DanwaBridgeConfig -> Pool -> IO [AddressedMessage]`,
+  `runDanwaBridgeOnce :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO [(AddressedMessage, Either UsageError MessageId)]`,
+  and `runDanwaBridge :: DanwaBridgeConfig -> Pool -> Pool -> [AgentDecl] -> IO ()` (calls
+  `Shikigami.Trigger.Enqueue.enqueueAddressedRunWithKey` after claiming
+  `agentName:messageId` in `shikigami_danwa_bridge_seen`).
 - `shikigami-core/src/Shikigami/Agent/Conversation.hs` (new) — `ConversationEnv`,
   `ConversationTurnResult`, and `runConversationTurn :: ConversationEnv -> AgentDecl ->
   AddressedMessage -> IO (Either Text ConversationTurnResult)` as specified in M3. This is the

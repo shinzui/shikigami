@@ -4,6 +4,7 @@ import Data.Text (Text)
 import Options.Applicative
 import Shikigami.Cli.Commands.AgentRun (runAgentRun)
 import Shikigami.Cli.Commands.ConsumeStream (runConsumeStream)
+import Shikigami.Cli.Commands.DanwaBridge (runDanwaBridgeCmd)
 import Shikigami.Cli.Commands.DanwaSpike (runDanwaSpike)
 import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
@@ -22,6 +23,7 @@ data Command
   | ConsumeStream FilePath Text Text Text Bool
   | Worker FilePath Text Text Text Text
   | DanwaSpike String String String
+  | DanwaBridge FilePath Text [Text]
 
 main :: IO ()
 main = run =<< execParser opts
@@ -85,6 +87,16 @@ parser =
               (progDesc "Spike the danwa HTTP client by posting a human message and agent reply")
           )
         <> command
+          "danwa-bridge"
+          ( info
+              ( DanwaBridge
+                  <$> strOption (long "agents" <> metavar "DIR" <> value "agents" <> help "Agents manifest directory")
+                  <*> strOption (long "danwa-db" <> metavar "CONNSTR" <> help "danwa PostgreSQL connection string")
+                  <*> many (strOption (long "map" <> metavar "PARTICIPANT=AGENT" <> help "Map danwa agent participant id to declared agent name"))
+              )
+              (progDesc "Poll danwa addressed messages and enqueue shikigami run jobs")
+          )
+        <> command
           "publish-fixture"
           ( info
               ( PublishFixture
@@ -130,3 +142,4 @@ run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
 run (Worker agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent) = runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent
 run (DanwaSpike danwaUrl human agent) = runDanwaSpike danwaUrl human agent
+run (DanwaBridge agentsDir danwaConn mappings) = runDanwaBridgeCmd agentsDir danwaConn mappings

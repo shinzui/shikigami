@@ -6,10 +6,11 @@ module Shikigami.Trigger.Enqueue
     runJobFromEnvelope,
     enqueueRunJob,
     enqueueAddressedRun,
+    enqueueAddressedRunWithKey,
   )
 where
 
-import Data.Aeson (Value, toJSON)
+import Data.Aeson (Value)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
@@ -58,6 +59,12 @@ enqueueRunJob pool job =
 enqueueAddressedRun :: Pool -> Text -> Value -> IO (Either UsageError MessageId)
 enqueueAddressedRun pool agent payload = do
   now <- getCurrentTime
+  enqueueAddressedRunWithKey pool agent payload (agent <> ":evt:" <> Text.pack (iso8601Show now))
+
+-- | Enqueue an addressed run with a caller-supplied stable idempotency key.
+enqueueAddressedRunWithKey :: Pool -> Text -> Value -> Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunWithKey pool agent payload key = do
+  now <- getCurrentTime
   enqueueRunJob
     pool
     RunJob
@@ -65,5 +72,5 @@ enqueueAddressedRun pool agent payload = do
         triggerKind = TriggeredByEvent,
         occurredAt = now,
         triggerPayload = payload,
-        idempotencyKey = agent <> ":evt:" <> Text.pack (iso8601Show now)
+        idempotencyKey = key
       }
