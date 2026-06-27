@@ -2,25 +2,29 @@ module Shikigami.AgentWorkflowSpec (tests) where
 
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
-import Data.Aeson (object, (.=))
+import Data.Aeson (Value, object, (.=))
 import Data.Bifunctor (first)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
+import Effectful (Eff)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), completedStepName, loadStepIndex)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
+import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
-import Kioku.Id (SessionId)
+import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Kioku.Id (SessionId, genSessionId, idText)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRunRegistry, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
 import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
@@ -28,7 +32,7 @@ import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
 tests :: TestTree
 tests =
@@ -47,8 +51,8 @@ tests =
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
 
             case (firstRun, second) of
-              (Right (Completed (Right firstResult)), Right (Completed (Right secondResult))) -> do
-                assertEqual "open-session replayed the original session id" (sessionId firstResult) (sessionId secondResult)
+              (Right (Completed (Right AgentRunResult {sessionId = firstSessionId})), Right (Completed (Right AgentRunResult {sessionId = secondSessionId}))) -> do
+                assertEqual "open-session replayed the original session id" firstSessionId secondSessionId
                 assertEqual "dispatch-sinks enqueued one stable outbox row" (Right 1) (length <$> outboxRows)
               other -> assertEqual "both workflow runs complete successfully" "completed twice" (show other),
       testCase "resumes after a crash without rerunning journaled step bodies" do
@@ -99,6 +103,39 @@ tests =
             assertEqual "one row per completed lifecycle step" (Right expectedLifecycleSteps) stepKeys
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "recovered run enqueued one stable outbox row" (Right 1) (length <$> outboxRows),
+      testGroup
+        "Delegate"
+        [ testCase "parent suspends awaiting delegated child and resumes with child output" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                parentSession <- genSessionId
+                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                    deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
+                    parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
+                    parentWorkflowId = WorkflowId "delegate-parent-1"
+                    childWorkflowId = delegatedWorkflowId parentWorkflowId "heartbeat" 0
+                    parentBody = parentDelegateWorkflow parentSession
+
+                parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                assertEqual "parent parks on delegated child" (Right Suspended) parked
+
+                childRun <-
+                  runAppIO appEnv $
+                    runChildWorkflow
+                      defaultWorkflowRunOptions
+                      agentRunWorkflowName
+                      childWorkflowId
+                      (agentRunWorkflow deps Nothing)
+                childOutput <-
+                  case childRun of
+                    Right (Completed (Right AgentRunResult {behaviorOutput = childBehaviorOutput})) -> pure childBehaviorOutput
+                    other -> assertFailure ("child agent workflow should complete, got " <> show other)
+
+                resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                assertEqual "parent resumes with child behavior output" (Right (Completed childOutput)) resumed
+        ],
       testGroup
         "Approval"
         [ testCase "approved answer resumes and dispatches sink once" do
@@ -198,6 +235,20 @@ tests =
                 assertEqual "approved sink still dispatches once" (Right 1) (length <$> afterOutbox)
         ]
     ]
+
+parentDelegateWorkflow :: SessionId -> Eff (Workflow : AppEffects) Value
+parentDelegateWorkflow currentSession = do
+  delegated <-
+    delegate
+      DelegateCtx
+        { delegateDepth = 0,
+          sessionId = Just (idText currentSession),
+          parentSessionId = Nothing,
+          parentRunWorkflowId = Nothing
+        }
+      "heartbeat"
+      (object ["source" .= ("delegate-test" :: Text)])
+  awaitDelegated delegated
 
 testDeps :: AppEnv -> BehaviorEnv -> AgentRunHooks -> AgentRunDeps
 testDeps appEnv behaviorEnv hooks =

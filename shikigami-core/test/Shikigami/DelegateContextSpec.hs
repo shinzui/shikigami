@@ -32,6 +32,7 @@ ctxAt :: Int -> DelegateCtx
 ctxAt depth =
   DelegateCtx
     { delegateDepth = depth,
+      sessionId = Nothing,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing
     }

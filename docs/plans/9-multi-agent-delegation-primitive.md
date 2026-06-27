@@ -56,7 +56,7 @@ This section must always reflect the actual current state of the work.
 - [x] **M1 — delegation context and depth bound (pure core).** Completed 2026-06-27T20:34:00Z. Added `Shikigami.Agent.Delegate.Context` with `DelegateCtx`, `maxDelegationDepth = 4`, `DelegationDepthExceeded`, and `checkDepth`; extended `Shikigami.Api.RunJob.TriggerKind` with `TriggeredByDelegation`; added optional `parentSessionId`, `parentRunWorkflowId`, and `delegationDepth` fields to `RunJob`; set existing producers and tests to `Nothing`; added the `Delegate.Context` unit tests. Validation: `nix develop -c cabal build shikigami-api shikigami-core` succeeded and `nix develop -c cabal test all` passed all 24 tests.
 - [x] **M2a — kioku parent/child lineage implementation (dependency).** Completed 2026-06-27T20:42:54Z in `/Users/shinzui/Keikaku/bokuno/kioku` and committed as `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1` (`feat(session): add delegation lineage`). Extended `StartSessionData`, `SessionStartedData`, and `SessionRow` with `parentSessionId` and `delegationDepth`; added backwards-compatible decoding for old `SessionStarted` events; added the `getDelegationChildren` read model; added the `2026-06-27-20-35-00-kioku-session-delegation-lineage.sql` migration; and added `Session.Lineage` tests. Validation: `nix develop -c cabal build all` and `nix develop -c cabal test all` passed in the kioku repo.
 - [x] **M2b — shikigami kioku pin update.** Completed 2026-06-27T21:28:46Z. Verified `origin/master` in `/Users/shinzui/Keikaku/bokuno/kioku` contains `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1`, then updated shikigami's `cabal.project` kioku `source-repository-package` tag to that exact commit. This keeps the dependency portable through GitHub while avoiding unrelated later kioku changes. Updated shikigami's `StartSessionData` call sites so non-delegated sessions pass `parentSessionId = Nothing` / `delegationDepth = 0`, and the durable workflow path projects lineage from `RunJob`. Validation: `nix develop -c cabal build shikigami-api shikigami-core` passed. `nix develop -c cabal test all` had one ephemeral Postgres startup timeout in `AgentWorkflow/resumes after a crash without rerunning journaled step bodies`; rerunning that exact test with `nix develop -c cabal test shikigami-core-test --test-option -p --test-option "resumes after a crash without rerunning journaled step bodies"` passed.
-- [ ] **M3 — the `delegate` primitive over keiro child workflows.** Add `Shikigami.Agent.Delegate` with `delegate` and `awaitDelegated`, built on `Keiro.Workflow.Child.spawnChild` / `awaitChild`; derive a replay-stable child workflow id; register the agent-run workflow in the resume worker's registry so children resolve. Depends on plan 7. Verify a supervisor workflow spawns a child, suspends, and resumes with the child result.
+- [x] **M3 — the `delegate` primitive over keiro child workflows.** Completed 2026-06-27T21:40:02Z. Added `Shikigami.Agent.Delegate` with `delegate`, `awaitDelegated`, and `delegatedWorkflowId`; exposed it from `shikigami-core`; extended `DelegateCtx` with the current `sessionId` so delegated child jobs can record `parentSessionId`; mapped child cancellation/failure/decode errors into `DelegationError`; and added an integration test where a parent workflow spawns a child agent run, suspends on `awaitDelegated`, the child completes through the agent-run workflow, and the parent resumes with the child behavior output. Validation: `nix fmt` succeeded and `nix develop -c cabal test all` passed all 25 tests.
 - [ ] **M4 — end-to-end supervisor demo, crash/resume, lineage inspection.** Add `agents/proof/research-supervisor.dhall` + two specialists; show the fan-out/await/synthesize log, the parent/child rows in kioku, and a kill-mid-delegation resume.
 
 (Replace this seed list as work proceeds; split any partially done item into "done" / "remaining".)
@@ -78,6 +78,12 @@ implementation. Provide concise evidence.
   migration list; the first kioku test run applied only 23 migrations and failed with
   `column "parent_session_id" does not exist`. Touching the source binding comment rebuilt the
   embed list, after which tests saw 24 migrations and passed.
+
+- Discovery (2026-06-27T21:40:02Z): `Keiro.Workflow.Child.spawnChild` records the parent/child
+  relationship and parks the parent, but it does not run the supplied child body inline. Shikigami's
+  agent-run registry drives the child later, so `delegate` must pre-seed the child workflow journal
+  with the `ingest-job` `StepRecorded` entry containing the delegated `RunJob`. Without that seed,
+  `agentRunWorkflow deps Nothing` has no durable job payload to replay when the child worker starts.
 
 
 ## Decision Log
@@ -161,6 +167,21 @@ Record every decision made while working on the plan.
   the hard dependency on plan 7.
   Date: 2026-06-27
 
+- Decision (M3 implementation, 2026-06-27): Carry the current run's kioku `sessionId` in
+  `DelegateCtx`, in addition to the parent lineage fields present on a delegated child.
+  Rationale: `delegate` is the call site that constructs the child `RunJob`, and that job must
+  include `parentSessionId = Just currentSession` before the child opens its own kioku session.
+  The existing `parentSessionId` field describes this run's parent, not this run's own session, so
+  reusing it would attach grandchildren to the wrong ancestor.
+  Date: 2026-06-27
+
+- Decision (M3 implementation, 2026-06-27): Seed the delegated child workflow's `ingest-job`
+  journal entry immediately after `spawnChild`.
+  Rationale: The agent-run workflow normally receives a `RunJob` argument only for a freshly
+  invoked top-level run. A delegated child is resumed by Keiro's registry as `agentRunWorkflow deps
+  Nothing`, so its `RunJob` must already be present in the child's durable journal.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -192,6 +213,19 @@ Session.Lineage
   child sessions record parent id and delegation depth: OK
 
 All 9 tests passed
+```
+
+- Outcome (M3, 2026-06-27T21:40:02Z): The Haskell primitive exists and is covered by a durable
+  parent/child workflow test. A parent can call `delegate`, suspend on `awaitDelegated`, have the
+  child driven through `agentRunWorkflow`, and then resume with the child's `behaviorOutput`. The
+  full shikigami suite passed after the implementation and record-pattern cleanup:
+
+```text
+AgentWorkflow
+  Delegate
+    parent suspends awaiting delegated child and resumes with child output: OK
+
+All 25 tests passed
 ```
 
 

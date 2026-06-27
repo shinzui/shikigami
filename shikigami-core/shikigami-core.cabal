@@ -24,6 +24,7 @@ library
   exposed-modules:
     Shikigami.Agent.Approval
     Shikigami.Agent.Conversation
+    Shikigami.Agent.Delegate
     Shikigami.Agent.Delegate.Context
     Shikigami.Agent.Loader
     Shikigami.Agent.Run
