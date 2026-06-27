@@ -57,12 +57,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M1 (spike)**: Prove a trivial keiro workflow runs inside shikigami's process using
+- [x] **M1 (spike)**: Prove a trivial keiro workflow runs inside shikigami's process using
       the kiroku `Store` handle already inside the kioku `AppEnv`, and that a crash between
       two steps resumes without re-running the first step. Throwaway code under
-      `shikigami-core/test/`.
-- [ ] **M1**: Confirm keiro workflow tables exist after `just migrate` (no migration wiring
+      `shikigami-core/test/`. Completed 2026-06-27T17:58:29Z; validation command:
+      `nix develop -c cabal test shikigami-core-test --test-options='-p Spike'`.
+- [x] **M1**: Confirm keiro workflow tables exist after `just migrate` (no migration wiring
       needed — they are applied transitively through kioku); document the finding.
+      Completed 2026-06-27T17:58:29Z; `just create-database` reported zero pending
+      migrations in the dev database, and `\dt kiroku.keiro_*` showed the keiro workflow
+      and outbox tables in the `kiroku` schema.
 - [ ] **M2**: Add `shikigami-core/src/Shikigami/Agent/Workflow.hs` expressing the run
       lifecycle (ingest job → open session → recall → run behavior → dispatch sinks → record
       learning → complete) as journaled `step`s; entry point `runAgentRunWorkflow`.
@@ -92,7 +96,26 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery (2026-06-27): The plan's assumption that `shikigami-core/test/` already had a
+  database/AppEnv helper was stale. The current suite only had `shikigami-core/test/Main.hs`.
+  The M1 spike therefore uses the existing `shikigami-migrations:test-support` public
+  sublibrary, `withShikigamiMigratedDatabase`, then opens a `KirokuStore` with
+  `withStore (defaultConnectionSettings connStr)` and builds a `Kioku.App.AppEnv` around
+  that store. Evidence: `rg --files shikigami-core/test` returned only
+  `shikigami-core/test/Main.hs` before the spike module was added.
+
+- Discovery (2026-06-27): The keiro tables exist after shikigami migrations, but under the
+  `kiroku` schema rather than as unqualified `public` relations. Evidence:
+  `nix develop -c psql -h "$PGHOST" -d "$PGDATABASE" -c "\dt keiro_*"` returned `Did not
+  find any relation named "keiro_*"`, while `\dt kiroku.keiro_*` listed
+  `keiro_awakeables`, `keiro_timers`, `keiro_workflow_children`,
+  `keiro_workflow_steps`, `keiro_workflows`, and `keiro_outbox`.
+
+- Discovery (2026-06-27): The current test runner is Tasty, whose filter option is
+  `-p/--pattern`, not `-m`. Evidence: `cabal test shikigami-core-test
+  --test-options='-m Spike'` built the test binary but failed with `Invalid option '-m'`;
+  `cabal test shikigami-core-test --test-options='-p Spike'` ran the single spike test and
+  passed.
 
 
 ## Decision Log
@@ -205,7 +228,15 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- M1 outcome (2026-06-27): The spike proves keiro workflows can run inside shikigami's test
+  process on the same kiroku store handle shape that `Kioku.App.AppEnv` carries. The first
+  run journals `step "one"` and then throws a simulated crash; the second run with the same
+  `WorkflowName "shikigami.spike"` and `WorkflowId "spike-replay"` completes with
+  `Completed "two"` while the `IORef` counter for step one remains `1`. This validates the
+  replay assumption needed before M2 moves the production agent lifecycle into a workflow.
+  M1 also verified that no migration wiring is required, with the qualification that the
+  keiro relations are in schema `kiroku`. The full core test suite was run after the spike:
+  `nix develop -c cabal test shikigami-core-test` reported `All 12 tests passed`.
 
 
 ## Context and Orientation
@@ -528,7 +559,7 @@ runs exactly once. Plus a Progress note recording that `keiro_workflow_steps` et
 present after `just migrate`.
 
 **Commands.** `just create-database`; then `cabal test shikigami-core-test
---test-options='-m Spike'`.
+--test-options='-p Spike'`.
 
 **Acceptance.** The spike test passes: a side effect inside `step "one"` happens on the first
 run, the run "crashes" (we throw after step one on the first pass), and the second run replays
@@ -744,7 +775,7 @@ that, given an `(AwakeableId, ApprovalDecision)` payload, calls `resolveApproval
 drives it past the `awaitAnswer`.
 
 **Commands.** `cabal build shikigami-core`; `cabal test shikigami-core-test
---test-options='-m Approval'`.
+--test-options='-p Approval'`.
 
 **Acceptance.** A test agent whose policy requires approval for its sink: running it returns
 `Suspended` (the workflow parked at `awaitApproval`); `keiro_awakeables` has a `pending` row
@@ -773,7 +804,7 @@ timer row routed to the fallback fire action. The plan's M4 first task is a 30-m
 pick the cleaner of the two against the real API, recorded in the Decision Log.
 
 **Commands.** `cabal build shikigami-core`; `cabal test shikigami-core-test
---test-options='-m Deadline'`.
+--test-options='-p Deadline'`.
 
 **Acceptance.** A test agent that requires approval with a 1-second deadline: running it
 parks (`Suspended`); without ever calling `resolveApproval`, after the timer is due and the
@@ -812,7 +843,7 @@ Confirm the keiro workflow tables are present (this proves M1's "no migration wi
 finding):
 
 ```bash
-psql -h "$PGHOST" -d "$PGDATABASE" -c "\dt keiro_*"
+psql -h "$PGHOST" -d "$PGDATABASE" -c "\dt kiroku.keiro_*"
 ```
 
 Expected to include:
@@ -844,7 +875,7 @@ already constructs one — see existing tests under `shikigami-core/test/`). Add
 `other-modules` in `shikigami-core/shikigami-core.cabal`'s `shikigami-core-test` stanza.
 
 ```bash
-cabal test shikigami-core-test --test-options='-m Spike'
+cabal test shikigami-core-test --test-options='-p Spike'
 ```
 
 Expected:
@@ -885,7 +916,7 @@ passes. Spot-check the journal:
 
 ```bash
 psql -h "$PGHOST" -d "$PGDATABASE" -c \
-  "SELECT step_name FROM keiro_workflow_steps WHERE workflow_name='shikigami.agent-run' ORDER BY step_name;"
+  "SELECT step_name FROM kiroku.keiro_workflow_steps WHERE workflow_name='shikigami.agent-run' ORDER BY step_name;"
 ```
 
 Expected step names include `complete`, `dispatch-sinks`, `ingest-job`, `lookup-agent`,
@@ -898,7 +929,7 @@ Create `shikigami-core/src/Shikigami/Agent/Approval.hs` and add it to `exposed-m
 
 ```bash
 cabal build shikigami-core
-cabal test shikigami-core-test --test-options='-m Approval'
+cabal test shikigami-core-test --test-options='-p Approval'
 ```
 
 Expected: the park test returns `Suspended`; after `resolveApproval`/resume it reaches
@@ -906,7 +937,7 @@ Expected: the park test returns `Suspended`; after `resolveApproval`/resume it r
 
 ```bash
 psql -h "$PGHOST" -d "$PGDATABASE" -c \
-  "SELECT status FROM keiro_awakeables ORDER BY created_at DESC LIMIT 1;"
+  "SELECT status FROM kiroku.keiro_awakeables ORDER BY created_at DESC LIMIT 1;"
 ```
 
 Expected `pending` while parked, `completed` after the answer.
@@ -918,7 +949,7 @@ First spike the timer-arming approach (Decision Log entry), then implement it an
 
 ```bash
 cabal build shikigami-core
-cabal test shikigami-core-test --test-options='-m Deadline'
+cabal test shikigami-core-test --test-options='-p Deadline'
 ```
 
 Expected: the deadline test reaches `Completed` with `TimedOut` after the timer fires, with no
@@ -963,7 +994,7 @@ answered-before-deadline run completes with `Approved` and the late timer fire i
 (`signalAwakeable` returns `False`).
 
 All four are covered by automated tests in `shikigami-core-test`, selectable with
-`--test-options='-m <Spike|Approval|Deadline>'`, plus the always-on lifecycle and crash-resume
+`--test-options='-p <Spike|Approval|Deadline>'`, plus the always-on lifecycle and crash-resume
 tests.
 
 

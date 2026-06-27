@@ -24,6 +24,7 @@ import Shikigami.Sink
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -35,7 +36,8 @@ main =
     ( testGroup
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests],
-          testGroup "Trigger" [scheduleTests, streamTests]
+          testGroup "Trigger" [scheduleTests, streamTests],
+          SpikeWorkflowSpec.tests
         ]
     )
 
