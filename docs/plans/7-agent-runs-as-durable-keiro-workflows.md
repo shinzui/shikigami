@@ -397,12 +397,12 @@ queue-processing loop. The worker is
 
 ```haskell
 data WorkerEnv = WorkerEnv
-  { workerPool        :: !Pool          -- pgmq connection pool
-  , workerAppEnv      :: !AppEnv        -- kioku app env (carries the Store handle)
-  , workerAgents      :: ![AgentDecl]
-  , workerBehaviorEnv :: !BehaviorEnv
-  , workerKizashi     :: !KizashiConfig
-  , workerKawa        :: !KawaConfig
+  { pool        :: !Pool          -- pgmq connection pool
+  , appEnv      :: !AppEnv        -- kioku app env (carries the Store handle)
+  , agents      :: ![AgentDecl]
+  , behaviorEnv :: !BehaviorEnv
+  , kizashi     :: !KizashiConfig
+  , kawa        :: !KawaConfig
   }
 
 runWorker :: WorkerEnv -> IO ()
@@ -1128,7 +1128,7 @@ agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 
 `Shikigami/Worker.hs` after M2: `runOneAgent` calls `runAgentRunWorkflow` and maps the
 outcome to an `AckDecision`; `runWorker` runs the pgmq processor and
-`runWorkflowResumeWorker (agentRunRegistry deps)` concurrently on `store workerAppEnv`.
+`runWorkflowResumeWorker (agentRunRegistry deps)` concurrently on `store appEnv`.
 
 At the end of **M3**, `/Users/shinzui/.../shikigami-core/src/Shikigami/Agent/Approval.hs`
 exports `ApprovalRequest`, `ApprovalChannel`, `ApprovalDecision`, `ApprovalRequirement`,

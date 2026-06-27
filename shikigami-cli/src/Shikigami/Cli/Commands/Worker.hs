@@ -7,7 +7,7 @@ import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..), noopTracer)
-import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Api.Agent (AgentDecl)
 import Shikigami.Behavior.Run (newBehaviorEnv)
@@ -25,17 +25,17 @@ runWorkerCmd agentsDir kawaUrl kizashiUrl = do
   putStrLn ("[worker] loaded " <> show (length agents) <> " agents")
   connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
   behEnv <- newBehaviorEnv
-  withStore (defaultConnectionSettings connStr) $ \st -> do
+  StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) $ \st -> do
     tr <- noopTracer
     let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
         env =
           WorkerEnv
-            { workerPool = pool st,
-              workerAppEnv = appEnv,
-              workerAgents = agents,
-              workerBehaviorEnv = behEnv,
-              workerKizashi = KizashiConfig {kizashiBaseUrl = kizashiUrl, kizashiDefaultRecipient = "recipient:default"},
-              workerKawa = KawaConfig {kawaBaseUrl = kawaUrl, kawaSourceSegment = "shinzui/shikigami"}
+            { pool = StoreConnection.pool st,
+              appEnv,
+              agents,
+              behaviorEnv = behEnv,
+              kizashi = KizashiConfig {kizashiBaseUrl = kizashiUrl, kizashiDefaultRecipient = "recipient:default"},
+              kawa = KawaConfig {kawaBaseUrl = kawaUrl, kawaSourceSegment = "shinzui/shikigami"}
             }
     runWorker env
 

@@ -33,7 +33,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (runTracingNoop)
-import Shikigami.Agent.Workflow (AgentRunDeps (..), agentRunRegistry, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
@@ -44,12 +44,12 @@ import System.IO (hPutStrLn, stderr)
 
 -- | Everything the worker handler needs.
 data WorkerEnv = WorkerEnv
-  { workerPool :: !Pool,
-    workerAppEnv :: !AppEnv,
-    workerAgents :: ![AgentDecl],
-    workerBehaviorEnv :: !BehaviorEnv,
-    workerKizashi :: !KizashiConfig,
-    workerKawa :: !KawaConfig
+  { pool :: !Pool,
+    appEnv :: !AppEnv,
+    agents :: ![AgentDecl],
+    behaviorEnv :: !BehaviorEnv,
+    kizashi :: !KizashiConfig,
+    kawa :: !KawaConfig
   }
 
 -- | Boot the worker: build the pgmq adapter over @shikigami_run_jobs@, wrap the
@@ -62,7 +62,7 @@ runWorker env = do
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
   result <-
-    runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (workerPool env) . runTracingNoop $ do
+    runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (pool env) . runTracingNoop $ do
       adapter <- pgmqAdapter (defaultConfig runQueueName)
       let processor = mkProcessor adapter (runJobHandler env)
       appResult <- runApp IgnoreFailures 100 [(ProcessorId "shikigami_run_jobs", processor)]
@@ -77,7 +77,7 @@ runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env = do
   hPutStrLn stderr "[shikigami.worker] starting keiro workflow resume worker"
   let deps = agentRunDeps env
-  result <- runAppIO (workerAppEnv env) (runWorkflowResumeWorker (agentRunRegistry deps))
+  result <- runAppIO (appEnv env) (runWorkflowResumeWorker (AgentWorkflow.agentRunRegistry deps))
   case result of
     Left err -> hPutStrLn stderr ("[shikigami.worker] resume worker store error: " <> show err)
     Right () -> pure ()
@@ -87,7 +87,7 @@ runOutboxPublisher env = do
   hPutStrLn stderr "[shikigami.worker] starting sink outbox publisher"
   forever do
     let deps = agentRunDeps env
-    result <- runAppIO (workerAppEnv env) (publishClaimedOutbox (publishSinkIntent deps) defaultPublishOptions Nothing)
+    result <- runAppIO (appEnv env) (publishClaimedOutbox (AgentWorkflow.publishSinkIntent deps) defaultPublishOptions Nothing)
     case result of
       Left err -> hPutStrLn stderr ("[shikigami.worker] outbox publisher store error: " <> show err)
       Right _summary -> pure ()
@@ -111,7 +111,7 @@ handleRunJob env payloadV =
 -- | Run a resolved agent and dispatch its sinks.
 runOneAgent :: WorkerEnv -> RunJob -> IO AckDecision
 runOneAgent env job = do
-  resE <- runAgentRunWorkflow (agentRunDeps env) job
+  resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
   case resE of
     Left err -> do
       hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow store error (retry): " <> show err)
@@ -131,12 +131,12 @@ runOneAgent env job = do
     Right Failed -> pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
     Right ContinuedAsNew -> pure AckOk
 
-agentRunDeps :: WorkerEnv -> AgentRunDeps
+agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
-  AgentRunDeps
-    { appEnv = workerAppEnv env,
-      behaviorEnv = workerBehaviorEnv env,
-      agents = workerAgents env,
-      kizashi = workerKizashi env,
-      kawa = workerKawa env
+  AgentWorkflow.AgentRunDeps
+    { AgentWorkflow.appEnv = appEnv env,
+      AgentWorkflow.behaviorEnv = behaviorEnv env,
+      AgentWorkflow.agents = agents env,
+      AgentWorkflow.kizashi = kizashi env,
+      AgentWorkflow.kawa = kawa env
     }
