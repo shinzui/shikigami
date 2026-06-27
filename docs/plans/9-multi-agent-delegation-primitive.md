@@ -57,7 +57,7 @@ This section must always reflect the actual current state of the work.
 - [x] **M2a — kioku parent/child lineage implementation (dependency).** Completed 2026-06-27T20:42:54Z in `/Users/shinzui/Keikaku/bokuno/kioku` and committed as `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1` (`feat(session): add delegation lineage`). Extended `StartSessionData`, `SessionStartedData`, and `SessionRow` with `parentSessionId` and `delegationDepth`; added backwards-compatible decoding for old `SessionStarted` events; added the `getDelegationChildren` read model; added the `2026-06-27-20-35-00-kioku-session-delegation-lineage.sql` migration; and added `Session.Lineage` tests. Validation: `nix develop -c cabal build all` and `nix develop -c cabal test all` passed in the kioku repo.
 - [x] **M2b — shikigami kioku pin update.** Completed 2026-06-27T21:28:46Z. Verified `origin/master` in `/Users/shinzui/Keikaku/bokuno/kioku` contains `8bcfc282484dd59b0a0b25530cca4f3ad9034ce1`, then updated shikigami's `cabal.project` kioku `source-repository-package` tag to that exact commit. This keeps the dependency portable through GitHub while avoiding unrelated later kioku changes. Updated shikigami's `StartSessionData` call sites so non-delegated sessions pass `parentSessionId = Nothing` / `delegationDepth = 0`, and the durable workflow path projects lineage from `RunJob`. Validation: `nix develop -c cabal build shikigami-api shikigami-core` passed. `nix develop -c cabal test all` had one ephemeral Postgres startup timeout in `AgentWorkflow/resumes after a crash without rerunning journaled step bodies`; rerunning that exact test with `nix develop -c cabal test shikigami-core-test --test-option -p --test-option "resumes after a crash without rerunning journaled step bodies"` passed.
 - [x] **M3 — the `delegate` primitive over keiro child workflows.** Completed 2026-06-27T21:40:02Z. Added `Shikigami.Agent.Delegate` with `delegate`, `awaitDelegated`, and `delegatedWorkflowId`; exposed it from `shikigami-core`; extended `DelegateCtx` with the current `sessionId` so delegated child jobs can record `parentSessionId`; mapped child cancellation/failure/decode errors into `DelegationError`; and added an integration test where a parent workflow spawns a child agent run, suspends on `awaitDelegated`, the child completes through the agent-run workflow, and the parent resumes with the child behavior output. Validation: `nix fmt` succeeded and `nix develop -c cabal test all` passed all 25 tests.
-- [ ] **M4 — end-to-end supervisor demo, crash/resume, lineage inspection.** Add `agents/proof/research-supervisor.dhall` + two specialists; show the fan-out/await/synthesize log, the parent/child rows in kioku, and a kill-mid-delegation resume.
+- [x] **M4 — end-to-end supervisor demo, crash/resume, lineage inspection.** Completed 2026-06-27T21:48:51Z. Added `agents/proof/research-supervisor.dhall`, `agents/proof/web-researcher.dhall`, and `agents/proof/code-researcher.dhall`; added workflow-aware execution for the proof supervisor task while keeping ordinary `ShikumiProgram`/`Skill` behavior on the existing runner; registered stub specialist tasks; documented the runbook in `docs/user/living-loop.md`; and added a DB-backed test that loads the Dhall proof agents, verifies supervisor fan-out/suspend/resume/synthesis, and asserts kioku child session lineage via `getDelegationChildren`. Validation: focused proof test `nix develop -c cabal test shikigami-core-test --test-option -p --test-option "proof supervisor fans out"` passed, then `nix develop -c cabal test all` passed all 26 tests.
 
 (Replace this seed list as work proceeds; split any partially done item into "done" / "remaining".)
 
@@ -84,6 +84,13 @@ implementation. Provide concise evidence.
   agent-run registry drives the child later, so `delegate` must pre-seed the child workflow journal
   with the `ingest-job` `StepRecorded` entry containing the delegated `RunJob`. Without that seed,
   `agentRunWorkflow deps Nothing` has no durable job payload to replay when the child worker starts.
+
+- Discovery (2026-06-27T21:48:51Z): The manifest behavior path is still mostly plain `IO`:
+  `runBehavior` dispatches `ShikumiProgram` and `Skill` outside the `Workflow` effect, and
+  `agentRunWorkflow` journals that call as the `run-behavior` step. A manifest task cannot call
+  `delegate` through the generic `Handan.Task` surface yet. The M4 proof therefore adds a narrow
+  workflow-aware branch for the `research-supervisor` proof task, leaving general behavior-language
+  delegation for a future API extension.
 
 
 ## Decision Log
@@ -182,6 +189,22 @@ Record every decision made while working on the plan.
   Nothing`, so its `RunJob` must already be present in the child's durable journal.
   Date: 2026-06-27
 
+- Decision (M4 implementation, 2026-06-27): Implement the proof supervisor as a named
+  workflow-aware behavior branch for `ShikumiProgram { task = "research-supervisor" }`, rather
+  than changing the whole `Handan.Task` API to run in `Workflow`.
+  Rationale: M4 needs a real Dhall agent to demonstrate delegation, but a general workflow-capable
+  behavior/task interface is larger than this plan and would affect all program and skill execution.
+  The proof branch keeps the demo end to end while preserving the existing behavior runner for all
+  other tasks.
+  Date: 2026-06-27
+
+- Decision (M4 implementation, 2026-06-27): Move `agentRunWorkflowName` into
+  `Shikigami.Agent.Workflow.Name` and re-export it from `Shikigami.Agent.Workflow`.
+  Rationale: `Shikigami.Agent.Delegate` needs the agent-run workflow name to spawn children, and
+  `Shikigami.Agent.Workflow` now needs `delegate` for the proof supervisor. A tiny name module
+  breaks that import cycle without changing existing callers.
+  Date: 2026-06-27
+
 
 ## Outcomes & Retrospective
 
@@ -226,6 +249,20 @@ AgentWorkflow
     parent suspends awaiting delegated child and resumes with child output: OK
 
 All 25 tests passed
+```
+
+- Outcome (M4, 2026-06-27T21:48:51Z): The proof manifests exercise delegation through real agent
+  declarations. The `research-supervisor` manifest fans out to `web-researcher` and
+  `code-researcher`, awaits both child runs, synthesizes their fixed findings, and records child
+  kioku sessions with `parentSessionId = Just supervisorSession` and `delegationDepth = 1`.
+  Focused validation passed:
+
+```text
+AgentWorkflow
+  Delegate
+    proof supervisor fans out to specialists and records lineage: OK
+
+All 26 tests passed
 ```
 
 

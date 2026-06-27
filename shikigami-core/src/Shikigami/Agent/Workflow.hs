@@ -32,7 +32,6 @@ import Keiro.Workflow
     Workflow,
     WorkflowId (..),
     WorkflowJournalEvent (StepRecorded),
-    WorkflowName (..),
     WorkflowOutcome,
     currentRunGeneration,
     currentWorkflow,
@@ -53,12 +52,16 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
+import Shikigami.Agent.Delegate (awaitDelegated, delegate)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
-import Shikigami.Api.Agent (AgentDecl (..), Sink)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink)
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
+import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
 import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 
@@ -97,9 +100,6 @@ defaultAgentRunHooks =
     { beforeStepBody = \_ -> pure (),
       afterStepBody = \_ -> pure ()
     }
-
-agentRunWorkflowName :: WorkflowName
-agentRunWorkflowName = WorkflowName "shikigami.agent-run"
 
 agentRunWorkflow ::
   AgentRunDeps ->
@@ -144,7 +144,7 @@ runResolvedAgent ::
 runResolvedAgent deps job decl = do
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
-  behaviorE <- runStep deps (StepName "run-behavior") (runBehaviorStep deps decl job)
+  behaviorE <- runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
   case behaviorE of
     Left err -> do
       _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
@@ -235,9 +235,48 @@ openSession deps job decl = liftIO do
       & runKioku deps
   pure sid
 
-runBehaviorStep :: (IOE :> es) => AgentRunDeps -> AgentDecl -> RunJob -> Eff es (Either Text Value)
-runBehaviorStep deps decl job =
-  liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv deps) decl (triggerPayload job))
+runBehaviorStep ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentRunDeps ->
+  SessionId ->
+  AgentDecl ->
+  RunJob ->
+  Eff es (Either Text Value)
+runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} =
+  case currentBehavior of
+    ShikumiProgram {task}
+      | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor sid job
+    _ -> liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv deps) decl triggerPayload)
+
+runResearchSupervisor ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  SessionId ->
+  RunJob ->
+  Eff es Value
+runResearchSupervisor currentSession RunJob {triggerPayload, parentSessionId, parentRunWorkflowId, delegationDepth} = do
+  let ctx =
+        DelegateCtx
+          { delegateDepth = fromMaybe 0 delegationDepth,
+            sessionId = Just (idText currentSession),
+            parentSessionId,
+            parentRunWorkflowId
+          }
+      childPayload role =
+        Aeson.object
+          [ (Aeson..=) "role" role,
+            (Aeson..=) "input" triggerPayload
+          ]
+  web <- delegate ctx webResearcherTaskName (childPayload ("web" :: Text))
+  code <- delegate ctx codeResearcherTaskName (childPayload ("code" :: Text))
+  webFinding <- awaitDelegated web
+  codeFinding <- awaitDelegated code
+  pure
+    ( Aeson.object
+        [ (Aeson..=) "summary" ("research-supervisor synthesized delegated findings" :: Text),
+          (Aeson..=) "web" (webFinding :: Value),
+          (Aeson..=) "code" (codeFinding :: Value)
+        ]
+    )
 
 failSession :: (IOE :> es) => AgentRunDeps -> SessionId -> Text -> Eff es ()
 failSession deps sid err = liftIO do

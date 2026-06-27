@@ -6,9 +6,14 @@
 module Shikigami.Program.Registry
   ( programRegistry,
     lookupTask,
+    researchSupervisorTaskName,
+    webResearcherTaskName,
+    codeResearcherTaskName,
     noopSummaryTask,
     noopSummaryProgram,
     noopBody,
+    webResearcherTask,
+    codeResearcherTask,
   )
 where
 
@@ -25,7 +30,7 @@ import Shikumi.Program (Program, embed)
 -- | Every program shikigami knows about. EP-6's detectors append their tasks here;
 -- for this plan it is just the deterministic stub.
 programRegistry :: [Task]
-programRegistry = [noopSummaryTask]
+programRegistry = [noopSummaryTask, webResearcherTask, codeResearcherTask]
 
 -- | Find a task by its declared name.
 lookupTask :: Text -> Maybe Task
@@ -47,6 +52,15 @@ noopBody =
     [ "summary" .= ("noop-summary produced a fixed digest" :: Text),
       "verb" .= ("heartbeat.tick" :: Text)
     ]
+
+researchSupervisorTaskName :: Text
+researchSupervisorTaskName = "research-supervisor"
+
+webResearcherTaskName :: Text
+webResearcherTaskName = "web-researcher"
+
+codeResearcherTaskName :: Text
+codeResearcherTaskName = "code-researcher"
 
 -- | The deterministic stub task. @taskRun@ runs the embedded program through the
 -- handan @Runtime@ (proving the handan path end to end) while staying key-free; its
@@ -81,5 +95,46 @@ noopSummaryTask =
                 trace = Nothing,
                 message = "noop-summary ok"
               },
+      taskEval = Nothing :: Maybe (EvalHandle Value Value)
+    }
+
+webResearcherTask :: Task
+webResearcherTask =
+  fixedFindingTask
+    webResearcherTaskName
+    "Stub web specialist: returns a fixed external research finding."
+    "Web sources indicate durable workflow delegation should journal child waits."
+
+codeResearcherTask :: Task
+codeResearcherTask =
+  fixedFindingTask
+    codeResearcherTaskName
+    "Stub code specialist: returns a fixed implementation finding."
+    "The code path should spawn child workflows before awaiting their results."
+
+fixedFindingTask :: Text -> Text -> Text -> Task
+fixedFindingTask taskName taskSummary finding =
+  Task
+    { taskName,
+      taskKind = KEffect,
+      taskSummary,
+      taskParse = \_args -> Right (Aeson.Null :: Value),
+      taskRun = \_rt _input ->
+        pure
+          Envelope
+            { program = taskName,
+              kind = Effect,
+              status = Ok,
+              verdict =
+                Just
+                  ( object
+                      [ "agent" .= taskName,
+                        "finding" .= finding
+                      ]
+                  ),
+              artifacts = [],
+              trace = Nothing,
+              message = taskName <> " ok"
+            },
       taskEval = Nothing :: Maybe (EvalHandle Value Value)
     }

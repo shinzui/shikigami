@@ -19,10 +19,13 @@ import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, 
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId, idText)
+import Kioku.Session (SessionRow (..))
+import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
@@ -134,7 +137,60 @@ tests =
                     other -> assertFailure ("child agent workflow should complete, got " <> show other)
 
                 resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
-                assertEqual "parent resumes with child behavior output" (Right (Completed childOutput)) resumed
+                assertEqual "parent resumes with child behavior output" (Right (Completed childOutput)) resumed,
+          testCase "proof supervisor fans out to specialists and records lineage" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                proofAgents <- loadProofAgents
+                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                    deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
+                    parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
+                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" 0
+                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" 1
+
+                parked <- runAgentRunWorkflow deps researchSupervisorJob
+                assertEqual "research supervisor parks after spawning children" (Right Suspended) parked
+
+                webRun <-
+                  runAppIO appEnv $
+                    runChildWorkflow
+                      defaultWorkflowRunOptions
+                      agentRunWorkflowName
+                      webWorkflowId
+                      (agentRunWorkflow deps Nothing)
+                assertChildCompleted "web specialist completes" webRun
+
+                codeRun <-
+                  runAppIO appEnv $
+                    runChildWorkflow
+                      defaultWorkflowRunOptions
+                      agentRunWorkflowName
+                      codeWorkflowId
+                      (agentRunWorkflow deps Nothing)
+                assertChildCompleted "code specialist completes" codeRun
+
+                resumed <- runAgentRunWorkflow deps researchSupervisorJob
+                parentSession <-
+                  case resumed of
+                    Right (Completed (Right AgentRunResult {sessionId = parentSessionId', behaviorOutput})) -> do
+                      assertEqual "supervisor synthesizes both findings" expectedSupervisorOutput behaviorOutput
+                      pure parentSessionId'
+                    other -> assertFailure ("research supervisor should complete after children, got " <> show other)
+
+                children <- runAppIO appEnv (Session.getDelegationChildren parentSession)
+                case children of
+                  Right (Right rows) ->
+                    assertEqual
+                      "kioku records both delegated child sessions"
+                      ( Set.fromList
+                          [ ("web-researcher", Just (idText parentSession), 1),
+                            ("code-researcher", Just (idText parentSession), 1)
+                          ]
+                      )
+                      (lineageSummary rows)
+                  other -> assertFailure ("getDelegationChildren should return rows, got " <> show (first (const ("store-error" :: String)) other))
         ],
       testGroup
         "Approval"
@@ -254,6 +310,20 @@ testDeps :: AppEnv -> BehaviorEnv -> AgentRunHooks -> AgentRunDeps
 testDeps appEnv behaviorEnv hooks =
   testDepsWithApproval appEnv behaviorEnv hooks defaultApprovalEnv
 
+testDepsWithAgents :: AppEnv -> BehaviorEnv -> AgentRunHooks -> [AgentDecl] -> AgentRunDeps
+testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
+  AgentRunDeps
+    { appEnv,
+      behaviorEnv,
+      agents = agentDecls,
+      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
+      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      hooks,
+      approval = defaultApprovalEnv,
+      deadline = Nothing
+    }
+
 testDepsWithApproval :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> AgentRunDeps
 testDepsWithApproval appEnv behaviorEnv hooks approval =
   testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval Nothing
@@ -298,6 +368,31 @@ readCapturedAwakeable aidRef =
   readIORef aidRef >>= \case
     Just aid -> pure aid
     Nothing -> ioError (userError "approval park should capture awakeable id")
+
+loadProofAgents :: IO [AgentDecl]
+loadProofAgents = do
+  results <-
+    traverse
+      loadAgent
+      [ "../agents/proof/research-supervisor.dhall",
+        "../agents/proof/web-researcher.dhall",
+        "../agents/proof/code-researcher.dhall"
+      ]
+  case sequence results of
+    Right loaded -> pure loaded
+    Left err -> assertFailure ("proof agents should load: " <> show err)
+
+assertChildCompleted :: String -> Either err (WorkflowOutcome (Either Text AgentRunResult)) -> IO ()
+assertChildCompleted label = \case
+  Right (Completed (Right _)) -> pure ()
+  other -> assertFailure (label <> ", got " <> show (first (const ("store-error" :: String)) other))
+
+lineageSummary :: [SessionRow] -> Set.Set (Text, Maybe Text, Int)
+lineageSummary rows =
+  Set.fromList
+    [ (agentId, parentSessionId, delegationDepth)
+    | SessionRow {agentId, parentSessionId, delegationDepth} <- rows
+    ]
 
 fireDueApprovalTimer :: AppEnv -> IO ()
 fireDueApprovalTimer appEnv = do
@@ -416,3 +511,32 @@ answeredBeforeDeadlineJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing
     }
+
+researchSupervisorJob :: RunJob
+researchSupervisorJob =
+  RunJob
+    { agentName = "research-supervisor",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object ["topic" .= ("durable workflows" :: Text)],
+      idempotencyKey = "research-supervisor:test-fanout",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+expectedSupervisorOutput :: Value
+expectedSupervisorOutput =
+  object
+    [ "summary" .= ("research-supervisor synthesized delegated findings" :: Text),
+      "web"
+        .= object
+          [ "agent" .= ("web-researcher" :: Text),
+            "finding" .= ("Web sources indicate durable workflow delegation should journal child waits." :: Text)
+          ],
+      "code"
+        .= object
+          [ "agent" .= ("code-researcher" :: Text),
+            "finding" .= ("The code path should spawn child workflows before awaiting their results." :: Text)
+          ]
+    ]

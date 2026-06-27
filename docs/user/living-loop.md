@@ -108,3 +108,39 @@ $ cabal run shikigami -- enqueue-run heartbeat --payload '{}'
 
 This is the **Event** trigger class — the path a `mori` automation action or a `kanmon`
 channel-inbound event uses to address an agent directly.
+
+## Delegation
+
+The proof agents under `agents/proof/` show the imperative parent/child path. The supervisor
+agent starts two named specialists, parks durably while they run, and resumes with both results.
+
+Start the worker against the proof manifests:
+
+```console
+$ cabal run shikigami -- worker --agents agents/proof
+```
+
+In another shell, enqueue the supervisor:
+
+```console
+$ cabal run shikigami -- enqueue-run research-supervisor \
+    --payload '{"topic":"durable workflows"}'
+```
+
+The worker first logs the supervisor as suspended, then the resume worker drives
+`web-researcher` and `code-researcher`, and then the supervisor completes. The synthesized
+result is recorded in kioku as the supervisor run's behavior output.
+
+To inspect lineage, query the session rows after the run:
+
+```sql
+SELECT session_id, agent_id, parent_session_id, delegation_depth, status
+FROM kioku_sessions
+WHERE agent_id IN ('research-supervisor', 'web-researcher', 'code-researcher')
+ORDER BY started_at;
+```
+
+The supervisor row has `parent_session_id` `NULL` and `delegation_depth` `0`; both specialist
+rows point at the supervisor session id and have `delegation_depth` `1`. If the worker exits
+after the supervisor suspends, restart it with the same command: the parent workflow replays its
+journal, observes the child results when they are available, and resumes instead of starting over.
