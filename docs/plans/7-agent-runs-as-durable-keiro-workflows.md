@@ -67,15 +67,22 @@ This section must always reflect the actual current state of the work.
       Completed 2026-06-27T17:58:29Z; `just create-database` reported zero pending
       migrations in the dev database, and `\dt kiroku.keiro_*` showed the keiro workflow
       and outbox tables in the `kiroku` schema.
-- [ ] **M2**: Add `shikigami-core/src/Shikigami/Agent/Workflow.hs` expressing the run
+- [x] **M2**: Add `shikigami-core/src/Shikigami/Agent/Workflow.hs` expressing the run
       lifecycle (ingest job → open session → recall → run behavior → dispatch sinks → record
-      learning → complete) as journaled `step`s; entry point `runAgentRunWorkflow`.
-- [ ] **M2**: Change `Shikigami/Worker.hs` to drive the run through `runAgentRunWorkflow`
+      learning → complete) as journaled steps; entry point `runAgentRunWorkflow`.
+      Completed 2026-06-27T18:18:01Z.
+- [x] **M2**: Change `Shikigami/Worker.hs` to drive the run through `runAgentRunWorkflow`
       instead of calling `runAgentWithMemory` directly; map `Completed`/`Suspended` to ack.
-- [ ] **M2**: Add a resume worker (keiro `runWorkflowResumeWorker` with a one-entry
-      registry) as a second component in the worker process.
+      Completed 2026-06-27T18:18:01Z.
+- [x] **M2**: Add a resume worker (keiro `runWorkflowResumeWorker` with a one-entry
+      registry) as a second component in the worker process. Completed 2026-06-27T18:18:01Z.
+- [x] **M2**: Implement the transactional sink outbox path for `dispatch-sinks` and run an
+      outbox publisher loop in the worker process. Completed 2026-06-27T18:18:01Z.
 - [ ] **M2**: Test — existing run behavior unchanged; a multi-step run killed mid-flight
-      resumes without repeating completed steps.
+      resumes without repeating completed steps. Current coverage: `AgentWorkflow` verifies a
+      completed workflow replays lifecycle steps for the same run id, and the full
+      `shikigami-core-test` suite reports `All 13 tests passed`; remaining coverage is an
+      explicit fault-injection crash-resume test for an unfinished run.
 - [ ] **M3**: Add `shikigami-core/src/Shikigami/Agent/Approval.hs`: the `awaitApproval` /
       `awaitInput` combinator built on keiro `awakeableNamed`; a policy hook
       `requiresApproval` (static stub now, `en` later); a park-state hook (log stub now,
@@ -117,10 +124,42 @@ implementation. Provide concise evidence.
   `cabal test shikigami-core-test --test-options='-p Spike'` ran the single spike test and
   passed.
 
+- Discovery (2026-06-27): Synchronous sink dispatch inside a journaled `step` cannot
+  preserve the old retry semantics for transient sink failures. If the step records
+  `[SinkResult]` containing a `Failed` outcome and the worker retries the pgmq message, the
+  workflow replay returns the recorded failure without re-running the sink POST, so the
+  worker can loop on the same failure forever or, if it ignores the failure, acknowledge a
+  sink that was never delivered. This is concrete evidence that the Decision Log's
+  transactional outbox requirement is not optional for M2. The implementation responded by
+  replacing the synchronous `dispatch-sinks` step with a specialized transactional step that
+  appends `StepRecorded "dispatch-sinks"` and enqueues `SinkIntent` outbox rows together.
+
 
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (implementation, 2026-06-27): New records introduced by this plan follow the
+  repository record convention from `/Users/shinzui/Keikaku/bokuno/haskell-jitsurei/core/record-patterns.md`:
+  no field prefixes, strict fields, and explicit deriving strategies. `AgentRunDeps` therefore uses
+  `appEnv`, `behaviorEnv`, `agents`, `kizashi`, and `kawa`, not the earlier plan sketch's
+  `ard*` field names.
+  Rationale: prefixed record fields conflict with the shared Haskell convention and make later
+  generic-lens `#field` access inconsistent. The plan and implementation were corrected when this was
+  noticed during M2.
+  Date: 2026-06-27
+
+- Decision (implementation, 2026-06-27): `dispatch-sinks` is implemented as a specialized
+  transactional workflow step rather than keiro's generic `step` helper. It uses
+  `currentWorkflow`, `currentRunGeneration`, and `prepareJournalAppend` to prepare the
+  `StepRecorded` journal insert, then runs that transaction together with `enqueueOutboxTx`
+  for each allowed sink intent.
+  Rationale: keiro's generic `step` helper appends the journal entry in its own internal
+  transaction after the action returns, so an action that merely calls `enqueueOutboxTx`
+  cannot guarantee "journal step and outbox rows commit together." The specialized step keeps
+  the plan's transactional outbox guarantee while still replaying from the recorded
+  `dispatch-sinks` result on later workflow runs.
+  Date: 2026-06-27
 
 - Decision (cross-plan coherence review, 2026-06-27, resolving audit item **C3**): Dispatch sinks via a
   **transactional outbox** (Option 3) — the `dispatch-sinks` step `enqueueOutboxTx`s a sink-intent row
@@ -627,7 +666,7 @@ so with small newtype wrappers if needed).
 
 ```haskell
 runAgentRunWorkflow deps job =
-  let env = ardAppEnv deps
+  let env = appEnv deps
    in runEff
         . runTracing (tracer env)
         . runErrorNoCallStack @StoreError
@@ -1069,11 +1108,11 @@ exports:
 
 ```haskell
 data AgentRunDeps = AgentRunDeps
-  { ardAppEnv      :: !AppEnv
-  , ardBehaviorEnv :: !BehaviorEnv
-  , ardAgents      :: ![AgentDecl]
-  , ardKizashi     :: !KizashiConfig
-  , ardKawa        :: !KawaConfig
+  { appEnv      :: !AppEnv
+  , behaviorEnv :: !BehaviorEnv
+  , agents      :: ![AgentDecl]
+  , kizashi     :: !KizashiConfig
+  , kawa        :: !KawaConfig
   }
 
 agentRunWorkflowName :: WorkflowName

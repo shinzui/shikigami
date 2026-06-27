@@ -17,6 +17,8 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
+import GHC.Generics (Generic)
+import Shikigami.Prelude (FromJSON, ToJSON)
 
 -- | The five sink kinds the gate distinguishes. @SChannelEgress@ is reserved for the
 -- not-yet-added channel-egress @Sink@ variant (IR-3).
@@ -26,7 +28,8 @@ data SinkKind
   | SReiAction
   | SDanwaConversation
   | SChannelEgress
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Who is asking. The name is the de-risking key; later the shomei-verified @sub@.
 newtype AgentIdentity = AgentIdentity {agentName :: Text}

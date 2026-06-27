@@ -6,6 +6,10 @@
 -- kioku Session, a learning is a kioku Memory.
 module Shikigami.Agent.Run
   ( AgentRunResult (..),
+    behaviorKindText,
+    recallPriorLearnings,
+    recallQuery,
+    renderLearning,
     runAgentWithMemory,
     recordActivityAsMemory,
     renderMemoryRecord,
@@ -43,6 +47,8 @@ data AgentRunResult = AgentRunResult
     behaviorOutput :: !Value, -- the behavior's result value
     recordedMemId :: !(Maybe MemoryId) -- the learning recorded this run (Nothing on failure)
   }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Run an agent end to end with memory. The scope is keyed by the agent's stable
 -- name so memory accumulates across the agent's runs.

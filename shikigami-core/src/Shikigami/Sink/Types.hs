@@ -32,13 +32,15 @@ data SinkOutcome
   | Stubbed -- a thin stub handler ran (ReiAction/Danwa)
   | DeniedOutcome !Text -- permission denied; the reason (no send)
   | Failed !Text -- the send errored (the worker decides retry)
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data SinkResult = SinkResult
   { sinkResultKind :: !SinkKind,
     sinkResultOutcome :: !SinkOutcome
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | The deterministic doorway dedup key: @"<agentName>:<runId>:<sinkOrdinal>"@. A retry
 -- of the same run re-POSTs the same key, so the doorway dedups it.

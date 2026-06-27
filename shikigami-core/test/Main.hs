@@ -11,6 +11,7 @@ import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (hContentType, status200, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Sink
@@ -37,6 +38,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests],
           testGroup "Trigger" [scheduleTests, streamTests],
+          AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
         ]
     )

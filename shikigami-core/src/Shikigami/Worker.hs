@@ -1,11 +1,8 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | The supervised worker (EP-5): a @shibuya@ @QueueProcessor@ over @pgmq@ that drains
--- the @shikigami_run_jobs@ queue and, for each job, runs the named agent end to end —
--- open a kioku session, run the behavior (EP-2), dispatch the agent's sinks (EP-3),
--- complete the session — and returns an @AckDecision@. Reuses
--- 'Shikigami.Agent.Run.runAgentWithMemory' (the EP-2 session/memory bracket) and
--- 'Shikigami.Sink.dispatch' (the EP-3 permission-gated sink dispatcher).
+-- the @shikigami_run_jobs@ queue and, for each job, drives the named agent through a
+-- durable keiro workflow.
 module Shikigami.Worker
   ( WorkerEnv (..),
     runWorker,
@@ -13,16 +10,20 @@ module Shikigami.Worker
   )
 where
 
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (concurrently_)
+import Control.Monad (forever)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
-import Data.List (find)
 import Data.Text qualified as Text
 import Data.Time.Clock (secondsToNominalDiffTime)
 import Effectful (IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Hasql.Pool (Pool)
-import Kioku.App (AppEnv)
-import Kioku.Id (idText)
+import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
+import Keiro.Workflow (WorkflowOutcome (..))
+import Keiro.Workflow.Resume (runWorkflowResumeWorker)
+import Kioku.App (AppEnv, runAppIO)
 import Pgmq.Effectful.Interpreter (PgmqRuntimeError, runPgmq)
 import Shibuya.Adapter.Pgmq (pgmqAdapter)
 import Shibuya.Adapter.Pgmq.Config (defaultConfig)
@@ -32,13 +33,12 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (runTracingNoop)
-import Shikigami.Agent.Run (AgentRunResult (..), runAgentWithMemory)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), agentRunRegistry, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Prelude
-import Shikigami.Sink (KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch)
-import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity))
+import Shikigami.Sink (KawaConfig, KizashiConfig)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import System.IO (hPutStrLn, stderr)
 
@@ -57,6 +57,10 @@ data WorkerEnv = WorkerEnv
 runWorker :: WorkerEnv -> IO ()
 runWorker env = do
   hPutStrLn stderr "[shikigami.worker] starting; draining shikigami_run_jobs"
+  concurrently_ (runQueueWorker env) (concurrently_ (runResumeWorker env) (runOutboxPublisher env))
+
+runQueueWorker :: WorkerEnv -> IO ()
+runQueueWorker env = do
   result <-
     runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (workerPool env) . runTracingNoop $ do
       adapter <- pgmqAdapter (defaultConfig runQueueName)
@@ -68,6 +72,26 @@ runWorker env = do
   case result of
     Left perr -> hPutStrLn stderr ("[shikigami.worker] pgmq error: " <> show perr)
     Right () -> pure ()
+
+runResumeWorker :: WorkerEnv -> IO ()
+runResumeWorker env = do
+  hPutStrLn stderr "[shikigami.worker] starting keiro workflow resume worker"
+  let deps = agentRunDeps env
+  result <- runAppIO (workerAppEnv env) (runWorkflowResumeWorker (agentRunRegistry deps))
+  case result of
+    Left err -> hPutStrLn stderr ("[shikigami.worker] resume worker store error: " <> show err)
+    Right () -> pure ()
+
+runOutboxPublisher :: WorkerEnv -> IO ()
+runOutboxPublisher env = do
+  hPutStrLn stderr "[shikigami.worker] starting sink outbox publisher"
+  forever do
+    let deps = agentRunDeps env
+    result <- runAppIO (workerAppEnv env) (publishClaimedOutbox (publishSinkIntent deps) defaultPublishOptions Nothing)
+    case result of
+      Left err -> hPutStrLn stderr ("[shikigami.worker] outbox publisher store error: " <> show err)
+      Right _summary -> pure ()
+    threadDelay 1_000_000
 
 -- | The shibuya handler: lift the (IO) orchestration into the worker's effect row.
 runJobHandler :: (IOE :> es) => WorkerEnv -> Handler es Value
@@ -82,52 +106,37 @@ handleRunJob env payloadV =
     Aeson.Error e -> do
       hPutStrLn stderr ("[shikigami.worker] invalid run job (dead-letter): " <> e)
       pure (AckDeadLetter (InvalidPayload (Text.pack e)))
-    Aeson.Success job ->
-      case find ((== agentName job) . name) (workerAgents env) of
-        Nothing -> do
-          hPutStrLn stderr ("[shikigami.worker] unknown agent (dead-letter): " <> Text.unpack (agentName job))
-          pure (AckDeadLetter (PoisonPill ("unknown agent " <> agentName job)))
-        Just decl -> runOneAgent env job decl
+    Aeson.Success job -> runOneAgent env job
 
 -- | Run a resolved agent and dispatch its sinks.
-runOneAgent :: WorkerEnv -> RunJob -> AgentDecl -> IO AckDecision
-runOneAgent env job decl = do
-  resE <- runAgentWithMemory (workerAppEnv env) (workerBehaviorEnv env) decl (triggerPayload job)
+runOneAgent :: WorkerEnv -> RunJob -> IO AckDecision
+runOneAgent env job = do
+  resE <- runAgentRunWorkflow (agentRunDeps env) job
   case resE of
     Left err -> do
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " behavior failed (retry): " <> Text.unpack err)
+      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow store error (retry): " <> show err)
       pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-    Right result -> do
-      let runId = idText (runSessionId result)
-          identity = AgentIdentity (agentName job)
-          dispatchOne (ordinal, sink) =
-            dispatch
-              SinkContext
-                { sinkCtxIdentity = identity,
-                  sinkCtxRunId = runId,
-                  sinkCtxOrdinal = ordinal,
-                  sinkCtxKizashi = workerKizashi env,
-                  sinkCtxKawa = workerKawa env,
-                  sinkCtxOccurredAt = Nothing
-                }
-              sink
-              (behaviorOutput result)
-      sinkResults <- mapM dispatchOne (zip [0 ..] (sinks decl))
-      mapM_ (logSink (agentName job)) sinkResults
-      let ack = classifyAck sinkResults
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " session=" <> Text.unpack runId <> " -> " <> show ack)
-      pure ack
+    Right (Completed (Right _result)) -> do
+      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow completed")
+      pure AckOk
+    Right (Completed (Left err)) -> do
+      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow failed (retry): " <> Text.unpack err)
+      if "unknown agent " `Text.isPrefixOf` err
+        then pure (AckDeadLetter (PoisonPill err))
+        else pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+    Right Suspended -> do
+      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow suspended")
+      pure AckOk
+    Right Cancelled -> pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
+    Right Failed -> pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+    Right ContinuedAsNew -> pure AckOk
 
--- | A transient sink failure ⇒ retry; everything else (delivered/stubbed/denied) ⇒ ok.
-classifyAck :: [SinkResult] -> AckDecision
-classifyAck results
-  | any isFailed results = AckRetry (RetryDelay (secondsToNominalDiffTime 1))
-  | otherwise = AckOk
-  where
-    isFailed r = case sinkResultOutcome r of
-      Failed _ -> True
-      _ -> False
-
-logSink :: Text -> SinkResult -> IO ()
-logSink agent r =
-  hPutStrLn stderr ("[shikigami.sink] agent=" <> Text.unpack agent <> " sink=" <> show (sinkResultKind r) <> " -> " <> show (sinkResultOutcome r))
+agentRunDeps :: WorkerEnv -> AgentRunDeps
+agentRunDeps env =
+  AgentRunDeps
+    { appEnv = workerAppEnv env,
+      behaviorEnv = workerBehaviorEnv env,
+      agents = workerAgents env,
+      kizashi = workerKizashi env,
+      kawa = workerKawa env
+    }
