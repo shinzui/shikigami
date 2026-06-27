@@ -84,14 +84,18 @@ This section must always reflect the actual current state of the work.
       id, and a fault-injection test crashes the first `run-behavior` body invocation, reruns
       the same `WorkflowId`, verifies previously journaled step bodies did not rerun, and
       checks the keiro step index contains one row per completed lifecycle step.
-- [ ] **M3**: Add `shikigami-core/src/Shikigami/Agent/Approval.hs`: the `awaitApproval` /
+- [x] **M3**: Add `shikigami-core/src/Shikigami/Agent/Approval.hs`: the `awaitApproval` /
       `awaitInput` combinator built on keiro `awakeableNamed`; a policy hook
       `requiresApproval` (static stub now, `en` later); a park-state hook (log stub now,
       kioku `Awaiting` later); the ask posted via the existing kizashi/danwa sink clients.
-- [ ] **M3**: Wire the gate into the workflow before sink dispatch; expose
-      `resolveApproval` so an inbound answer event resumes the run.
-- [ ] **M3**: Test — a run that requires approval parks (workflow `Suspended`), and
-      `signalAwakeable` resumes it to completion.
+      Completed 2026-06-27T18:37:56Z.
+- [x] **M3**: Wire the gate into the workflow before sink dispatch; expose
+      `resolveApproval` so an inbound answer event resumes the run. Completed
+      2026-06-27T18:37:56Z.
+- [x] **M3**: Test — a run that requires approval parks (workflow `Suspended`), and
+      `signalAwakeable` resumes it to completion. Completed 2026-06-27T18:37:56Z;
+      validation command:
+      `nix develop -c cabal test shikigami-core-test --test-options='-p Approval'`.
 - [ ] **M4**: Add deadline support: arm a keiro timer when `awaitApproval` is given a
       deadline; run keiro's `runWorkflowTimerWorker` in the worker process; on fire the
       timer signals the awakeable with a `TimedOut` decision.
@@ -160,6 +164,15 @@ Record every decision made while working on the plan.
   cannot guarantee "journal step and outbox rows commit together." The specialized step keeps
   the plan's transactional outbox guarantee while still replaying from the recorded
   `dispatch-sinks` result on later workflow runs.
+  Date: 2026-06-27
+
+- Decision (implementation, 2026-06-27): `deliverInput` does not add a new shikigami mapping
+  table for `(WorkflowId, StepName) -> AwakeableId`. It reads keiro's existing step index for
+  the awakeable allocation step (`awkid:<step>`) and decodes the journaled `AwakeableId`, then
+  calls `signalAwakeable`.
+  Rationale: `awakeableNamed` already records the stable allocation in the workflow journal,
+  so reusing that durable fact avoids a second source of truth while preserving the plan's
+  public `WorkflowId` + `StepName` addressing.
   Date: 2026-06-27
 
 - Decision (cross-plan coherence review, 2026-06-27, resolving audit item **C3**): Dispatch sinks via a
@@ -773,10 +786,10 @@ deliverInput ::
 resolveApproval :: AppEnv -> AwakeableId -> ApprovalDecision -> IO Bool
 ```
 
-To support addressing by (WorkflowId, StepName), `awaitInput` records the mapping
-`(WorkflowId, StepName) -> AwakeableId` when it arms the awakeable (an additive column on the same park
-record `recordPark` already writes), and `deliverInput` looks it up before signalling. This is the only
-new storage `awaitInput`/`deliverInput` need beyond what `awaitApproval` already records.
+To support addressing by (WorkflowId, StepName), `awaitInput` relies on keiro's own
+`awakeableNamed` allocation step. The workflow journal records `awkid:<step>` with the opaque
+`AwakeableId`; `deliverInput` loads the keiro step index for the agent-run workflow, decodes
+that allocation result, and signals it. No separate shikigami mapping table is introduced.
 
 `ApprovalEnv` carries the three dependency hooks, each stubbed now and swapped later:
 
@@ -1116,6 +1129,7 @@ data AgentRunDeps = AgentRunDeps
   , kizashi     :: !KizashiConfig
   , kawa        :: !KawaConfig
   , hooks       :: !AgentRunHooks
+  , approval    :: !(SessionId -> ApprovalEnv)
   }
 
 data AgentRunHooks = AgentRunHooks

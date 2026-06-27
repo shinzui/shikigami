@@ -33,6 +33,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (runTracingNoop)
+import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
@@ -139,5 +140,6 @@ agentRunDeps env =
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,
-      AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks
+      AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+      AgentWorkflow.approval = Approval.defaultApprovalEnv
     }

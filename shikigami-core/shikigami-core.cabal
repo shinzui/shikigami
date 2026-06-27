@@ -22,6 +22,7 @@ library
   import:          common
   hs-source-dirs:  src
   exposed-modules:
+    Shikigami.Agent.Approval
     Shikigami.Agent.Loader
     Shikigami.Agent.Run
     Shikigami.Agent.Skill
@@ -109,6 +110,7 @@ test-suite shikigami-core-test
     , effectful
     , http-types
     , keiro
+    , kioku-api
     , kioku-core
     , kiroku-store
     , shikigami-api

@@ -17,6 +17,7 @@ import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
@@ -50,6 +51,7 @@ import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Api.Agent (AgentDecl (..), Sink)
 import Shikigami.Api.RunJob (RunJob (..))
@@ -57,7 +59,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink (KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
-import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))
+import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
@@ -65,7 +67,8 @@ data AgentRunDeps = AgentRunDeps
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
-    hooks :: !AgentRunHooks
+    hooks :: !AgentRunHooks,
+    approval :: !(SessionId -> ApprovalEnv)
   }
 
 data AgentRunHooks = AgentRunHooks
@@ -143,7 +146,8 @@ runResolvedAgent deps job decl = do
       _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
       pure (Left err)
     Right output -> do
-      sinkResults <- enqueueSinkIntents job decl sid output
+      approvedSinks <- approveSinks deps sid job decl output
+      sinkResults <- enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
       _ <- runStep deps (StepName "complete") (completeSession deps sid)
@@ -169,6 +173,34 @@ runStep deps stepName action =
     result <- action
     liftIO (afterStepBody (hooks deps) stepName)
     pure result
+
+approveSinks ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentRunDeps ->
+  SessionId ->
+  RunJob ->
+  AgentDecl ->
+  Value ->
+  Eff es [Sink]
+approveSinks deps sid job decl output =
+  catMaybes <$> traverse approve (zip [0 :: Int ..] (sinks decl))
+  where
+    env = approval deps sid
+
+    approve (ordinal, sink) = do
+      let kind = sinkKindOf sink
+      requirement <- liftIO (requiresApproval env (AgentIdentity (agentName job)) kind output)
+      case requirement of
+        ApprovalNotRequired -> pure (Just sink)
+        ApprovalRequired request -> do
+          decision <- awaitApproval env (approvalStepName ordinal kind) request Nothing
+          pure case decision of
+            Approved _ -> Just sink
+            Rejected _ -> Nothing
+            TimedOut -> Nothing
+
+    approvalStepName ordinal kind =
+      StepName ("approval:" <> sinkKindText kind <> ":" <> Text.pack (show ordinal))
 
 openSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> Eff es SessionId
 openSession deps decl = liftIO do
