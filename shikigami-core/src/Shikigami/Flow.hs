@@ -17,9 +17,10 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Keiro.Workflow (Workflow)
 import Kiroku.Store.Effect (Store)
+import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 
-type FlowEffects es = (Workflow :> es, Store :> es, IOE :> es)
+type FlowEffects es = (Workflow :> es, Store :> es, IOE :> es, Memory :> es, Sink :> es, Activity :> es)
 
 data LifecycleDiagram = LifecycleDiagram
   { mermaid :: !Text,

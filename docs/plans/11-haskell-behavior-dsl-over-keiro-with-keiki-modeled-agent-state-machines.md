@@ -118,14 +118,14 @@ This section must always reflect the actual current state of the work.
       `runWorkflow`, proving a two-step flow returns `Completed` and a `sleepNamed` flow returns
       `Suspended`. Verified with `nix develop -c cabal build shikigami-core` and
       `nix develop -c cabal test shikigami-core` (all 40 tests passed).
-- [ ] **M3 — the capability combinators.** Implement `recall`, `remember`, `emitSignal`,
-      `currentActivity`, and `awaitAcknowledgement` (the last wrapping plan 7's `awaitApproval`) as thin
-      smart constructors over keiro + shikigami effects. Partial progress on 2026-06-28:
-      `Shikigami.Flow.Acknowledgement` now defines `Ack`, `ackFromDecision`, and
-      `awaitAcknowledgement` as a thin wrapper over plan 7's `awaitApproval`, with unit coverage for the
-      `Approved`/`Rejected`/`TimedOut` mapping. Remaining: implement the `Memory`, `Sink`, and `Activity`
-      flow effects, their interpreters, and tests for `recall`, `remember`, `emitSignal`, and
-      `currentActivity`.
+- [x] **M3 — the capability combinators.** Completed 2026-06-28. Implemented `recall`, `remember`,
+      `emitSignal`, `currentActivity`, and `awaitAcknowledgement` as thin smart constructors over keiro
+      + shikigami effects. Added `Shikigami.Flow.Capability` with `Memory`, `Sink`, and `Activity`
+      effects plus interpreters backed by kioku memory, plan 7's transactional sink outbox seam, and the
+      triggering `ActivityEnvelope`. `Shikigami.Flow.Acknowledgement` wraps plan 7's `awaitApproval`.
+      `FlowEffects` now includes the three domain effects. Verified with
+      `nix develop -c cabal build shikigami-core` and `nix develop -c cabal test shikigami-core` (all 45
+      tests passed).
 - [ ] **M4 — the at-risk-customer vertical slice.** Compose the combinators into `atRiskCustomerFlow`,
       register it, and prove both branches (acknowledged-in-time and timed-out-then-escalated) plus
       crash-resume against a live Postgres.
@@ -261,6 +261,13 @@ Record every decision made while working on the plan.
   sketch while preserving the same interface semantics.
   Date: 2026-06-28
 
+- Decision: The M3 capability module exports effect types named exactly `Memory`, `Sink`, and
+  `Activity`, with API sink constructors referenced through qualified imports where needed.
+  Rationale: This keeps the authoring surface aligned with the plan and the established direct-name
+  record convention. The local naming conflict with `Shikigami.Api.Agent.Sink` is manageable through
+  qualified imports and does not justify changing the public flow capability names.
+  Date: 2026-06-28
+
 
 ## Outcomes & Retrospective
 
@@ -285,6 +292,13 @@ Compare the result against the original purpose.
   `ApprovalDecision` constructors to flow-domain `Ack` constructors and passing the deadline as `Just`.
   This confirms plan 11 can consume the landed plan 7 approval API without fallback code. M3 is not
   complete: the `Memory`, `Sink`, and `Activity` effects and interpreters remain.
+- 2026-06-28 — M3 is complete. `Shikigami.Flow.Capability` now exposes the flow domain capabilities:
+  `Memory` (`recall`/`remember`) backed by kioku, `Sink` (`emitSignal`) backed by plan 7's
+  `enqueueSinkIntentStep` transactional outbox, and `Activity` (`currentActivity`) backed by the
+  triggering envelope. The flow test harness interprets those effects around local `FlowDef`s and proves
+  that activity access works, memory can be remembered and recalled, allowed sink intents enqueue one
+  outbox row, and denied sink intents complete without enqueueing. Remaining work starts at M4:
+  composing these primitives into the real at-risk-customer vertical slice.
 
 
 ## Context and Orientation
@@ -693,6 +707,28 @@ FlowLifecycle
   acknowledgement wrapper maps approval decisions: OK
 
 All 41 tests passed (2.66s)
+Test suite shikigami-core-test: PASS
+```
+
+M3 completion validation on 2026-06-28:
+
+```bash
+nix develop -c fourmolu -i shikigami-core/src/Shikigami/Flow.hs shikigami-core/src/Shikigami/Flow/Capability.hs shikigami-core/test/Shikigami/FlowLifecycleSpec.hs
+nix develop -c cabal build shikigami-core
+nix develop -c cabal test shikigami-core
+```
+
+The relevant added test output was:
+
+```text
+FlowLifecycle
+  currentActivity exposes the triggering activity envelope: OK
+  remember and recall use the flow memory capability:       OK
+  emitSignal enqueues an allowed sink outbox intent:        OK
+  emitSignal records denied sinks without enqueueing:       OK
+  acknowledgement wrapper maps approval decisions:          OK
+
+All 45 tests passed (3.51s)
 Test suite shikigami-core-test: PASS
 ```
 
