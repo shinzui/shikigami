@@ -37,6 +37,7 @@ library
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
     Shikigami.Core
+    Shikigami.Flow
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Integration.Danwa
     Shikigami.Memory.Scope

@@ -112,11 +112,12 @@ This section must always reflect the actual current state of the work.
       rendered it to Mermaid with `Keiki.Render.Mermaid.toMermaidWith`, and asserted well-formedness
       with keiki's validator. No database or keiro runtime is involved; it is pure functions plus a
       `tasty` test, which de-risks the keiki adoption.
-- [ ] **M2 (spike) — the behavior DSL skeleton: a `Flow` effect row and a flow registry.** Define the
-      capability constraints a flow runs under, a `FlowDef` registry mirroring
-      `Shikigami.Program.Registry`, and run a trivial durable flow through keiro's `runWorkflow` in an
-      isolated harness (independent of the worker). Confirms the effect stack assembles and a flow can
-      `step`/suspend.
+- [x] **M2 (spike) — the behavior DSL skeleton: a `Flow` effect row and a flow registry.** Completed
+      2026-06-28. Added `Shikigami.Flow` with `FlowEffects`, `LifecycleDiagram`, `FlowDef`,
+      `flowRegistry`, and `lookupFlow`; added spike tests that run local `FlowDef`s through keiro's
+      `runWorkflow`, proving a two-step flow returns `Completed` and a `sleepNamed` flow returns
+      `Suspended`. Verified with `nix develop -c cabal build shikigami-core` and
+      `nix develop -c cabal test shikigami-core` (all 40 tests passed).
 - [ ] **M3 — the capability combinators.** Implement `recall`, `remember`, `emitSignal`,
       `currentActivity`, and `awaitAcknowledgement` (the last wrapping plan 7's `awaitApproval`) as thin
       smart constructors over keiro + shikigami effects.
@@ -240,6 +241,21 @@ Record every decision made while working on the plan.
   Idempotence and Recovery).
   Date: 2026-06-27
 
+- Decision: M2 keeps the production `flowRegistry` empty and uses local test `FlowDef`s for the keiro
+  completion/suspension spike.
+  Rationale: A registered flow is user-visible once M5 adds the Dhall arm, and the real
+  `at-risk-customer` body is not implemented until M4. Registering placeholder flows would create a
+  behavior name that should never be used outside tests. The empty registry still proves the lookup seam;
+  the tests prove the `FlowDef.run` effect row assembles under keiro.
+  Date: 2026-06-28
+
+- Decision: `FlowDef` and `LifecycleDiagram` use direct record fields (`name`, `lifecycle`, `run`,
+  `mermaid`, `validationWarnings`) rather than prefixed fields such as `flowName`.
+  Rationale: The repository's Haskell record convention requires direct field names with
+  `DuplicateRecordFields`. This deliberately diverges from the illustrative field names in the plan
+  sketch while preserving the same interface semantics.
+  Date: 2026-06-28
+
 
 ## Outcomes & Retrospective
 
@@ -252,6 +268,13 @@ Compare the result against the original purpose.
   keiki warnings; and renders to Mermaid. This proves the plan's keiki adoption slice before any flow
   runtime or database wiring begins. Remaining work starts at M2: define the flow effect row and
   registry and prove a trivial durable flow can complete or suspend under keiro.
+- 2026-06-28 — M2 is complete. `Shikigami.Flow` now defines the first flow authoring surface:
+  `FlowEffects es = (Workflow :> es, Store :> es, IOE :> es)`, a `LifecycleDiagram` wrapper, a rank-2
+  `FlowDef.run`, and `flowRegistry`/`lookupFlow`. The production registry is intentionally empty until
+  M4 registers the real at-risk flow. `Shikigami.FlowLifecycleSpec` now includes keiro-backed spike
+  tests: one local flow journals two steps and completes, and one local flow calls `sleepNamed` and
+  suspends. Remaining work starts at M3: add shikigami-specific capabilities (`Memory`, `Sink`,
+  `Activity`) and the named combinators.
 
 
 ## Context and Orientation
@@ -614,6 +637,28 @@ M2 — the flow skeleton and durable-run spike:
 cabal build shikigami-core
 cabal test shikigami-core
 # Expected: two-step flow -> Completed 2; sleeping flow -> Suspended.
+```
+
+Actual M2 validation on 2026-06-28:
+
+```bash
+nix develop -c cabal build shikigami-core
+nix develop -c cabal test shikigami-core
+```
+
+The relevant test output was:
+
+```text
+FlowLifecycle
+  at-risk customer lifecycle is well-formed:                     OK
+  at-risk customer lifecycle renders the expected states:        OK
+  at-risk customer lifecycle is available as a registry diagram: OK
+  empty flow registry lookup misses unknown flows:               OK
+  trivial flow completes through keiro runWorkflow:              OK
+  sleeping flow suspends through keiro runWorkflow:              OK
+
+All 40 tests passed (2.79s)
+Test suite shikigami-core-test: PASS
 ```
 
 M3/M4 — combinators and the end-to-end proof (needs the local stack):
