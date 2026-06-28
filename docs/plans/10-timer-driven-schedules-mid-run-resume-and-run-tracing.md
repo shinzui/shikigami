@@ -74,7 +74,14 @@ Milestone A — timer-driven schedule firing:
       Completed 2026-06-28T04:21:38Z; validation command:
       `nix develop -c cabal test shikigami-core-test --test-options='-p Scheduler'` passed all 4
       focused Scheduler tests.
-- [ ] End-to-end: a `"* * * * *"` agent produces a `kioku_sessions` row within ~70s of boot.
+- [x] End-to-end: a `"* * * * *"` agent produces a `kioku_sessions` row within ~70s of boot.
+      Completed 2026-06-28T04:27:23Z using `agents/heartbeat.dhall`; baseline
+      `select count(*) from kiroku.kioku_sessions where agent_id='heartbeat'` was `2`, then after
+      running `cabal run shikigami -- scheduler --agents agents` and
+      `cabal run shikigami -- worker --agents agents --kawa-url http://localhost:9 --kizashi-url
+      http://localhost:9 --danwa-url http://localhost:9 --danwa-agent part_shikigami`, the count was
+      `3`, the worker logged `agent=heartbeat workflow completed`, and `kiroku.keiro_timers` showed a
+      future `payload->>'kind' = 'shikigami.schedule'` row for `heartbeat`.
 
 Milestone B — mid-run resume on the keiro workflow substrate (depends on plan 7):
 
@@ -104,7 +111,12 @@ Milestone C — real OTel tracing through the run:
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery (2026-06-28): The repo-local dev database contained three stale unfinished
+  `shikigami.danwa-conversation` workflows from earlier runs. During the manual scheduler E2E proof,
+  the plan-7 resume worker retried them and then marked them failed with
+  `WorkflowStepDecodeError "ingest-start" "key \"parentMessageId\" not found"`. This did not block
+  the schedule proof: in the same worker run, `agent=heartbeat workflow completed`, the heartbeat
+  session count increased from 2 to 3, and schedule timers re-armed.
 
 
 ## Decision Log
@@ -187,6 +199,15 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
+
+- M1/Milestone A outcome (2026-06-28): Schedule triggers now have an active durable driver.
+  `nextDue` computes the next cron minute, `Shikigami.Trigger.Scheduler` arms deterministic keiro
+  timers and fires them by enqueueing normal `RunJob`s with `TriggeredBySchedule`, the worker's timer
+  loop routes both approval-timeout and schedule timers through the shared fallback, and the new
+  `scheduler` CLI command arms scheduled agents at boot. Validation: `nix develop -c cabal build all`,
+  `nix develop -c cabal test shikigami-core-test --test-options='-p Scheduler'`, and
+  `nix develop -c cabal test shikigami-core-test` passed; the manual heartbeat E2E proof created a new
+  completed `kioku_sessions` row and re-armed the next schedule timer.
 
 
 ## Context and Orientation
