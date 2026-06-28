@@ -7,11 +7,14 @@ module Shikigami.Behavior.Run
   ( BehaviorEnv (..),
     RunError (..),
     newBehaviorEnv,
+    newBehaviorEnvWithTraceSink,
     runBehavior,
   )
 where
 
 import Baikai.Model (Model)
+import Baikai.Trace (TraceSink)
+import Baikai.Trace qualified as BaikaiTrace
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
@@ -21,7 +24,7 @@ import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..))
 import Shikigami.Behavior.Error (RunError (..))
-import Shikigami.Behavior.Skill (SkillDir (..), runSkill)
+import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Program.Registry (lookupTask)
 
@@ -29,16 +32,21 @@ import Shikigami.Program.Registry (lookupTask)
 -- the model the skill arm dispatches with. Built once at worker startup.
 data BehaviorEnv = BehaviorEnv
   { runtime :: !Runtime,
-    model :: !Model
+    model :: !Model,
+    traceSink :: !(Maybe TraceSink)
   }
 
 -- | Build the env once: construct the handan 'Runtime' and register the stub baikai
 -- provider so the skill arm runs without a key.
 newBehaviorEnv :: IO BehaviorEnv
-newBehaviorEnv = do
+newBehaviorEnv =
+  newBehaviorEnvWithTraceSink Nothing
+
+newBehaviorEnvWithTraceSink :: Maybe TraceSink -> IO BehaviorEnv
+newBehaviorEnvWithTraceSink traceSink = do
   rt <- newRuntime
   registerStubProvider
-  pure BehaviorEnv {runtime = rt, model = stubModel}
+  pure BehaviorEnv {runtime = rt, model = stubModel, traceSink}
 
 -- | Dispatch on the behavior union. The input @Value@ is the trigger payload; the
 -- output @Value@ is the behavior's result.
@@ -50,7 +58,7 @@ runBehavior env decl payload =
         Nothing -> pure (Left (UnknownTask t))
         Just tk -> runProgramTask (runtime env) tk payload
     Skill {path = p} ->
-      runSkill (model env) (SkillDir (Text.unpack p)) payload
+      runSkillWithTrace (traceSink env) (model env) (SkillDir (Text.unpack p)) payload
     Deterministic {} ->
       -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
       pure (Left (UnsupportedBehavior "Deterministic"))
@@ -70,3 +78,9 @@ envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
   case st of
     ErrorS -> Left (ProgramFailed msg)
     _ -> Right (maybe Aeson.Null id v)
+
+runSkillWithTrace :: Maybe TraceSink -> Model -> SkillDir -> Value -> IO (Either RunError Value)
+runSkillWithTrace Nothing model dir payload =
+  runSkill model dir payload
+runSkillWithTrace (Just sink) model dir payload =
+  runSkillWith model dir payload (BaikaiTrace.withTrace sink)

@@ -3,15 +3,17 @@ module Shikigami.Cli.Commands.Worker
   )
 where
 
+import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Kioku.App (AppEnv (..), noopTracer)
+import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Api.Agent (AgentDecl)
-import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Behavior.Run (newBehaviorEnvWithTraceSink)
 import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
+import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Worker (WorkerEnv (..), runWorker)
 import System.Directory (listDirectory)
 import System.Environment (getEnv)
@@ -24,21 +26,21 @@ runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent = do
   agents <- loadAgents agentsDir
   putStrLn ("[worker] loaded " <> show (length agents) <> " agents")
   connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
-  behEnv <- newBehaviorEnv
-  StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) $ \st -> do
-    tr <- noopTracer
-    let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
-        env =
-          WorkerEnv
-            { pool = StoreConnection.pool st,
-              appEnv,
-              agents,
-              behaviorEnv = behEnv,
-              kizashi = KizashiConfig {baseUrl = kizashiUrl, defaultRecipient = "recipient:default"},
-              kawa = KawaConfig {baseUrl = kawaUrl, sourceSegment = "shinzui/shikigami"},
-              danwa = DanwaConfig {baseUrl = danwaUrl, agentParticipant = danwaAgent}
-            }
-    runWorker env
+  withRunTracer \tr -> do
+    behEnv <- newBehaviorEnvWithTraceSink (Just (otelSink tr))
+    StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) $ \st -> do
+      let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+          env =
+            WorkerEnv
+              { pool = StoreConnection.pool st,
+                appEnv,
+                agents,
+                behaviorEnv = behEnv,
+                kizashi = KizashiConfig {baseUrl = kizashiUrl, defaultRecipient = "recipient:default"},
+                kawa = KawaConfig {baseUrl = kawaUrl, sourceSegment = "shinzui/shikigami"},
+                danwa = DanwaConfig {baseUrl = danwaUrl, agentParticipant = danwaAgent}
+              }
+      runWorker env
 
 loadAgents :: FilePath -> IO [AgentDecl]
 loadAgents dir = do

@@ -18,6 +18,7 @@ import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model (..), _Model)
 import Baikai.Provider.Registry (ApiProvider (..), registerApiProvider)
 import Baikai.Response (Response (..), _Response)
+import Baikai.Stream (liftCompleteToStream)
 import Data.Text (Text)
 import Data.Vector qualified as V
 
@@ -54,7 +55,7 @@ stubApiProvider :: ApiProvider
 stubApiProvider =
   ApiProvider
     { apiTag = stubApi,
-      stream = \_model _ctx _opts -> error "shikigami stub provider: streaming unused",
+      stream = liftCompleteToStream (\_model _ctx _opts -> pure stubResponse),
       complete = \_model _ctx _opts -> pure stubResponse
     }
 

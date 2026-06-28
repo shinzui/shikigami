@@ -110,14 +110,22 @@ Milestone B — mid-run resume on the keiro workflow substrate (depends on plan 
 
 Milestone C — real OTel tracing through the run:
 
-- [ ] Add `Shikigami.Telemetry` with `withRunTracer` (build a real `Tracer` from env, else noop).
-- [ ] Replace `runTracingNoop` in `Shikigami.Worker.runWorker` with `runTracing tracer`.
-- [ ] Emit `agent.run` parent span with `trigger`, `behavior`, `sink.dispatch` child spans;
-      attach GenAI attributes via baikai's `otelSink` on the behavior's model calls.
-- [ ] Wire the CLI to build the tracer from `OTEL_EXPORTER_OTLP_ENDPOINT` (noop when unset).
-- [ ] Demonstrate spans for one run against a local collector (or the debug span processor).
-
-(Replace this seed checklist with the true state as work proceeds; split any partially done item.)
+- [x] Add `Shikigami.Telemetry` with `withRunTracer` (build a real `Tracer` from env, else noop).
+      Completed 2026-06-28T04:47:30Z.
+- [x] Replace `runTracingNoop` in `Shikigami.Worker.runWorker` with `runTracing tracer`.
+      Completed 2026-06-28T04:47:30Z.
+- [x] Emit `agent.run` parent span with `trigger`, `behavior`, `sink.dispatch` child spans;
+      attach GenAI attributes via baikai's `otelSink` on the behavior's model calls. Completed
+      2026-06-28T04:47:30Z; `sink.dispatch` covers durable outbox enqueue.
+- [x] Wire the CLI to build the tracer from `OTEL_EXPORTER_OTLP_ENDPOINT` (noop when unset).
+      Completed 2026-06-28T04:47:30Z.
+- [x] Demonstrate spans for one run against a local collector (or the debug span processor).
+      Completed 2026-06-28T04:47:30Z with the global `jaeger` executable v2.15.0, OTLP/HTTP
+      receiver on `127.0.0.1:4318`, and debug exporter. A `triage-note` skill run
+      (`triage-note:evt:2026-06-28T04:46:42.435856Z`) completed and Jaeger printed
+      `agent.run`, `trigger`, `behavior`, `sink.dispatch`, and `baikai.call`; `baikai.call`
+      carried `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`,
+      `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
 
 
 ## Surprises & Discoveries
@@ -131,6 +139,11 @@ implementation. Provide concise evidence.
   `WorkflowStepDecodeError "ingest-start" "key \"parentMessageId\" not found"`. This did not block
   the schedule proof: in the same worker run, `agent=heartbeat workflow completed`, the heartbeat
   session count increased from 2 to 3, and schedule timers re-armed.
+- Discovery (2026-06-28): Baikai's `withTrace` exercises the provider `stream` arm. Shikigami's
+  deterministic stub provider previously implemented only blocking `complete` and threw
+  `"shikigami stub provider: streaming unused"` from `stream`; the first Jaeger proof surfaced this
+  as failed `behavior`/`agent.run` spans. The fix is to implement `stream` with
+  `Baikai.Stream.liftCompleteToStream` over the same deterministic response.
 
 
 ## Decision Log
@@ -548,27 +561,19 @@ Edits, in order:
 2. **`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`** — wrap the worker boot in
    `withRunTracer`, pass the real `Tracer` into the `kioku` `AppEnv` (replacing `noopTracer`),
    and thread it into `WorkerEnv` so the worker runs under `runTracing tracer`.
-3. **`shikigami-core/src/Shikigami/Worker.hs`** — replace `runTracingNoop` (line 61) with
-   `runTracing tracer` (taking the tracer from `WorkerEnv`). In `runOneAgent`, open the parent
-   span with `withSpan' "agent.run" defaultSpanArguments { kind = Internal } $ \runSpan -> …` and
-   attach run-level attributes (`shikigami.agent`, `shikigami.run_id`, `shikigami.trigger.kind`
-   from `triggerKind job`). Open child spans: `withSpan' "trigger" …` (kind `Consumer` for
-   stream/event, `Internal`/`Producer` for schedule), `withSpan' "behavior" …` around
-   `runBehavior` with `kind = Internal`, and `withSpan' "sink.dispatch" …` per sink with the
-   sink kind as an attribute (`shikigami.sink.kind`). Set span status from the outcome
-   (`setStatus runSpan Ok`/`Error` and `recordException` on failure). Note (C3 = Option 3): the
-   `sink.dispatch` span now covers the *outbox enqueue* inside the run (kind `Producer`); the actual
-   HTTP delivery happens in the separate outbox-publisher worker (plan 7), which opens its own
-   `sink.deliver` spans with `shikigami.sink.kind` + the outbox `message_id`, linked to the run by
-   that id rather than nested under `agent.run`.
-4. **Behavior model-call spans (GenAI attributes).** Route the `Skill`/`ShikumiProgram` behavior
-   arms' model calls through baikai's `otelSink`: pass the run's `Tracer` into
-   `Shikigami.Behavior.Run` so the `Skill` arm's baikai request runs `withTrace (otelSink tracer)`,
-   producing a child model-call span under `behavior` with `gen_ai.request.model`,
-   `gen_ai.usage.input_tokens`, etc. For the `ShikumiProgram` arm, optionally call
-   `Shikumi.Trace.OpenTelemetry.exportTree tracer tree` after the program runs to attach the
-   program's nested spans. The context propagation is automatic: `withSpan'` installs the parent
-   in thread-local context, and the OTel sink's `createSpan` discovers it.
+3. **`shikigami-core/src/Shikigami/Worker.hs` and
+   `shikigami-core/src/Shikigami/Agent/Workflow.hs`** — replace `runTracingNoop` with
+   `runTracing (tracer appEnv)`. In `runOneAgent`, open the parent `agent.run` span and attach
+   `agent.name`, `trigger.kind`, `run.idempotency_key`, and `run.workflow_id`. Inside the durable
+   workflow, open `trigger`, `behavior`, and `sink.dispatch` spans. Note (C3 = Option 3): the
+   `sink.dispatch` span covers the *outbox enqueue* inside the run (kind `Producer`); the actual
+   HTTP delivery happens in the separate outbox-publisher worker.
+4. **Behavior model-call spans (GenAI attributes).** Route the `Skill` behavior arm's model call
+   through baikai's `otelSink`: the worker builds `newBehaviorEnvWithTraceSink (Just (otelSink tr))`,
+   and the `Skill` arm runs `Baikai.Trace.withTrace` around the completion. This emits
+   `baikai.call` spans with GenAI attributes such as `gen_ai.request.model`,
+   `gen_ai.response.model`, and token usage. `ShikumiProgram` arms still emit the Shikigami
+   `behavior` span but do not yet export nested shikumi trace trees.
 
 
 ## Concrete Steps
@@ -695,27 +700,30 @@ line per executed step versus replayed step, since `runWorkflow` records
 
 ### Milestone C steps
 
-Build, then run a single agent with tracing pointed at a local collector. The easiest local
-collector is the OpenTelemetry Collector's debug exporter, or Jaeger all-in-one on
-`localhost:4317` (OTLP/gRPC). With one running:
+Build, then run a single agent with tracing pointed at a local collector. The proof used the
+global Jaeger v2 executable with an OTLP/HTTP receiver on `127.0.0.1:4318` and the debug exporter.
+With Jaeger running:
 
 ```bash
 cabal build all
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
 PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
-  cabal run shikigami -- worker --agents fixtures/agents \
-  --kawa-url http://localhost:9 --kizashi-url http://localhost:9
+  cabal run shikigami -- worker --agents agents \
+  --kawa-url http://localhost:9 --kizashi-url http://localhost:9 \
+  --danwa-url http://localhost:9 --danwa-agent part_shikigami
+
+cabal run shikigami -- enqueue-run triage-note \
+  --payload '{"ticket":"Customer cannot access billing settings after plan change"}'
 ```
 
-Enqueue one run (e.g. via the addressed-run path or by letting the scheduler fire one), then open
-the collector UI. Expected span tree for the run:
+Expected span names for the skill run:
 
 ```text
-agent.run            (shikigami.agent=tick, shikigami.run_id=…, shikigami.trigger.kind=schedule)
+agent.run            (agent.name=triage-note, run.idempotency_key=…, trigger.kind=event)
 ├─ trigger
 ├─ behavior
-│  └─ chat           (gen_ai.request.model=…, gen_ai.usage.input_tokens=…)   # only for Skill/Program arms
-└─ sink.dispatch     (shikigami.sink.kind=kawa)
+├─ sink.dispatch     (sink.count=1)
+└─ baikai.call       (gen_ai.request.model=stub-v1, gen_ai.usage.input_tokens=0)
 ```
 
 With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, the same command runs with the no-op tracer and emits
@@ -724,8 +732,9 @@ nothing (regression check that tracing is strictly opt-in and zero-overhead by d
 ```bash
 unset OTEL_EXPORTER_OTLP_ENDPOINT
 PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
-  cabal run shikigami -- worker --agents fixtures/agents \
-  --kawa-url http://localhost:9 --kizashi-url http://localhost:9
+  cabal run shikigami -- worker --agents agents \
+  --kawa-url http://localhost:9 --kizashi-url http://localhost:9 \
+  --danwa-url http://localhost:9 --danwa-agent part_shikigami
 # no spans exported; behavior identical to today
 ```
 
@@ -755,10 +764,15 @@ the keiro `keiro.workflow.steps.replayed` count rising on the resumed run while
 
 **Milestone C (tracing).** Run one agent with `OTEL_EXPORTER_OTLP_ENDPOINT` set. Acceptance: the
 collector shows an `agent.run` parent span with `trigger`, `behavior`, and `sink.dispatch`
-children, and (for `Skill`/`ShikumiProgram` behaviors) a model-call child span carrying GenAI
+children, and (for `Skill` behaviors) a model-call span carrying GenAI
 attributes (`gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`).
 A failed run shows the `agent.run` span with an error status and a recorded exception. With the
 env var unset, no spans are exported and run behavior is byte-for-byte unchanged.
+
+Observed 2026-06-28T04:47:30Z with Jaeger's debug exporter: `triage-note` produced `agent.run`,
+`trigger`, `behavior`, `sink.dispatch`, and `baikai.call`; `baikai.call` had
+`gen_ai.provider.name=stub`, `gen_ai.request.model=stub-v1`, `gen_ai.response.model=stub-v1`,
+`gen_ai.usage.input_tokens=0`, and `gen_ai.usage.output_tokens=0`.
 
 
 ## Idempotence and Recovery

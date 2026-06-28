@@ -52,6 +52,7 @@ library
     Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
     Shikigami.Sink.Wire
+    Shikigami.Telemetry
     Shikigami.Trigger.Consumer
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Publish
@@ -61,23 +62,27 @@ library
     Shikigami.Worker
 
   build-depends:
-    , aeson                 >=2.2
+    , aeson                           >=2.2
     , async
     , baikai
-    , base                  >=4.21 && <5
+    , baikai-trace-otel
+    , base                            >=4.21 && <5
     , bytestring
-    , containers            >=0.6
+    , containers                      >=0.6
     , cron
     , danwa-api
     , danwa-client
-    , dhall                 >=1.42
-    , directory             >=1.3
+    , dhall                           >=1.42
+    , directory                       >=1.3
     , effectful
-    , filepath              >=1.4
+    , filepath                        >=1.4
     , handan-core
     , hasql
     , hasql-pool
     , hasql-transaction
+    , hs-opentelemetry-api
+    , hs-opentelemetry-exporter-otlp
+    , hs-opentelemetry-sdk
     , http-client
     , http-types
     , hw-kafka-client
@@ -94,13 +99,13 @@ library
     , shibuya-pgmq-adapter
     , shikigami-api
     , shikumi
-    , text                  >=2.1
-    , time                  >=1.12
+    , text                            >=2.1
+    , time                            >=1.12
     , uuid
-    , vector                >=0.13
+    , vector                          >=0.13
     , wai
     , warp
-    , yaml                  >=0.11
+    , yaml                            >=0.11
 
 test-suite shikigami-core-test
   import:         common

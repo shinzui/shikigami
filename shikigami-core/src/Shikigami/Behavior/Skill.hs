@@ -8,6 +8,7 @@ module Shikigami.Behavior.Skill
     SkillManifest (..),
     loadSkillManifest,
     runSkill,
+    runSkillWith,
   )
 where
 
@@ -15,7 +16,7 @@ import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context (Context (..), _Context)
 import Baikai.Message (user)
 import Baikai.Model (Model)
-import Baikai.Options (_Options)
+import Baikai.Options (Options, _Options)
 import Baikai.Provider.Registry (completeRequest)
 import Baikai.Response (Response, flattenAssistantBlocks)
 import Data.Aeson (Value, object, (.=))
@@ -86,7 +87,16 @@ parseManifest t =
 -- first user message = the instruction body plus the trigger payload rendered as JSON.
 -- Returns the assistant reply as @{"reply": <text>}@.
 runSkill :: Model -> SkillDir -> Value -> IO (Either RunError Value)
-runSkill model dir payload = do
+runSkill model dir payload =
+  runSkillWith model dir payload completeRequest
+
+runSkillWith ::
+  Model ->
+  SkillDir ->
+  Value ->
+  (Model -> Context -> Options -> IO Response) ->
+  IO (Either RunError Value)
+runSkillWith model dir payload complete = do
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
@@ -97,7 +107,7 @@ runSkill model dir payload = do
                 messages = V.singleton (user (body manifest <> "\n\nTrigger payload: " <> renderPayload payload)),
                 tools = V.empty
               }
-      resp <- completeRequest model ctx _Options
+      resp <- complete model ctx _Options
       pure (Right (object ["reply" .= renderReply resp]))
 
 -- | Compact JSON encoding of the trigger payload, for the user message.

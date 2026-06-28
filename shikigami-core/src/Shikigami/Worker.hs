@@ -26,7 +26,8 @@ import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Keiro.Workflow.Resume (runWorkflowResumeWorker)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
-import Kioku.App (AppEnv, runAppIO)
+import Kioku.App (AppEnv (..), runAppIO)
+import OpenTelemetry.Trace.Core qualified as Otel
 import Pgmq.Effectful.Interpreter (PgmqRuntimeError, runPgmq)
 import Shibuya.Adapter.Pgmq (pgmqAdapter)
 import Shibuya.Adapter.Pgmq.Config (defaultConfig)
@@ -35,12 +36,12 @@ import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
-import Shibuya.Telemetry.Effect (runTracingNoop)
+import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Api.Agent (AgentDecl (..), Trigger (..))
-import Shikigami.Api.RunJob (RunJob (..))
+import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Prelude
@@ -71,7 +72,7 @@ runWorker env = do
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
   result <-
-    runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (pool env) . runTracingNoop $ do
+    runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (pool env) . runTracing (tracer (appEnv env)) $ do
       adapter <- pgmqAdapter (defaultConfig runQueueName)
       let processor = mkProcessor adapter (runJobHandler env)
       appResult <- runApp IgnoreFailures 100 [(ProcessorId "shikigami_run_jobs", processor)]
@@ -162,26 +163,33 @@ runConversationAgent env job addressed =
 
 -- | Run a resolved agent and dispatch its sinks.
 runOneAgent :: WorkerEnv -> RunJob -> IO AckDecision
-runOneAgent env job = do
-  resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
-  case resE of
-    Left err -> do
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow store error (retry): " <> show err)
-      pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-    Right (Completed (Right _result)) -> do
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow completed")
-      pure AckOk
-    Right (Completed (Left err)) -> do
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow failed (retry): " <> Text.unpack err)
-      if "unknown agent " `Text.isPrefixOf` err
-        then pure (AckDeadLetter (PoisonPill err))
-        else pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-    Right Suspended -> do
-      hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow suspended")
-      pure AckOk
-    Right Cancelled -> pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
-    Right Failed -> pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-    Right ContinuedAsNew -> pure AckOk
+runOneAgent env job =
+  runEff . runTracing (tracer (appEnv env)) $
+    withSpan' "agent.run" (spanArgs Consumer) \traceSpan -> do
+      addAttribute traceSpan "agent.name" (agentName job)
+      addAttribute traceSpan "trigger.kind" (triggerKindText (triggerKind job))
+      addAttribute traceSpan "run.idempotency_key" (idempotencyKey job)
+      addAttribute traceSpan "run.workflow_id" (idempotencyKey job)
+      liftIO do
+        resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
+        case resE of
+          Left err -> do
+            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow store error (retry): " <> show err)
+            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right (Completed (Right _result)) -> do
+            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow completed")
+            pure AckOk
+          Right (Completed (Left err)) -> do
+            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow failed (retry): " <> Text.unpack err)
+            if "unknown agent " `Text.isPrefixOf` err
+              then pure (AckDeadLetter (PoisonPill err))
+              else pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right Suspended -> do
+            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow suspended")
+            pure AckOk
+          Right Cancelled -> pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
+          Right Failed -> pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right ContinuedAsNew -> pure AckOk
 
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
@@ -209,3 +217,14 @@ schedulerEnv env =
         Right parsed -> Just (agentName, parsed)
         Left _ -> Nothing
     scheduleFor _ = Nothing
+
+triggerKindText :: TriggerKind -> Text
+triggerKindText = \case
+  TriggeredBySchedule -> "schedule"
+  TriggeredByStream -> "stream"
+  TriggeredByEvent -> "event"
+  TriggeredByDelegation -> "delegation"
+
+spanArgs :: SpanKind -> SpanArguments
+spanArgs spanKind =
+  Otel.defaultSpanArguments {Otel.kind = spanKind}

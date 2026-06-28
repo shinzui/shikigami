@@ -56,13 +56,14 @@ import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), Sta
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
-import Shibuya.Telemetry.Effect (runTracing)
+import OpenTelemetry.Trace.Core qualified as Otel
+import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink)
+import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink, Trigger (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
@@ -153,16 +154,28 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 runResolvedAgent deps job decl = do
+  withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
+    addAttribute traceSpan "agent.name" (agentName job)
+    addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
+    addAttribute traceSpan "run.idempotency_key" (idempotencyKey job)
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
-  behaviorE <- runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
+  behaviorE <-
+    withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
+      addAttribute traceSpan "agent.name" (name decl)
+      addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
+      runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
   case behaviorE of
     Left err -> do
       _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
       pure (Left err)
     Right output -> do
       approvedSinks <- approveSinks deps sid job decl output
-      sinkResults <- enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
+      sinkResults <-
+        withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
+          addAttribute traceSpan "agent.name" (name decl)
+          addAttribute traceSpan "sink.count" (length approvedSinks)
+          enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
       _ <- runStep deps (StepName "complete") (completeSession deps sid)
@@ -546,3 +559,13 @@ runKioku deps action =
 
 logSinkResult :: RunJob -> SinkResult -> IO ()
 logSinkResult _job _result = pure ()
+
+triggerKindText :: Trigger -> Text
+triggerKindText = \case
+  Schedule {} -> "schedule"
+  Stream {} -> "stream"
+  Event {} -> "event"
+
+spanArgs :: SpanKind -> SpanArguments
+spanArgs spanKind =
+  Otel.defaultSpanArguments {Otel.kind = spanKind}
