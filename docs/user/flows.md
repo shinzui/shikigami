@@ -73,6 +73,142 @@ The important rule is that external side effects must go through the DSL capabil
 named keiro `step`. Completed steps are replayed from the journal after a restart, so
 step names are part of the durable contract.
 
+## Minimal Haskell example
+
+To add a new flow, create a Haskell module under `shikigami-core/src/Shikigami/Flow/`,
+expose it in `shikigami-core.cabal`, register it in `Shikigami.Flow.flowRegistry`, then
+point a Dhall manifest at the registered name.
+
+Example module:
+
+```haskell
+module Shikigami.Flow.OwnerReminder
+  ( ownerReminderFlow,
+  )
+where
+
+import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Text (Text)
+import Data.Text qualified as Text
+import Effectful (Eff, IOE, (:>))
+import Keiro.Workflow (StepName (..), Workflow, step)
+import Kiroku.Store.Effect (Store)
+import Shikigami.Api.Activity (ActivityEnvelope (..))
+import Shikigami.Api.Agent qualified as Agent
+import Shikigami.Flow.Capability
+  ( Activity,
+    Memory,
+    MemoryQuery (..),
+    currentActivity,
+    emitSignal,
+    recall,
+    remember,
+  )
+import Shikigami.Flow.Capability qualified as Capability
+
+ownerReminderFlow ::
+  (Workflow :> es, Store :> es, IOE :> es, Memory :> es, Capability.Sink :> es, Activity :> es) =>
+  Value ->
+  Eff es Value
+ownerReminderFlow payload = do
+  activity <- currentActivity
+  prior <- recall (MemoryQuery "recent owner reminder")
+  missing <- step (StepName "check-owner") (pure (missingOwner payload))
+  if not missing
+    then
+      pure
+        ( object
+            [ "status" .= ("ok" :: Text),
+              "priorReminderCount" .= length prior
+            ]
+        )
+    else do
+      let output =
+            object
+              [ "status" .= ("reminder-sent" :: Text),
+                "activityId" .= activityId activity
+              ]
+      _ <- emitSignal ownerReminderSignal output
+      _ <- remember output
+      pure output
+
+missingOwner :: Value -> Bool
+missingOwner = \case
+  Object fields ->
+    case KeyMap.lookup "owner" fields of
+      Just (String owner) -> Text.null (Text.strip owner)
+      _ -> True
+  _ -> True
+
+ownerReminderSignal :: Agent.Sink
+ownerReminderSignal =
+  Agent.KizashiSignal
+    { Agent.source = "shinzui/shikigami",
+      Agent.signalType = Agent.Reminder,
+      Agent.priority = Agent.Normal,
+      Agent.importance = 50,
+      Agent.recipientFrom = Agent.AreaOwner,
+      Agent.defaultRecipient = Just "role_area_owner",
+      Agent.intentTemplate = "Assign an owner to the unowned item.",
+      Agent.extraContextTags = ["flow:owner-reminder"]
+    }
+```
+
+Then register it:
+
+```haskell
+import Shikigami.Flow.OwnerReminder (ownerReminderFlow)
+
+flowRegistry :: FlowRuntime -> [FlowDef]
+flowRegistry runtime =
+  [ FlowDef
+      { name = "at-risk-customer",
+        lifecycle = atRiskCustomerLifecycleDiagram,
+        run = atRiskCustomerFlow (approval runtime) (acknowledgementDeadline runtime)
+      },
+    FlowDef
+      { name = "owner-reminder",
+        lifecycle =
+          LifecycleDiagram
+            { mermaid =
+                "stateDiagram-v2\n    [*] --> Observed\n    Observed --> Complete\n    Complete --> [*]\n",
+              validationWarnings = []
+            },
+        run = ownerReminderFlow
+      }
+  ]
+```
+
+For production flows, prefer a real keiki lifecycle module like
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` instead of hand-written Mermaid text. The registry
+only needs the `LifecycleDiagram`, but keiki gives validation as well as rendering.
+
+The matching Dhall manifest is small because the behavior body is compiled Haskell:
+
+```dhall
+let Schema = ../../schema/Agent.dhall
+
+in  Schema.Agent::{
+    , name = "owner-reminder"
+    , description = "Remind the area owner when an item has no owner."
+    , trigger =
+        Schema.Trigger.Stream
+          { match =
+              { verb = None Text
+              , source = None Text
+              , subjectType = Some "item"
+              , verbs = [ "item.observed" ]
+              }
+          }
+    , behavior = Schema.Behavior.Flow { name = "owner-reminder" }
+    , sinks = [] : List Schema.Sink
+    }
+```
+
+That is the intended split: Haskell expresses "check, journal, maybe emit, remember"; Dhall
+expresses "this agent runs that compiled flow when this trigger matches."
+
 ## Combinators
 
 `currentActivity`
