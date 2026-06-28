@@ -56,6 +56,7 @@ library
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Publish
     Shikigami.Trigger.Schedule
+    Shikigami.Trigger.Scheduler
     Shikigami.Trigger.Stream
     Shikigami.Worker
 
@@ -108,6 +109,7 @@ test-suite shikigami-core-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.DelegateContextSpec
+    Shikigami.SchedulerSpec
     Shikigami.SpikeWorkflowSpec
 
   hs-source-dirs: test
@@ -125,6 +127,7 @@ test-suite shikigami-core-test
     , kioku-api
     , kioku-core
     , kiroku-store
+    , pgmq-hasql
     , shikigami-api
     , shikigami-core
     , shikigami-migrations:test-support
@@ -132,5 +135,6 @@ test-suite shikigami-core-test
     , tasty-hunit
     , text
     , time
+    , vector
     , wai
     , warp

@@ -7,10 +7,12 @@ module Shikigami.Trigger.Enqueue
     enqueueRunJob,
     enqueueAddressedRun,
     enqueueAddressedRunWithKey,
+    enqueueScheduledRun,
   )
 where
 
 import Data.Aeson (Value)
+import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
@@ -76,6 +78,27 @@ enqueueAddressedRunWithKey pool agent payload key = do
         occurredAt = now,
         triggerPayload = payload,
         idempotencyKey = key,
+        parentSessionId = Nothing,
+        parentRunWorkflowId = Nothing,
+        delegationDepth = Nothing
+      }
+
+-- | Enqueue a schedule-triggered run for a deterministic due minute.
+enqueueScheduledRun :: Pool -> Text -> UTCTime -> IO (Either UsageError MessageId)
+enqueueScheduledRun pool agent dueAt =
+  enqueueRunJob
+    pool
+    RunJob
+      { agentName = agent,
+        triggerKind = TriggeredBySchedule,
+        occurredAt = dueAt,
+        triggerPayload =
+          Aeson.object
+            [ "kind" Aeson..= ("shikigami.schedule" :: Text),
+              "agent" Aeson..= agent,
+              "dueAt" Aeson..= dueAt
+            ],
+        idempotencyKey = agent <> ":sched:" <> Text.pack (iso8601Show dueAt),
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing

@@ -6,10 +6,13 @@ module Shikigami.Trigger.Schedule
   ( CronSchedule,
     parseCron,
     isDue,
+    nextDue,
   )
 where
 
 import Data.Text qualified as Text
+import Data.Time.Clock (addUTCTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Shikigami.Prelude
 import System.Cron qualified as Cron
 
@@ -24,3 +27,21 @@ parseCron t = bimap Text.pack CronSchedule (Cron.parseCronSchedule t)
 -- | True when the cron expression matches the given instant (to the minute).
 isDue :: CronSchedule -> UTCTime -> Bool
 isDue (CronSchedule s) = Cron.scheduleMatches s
+
+-- | The next matching minute strictly after @now@, bounded to one leap year.
+nextDue :: CronSchedule -> UTCTime -> Maybe UTCTime
+nextDue cron now = go 0 (nextWholeMinute now)
+  where
+    maxMinutes = 366 * 24 * 60 :: Int
+
+    go n candidate
+      | n > maxMinutes = Nothing
+      | isDue cron candidate = Just candidate
+      | otherwise = go (n + 1) (addUTCTime 60 candidate)
+
+nextWholeMinute :: UTCTime -> UTCTime
+nextWholeMinute now =
+  posixSecondsToUTCTime (fromInteger nextMinute)
+  where
+    seconds = floor (utcTimeToPOSIXSeconds now) :: Integer
+    nextMinute = ((seconds `div` 60) + 1) * 60

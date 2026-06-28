@@ -29,6 +29,7 @@ library
     Shikigami.Cli.Commands.EnqueueRun
     Shikigami.Cli.Commands.PublishFixture
     Shikigami.Cli.Commands.RunBehavior
+    Shikigami.Cli.Commands.Scheduler
     Shikigami.Cli.Commands.StubKawa
     Shikigami.Cli.Commands.Validate
     Shikigami.Cli.Commands.Worker
@@ -36,9 +37,11 @@ library
   build-depends:
     , aeson                 >=2.2
     , base                  >=4.21 && <5
+    , containers
     , danwa-api
     , danwa-client
     , directory
+    , effectful
     , filepath
     , kioku-api
     , kioku-core
@@ -47,6 +50,7 @@ library
     , shikigami-api
     , shikigami-core
     , text                  >=2.1
+    , time                  >=1.12
 
 executable shikigami
   import:         common

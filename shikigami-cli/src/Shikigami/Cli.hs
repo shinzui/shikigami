@@ -8,6 +8,7 @@ import Shikigami.Cli.Commands.DanwaSpike (runDanwaSpike)
 import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
 import Shikigami.Cli.Commands.RunBehavior (runRunBehavior)
+import Shikigami.Cli.Commands.Scheduler (runSchedulerCmd)
 import Shikigami.Cli.Commands.StubKawa (runStubKawaCmd)
 import Shikigami.Cli.Commands.Validate (runValidate)
 import Shikigami.Cli.Commands.Worker (runWorkerCmd)
@@ -21,6 +22,7 @@ data Command
   | PublishFixture FilePath Text Text
   | ConsumeStream FilePath Text Text Text Bool
   | ConsumeEvents FilePath Text Text Text
+  | Scheduler FilePath
   | Worker FilePath Text Text Text Text
   | DanwaSpike String String String
 
@@ -119,6 +121,14 @@ parser =
               (progDesc "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs")
           )
         <> command
+          "scheduler"
+          ( info
+              ( Scheduler
+                  <$> strOption (long "agents" <> metavar "DIR" <> value "agents" <> help "Agents manifest directory")
+              )
+              (progDesc "Arm Schedule triggers and drive keiro timer firing")
+          )
+        <> command
           "worker"
           ( info
               ( Worker
@@ -141,5 +151,6 @@ run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
 run (ConsumeEvents agentsDir broker topic grp) = runConsumeEvents agentsDir broker topic grp
+run (Scheduler agentsDir) = runSchedulerCmd agentsDir
 run (Worker agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent) = runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent
 run (DanwaSpike danwaUrl human agent) = runDanwaSpike danwaUrl human agent

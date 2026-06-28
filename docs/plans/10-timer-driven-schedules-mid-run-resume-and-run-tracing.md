@@ -60,13 +60,20 @@ This section must always reflect the actual current state of the work.
 
 Milestone A — timer-driven schedule firing:
 
-- [ ] Add `nextDue :: CronSchedule -> UTCTime -> Maybe UTCTime` to `Shikigami.Trigger.Schedule`.
-- [ ] Add `TriggeredBySchedule` to `TriggerKind` in `Shikigami.Api.RunJob`.
-- [ ] Create `Shikigami.Trigger.Scheduler` with the schedule-timer payload, deterministic
+- [x] Add `nextDue :: CronSchedule -> UTCTime -> Maybe UTCTime` to `Shikigami.Trigger.Schedule`.
+      Completed 2026-06-28T04:21:38Z.
+- [x] Add `TriggeredBySchedule` to `TriggerKind` in `Shikigami.Api.RunJob`.
+      Already present from prior plan-9/plan-10-adjacent work; verified 2026-06-28T04:21:38Z in
+      `shikigami-api/src/Shikigami/Api/RunJob.hs`.
+- [x] Create `Shikigami.Trigger.Scheduler` with the schedule-timer payload, deterministic
       timer id, arming function, and the timer `fire` action that enqueues a run job and re-arms.
-- [ ] Add a `scheduler` CLI subcommand that arms all scheduled agents once at boot and runs the
-      keiro timer worker loop.
-- [ ] Unit tests: `nextDue`, payload round-trip, deterministic timer id, fire-action enqueues + re-arms.
+      Completed 2026-06-28T04:21:38Z.
+- [x] Add a `scheduler` CLI subcommand that arms all scheduled agents once at boot and runs the
+      keiro timer worker loop. Completed 2026-06-28T04:21:38Z.
+- [x] Unit tests: `nextDue`, payload round-trip, deterministic timer id, fire-action enqueues + re-arms.
+      Completed 2026-06-28T04:21:38Z; validation command:
+      `nix develop -c cabal test shikigami-core-test --test-options='-p Scheduler'` passed all 4
+      focused Scheduler tests.
 - [ ] End-to-end: a `"* * * * *"` agent produces a `kioku_sessions` row within ~70s of boot.
 
 Milestone B — mid-run resume on the keiro workflow substrate (depends on plan 7):

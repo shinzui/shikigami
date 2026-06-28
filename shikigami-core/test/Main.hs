@@ -16,6 +16,7 @@ import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -30,7 +31,7 @@ import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
-import Shikigami.Trigger.Schedule (isDue, parseCron)
+import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
@@ -42,6 +43,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+          SchedulerSpec.tests,
           DelegateContextSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
@@ -70,7 +72,11 @@ scheduleTests =
       testCase "malformed cron fails to parse" $
         case parseCron "not a cron" of
           Left _ -> pure ()
-          Right _ -> assertBool "expected parse failure" False
+          Right _ -> assertBool "expected parse failure" False,
+      testCase "nextDue is strictly after the supplied minute" $
+        case parseCron "* * * * *" of
+          Right c -> nextDue c (atHour 3) @?= Just (UTCTime (fromGregorian 2026 6 20) (secondsToDiffTime (3 * 3600 + 60)))
+          Left e -> assertBool ("parse failed: " <> show e) False
     ]
 
 -- ── Trigger.Stream ──────────────────────────────────────────────────────────

@@ -39,13 +39,15 @@ import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Api.Agent (AgentDecl (..))
+import Shikigami.Api.Agent (AgentDecl (..), Trigger (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig)
 import Shikigami.Trigger.Enqueue (runQueueName)
+import Shikigami.Trigger.Schedule (parseCron)
+import Shikigami.Trigger.Scheduler qualified as Scheduler
 import System.IO (hPutStrLn, stderr)
 
 -- | Everything the worker handler needs.
@@ -64,7 +66,7 @@ data WorkerEnv = WorkerEnv
 runWorker :: WorkerEnv -> IO ()
 runWorker env = do
   hPutStrLn stderr "[shikigami.worker] starting; draining shikigami_run_jobs"
-  concurrently_ (runQueueWorker env) (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runApprovalTimerWorker env)))
+  concurrently_ (runQueueWorker env) (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
 
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
@@ -108,14 +110,14 @@ runOutboxPublisher env = do
       Right _summary -> pure ()
     threadDelay 1_000_000
 
-runApprovalTimerWorker :: WorkerEnv -> IO ()
-runApprovalTimerWorker env = do
-  hPutStrLn stderr "[shikigami.worker] starting approval timeout timer worker"
+runTimerWorker :: WorkerEnv -> IO ()
+runTimerWorker env = do
+  hPutStrLn stderr "[shikigami.worker] starting keiro timer worker"
   forever do
     now <- getCurrentTime
-    result <- runAppIO (appEnv env) (runWorkflowTimerWorker Nothing now Approval.approvalTimeoutFireAction)
+    result <- runAppIO (appEnv env) (runWorkflowTimerWorker Nothing now (Scheduler.shikigamiTimerFallback (schedulerEnv env)))
     case result of
-      Left err -> hPutStrLn stderr ("[shikigami.worker] approval timer worker store error: " <> show err)
+      Left err -> hPutStrLn stderr ("[shikigami.worker] timer worker store error: " <> show err)
       Right _row -> pure ()
     threadDelay 1_000_000
 
@@ -194,3 +196,16 @@ agentRunDeps env =
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing
     }
+
+schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
+schedulerEnv env =
+  Scheduler.SchedulerEnv
+    { Scheduler.pool = pool env,
+      Scheduler.schedules = Map.fromList (mapMaybe scheduleFor (agents env))
+    }
+  where
+    scheduleFor AgentDecl {name = agentName, trigger = Schedule {cron}} =
+      case parseCron cron of
+        Right parsed -> Just (agentName, parsed)
+        Left _ -> Nothing
+    scheduleFor _ = Nothing
