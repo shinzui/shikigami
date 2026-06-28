@@ -7,6 +7,7 @@ import Shikigami.Cli.Commands.ConsumeStream (runConsumeEvents, runConsumeStream)
 import Shikigami.Cli.Commands.DanwaSpike (runDanwaSpike)
 import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
+import Shikigami.Cli.Commands.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Cli.Commands.RunBehavior (runRunBehavior)
 import Shikigami.Cli.Commands.Scheduler (runSchedulerCmd)
 import Shikigami.Cli.Commands.StubKawa (runStubKawaCmd)
@@ -15,6 +16,7 @@ import Shikigami.Cli.Commands.Worker (runWorkerCmd)
 
 data Command
   = Validate FilePath
+  | RenderLifecycle FilePath
   | RunBehavior FilePath (Maybe String)
   | AgentRun String (Maybe FilePath)
   | StubKawa Int (Maybe String) (Maybe String)
@@ -40,6 +42,12 @@ parser =
             (Validate <$> argument str (metavar "FILE"))
             (progDesc "Parse and validate an agent manifest (.dhall)")
         )
+        <> command
+          "render-lifecycle"
+          ( info
+              (RenderLifecycle <$> argument str (metavar "FILE"))
+              (progDesc "Render a Flow agent lifecycle as Mermaid")
+          )
         <> command
           "run-behavior"
           ( info
@@ -144,6 +152,7 @@ parser =
 
 run :: Command -> IO ()
 run (Validate file) = runValidate file
+run (RenderLifecycle file) = runRenderLifecycle file
 run (RunBehavior file payload) = runRunBehavior file payload
 run (AgentRun agentArg fromActivity) = runAgentRun agentArg fromActivity
 run (StubKawa port topic broker) = runStubKawaCmd port topic broker

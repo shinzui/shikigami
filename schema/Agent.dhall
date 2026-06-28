@@ -36,6 +36,7 @@ let Behavior =
           , enabledBy : Optional Text
           }
       | Skill : { path : Text }
+      | Flow : { name : Text }
       >
 
 -- The producer sink set. KizashiSignal carries the seeds' rich RaiseSignal fields.

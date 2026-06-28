@@ -28,6 +28,7 @@ library
     Shikigami.Cli.Commands.DanwaSpike
     Shikigami.Cli.Commands.EnqueueRun
     Shikigami.Cli.Commands.PublishFixture
+    Shikigami.Cli.Commands.RenderLifecycle
     Shikigami.Cli.Commands.RunBehavior
     Shikigami.Cli.Commands.Scheduler
     Shikigami.Cli.Commands.StubKawa

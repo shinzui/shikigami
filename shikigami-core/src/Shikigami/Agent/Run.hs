@@ -54,8 +54,8 @@ data AgentRunResult = AgentRunResult
 -- name so memory accumulates across the agent's runs.
 runAgentWithMemory ::
   AppEnv -> BehaviorEnv -> AgentDecl -> Value -> IO (Either Text AgentRunResult)
-runAgentWithMemory appEnv behEnv decl payload = do
-  let scope' = agentScope (name decl)
+runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
+  let scope' = agentScope agentName'
       focusTxt = behaviorKindText (behavior decl)
   startedAt' <- getCurrentTime
   sid <- genSessionId
@@ -65,7 +65,7 @@ runAgentWithMemory appEnv behEnv decl payload = do
       Session.start
         StartSessionData
           { sessionId = sid,
-            agentId = name decl,
+            agentId = agentName',
             focus = focusTxt,
             scope = scope',
             subjectRef = Just (idText sid),
@@ -99,7 +99,7 @@ runAgentWithMemory appEnv behEnv decl payload = do
           Memory.record
             RecordMemoryData
               { memoryId = mid,
-                agentId = name decl,
+                agentId = agentName',
                 sessionId = Just sid,
                 scope = scope',
                 memoryType = MemoryPattern,
@@ -136,10 +136,10 @@ runAgentWithMemory appEnv behEnv decl payload = do
 -- @verb@/@subject.type@ become searchable tags. An envelope the agent produced
 -- (@actor.kind: "agent"@) is exactly a learning to capture. Returns the new memory id.
 recordActivityAsMemory :: AppEnv -> AgentDecl -> ActivityEnvelope -> IO (Either Text MemoryId)
-recordActivityAsMemory appEnv decl env = do
+recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
   let ActivityEnvelope {occurredAt = oat, verb = vb, payload = pl, subject = subj} = env
       Subject {subjectType = sty} = subj
-      scope' = agentScope (name decl)
+      scope' = agentScope agentName'
       tags' = Set.fromList ["verb:" <> vb, "subject:" <> sty]
       content' = TL.toStrict (encodeToLazyText pl)
   mid <- genMemoryId
@@ -149,7 +149,7 @@ recordActivityAsMemory appEnv decl env = do
       Memory.record
         RecordMemoryData
           { memoryId = mid,
-            agentId = name decl,
+            agentId = agentName',
             sessionId = Nothing,
             scope = scope',
             memoryType = MemoryPattern,
@@ -170,6 +170,7 @@ behaviorKindText b = case b of
   ShikumiProgram {} -> "ShikumiProgram"
   Skill {} -> "Skill"
   Deterministic {} -> "Deterministic"
+  Flow {} -> "Flow"
 
 -- | Turn the behavior's output JSON into a memory's @content@: prefer a @summary@ or
 -- @reply@ string field, falling back to the compact JSON encoding.
@@ -218,5 +219,5 @@ recallActiveByScope appEnv scope' = do
     _ -> []
 
 recallQuery :: AgentDecl -> Text -> Text
-recallQuery decl focusTxt =
-  Text.unwords [name decl, focusTxt, "summary digest learning prior memory"]
+recallQuery AgentDecl {name = agentName'} focusTxt =
+  Text.unwords [agentName', focusTxt, "summary digest learning prior memory"]

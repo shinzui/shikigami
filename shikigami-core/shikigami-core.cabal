@@ -42,6 +42,7 @@ library
     Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
     Shikigami.Flow.Lifecycle.AtRiskCustomer
+    Shikigami.Flow.SinkOutbox
     Shikigami.Integration.Danwa
     Shikigami.Memory.Scope
     Shikigami.Program.Registry

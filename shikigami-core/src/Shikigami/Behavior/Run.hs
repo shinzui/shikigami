@@ -59,6 +59,8 @@ runBehavior env decl payload =
         Just tk -> runProgramTask (runtime env) tk payload
     Skill {path = p} ->
       runSkillWithTrace (traceSink env) (model env) (SkillDir (Text.unpack p)) payload
+    Flow {} ->
+      pure (Left (UnsupportedBehavior "Flow"))
     Deterministic {} ->
       -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
       pure (Left (UnsupportedBehavior "Deterministic"))

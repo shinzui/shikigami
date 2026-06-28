@@ -157,6 +157,22 @@ tests =
             case session of
               Right (Right (Just SessionRow {status})) -> assertEqual "session completed after resume" "completed" status
               other -> assertFailure ("session lookup should return completed row, got " <> show other),
+      testCase "runs Flow behavior through the agent workflow" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [flowDecl]
+
+            result <- runAgentRunWorkflow deps flowJob
+            case result of
+              Right (Completed (Right AgentRunResult {behaviorOutput})) ->
+                assertEqual "flow behavior returns its classified verdict" expectedFlowOutput behaviorOutput
+              other -> assertFailure ("flow behavior should complete, got " <> show other)
+
+            outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+            assertEqual "low-risk flow emits no sink outbox rows" (Right 0) (length <$> outboxRows),
       testGroup
         "Conversation"
         [ testCase "parks and resumes a danwa conversation as one workflow session" do
@@ -575,6 +591,16 @@ decl =
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}]
     }
 
+flowDecl :: AgentDecl
+flowDecl =
+  AgentDecl
+    { name = "at-risk-customer",
+      description = "workflow flow test agent",
+      trigger = Event {eventType = "test"},
+      behavior = Flow {name = "at-risk-customer"},
+      sinks = []
+    }
+
 conversationDecl :: AgentDecl
 conversationDecl =
   decl
@@ -648,6 +674,27 @@ recordBeforeCompleteCrashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing
     }
+
+flowJob :: RunJob
+flowJob =
+  RunJob
+    { agentName = "at-risk-customer",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
+      idempotencyKey = "at-risk-customer:test-flow-low",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+expectedFlowOutput :: Value
+expectedFlowOutput =
+  object
+    [ "level" .= ("low" :: Text),
+      "rationale" .= ("no high-risk signal detected" :: Text),
+      "ticketId" .= ("at-risk-customer:test-flow-low" :: Text)
+    ]
 
 approvalJob :: RunJob
 approvalJob =

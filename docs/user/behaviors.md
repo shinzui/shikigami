@@ -1,6 +1,6 @@
 # Behaviors — *what* an agent does
 
-A behavior is the work an agent performs when its trigger fires. It is a **union** of three
+A behavior is the work an agent performs when its trigger fires. It is a **union** of four
 arms — not everything needs a typed program or a model call:
 
 ```dhall
@@ -11,6 +11,7 @@ let Behavior =
           { task : Text, preferEnrichment : Bool
           , grounding : Optional Text, enabledBy : Optional Text }
       | Skill : { path : Text }
+      | Flow : { name : Text }
       >
 ```
 
@@ -19,9 +20,10 @@ let Behavior =
 | **Deterministic** | a named rule, in-process | No | cheap, rule-based decisions (thresholds, staleness, counting) |
 | **ShikumiProgram** | `shinzui/handan` + `shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
 | **Skill** | `shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
+| **Flow** | `shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
 
 Whatever the arm, its output is a JSON value handed to the agent's **sinks** identically — the
-downstream wiring (sinks, sessions, memory) is shared across all three.
+downstream wiring (sinks, sessions, memory) is shared across all four.
 
 ## Deterministic — a named rule
 
@@ -88,9 +90,23 @@ model key — exactly as `noop-summary` does. See **[Skills](./skills.md)** for 
 > `scripts/` (arbitrary executable code) needs a sandbox and is **not** run by this runtime —
 > a deferred concern.
 
+## Flow — the durable lifecycle path
+
+```dhall
+behavior = A.Behavior.Flow { name = "at-risk-customer" }
+```
+
+Names a compiled Haskell flow in the flow registry. A Flow runs inside the agent-run
+workflow, so it can journal internal steps, emit replay-safe sink intents, park for an
+acknowledgement, resume after an answer or deadline, and render its lifecycle as Mermaid.
+
+Use this path when the behavior is not just "compute one JSON value" but a durable process.
+The `at-risk-customer` flow classifies a ticket, raises an alert for high risk, waits for
+acknowledgement, and escalates on timeout. See **[Flows](./flows.md)**.
+
 ## Running without a key
 
-All three arms are provable with deterministic stubs:
+The synchronous arms are provable with deterministic stubs:
 
 ```bash
 $ cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
@@ -107,3 +123,4 @@ quickest way to iterate on what an agent produces.
 | a clear rule over structured fields | `Deterministic` |
 | a typed pipeline you want to evaluate/optimize | `ShikumiProgram` |
 | natural-language instructions, optionally with tools | `Skill` |
+| a durable process that must wait or resume | `Flow` |

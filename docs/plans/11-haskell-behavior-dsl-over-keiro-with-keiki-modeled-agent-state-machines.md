@@ -132,9 +132,14 @@ This section must always reflect the actual current state of the work.
       -> alert -> timeout -> escalation, and replay-while-parked without duplicate alert outbox rows
       against migrated Postgres. Verified with `nix develop -c cabal build shikigami-core` and
       `nix develop -c cabal test shikigami-core --test-options='-j1'` (all 48 tests passed).
-- [ ] **M5 — wiring and docs.** Add the `Flow { name : Text }` arm to `schema/Agent.dhall` and
-      `Shikigami.Api.Agent`; route it through the loader and worker; add a `render-lifecycle` CLI
-      subcommand; write `docs/user/flows.md`.
+- [x] **M5 — wiring and docs.** Completed 2026-06-28. Added the `Flow { name : Text }` arm to
+      `schema/Agent.dhall` and `Shikigami.Api.Agent`; routed Flow behavior through the durable
+      `agentRunWorkflow` path; added `agents/detectors/at-risk-customer-flow.dhall`; added
+      `shikigami render-lifecycle`; documented flows in `docs/user/flows.md` and cross-linked the user
+      guide. Verified with `nix develop -c cabal build shikigami-core shikigami-cli:exe:shikigami`,
+      `nix develop -c cabal run shikigami -- validate agents/detectors/at-risk-customer-flow.dhall`,
+      `nix develop -c cabal run shikigami -- render-lifecycle agents/detectors/at-risk-customer-flow.dhall`,
+      and `nix develop -c cabal test shikigami-core --test-options='-j1'` (all 49 tests passed).
 
 
 ## Surprises & Discoveries
@@ -179,6 +184,16 @@ clang: error: linker command failed with exit code 1
   60`; the new M4 at-risk tests in that same run passed. Re-running the suite serially with
   `--test-options='-j1'` passed all 48 tests. The code path was not changed for this; the discovery is
   about local validation concurrency.
+- **Inlining Flow into `Agent.Workflow` exposed a module cycle in the M3 sink interpreter.**
+  `Shikigami.Flow.Capability` originally reused `Shikigami.Agent.Workflow.enqueueSinkIntentStep`, but
+  M5 needed `Shikigami.Agent.Workflow` to import `Shikigami.Flow.Capability` to interpret Flow effects.
+  The fix was to move the transactional sink-intent enqueue helper into `Shikigami.Flow.SinkOutbox`, so
+  both the Flow interpreter and agent workflow can share the same outbox semantics without importing each
+  other.
+- **The new `Flow {name}` record field made older unqualified `name decl` selectors ambiguous.**
+  The direct-record-fields convention is still correct, but modules that import both `AgentDecl(..)` and
+  `Behavior(..)` must bind or helper the selector at the constructor site. M5 added local helpers such as
+  `agentDeclName` and pattern bindings like `AgentDecl {name = agentName'}` in the run/workflow modules.
 
 
 ## Decision Log
@@ -286,6 +301,13 @@ Record every decision made while working on the plan.
   run-specific approval environment.
   Date: 2026-06-28
 
+- Decision: The replay-safe sink outbox helper lives in `Shikigami.Flow.SinkOutbox`, not in
+  `Shikigami.Agent.Workflow`.
+  Rationale: Flow execution is inlined into `Agent.Workflow`, so keeping the helper in `Agent.Workflow`
+  would force `Flow.Capability` and `Agent.Workflow` to import each other. Extracting the helper preserves
+  the same deterministic outbox behavior while making the dependency direction acyclic.
+  Date: 2026-06-28
+
 
 ## Outcomes & Retrospective
 
@@ -324,6 +346,13 @@ Compare the result against the original purpose.
   branch, timeout/escalation branch, and replay while parked; replay reuses the journaled classify/alert
   path and leaves the alert outbox count at one. Remaining work starts at M5: making `Flow { name }`
   available in Dhall/API/worker wiring and exposing lifecycle rendering from the CLI/docs.
+- 2026-06-28 — M5 is complete. `Flow { name }` is now part of the Dhall schema and Haskell API, and the
+  durable agent-run workflow routes it through `lookupFlow` with per-run approval/deadline/memory/sink
+  interpreters. The synchronous `runBehavior` path explicitly rejects `Flow` if called directly, keeping
+  the old three behavior arms unchanged. The new `at-risk-customer-flow.dhall` manifest validates, the
+  `render-lifecycle` CLI prints the keiki Mermaid diagram, and `docs/user/flows.md` plus the behavior
+  guide explain when to use Flow. The serial core suite now has 49 passing tests, including an
+  agent-workflow test proving a Flow manifest runs through the worker path.
 
 
 ## Context and Orientation
@@ -794,8 +823,45 @@ cabal run shikigami -- render-lifecycle agents/detectors/at-risk-customer-flow.d
 # Expected: a Mermaid stateDiagram printed to stdout.
 ```
 
-(Exact expected transcripts are filled in as each milestone is implemented; this section must be updated
-with the real output captured during M1–M5.)
+Actual M5 validation on 2026-06-28:
+
+```bash
+nix develop -c cabal build shikigami-core shikigami-cli:exe:shikigami
+nix develop -c cabal run shikigami -- validate agents/detectors/at-risk-customer-flow.dhall
+nix develop -c cabal run shikigami -- render-lifecycle agents/detectors/at-risk-customer-flow.dhall
+nix develop -c cabal test shikigami-core --test-options='-j1'
+```
+
+The validate command printed:
+
+```text
+AgentDecl {name = "at-risk-customer", description = "Raise an Alert for at-risk customer tickets, wait for acknowledgement, and escalate on timeout.", trigger = Stream {match = StreamMatch {verb = Nothing, source = Nothing, subjectType = Just "ticket", verbs = ["ticket.received"]}}, behavior = Flow {name = "at-risk-customer"}, sinks = []}
+OK: 1 agent parsed.
+```
+
+The render command printed:
+
+```text
+stateDiagram-v2
+    [*] --> Observed
+    Observed --> SettledLow : ClassifyLowRisk / ε
+    Observed --> AwaitingAck : ClassifyHighRisk / ε
+    AwaitingAck --> Acknowledged : Acknowledge / ε
+    AwaitingAck --> Escalated : DeadlineExpired / ε
+    SettledLow --> [*]
+    Acknowledged --> [*]
+    Escalated --> [*]
+```
+
+The relevant added test output was:
+
+```text
+AgentWorkflow
+  runs Flow behavior through the agent workflow: OK
+
+All 49 tests passed (14.00s)
+Test suite shikigami-core-test: PASS
+```
 
 
 ## Validation and Acceptance

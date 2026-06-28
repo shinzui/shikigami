@@ -25,7 +25,8 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Time (NominalDiffTime)
+import Data.Time (NominalDiffTime, secondsToNominalDiffTime)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -63,9 +64,12 @@ import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Api.Activity qualified as Activity
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink, Trigger (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Flow qualified as Flow
+import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
@@ -113,13 +117,22 @@ defaultAgentRunHooks =
       afterStepBody = \_ -> pure ()
     }
 
+agentDeclName :: AgentDecl -> Text
+agentDeclName AgentDecl {name} = name
+
+jobIdempotencyKey :: RunJob -> Text
+jobIdempotencyKey RunJob {idempotencyKey} = idempotencyKey
+
+runJobOccurredAt :: RunJob -> UTCTime
+runJobOccurredAt RunJob {occurredAt} = occurredAt
+
 agentRunWorkflow ::
   AgentRunDeps ->
   Maybe RunJob ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps (StepName "ingest-job") (ingestJob mJob)
-  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . name) (agents deps)))
+  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . agentDeclName) (agents deps)))
   case mDecl of
     Nothing -> pure (Left ("unknown agent " <> agentName job))
     Just decl -> runResolvedAgent deps job decl
@@ -136,7 +149,7 @@ runAgentRunWorkflow deps job =
         . runStorePool (store env)
         $ runWorkflow
           agentRunWorkflowName
-          (WorkflowId (idempotencyKey job))
+          (WorkflowId (jobIdempotencyKey job))
           (agentRunWorkflow deps (Just job))
 
 agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
@@ -157,14 +170,16 @@ runResolvedAgent deps job decl = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
-    addAttribute traceSpan "run.idempotency_key" (idempotencyKey job)
+    addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
-  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (name decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
+  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
-      addAttribute traceSpan "agent.name" (name decl)
+      addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
-      runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
+      case behavior decl of
+        Flow {} -> runBehaviorStep deps sid decl job
+        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
   case behaviorE of
     Left err -> do
       _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
@@ -173,7 +188,7 @@ runResolvedAgent deps job decl = do
       approvedSinks <- approveSinks deps sid job decl output
       sinkResults <-
         withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
-          addAttribute traceSpan "agent.name" (name decl)
+          addAttribute traceSpan "agent.name" (agentDeclName decl)
           addAttribute traceSpan "sink.count" (length approvedSinks)
           enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult job) sinkResults)
@@ -247,9 +262,9 @@ openSession deps job decl = liftIO do
     Session.start
       StartSessionData
         { sessionId = sid,
-          agentId = name decl,
+          agentId = agentDeclName decl,
           focus = focusTxt,
-          scope = agentScope (name decl),
+          scope = agentScope (agentDeclName decl),
           subjectRef = Just (idText sid),
           previousSessionId = Nothing,
           parentSessionId = parsedParent,
@@ -268,9 +283,63 @@ runBehaviorStep ::
   Eff es (Either Text Value)
 runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} =
   case currentBehavior of
+    Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
     ShikumiProgram {task}
       | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor sid job
     _ -> liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv deps) decl triggerPayload)
+
+runFlowBehavior ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentRunDeps ->
+  SessionId ->
+  AgentDecl ->
+  RunJob ->
+  Text ->
+  Eff es (Either Text Value)
+runFlowBehavior deps sid decl job flowName =
+  case Flow.lookupFlow runtime flowName of
+    Nothing -> pure (Left ("unknown flow " <> flowName))
+    Just Flow.FlowDef {Flow.run} -> do
+      output <-
+        FlowCapability.runActivity (activityFromJob job)
+          . FlowCapability.runMemory memoryEnv
+          . FlowCapability.runSink sinkEnv
+          $ run (triggerPayload job)
+      pure (Right output)
+  where
+    runtime =
+      Flow.FlowRuntime
+        { Flow.approval = approval deps sid,
+          Flow.acknowledgementDeadline = fromMaybe (secondsToNominalDiffTime 900) (deadline deps)
+        }
+    memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
+    sinkEnv =
+      FlowCapability.SinkEnv
+        { FlowCapability.agent = agentName job,
+          FlowCapability.runId = idText sid,
+          FlowCapability.occurredAt = Just (runJobOccurredAt job),
+          FlowCapability.danwaTarget = Nothing
+        }
+
+activityFromJob :: RunJob -> Activity.ActivityEnvelope
+activityFromJob job@RunJob {triggerPayload} =
+  case Aeson.fromJSON triggerPayload of
+    Aeson.Success activity -> activity
+    Aeson.Error _ -> syntheticActivityFromJob job
+
+syntheticActivityFromJob :: RunJob -> Activity.ActivityEnvelope
+syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempotencyKey} =
+  Activity.ActivityEnvelope
+    { Activity.activityId = idempotencyKey,
+      Activity.occurredAt = Text.pack (iso8601Show occurredAt),
+      Activity.source = "shinzui/shikigami",
+      Activity.actor = Activity.Actor {Activity.kind = "service", Activity.id = agentName, Activity.session = Nothing},
+      Activity.subject = Activity.Subject {Activity.subjectType = "run", Activity.subjectId = idempotencyKey},
+      Activity.verb = "run.triggered",
+      Activity.payload = triggerPayload,
+      Activity.contextRefs = [],
+      Activity.idempotencyKey = idempotencyKey
+    }
 
 runResearchSupervisor ::
   (Workflow :> es, Store :> es, IOE :> es) =>
@@ -521,9 +590,9 @@ recordLearning deps decl sid output = liftIO do
     Memory.record
       RecordMemoryData
         { memoryId = mid,
-          agentId = name decl,
+          agentId = agentDeclName decl,
           sessionId = Just sid,
-          scope = agentScope (name decl),
+          scope = agentScope (agentDeclName decl),
           memoryType = MemoryPattern,
           content = renderLearning output,
           priority = 100,

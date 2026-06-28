@@ -11,7 +11,7 @@ the activity stream, or when addressed by a public integration event. There is n
 deploy: an agent is a declaration.
 
 ```text
-behavior  = what the agent does     (a deterministic rule, a typed shikumi program, or a Skill)
+behavior  = what the agent does     (a deterministic rule, a typed shikumi program, a Skill, or a Flow)
 trigger   = when it does it         (a schedule, an activity.v1 stream pattern, or a public addressed event)
 sinks     = what it produces        (a kawa digest, a kizashi signal, a rei action, a danwa conversation)
 identity  = under whose authority   (each sink is gated by a permission grant)
@@ -53,7 +53,8 @@ agent declaration in order:
 | **[Getting Started](./getting-started.md)** | Prerequisites, building, the database, your first validate + run |
 | **[Writing Agents](./writing-agents.md)** | The Dhall schema: `name`, `description`, and how the four parts fit together |
 | **[Triggers](./triggers.md)** | The three trigger classes — Schedule, Stream, Event — and the feedback guard |
-| **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill |
+| **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill, Flow |
+| **[Flows](./flows.md)** | Durable lifecycle-backed behaviors that can park, resume, and render diagrams |
 | **[Skills](./skills.md)** | Authoring a `SKILL.md` skill behavior |
 | **[Sinks](./sinks.md)** | The producer sink set and the permission gate |
 | **[Memory & Sessions](./memory.md)** | How an agent recalls prior learnings and records new ones across runs |
@@ -69,7 +70,7 @@ Agent declarations (agents/*.dhall, schema/Agent.dhall)
   ▼
 Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (public integration event)
   ▼
-Behavior runs  ──  Deterministic rule │ shikumi program (handan) │ Skill (baikai)
+Behavior runs  ──  Deterministic rule │ shikumi program (handan) │ Skill (baikai) │ Flow (keiro)
   ▼
 Sinks dispatch ──  KawaDigest │ KizashiSignal │ ReiAction │ DanwaConversation   (each permission-gated)
   ▼
