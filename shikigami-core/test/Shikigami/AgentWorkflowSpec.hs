@@ -21,6 +21,7 @@ import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, 
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId, idText)
+import Kioku.Memory qualified as Memory
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.ReadModel (TurnRow (..))
@@ -111,6 +112,51 @@ tests =
             assertEqual "one row per completed lifecycle step" (Right expectedLifecycleSteps) stepKeys
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "recovered run enqueued one stable outbox row" (Right 1) (length <$> outboxRows),
+      testCase "resumes after a crash between record and complete without duplicating memory" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            counts <- newIORef Map.empty
+            shouldCrash <- newIORef True
+            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                hooks =
+                  defaultAgentRunHooks
+                    { beforeStepBody = \stepName -> do
+                        modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
+                        when (unStepName stepName == "complete") do
+                          crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
+                          when crashNow (ioError (userError "simulated crash before complete"))
+                    }
+                deps = testDeps appEnv behaviorEnv hooks
+
+            crashedRun <- try (runAgentRunWorkflow deps recordBeforeCompleteCrashJob)
+            case crashedRun of
+              Left (_ :: SomeException) -> pure ()
+              Right other -> assertEqual "first run should crash before complete" "exception" (show other)
+
+            afterCrash <- readIORef counts
+            assertEqual "record step completed before the crash" (Just 1) (Map.lookup "record" afterCrash)
+            assertEqual "complete step was reached once before the crash" (Just 1) (Map.lookup "complete" afterCrash)
+
+            resumed <- runAgentRunWorkflow deps recordBeforeCompleteCrashJob
+            sid <- case resumed of
+              Right (Completed (Right AgentRunResult {sessionId})) -> pure sessionId
+              other -> assertFailure ("resumed run should complete, got " <> show other)
+
+            finalCounts <- readIORef counts
+            assertEqual "record replayed without rerunning" (Just 1) (Map.lookup "record" finalCounts)
+            assertEqual "complete body ran once after recovery" (Just 2) (Map.lookup "complete" finalCounts)
+
+            memories <- runAppIO appEnv (Memory.getRowsBySession sid)
+            case memories of
+              Right (Right rows) -> assertEqual "exactly one memory row for the resumed session" 1 (length rows)
+              other -> assertFailure ("memory lookup should succeed, got " <> show other)
+
+            session <- runAppIO appEnv (Session.getById sid)
+            case session of
+              Right (Right (Just SessionRow {status})) -> assertEqual "session completed after resume" "completed" status
+              other -> assertFailure ("session lookup should return completed row, got " <> show other),
       testGroup
         "Conversation"
         [ testCase "parks and resumes a danwa conversation as one workflow session" do
@@ -585,6 +631,19 @@ crashJob =
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-workflow-crash-resume",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+recordBeforeCompleteCrashJob :: RunJob
+recordBeforeCompleteCrashJob =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "heartbeat:test-record-before-complete-crash",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing

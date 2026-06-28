@@ -85,14 +85,28 @@ Milestone A — timer-driven schedule firing:
 
 Milestone B — mid-run resume on the keiro workflow substrate (depends on plan 7):
 
-- [ ] Confirm plan 7 (`docs/plans/7-agent-runs-as-durable-keiro-workflows.md`) has landed and
+- [x] Confirm plan 7 (`docs/plans/7-agent-runs-as-durable-keiro-workflows.md`) has landed and
       `runAgentWorkflow` (or equivalent) exists; if not, block this milestone and note it here.
-- [ ] Re-platform `Shikigami.Agent.Run.runAgentWithMemory` so its five phases are named keiro
-      `step`s journaled under `wf:shikigami.agent-run-<sessionId>`.
-- [ ] Add a resume entry point that, on worker boot, finds unfinished agent-run workflows and
-      re-invokes `runWorkflow` so they continue from the journal.
-- [ ] Test: kill between `record-memory` and `complete-session`; restart; assert exactly one
-      memory row and a `Completed` session (no re-run of completed steps).
+      Completed 2026-06-28T04:31:26Z; verified current artifacts
+      `Shikigami.Agent.Workflow.agentRunWorkflow`, `agentRunWorkflowName`,
+      `agentRunRegistry`, and `runAgentRunWorkflow`.
+- [x] Re-platform `Shikigami.Agent.Run.runAgentWithMemory` so its five phases are named keiro
+      `step`s journaled under `wf:shikigami.agent-run-<sessionId>`. Completed by plan 7 and
+      verified 2026-06-28T04:31:26Z against the current code: the worker drives runs through
+      `Shikigami.Agent.Workflow.runAgentRunWorkflow`, with journaled steps `ingest-job`,
+      `lookup-agent`, `open-session`, `recall`, `run-behavior`, `dispatch-sinks`, `record`, and
+      `complete` under `agentRunWorkflowName = WorkflowName "shikigami.agent-run"` and
+      `WorkflowId = RunJob.idempotencyKey`.
+- [x] Add a resume entry point that, on worker boot, finds unfinished agent-run workflows and
+      re-invokes `runWorkflow` so they continue from the journal. Completed by plan 7 and
+      verified 2026-06-28T04:31:26Z: `Shikigami.Worker.runResumeWorker` runs
+      `runWorkflowResumeWorker` with `AgentWorkflow.agentRunRegistry deps`.
+- [x] Test: kill between `record-memory` and `complete-session`; restart; assert exactly one
+      memory row and a `Completed` session (no re-run of completed steps). Completed
+      2026-06-28T04:31:26Z; added
+      `AgentWorkflow.resumes after a crash between record and complete without duplicating memory`,
+      verified by the focused `-p "record and complete"` test pattern and by the full
+      `nix develop -c cabal test shikigami-core-test` run (34 tests).
 
 Milestone C — real OTel tracing through the run:
 
@@ -208,6 +222,12 @@ Compare the result against the original purpose.
   `nix develop -c cabal test shikigami-core-test --test-options='-p Scheduler'`, and
   `nix develop -c cabal test shikigami-core-test` passed; the manual heartbeat E2E proof created a new
   completed `kioku_sessions` row and re-armed the next schedule timer.
+
+- Milestone B outcome (2026-06-28): Mid-run resume is covered against the plan-10 failure point. Plan
+  7's workflow substrate is present and is the active worker path; plan 10 added the narrower acceptance
+  test that throws when the `complete` step is first reached, after `record` has already journaled. On
+  rerun, `record` is replayed without re-executing, `complete` finishes, the session row is
+  `completed`, and `Memory.getRowsBySession` returns exactly one row.
 
 
 ## Context and Orientation
