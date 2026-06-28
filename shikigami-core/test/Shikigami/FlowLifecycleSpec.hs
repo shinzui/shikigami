@@ -1,23 +1,27 @@
 module Shikigami.FlowLifecycleSpec (tests) where
 
 import Data.Aeson (Value (Bool, String), object, toJSON, (.=))
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (UTCTime (..), fromGregorian)
+import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflow, step)
-import Keiro.Workflow.Sleep (sleepNamed)
+import Keiro.Workflow.Awakeable (AwakeableId)
+import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
 import Kioku.Api.Types (MemoryRecord (..))
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
+import Kioku.Id (SessionId, genSessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..))
-import Shikigami.Flow (FlowDef (..), FlowEffects, LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, lookupFlow)
+import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, lookupFlow)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
@@ -55,10 +59,15 @@ tests =
         let LifecycleDiagram {mermaid, validationWarnings} = atRiskCustomerLifecycleDiagram
         assertEqual "registry diagram has no validation warnings" [] validationWarnings
         assertBool "registry diagram includes AwaitingAck" ("AwaitingAck" `Text.isInfixOf` mermaid),
-      testCase "empty flow registry lookup misses unknown flows" do
-        case lookupFlow "at-risk-customer" of
+      testCase "flow registry resolves at-risk-customer and misses unknown flows" do
+        session <- genSessionId
+        let runtime = FlowRuntime {approval = Approval.defaultApprovalEnv session, acknowledgementDeadline = secondsToNominalDiffTime 1}
+        case lookupFlow runtime "at-risk-customer" of
+          Just FlowDef {name = flowName} -> assertEqual "registered flow name" "at-risk-customer" flowName
+          Nothing -> assertFailure "expected at-risk-customer flow to be registered"
+        case lookupFlow runtime "unknown-flow" of
           Nothing -> pure ()
-          Just flow -> assertFailure ("expected empty registry lookup, got " <> show flow),
+          Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
       testCase "trivial flow completes through keiro runWorkflow" do
         outcome <- runFlowWorkflow completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
@@ -72,20 +81,68 @@ tests =
         outcome <- runFlowWorkflow memoryFlow (WorkflowId "flow-memory-spike")
         assertEqual "recalled memories include the remembered flow note" (Right (Completed (Bool True))) outcome,
       testCase "emitSignal enqueues an allowed sink outbox intent" do
-        (outcome, outboxCount) <- runFlowWorkflowWithAgent "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
+        (outcome, count) <- runFlowWorkflowWithAgent "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
           (Right (Completed (toJSON (SinkResult SKizashiSignal (Delivered "outbox:flow-sink-spike:emit-signal:0")))))
           outcome
-        assertEqual "allowed sink enqueues one outbox message" (Right 1) outboxCount,
+        assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do
-        (outcome, outboxCount) <- runFlowWorkflowWithAgent "intruder" sinkFlow (WorkflowId "flow-denied-sink-spike")
+        (outcome, count) <- runFlowWorkflowWithAgent "intruder" sinkFlow (WorkflowId "flow-denied-sink-spike")
         case outcome of
           Right (Completed encodedResult) -> case encodedResult of
             _ | encodedResult == toJSON (SinkResult SKizashiSignal (DeniedOutcome "agent 'intruder' has no sink grants")) -> pure ()
             other -> assertFailure ("expected denied sink result, got " <> show other)
           other -> assertFailure ("denied sink flow should complete, got " <> show other)
-        assertEqual "denied sink does not enqueue an outbox message" (Right 0) outboxCount,
+        assertEqual "denied sink does not enqueue an outbox message" (Right 0) count,
+      testCase "registered at-risk-customer flow parks then completes when acknowledged" do
+        withAtRiskFlow \appEnv aidRef flow -> do
+          let workflowId = WorkflowId "flow-at-risk-ack"
+          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
+
+          pending <- runAppIO appEnv countPendingAwakeables
+          assertEqual "one acknowledgement awakeable is pending" (Right 1) pending
+          beforeOutbox <- outboxCount appEnv
+          assertEqual "alert outbox row is enqueued before acknowledgement" (Right 1) beforeOutbox
+
+          aid <- readCapturedAwakeable aidRef
+          resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
+          assertBool "approval signal resolves the awakeable" resolved
+
+          resumed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "acknowledged flow completes" (Right (Completed acknowledgedOutput)) resumed
+          afterOutbox <- outboxCount appEnv
+          assertEqual "acknowledged branch does not enqueue escalation" (Right 1) afterOutbox,
+      testCase "registered at-risk-customer flow escalates after acknowledgement timeout" do
+        withAtRiskFlow \appEnv _aidRef flow -> do
+          let workflowId = WorkflowId "flow-at-risk-timeout"
+          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "high-risk flow parks for acknowledgement deadline" (Right Suspended) parked
+
+          fireDueApprovalTimer appEnv
+          resumed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "timed-out flow completes escalated" (Right (Completed escalatedOutput)) resumed
+          afterOutbox <- outboxCount appEnv
+          assertEqual "timeout branch enqueues alert plus escalation" (Right 2) afterOutbox,
+      testCase "registered at-risk-customer flow replays parked alert without duplicating outbox" do
+        withAtRiskFlow \appEnv aidRef flow -> do
+          let workflowId = WorkflowId "flow-at-risk-crash-replay"
+          first <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "first run parks" (Right Suspended) first
+          firstOutbox <- outboxCount appEnv
+          assertEqual "first run enqueues alert once" (Right 1) firstOutbox
+
+          replayed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "replayed run remains parked" (Right Suspended) replayed
+          replayedOutbox <- outboxCount appEnv
+          assertEqual "replay does not enqueue another alert" (Right 1) replayedOutbox
+
+          aid <- readCapturedAwakeable aidRef
+          resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
+          assertBool "approval signal resolves after replay" resolved
+          completed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "replayed flow can still complete" (Right (Completed acknowledgedOutput)) completed,
       testCase "acknowledgement wrapper maps approval decisions" do
         assertEqual "approved maps to acknowledged" (Acknowledged (toJSON True)) (ackFromDecision (Approval.Approved (toJSON True)))
         assertEqual "rejected maps to declined" (Declined "no") (ackFromDecision (Approval.Rejected "no"))
@@ -160,28 +217,90 @@ runFlowWorkflowWithAgent ::
   FlowDef ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value), Either StoreError Int)
-runFlowWorkflowWithAgent flowAgent FlowDef {run} workflowId =
+runFlowWorkflowWithAgent flowAgent flow workflowId =
   withShikigamiMigratedDatabase \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
       let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
-          memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl flowAgent, sessionId = Nothing}
-          sinkEnv = SinkEnv {agent = flowAgent, runId = "flow-test-run", occurredAt = Just flowOccurredAt, danwaTarget = Nothing}
-          body =
-            runActivity sampleActivity
-              . runMemory memoryEnv
-              . runSink sinkEnv
-              $ run (object [])
-      outcome <-
-        runEff
-          . runErrorNoCallStack
-          . runStorePool kirokuStore
-          $ runWorkflow
-            (WorkflowName "shikigami.flow.spike")
-            workflowId
-            body
-      outboxCount <- fmap length <$> runAppIO appEnv (listOutbox "shinzui/shikigami")
-      pure (outcome, outboxCount)
+      outcome <- runFlowBody appEnv flowAgent flow workflowId (object [])
+      count <- outboxCount appEnv
+      pure (outcome, count)
+
+runFlowInAppEnv ::
+  AppEnv ->
+  Text ->
+  FlowDef ->
+  WorkflowId ->
+  Value ->
+  IO (Either StoreError (WorkflowOutcome Value))
+runFlowInAppEnv appEnv flowAgent flow workflowId input =
+  runFlowBody appEnv flowAgent flow workflowId input
+
+runFlowBody ::
+  AppEnv ->
+  Text ->
+  FlowDef ->
+  WorkflowId ->
+  Value ->
+  IO (Either StoreError (WorkflowOutcome Value))
+runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
+  runEff
+    . runErrorNoCallStack
+    . runStorePool (store appEnv)
+    $ runWorkflow
+      (WorkflowName "shikigami.flow.spike")
+      workflowId
+      body
+  where
+    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl flowAgent, sessionId = Nothing}
+    sinkEnv = SinkEnv {agent = flowAgent, runId = "flow-test-run", occurredAt = Just flowOccurredAt, danwaTarget = Nothing}
+    body =
+      runActivity sampleActivity
+        . runMemory memoryEnv
+        . runSink sinkEnv
+        $ run input
+
+withAtRiskFlow :: (AppEnv -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
+withAtRiskFlow action =
+  withShikigamiMigratedDatabase \connStr ->
+    withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+      tracer <- noopTracer
+      session <- genSessionId
+      aidRef <- newIORef Nothing
+      let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+          runtime =
+            FlowRuntime
+              { approval = approvalEnv aidRef session,
+                acknowledgementDeadline = secondsToNominalDiffTime 1
+              }
+      case lookupFlow runtime "at-risk-customer" of
+        Just flow -> action appEnv aidRef flow
+        Nothing -> assertFailure "at-risk-customer flow should be registered"
+
+approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> Approval.ApprovalEnv
+approvalEnv aidRef currentSession =
+  Approval.ApprovalEnv
+    { currentSession,
+      requiresApproval = \_ _ _ -> pure Approval.ApprovalNotRequired,
+      recordPark = \_ aid _ -> writeIORef aidRef (Just aid),
+      postAsk = \_ _ _ -> pure ()
+    }
+
+readCapturedAwakeable :: IORef (Maybe AwakeableId) -> IO AwakeableId
+readCapturedAwakeable aidRef =
+  readIORef aidRef >>= \case
+    Just aid -> pure aid
+    Nothing -> assertFailure "expected acknowledgement awakeable to be captured"
+
+fireDueApprovalTimer :: AppEnv -> IO ()
+fireDueApprovalTimer appEnv = do
+  now <- getCurrentTime
+  fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) Approval.approvalTimeoutFireAction)
+  assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
+
+outboxCount :: AppEnv -> IO (Either StoreError Int)
+outboxCount appEnv =
+  fmap length <$> runAppIO appEnv (listOutbox "shinzui/shikigami")
 
 sampleActivity :: ActivityEnvelope
 sampleActivity =
@@ -190,7 +309,7 @@ sampleActivity =
       occurredAt = "2026-06-27T00:00:00Z",
       source = "shinzui/shikigami",
       actor = Actor {kind = "service", id = "flow-test", session = Nothing},
-      subject = Subject {subjectType = "customer", subjectId = "cust_1"},
+      subject = Subject {subjectType = "ticket", subjectId = "ticket_1"},
       verb = "customer.risk_detected",
       payload = object [],
       contextRefs = [],
@@ -226,3 +345,37 @@ flowAgentDecl flowAgent =
 
 flowOccurredAt :: UTCTime
 flowOccurredAt = UTCTime (fromGregorian 2026 6 27) 0
+
+highRiskPayload :: Value
+highRiskPayload =
+  object
+    [ "text" .= ("Customer says they will cancel after repeated outages." :: Text),
+      "enrichment"
+        .= object
+          [ "sentiment" .= ("negative" :: Text),
+            "risks" .= ["churn risk" :: Text]
+          ]
+    ]
+
+expectedVerdict :: Value
+expectedVerdict =
+  object
+    [ "level" .= ("high" :: Text),
+      "rationale" .= ("customer relationship at risk" :: Text),
+      "ticketId" .= ("ticket_1" :: Text)
+    ]
+
+acknowledgedOutput :: Value
+acknowledgedOutput =
+  object
+    [ "status" .= ("acknowledged" :: Text),
+      "verdict" .= expectedVerdict,
+      "acknowledgement" .= object ["by" .= ("relationship-owner" :: Text)]
+    ]
+
+escalatedOutput :: Value
+escalatedOutput =
+  object
+    [ "status" .= ("escalated" :: Text),
+      "verdict" .= expectedVerdict
+    ]

@@ -126,9 +126,12 @@ This section must always reflect the actual current state of the work.
       `FlowEffects` now includes the three domain effects. Verified with
       `nix develop -c cabal build shikigami-core` and `nix develop -c cabal test shikigami-core` (all 45
       tests passed).
-- [ ] **M4 — the at-risk-customer vertical slice.** Compose the combinators into `atRiskCustomerFlow`,
-      register it, and prove both branches (acknowledged-in-time and timed-out-then-escalated) plus
-      crash-resume against a live Postgres.
+- [x] **M4 — the at-risk-customer vertical slice.** Completed 2026-06-28. Added
+      `Shikigami.Flow.AtRiskCustomer`, registered the flow through a runtime-parameterized
+      `flowRegistry`, and proved high-risk classify -> alert -> park -> acknowledged, high-risk classify
+      -> alert -> timeout -> escalation, and replay-while-parked without duplicate alert outbox rows
+      against migrated Postgres. Verified with `nix develop -c cabal build shikigami-core` and
+      `nix develop -c cabal test shikigami-core --test-options='-j1'` (all 48 tests passed).
 - [ ] **M5 — wiring and docs.** Add the `Flow { name : Text }` arm to `schema/Agent.dhall` and
       `Shikigami.Api.Agent`; route it through the loader and worker; add a `render-lifecycle` CLI
       subcommand; write `docs/user/flows.md`.
@@ -169,6 +172,13 @@ implementation. Provide concise evidence.
 ld: library not found for -lrdkafka
 clang: error: linker command failed with exit code 1
 ```
+
+- **The full database-heavy test suite can exhaust ephemeral Postgres startup when run in parallel.**
+  After M4, a parallel `nix develop -c cabal test shikigami-core` run failed one existing
+  `FlowLifecycle` test with `Failed to start ephemeral PostgreSQL: TimeoutError ... durationSeconds =
+  60`; the new M4 at-risk tests in that same run passed. Re-running the suite serially with
+  `--test-options='-j1'` passed all 48 tests. The code path was not changed for this; the discovery is
+  about local validation concurrency.
 
 
 ## Decision Log
@@ -268,6 +278,14 @@ Record every decision made while working on the plan.
   qualified imports and does not justify changing the public flow capability names.
   Date: 2026-06-28
 
+- Decision: `flowRegistry` and `lookupFlow` are parameterized by `FlowRuntime`, which currently carries
+  the per-run `ApprovalEnv` and acknowledgement deadline.
+  Rationale: The real at-risk flow cannot be a closed static function because `awaitAcknowledgement`
+  must record and post through the current run's approval hooks and session. A small runtime parameter
+  keeps registered `FlowDef`s ordinary after lookup while giving M5 a clear place to pass plan 7's
+  run-specific approval environment.
+  Date: 2026-06-28
+
 
 ## Outcomes & Retrospective
 
@@ -299,6 +317,13 @@ Compare the result against the original purpose.
   that activity access works, memory can be remembered and recalled, allowed sink intents enqueue one
   outbox row, and denied sink intents complete without enqueueing. Remaining work starts at M4:
   composing these primitives into the real at-risk-customer vertical slice.
+- 2026-06-28 — M4 is complete. `Shikigami.Flow.AtRiskCustomer` composes the capability layer into a
+  registered durable flow: it reads the triggering `ActivityEnvelope`, recalls prior risk context,
+  journals a `classify` step, emits a Kizashi alert for high-risk tickets, waits at `await-ack`, and then
+  either records an acknowledgement or emits an escalation on timeout. Tests cover the acknowledged
+  branch, timeout/escalation branch, and replay while parked; replay reuses the journaled classify/alert
+  path and leaves the alert outbox count at one. Remaining work starts at M5: making `Flow { name }`
+  available in Dhall/API/worker wiring and exposing lifecycle rendering from the CLI/docs.
 
 
 ## Context and Orientation
@@ -332,7 +357,9 @@ the program; it *names* one. `Shikigami.Program.Registry` (file
 `shikigami-core/src/Shikigami/Program/Registry.hs`) holds `programRegistry :: [Task]` and
 `lookupTask :: Text -> Maybe Task`; the runner finds the named `Task` and runs it through a `handan`
 `Runtime`. We will add a fourth arm, `Flow { name :: Text }`, and a parallel
-`Shikigami.Flow.Registry` with `flowRegistry :: [FlowDef]` and `lookupFlow :: Text -> Maybe FlowDef`.
+`Shikigami.Flow.Registry` with `flowRegistry :: FlowRuntime -> [FlowDef]` and
+`lookupFlow :: FlowRuntime -> Text -> Maybe FlowDef`, where `FlowRuntime` carries the per-run hooks
+that compiled flows need (currently approval environment and acknowledgement deadline).
 
 **The behavior seam today is synchronous IO.**
 `Shikigami.Behavior.Run.runBehavior :: BehaviorEnv -> AgentDecl -> Value -> IO (Either RunError Value)`
@@ -455,13 +482,18 @@ type FlowEffects es = (Workflow :> es, Store :> es, IOE :> es)
 -- | A registered complex behavior. 'flowLifecycle' is the keiki transducer (for the
 -- diagram + validation); 'flowRun' is the durable behavior body, named from Dhall.
 data FlowDef = FlowDef
-  { flowName      :: !Text
-  , flowLifecycle :: !LifecycleDiagram          -- a wrapper carrying the transducer's Mermaid + validation
-  , flowRun       :: forall es. FlowEffects es => Value -> Eff es Value
+  { name      :: !Text
+  , lifecycle :: !LifecycleDiagram          -- a wrapper carrying the transducer's Mermaid + validation
+  , run       :: forall es. FlowEffects es => Value -> Eff es Value
   }
 
-flowRegistry :: [FlowDef]
-lookupFlow   :: Text -> Maybe FlowDef
+data FlowRuntime = FlowRuntime
+  { approval :: !ApprovalEnv
+  , acknowledgementDeadline :: !NominalDiffTime
+  }
+
+flowRegistry :: FlowRuntime -> [FlowDef]
+lookupFlow   :: FlowRuntime -> Text -> Maybe FlowDef
 ```
 
 (`forall es.` in the field needs `RankNTypes`, already common in this codebase; `LifecycleDiagram`
@@ -597,7 +629,7 @@ Work:
   deriving). Update `agents/detectors/at-risk-customer.dhall` (or add a sibling
   `agents/detectors/at-risk-customer-flow.dhall`) to use the new arm.
 - In the worker/agent-run dispatch (`Shikigami.Agent.Run` / the worker command), route `Flow { name }`
-  to plan 7's workflow runner using `lookupFlow name`'s `flowRun`, instead of the synchronous
+  to plan 7's workflow runner using `lookupFlow runtime name`'s `run`, instead of the synchronous
   `runBehavior` path used by the other three arms. The other arms are unchanged.
 - Add a `shikigami render-lifecycle <agent.dhall>` CLI subcommand (in `shikigami-cli`) that loads the
   agent, looks up its flow, and prints `flowLifecycle`'s Mermaid `Text` to stdout; optionally
@@ -732,6 +764,27 @@ All 45 tests passed (3.51s)
 Test suite shikigami-core-test: PASS
 ```
 
+M4 validation on 2026-06-28:
+
+```bash
+nix develop -c fourmolu -i shikigami-core/src/Shikigami/Flow.hs shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs shikigami-core/test/Shikigami/FlowLifecycleSpec.hs
+nix develop -c cabal build shikigami-core
+nix develop -c cabal test shikigami-core --test-options='-j1'
+```
+
+The relevant added test output was:
+
+```text
+FlowLifecycle
+  flow registry resolves at-risk-customer and misses unknown flows:                 OK
+  registered at-risk-customer flow parks then completes when acknowledged:          OK
+  registered at-risk-customer flow escalates after acknowledgement timeout:         OK
+  registered at-risk-customer flow replays parked alert without duplicating outbox: OK
+
+All 48 tests passed (13.10s)
+Test suite shikigami-core-test: PASS
+```
+
 M5 — wiring and diagram CLI:
 
 ```bash
@@ -839,8 +892,9 @@ Types/functions that must exist at the end of each milestone:
 
 - End of M1: `Shikigami.Flow.Lifecycle.AtRiskCustomer.atRiskCustomerLifecycle :: SymTransducer ...` and
   `atRiskCustomerMermaid :: Text`; a passing well-formedness test.
-- End of M2: `Shikigami.Flow.FlowEffects` (constraint synonym), `FlowDef`, `flowRegistry :: [FlowDef]`,
-  `lookupFlow :: Text -> Maybe FlowDef`; a passing durable-run spike (`Completed`/`Suspended`).
+- End of M2: `Shikigami.Flow.FlowEffects` (constraint synonym), `FlowDef`,
+  `flowRegistry :: FlowRuntime -> [FlowDef]`, `lookupFlow :: FlowRuntime -> Text -> Maybe FlowDef`; a
+  passing durable-run spike (`Completed`/`Suspended`).
 - End of M3: effects `Memory`, `Sink`, `Activity` with interpreters reusing the existing kioku/sink/IO
   code; combinators `recall`, `remember`, `emitSignal`, `currentActivity`, and
   `awaitAcknowledgement :: (Workflow :> es, Store :> es, IOE :> es) => ApprovalEnv -> StepName -> ApprovalRequest -> NominalDiffTime -> Eff es Ack`

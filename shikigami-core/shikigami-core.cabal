@@ -39,6 +39,7 @@ library
     Shikigami.Core
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
+    Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Integration.Danwa
