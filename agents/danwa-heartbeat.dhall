@@ -8,6 +8,6 @@ in  A.Agent::{
           , grounding = None Text
           , enabledBy = None Text
           }
-    , trigger = A.Trigger.Event { eventType = "danwa.message-addressed" }
+    , trigger = A.Trigger.Event { eventType = "danwa.message-addressed-to-agent" }
     , sinks = [ A.Sink.DanwaConversation { topic = "support" } ]
     }

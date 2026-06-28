@@ -42,9 +42,9 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig)
-import Shikigami.Trigger.Danwa (AddressedMessage)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import System.IO (hPutStrLn, stderr)
 

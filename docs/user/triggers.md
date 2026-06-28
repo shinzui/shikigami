@@ -15,7 +15,7 @@ let Trigger =
 | --- | --- | --- | --- |
 | **Schedule** | `Trigger.Schedule` | the clock matches a cron expression | a due-time job on the worker queue |
 | **Stream** | `Trigger.Stream` | a matching `activity.v1` envelope is published | the Kafka stream consumer |
-| **Event** | `Trigger.Event` | something addresses the agent directly | the agent inbox / run queue |
+| **Event** | `Trigger.Event` | a public integration event or direct command addresses the agent | the integration-event consumer or run queue |
 
 ## Schedule — the clock
 
@@ -72,7 +72,7 @@ the stream does not re-trigger detectors that watch human activity.
 To intentionally match agent-produced activities (a "meta-detector" that watches other
 agents), pass `--include-agent-actors` to the stream consumer:
 
-```console
+```bash
 $ cabal run shikigami -- consume-stream --agents agents --include-agent-actors
 ```
 
@@ -85,20 +85,38 @@ second agent.
 trigger = A.Trigger.Event { eventType = "ticket.escalated" }
 ```
 
-An Event-triggered agent runs when it is **addressed directly** — bypassing the activity
-stream. This is the path for a command that already knows its recipient (a `mori` automation
-action, a `kanmon` channel-inbound event, a manual run). The invocation lands as a run job on
-the worker's `shikigami_run_jobs` queue.
+An Event-triggered agent runs when it is **addressed directly**. This is the path for public
+integration events and commands that already know their recipient. Event triggers bypass
+`activity.v1`; they match the integration event's `eventType` or are enqueued directly as a
+run job.
+
+Consume a public integration-event topic with `consume-events`:
+
+```bash
+$ cabal run shikigami -- consume-events \
+    --agents agents \
+    --broker 127.0.0.1:9092 \
+    --topic danwa.message-addressed.v1
+```
+
+For Danwa conversations, declare:
+
+```dhall
+trigger = A.Trigger.Event { eventType = "danwa.message-addressed-to-agent" }
+```
+
+Danwa publishes that public event type to `danwa.message-addressed.v1` when integration
+events are enabled. Shikigami consumes the topic and uses Danwa's HTTP API for replies. It
+must not read Danwa's database, private event store, read models, or outbox tables.
 
 Enqueue an addressed run by hand with `enqueue-run`:
 
-```console
+```bash
 $ cabal run shikigami -- enqueue-run my-agent --payload '{"ticketId":"T-42"}'
 ```
 
-The worker drains the queue and runs the named agent with that payload. The triggering event
-is still recorded as memory in parallel (the kawa ingest of the same event), so "every action
-is remembered" even though the trigger itself did not arrive through the memory ledger.
+The worker drains the queue and runs the named agent with that payload. Manual enqueueing is
+useful for local smoke tests and command-style integrations that do not use a broker.
 
 ## Choosing a trigger
 

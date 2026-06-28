@@ -25,7 +25,6 @@ library
     Shikigami.Cli
     Shikigami.Cli.Commands.AgentRun
     Shikigami.Cli.Commands.ConsumeStream
-    Shikigami.Cli.Commands.DanwaBridge
     Shikigami.Cli.Commands.DanwaSpike
     Shikigami.Cli.Commands.EnqueueRun
     Shikigami.Cli.Commands.PublishFixture

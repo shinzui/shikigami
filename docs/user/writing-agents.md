@@ -56,7 +56,7 @@ behavior  ×  trigger  ×  sinks
 
 - A **deterministic rule** on a **stream** trigger raising a **signal** → a cheap detector.
 - A **shikumi program** on a **schedule** writing a **kawa digest** → a recurring summarizer.
-- A **skill** on an **event** trigger opening a **danwa conversation** → an addressed responder.
+- A **skill** on a public **event** trigger opening a **danwa conversation** → an addressed responder.
 
 You mix and match freely; the runtime dispatches on each part independently.
 
@@ -110,7 +110,7 @@ This says: *when a `ticket.received` activity about a `ticket` subject arrives o
 
 Every manifest should round-trip through `validate` before you wire it into the worker:
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/triage-note.dhall
 ```
 

@@ -92,7 +92,7 @@ model key — exactly as `noop-summary` does. See **[Skills](./skills.md)** for 
 
 All three arms are provable with deterministic stubs:
 
-```console
+```bash
 $ cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
 {"summary":"..."}
 ```

@@ -25,6 +25,7 @@ publish-fixture ──▶ activity.v1 ──▶ consume-stream (matches agents) 
 | `stub-kawa` | a kawa ingest doorway stub; with `--republish-topic` it re-publishes accepted digests onto the stream |
 | `publish-fixture` | publishes one Activity Envelope (JSON) onto `activity.v1` with the required `keiro-*` headers |
 | `consume-stream` | consumes `activity.v1`, matches declared Stream agents, enqueues run jobs |
+| `consume-events` | consumes a public integration-event topic, matches declared Event agents, enqueues run jobs |
 | `enqueue-run` | enqueues an addressed run job for a named agent (the Event path) |
 
 ## Prerequisites
@@ -43,7 +44,7 @@ publish-fixture ──▶ activity.v1 ──▶ consume-stream (matches agents) 
 
 ### 1. Start the kawa stub (republishing)
 
-```console
+```bash
 $ cabal run shikigami -- stub-kawa --port 8088 \
     --republish-topic activity.v1 --broker 127.0.0.1:9092
 ```
@@ -55,7 +56,7 @@ each accepted `KawaDigest` back onto the stream (exactly what real kawa's outbox
 
 ### 2. Start the worker
 
-```console
+```bash
 $ cabal run shikigami -- worker --agents agents \
     --kawa-url http://localhost:8088 --kizashi-url http://localhost:8089
 [worker] loaded N agents
@@ -69,7 +70,7 @@ and kizashi URLs, and records a kioku session.
 
 Publish a fixture envelope and let the consumer match it:
 
-```console
+```bash
 $ cabal run shikigami -- consume-stream --agents agents --broker 127.0.0.1:9092 &
 $ cabal run shikigami -- publish-fixture fixtures/envelope.json --broker 127.0.0.1:9092
 ```
@@ -90,7 +91,7 @@ The republished digest carries `actor.kind = "agent"`. By default `consume-strea
 agent-produced activities**, so a digest only triggers agents that explicitly opt in. To let
 meta-detectors match agent output:
 
-```console
+```bash
 $ cabal run shikigami -- consume-stream --agents agents --include-agent-actors
 ```
 
@@ -101,13 +102,42 @@ flag fires nothing — the guard in action.
 
 You don't need the stream to exercise the worker. Enqueue an addressed run directly:
 
-```console
+```bash
 $ cabal run shikigami -- enqueue-run heartbeat --payload '{}'
 # the running worker drains the job and runs `heartbeat`
 ```
 
 This is the **Event** trigger class — the path a `mori` automation action or a `kanmon`
 channel-inbound event uses to address an agent directly.
+
+## Danwa addressed conversations (public topic)
+
+Danwa can publish public integration events for messages addressed to an agent. When Danwa is
+configured with integration publishing enabled, it emits
+`danwa.message-addressed-to-agent` events on `danwa.message-addressed.v1`.
+
+Start the event consumer:
+
+```bash
+$ cabal run shikigami -- consume-events \
+    --agents agents \
+    --broker 127.0.0.1:9092 \
+    --topic danwa.message-addressed.v1 \
+    --group shikigami-danwa
+```
+
+Then start the worker with Danwa HTTP settings:
+
+```bash
+$ cabal run shikigami -- worker --agents agents \
+    --danwa-url http://localhost:8080 \
+    --danwa-agent part_shikigami
+```
+
+The sample `agents/danwa-heartbeat.dhall` listens for
+`danwa.message-addressed-to-agent` and replies through `DanwaConversation`. Shikigami only
+uses Danwa's public integration topic and HTTP API in this path. It never reads Danwa's
+database, event store, read models, or outbox tables.
 
 ## Delegation
 
@@ -116,13 +146,13 @@ agent starts two named specialists, parks durably while they run, and resumes wi
 
 Start the worker against the proof manifests:
 
-```console
+```bash
 $ cabal run shikigami -- worker --agents agents/proof
 ```
 
 In another shell, enqueue the supervisor:
 
-```console
+```bash
 $ cabal run shikigami -- enqueue-run research-supervisor \
     --payload '{"topic":"durable workflows"}'
 ```

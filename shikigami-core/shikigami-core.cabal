@@ -37,6 +37,7 @@ library
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
     Shikigami.Core
+    Shikigami.Integration.Danwa
     Shikigami.Memory.Scope
     Shikigami.Program.Registry
     Shikigami.Sink
@@ -52,7 +53,6 @@ library
     Shikigami.Sink.Types
     Shikigami.Sink.Wire
     Shikigami.Trigger.Consumer
-    Shikigami.Trigger.Danwa
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Publish
     Shikigami.Trigger.Schedule

@@ -8,17 +8,14 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Hasql.Pool qualified as Pool
-import Hasql.Session qualified as Session
-import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..), Trigger (..))
+import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -33,7 +30,6 @@ import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
-import Shikigami.Trigger.Danwa (DanwaBridgeConfig (..), DanwaBridgeResult (..), runDanwaBridgeOnce)
 import Shikigami.Trigger.Schedule (isDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -45,7 +41,7 @@ main =
     ( testGroup
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
-          testGroup "Trigger" [scheduleTests, streamTests, danwaBridgeTests],
+          testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           DelegateContextSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
@@ -112,122 +108,36 @@ streamTests =
         assertBool "agent actor included with opt-in" (matchesStreamWith IncludeAgentActors matchAll (envelopeWith "agent" "intention.declared" "shinzui/rei" "intention"))
     ]
 
-danwaBridgeTests :: TestTree
-danwaBridgeTests =
+danwaIntegrationTests :: TestTree
+danwaIntegrationTests =
   testGroup
-    "DanwaBridge"
-    [ testCase "mention detection enqueues once for a repeated observation" do
-        withShikigamiMigratedDatabase \connStr ->
-          withStore (defaultConnectionSettings connStr) \store -> do
-            setup <- Pool.use (pool store) (Session.script danwaBridgeFixtureSql)
-            assertBool "fixture setup succeeds" (either (const False) (const True) setup)
-            let cfg =
-                  DanwaBridgeConfig
-                    { agentMap = [("part_agent_test", "heartbeat")],
-                      pollIntervalMicros = 1_000_000,
-                      deliverAddressed = const (pure False)
-                    }
-            first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
-            second <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
-            assertEqual "first bridge pass enqueues one addressed run" 1 (length first)
-            assertEqual "second bridge pass is idempotent" 0 (length second),
-      testCase "addressed message is delivered to parked workflow before enqueueing" do
-        withShikigamiMigratedDatabase \connStr ->
-          withStore (defaultConnectionSettings connStr) \store -> do
-            setup <- Pool.use (pool store) (Session.script danwaBridgeFixtureSql)
-            assertBool "fixture setup succeeds" (either (const False) (const True) setup)
-            let cfg =
-                  DanwaBridgeConfig
-                    { agentMap = [("part_agent_test", "heartbeat")],
-                      pollIntervalMicros = 1_000_000,
-                      deliverAddressed = const (pure True)
-                    }
-            first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
-            case first of
-              [(_, DeliveredToConversation)] -> pure ()
-              _ -> assertBool "expected delivery to parked workflow" False,
-      testCase "mention detection falls back to danwa event store when read models are unavailable" do
-        withShikigamiMigratedDatabase \connStr ->
-          withStore (defaultConnectionSettings connStr) \store -> do
-            setup <- Pool.use (pool store) (Session.script danwaBridgeEventFixtureSql)
-            assertBool "fixture setup succeeds" (either (const False) (const True) setup)
-            let cfg =
-                  DanwaBridgeConfig
-                    { agentMap = [("part_agent_event", "heartbeat")],
-                      pollIntervalMicros = 1_000_000,
-                      deliverAddressed = const (pure False)
-                    }
-            first <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
-            second <- runDanwaBridgeOnce cfg (pool store) (pool store) [bridgeAgentDecl]
-            assertEqual "event-store fallback enqueues one addressed run" 1 (length first)
-            assertEqual "event-store fallback remains idempotent" 0 (length second)
+    "DanwaIntegration"
+    [ testCase "decodes the public addressed-message payload" do
+        let payload =
+              """
+              {"conversationId":"conv_public_1","messageId":"msg_public_1","parentMessageId":null,
+               "author":"part_human_test","content":"please help","agentParticipantId":"part_agent_test",
+               "embellishmentId":"emb_public_1","mentionedBy":"part_human_test",
+               "occurredAt":"2026-06-27T00:00:00Z"}
+              """
+        case eitherDecode @AddressedMessage payload of
+          Left err -> assertBool ("decode failed: " <> err) False
+          Right msg ->
+            msg
+              @?= AddressedMessage
+                { conversationId = "conv_public_1",
+                  messageId = "msg_public_1",
+                  parentMessageId = Nothing,
+                  author = "part_human_test",
+                  content = "please help",
+                  agentParticipantId = "part_agent_test",
+                  embellishmentId = "emb_public_1",
+                  mentionedBy = "part_human_test",
+                  occurredAt = UTCTime (fromGregorian 2026 6 27) 0
+                },
+      testCase "uses Danwa's public integration event type" $
+        addressedMessageEventType @?= "danwa.message-addressed-to-agent"
     ]
-
-danwaBridgeFixtureSql :: Text
-danwaBridgeFixtureSql =
-  """
-  CREATE SCHEMA IF NOT EXISTS danwa;
-  CREATE TABLE IF NOT EXISTS danwa.danwa_messages (
-    message_id text PRIMARY KEY,
-    conversation_id text NOT NULL,
-    author text NOT NULL,
-    parent_message_id text NOT NULL DEFAULT '',
-    content text NOT NULL,
-    deleted boolean NOT NULL DEFAULT false,
-    last_event_position bigint NOT NULL DEFAULT 1,
-    posted_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
-  );
-  CREATE TABLE IF NOT EXISTS danwa.danwa_embellishments (
-    embellishment_id text PRIMARY KEY,
-    target_type text NOT NULL,
-    target_id text NOT NULL,
-    kind text NOT NULL,
-    added_by text NOT NULL,
-    payload jsonb NOT NULL,
-    removed boolean NOT NULL DEFAULT false,
-    removed_by text NOT NULL DEFAULT '',
-    last_event_position bigint NOT NULL DEFAULT 1,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
-  );
-  INSERT INTO danwa.danwa_messages
-    (message_id, conversation_id, author, content, posted_at, updated_at)
-  VALUES
-    ('msg_bridge_1', 'conv_bridge_1', 'part_human_test', 'please help', '2026-06-27T00:00:00Z', '2026-06-27T00:00:00Z')
-  ON CONFLICT (message_id) DO NOTHING;
-  INSERT INTO danwa.danwa_embellishments
-    (embellishment_id, target_type, target_id, kind, added_by, payload, created_at, updated_at)
-  VALUES
-    ('emb_bridge_1', 'message', 'msg_bridge_1', 'mention', 'part_human_test',
-     '{"mentionedParticipantId":"part_agent_test"}'::jsonb, '2026-06-27T00:00:00Z', '2026-06-27T00:00:00Z')
-  ON CONFLICT (embellishment_id) DO NOTHING;
-  """
-
-danwaBridgeEventFixtureSql :: Text
-danwaBridgeEventFixtureSql =
-  """
-  INSERT INTO kiroku.events
-    (event_id, event_type, causation_id, correlation_id, data, metadata, created_at)
-  VALUES
-    ('00000000-0000-7000-8000-000000000101'::uuid, 'MessagePosted', NULL, NULL,
-     '{"kind":"MessagePosted","messageId":"msg_bridge_event_1","conversationId":"conv_bridge_event_1","author":"part_human_event","parentMessageId":"","content":"please help from events","commandId":"cmd_bridge_event_1"}'::jsonb,
-     '{}'::jsonb, '2026-06-27T00:00:00Z'),
-    ('00000000-0000-7000-8000-000000000102'::uuid, 'EmbellishmentAdded', NULL, NULL,
-     '{"kind":"mention","embellishmentId":"emb_bridge_event_1","targetType":"message","targetId":"msg_bridge_event_1","addedBy":"part_human_event","payloadJson":"{\\"mentionedParticipantId\\":\\"part_agent_event\\"}","commandId":"cmd_bridge_event_2"}'::jsonb,
-     '{}'::jsonb, '2026-06-27T00:00:01Z')
-  ON CONFLICT (event_id) DO NOTHING;
-  """
-
-bridgeAgentDecl :: AgentDecl
-bridgeAgentDecl =
-  AgentDecl
-    { name = "heartbeat",
-      description = "bridge test agent",
-      trigger = Event {eventType = "danwa.message-addressed"},
-      behavior = Deterministic {rule = "noop", params = mempty},
-      sinks = []
-    }
 
 -- | A stub kizashi server: records each CreateSignalReq and returns a fixed response.
 stubKizashiApp :: IORef [CreateSignalReq] -> Application

@@ -7,12 +7,12 @@ Dhall file that says:
 > Run **this behavior**, when **this trigger** fires, and send the result to **these sinks**.
 
 …and a thin worker runs it forever — on a schedule, in response to events flowing through
-the activity stream, or when addressed directly. There is no bespoke service to build and
+the activity stream, or when addressed by a public integration event. There is no bespoke service to build and
 deploy: an agent is a declaration.
 
 ```text
 behavior  = what the agent does     (a deterministic rule, a typed shikumi program, or a Skill)
-trigger   = when it does it         (a schedule, an activity.v1 stream pattern, or an addressed event)
+trigger   = when it does it         (a schedule, an activity.v1 stream pattern, or a public addressed event)
 sinks     = what it produces        (a kawa digest, a kizashi signal, a rei action, a danwa conversation)
 identity  = under whose authority   (each sink is gated by a permission grant)
 ```
@@ -37,7 +37,7 @@ in  A.Agent::{
     }
 ```
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/heartbeat.dhall
 AgentDecl {name = "heartbeat", ...}
 OK: 1 agent parsed.
@@ -67,7 +67,7 @@ agent declaration in order:
 Agent declarations (agents/*.dhall, schema/Agent.dhall)
   │  loaded + validated by the Dhall loader
   ▼
-Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (addressed run)
+Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (public integration event)
   ▼
 Behavior runs  ──  Deterministic rule │ shikumi program (handan) │ Skill (baikai)
   ▼
@@ -77,6 +77,11 @@ Session recorded (kioku) ── prior learnings recalled before, new learning re
   ▼
 A KawaDigest reappears on activity.v1 → a *second* agent fires on it → the living loop closes.
 ```
+
+Danwa addressed conversations use the Event path: Danwa publishes
+`danwa.message-addressed-to-agent` on `danwa.message-addressed.v1`, Shikigami consumes that
+public topic with `consume-events`, and replies through Danwa's HTTP API. Shikigami does not
+read Danwa's database or private event store.
 
 > **Status note.** Several downstream services (`kawa`, `shomei`, `kanmon`, `danwa`) are
 > proven against **stubs and fixtures** in this runtime; their live wiring is owned by their

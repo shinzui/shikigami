@@ -124,7 +124,7 @@ Agent declarations  (agents/*.dhall, schema/Agent.dhall)
 Triggers  (three classes — C3)
   | Schedule  : cron evaluator                       (Shikigami.Trigger.Schedule)
   | Stream    : activity.v1 Kafka consumer + matcher (Shikigami.Trigger.Stream, kafka-effectful)
-  | Event     : addressed delivery to the agent inbox (HTTP route / shared pgmq queue)
+  | Event     : public integration event or addressed run queue
   v
 Worker  (shibuya QueueProcessor over pgmq-hs, on the keiro idempotent inbox)
   |
@@ -305,10 +305,12 @@ never redefines them.
   as one envelope shape, via keiro's idempotent Kafka inbox; consumers bind this one topic, never raw
   per-service topics; exclude `actor.kind: "agent"` by default (feedback guard). (2) **Coordinate**
   (addressed, internal): a `kizashi` `AgentRequest`, a `mori` `Agent` action, or a `rei` delegation
-  reaches the agent **directly through its `shikigami` inbox**, bypassing `activity.v1`. (3)
-  **Interact** (addressed, external): a `kanmon` channel-inbound event triggers the bound agent
-  directly. The invariant: *"every action is remembered," not "every trigger is delivered through
-  memory"* — `kawa` records the trigger in parallel.
+  reaches the agent through the run queue, bypassing `activity.v1`. (3) **Interact** (addressed,
+  external): a producer-owned public integration-event topic, such as Danwa's
+  `danwa.message-addressed.v1`, triggers the bound agent by matching `Trigger.Event.eventType`.
+  Consumers never read another service's database, private event store, read models, or outbox
+  tables. The invariant: *"every action is remembered," not "every trigger is delivered through
+  memory"* — `kawa` records the trigger in parallel when needed.
 - **C2 — The verification boundary (kawa doorway / native publish).** *Consumed.* The `KawaDigest`
   sink targets the doorway shape `POST /v1/sources/{source_id}/events`, idempotent on
   `(source, source_event_id)`. Proven against a stub until kawa ships.
@@ -545,16 +547,15 @@ project's `process-compose.yaml`, mirroring how kizashi runs its postgres) and a
 publish-fixture <envelope.json>` CLI subcommand that publishes a single envelope with the correct
 `keiro-*` headers so the inbox accepts it.
 
-### Event (C3 classes 2/3 — addressed delivery to the `shikigami` inbox)
+### Event (C3 classes 2/3 — addressed delivery)
 
 An `EventTrigger { eventType }` declares an agent to run "when invoked by an external event" — the
-**addressed** classes. These reach the agent **directly through its `shikigami` inbox, bypassing
-`activity.v1`** (routing a command that already knows its recipient through the memory ledger would add
-a round-trip and couple coordination to kawa's liveness). The inbox is an HTTP route (`POST
-/v1/agents/{name}/runs`) or a shared `pgmq-hs` agent-run queue the worker drains; the invocation
-produces an agent run + session row. The triggering signal/event is still recorded because `kawa`
-ingests it as an ordinary activity *in parallel* (C3 invariant). This is the path the `mori` `Agent`
-action (class 2) and a `kanmon` channel-inbound event (class 3) use.
+**addressed** classes. These reach the agent by matching a public integration event with
+`consume-events`, or by directly enqueueing a run job, bypassing `activity.v1`. The public-topic path
+is for service-owned contracts such as Danwa's `danwa.message-addressed-to-agent` events on
+`danwa.message-addressed.v1`; the direct queue path is for commands that already know the recipient.
+The invocation produces an agent run + session row. Shikigami must not read another service's
+database, private event store, read models, or outbox tables.
 
 ## The behavior runner (the new surface)
 
@@ -702,9 +703,11 @@ CLI surface (the `shikigami` executable, `optparse-applicative`):
 
 ```text
 shikigami validate <file>                         -- parse + validate an agent manifest
-shikigami worker --agents <dir> [--kawa-url <u>] [--topic activity.v1] [--broker <h:p>]
+shikigami worker --agents <dir> [--kawa-url <u>] [--kizashi-url <u>] [--danwa-url <u>] [--danwa-agent <participant>]
 shikigami stub-kawa --port <p> [--republish-topic activity.v1 --broker <h:p>]
 shikigami publish-fixture <envelope.json>         -- publish one envelope with keiro-* headers
+shikigami consume-stream --agents <dir> [--topic activity.v1] [--broker <h:p>]
+shikigami consume-events --agents <dir> [--topic danwa.message-addressed.v1] [--broker <h:p>]
 ```
 
 The **kawa stub** (`shikigami stub-kawa`) is a ~30-line server accepting `POST
@@ -933,9 +936,9 @@ is swapped for its client with **no schema change**.
    small cron crate. Settle when scaffolding `Shikigami.Trigger.Schedule`.
 2. **Schedule drive mechanism.** Timer loop vs. enqueue-a-due-time-message onto `pgmq-hs` and let the
    shibuya worker pull it (preferred, to reuse substrate). Confirm during the worker proof.
-3. **The addressed-delivery transport.** The `EventTrigger` inbox as an HTTP route (`POST
-   /v1/agents/{name}/runs`) vs. a shared `pgmq-hs` agent-run queue the worker drains. The queue path
-   is preferred (reuses substrate, decouples mori/kanmon from Shikigami liveness); confirm with IR-1.
+3. **Additional addressed-delivery transports.** The implemented paths are public integration-event
+   topics (`consume-events`) and the shared `pgmq-hs` run queue (`enqueue-run`). Add new transports
+   only when they preserve service boundaries and do not read another service's database.
 4. **The channel-egress sink's concrete schema.** The exact `Sink` variant config for the C12 outbound
    half (conversation key + destination + the egress action), aligned with `kanmon`'s egress API.
    Pin with EP-4/`kanmon`.

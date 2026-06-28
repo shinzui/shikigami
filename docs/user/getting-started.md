@@ -8,7 +8,7 @@ running its behavior — with no model key and no running services required.
 Shikigami is a Haskell project (GHC 9.12.4) built with a Nix dev shell. From the repository
 root:
 
-```console
+```bash
 $ nix develop        # or `direnv allow` if you use direnv — see .envrc
 ```
 
@@ -18,7 +18,7 @@ below assumes you are **inside the dev shell**.
 
 Build everything once:
 
-```console
+```bash
 $ cabal build all
 ```
 
@@ -26,7 +26,7 @@ $ cabal build all
 
 The repository ships sample agents under `agents/`. Validate one:
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/heartbeat.dhall
 AgentDecl {name = "heartbeat", behavior = ShikumiProgram {...}, trigger = ScheduleTrigger {...}, ...}
 OK: 1 agent parsed.
@@ -36,7 +36,7 @@ OK: 1 agent parsed.
 pretty-prints it. For a **skill-agent** it additionally checks the skill directory and its
 `SKILL.md` frontmatter:
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/triage-note.dhall
 AgentDecl {name = "triage-note", behavior = Skill {path = "agents/skills/triage-note"}, ...}
 OK: 1 agent parsed (skill agents/skills/triage-note valid).
@@ -44,7 +44,7 @@ OK: 1 agent parsed (skill agents/skills/triage-note valid).
 
 A malformed manifest exits non-zero with a typed error:
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/broken.dhall
 validate: load error in agents/broken.dhall:
   <typed Dhall error>
@@ -56,14 +56,14 @@ validate: load error in agents/broken.dhall:
 prints the output JSON. It does not touch the database or dispatch sinks — the fastest way
 to see what an agent produces:
 
-```console
+```bash
 $ cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
 {"summary":"...","...":"..."}
 ```
 
 Pass a trigger payload as JSON with `--payload`:
 
-```console
+```bash
 $ cabal run shikigami -- run-behavior --agent agents/triage-note.dhall \
     --payload '{"text":"customer is furious about the outage"}'
 ```
@@ -71,22 +71,23 @@ $ cabal run shikigami -- run-behavior --agent agents/triage-note.dhall \
 The `noop-summary` program and the stub `baikai` provider both run **without a model key**,
 so this works in CI and on a fresh checkout.
 
-## Set up the database (for sessions & the worker)
+## Set up the database (for sessions, queues, and consumers)
 
-The `agent-run` and `worker` commands record sessions and memory via **kioku**, which needs
-Postgres. Create and migrate the dev database (idempotent):
+The `agent-run` and `worker` commands record sessions and memory via **kioku**. The
+`enqueue-run`, `consume-stream`, and `consume-events` commands use the run queue or Keiro
+inbox. All of those paths need Postgres. Create and migrate the dev database (idempotent):
 
-```console
+```bash
 $ just create-database     # creates the DB if missing, then runs `just migrate`
 ```
 
 This installs the kiroku event-store schema *and* shikigami's own read-model migrations
 (the suppression table) in one pass. The connection string is exposed as
-`PG_CONNECTION_STRING` by the dev shell; `agent-run`/`worker` read it automatically.
+`PG_CONNECTION_STRING` by the dev shell; runtime commands read it automatically.
 
 To run Postgres itself locally, use the bundled process-compose:
 
-```console
+```bash
 $ process-compose up       # starts postgres and runs `just create-database`
 ```
 
@@ -96,7 +97,7 @@ With the database up, `agent-run` runs the full lifecycle — open a session, re
 learnings, run the behavior, record the new learning, complete the session — and prints an
 across-run report:
 
-```console
+```bash
 $ cabal run shikigami -- agent-run --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 0 prior memories:

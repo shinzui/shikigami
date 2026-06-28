@@ -38,7 +38,7 @@ field is used directly; otherwise the compact JSON encoding is stored.
 
 ## Run an agent with memory
 
-```console
+```bash
 $ cabal run shikigami -- agent-run --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 0 prior memories:
@@ -47,7 +47,7 @@ recorded learning mem_01k…
 
 Run it again and `recalled` grows — the previous run's learning comes back:
 
-```console
+```bash
 $ cabal run shikigami -- agent-run --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 1 prior memories:
@@ -65,7 +65,7 @@ Instead of running the behavior, you can fold an `activity.v1` envelope **direct
 agent's memory** with `--from-activity`. The envelope's `payload` becomes the memory content
 and its `verb`/`subject.type` become searchable tags:
 
-```console
+```bash
 $ cabal run shikigami -- agent-run --agent triage-note --from-activity fixtures/envelope.json
 recorded activity memory mem_01k…
 ```

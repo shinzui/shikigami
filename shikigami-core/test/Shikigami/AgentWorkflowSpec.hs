@@ -35,10 +35,10 @@ import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRun
 import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
 import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
+import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
-import Shikigami.Trigger.Danwa (AddressedMessage (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -532,7 +532,7 @@ decl =
 conversationDecl :: AgentDecl
 conversationDecl =
   decl
-    { trigger = Event {eventType = "danwa.message-addressed"},
+    { trigger = Event {eventType = addressedMessageEventType},
       sinks = [DanwaConversation {topic = "support"}]
     }
 
@@ -541,9 +541,13 @@ firstAddressedMessage =
   AddressedMessage
     { conversationId = "conv_thread_1",
       messageId = "msg_human_1",
+      parentMessageId = Nothing,
       author = "part_human_test",
       content = "first question",
-      agentParticipant = "part_agent_test"
+      agentParticipantId = "part_agent_test",
+      embellishmentId = "emb_human_1",
+      mentionedBy = "part_human_test",
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0
     }
 
 secondAddressedMessage :: AddressedMessage
@@ -551,9 +555,13 @@ secondAddressedMessage =
   AddressedMessage
     { conversationId = "conv_thread_1",
       messageId = "msg_human_2",
+      parentMessageId = Just "msg_human_1",
       author = "part_human_test",
       content = "follow up",
-      agentParticipant = "part_agent_test"
+      agentParticipantId = "part_agent_test",
+      embellishmentId = "emb_human_2",
+      mentionedBy = "part_human_test",
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 1
     }
 
 job :: RunJob

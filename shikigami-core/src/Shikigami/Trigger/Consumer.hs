@@ -8,10 +8,13 @@
 module Shikigami.Trigger.Consumer
   ( StreamConfig (..),
     StreamHit (..),
+    EventHit (..),
     subscribeActivityStream,
+    subscribeIntegrationEventStream,
   )
 where
 
+import Data.Aeson (Value)
 import Data.ByteString (ByteString)
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, IOE, runEff, (:>))
@@ -54,8 +57,17 @@ data StreamConfig = StreamConfig
 
 -- | A matched (agent, envelope) pair the consumer reports.
 data StreamHit = StreamHit
-  { agentName :: !Text,
+  { streamAgentName :: !Text,
     envelope :: !ActivityEnvelope
+  }
+  deriving stock (Eq, Show)
+
+-- | A matched event-triggered agent and the public integration-event payload.
+data EventHit = EventHit
+  { eventAgentName :: !Text,
+    eventType :: !Text,
+    integrationMessageId :: !Text,
+    payload :: !Value
   }
   deriving stock (Eq, Show)
 
@@ -81,6 +93,33 @@ subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = stre
         Nothing -> loop
         Just record -> do
           liftIO (processRecord appEnv include agents onHit record)
+          commitOffsetMessage OffsetCommit record
+          loop
+
+-- | Subscribe to a public integration-event topic and report declared event
+-- agents whose `Trigger.Event.eventType` matches the integration event type.
+--
+-- This is the supported path for Danwa addressed-message events. It consumes
+-- the public topic Danwa publishes; it does not read Danwa's database.
+subscribeIntegrationEventStream :: AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} agents onHit = do
+  let props =
+        brokersList [BrokerAddress streamBroker]
+          <> groupId (ConsumerGroupId streamGroup)
+          <> noAutoCommit
+      sub = topics [TopicName streamTopic] <> offsetReset Earliest
+  result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
+  case result of
+    Left err -> hPutStrLn stderr ("[events] consumer error: " <> show err)
+    Right () -> pure ()
+  where
+    loop :: (KafkaConsumer :> es, IOE :> es) => Eff es ()
+    loop = do
+      mr <- pollMessage (Timeout 1000)
+      case mr of
+        Nothing -> loop
+        Just record -> do
+          liftIO (processEventRecord appEnv agents onHit record)
           commitOffsetMessage OffsetCommit record
           loop
 
@@ -120,6 +159,40 @@ processRecord appEnv include agents onHit record = do
         Right (Left ierr) -> hPutStrLn stderr ("[stream] inbox error: " <> show ierr)
         Left serr -> hPutStrLn stderr ("[stream] store error: " <> show serr)
 
+processEventRecord ::
+  AppEnv ->
+  [AgentDecl] ->
+  (EventHit -> IO ()) ->
+  ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
+  IO ()
+processEventRecord appEnv agents onHit record = do
+  now <- getCurrentTime
+  let TopicName topicT = crTopic record
+      PartitionId partI = crPartition record
+      Offset offI = crOffset record
+      kir =
+        KafkaInboundRecord
+          { topic = topicT,
+            partition = fromIntegral partI,
+            offset = offI,
+            key = TE.decodeUtf8 <$> crKey record,
+            payload = fromMaybe mempty (crValue record),
+            headers = [(TE.decodeUtf8 k, TE.decodeUtf8 v) | (k, v) <- headersToList (crHeaders record)],
+            receivedAt = now
+          }
+  case integrationEventFromKafka kir of
+    Left err -> hPutStrLn stderr ("[events] decode error (skipped + committed): " <> show err)
+    Right (event, kref) -> do
+      res <-
+        runAppIO appEnv $
+          runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref) (eventInboxHandler agents)
+      case res of
+        Right (Right (InboxProcessed hits)) -> mapM_ onHit hits
+        Right (Right InboxDuplicate) -> hPutStrLn stderr "[events] deduped (InboxDuplicate)"
+        Right (Right other) -> hPutStrLn stderr ("[events] inbox result: " <> show other)
+        Right (Left ierr) -> hPutStrLn stderr ("[events] inbox error: " <> show ierr)
+        Left serr -> hPutStrLn stderr ("[events] store error: " <> show serr)
+
 -- | The inbox handler (runs in the inbox DB transaction): decode the envelope and
 -- collect the matching stream agents. Pure work wrapped in @pure@.
 inboxHandler :: IncludeAgentActors -> [AgentDecl] -> IntegrationEvent -> Tx.Transaction [StreamHit]
@@ -138,4 +211,26 @@ inboxHandler include agents event =
 streamMatchOf :: AgentDecl -> Maybe StreamMatch
 streamMatchOf a = case trigger a of
   Stream {match = m} -> Just m
+  _ -> Nothing
+
+eventInboxHandler :: [AgentDecl] -> IntegrationEvent -> Tx.Transaction [EventHit]
+eventInboxHandler agents event =
+  case decodeJsonIntegrationEvent event of
+    Left _ -> pure []
+    Right payloadValue ->
+      pure
+        [ EventHit
+            { eventAgentName = name a,
+              eventType = event ^. #eventType,
+              integrationMessageId = event ^. #messageId,
+              payload = payloadValue
+            }
+        | a <- agents,
+          Just expectedEventType <- [eventTriggerTypeOf a],
+          expectedEventType == event ^. #eventType
+        ]
+
+eventTriggerTypeOf :: AgentDecl -> Maybe Text
+eventTriggerTypeOf a = case trigger a of
+  Event {eventType = t} -> Just t
   _ -> Nothing

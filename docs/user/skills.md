@@ -86,7 +86,7 @@ definitions in a skill body; that is grounding, configured separately on the
 `validate` checks a skill-agent's directory and `SKILL.md` frontmatter (a required `name`
 matching the directory, and a required `description`):
 
-```console
+```bash
 $ cabal run shikigami -- validate agents/triage-note.dhall
 AgentDecl {name = "triage-note", behavior = Skill {path = "agents/skills/triage-note"}, ...}
 OK: 1 agent parsed (skill agents/skills/triage-note valid).

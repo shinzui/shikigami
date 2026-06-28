@@ -3,8 +3,7 @@ module Shikigami.Cli (main) where
 import Data.Text (Text)
 import Options.Applicative
 import Shikigami.Cli.Commands.AgentRun (runAgentRun)
-import Shikigami.Cli.Commands.ConsumeStream (runConsumeStream)
-import Shikigami.Cli.Commands.DanwaBridge (runDanwaBridgeCmd)
+import Shikigami.Cli.Commands.ConsumeStream (runConsumeEvents, runConsumeStream)
 import Shikigami.Cli.Commands.DanwaSpike (runDanwaSpike)
 import Shikigami.Cli.Commands.EnqueueRun (runEnqueueRun)
 import Shikigami.Cli.Commands.PublishFixture (runPublishFixture)
@@ -21,9 +20,9 @@ data Command
   | EnqueueRun String (Maybe String)
   | PublishFixture FilePath Text Text
   | ConsumeStream FilePath Text Text Text Bool
+  | ConsumeEvents FilePath Text Text Text
   | Worker FilePath Text Text Text Text
   | DanwaSpike String String String
-  | DanwaBridge FilePath Text [Text]
 
 main :: IO ()
 main = run =<< execParser opts
@@ -87,14 +86,15 @@ parser =
               (progDesc "Spike the danwa HTTP client by posting a human message and agent reply")
           )
         <> command
-          "danwa-bridge"
+          "consume-events"
           ( info
-              ( DanwaBridge
+              ( ConsumeEvents
                   <$> strOption (long "agents" <> metavar "DIR" <> value "agents" <> help "Agents manifest directory")
-                  <*> strOption (long "danwa-db" <> metavar "CONNSTR" <> help "danwa PostgreSQL connection string")
-                  <*> many (strOption (long "map" <> metavar "PARTICIPANT=AGENT" <> help "Map danwa agent participant id to declared agent name"))
+                  <*> strOption (long "broker" <> metavar "HOST:PORT" <> value "127.0.0.1:9092" <> help "Kafka broker")
+                  <*> strOption (long "topic" <> metavar "TOPIC" <> value "danwa.message-addressed.v1" <> help "Integration-event topic")
+                  <*> strOption (long "group" <> metavar "GROUP" <> value "shikigami-events" <> help "Consumer group id")
               )
-              (progDesc "Poll danwa addressed messages and enqueue shikigami run jobs")
+              (progDesc "Consume public integration events, match Event triggers, and enqueue run jobs")
           )
         <> command
           "publish-fixture"
@@ -140,6 +140,6 @@ run (StubKawa port topic broker) = runStubKawaCmd port topic broker
 run (EnqueueRun agent payload) = runEnqueueRun agent payload
 run (PublishFixture file broker topic) = runPublishFixture broker topic file
 run (ConsumeStream agentsDir broker topic grp inclAgents) = runConsumeStream agentsDir broker topic grp inclAgents
+run (ConsumeEvents agentsDir broker topic grp) = runConsumeEvents agentsDir broker topic grp
 run (Worker agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent) = runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent
 run (DanwaSpike danwaUrl human agent) = runDanwaSpike danwaUrl human agent
-run (DanwaBridge agentsDir danwaConn mappings) = runDanwaBridgeCmd agentsDir danwaConn mappings

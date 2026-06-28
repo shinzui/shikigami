@@ -1,5 +1,6 @@
 module Shikigami.Cli.Commands.ConsumeStream
   ( runConsumeStream,
+    runConsumeEvents,
   )
 where
 
@@ -10,8 +11,9 @@ import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Api.Agent (AgentDecl (..))
-import Shikigami.Trigger.Consumer (StreamConfig (..), StreamHit (..), subscribeActivityStream)
-import Shikigami.Trigger.Enqueue (enqueueRunJob, runJobFromEnvelope)
+import Shikigami.Trigger.Consumer (StreamConfig (..), subscribeActivityStream, subscribeIntegrationEventStream)
+import Shikigami.Trigger.Consumer qualified as Consumer
+import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, enqueueRunJob, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import System.Directory (listDirectory)
 import System.Environment (getEnv)
@@ -41,15 +43,48 @@ runConsumeStream agentsDir broker topic grp includeAgentActors = do
     let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
         cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = grp}
         onHit hit = do
-          putStrLn ("[stream] MATCH agent=" <> Text.unpack (agentName hit))
-          case find ((== agentName hit) . name) agents of
+          putStrLn ("[stream] MATCH agent=" <> Text.unpack (Consumer.streamAgentName hit))
+          case find ((== Consumer.streamAgentName hit) . name) agents of
             Just decl -> do
-              r <- enqueueRunJob (pool st) (runJobFromEnvelope decl (envelope hit))
+              r <- enqueueRunJob (pool st) (runJobFromEnvelope decl (Consumer.envelope hit))
               case r of
                 Right mid -> putStrLn ("[stream]   enqueued run job " <> show mid)
                 Left e -> putStrLn ("[stream]   enqueue failed: " <> show e)
             Nothing -> pure ()
     subscribeActivityStream appEnv cfg include agents onHit
+
+-- | Consume public integration events and enqueue matching `Trigger.Event`
+-- agents. Use this for Danwa's `danwa.message-addressed.v1` topic.
+runConsumeEvents :: FilePath -> Text -> Text -> Text -> IO ()
+runConsumeEvents agentsDir broker topic grp = do
+  hSetBuffering stdout LineBuffering
+  agents <- loadAgents agentsDir
+  putStrLn
+    ( "[events] loaded "
+        <> show (length agents)
+        <> " agents; consuming "
+        <> Text.unpack topic
+        <> " on "
+        <> Text.unpack broker
+    )
+  connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
+  withStore (defaultConnectionSettings connStr) $ \st -> do
+    tr <- noopTracer
+    let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = grp}
+        onHit hit = do
+          putStrLn
+            ( "[events] MATCH agent="
+                <> Text.unpack (Consumer.eventAgentName hit)
+                <> " eventType="
+                <> Text.unpack (Consumer.eventType hit)
+            )
+          let key = Consumer.eventAgentName hit <> ":" <> Consumer.integrationMessageId hit
+          r <- enqueueAddressedRunWithKey (pool st) (Consumer.eventAgentName hit) (Consumer.payload hit) key
+          case r of
+            Right mid -> putStrLn ("[events]   enqueued run job " <> show mid)
+            Left e -> putStrLn ("[events]   enqueue failed: " <> show e)
+    subscribeIntegrationEventStream appEnv cfg agents onHit
 
 -- | Load every @*.dhall@ manifest in a directory (skipping ones that fail to parse).
 loadAgents :: FilePath -> IO [AgentDecl]

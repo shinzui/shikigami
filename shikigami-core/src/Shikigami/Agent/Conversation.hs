@@ -51,11 +51,11 @@ import Shikigami.Agent.Workflow.Input (awaitInput)
 import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Api.Agent qualified as Agent
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered), SinkResult (..))
-import Shikigami.Trigger.Danwa (AddressedMessage (..))
 
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
@@ -252,13 +252,13 @@ replySinkStepName msgMessageId =
   StepName ("danwa-reply:" <> msgMessageId)
 
 behaviorPayload :: AddressedMessage -> [TurnRow] -> Value
-behaviorPayload AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, author = msgAuthor, content = msgContent, agentParticipant = msgAgentParticipant} priorTurns =
+behaviorPayload AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, author = msgAuthor, content = msgContent, agentParticipantId = msgAgentParticipantId} priorTurns =
   Aeson.object
     [ "conversationId" Aeson..= msgConversationId,
       "messageId" Aeson..= msgMessageId,
       "author" Aeson..= msgAuthor,
       "content" Aeson..= msgContent,
-      "agentParticipant" Aeson..= msgAgentParticipant,
+      "agentParticipantId" Aeson..= msgAgentParticipantId,
       "turns" Aeson..= fmap turnPayload priorTurns
     ]
 

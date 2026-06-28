@@ -3,7 +3,7 @@
 All functionality is exposed by the single `shikigami` executable. In the dev shell, invoke it
 through cabal:
 
-```console
+```bash
 $ cabal run shikigami -- <command> [options]
 ```
 
@@ -15,10 +15,12 @@ shikigami enqueue-run <AGENT> [--payload <JSON>]
 shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC> --broker <HOST:PORT>]
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
-shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>]
+shikigami consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
 ```
 
-Commands that record sessions/memory (`agent-run`, `worker`) read the connection string from
+Commands that record sessions, use the run queue, or use the Keiro inbox (`agent-run`,
+`enqueue-run`, `consume-stream`, `consume-events`, `worker`) read the connection string from
 the `PG_CONNECTION_STRING` environment variable (set by the dev shell) and need a migrated
 database (`just create-database`).
 
@@ -26,7 +28,7 @@ database (`just create-database`).
 
 ## `validate`
 
-```console
+```bash
 $ shikigami validate <FILE>
 ```
 
@@ -38,7 +40,7 @@ success, non-zero with a typed error on any load/skill failure. **No DB or key.*
 
 ## `run-behavior`
 
-```console
+```bash
 $ shikigami run-behavior --agent <FILE> [--payload <JSON>]
 ```
 
@@ -50,7 +52,7 @@ JSON (defaults to `null`; invalid JSON exits non-zero). **No DB or key.**
 
 ## `agent-run`
 
-```console
+```bash
 $ shikigami agent-run --agent <NAME|FILE> [--from-activity <FILE>]
 ```
 
@@ -66,7 +68,7 @@ envelope (JSON) directly into the agent's memory (payload → content; verb/subj
 
 ## `enqueue-run`
 
-```console
+```bash
 $ shikigami enqueue-run <AGENT> [--payload <JSON>]
 ```
 
@@ -78,7 +80,7 @@ queue — the Event trigger class. `--payload` is the addressed run payload as J
 
 ## `stub-kawa`
 
-```console
+```bash
 $ shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
 ```
 
@@ -92,7 +94,7 @@ topic — the mechanism that **closes the living loop**.
 
 ## `publish-fixture`
 
-```console
+```bash
 $ shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 ```
 
@@ -104,7 +106,7 @@ headers** so the keiro inbox accepts it. Defaults: `--broker 127.0.0.1:9092`,
 
 ## `consume-stream`
 
-```console
+```bash
 $ shikigami consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
 ```
 
@@ -118,16 +120,35 @@ default** is the feedback guard.
 
 → See [Triggers](./triggers.md), [Detectors](./detectors.md).
 
+## `consume-events`
+
+```bash
+$ shikigami consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+```
+
+Consume a public integration-event topic, reconstruct each Keiro integration event, match it
+against declared **Event** agents by `eventType`, and enqueue a run job per match. Defaults:
+`--agents agents`, `--broker 127.0.0.1:9092`, `--topic danwa.message-addressed.v1`,
+`--group shikigami-events`.
+
+Use this for Danwa addressed-message events. Danwa publishes
+`danwa.message-addressed-to-agent` on `danwa.message-addressed.v1` when Danwa integration
+events are enabled. Shikigami consumes that public topic only; it does not read Danwa's
+database, event store, read models, or outbox tables.
+
+→ See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
+
 ## `worker`
 
-```console
-$ shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>]
+```bash
+$ shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
 ```
 
 Boot the supervised worker. Loads every `.dhall` in `--agents`, then drains
 `shikigami_run_jobs`: for each job, run the agent's behavior, dispatch its (permission-gated)
 sinks to the configured services, and record a kioku session. Defaults:
-`--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`.
+`--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`,
+`--danwa-url http://localhost:8080`, `--danwa-agent part_shikigami`.
 **Needs the DB** (`PG_CONNECTION_STRING`).
 
 → See [The Living Loop](./living-loop.md).
