@@ -104,10 +104,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M1 (spike) — keiki agent lifecycle as a verified, drawable state machine.** Write the
-      at-risk-customer lifecycle as a keiki `SymTransducer`; render it to Mermaid with
-      `Keiki.Render.Mermaid.toMermaidWith`; assert well-formedness with keiki's validator. No
-      database, no keiro, pure functions + a `tasty` test. De-risks the keiki adoption.
+- [x] **M1 (spike) — keiki agent lifecycle as a verified, drawable state machine.** Completed
+      2026-06-28. Added `Shikigami.Flow.Lifecycle.AtRiskCustomer` with a keiki `SymTransducer`,
+      Mermaid rendering, and validation warnings; added `Shikigami.FlowLifecycleSpec`; verified with
+      `nix develop -c cabal build shikigami-core` and `nix develop -c cabal test shikigami-core` (all
+      36 tests passed). This delivered the at-risk-customer lifecycle as a keiki `SymTransducer`,
+      rendered it to Mermaid with `Keiki.Render.Mermaid.toMermaidWith`, and asserted well-formedness
+      with keiki's validator. No database or keiro runtime is involved; it is pure functions plus a
+      `tasty` test, which de-risks the keiki adoption.
 - [ ] **M2 (spike) — the behavior DSL skeleton: a `Flow` effect row and a flow registry.** Define the
       capability constraints a flow runs under, a `FlowDef` registry mirroring
       `Shikigami.Program.Registry`, and run a trivial durable flow through keiro's `runWorkflow` in an
@@ -151,6 +155,14 @@ implementation. Provide concise evidence.
   timer in the append transaction, fire a *total* compensating command on deadline" pattern. Plan 7's
   `awaitApproval` (suspend + arm a deadline timer + resume on answer-or-timeout) is the in-workflow
   expression of the same idea, which is why this plan reuses it rather than standing up a process manager.
+- **Validation must run inside the nix development shell on this machine.** A plain
+  `cabal build shikigami-core` compiled the new lifecycle module but failed at link time because the
+  ambient shell could not find `librdkafka`; the same build through `nix develop` succeeded. Evidence:
+
+```text
+ld: library not found for -lrdkafka
+clang: error: linker command failed with exit code 1
+```
 
 
 ## Decision Log
@@ -234,7 +246,12 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-06-28 — M1 is complete. The at-risk-customer lifecycle now exists as a checked keiki state
+  machine in `shikigami-core/src/Shikigami/Flow/Lifecycle/AtRiskCustomer.hs`. The lifecycle uses the
+  states `Observed`, `SettledLow`, `AwaitingAck`, `Acknowledged`, and `Escalated`; validates with no
+  keiki warnings; and renders to Mermaid. This proves the plan's keiki adoption slice before any flow
+  runtime or database wiring begins. Remaining work starts at M2: define the flow effect row and
+  registry and prove a trivial durable flow can complete or suspend under keiro.
 
 
 ## Context and Orientation
@@ -570,6 +587,25 @@ M1 — build and test the lifecycle spike:
 cabal build shikigami-core
 cabal test shikigami-core
 # Expected: the lifecycle test passes; toMermaidWith output includes "AwaitingAck" and "Escalated".
+```
+
+Actual M1 validation on 2026-06-28 was run through the nix development shell because the ambient shell
+was missing `librdkafka`:
+
+```bash
+nix develop -c cabal build shikigami-core
+nix develop -c cabal test shikigami-core
+```
+
+The relevant test output was:
+
+```text
+FlowLifecycle
+  at-risk customer lifecycle is well-formed:              OK
+  at-risk customer lifecycle renders the expected states: OK
+
+All 36 tests passed (3.14s)
+Test suite shikigami-core-test: PASS
 ```
 
 M2 — the flow skeleton and durable-run spike:

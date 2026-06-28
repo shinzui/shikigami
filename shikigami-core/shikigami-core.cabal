@@ -37,6 +37,7 @@ library
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
     Shikigami.Core
+    Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Integration.Danwa
     Shikigami.Memory.Scope
     Shikigami.Program.Registry
@@ -87,6 +88,7 @@ library
     , http-types
     , hw-kafka-client
     , kafka-effectful
+    , keiki
     , keiro
     , keiro-core
     , kioku-api
@@ -114,6 +116,7 @@ test-suite shikigami-core-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.DelegateContextSpec
+    Shikigami.FlowLifecycleSpec
     Shikigami.SchedulerSpec
     Shikigami.SpikeWorkflowSpec
 
@@ -128,6 +131,7 @@ test-suite shikigami-core-test
     , hasql
     , hasql-pool
     , http-types
+    , keiki
     , keiro
     , kioku-api
     , kioku-core

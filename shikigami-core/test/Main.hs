@@ -15,6 +15,7 @@ import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
+import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.Sink
@@ -45,6 +46,7 @@ main =
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           SchedulerSpec.tests,
           DelegateContextSpec.tests,
+          FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
         ]
