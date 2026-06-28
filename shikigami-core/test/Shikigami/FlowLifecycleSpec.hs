@@ -9,7 +9,9 @@ import Keiro.Workflow.Sleep (sleepNamed)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStorePool)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Flow (FlowDef (..), FlowEffects, LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, lookupFlow)
+import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
 import Shikigami.Flow.Lifecycle.AtRiskCustomer
   ( atRiskCustomerMermaid,
     atRiskCustomerValidationWarnings,
@@ -41,7 +43,11 @@ tests =
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
       testCase "sleeping flow suspends through keiro runWorkflow" do
         outcome <- runFlowWorkflow sleepingFlow (WorkflowId "flow-sleeping-spike")
-        assertEqual "sleeping flow suspends" (Right Suspended) outcome
+        assertEqual "sleeping flow suspends" (Right Suspended) outcome,
+      testCase "acknowledgement wrapper maps approval decisions" do
+        assertEqual "approved maps to acknowledged" (Acknowledged (toJSON True)) (ackFromDecision (Approval.Approved (toJSON True)))
+        assertEqual "rejected maps to declined" (Declined "no") (ackFromDecision (Approval.Rejected "no"))
+        assertEqual "timeout maps to timeout" TimedOut (ackFromDecision Approval.TimedOut)
     ]
 
 completedFlow :: FlowDef

@@ -120,7 +120,12 @@ This section must always reflect the actual current state of the work.
       `nix develop -c cabal test shikigami-core` (all 40 tests passed).
 - [ ] **M3 — the capability combinators.** Implement `recall`, `remember`, `emitSignal`,
       `currentActivity`, and `awaitAcknowledgement` (the last wrapping plan 7's `awaitApproval`) as thin
-      smart constructors over keiro + shikigami effects.
+      smart constructors over keiro + shikigami effects. Partial progress on 2026-06-28:
+      `Shikigami.Flow.Acknowledgement` now defines `Ack`, `ackFromDecision`, and
+      `awaitAcknowledgement` as a thin wrapper over plan 7's `awaitApproval`, with unit coverage for the
+      `Approved`/`Rejected`/`TimedOut` mapping. Remaining: implement the `Memory`, `Sink`, and `Activity`
+      flow effects, their interpreters, and tests for `recall`, `remember`, `emitSignal`, and
+      `currentActivity`.
 - [ ] **M4 — the at-risk-customer vertical slice.** Compose the combinators into `atRiskCustomerFlow`,
       register it, and prove both branches (acknowledged-in-time and timed-out-then-escalated) plus
       crash-resume against a live Postgres.
@@ -275,6 +280,11 @@ Compare the result against the original purpose.
   tests: one local flow journals two steps and completes, and one local flow calls `sleepNamed` and
   suspends. Remaining work starts at M3: add shikigami-specific capabilities (`Memory`, `Sink`,
   `Activity`) and the named combinators.
+- 2026-06-28 — M3 has started. The acknowledgement branch is implemented as
+  `Shikigami.Flow.Acknowledgement.awaitAcknowledgement`, exactly mapping plan 7's
+  `ApprovalDecision` constructors to flow-domain `Ack` constructors and passing the deadline as `Just`.
+  This confirms plan 11 can consume the landed plan 7 approval API without fallback code. M3 is not
+  complete: the `Memory`, `Sink`, and `Activity` effects and interpreters remain.
 
 
 ## Context and Orientation
@@ -667,6 +677,23 @@ M3/M4 — combinators and the end-to-end proof (needs the local stack):
 # Start Postgres (and any broker) the repo's way; see Justfile / process-compose.yaml.
 just db-up 2>/dev/null || process-compose up -D
 cabal test shikigami-core   # includes the three at-risk-customer scenarios
+```
+
+M3 partial validation on 2026-06-28:
+
+```bash
+nix develop -c cabal build shikigami-core
+nix develop -c cabal test shikigami-core
+```
+
+The relevant added test output was:
+
+```text
+FlowLifecycle
+  acknowledgement wrapper maps approval decisions: OK
+
+All 41 tests passed (2.66s)
+Test suite shikigami-core-test: PASS
 ```
 
 M5 — wiring and diagram CLI:
