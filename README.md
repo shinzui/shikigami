@@ -1,0 +1,153 @@
+# Shikigami
+
+Shikigami is a declared-agent runtime for the Kikan platform. It runs autonomous
+system agents from typed Dhall declarations, with an embedded Haskell `Flow` DSL
+available when the behavior is too stateful for declaration alone. When a
+trigger fires, Shikigami runs the selected behavior, dispatches the declared
+sinks, and records memory across runs through `kioku`.
+
+An agent is usually a declaration, not a bespoke service:
+
+```text
+behavior  = what the agent does
+trigger   = when it runs
+sinks     = what it produces
+identity  = under whose authority it acts
+memory    = what it carries forward across runs
+```
+
+For simple agents, Dhall can name a deterministic rule, a `shikumi` / `handan`
+program, or a `baikai` skill. For lifecycle-backed work, Dhall names a compiled
+Haskell `FlowDef`; the Haskell flow owns the durable control flow, journaled
+steps, waits, mid-run sink emissions, memory writes, and timeout or
+acknowledgement branches.
+
+This makes routine coordination part of the platform's living loop: events
+become memory, memory and stream activity trigger agents, agents produce signals,
+digests, actions, or conversations, and those outputs can re-enter the stream for
+other humans and agents to observe.
+
+## Why The Name
+
+The project name is written as **式神** and read **Shikigami**.
+
+In Japanese folklore, a shikigami is a summoned spirit-servant bound to its
+master's will. That is the intended metaphor here: a small, declared agent that
+can be summoned by the system to observe, decide, coordinate, and act within the
+authority it has been granted.
+
+Within **Kikan** (機関), the AI-native organization platform, Shikigami is the
+augmentation-layer runtime for autonomous system agents. Kikan is the broader
+institutional mechanism: humans, agents, memory, awareness, conversations, and
+flows working as one inspectable system. Shikigami is one way that mechanism acts.
+
+## What It Does
+
+- Loads and validates typed Dhall agent declarations from `agents/*.dhall`.
+- Supports schedule, activity-stream, and addressed-event triggers.
+- Runs deterministic rules, `shikumi` / `handan` programs, `baikai` skills, and
+  durable Haskell `Flow` behaviors on `keiro`.
+- Dispatches permission-gated sinks such as Kawa digests, Kizashi signals, Rei
+  actions, and Danwa conversations.
+- Records sessions and reusable memory through `kioku` so agents do not start
+  blank on every run.
+- Provides a supervised worker and CLI for validating, running, enqueueing, and
+  consuming agent work.
+
+## Repository Shape
+
+```text
+shikigami-api/         Client-safe wire types and Dhall-decoded agent schema
+shikigami-core/        Loader, triggers, behavior runner, sinks, worker, memory
+shikigami-core/src/Shikigami/Flow/
+                       Haskell Flow DSL definitions and registered flow bodies
+shikigami-cli/         The `shikigami` command-line tool
+shikigami-migrations/  Database migrations for Shikigami and composed Kioku state
+agents/                Example and proof agent declarations
+schema/                Dhall schema for declared agents
+docs/user/             User guide and CLI reference
+docs/plans/            ExecPlans for the runtime build-out
+docs/initial-spec.md   Original architecture spec
+```
+
+## Quick Start
+
+Enter the development shell:
+
+```sh
+nix develop
+```
+
+Build the project:
+
+```sh
+cabal build all
+```
+
+Validate a sample declared agent:
+
+```sh
+cabal run shikigami -- validate agents/heartbeat.dhall
+```
+
+Run only its behavior with deterministic stubs, without a database or model key:
+
+```sh
+cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
+```
+
+Create and migrate the local development database for session, memory, queue, and
+worker paths:
+
+```sh
+just create-database
+```
+
+Run an agent through the full memory-backed lifecycle:
+
+```sh
+cabal run shikigami -- agent-run --agent heartbeat
+```
+
+For a fuller walkthrough, start with
+[docs/user/getting-started.md](docs/user/getting-started.md).
+
+## Main Commands
+
+All runtime functionality is exposed through the `shikigami` executable:
+
+```text
+shikigami validate <FILE>
+shikigami run-behavior --agent <FILE> [--payload <JSON>]
+shikigami agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+shikigami enqueue-run <AGENT> [--payload <JSON>]
+shikigami consume-stream [--agents <DIR>]
+shikigami consume-events [--agents <DIR>]
+shikigami worker [--agents <DIR>]
+```
+
+See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
+
+## Documentation
+
+- [User guide](docs/user/README.md) explains the declared-agent model.
+- [Getting started](docs/user/getting-started.md) covers local setup and the
+  first validate/run path.
+- [Writing agents](docs/user/writing-agents.md) explains the Dhall declaration
+  schema.
+- [Triggers](docs/user/triggers.md), [behaviors](docs/user/behaviors.md),
+  [sinks](docs/user/sinks.md), and [memory](docs/user/memory.md) cover the four
+  main runtime parts.
+- [Flows](docs/user/flows.md) covers the embedded Haskell DSL for durable agent
+  behaviors.
+- [The living loop](docs/user/living-loop.md) shows Shikigami operating end to
+  end with the stream and stub services.
+- [Initial architecture spec](docs/initial-spec.md) records the original design
+  and Kikan contract context.
+
+## Status
+
+Shikigami is active Haskell work in the `shinzui/kikan` portfolio. Some adjacent
+services are still proven through stubs or fixtures in this repository; the
+contract shapes are represented here, while live service ownership remains with
+the corresponding Kikan projects.
