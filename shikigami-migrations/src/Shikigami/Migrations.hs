@@ -1,4 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Shikigami.Migrations
@@ -9,30 +8,19 @@ module Shikigami.Migrations
   )
 where
 
-import Codd (ApplyResult (SchemasNotVerified), CoddSettings, VerifySchemas, applyMigrations, applyMigrationsNoCheck)
-import Codd.Logging (runCoddLogger)
-import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
+import Codd (ApplyResult, CoddSettings, VerifySchemas)
+import Codd.Extras.Apply (applyParsedMigrations, applyParsedMigrationsNoCheck)
+import Codd.Extras.Embedded qualified as Embedded
+import Codd.Parsing (AddedSqlMigration, EnvVars)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
 import Data.List (sortOn)
-import Data.Text.Encoding qualified as TE
 import Data.Time (DiffTime)
 import Kioku.Migrations (kiokuMigrations)
-import Streaming.Prelude qualified as Streaming
 
 -- | Parse shikigami's OWN embedded SQL files (currently just shikigami_fired).
 shikigamiOwnMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
-shikigamiOwnMigrations =
-  traverse parseEmbeddedMigration embeddedFiles
-  where
-    parseEmbeddedMigration :: forall m. (MonadFail m, EnvVars m) => (FilePath, ByteString) -> m (AddedSqlMigration m)
-    parseEmbeddedMigration (name, bytes) = do
-      let stream :: PureStream m
-          stream = PureStream $ Streaming.yield (TE.decodeUtf8 bytes)
-      result <- parseAddedSqlMigration name stream
-      case result of
-        Left err -> fail ("Invalid shikigami migration " <> name <> ": " <> err)
-        Right migration -> pure migration
+shikigamiOwnMigrations = Embedded.parseEmbeddedMigrations "Shikigami" embeddedFiles
 
 -- | The full shikigami migration set. IMPORTANT: kiokuMigrations ALREADY composes
 -- kirokuMigrations <> keiroFrameworkMigrations <> kiokuOwnMigrations (see
@@ -46,15 +34,11 @@ shikigamiMigrations = do
 
 runShikigamiMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
 runShikigamiMigrations settings connectTimeout verifySchemas =
-  runCoddLogger do
-    migrations <- shikigamiMigrations
-    applyMigrations settings (Just migrations) connectTimeout verifySchemas
+  applyParsedMigrations settings connectTimeout verifySchemas shikigamiMigrations
 
 runShikigamiMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ApplyResult
 runShikigamiMigrationsNoCheck settings connectTimeout =
-  runCoddLogger do
-    migrations <- shikigamiMigrations
-    applyMigrationsNoCheck settings (Just migrations) connectTimeout (const (pure SchemasNotVerified))
+  applyParsedMigrationsNoCheck settings connectTimeout shikigamiMigrations
 
 -- Embeds sql-migrations/*.sql at compile time: shikigami_fired + the pgmq schema
 -- (pgmq-schema.sql, applied via codd in lieu of the unbuildable pgmq-migration).
