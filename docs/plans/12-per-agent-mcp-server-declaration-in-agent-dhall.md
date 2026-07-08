@@ -4,8 +4,8 @@ slug: per-agent-mcp-server-declaration-in-agent-dhall
 title: "Per-agent MCP server declaration in Agent.dhall"
 kind: exec-plan
 created_at: 2026-06-27T17:57:56Z
-intention: "intention_01kw53nfb4es1sf7demy46z0eb"
-master_plan: "shinzui/baikai:docs/masterplans/6-mcp-support-across-the-agent-stack.md"
+intention: "intention_01kx1tyzqcerzv4ysbktgr9sw9"
+master_plan: "docs/masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md"
 ---
 
 # Per-agent MCP server declaration in Agent.dhall
