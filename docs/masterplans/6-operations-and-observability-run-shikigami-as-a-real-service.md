@@ -1,0 +1,263 @@
+---
+id: 6
+slug: operations-and-observability-run-shikigami-as-a-real-service
+title: "Operations and Observability: Run Shikigami as a Real Service"
+kind: master-plan
+created_at: 2026-07-08T20:13:36Z
+intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
+---
+
+# Operations and Observability: Run Shikigami as a Real Service
+
+This MasterPlan is a living document. The sections Progress, Surprises & Discoveries,
+Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
+
+
+## Vision & Scope
+
+Shikigami is a declared-agent runtime — a CLI whose long-running commands (`worker`,
+`scheduler`, `consume-stream`, `consume-events`) drive declared agents over a Postgres + Kafka
+substrate. It works, but it cannot yet be *operated*. Every log line is a bare `hPutStrLn
+stderr`; every metrics hook the substrate exposes is filled with `Nothing`; tracing exists only
+inside the worker and dies at the outbox boundary; any of the worker's four concurrent loops can
+die silently while the process lingers; there is no health endpoint to probe; there is no way to
+list agents, list or cancel runs, or inspect dead letters; and the whole thing runs only inside
+a nix dev shell, with `process-compose` starting Postgres and nothing else.
+
+After this initiative, shikigami runs as a real service. An operator sees structured JSON logs
+they can filter with `jq`, real metrics and end-to-end traces exported over OTLP, and HTTP
+`/healthz`/`/readyz` endpoints on every long-running command. A dead loop takes the process down
+so a supervisor restarts it. From the command line an operator can list agents, list and inspect
+runs (keiro workflow status joined with the kioku session), cancel a stuck run, and inspect and
+replay dead-lettered jobs — all read-mostly, with destructive actions gated behind `--confirm`.
+One command, `just dev`, boots the entire local stack (Postgres, Kafka/Redpanda, migrations, the
+stub sink, the worker, the scheduler, both consumers) with health-check-based ordering; and a
+NixOS module plus a single configuration reference make the runtime installable outside the dev
+shell.
+
+In scope: observability (logs, metrics, traces), liveness/readiness and loop supervision, an
+operator CLI, and the deployable stack (process-compose, packaging, configuration reference).
+Explicitly out of scope: the Kafka consume-loop *reconnect* fix (owned by
+`docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md` in
+MasterPlan 3 — this initiative only makes that death observable); in-workflow run timeouts
+(owned by `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md` in
+MasterPlan 3 — this initiative owns only the operator-issued cancel); and the definition of the
+model-provider and outbound-credential configuration (owned by `docs/plans/13-...` and
+`docs/plans/22-...` — the configuration reference reserves sections for them).
+
+
+## Decomposition Strategy
+
+The initiative splits along four operational concerns, each independently demonstrable, each
+producing a distinct user-visible capability:
+
+1. **Observability (EP-1, plan 28)** — structured logging, metrics, and trace propagation. This
+   is the "can I see what it's doing" layer. It is first because it defines the observability
+   *vocabulary* (metric names, log event names, attribute keys) that every other plan — and
+   every plan in MasterPlans 2-5 — emits against.
+2. **Health & supervision (EP-2, plan 29)** — per-loop heartbeats, `/healthz`/`/readyz`, and
+   fail-fast supervision. This is the "is it alive, and does it die honestly" layer. Its
+   endpoints feed EP-4's readiness probes.
+3. **Operator CLI (EP-3, plan 30)** — `agents list`, `runs list/show/cancel`, `dlq list/replay`,
+   `outbox status`. This is the "can I inspect and control it" layer, pure surface over the
+   existing substrate tables.
+4. **Deployable stack (EP-4, plan 31)** — full `process-compose` stack, `just dev`, a NixOS
+   module, and the configuration reference. This is the "can I run and install it" layer.
+
+Boundaries were drawn to minimize cross-plan coupling and maximize independent verifiability.
+Observability, health, and the operator CLI touch largely disjoint code — logging/metrics
+plumbing, a health server, and read-only queries respectively — so they proceed in parallel.
+The deployable stack is deliberately last-and-thin: it is mostly configuration (YAML, nix,
+Markdown) and consumes the others' outputs (health endpoints as probes, the config surface as a
+reference) without needing their internals.
+
+Alternatives considered and rejected. *One "observability" plan folding health in*: rejected
+because health/supervision is a behavioral change (fail-fast, loop death) with its own risk
+profile and its own acceptance (a process that exits non-zero), distinct from the additive
+logging/metrics work. *Merging the operator CLI into the deployable stack*: rejected because the
+CLI is Haskell code with database queries and a confirm-gate test, while the stack is
+configuration; merging would produce one lopsided plan. *A separate plan for a Prometheus
+endpoint*: rejected because the substrate's metrics hooks are typed for the OpenTelemetry
+`Meter`, so metrics belong with the OTLP work in EP-1 (see EP-1's Decision Log).
+
+
+## Exec-Plan Registry
+
+| # | Title | Path | Hard Deps | Soft Deps | Status |
+|---|-------|------|-----------|-----------|--------|
+| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | None | None | Not Started |
+| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | None | EP-1 | Not Started |
+| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | None | EP-1 | Not Started |
+| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | None | EP-2 | Not Started |
+
+Status values: Not Started, In Progress, Complete, Cancelled.
+Hard Deps and Soft Deps reference other rows by their EP-# prefix.
+
+
+## Dependency Graph
+
+There are no hard dependencies in this initiative — every plan compiles and delivers on its own,
+so all four can start immediately. The ordering is entirely soft, driven by which outputs a plan
+*benefits from* rather than *requires*.
+
+EP-1 (observability) is the natural first mover because it defines the observability vocabulary
+and the `Shikigami.Log` module that EP-2 and EP-3 would ideally emit through. But EP-2 and EP-3
+do not block on it: EP-2's health server can ship with plain logging and adopt `Shikigami.Log`
+later; EP-3's subcommands are one-shot CLIs that need no structured logging at all. That is why
+EP-1 is a *soft* dep of both, not a hard one.
+
+EP-2 and EP-3 are mutually independent and independent of each other's internals — health
+plumbing versus read-only operator queries touch disjoint code — so they run fully in parallel
+with each other and with EP-1.
+
+EP-4 (deployable stack) softly depends on EP-2: its process-compose and systemd readiness probes
+are best pointed at EP-2's `/readyz` endpoint. Until EP-2 lands, EP-4 ships with exec-based and
+`process_started` probes and upgrades them afterward (EP-4 spells this out). EP-4 also consumes
+EP-1's configuration surface — the metrics/logging env vars EP-1 introduces must appear in EP-4's
+configuration reference — an integration concern, not an ordering constraint. The pragmatic
+sequence, if one contributor works serially, is EP-1 → (EP-2 ∥ EP-3) → EP-4; with parallel
+contributors, all four start at once and reconcile at the integration points below.
+
+
+## Integration Points
+
+**IP-A — The observability vocabulary (EP-1 defines; all plans consume).** EP-1 owns the naming
+conventions: metric names dot-namespaced under `shikigami.`
+(`shikigami.runs.started|completed|failed|retried|dead_lettered`, `shikigami.queue.depth`,
+`shikigami.consumer.records`), log event names as `component.subject.verb`
+(`worker.job.dead_lettered`, `stream.record.matched`), and attribute keys reusing the existing
+span attribute names (`agent.name`, `trigger.kind`, `run.idempotency_key`, plus `sink.kind`,
+`outcome`, `topic`). EP-2 and EP-3 emit loop-lifecycle and audit events using these conventions;
+plans in MasterPlans 2-5 (which emit run/sink/timer events) follow the same vocabulary. The
+artifact is documented in EP-1's Decision Log; changes to it are made in EP-1 first.
+
+**IP-B — `Shikigami.Log` (EP-1 defines; EP-2, EP-3 consume).** EP-1 creates
+`shikigami-core/src/Shikigami/Log.hs`. EP-2's loop-supervision events and EP-3's destructive-
+action audit lines should go through it once it exists. Because both can function without it,
+this is a soft consumption, not a compile dependency.
+
+**IP-C — Health endpoints and `--health-port` (EP-2 defines; EP-4 consumes).** EP-2 adds
+`GET /healthz` and `GET /readyz` and a `--health-port` flag to the four long-running commands.
+EP-4 wires these as process-compose `http_get` readiness probes and systemd health config, and
+must list `--health-port` in the configuration reference. Until EP-2 lands, EP-4 uses exec
+probes; the shared contract is the endpoint paths and the flag name.
+
+**IP-D — Configuration surface (EP-1 extends; EP-4 documents).** EP-4 owns
+`docs/operations/configuration.md`, the single enumeration of every env var and flag. EP-1 may
+add observability knobs (beyond the standard `OTEL_*` family, e.g. a metrics-exposition fallback
+switch); any such addition must be reflected in EP-4's reference. EP-4's reference also reserves
+sections for the model-provider config owned by
+`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) and the
+outbound-credential config owned by `docs/plans/22-outbound-authentication-for-sink-clients.md`
+(MasterPlan 4), to be filled by those plans' authors.
+
+**IP-E — Cross-MasterPlan cancellation surface (EP-3 with MasterPlan 3's plan 17).** EP-3's
+`runs cancel <workflow-id>` and plan 17's in-workflow run timeout both write keiro's terminal
+`WorkflowCancelled` journal marker (`Keiro.Workflow.Types.WorkflowCancelled`, appended via
+`Keiro.Workflow.appendJournalEntry`). Plan 17 owns the automatic self-cancel on overrun; EP-3
+owns the operator-issued cancel. If plan 17 lands a shared cancel helper, EP-3 should call it
+rather than duplicate the append.
+
+**IP-F — Cross-MasterPlan consume-loop death (EP-2 with MasterPlan 3's plan 18).** EP-2 makes a
+dead Kafka consume loop *observable* (readiness flips to 503, the process exits non-zero so a
+supervisor restarts it). The actual reconnect/backoff fix — so the loop recovers without a full
+restart — is owned by
+`docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`. EP-2
+must not duplicate plan 18's in-loop recovery.
+
+
+## Progress
+
+Milestone-level checklist across all four child plans. Update as each milestone completes.
+
+EP-1 — Structured logging, metrics, and trace propagation:
+
+- [ ] EP-1 M1: `Shikigami.Log` module + every `hPutStrLn stderr` call site replaced;
+      `logSinkResult` implemented (no longer a no-op).
+- [ ] EP-1 M2: metrics spike promoted; `ShikigamiMetrics` + `withRunTelemetry`; `AppEnv.metrics`
+      populated everywhere; queue-depth/outbox/consumer instruments live.
+- [ ] EP-1 M3: scheduler and consumers traced; `traceparent` propagated into the outbox;
+      `sink.publish` span wraps the outbound HTTP POST with a `traceparent` header.
+
+EP-2 — Health, liveness, and worker loop supervision:
+
+- [ ] EP-2 M1: `Shikigami.Health` warp server serving `/healthz` and `/readyz`; `--health-port`
+      on the four commands.
+- [ ] EP-2 M2: per-loop heartbeats reflected in `/healthz`; real dependency checks in `/readyz`.
+- [ ] EP-2 M3: fail-fast supervision (loop death exits non-zero); resume loop
+      restart-with-backoff.
+
+EP-3 — Operator CLI:
+
+- [ ] EP-3 M1: `agents list`.
+- [ ] EP-3 M2: `Shikigami.Operator.Query` + `runs list` / `runs show`.
+- [ ] EP-3 M3: `runs cancel --confirm`.
+- [ ] EP-3 M4: `dlq list` / `dlq replay --confirm` + `outbox status`.
+- [ ] EP-3 M5: `--confirm` gate proven by test.
+
+EP-4 — Deployable service stack:
+
+- [ ] EP-4 M1: Kafka in the dev shell + full `process-compose` stack + `just dev`.
+- [ ] EP-4 M2: end-to-end smoke through the composed stack.
+- [ ] EP-4 M3: NixOS module exported + flake eval check.
+- [ ] EP-4 M4: `docs/operations/configuration.md`.
+
+
+## Surprises & Discoveries
+
+(None yet.)
+
+Seeded research findings that shaped the decomposition (verified 2026-07-08):
+
+- The kikan ecosystem uses **no** structured-logging framework (keiro, shibuya-core,
+  kizashi-core, kioku, kawa — no katip/co-log/monad-logger). The idiom is stderr lines plus
+  OpenTelemetry spans. This is why EP-1 adds a minimal in-repo JSON logger rather than adopting a
+  framework.
+- shibuya offers **no** processor-level restart supervision — only `IgnoreFailures` and
+  `StopAllOnFailure` (`Shibuya.App:89-98`), neither of which restarts a failed child. This is
+  why EP-2 chooses fail-fast + external supervisor rather than in-process restart.
+- keiro has **no** top-level "cancel workflow by id"; cancellation is appending the
+  `WorkflowCancelled` marker via `appendJournalEntry`. This is why EP-3's `runs cancel` uses the
+  journal, not a raw `UPDATE`, and why IP-E exists.
+- Poison run jobs are pgmq-*archived* (`deadLetterConfig = Nothing`), and pgmq-hs exposes no
+  archive reader — so EP-3's `dlq list` is a direct `SELECT` over `pgmq.a_shikigami_run_jobs`.
+
+
+## Decision Log
+
+- Decision: Decompose Operations & Observability into four plans — observability (28), health &
+  supervision (29), operator CLI (30), deployable stack (31) — with EP-1 as the soft-first
+  vocabulary owner and no hard dependencies.
+  Rationale: the four concerns touch largely disjoint code and each yields a distinct operator-
+  visible capability, so they are independently verifiable and can run in parallel. Folding
+  health into observability, or the CLI into the stack, was rejected as producing lopsided plans
+  with mixed risk profiles (see Decomposition Strategy).
+  Date: 2026-07-08
+
+- Decision: Make every inter-plan dependency soft, not hard.
+  Rationale: each plan compiles and delivers standalone. EP-2/EP-3 can emit through
+  `Shikigami.Log` if EP-1 has landed but function without it; EP-4 can probe `/readyz` if EP-2
+  has landed but ships with exec probes otherwise. Serializing them with hard deps would extend
+  the timeline for no correctness gain.
+  Date: 2026-07-08
+
+- Decision: EP-1 owns the observability vocabulary as an explicit Integration Point (IP-A) that
+  MasterPlans 2-5 also consume.
+  Rationale: those MasterPlans' plans emit run/sink/timer logs and metrics; without a single
+  naming owner the vocabulary would drift across a dozen plans. Centralizing the convention in
+  EP-1's Decision Log gives one place to change it.
+  Date: 2026-07-08
+
+- Decision: Route the two cross-MasterPlan overlaps (cancellation with plan 17; consume-loop
+  death with plan 18) through named integration points (IP-E, IP-F) rather than absorbing that
+  work here.
+  Rationale: plan 17 owns in-workflow timeout and plan 18 owns Kafka reconnect/atomic
+  consumption; this MasterPlan owns only the operator-facing cancel surface and the *observability*
+  of loop death. Naming the seams prevents duplicated or conflicting implementations of the same
+  keiro marker and the same consume loop.
+  Date: 2026-07-08
+
+
+## Outcomes & Retrospective
+
+(To be filled during and after implementation.)
