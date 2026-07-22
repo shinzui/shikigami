@@ -130,6 +130,14 @@ back on the live queue.
   paths; everything else is a `SELECT` or a manifest read.
   Date: 2026-07-08
 
+- Decision: This plan owns the `agents` operator command group but consumes plan 20's
+  `AgentLoadReport`; plan 23 later extends the command with principal/lifecycle state and
+  adds `sync`.
+  Rationale: plan 20 is the sole directory traversal and preserves parse failures, while
+  the operations initiative owns presentation and CLI parsing. This division prevents a
+  second loader here and a second `agents` command in plan 23.
+  Date: 2026-07-22
+
 
 ## Outcomes & Retrospective
 
@@ -210,10 +218,10 @@ convention (a compact aligned table by default; `--json` for machine consumption
 
 Add an `Agents AgentsSub` constructor and an `agents` `command` with a `list` subparser to
 `Cli.hs`. Create `shikigami-cli/src/Shikigami/Cli/Commands/Agents.hs` (`runAgentsList ::
-FilePath -> Bool -> IO ()`, taking `--agents DIR` (default `agents`) and `--json`). Reuse the
-`loadAgents` pattern from `Commands/ConsumeStream.hs:90-94`, but keep both the successes and the
-parse failures (call `loadAgent` per file and report `Left` as a `failed` load-state row instead
-of dropping it, so an operator sees a broken manifest). For each loaded `AgentDecl`, print name,
+FilePath -> Bool -> IO ()`, taking `--agents DIR` (default `agents`) and `--json`). Consume
+`Shikigami.Agent.Loader.loadAgentsReport` from plan 20 and render every
+`AgentLoaded`/`AgentLoadFailed` entry, so an operator sees broken manifests without a second
+directory traversal. For each loaded `AgentDecl`, print name,
 behavior kind (reuse `Shikigami.Agent.Run.behaviorKindText`), and a trigger summary (`schedule
 <cron>` / `stream <topic/match>` / `event <eventType>` derived from the `Trigger` constructor).
 
@@ -299,7 +307,9 @@ it.
 ## Concrete Steps
 
 All commands run from the repo root inside `nix develop`, with `PG_CONNECTION_STRING` set (use
-the stack from `docs/plans/31-...md` or a manual Postgres).
+the stack from
+`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
+or a manual Postgres).
 
 Build:
 
@@ -423,7 +433,8 @@ made; nothing to roll back on the data side.
 
 ## Interfaces and Dependencies
 
-Dependencies: `hasql`, `hasql-pool`, `kiroku-store` (already in `shikigami-cli.cabal`), plus
+Dependencies: hard dependency on plan 20's `AgentLoadReport` API; `hasql`, `hasql-pool`,
+`kiroku-store` (already in `shikigami-cli.cabal`), plus
 `keiro`/`keiro-core` and `kioku` transitively via `shikigami-core`. keiro provides
 `Keiro.Workflow (appendJournalEntry, WorkflowId (..), WorkflowName (..))` and
 `Keiro.Workflow.Types (WorkflowJournalEvent (WorkflowCancelled))`; shikigami provides
@@ -453,9 +464,20 @@ New modules/handlers that must exist at the end:
   `outbox`, each destructive leaf carrying a `switch (long "confirm")`.
 
 Cross-plan contracts (mirrored in the MasterPlan's Integration Points):
+`docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md`
+defines the report rendered by `agents list`; do not call `loadAgent` or walk the
+directory here. `docs/plans/23-agent-lifecycle-control-with-meibo-principals.md` extends
+this command group after plan 33 defines `identity.principal`.
 `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md` owns
 in-workflow run timeouts (self-cancel on overrun); this plan owns the operator-issued cancel —
 both write the same `WorkflowCancelled` marker, so if plan 17 lands a shared cancel helper, this
 plan should call it rather than re-implement the append. If
 `docs/plans/28-structured-logging-metrics-and-trace-propagation.md` has landed, the destructive
 subcommands should emit an audit `Shikigami.Log` event (soft dependency).
+
+
+## Revision Notes
+
+- 2026-07-22: Made plan 20's `AgentLoadReport` a hard dependency and assigned this plan
+  ownership of the `agents` command group. Plan 23 now extends that command instead of
+  defining a competing `agents list`.

@@ -115,7 +115,7 @@ consolidation reviewable against it.
 | 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | None | None | Not Started |
 | 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | EP-1 | None | Not Started |
 | 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | EP-1 | None | Not Started |
-| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | None | EP-1 | Not Started |
+| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | None | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -148,16 +148,19 @@ be shipped behind EP-1's patch discipline so in-flight conversations survive the
 EP-4 soft-depends on EP-1: consolidation must preserve journaled step names and the
 SinkIntent wire format byte-for-byte, and EP-1's discipline document is the standard the
 consolidation diff is reviewed against. EP-4 can start any time (its work is code motion
-plus tests) but should land after the discipline exists. EP-2 and EP-3 can proceed in
+plus tests) but should land after the discipline exists and after cross-MasterPlan plans
+19 and 28 have settled delivery semantics and trace context. EP-2 and EP-3 can proceed in
 parallel with each other once EP-1 is complete; EP-4 can proceed in parallel with EP-2 and
 EP-3 as long as merge order into `shikigami-core/src/Shikigami/Agent/Workflow.hs` and
 `shikigami-core/src/Shikigami/Flow/Capability.hs` is coordinated (see Integration Points).
 
-Cross-MasterPlan edges: plan 19 (MasterPlan 3) changes SinkIntent semantics and EP-4 moves
-the SinkIntent code; either order works if the shared module preserves the wire format, and
-the reconciliation step is documented in EP-4. Plans 15, 17, and 23 (MasterPlans 2, 3, 4)
+Cross-MasterPlan edges: plan 19 (MasterPlan 3) changes SinkIntent semantics, plan 28
+(MasterPlan 6) adds trace context, and EP-4 moves the SinkIntent code. Preferred landing
+order is plans 19 and 28 before EP-4 so the final machinery moves once. Plans 15, 17, and 23 (MasterPlans 2, 3, 4)
 all touch `shikigami-core/src/Shikigami/Agent/Workflow.hs`; once EP-1 lands, every change to
-journaled step structure in that file must follow `docs/workflow-versioning.md`.
+journaled step structure in that file must follow `docs/workflow-versioning.md`. Plan 35
+(MasterPlan 7) now hard-depends on EP-1 before changing the durable delegation path. This is
+the MasterPlan-5 slice of the canonical MP-2 through MP-7 waves in MasterPlan 2.
 
 
 ## Integration Points
@@ -184,9 +187,9 @@ SinkIntent wire format and outbox identity: today defined twice, identically —
 `shikigami-core/src/Shikigami/Agent/Workflow.hs:96-106,442-583`. EP-4 owns extracting the
 single module `Shikigami.Sink.Intent` and the golden wire-format test. EP-1 (emitSignal
 labels) and EP-3 (conversation replies) both produce SinkIntents through this machinery but
-do not change its encoding; plan 19 (MasterPlan 3, outside this MasterPlan) changes its
-semantics — EP-4 documents the reconciliation: whichever of EP-4/plan-19 lands second
-rebases onto the other, and the golden fixture test is the drift tripwire.
+do not change its encoding; plan 19 changes its semantics and plan 28 adds trace context.
+Both land before EP-4; the golden fixture test is the drift tripwire while the settled
+fields and behavior move into the shared module.
 
 Journaled step-name inventory: EP-1's discipline document includes the inventory of every
 step name shikigami journals today (agent-run lifecycle steps, conversation per-turn steps,
@@ -221,7 +224,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-4 M1: `Shikigami.Sink.Intent` shared module extracted; both former copies deleted; golden wire-format round-trip test.
 - [ ] EP-4 M2: `agent-run` CLI drives the durable workflow; `runAgentWithMemory` retired.
 - [ ] EP-4 M3: keiki lifecycle conformance test (flow branches accepted by the transducer).
-- [ ] EP-4 M4: Cross-plan reconciliation with plan 19 documented and verified; sharedScope disposition noted for plan 34.
+- [ ] EP-4 M4: Cross-plan reconciliation with plans 19 and 28 documented and verified; sharedScope disposition noted for plan 34.
 
 
 ## Surprises & Discoveries
@@ -277,6 +280,11 @@ plan.
   Rationale: whether cross-agent shared memory exists is a memory-lifecycle product
   decision, not a consolidation concern.
   Date: 2026-07-08
+- Decision: Plan 27 lands after plans 19 and 28, and plan 35 hard-depends on plan 24.
+  Rationale: consolidation should move final delivery/trace semantics once, while
+  delegation must change a durable workflow only after patch plumbing and the step-name
+  inventory exist.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -285,3 +293,10 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-22: Ordered plan 27 after plans 19 and 28 and made plan 24 an explicit
+  prerequisite of MasterPlan 7's delegation work. This aligns the durable-evolution
+  initiative with the canonical MP-2 through MP-7 execution waves.

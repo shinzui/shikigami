@@ -571,4 +571,12 @@ same `Flow/Capability.hs` module), plan 26 (`continueAsNew`/`restoreSeed` usage 
 discipline; `shikigamiWorkflowRunOptions` at conversation call sites), plan 27 (the
 discipline document and step-name inventory as the review standard for code motion), and
 plans 15/17/23 in other MasterPlans (any change to `Agent/Workflow.hs` step structure must
-follow `docs/workflow-versioning.md`).
+follow `docs/workflow-versioning.md`). Plan 35 (MasterPlan 7) is a hard downstream
+consumer: delegation work begins only after this plan and updates the step inventory for
+any added durable steps.
+
+
+## Revision Notes
+
+- 2026-07-22: Added plan 35 as a hard downstream consumer of the workflow-versioning
+discipline and patch plumbing, matching the cross-MasterPlan execution order.

@@ -85,10 +85,11 @@ plan (33, MasterPlan 7) was rejected: silently ignored fields are a present-tens
 runtime lie, not a future schema concern, and the fix (honor or reject) requires no
 schema change.
 
-Plans 14 and 16 share nothing but additive record fields on `WorkerEnv`/`AgentRunDeps`
-and CLI flag blocks; they can proceed fully in parallel. Plan 15 is sequenced after 13
-by soft dependency (same-file coordination, and the feature is only meaningful with a
-real model) but is not blocked by it.
+Plans 14 and 16 share only additive record fields, but their portfolio landing order is
+now plan 16 → plan 22 → plan 14: plan 22 wraps the settled sink clients with the
+authenticated `SinkHttp` that approval notifications consume. Plan 15 is sequenced
+after 13 by soft dependency (same-file coordination, and the feature is only meaningful
+with a real model) but is not blocked by it.
 
 
 ## Exec-Plan Registry
@@ -96,15 +97,21 @@ real model) but is not blocked by it.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | None | None | Not Started |
-| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | None | None | Not Started |
+| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | cross-MP: plan 22 (MasterPlan 4) | EP-1 | Not Started |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | None | EP-1 | Not Started |
 | 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | None | None | Not Started |
 
 
 ## Dependency Graph
 
-There are no hard dependencies: every plan compiles and verifies against the current
-tree. The one soft dependency is EP-3 on EP-1. Both edit
+EP-1, EP-3, and EP-4 have no hard dependencies and compile against the current tree.
+EP-2 has one cross-MasterPlan hard dependency on
+`docs/plans/22-outbound-authentication-for-sink-clients.md`: approval asks are outbound
+danwa or kizashi calls and must use plan 22's authenticated `SinkHttp` rather than
+introduce a second, unauthenticated client path. EP-2 also soft-depends on EP-1 for the
+typed environment-resolver convention.
+
+The remaining intra-MasterPlan soft dependency is EP-3 on EP-1. Both edit
 `shikigami-core/src/Shikigami/Behavior/Run.hs` and `Behavior/Skill.hs`; EP-1 defines
 the `BehaviorEnv` shape, the provider/config idiom, and the `Options` parameter on the
 skill functions, while EP-3 changes the *input* side (`BehaviorInput` and context
@@ -115,12 +122,74 @@ is fully testable against the stub provider (its tests assert the outbound reque
 not the reply) but only becomes *meaningful* to users once EP-1's real provider can
 read the injected context — hence soft, not hard.
 
-EP-2 (approval) and EP-4 (sink honesty) are independent of everything: EP-2 touches
-the approval seam and worker wiring; EP-4 touches the sink dispatch path. Both add
+EP-4 (sink honesty) remains independent. EP-2 touches the approval seam and worker
+wiring after plan 22 has established authenticated clients; EP-4 touches the sink
+dispatch path. Both add
 fields to `WorkerEnv`/`AgentRunDeps` and flags to the `worker` CLI command — a
 mechanical merge, called out in each plan. All four plans may be worked concurrently
-by different contributors provided the EP-1/EP-3 landing order is respected and the
-`worker` command's flag additions are merged deliberately.
+where their dependencies allow, provided the EP-1/EP-3 landing order is respected and
+the `worker` command's flag additions are merged deliberately.
+
+### Cross-MasterPlan execution order for MasterPlans 2–7
+
+The six MasterPlans are not six serial phases. Their child plans form one directed
+acyclic graph, and implementing the MasterPlans in numeric order would create avoidable
+adapters and merge work. The canonical landing order is expressed as waves; plans in
+the same wave may proceed in parallel unless an intra-MasterPlan dependency says
+otherwise.
+
+Foundation wave: land plan 13 (model/config convention), plan 16 (honest sink
+behavior), plans 17 and 18 (worker failure taxonomy and transactional enqueue), plan
+21 (grant schema), and plan 24 (workflow-versioning discipline). These artifacts have
+no cross-MasterPlan prerequisites.
+
+Shared-seam wave: land plan 20 after plans 17 and 18 so it consumes their worker and
+enqueue seams; land plan 22 after plans 13 and 16 so it owns the single authenticated,
+header-capable HTTP layer; plans 25 and 26 may land after plan 24. Plan 15 lands after
+plan 13. Plan 28's logging and metrics milestones may start earlier, but its HTTP trace
+propagation lands after plan 22 and extends the same HTTP helper.
+
+Semantic-consumer wave: land plan 19 after plan 16 and plan 28 Milestone 1, then plan
+27 after plans 19, 24, and 28 so consolidation preserves the final sink semantics,
+wire format, and trace context. Land plan 33 after plan 20 so it extends the canonical
+loader with enabled-agent filtering instead of creating another loader. Land plan 30
+after plan 20 so its agent inspection command consumes the same load report. Plan 14
+lands after plan 22 and uses its authenticated clients.
+
+Feature-completion wave: plan 23 lands after plans 30 and 33 (and preferably plan 21),
+extending the existing `agents` command with principal/lifecycle state and persisting
+the shared load report. Plan 35 lands after plans 24 and 33. Plan 34 may implement
+distillation, bounded fallback, and retention earlier, but its shared-scope milestone
+lands after plan 33. Plan 32 lands after plan 22 and preferably after plans 21, 19, and
+27. Plan 12's runtime milestones land after plan 13, plan 33, and its cross-repository
+baikai/shikumi prerequisites.
+
+Operations closure wave: plan 29 follows plan 28 where practical, and plan 31 lands
+last, after the health, provider, outbound-authentication, and channel-egress
+configuration surfaces it documents have stabilized. This wave ordering is a delivery
+optimization; only dependencies explicitly marked hard in a registry prevent an
+earlier start.
+
+The exact edge ledger is:
+
+| Consumer | Predecessor(s) | Strength |
+|---|---|---|
+| plan 14 | plan 22 | Hard: approval asks import `SinkHttp` and authenticated clients |
+| plan 19 | plan 28 M1 | Hard: delivery events import `Shikigami.Log` |
+| plan 20 | plans 17 and 18 | Hard: routing/enqueue hardening consumes their final seams |
+| plans 25 and 26 | plan 24 | Hard: both change durable workflow behavior |
+| plan 23 | plans 30 and 33 | Hard: it extends the owned CLI and consumes declared identity |
+| plan 30 | plan 20 | Hard: `agents list` renders `AgentLoadReport` |
+| plan 32 | plan 22 | Hard: kanmon extends the canonical auth/HTTP layer |
+| plan 33 | plan 20 | Hard: enabled selection consumes `AgentLoadReport` |
+| plan 35 | plans 24 and 33 | Hard: delegation changes the durable workflow and agent schema |
+| plan 22 | plans 13 and 16 | Preferred landing order: reuse final config and sink-client shapes |
+| plan 27 | plans 19, 24, and 28 | Preferred landing order: consolidate final semantics once |
+| plan 31 | plans 13, 22, 28, 29, and 32 | Preferred landing order: document and package settled surfaces |
+
+Plan 28 Milestone 3 also waits for plan 22, while its logging and metrics milestones can
+start immediately. Plan 34 Milestone 4 waits for plan 33; its earlier memory-lifecycle
+milestones can proceed independently.
 
 
 ## Integration Points
@@ -157,19 +226,29 @@ result shape; EP-4 adds `resolvedRecipient :: Maybe Text` to the journaled/outbo
 historical journals still decode (each plan carries a decode-compat test or an
 explicit keep-constructor decision).
 
-**Approval policy interface — vs. MasterPlan 7's plan 33 (EP-2 defines).**
-`docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md` may
-move approval policy into `schema/Agent.dhall`. EP-2 therefore keeps policy behind the
-small `ApprovalPolicy` record and one `policyApprovalEnv` constructor: plan 33 swaps
-the policy *source* (Dhall instead of environment) without touching the park/notify/
-resolve machinery or the CLI.
+**Approval notification transport — plan 22 (EP-2 consumes).**
+`docs/plans/22-outbound-authentication-for-sink-clients.md` owns `SinkHttp`, the shared
+connection managers, `TokenSource`, and the canonical header-capable POST helper. EP-2
+uses those artifacts for danwa/kizashi approval asks and does not open a parallel raw
+HTTP path. `ApprovalPolicy` remains a small environment-backed record local to EP-2.
+Plan 33 does not own approval policy—it owns identity, memory policy, and enablement—so
+there is no approval dependency on MasterPlan 7.
 
 **Sink outcome semantics — vs. MasterPlan 3's plan 19 (EP-4 feeds it).**
 `docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md` owns retry ceilings,
 dead-lettering, and delivery accounting for the outbox path. EP-4's contribution is
 upstream of that: it stops minting fake `PublishSucceeded` outcomes so plan 19 has
 truthful failures to manage. EP-4 must not implement its own retry policy beyond what
-`publishClaimedOutbox` already does.
+`publishClaimedOutbox` already does. Preferred landing order is plan 16 plus plan 28
+Milestone 1 → plan 19 → plan 27: first make individual handlers honest and establish
+structured logging, then make asynchronous delivery state truthful, then move the
+settled machinery into its shared module.
+
+**HTTP request layer — plans 22, 28, and 32 (plan 22 defines).** Plan 22 owns
+`HttpEnv`, `TokenSource`, and `postJSONWithHeaders`; plan 28 adds `traceparent` through
+that helper; plan 32 adds the kanmon `HttpEnv`/token source and consumes the same helper.
+No plan may add a second `postJSONWith` variant or store bearer-token text in a
+serializable sink config.
 
 **Worker construction — `WorkerEnv`/`AgentRunDeps`/`Cli.hs` worker flags (EP-1, EP-2,
 EP-4).** Three plans add fields (provider selection, approval policy, `ReiConfig`) and
@@ -205,20 +284,31 @@ inside `runWorkerCmd` so the merges stay mechanical.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Cross-MasterPlan audit (2026-07-22): plan 33 contains no approval-policy work,
+  despite the earlier EP-2 integration note saying it might replace the policy source.
+  The false edge was removed; approval policy remains owned by plan 14.
+- Cross-MasterPlan audit (2026-07-22): approval notification, sink authentication,
+  trace propagation, and channel egress all need the same outbound HTTP seam. Making
+  plan 22 the owner removes three incompatible proposed helper signatures and prevents
+  approval asks from bypassing authentication.
+- Cross-MasterPlan audit (2026-07-22): a correct portfolio order must be expressed at
+  child-plan granularity. MP-5's versioning foundation and MP-6's observability work
+  precede some work in numerically earlier MasterPlans, while MP-6's deployable stack
+  remains the final closure step.
 
 
 ## Decision Log
 
 - Decision: Decompose the review's findings into four child plans along functional
   concerns (model execution, human-in-the-loop, context assembly, sink truth), with
-  the dependency matrix EP-1=plan 13, EP-2=plan 14, EP-3=plan 15, EP-4=plan 16; no
-  hard dependencies; EP-3 soft-depends on EP-1.
+  the dependency matrix EP-1=plan 13, EP-2=plan 14, EP-3=plan 15, EP-4=plan 16;
+  EP-3 soft-depends on EP-1. The 2026-07-22 revision adds plan 22 as EP-2's
+  cross-MasterPlan hard dependency.
   Rationale: each concern yields an independently demonstrable behavior and an
   independent test story; the only real coupling (two shared behavior files) is
   cheaper as an ordered integration point than as a merged mega-plan. See
   Decomposition Strategy for the rejected alternatives.
-  Date: 2026-07-08
+  Date: 2026-07-22
 - Decision: "De-stub" means *honest*, not *stub-free*: deterministic stubs remain the
   default for CI and tests everywhere, but every stub in the production path must be
   loudly labeled (startup logs, recorded `modelUsed`, explicit `Failed` outcomes) and
@@ -252,8 +342,30 @@ inside `runWorkerCmd` so the merges stay mechanical.
   redacting `ApiKeySource` is the model) and makes later config surfaces (plan 31's
   deployable stack) a rename problem instead of a redesign.
   Date: 2026-07-08
+- Decision: Coordinate MasterPlans 2–7 through the child-plan waves in Dependency Graph,
+  not by imposing a coarse MP-2 → MP-3 → … → MP-7 chain.
+  Rationale: the actual hard edges cross initiative numbers in both directions (for
+  example plan 14 needs plan 22, plan 23 needs plans 30 and 33, and plan 35 needs plan
+  24). A whole-MasterPlan chain would either contain cycles or serialize independent
+  work; the child-plan DAG is precise and acyclic.
+  Date: 2026-07-22
+- Decision: Plan 22 owns the authenticated, header-capable HTTP seam; plan 14 consumes
+  it for approval asks, plan 28 extends it with trace propagation, and plan 32 extends
+  it for kanmon.
+  Rationale: the prior plans proposed incompatible helpers and allowed approval asks to
+  bypass outbound authentication. One owner yields one manager/token/header contract.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-22: Added the MP-2 through MP-7 child-plan execution waves, made plan 14's
+  authenticated-client dependency explicit, removed the false approval-policy edge to
+  plan 33, and fixed ownership of the shared HTTP seam. The update prevents numeric
+  MasterPlan order from driving implementation and gives contributors a single acyclic
+  landing order.

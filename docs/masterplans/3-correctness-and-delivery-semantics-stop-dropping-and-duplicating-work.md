@@ -39,8 +39,8 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 |---|-------|------|-----------|-----------|--------|
 | 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | None | None | Not Started |
 | 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | None | None | Not Started |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | None | None | Not Started |
-| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | None | EP-1 | Not Started |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plan 28 M1 (MasterPlan 6) | cross-MP: plan 16 (MasterPlan 2) | Not Started |
+| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -48,28 +48,43 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-There are no hard dependencies: all four plans compile and are testable independently, and any of them can be picked up first. Three coordination edges exist.
+EP-1 and EP-2 can start independently. EP-3 starts after plan 28 Milestone 1 defines
+`Shikigami.Log`. EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
+and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
+implementations. Three additional coordination edges exist.
 
-EP-4 has a soft dependency on EP-1. Both edit the run-job handler in `shikigami-core/src/Shikigami/Worker.hs`: EP-1 restructures `runOneAgent`'s outcome-to-`AckDecision` mapping into an extracted, typed classification (replacing the `"unknown agent "` string-prefix match and the fixed one-second retry), and EP-4 restructures `handleRunJob`'s route selection (replacing the duck-typed `AddressedMessage` decode with routing on `RunJob.triggerKind`). If EP-1 lands first, EP-4 routes into EP-1's classified handler and dead-letters malformed conversation payloads through EP-1's taxonomy; if EP-4 must land first, it keeps the existing ack mapping untouched and EP-1 rebases over the routing change. Either order works; simultaneous implementation in separate branches requires reconciling `handleRunJob` (see Integration Points).
+EP-1 precedes EP-4. Both edit the run-job handler in `shikigami-core/src/Shikigami/Worker.hs`: EP-1 defines the typed outcome-to-`AckDecision` classification, and EP-4 routes its malformed-payload errors through that taxonomy.
 
-EP-2 and EP-4 share an integration dependency on `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. EP-2 adds a transaction-composable enqueue (`enqueueRunJobTx`) and a startup-time `ensureRunQueue`; EP-4 hardens the existing IO-level enqueue helpers in the same module (removing the per-enqueue `createQueue`, the timestamp-bearing idempotency key, and the epoch fallback). Neither blocks the other, but EP-4 must consume EP-2's `ensureRunQueue` if it exists rather than inventing a second one, and EP-2's transactional path must not reintroduce per-enqueue queue creation.
+EP-2 precedes EP-4 on `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. EP-2 adds
+`enqueueRunJobTx` and `ensureRunQueue`; EP-4 hardens the IO-level helpers by consuming
+those artifacts and never conditionally invents them.
 
 EP-3 has a cross-MasterPlan integration edge, not with a plan in this registry but with docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md (MasterPlan 5), which plans to consolidate the very sink-intent machinery EP-3 modifies. EP-3 should land first; if the consolidation proceeds concurrently, it must preserve EP-3's semantics (the `Enqueued` outcome, per-sink outbox keys, and the delivery-receipt guard). All journaled-value changes in EP-1 and EP-3 must also respect the versioning discipline that docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md (MasterPlan 5) establishes: additive only — no renames of journaled step names, no encoding changes that fail to decode already-journaled values.
 
-EP-1, EP-2, and EP-3 can proceed fully in parallel. A team of four can run all four concurrently provided the EP-1/EP-4 seam in `Worker.hs` is reconciled at merge time.
+EP-3 hard-depends on plan 28 Milestone 1, which defines `Shikigami.Log`, and preferably
+follows plan 16, which makes each sink handler truthful. EP-3 then records delivery semantics
+using the final sink outcomes and structured logger; plan 27 lands afterward and consolidates
+the settled semantics. The sink chain is plan 16 plus plan 28 M1 → EP-3 → plan 27.
+
+EP-1 and EP-2 can proceed in parallel while plan 28 M1 lands; EP-3 follows that logging
+milestone, and EP-4 starts after EP-1 and EP-2. This is the MasterPlan-3 slice of the
+canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
 ## Integration Points
 
-Worker handler and ack classification — `shikigami-core/src/Shikigami/Worker.hs`. Involved: EP-1, EP-4. EP-1 defines the shape: it changes `runJobHandler` to carry the shibuya lease for heartbeating, extracts a pure outcome-to-`AckDecision` classification with attempt-aware backoff, and removes the string-prefix dead-letter matching (today at `Worker.hs:184-185`). EP-4 consumes it: its new `routeRunJob` decides which orchestration path runs (`runConversationAgent` versus `runOneAgent`, today chosen by payload decode at `Worker.hs:139-141`) and must express its own failure cases (for example, a `TriggeredByEvent` job addressed to a conversation agent whose payload does not decode) as values of EP-1's classification rather than ad-hoc `AckDecision`s. Whichever plan lands second updates the other's tests in `shikigami-core/test/` rather than duplicating handler logic.
+Worker handler and ack classification — `shikigami-core/src/Shikigami/Worker.hs`. Involved: EP-1, EP-4. EP-1 defines the shape: it changes `runJobHandler` to carry the shibuya lease for heartbeating, extracts a pure outcome-to-`AckDecision` classification with attempt-aware backoff, and removes the string-prefix dead-letter matching (today at `Worker.hs:184-185`). EP-4 consumes it: its new `routeRunJob` decides which orchestration path runs (`runConversationAgent` versus `runOneAgent`, today chosen by payload decode at `Worker.hs:139-141`) and expresses its failure cases through EP-1's classification rather than ad-hoc `AckDecision`s.
 
-Run-job enqueue module — `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Involved: EP-2, EP-4. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` (no queue creation inside the transaction) and `ensureRunQueue :: Pool -> IO (Either UsageError ())` called once at process startup. EP-4 extends the module: it removes `createQueue` from the per-enqueue path of `enqueueRunJob` (relying on `ensureRunQueue`), removes or re-keys `enqueueAddressedRun`, and replaces the epoch fallback in `runJobFromEnvelope`. If EP-4 lands first, it introduces `ensureRunQueue` itself and EP-2 adopts it.
+Run-job enqueue module — `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Involved: EP-2, EP-4. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` (no queue creation inside the transaction) and `ensureRunQueue :: Pool -> IO (Either UsageError ())` called once at process startup. EP-4 extends the module: it removes `createQueue` from the per-enqueue path of `enqueueRunJob` (relying on `ensureRunQueue`), removes or re-keys `enqueueAddressedRun`, and replaces the epoch fallback in `runJobFromEnvelope`.
 
 Journaled sink outcome values — `shikigami-core/src/Shikigami/Sink/Types.hs` (`SinkOutcome`) and the step values journaled by `shikigami-core/src/Shikigami/Agent/Workflow.hs` (`dispatch-sinks` and the per-reply sink steps). Involved: EP-3 here; docs/plans/24 and docs/plans/27 in MasterPlan 5. EP-3 owns the change: it adds an `Enqueued` constructor (additive — old journaled `Delivered` values must still decode) and re-keys outbox messages per sink ordinal. Constraint on everyone: journaled step names (`ingest-job`, `lookup-agent`, `open-session`, `recall`, `run-behavior`, `dispatch-sinks`, `record`, `complete`, and the conversation steps) are never renamed, and value encodings only change backward-compatibly. The docs/plans/27 consolidation must treat EP-3's final semantics as the specification it preserves.
 
 Workflow result encoding — `agentRunWorkflow`'s return type `Either Text AgentRunResult` (journaled by keiro as the workflow completion value). Involved: EP-1. Decision recorded here so no plan trips over it: EP-1 does not change this type. Transient failures are expressed by throwing (never journaled), so a journaled `Left` comes to mean "permanent failure" without any encoding change to already-completed workflows.
 
-Agent load-state boundary. Involved: EP-4 and docs/plans/23 (MasterPlan 4). EP-4 only makes manifest and cron load failures loud (per-file logging, counts, a strict mode that refuses to start). Recording per-agent load state durably and gating agents on lifecycle status belongs to docs/plans/23; EP-4 must not build a persistence mechanism for load state.
+Agent loading boundary. EP-4 owns `AgentLoadReport`, the single directory traversal, and
+loud/strict failure behavior. Plan 30 renders that report in `agents list`; plan 33 adds
+enabled-agent selection; plan 23 persists the report and annotates the existing command with
+lifecycle state. EP-4 must not implement persistence, enabled filtering, or operator output.
 
 
 ## Progress
@@ -113,9 +128,12 @@ plan.
   Rationale: Each boundary has a distinct failure mode, distinct files, and an independently observable fix; one mega-plan would exceed the ExecPlan size guidance and none of the streams share code artifacts that would force merging.
   Date: 2026-07-08
 
-- Decision: No hard dependencies between the four plans; EP-4 takes a soft dependency on EP-1, and EP-2/EP-4 plus EP-1/EP-4 are managed as integration points on `Shikigami/Trigger/Enqueue.hs` and `Shikigami/Worker.hs` respectively.
-  Rationale: Maximizes parallelism. The shared files are touched in different functions; a reconciliation note is cheaper than serializing two otherwise-independent work streams.
-  Date: 2026-07-08
+- Decision: EP-4 hard-depends on EP-1 and EP-2; it consumes EP-1's ack taxonomy and
+  EP-2's `ensureRunQueue`/transactional enqueue seam.
+  Rationale: the earlier soft/integration treatment required conditional duplicate
+  implementations in EP-4. Serializing EP-4 behind EP-1/EP-2 removes that ambiguity;
+  EP-3 remains independent of them and follows plan 28 Milestone 1.
+  Date: 2026-07-22
 
 - Decision: EP-1 keeps `agentRunWorkflow`'s result type `Either Text AgentRunResult` unchanged and expresses transience by throwing; a journaled `Left` becomes "permanent" by construction.
   Rationale: keiro journals the workflow completion value; changing the type would change the JSON encoding of already-journaled completions and violate the additive-only versioning discipline that docs/plans/24 establishes.
@@ -128,6 +146,20 @@ plan.
 - Decision: EP-4 stops the silence around agent-manifest and cron load failures (logging, counts, strict mode) but does not persist per-agent load state; that persistence belongs to docs/plans/23 in MasterPlan 4.
   Rationale: Load-state persistence requires the meibo principal model that MasterPlan 4 introduces; duplicating a throwaway mechanism here would create migration debt.
   Date: 2026-07-08
+- Decision: EP-4 owns the canonical `AgentLoadReport`; plans 30 and 33 consume it for
+  inspection and enabled selection, then plan 23 adds durable lifecycle state.
+  Rationale: a single report preserves failures and prevents four plans from walking the
+  same directory with subtly different semantics.
+  Date: 2026-07-22
+- Decision: Order the sink path as plan 16 plus plan 28 M1 → EP-3 → plan 27.
+  Rationale: handlers become honest first, delivery accounting and logging then settle,
+  and consolidation finally moves the stable semantics and trace context once.
+  Date: 2026-07-22
+- Decision: Make plan 28 Milestone 1 a hard predecessor of EP-3.
+  Rationale: EP-3 now emits delivery and publisher events through the concrete
+  `Shikigami.Log` API rather than adding temporary stderr logging that a later plan must
+  replace.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -136,3 +168,11 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-22: Converted EP-4's worker/enqueue prerequisites and EP-3's structured-logger
+  prerequisite to hard dependencies, assigned canonical loader ownership to EP-4, and
+  added the cross-MasterPlan sink landing chain. This aligns MasterPlan 3 with the MP-2
+  through MP-7 execution waves.

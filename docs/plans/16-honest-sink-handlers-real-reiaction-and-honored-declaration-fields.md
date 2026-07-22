@@ -465,6 +465,14 @@ External facts this plan depends on (verified 2026-07-08): rei has no HTTP API
 (`/Users/shinzui/Keikaku/bokuno/danwa/danwa-api/src/Danwa/Conversation/Api.hs:3,139-148`).
 No new package dependencies. Independent of plans 13/14/15 except for shared additive
 edits to `WorkerEnv`/`AgentRunDeps`/`Cli.hs` (worker flag blocks) — coordinate merges
-mechanically. Cross-MasterPlan notes: plan 22 will extend `Sink/Config.hs` with
-credentials (keep `ReiConfig` self-contained); plan 19 (MasterPlan 3) owns
-retry/dead-letter policy for failed publishes — this plan only makes the failure real.
+mechanically. Cross-MasterPlan notes: plan 22 extends `Sink/Config.hs` with
+credentials after this plan's request/client shapes settle (keep `ReiConfig`
+self-contained); plan 19 (MasterPlan 3) lands after this plan and owns retry/dead-letter
+policy for failed publishes — this plan only makes the failure real.
+
+
+## Revision Notes
+
+- 2026-07-22: Recorded this plan as the sink-path predecessor of plans 22 and 19.
+  Authentication wraps the settled client shapes, and delivery truth consumes the
+  settled handler outcomes.

@@ -62,8 +62,16 @@ SHIKIGAMI_KAWA_TOKEN=s3cret cabal run shikigami -- worker --agents agents ...
   Date: 2026-07-08
 
 - Decision: Configuration idiom is environment variables read in the CLI command modules (`lookupEnv`), matching the existing `PG_CONNECTION_STRING` pattern (`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:28`).
-  Rationale: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) will introduce secret configuration for model API keys; whichever plan lands first defines the idiom and the other must follow it. As of 2026-07-08, plan 13 is not yet fleshed out, so this plan proposes env vars (the least-surprise extension of what the repo already does) and records the coordination duty here and in the masterplan's Integration Points. If plan 13 lands first with a different mechanism (e.g. a config file), adopt that mechanism here and update this entry.
-  Date: 2026-07-08
+  Rationale: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) lands first and defines the typed `lookupEnv` resolver, fatal-on-invalid startup behavior, and loud redacted description convention. This plan applies that convention to sink tokens instead of establishing a competing one.
+  Date: 2026-07-22
+- Decision: This plan owns the repository's one header-capable JSON POST seam:
+  `postJSONWithHeaders :: HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO ...`;
+  `postJSON` is the empty-extra-header wrapper.
+  Rationale: plan 28 needs to add `traceparent`, plan 32 needs kanmon requests, and plan
+  14 needs authenticated approval notifications. A helper that carries `HttpEnv` lets
+  authentication supplied by `TokenSource` compose with caller headers without exposing
+  bearer tokens in serializable configs or creating three similar functions.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -147,10 +155,19 @@ newSinkManager =
   newManager
     defaultManagerSettings {managerResponseTimeout = responseTimeoutMicro 30_000_000}
 
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
 postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSON env = postJSONWithHeaders env []
 ```
 
-`postJSON` keeps its current parse/try/status handling (Http.hs:32-51) but uses `manager env` instead of `newManager` (deleting line 37), and before sending resolves the header: with `Nothing` it sends only `content-type` (today's behavior); with `Just src` it runs `fetchToken src` — a `Left e` becomes `Left ("token fetch failed: " <> e)` without issuing the request (fail closed: an authenticated sink must not fall back to anonymous), a `Right tok` adds `("authorization", renderAuthHeader tok)` to `requestHeaders`. Error strings must never interpolate the token (the redacted `Show` guards accidents, but do not `show` the header value either).
+`postJSONWithHeaders` keeps the current parse/try/status handling (Http.hs:32-51) but
+uses `manager env` instead of `newManager` (deleting line 37). It starts with the
+caller-supplied headers, adds `content-type`, and then resolves authentication: with
+`Nothing` it sends no authorization header; with `Just src` it runs `fetchToken src` — a
+`Left e` becomes `Left ("token fetch failed: " <> e)` without issuing the request (fail
+closed), and a `Right tok` adds `("authorization", renderAuthHeader tok)`. Define
+`postJSON` only as the empty-extra-header wrapper. Error strings must never interpolate
+the token (the redacted `Show` guards accidents, but do not `show` the header value either).
 
 Rewire the two callers: `postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)` (`KawaClient.hs:86-95`) and `postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)` (`KizashiClient.hs:57-65`) gain the leading `HttpEnv` parameter and pass it to `postJSON`. Their call sites are in `Shikigami.Sink.runSink` (Sink.hs:51-65) — which reads the envs from `SinkContext` (next milestone). For this milestone to compile independently, add the `SinkContext` fields now (see Milestone 2's record shapes) and let `test/Main.hs`'s `ctxFor` build a token-less env with a per-test `newSinkManager`.
 
@@ -303,6 +320,7 @@ newSinkHttp :: SinkCredentials -> DanwaConfig -> IO SinkHttp
 -- shikigami-core : Shikigami.Sink.Http
 data HttpEnv = HttpEnv {manager :: !Manager, token :: !(Maybe TokenSource)}
 newSinkManager :: IO Manager
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
 postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either Text LBS.ByteString)
 
 -- shikigami-core : Shikigami.Sink.KawaClient
@@ -324,4 +342,16 @@ stubKawaApplication :: IORef (Map (Text, Text) Text) -> Maybe Republisher -> May
 -- SinkContext, AgentRunDeps, WorkerEnv each gain: sinkHttp :: !SinkHttp
 ```
 
-Consumers to keep in mind: `docs/plans/32-channel-egress-sink-through-kanmon.md` (kanmon egress must reuse `HttpEnv`/`TokenSource`), `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (shared secret-configuration idiom — see Decision Log), and `docs/plans/21-database-backed-sink-permission-grants.md` (touches the same record constructors; merge textually).
+Soft landing dependencies: plan 13 defines the configuration convention and plan 16
+settles the sink-client/request shapes this plan wraps. Consumers: plan 14 uses
+`SinkHttp` for authenticated approval asks; plan 28 passes `traceparent` through
+`postJSONWithHeaders`; plan 32 extends `SinkCredentials`/`SinkHttp` with kanmon and
+uses the same helper. Plan 21 touches the same record constructors but is semantically
+independent.
+
+
+## Revision Notes
+
+- 2026-07-22: Made plan 13 the configuration-convention predecessor and assigned this
+  plan sole ownership of `postJSONWithHeaders`. Plans 14, 28, and 32 now consume this
+  authenticated seam rather than defining raw or incompatible HTTP helpers.

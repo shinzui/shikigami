@@ -40,8 +40,8 @@ Boundaries minimize coupling but not to zero: plans 21, 22, and 23 all thread a 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | None | None | Not Started |
-| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | None | None | Not Started |
-| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | None | EP-1 | Not Started |
+| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | None | cross-MP: plans 13, 16 (MasterPlan 2) | Not Started |
+| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 30 (MasterPlan 6), 33 (MasterPlan 7) | EP-1; cross-MP: plan 20 (MasterPlan 3) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -49,11 +49,11 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-1 (grants) and EP-2 (outbound auth) are fully independent and can proceed in parallel: EP-1 changes what the permission gate consults (a table instead of a compiled map), EP-2 changes what the sink clients send (headers, manager, timeouts). They touch different functions — the gate call sites versus the HTTP/client functions — and meet only in the record constructors listed under Integration Points, which is a textual-merge concern, not a semantic one.
+EP-1 (grants) and EP-2 (outbound auth) are independent inside this MasterPlan and can proceed in parallel: EP-1 changes what the permission gate consults (a table instead of a compiled map), EP-2 changes what the sink clients send (headers, manager, timeouts). EP-2 has soft cross-MasterPlan ordering on plans 13 and 16: plan 13 defines the typed environment resolver, and plan 16 settles the sink-client/request shapes that authentication wraps. They touch different functions — the gate call sites versus the HTTP/client functions — and meet only in the record constructors listed under Integration Points, which is a textual-merge concern, not a semantic one.
 
-EP-3 soft-depends on EP-1. The dependency is soft because every EP-3 deliverable except one (the kill switch, load-state recording, session attribution, the `agents list` join) works without EP-1; the one integration — backfilling principal ids onto grant rows via `shikigami agents sync` — writes to the nullable `principal_id` column that EP-1's migration creates on `shikigami.sink_grants`. If EP-3 reaches its Milestone 4 before EP-1 lands, it skips the backfill and records it as remaining work; nothing stubs or blocks. EP-3 also mirrors EP-1's gate placement (the lifecycle consult sits beside the grant check at the same four dispatch sites), so implementing EP-1 first makes EP-3's threading mechanical — a scheduling preference, not a dependency.
+EP-3 soft-depends on EP-1. The dependency is soft because only the `agents sync` grant backfill consumes EP-1's nullable `principal_id` column. EP-3 has two cross-MasterPlan hard dependencies. Plan 30 must first establish the `agents` operator command group, which EP-3 extends with principal/lifecycle columns and `sync`; plan 33 must first define the optional `identity.principal` declaration, which EP-3 treats as authoritative instead of shipping a temporary name-only join. Plan 20 is a soft/transitive ordering preference: it defines the shared load-report seam consumed by both hard dependencies.
 
-There is no hard dependency anywhere in this initiative: any of the three plans can be picked up first by a contributor whose only context is the child plan file.
+Therefore EP-1 and EP-2 may start immediately, while EP-3 starts after plans 30 and 33. At portfolio level the preferred chain is plan 13/16 → plan 22 → plans 14/28/32 for outbound HTTP, and plan 20 → plans 30/33 → plan 23 for agent loading, inspection, and lifecycle. This is the MasterPlan-4 slice of the canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
 ## Integration Points
@@ -66,13 +66,15 @@ There is no hard dependency anywhere in this initiative: any of the three plans 
 
 4. `SinkKind` / `sinkKindText` strings (`shikigami-core/src/Shikigami/Sink/Permission.hs:25-49`). EP-1 freezes the five strings — including the reserved `ChannelEgress` (Permission.hs:30) — as the `sink_kind` CHECK constraint. External consumer: `docs/plans/32-channel-egress-sink-through-kanmon.md` (MasterPlan 7) adds the channel-egress sink variant and expects to `grants grant <agent> ChannelEgress` with no schema change, and must route its kanmon client through EP-2's `HttpEnv`/`TokenSource` layer rather than raw http-client.
 
-5. Secret-configuration idiom. EP-2 reads per-sink tokens from `SHIKIGAMI_{KAWA,KIZASHI,DANWA}_TOKEN` env vars in the CLI command modules (the existing `PG_CONNECTION_STRING` pattern). External integration: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) configures model API keys — whichever of 13/22 lands first defines the idiom and the other follows it; both plans carry a Decision Log entry recording this duty.
+5. Secret-configuration idiom. EP-2 reads per-sink tokens from `SHIKIGAMI_{KAWA,KIZASHI,DANWA}_TOKEN` env vars in the CLI command modules (the existing `PG_CONNECTION_STRING` pattern). External integration: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) defines the typed resolver and loud redacted description first; EP-2 follows it.
 
-6. Manifest-load failure surfacing. EP-3 consolidates the three copy-pasted `loadAgents` helpers (`shikigami-cli/src/Shikigami/Cli/Commands/{Worker.hs:45-49,Scheduler.hs:77-80,ConsumeStream.hs:90-94}`) into `Shikigami.Agent.Loader.loadAgentsReport` and records durable load state. External integration: `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md` (MasterPlan 3) makes the same failures loud at the logging level. Division agreed here: the first plan to land does the loader consolidation; 20 owns loud logging, 23 owns the recorded `shikigami.agent_load_state`. Neither re-implements the other's half.
+6. Manifest-load failure surfacing. Plan 20 owns the canonical `Shikigami.Agent.Loader.loadAgentsReport` and loud/strict loading behavior. Plan 30 consumes that report for `agents list`; plan 33 adds enabled-agent selection; EP-3 consumes the same report to persist `shikigami.agent_load_state` and extends the existing command with principal/lifecycle state and `sync`. EP-3 does not consolidate or reimplement the loader.
 
 7. `SinkOutcome` (`shikigami-core/src/Shikigami/Sink/Types.hs:42-48`) and the outbox publisher's outcome mapping (`Workflow.hs:581-583`). EP-1 relies on the existing `DeniedOutcome` semantics (recorded, non-crashing, non-retrying); EP-3 adds a `SkippedLifecycle` constructor with identical publisher treatment. If EP-1 is in flight when EP-3 lands, both touch the same `case` arms — coordinate the merge.
 
-8. The declared-identity field. `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md` (MasterPlan 7) later adds an optional `identity : Optional { principal : Text }` field to `schema/Agent.dhall`; the schema field only *carries* a principal id. EP-3 owns the join machinery and today joins by Dhall `name` against the directory handle (per the improvement request). When plan 33 lands, a declared `identity.principal` takes precedence over the name-based join inside EP-3's `consultLifecycle`/`lookupPrincipal` — a one-function change on the EP-3 side, no schema change on either side. Neither plan blocks the other.
+8. The declared-identity field. `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md` (MasterPlan 7) defines `identity : Optional { principal : Text }` before EP-3 begins. EP-3 resolves a declared `identity.principal` directly and falls back to name-based directory lookup only when the optional field is absent, preserving compatibility with existing manifests without a later rewrite.
+
+9. Authenticated HTTP request layer. EP-2 is the sole owner of `HttpEnv`, `TokenSource`, and `postJSONWithHeaders`. Plan 14 uses it for approval notifications, plan 28 uses it for `traceparent`, and plan 32 extends `SinkCredentials`/`SinkHttp` with kanmon rather than introducing another header helper or serializable token field.
 
 
 ## Progress
@@ -87,7 +89,7 @@ There is no hard dependency anywhere in this initiative: any of the three plans 
 - [ ] EP-2 M4: `stub-kawa --require-token` + header/401/redaction tests.
 - [ ] EP-2 M5: shomei `TokenSource` seam documented; static implementation shipped.
 - [ ] EP-3 M1: `Shikigami.Directory` cached view + file stub source + unit tests.
-- [ ] EP-3 M2: `agent_load_state`/`run_skips` migrations; loader consolidation; `broken.dhall` visible.
+- [ ] EP-3 M2: `agent_load_state`/`run_skips` migrations; persist plan 20's load report; `broken.dhall` visible.
 - [ ] EP-3 M3: lifecycle kill switch at all trigger/drain/sink sites; fail-open; recorded skips; tests.
 - [ ] EP-3 M4: principal attribution on sessions; `agents list|sync`; `sink_grants.principal_id` backfill.
 - [ ] Initiative: end-to-end demo — pause a granted, authenticated agent; unpause; revoke; re-grant — all without restarts.
@@ -103,9 +105,9 @@ There is no hard dependency anywhere in this initiative: any of the three plans 
 
 ## Decision Log
 
-- Decision: Decompose into exactly three plans along the three trust questions (authorization state / outbound credentials / identity & lifecycle), with EP-1 ∥ EP-2 and EP-3 soft-depending on EP-1.
-  Rationale: Each question has distinct failure semantics (fail-closed / fail-closed / fail-open), a distinct artifact, and an independent demonstration; merging any two crosses those lines, splitting further (e.g. kill switch vs. principal join) would separate work that shares one module and one migration.
-  Date: 2026-07-08
+- Decision: Decompose into exactly three plans along the three trust questions (authorization state / outbound credentials / identity & lifecycle), with EP-1 ∥ EP-2, EP-3 soft-depending on EP-1, and EP-3 hard-depending cross-MasterPlan on plans 30 and 33.
+  Rationale: Each question has distinct failure semantics (fail-closed / fail-closed / fail-open), a distinct artifact, and an independent demonstration; the cross-MasterPlan edges ensure lifecycle work extends the existing operator command and consumes the declared principal field instead of creating temporary alternatives.
+  Date: 2026-07-22
 
 - Decision: The seam between EP-1 and EP-3 is a nullable `principal_id` column on `shikigami.sink_grants`, created by EP-1, populated by EP-3, constrained by neither.
   Rationale: Grants must be operable while `AgentIdentity` is still an unverified name (Permission.hs:35); re-keying to verified principals later must not require a schema migration. Matches the spec's Open Question 6 (`docs/initial-spec.md:947-948`).
@@ -115,13 +117,25 @@ There is no hard dependency anywhere in this initiative: any of the three plans 
   Rationale: The first two guard trust boundaries (C11, IR-2); the third is an operational switch whose outage must not silence the fleet (C14 change rule, quoted in the improvement request).
   Date: 2026-07-08
 
-- Decision: Adopt existing sibling-plan boundaries rather than duplicating: plan 20 owns loud manifest-failure logging (EP-3 adds durable state on top of the shared loader consolidation), plan 13 co-defines the secret-config idiom with EP-2 (first to land decides), plan 32 consumes EP-1's `ChannelEgress` kind and EP-2's HTTP layer, plan 27 will later consolidate the duplicated sink-intent machinery that EP-1/EP-3 thread through.
+- Decision: Adopt existing sibling-plan boundaries rather than duplicating: plan 20 owns loud manifest-failure logging (EP-3 adds durable state on top of its shared load report), plan 13 defines the secret-config idiom that EP-2 follows, plan 32 consumes EP-1's `ChannelEgress` kind and EP-2's HTTP layer, and plan 27 later consolidates the duplicated sink-intent machinery that EP-1/EP-3 thread through.
   Rationale: Prevents the two silent-conflict classes the MasterPlan spec warns about — duplicate work and incompatible shared-interface assumptions — by naming the owner of each shared artifact now.
   Date: 2026-07-08
 
 - Decision: Author all three plans against verified code as of commit `0c164b7` (file:line citations throughout); build/test commands are `cabal build all` / `cabal test all` under `nix develop`, migrations via `just new-migration` / `just migrate` only.
   Rationale: Self-containment for a novice implementer; the Justfile's embed-touch hack (Justfile:20-27) makes hand-created migration files a known footgun.
   Date: 2026-07-08
+- Decision: Plan 22 owns the sole authenticated, header-capable HTTP layer and follows
+  plan 13's configuration convention; plans 14, 28, and 32 consume or extend it.
+  Rationale: the previous child plans proposed incompatible header helpers and one raw
+  approval path. Central ownership keeps tokens redacted and out of serialized sink
+  configs while allowing auth, tracing, and kanmon headers to compose.
+  Date: 2026-07-22
+- Decision: Loader and agent-command ownership follows plan 20 → plans 30/33 → plan
+  23. Plan 20 reports loads, plan 33 filters enabled agents, plan 30 owns the operator
+  command, and plan 23 persists/annotates the result.
+  Rationale: four plans previously described independent directory walks or command
+  creation. A single chain prevents duplicate helpers and CLI parser conflicts.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -131,4 +145,8 @@ There is no hard dependency anywhere in this initiative: any of the three plans 
 
 ## Revision Notes
 
-- 2026-07-08: Cross-plan consistency pass after initial authoring — added Integration Point 8 (the declared-identity field seam with MasterPlan 7's plan 33) and the matching touchpoint in plan 23. Reason: plan 33 documented the seam one-sidedly; both sides now agree the declared `identity.principal` overrides EP-3's name-based join with no blocking dependency either way.
+- 2026-07-08: Cross-plan consistency pass after initial authoring — added Integration Point 8 (the declared-identity field seam with MasterPlan 7's plan 33) and the matching touchpoint in plan 23. This initial revision allowed either landing order; the 2026-07-22 revision below supersedes that ordering and places plan 33 first to avoid a later identity-lookup rewrite.
+- 2026-07-22: Portfolio-order revision — made plans 30 and 33 prerequisites of plan
+  23, assigned the loader chain to plan 20 → plans 30/33 → plan 23, and made plan 22
+  the shared HTTP owner consumed by plans 14, 28, and 32. This removes duplicate loader,
+  CLI, and HTTP implementations from the MP-2 through MP-7 execution path.

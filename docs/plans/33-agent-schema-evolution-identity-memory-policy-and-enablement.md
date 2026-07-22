@@ -50,7 +50,7 @@ This section must always reflect the actual current state of the work.
 - [ ] M1: prove byte-compatibility — `validate` over every existing manifest under `agents/` succeeds unchanged.
 - [ ] M2: mirror types in shikigami-api/src/Shikigami/Api/Agent.hs (`IdentityDecl`, `MemoryScopeDecl`, `RecordPolicy`, `MemoryPolicy`; three new `AgentDecl` fields); export them.
 - [ ] M2: proof manifest `agents/proof/declared-identity.dhall` exercising all three fields; loader unit test asserting the decoded values and the defaults.
-- [ ] M3: consolidate the triplicated CLI `loadAgents` into `Shikigami.Agent.Loader.loadAgents`; skip `enabled = False` agents with a loud stderr line; make load *failures* loud too.
+- [ ] M3: consume plan 20's `loadAgentsReport`; add enabled-agent selection with a loud skip line and keep plan 20's loud/strict failure behavior.
 - [ ] M3: enforce `recallLimit` (thread into both recall paths in Shikigami/Agent/Run.hs) and `recordPolicy` (Run.hs and Workflow.hs record steps).
 - [ ] M4: update docs/user/writing-agents.md (field table + new sections) and docs/user/memory.md.
 - [ ] M4: full-suite regression `cabal test all`.
@@ -66,8 +66,9 @@ implementation. Provide concise evidence.
   Scheduler.hs:77-80, ConsumeStream.hs:90-93) and each copy **silently drops** any manifest
   that fails to load (`pure [a | Right a <- loaded]`). A typo in one agent file makes that
   agent vanish from the worker with no diagnostic. The "skip disabled agents LOUDLY"
-  requirement therefore lands together with a consolidation that makes load errors loud too
-  (Decision Log).
+  requirement originally included consolidation. The 2026-07-22 portfolio audit assigned
+  that consolidation and failure reporting to plan 20; this plan now extends its report with
+  enabled-agent selection.
 
 
 ## Decision Log
@@ -112,17 +113,17 @@ Record every decision made while working on the plan.
   new machinery (same `Memory.record` call, different arm).
   Date: 2026-07-08
 
-- Decision: Consolidate the CLI's three `loadAgents` copies into
-  `Shikigami.Agent.Loader.loadAgents :: FilePath -> IO [AgentDecl]`, which (a) logs one loud
-  stderr line per manifest that fails to load and (b) logs one loud stderr line per disabled
-  agent it skips, returning only enabled, successfully-loaded agents.
-  Rationale: enforcing `enabled` in three copy-pasted places would triple the bug surface;
-  and shipping "skip disabled loudly" while parse failures stay silent would be perverse —
-  the consolidation is the smallest change that makes both loud. Single-file commands
+- Decision: Hard-depend on plan 20's `Shikigami.Agent.Loader.loadAgentsReport` and add
+  `enabledAgentsFromReport`, which logs one loud line per disabled agent and returns enabled,
+  successfully loaded declarations. Plan 20 retains ownership of directory traversal,
+  load-failure logging, and strict mode.
+  Rationale: enforcing `enabled` in three copy-pasted places would triple the bug surface,
+  while reimplementing plan 20's loader would create the same duplication under a new name.
+  Single-file commands
   (`validate`, `run-behavior`, `render-lifecycle`, `agent-run`) intentionally still load
   disabled agents: you must be able to validate and hand-run an agent you have parked;
   `validate` prints `note: agent is disabled (enabled = False)` so the state is visible.
-  Date: 2026-07-08
+  Date: 2026-07-22
 
 - Decision: Haskell mirror names are `IdentityDecl`, `MemoryScopeDecl` (constructors
   `AgentScope | Shared`), `RecordPolicy` (constructors `Always | OnSuccess | Never`), and
@@ -135,15 +136,12 @@ Record every decision made while working on the plan.
   names are namespaced by the schema record.
   Date: 2026-07-08
 
-- Decision: Note only, no work here — `KizashiSignal.recipientFrom` and
-  `DanwaConversation.topic` are accepted-but-ignored schema fields today; implementing them
-  is owned by
+- Decision: `KizashiSignal.recipientFrom` and `DanwaConversation.topic` are owned by
   docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md
-  (MasterPlan 2). This plan does not touch those fields; it only adds a "currently not
-  honored" marker for them in docs/user/writing-agents.md so the schema documentation stops
-  overpromising.
+  (MasterPlan 2). This plan lands after plan 16 where practical and does not add a stale
+  "currently not honored" marker while updating the same schema documentation.
   Rationale: duplicating plan 16's scope would create conflicting edits in the sink handlers.
-  Date: 2026-07-08
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -186,10 +184,11 @@ decoding fails at runtime with a type error. The loader,
 (shikigami-core/src/Shikigami/Agent/Loader.hs:21-26), is generic over the `FromDhall`
 instance and needs no per-field changes.
 
-Directory loading is different: three CLI commands each define a private
+Before plan 20, directory loading is different: three CLI commands each define a private
 `loadAgents :: FilePath -> IO [AgentDecl]` that lists `*.dhall` files and silently discards
 failures — shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:45-49, Scheduler.hs:77-80,
-ConsumeStream.hs:90-93. The single-file commands `validate`
+ConsumeStream.hs:90-93. This plan begins after plan 20 has replaced those copies with
+`loadAgentsReport`. The single-file commands `validate`
 (Commands/Validate.hs), `run-behavior`, `render-lifecycle`, and `agent-run` call `loadAgent`
 directly.
 
@@ -313,19 +312,17 @@ agents/proof/declared-identity.dhall` prints the decoded record including all th
 
 Scope: the declared values change runtime behavior. Three edits.
 
-First, `enabled`. Add to shikigami-core/src/Shikigami/Agent/Loader.hs:
+First, `enabled`. Consume plan 20's report and add to
+shikigami-core/src/Shikigami/Agent/Loader.hs:
 
 ```haskell
-loadAgents :: FilePath -> IO [AgentDecl]
+enabledAgentsFromReport :: AgentLoadReport -> IO [AgentDecl]
 ```
 
-listing `*.dhall` in the directory (the same `listDirectory`/`isSuffixOf` logic the CLI
-copies use), calling `loadAgent` on each, and for each result: on `Left (LoadError msg)`
-print `hPutStrLn stderr ("[loader] SKIPPING unloadable manifest " <> path <> ": " <> msg)`;
-on a decl with `enabled = False` print
+For each successfully loaded declaration with `enabled = False`, print
 `hPutStrLn stderr ("[loader] skipping disabled agent '" <> name <> "' (" <> path <> ")")`;
-return the rest. Delete the three private CLI copies and import this one in
-Commands/Worker.hs, Commands/Scheduler.hs, Commands/ConsumeStream.hs. In
+return the enabled declarations. The CLI commands already consume the report through plan
+20's loud/strict loader; apply `enabledAgentsFromReport` before constructing each runtime. In
 Commands/Validate.hs, after printing the decl, print
 `note: agent is disabled (enabled = False)` when applicable (still exit 0 — validation is
 about well-formedness).
@@ -366,9 +363,9 @@ Scope: the declared surface is documented and the whole suite is green. Update
 docs/user/writing-agents.md: extend the "schema at a glance" block and field table with the
 three fields, their defaults, and — honestly — who enforces what (`enabled`, `recallLimit`,
 `recordPolicy` here; `memory.scope` by plan 34; `identity.principal` verified by plan 23).
-Add the "currently not honored" marker for `KizashiSignal.recipientFrom` and
-`DanwaConversation.topic` per the Decision Log. Update docs/user/memory.md's description of
-recall/record with the policy knobs. Run `cabal test all`.
+Keep plan 16's final documentation for `KizashiSignal.recipientFrom` and
+`DanwaConversation.topic` intact. Update docs/user/memory.md's description of recall/record
+with the policy knobs. Run `cabal test all`.
 
 
 ## Concrete Steps
@@ -463,10 +460,9 @@ side-effect free. The one behavioral risk is the `recallPriorLearnings` signatur
 is a compile-time-visible break, so the compiler enumerates every call site — there is no
 silent partial state. If M3's enforcement must be rolled back, the fields safely revert to
 "parsed but not enforced" (M1/M2 state) by reverting the three enforcement edits; manifests
-declaring the fields remain valid either way. The loader consolidation is
-behavior-preserving for well-formed enabled agents; if a deployment depended on silently
-ignoring a broken manifest (it should not), the loud line changes logs only, not the loaded
-set.
+declaring the fields remain valid either way. Plan 20's loader consolidation is already
+behavior-preserving for well-formed agents; this plan's enabled selection only removes
+well-formed declarations that explicitly opt out with `enabled = False`.
 
 
 ## Interfaces and Dependencies
@@ -479,8 +475,8 @@ Owned and defined by this plan:
 - `Shikigami.Api.Agent` (shikigami-api) — `IdentityDecl(..)`, `MemoryScopeDecl(..)`,
   `RecordPolicy(..)`, `MemoryPolicy(..)`; `AgentDecl` gains
   `identity :: !(Maybe IdentityDecl)`, `memory :: !MemoryPolicy`, `enabled :: !Bool`.
-- `Shikigami.Agent.Loader` — `loadAgents :: FilePath -> IO [AgentDecl]` (loud skip/failure
-  semantics per the Decision Log); `loadAgent` unchanged.
+- `Shikigami.Agent.Loader` — consume plan 20's `AgentLoadReport` and
+  `loadAgentsReport`; add `enabledAgentsFromReport :: AgentLoadReport -> IO [AgentDecl]`.
 - `Shikigami.Agent.Run` —
   `recallPriorLearnings :: AppEnv -> Int -> MemoryScope -> Text -> IO [MemoryRecord]`
   (limit threaded to both the vector `maxResults` and the fallback cap); record-policy
@@ -499,7 +495,7 @@ Consumed / coordinated (do not implement here):
   name/shape is the coordinated contract (MasterPlan IP-5).
 - `KizashiSignal.recipientFrom` / `DanwaConversation.topic` honoring —
   docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md
-  (MasterPlan 2); this plan only documents their current non-enforcement.
+  (MasterPlan 2); this plan preserves plan 16's final documentation.
 - kioku recall/record APIs — `Kioku.Recall.recall` (`RecallRequest {scope, query, strategy,
   maxResults}`), `Kioku.Recall.getActiveByScope`, `Kioku.Memory.record` — used as today, no
   kioku changes.
@@ -507,3 +503,15 @@ Consumed / coordinated (do not implement here):
 Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 `cabal run shikigami -- validate <file>`; `just create-database` +
 `Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase` for Postgres-backed tests.
+
+Hard dependency: plan 20 defines the load-report API consumed by Milestone 3. Soft
+landing dependency: plan 16 should settle the sink-field documentation before Milestone
+4. Plan 30 is an independent consumer of the same report; plan 23 hard-depends on both
+this plan and plan 30 before adding lifecycle state.
+
+
+## Revision Notes
+
+- 2026-07-22: Replaced this plan's duplicate loader consolidation with a hard
+  dependency on plan 20's `loadAgentsReport`, scoped this plan to enabled-agent
+  selection, and removed the stale sink-field warning that would contradict plan 16.

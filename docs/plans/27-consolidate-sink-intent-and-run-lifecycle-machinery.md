@@ -268,12 +268,10 @@ documentation is in place with a Decision Log note explaining why the mechanical
 not feasible).
 
 Milestone 4 — cross-plan reconciliation and notes. Two documentation deliverables and a
-verification. First, record the plan-19 reconciliation explicitly (see Integration Points
-below): whichever of this plan and
-`docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md` lands second must rebase
-onto the other, and the golden wire-format test from M1 is the shared tripwire; state that
-either order is safe as long as the shared `Shikigami.Sink.Intent` module preserves the
-wire format, and that plan 19's semantic changes go INTO that one module. Second, add a
+verification. First, verify that plan 19's delivery semantics and plan 28's trace-context
+fields are present before extracting the shared module. Move both into
+`Shikigami.Sink.Intent`, and use the golden wire-format test from M1 as the shared tripwire.
+Second, add a
 note (a comment at `Shikigami.Memory.Scope.sharedScope` and a line in this plan) that
 `sharedScope` is dead code whose removal-or-use is deferred to
 `docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md` (MasterPlan 7)
@@ -406,15 +404,21 @@ publisher), and `shikigami-cli/src/Shikigami/Cli/Commands/AgentRun.hs` (rewired 
 Integration Points (cross-plan):
 
 - Plan 19 (`docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md`, MasterPlan 3)
-  changes SinkIntent SEMANTICS (delivery truth, downstream idempotency). This plan changes
-  its LOCATION (one module) without changing bytes. Reconciliation: whichever lands second
-  rebases onto the other; plan 19's semantic changes are applied INSIDE
-  `Shikigami.Sink.Intent`; the M1 golden test is the shared tripwire that forces any wire
-  change to be deliberate (update the pinned bytes and the `schemaVersion` together). Either
-  order is safe.
+  changes SinkIntent SEMANTICS (delivery truth, downstream idempotency), and plan 28 adds
+  trace context. This plan changes LOCATION. Both should land first; move their settled
+  fields and behavior into `Shikigami.Sink.Intent` and use the M1 golden test as the wire
+  tripwire. Implementing earlier is possible, but landing earlier creates avoidable code
+  motion and a second reconciliation pass.
 - Plan 26 (`docs/plans/26-conversation-workflow-lifecycle-...`, this MasterPlan) uses the
   conversation reply path that builds SinkIntents (`Conversation.hs:391-414`). Coordinate
   merge order so the reply path imports the single `Shikigami.Sink.Intent` module; no
   semantic conflict.
 - Plan 34 (`docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md`,
   MasterPlan 7) owns the fate of `sharedScope`; this plan only notes it.
+
+
+## Revision Notes
+
+- 2026-07-22: Replaced the either-order rule with the preferred landing order plans
+  19 and 28 → plan 27. Consolidation now moves the final delivery and trace semantics
+  once instead of moving old code and rebasing it immediately.

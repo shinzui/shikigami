@@ -30,7 +30,7 @@ This section must always reflect the actual current state of the work.
 - [ ] Milestone 1: `routeRunJob` on `RunJob.triggerKind`; conversation payload decode failure becomes a typed dead-letter; tests.
 - [ ] Milestone 2: `CatchUpPolicy` in the scheduler; `armNextRun`/`scheduleFireAction` coalesce missed ticks; `scheduleFireAction` no longer falls through to the approval fallback on non-schedule payloads; tests.
 - [ ] Milestone 3: kioku result propagation/logging at the five discard sites (`Workflow.hs` open/record/complete/fail; `Agent/Run.hs`); counters or logs; tests where observable.
-- [ ] Milestone 4: `loadAgentsLoud` with per-file logging, count, and strict mode across the three CLI loaders; unparseable-cron loudness in `Worker.hs` schedule extraction.
+- [ ] Milestone 4: canonical `AgentLoadReport`/`loadAgentsReport` plus loud/strict loading across the three CLI commands; unparseable-cron loudness in `Worker.hs` schedule extraction.
 - [ ] Milestone 4 (hardening): enqueue-path fixes — idempotent addressed key, drop per-enqueue `createQueue`, epoch fallback, UUIDv5 non-ASCII bytes, partial `error` in `runQueueName`.
 - [ ] Register new/extended specs in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
 
@@ -58,6 +58,13 @@ Record every decision made while working on the plan.
 - Decision: Only stop the silence around agent/cron load failures here (per-file log, count, `--strict` refusal to start); do not persist per-agent load state.
   Rationale: Durable per-agent load/lifecycle state belongs to docs/plans/23-agent-lifecycle-control-with-meibo-principals.md (MasterPlan 4), which introduces the meibo principal model. Building a throwaway store here would create migration debt. This is a declared MasterPlan integration boundary.
   Date: 2026-07-08
+
+- Decision: This plan owns the canonical agent-directory traversal and load-report API;
+  plans 30, 33, and 23 consume it for inspection, enabled filtering, and durable state.
+  Rationale: those plans previously proposed separate directory walks and result shapes.
+  One report preserves failed entries for operators/persistence while still exposing the
+  successfully loaded declarations to runtimes.
+  Date: 2026-07-22
 
 - Decision: Fix `scheduleFireAction`'s fall-through into the approval-timeout fallback for non-schedule timer payloads by giving the timer worker an explicit dispatch on timer kind, not by relying on `parseSchedulePayload` returning `Nothing`.
   Rationale: `shikigamiTimerFallback` (`Scheduler.hs:105-109`) tries the schedule action and, on `Nothing`, falls through to `approvalTimeoutFireAction`. A schedule timer whose enqueue fails also returns `Nothing` (`Scheduler.hs:99`), so a failed schedule fire is misinterpreted as an approval timeout. Dispatching on the timer payload's kind removes the ambiguity.
@@ -109,7 +116,7 @@ routeRunJob job = case triggerKind job of
   _ -> AgentRunRoute
 ```
 
-Rework `handleRunJob` (Worker.hs:132-141) to `case routeRunJob job of` → `ConversationRoute a -> runConversationAgent env job a`; `AgentRunRoute -> runOneAgent env job`; `RouteError e -> pure (AckDeadLetter (InvalidPayload e))`. Refinement to remove the remaining ambiguity: conversation agents are declared with the addressed-message event type (`addressedMessageEventType`), so an event job whose declared agent is a conversation agent but whose payload does not decode is a real error, not an ordinary run — if docs/plans/17 has landed, express that as `RouteError` routed through its `classifyOutcome`/ack taxonomy; if not, `AckDeadLetter (InvalidPayload …)` directly. This is the declared integration point with docs/plans/17 on `Shikigami/Worker.hs` (17 owns the ack taxonomy; 20 consumes it) — whichever lands second reconciles the handler.
+Rework `handleRunJob` (Worker.hs:132-141) to `case routeRunJob job of` → `ConversationRoute a -> runConversationAgent env job a`; `AgentRunRoute -> runOneAgent env job`; `RouteError e ->` route through plan 17's `classifyOutcome`/ack taxonomy. A conversation agent whose addressed payload does not decode is a permanent invalid-payload error; do not construct an ad-hoc `AckDecision` because plan 17 is a hard dependency.
 
 Milestone 2 — scheduler catch-up policy. Scope: `shikigami-core/src/Shikigami/Trigger/Scheduler.hs`. At the end, waking late arms exactly one future tick, and a failed schedule fire is not misread as an approval timeout.
 
@@ -121,9 +128,29 @@ At each discard site, replace `_ <-`/`void` with an inspection that logs on `Lef
 
 Milestone 4 — loud loading and enqueue hardening. Scope: the three CLI loaders, `Worker.hs` schedule extraction, `Shikigami/Trigger/Enqueue.hs`, plus the UUIDv5 helpers. At the end, load failures are visible and refuseable, and the enqueue path is idempotent and total.
 
-Add a shared loud loader. Introduce `loadAgentsLoud :: FilePath -> Bool -> IO [AgentDecl]` in a small shared module (or in `Shikigami.Agent.Loader`) that maps `loadAgent` over the directory, and for each `Left err` logs `[load] FAILED <file>: <err>` to stderr; it prints a summary `[load] loaded N of M manifests (K failed)`; when the `Bool` strict flag is set and `K > 0`, it exits non-zero (`exitFailure`) before the service starts. Replace the three copies of `loadAgents` (Worker.hs:45-49, Scheduler.hs:77-81, ConsumeStream.hs:90-94) with calls to it, wiring a `--strict` CLI flag (default off, preserving current lenient behavior) through `runWorkerCmd`, `runSchedulerCmd`, `runConsumeStream`/`runConsumeEvents`. In the worker's schedule extraction `scheduleFor` (Worker.hs:215-219) and the scheduler CLI's `parseScheduleAgent`, make an unparseable cron loud: log `[schedule] agent <name> has invalid cron: <err>` (the scheduler CLI already errors hard here via `ioError` at Scheduler.hs:63-64; the worker's `scheduleFor` silently drops — make it log before dropping, and under strict mode refuse to start).
+Add the canonical report to `Shikigami.Agent.Loader`:
 
-Enqueue hardening in `Shikigami/Trigger/Enqueue.hs`: make `runQueueName` total (return via a top-level `let`/`case` that is proven at the call site, or keep `error` but only as an unreachable-by-construction with a comment — prefer a `parseQueueName` on a known-good literal wrapped so the partiality is confined; simplest acceptable fix: keep it but add a test asserting it is `Right`). Remove the per-enqueue `createQueue` from `enqueueRunJob` (Enqueue.hs:55), relying on docs/plans/18's `ensureRunQueue` called once at startup (if 18 has not landed, add `ensureRunQueue` here — MasterPlan integration point). Make `enqueueAddressedRun` idempotent or delete it in favor of `enqueueAddressedRunWithKey`: its `now`-bearing key (Enqueue.hs:66-67) means two calls for the same logical event produce two runs; the only caller is the `enqueue-run` CLI (`EnqueueRun.hs:29`), so change that caller to pass a stable key (e.g. derived from the agent and a payload hash) and drop the non-deterministic variant. In `runJobFromEnvelope` (Enqueue.hs:34-48), stop silently backdating: on unparseable `occurredAt`, log and use `getCurrentTime` (or reject the envelope), not the Unix epoch. Fix the UUIDv5 name bytes in `deterministicOutboxIdForMessage` (Workflow.hs:555-559), `scheduleTimerId` and `scheduleFiredEventId` (Scheduler.hs:66-69,74-77) to encode the text as UTF-8 (`Data.Text.Encoding.encodeUtf8` then `ByteString.unpack`) instead of `fmap (fromIntegral . fromEnum) . Text.unpack`, which truncates each `Char` to its low byte and can collide for non-ASCII agent names.
+```haskell
+data AgentLoadEntry
+  = AgentLoaded { path :: !FilePath, declaration :: !AgentDecl }
+  | AgentLoadFailed { path :: !FilePath, error :: !LoadError }
+newtype AgentLoadReport = AgentLoadReport { entries :: [AgentLoadEntry] }
+
+loadAgentsReport :: FilePath -> IO AgentLoadReport
+loadAgentsLoud :: FilePath -> Bool -> IO AgentLoadReport
+loadedAgents :: AgentLoadReport -> [AgentDecl]
+```
+
+`loadAgentsReport` is the sole directory traversal and preserves every success and failure.
+`loadAgentsLoud` calls it, logs `[load] FAILED <file>: <err>` per failure plus the summary,
+and exits non-zero under strict mode when any failure exists. Replace the three private
+copies with this function and pass `loadedAgents report` to the runtime, wiring `--strict`
+(default off) through all long-running commands. Plans 30, 33, and 23 consume the report
+rather than walking the directory again. In the worker's schedule extraction `scheduleFor`
+and the scheduler CLI's `parseScheduleAgent`, make an unparseable cron loud and make strict
+mode refuse startup.
+
+Enqueue hardening in `Shikigami/Trigger/Enqueue.hs`: make `runQueueName` total (return via a top-level `let`/`case` that is proven at the call site, or keep `error` but only as an unreachable-by-construction with a comment — prefer a `parseQueueName` on a known-good literal wrapped so the partiality is confined; simplest acceptable fix: keep it but add a test asserting it is `Right`). Remove the per-enqueue `createQueue` from `enqueueRunJob` (Enqueue.hs:55), relying on plan 18's `ensureRunQueue` called once at startup; plan 18 is a hard dependency, so do not define a second queue-initialization helper here. Make `enqueueAddressedRun` idempotent or delete it in favor of `enqueueAddressedRunWithKey`: its `now`-bearing key (Enqueue.hs:66-67) means two calls for the same logical event produce two runs; the only caller is the `enqueue-run` CLI (`EnqueueRun.hs:29`), so change that caller to pass a stable key (e.g. derived from the agent and a payload hash) and drop the non-deterministic variant. In `runJobFromEnvelope` (Enqueue.hs:34-48), stop silently backdating: on unparseable `occurredAt`, log and use `getCurrentTime` (or reject the envelope), not the Unix epoch. Fix the UUIDv5 name bytes in `deterministicOutboxIdForMessage` (Workflow.hs:555-559), `scheduleTimerId` and `scheduleFiredEventId` (Scheduler.hs:66-69,74-77) to encode the text as UTF-8 (`Data.Text.Encoding.encodeUtf8` then `ByteString.unpack`) instead of `fmap (fromIntegral . fromEnum) . Text.unpack`, which truncates each `Char` to its low byte and can collide for non-ASCII agent names.
 
 
 ## Concrete Steps
@@ -178,7 +205,7 @@ Routing (fails before): a table-driven pure test over `routeRunJob`. A `RunJob {
 
 Scheduler catch-up (fails before): in `SchedulerSpec`, arm an agent on `* * * * *` with `now` set to a fixed instant, then invoke the fire action with a `TimerRow` whose `dueAt` is 24 hours in the past under `SkipMissed`. Assert exactly one run job is enqueued and the newly-armed timer's `fireAt` is `> now`. The fails-before counterpart drives the current `FireAll`-equivalent path and observes many enqueues draining across passes. Read the queue with the pgmq test helpers the suite already uses. Also assert: a schedule fire whose `enqueueScheduledRun` fails (point the pool at a closed connection or use a fire action stub) leaves the timer for requeue and does not invoke `approvalTimeoutFireAction` — before the change the `Nothing` fell through to the approval path.
 
-Loud loading (fails before): call `loadAgentsLoud "agents" False` and assert the returned list excludes `broken` while a captured stderr contains `FAILED agents/broken.dhall`; call with strict `True` and assert it exits (test via a variant returning `Either` count so the assertion does not kill the test process, or run the CLI as a subprocess and check the exit code). Before this plan, `loadAgents` returns the same filtered list with no log — the visibility is the new, testable behavior.
+Loud loading (fails before): call `loadAgentsLoud "agents" False` and assert the report contains an `AgentLoadFailed` entry for `broken`, `loadedAgents` excludes it, and captured stderr contains `FAILED agents/broken.dhall`; call with strict `True` and assert it exits. Before this plan, `loadAgents` returns only the filtered list with no diagnostic or preserved failure entry.
 
 kioku loudness (fails before, where observable): drive `openSession`/`recordLearning` against an `AppEnv` whose store pool has been released so the kioku write returns `Left StoreError`; assert the run still returns but a captured stderr names the failed operation. This proves the discard sites now surface failures.
 
@@ -209,12 +236,25 @@ data Shikigami.Trigger.Scheduler.CatchUpPolicy = SkipMissed | CoalesceToLatest |
 Shikigami.Trigger.Scheduler.armNextRun ::
   (Store :> es, IOE :> es) => CatchUpPolicy -> CronSchedule -> Text -> UTCTime -> Eff es ()
 
--- shikigami-core/src/Shikigami/Agent/Loader.hs (or a shared CLI module)
-Shikigami.Agent.Loader.loadAgentsLoud :: FilePath -> Bool -> IO [AgentDecl]
+-- shikigami-core/src/Shikigami/Agent/Loader.hs
+Shikigami.Agent.Loader.loadAgentsReport :: FilePath -> IO AgentLoadReport
+Shikigami.Agent.Loader.loadAgentsLoud :: FilePath -> Bool -> IO AgentLoadReport
+Shikigami.Agent.Loader.loadedAgents :: AgentLoadReport -> [AgentDecl]
 
 -- shikigami-core/src/Shikigami/Trigger/Enqueue.hs
 -- enqueueRunJob no longer calls createQueue; runJobFromEnvelope no longer backdates to epoch;
 -- enqueueAddressedRun removed or made deterministic. Coordinate ensureRunQueue with docs/plans/18.
 ```
 
-Integration points (from docs/masterplans/3): docs/plans/17 and this plan both edit `Shikigami/Worker.hs` — 17 owns the ack/retry taxonomy, this plan's `RouteError` consumes it; whichever lands second reconciles `handleRunJob`. docs/plans/18 and this plan both edit `Shikigami/Trigger/Enqueue.hs` — 18 owns `enqueueRunJobTx`/`ensureRunQueue`, this plan removes the per-enqueue `createQueue` and hardens the IO helpers; the `createQueue` removal depends on `ensureRunQueue` existing (add it here if 18 has not landed). Per-agent load-state persistence is explicitly deferred to docs/plans/23 (MasterPlan 4); this plan only stops the silence.
+Hard dependencies: plan 17 owns the ack/retry taxonomy consumed by `RouteError`; plan 18
+owns `enqueueRunJobTx`/`ensureRunQueue`, which this plan's hardened IO helpers consume.
+Downstream consumers of `AgentLoadReport`: plan 30 (operator inspection), plan 33
+(enabled-agent selection), and plan 23 (durable load state/lifecycle). This plan only
+reports and logs; plan 23 owns persistence.
+
+
+## Revision Notes
+
+- 2026-07-22: Made plans 17 and 18 prerequisites, promoted loading to the canonical
+  `AgentLoadReport` seam, and assigned plans 30, 33, and 23 as consumers. This removes
+  the prior "whichever lands first" duplication across MasterPlans 3, 4, 6, and 7.

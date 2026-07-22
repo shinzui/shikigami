@@ -99,7 +99,7 @@ Infrastructure facts: shikigami's migrations are embedded SQL files under `shiki
 
 Milestone 1 — tell the truth in the journal and the logs. Scope: `Sink/Types.hs`, `Agent/Workflow.hs`, `Flow/SinkOutbox.hs`, `Agent/Conversation.hs`, `Worker.hs`, existing tests. At the end, no code path claims `Delivered` before HTTP, and publisher dead-letters are visible in the worker log.
 
-Add `Enqueued !Text` to `SinkOutcome` in `shikigami-core/src/Shikigami/Sink/Types.hs` (keep `Delivered` — it remains the post-HTTP truth; the derived aeson instances make the addition backward-compatible for already-journaled values). Switch the three enqueue sites to `Enqueued ("outbox:" <> messageId)`: Workflow.hs:440, Workflow.hs:492, Flow/SinkOutbox.hs:100. Update `sinkResultDetail` (Conversation.hs:446-448) to match `Enqueued detail` as well as `Delivered detail` (order: `Enqueued` first; `Delivered` kept for old journaled turns replaying). Update the AgentWorkflowSpec assertions that check the `outbox:` prefix — they read `replyMessageId`, which now flows from `Enqueued`. Implement `logSinkResult` (Workflow.hs:629-630) as a stderr line naming agent, run idempotency key, sink kind, and outcome (structured logging is docs/plans/28's job; one honest `hPutStrLn` is this plan's). In `runOutboxPublisher` (Worker.hs:103-112), stop discarding the summary: log `published/retried/dead` when any is non-zero, and log dead-letters at error level with the `haltedOn` id if present (`OutboxPublishSummary` fields, keiro `src/Keiro/Outbox/Types.hs:190-197`).
+Add `Enqueued !Text` to `SinkOutcome` in `shikigami-core/src/Shikigami/Sink/Types.hs` (keep `Delivered` — it remains the post-HTTP truth; the derived aeson instances make the addition backward-compatible for already-journaled values). Switch the three enqueue sites to `Enqueued ("outbox:" <> messageId)`: Workflow.hs:440, Workflow.hs:492, Flow/SinkOutbox.hs:100. Update `sinkResultDetail` (Conversation.hs:446-448) to match `Enqueued detail` as well as `Delivered detail` (order: `Enqueued` first; `Delivered` kept for old journaled turns replaying). Update the AgentWorkflowSpec assertions that check the `outbox:` prefix — they read `replyMessageId`, which now flows from `Enqueued`. Implement `logSinkResult` (Workflow.hs:629-630) through plan 28's `Shikigami.Log`, naming agent, run idempotency key, sink kind, and outcome. In `runOutboxPublisher` (Worker.hs:103-112), stop discarding the summary: emit structured `published`/`retried`/`dead` fields when any is non-zero and a dead-letter event with the `haltedOn` id if present.
 
 Milestone 2 — durable delivery receipts and the send-guard. Scope: new migration, new module `shikigami-core/src/Shikigami/Sink/Delivery.hs`, `Agent/Workflow.hs` (`publishSinkIntent`). At the end, every publish attempt's real outcome is queryable, and re-publishing an already-delivered message is a no-op.
 
@@ -224,3 +224,15 @@ Shikigami.Sink.Delivery.lookupDelivery :: Pool -> Text -> IO (Either UsageError 
 ```
 
 Constraints from sibling plans (record in code comments where relevant): journaled step names never change and `SinkOutcome`'s encoding change is additive-only (docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md); docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md (MasterPlan 5) plans to consolidate `enqueueSinkIntents`/`enqueueSinkIntentStep`/`Flow/SinkOutbox.hs` — this plan should land first, and that consolidation must preserve the `Enqueued` semantics, the receipt guard, and the per-sink keys introduced here (this is a declared cross-MasterPlan integration point in docs/masterplans/3).
+
+Hard cross-MasterPlan predecessor: plan 28 Milestone 1 supplies `Shikigami.Log`, which
+this plan imports for delivery and publisher events. Preferred predecessor: plan 16 first
+makes every handler produce truthful success/failure outcomes. Plan 27 lands after this
+plan and preserves these semantics.
+
+
+## Revision Notes
+
+- 2026-07-22: Made plan 28 Milestone 1 a hard prerequisite, kept plan 16 as a preferred
+  predecessor, and changed `logSinkResult`/publisher summaries to use the structured
+  logger. The sink sequence is now plan 16 plus plan 28 M1 → plan 19 → plan 27.

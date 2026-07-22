@@ -71,11 +71,11 @@ notification path, and a real resolution path.
   (`SHIKIGAMI_APPROVAL_REQUIRE`, `SHIKIGAMI_APPROVAL_CHANNEL`,
   `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`) and lives behind a small `ApprovalPolicy`
   record and one `requiresApprovalFor` function — not in the Dhall agent schema yet.
-  Rationale: `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`
-  (MasterPlan 7) owns schema evolution and may move policy into `schema/Agent.dhall`
-  later; keeping the policy behind one small pure interface means that plan only swaps
-  the policy *source*, not the approval machinery. Environment configuration follows
-  the config idiom established by plan 13.
+  Rationale: plan 33 owns identity, memory policy, and enablement, not approval policy.
+  Keeping approval configuration behind one small pure interface still permits a
+  future, explicitly scoped schema plan to replace the source without changing the
+  machinery. Environment configuration follows the config idiom established by plan
+  13.
   Date: 2026-07-08
 - Decision: The notification path reuses existing sink clients — danwa
   (`Shikigami.Sink.Danwa`) for `ViaDanwa`, kizashi (`Shikigami.Sink.KizashiClient`)
@@ -86,6 +86,14 @@ notification path, and a real resolution path.
   (`shikigami-api/src/Shikigami/Api/Agent.hs:21-29`) that is semantically "an agent
   asks a human for something".
   Date: 2026-07-08
+- Decision: This plan hard-depends on
+  `docs/plans/22-outbound-authentication-for-sink-clients.md` and sends both danwa and
+  kizashi approval asks through its `SinkHttp`.
+  Rationale: approval asks are production outbound calls. Sending them through the old
+  raw clients would bypass the credential, timeout, and connection-manager policy that
+  plan 22 establishes and would leave a second HTTP path for later contributors to
+  reconcile.
+  Date: 2026-07-22
 - Decision: The resolution path is a CLI command (`resolve-approval <token>
   --approve/--reject`), not an HTTP endpoint.
   Rationale: shikigami has no HTTP server today and MasterPlan 6 (operations) owns
@@ -220,7 +228,7 @@ describeApprovalPolicy :: Maybe ApprovalPolicy -> Text
 The env builder:
 
 ```haskell
-policyApprovalEnv :: ApprovalPolicy -> DanwaConfig -> KizashiConfig -> SessionId -> ApprovalEnv
+policyApprovalEnv :: ApprovalPolicy -> SinkHttp -> DanwaConfig -> KizashiConfig -> SessionId -> ApprovalEnv
 ```
 
 with these behaviors:
@@ -244,17 +252,19 @@ Resolve with: shikigami resolve-approval 7f3c9a12-...-uuid --approve   (or --rej
 ```
 
   For `ViaDanwa`: add a small helper to `shikigami-core/src/Shikigami/Sink/Danwa.hs` —
-  `postText :: DanwaConfig -> Text -> IO (Either Text Text)` — factored from the
+  `postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either Text Text)` — factored from the
   existing `postToFreshConversation` (lines 59-92: start a `"thread"` conversation as
   `agentParticipant cfg`, join, post the message, return the message id). The existing
   function pattern-matches on the `DanwaConversation` sink variant only to satisfy its
   current caller; the new helper takes the rendered text directly so the approval path
-  does not fabricate a fake `Sink` value.
+  does not fabricate a fake `Sink` value. Call it as
+  `postText (danwaClientEnv sinkHttp) danwaConfig renderedAsk`.
   For `ViaKizashi`: build a `CreateSignalReq` directly (`Sink/Wire.hs:56-67`) with
   `actor` = the agent name from the prompt context, `recipient = defaultRecipient` of
   the `KizashiConfig`, `source = "shinzui/shikigami"`, `signalType = AgentRequest`,
   `priority = High`, `importance = 80`, `intent` = the prompt, and
-  `contextTags = ["approval:" <> awakeableIdText aid]`; post with `postSignal`.
+  `contextTags = ["approval:" <> awakeableIdText aid]`; post with
+  `postSignal (kizashiHttp sinkHttp)`.
   In both channels a `Left`/error result is rethrown via
   `ioError . userError` so the journaled notify step fails and is retried on resume
   (see Decision Log).
@@ -274,7 +284,7 @@ add `approvalPolicy :: !(Maybe ApprovalPolicy)` to `WorkerEnv` (lines 55-63); in
 ```haskell
 approval = case approvalPolicy env of
   Nothing -> Approval.defaultApprovalEnv
-  Just policy -> Policy.policyApprovalEnv policy (danwa env) (kizashi env),
+  Just policy -> Policy.policyApprovalEnv policy (sinkHttp env) (danwa env) (kizashi env),
 deadline = Policy.deadline =<< approvalPolicy env
 ```
 
@@ -465,13 +475,14 @@ resolveApprovalPolicy :: IO (Either Data.Text.Text (Maybe ApprovalPolicy))
 describeApprovalPolicy :: Maybe ApprovalPolicy -> Data.Text.Text
 policyApprovalEnv ::
   ApprovalPolicy ->
+  Shikigami.Sink.Auth.SinkHttp ->
   Shikigami.Sink.Config.DanwaConfig ->
   Shikigami.Sink.Config.KizashiConfig ->
   Kioku.Id.SessionId ->
   Shikigami.Agent.Approval.ApprovalEnv
 
 -- shikigami-core/src/Shikigami/Sink/Danwa.hs (added helper)
-postText :: Shikigami.Sink.Config.DanwaConfig -> Data.Text.Text -> IO (Either Data.Text.Text Data.Text.Text)
+postText :: Servant.Client.ClientEnv -> Shikigami.Sink.Config.DanwaConfig -> Data.Text.Text -> IO (Either Data.Text.Text Data.Text.Text)
 
 -- shikigami-cli/src/Shikigami/Cli/Commands/ResolveApproval.hs (new)
 runResolveApproval :: String -> Bool -> Maybe String -> IO ()   -- token, approve?, reject reason
@@ -485,7 +496,7 @@ Shikigami.Agent.Approval.resolveApproval :: AppEnv -> AwakeableId -> ApprovalDec
 Shikigami.Agent.Approval.ApprovalDecision (Approved | Rejected | TimedOut)                        -- Approval.hs:65-70
 Keiro.Workflow.Awakeable.AwakeableId (AwakeableId)                    -- constructor exported, Awakeable.hs:52,119
 Keiro.Workflow.Awakeable.awakeableIdText :: AwakeableId -> Text       -- Awakeable.hs:130
-Shikigami.Sink.KizashiClient.postSignal :: KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
+Shikigami.Sink.KizashiClient.postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
 Shikigami.Sink.Wire.CreateSignalReq (..)                              -- Wire.hs:56-67
 Shikigami.Sink.Permission.sinkKindText :: SinkKind -> Text            -- Permission.hs:43-49
 Shikigami.Api.Agent.SignalType (AgentRequest)                         -- Api/Agent.hs:21-29
@@ -493,8 +504,19 @@ Kioku.App.noopTracer, Kioku.App.AppEnv (..)
 Kiroku.Store.Connection (withStore, defaultConnectionSettings)
 ```
 
+Hard dependency: `docs/plans/22-outbound-authentication-for-sink-clients.md` defines
+`SinkHttp`, `HttpEnv`, the authenticated danwa `ClientEnv`, and the final `postSignal`
+signature consumed above. Soft dependency: plan 13 defines the typed environment
+resolver and loud startup-description convention reused by `resolveApprovalPolicy`.
+
 No new package dependencies: `uuid` (via keiro), `containers`, `danwa-client`, and
-`optparse-applicative` (CLI) are already in scope. This plan is independent of plans
-13, 15, and 16 (no shared files beyond additive `Worker.hs` record fields; plan 13
-also edits `Cli/Commands/Worker.hs` — coordinate by keeping each plan's additions to
-separate, clearly-named blocks in `runWorkerCmd`).
+`optparse-applicative` (CLI) are already in scope. Coordinate the additive worker-startup
+edits with plans 13, 15, and 16; plan 13 also edits `Cli/Commands/Worker.hs`, so keep each
+plan's additions in separate, clearly named blocks in `runWorkerCmd`.
+
+
+## Revision Notes
+
+- 2026-07-22: Removed the nonexistent approval-policy dependency on plan 33 and made
+  plan 22 a hard dependency. Approval notifications now consume authenticated
+  `SinkHttp` clients instead of introducing an unauthenticated parallel path.

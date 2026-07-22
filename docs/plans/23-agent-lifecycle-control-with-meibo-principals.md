@@ -28,9 +28,9 @@ Explicitly out of scope, per the improvement request: the shikigami HTTP API, th
 ## Progress
 
 - [ ] Milestone 1: `Shikigami.Directory` module — types, cached view, file stub source, refresher; unit tests.
-- [ ] Milestone 2: migrations for `shikigami.agent_load_state` and `shikigami.run_skips`; loader consolidation with recorded per-agent load state (`agents/broken.dhall` visible as failed).
+- [ ] Milestone 2: migrations for `shikigami.agent_load_state` and `shikigami.run_skips`; persist plan 20's canonical load report (`agents/broken.dhall` visible as failed).
 - [ ] Milestone 3: lifecycle kill switch at all trigger-fire and sink-dispatch points, with recorded skips and fail-open semantics; real-Postgres tests.
-- [ ] Milestone 4: principal join — sessions record principal ids; `shikigami agents list`/`sync` reconcile declared↔principal orphans and backfill `sink_grants.principal_id`.
+- [ ] Milestone 4: principal join — sessions record principal ids; extend plan 30's `shikigami agents list` and add `sync` to reconcile declared↔principal orphans and backfill `sink_grants.principal_id`.
 - [ ] Final: end-to-end pause/resume demonstration transcript captured; `cabal test all` green.
 
 
@@ -54,12 +54,16 @@ Explicitly out of scope, per the improvement request: the shikigami HTTP API, th
   Rationale: A trigger-level skip happens before any run, workflow, or kioku session exists, so there is nothing to attach it to — hence a table (the IR asks for an "attributable skipped outcome"; agent name + principal id + trigger kind + reason + timestamp is exactly that, and a fleet page can query it). A sink-level skip happens where `DeniedOutcome` already flows (journaled `SinkResult`s at `Shikigami/Agent/Workflow.hs:424-425`, publish-time log at `Shikigami/Sink.hs:45`), so reusing that channel keeps recording uniform; a distinct constructor (not `DeniedOutcome` with a special reason) keeps permission denials and lifecycle skips distinguishable in journals and logs. Adding a constructor is JSON-backward-compatible: old journaled rows decode unchanged, and new rows only appear after this code ships.
   Date: 2026-07-08
 
-- Decision: Sessions record the principal id by writing it into `StartSessionData.agentId` when the directory resolves one, falling back to the declared name otherwise. The kioku memory scope (`agentScope`, keyed by declared name) is unchanged.
+- Decision: Sessions record the principal id by writing it into `StartSessionData.agentId`. A declared `identity.principal` from plan 33 is authoritative; when absent, directory lookup by declared name remains the compatibility fallback. The kioku memory scope (`agentScope`, keyed by declared name) is unchanged.
   Rationale: `kioku_sessions.agent_id` is `text` (kioku-migrations `2026-06-24-00-00-00-kioku-base.sql:37`) and `StartSessionData.agentId :: Text` (`/Users/shinzui/Keikaku/bokuno/kioku/kioku-core/src/Kioku/Session/Domain.hs:43-53`), so no cross-repo change is needed — the IR's acceptance ("a run's kioku session carries the agent principal id") is met by writing the right value. Alternative rejected: adding a dedicated `principal_id` column to kioku sessions — a cross-repo schema change the IR does not require. Memory scoping stays name-keyed because scopes are a recall namespace, not an identity claim, and re-keying them would orphan existing memories.
   Date: 2026-07-08
 
-- Decision: Consolidate the three copy-pasted `loadAgents` helpers into `Shikigami.Agent.Loader.loadAgentsReport` and have the CLI commands log failures loudly and upsert `shikigami.agent_load_state`. Coordinate with `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md` (MasterPlan 3), which owns loud *logging* of manifest failures: whichever plan lands first does the consolidation; the second builds on it (20 = log loudly now, 23 = durable recorded state). Do not implement the same consolidation twice.
-  Date: 2026-07-08
+- Decision: Hard-depend on plan 33's `identity.principal` field and plan 30's `agents`
+  command group; consume plan 20's `AgentLoadReport` for durable load state.
+  Rationale: plan 20 owns traversal/reporting, plan 30 owns CLI presentation, plan 33 owns
+  declared identity, and this plan owns persistence plus lifecycle semantics. This removes
+  the former "whichever lands first" loader rule and the temporary name-only identity path.
+  Date: 2026-07-22
 
 - Decision: Soft-depend on plan 21 for principal keying of grants: `shikigami.sink_grants.principal_id` (the nullable column plan 21 creates) is backfilled by this plan's `shikigami agents sync`, not by a schema change here. If plan 21 has not landed when Milestone 4 starts, skip the backfill step and record it in Progress as remaining.
   Date: 2026-07-08
@@ -103,9 +107,12 @@ data LifecycleDecision
   = AllowRun !(Maybe PrincipalRecord)   -- active, or unknown to the directory (fail open)
   | SkipRun !PrincipalRecord !Text      -- paused/deactivated, with the reason text
 
-consultLifecycle :: DirectoryHandle -> Text -> IO LifecycleDecision
-lookupPrincipal  :: DirectoryHandle -> Text -> IO (Maybe PrincipalRecord)
+consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
+lookupPrincipal  :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
 ```
+
+The `Maybe Text` is `identity.principal` from plan 33 and is looked up first; the final
+`Text` is the declared agent name used as the compatibility fallback.
 
 The stub file format mirrors the C14 principal shape so real meibo data drops in unchanged:
 
@@ -122,7 +129,9 @@ Acceptance: `cabal test all` green with the new group.
 
 ### Milestone 2 — recorded load state and the skips table
 
-Scope: two small tables and the loader consolidation. At the end, `agents/broken.dhall` produces a visible failed-load row and a loud stderr line instead of a silent skip.
+Scope: two small tables and persistence of plan 20's canonical load report. At the end,
+`agents/broken.dhall` produces a visible failed-load row and a loud stderr line instead of
+a silent skip.
 
 Run `just new-migration agent-load-state-and-run-skips` and give it this body (keeping the generated `-- codd: in-txn` header; replace the template's `search_path` line):
 
@@ -156,7 +165,13 @@ CREATE INDEX IF NOT EXISTS run_skips_agent_idx ON shikigami.run_skips (agent_nam
 
 (The `CREATE SCHEMA IF NOT EXISTS shikigami` is idempotent whether or not plan 21's migration ran first — codd applies both in timestamp order regardless of which plan merged first.)
 
-Loader consolidation: add to `Shikigami.Agent.Loader` a `loadAgentsReport :: FilePath -> IO [(FilePath, Either LoadError AgentDecl)]` (the directory walk currently copy-pasted in the three CLI helpers, but returning every result). Add `Shikigami.Directory.LoadStateStore` (or a section of `Shikigami.Directory`) with `recordLoadStates :: Hasql.Pool.Pool -> [(FilePath, Either LoadError AgentDecl)] -> IO (Either Text ())` (upsert per manifest path, schema-qualified `shikigami.agent_load_state` — the pool's `search_path` is `kiroku`) and `recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO ()` (insert; a recording failure logs to stderr and never blocks the caller — recording is best-effort by design). Rewrite the three CLI `loadAgents` helpers (Worker.hs:45-49, Scheduler.hs:77-80, ConsumeStream.hs:90-94) to call `loadAgentsReport`, print one loud line per failure (`[agents] FAILED to load agents/broken.dhall: …dhall error…`), call `recordLoadStates` once the store is open, and proceed with the successes. (Coordination: if plan 20 already consolidated the loader, keep its logging and add only the `recordLoadStates` call.)
+Load-state persistence: consume the `AgentLoadReport` returned by plan 20's
+`loadAgentsLoud`. Add `Shikigami.Directory.LoadStateStore` (or a section of
+`Shikigami.Directory`) with `recordLoadStates :: Hasql.Pool.Pool -> AgentLoadReport -> IO
+(Either Text ())` (upsert per manifest path, schema-qualified
+`shikigami.agent_load_state`) and `recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO ()`.
+At the existing CLI call sites, add only `recordLoadStates` after loading; retain plan 20's
+logging, summary, and strict-mode behavior and plan 33's enabled selection.
 
 Acceptance: `just migrate` applies; `cabal run shikigami -- worker --agents agents …` prints the loud failure line for `broken.dhall`; `psql … -c "TABLE shikigami.agent_load_state"` shows a `failed` row for `agents/broken.dhall` with the Dhall error, and `loaded` rows for the others.
 
@@ -184,11 +199,14 @@ Acceptance: tests green; the manual pause/resume transcript under Validation wor
 
 Scope: runs are attributed to principal ids and the declared↔directory join is visible both ways.
 
-Session attribution: in `openSession` (Workflow.hs:248-275), `lookupPrincipal (directory deps) (agentDeclName decl)` and set `agentId = maybe (agentDeclName decl) principalId mRecord` (per the Decision Log; `focus`, `scope`, and everything else unchanged).
+Session attribution: in `openSession` (Workflow.hs:248-275), call `lookupPrincipal
+(directory deps) (principal <$> identity decl) (name decl)` and set `agentId` to the
+resolved principal id, falling back to the declared principal value and then the agent name.
 
-Reconciliation surface: a new command module `shikigami-cli/src/Shikigami/Cli/Commands/Agents.hs` with two subcommands wired into `Shikigami/Cli.hs`:
+Reconciliation surface: extend plan 30's
+`shikigami-cli/src/Shikigami/Cli/Commands/Agents.hs` and existing parser:
 
-- `shikigami agents list --agents DIR [--directory FILE]`: run `loadAgentsReport`, load the directory view once, and print the full join — for each manifest: name, load status (loaded/failed+reason), principal id and lifecycle or `NO PRINCIPAL`; then each directory principal with no manifest as `NO MANIFEST`. This is the IR's "fleet page data" in CLI form and makes both orphan classes listable (requirement 2 and 3's acceptance).
+- Extend plan 30's `shikigami agents list --agents DIR [--directory FILE]`: load the directory view once and add principal id/lifecycle columns to every report entry, then print directory principals with no manifest as `NO MANIFEST`. Add `agents sync` beside the existing `list` parser.
 - `shikigami agents sync --agents DIR --directory FILE`: additionally `recordLoadStates` to the database and, when plan 21's table exists, backfill `UPDATE shikigami.sink_grants g SET principal_id = $2, updated_at = now() WHERE g.agent_name = $1 AND g.principal_id IS DISTINCT FROM $2` for each resolved principal (the integration point with `docs/plans/21-database-backed-sink-permission-grants.md`; if the table is absent, print a notice and skip).
 
 Tests: extend `LifecycleGateSpec` — after a run with a directory that maps the agent, the kioku session row's `agent_id` equals the principal id (query `kioku_sessions` via `Kioku.Session` as AgentWorkflowSpec does); after `sync` against a database with plan 21's seed rows, the matching `sink_grants` rows carry the principal id.
@@ -270,16 +288,13 @@ emptyDirectoryHandle :: IO DirectoryHandle
 refreshDirectory :: DirectoryHandle -> IO ()
 startDirectoryRefresher :: DirectoryHandle -> Int -> IO ()
 data LifecycleDecision = AllowRun !(Maybe PrincipalRecord) | SkipRun !PrincipalRecord !Text
-consultLifecycle :: DirectoryHandle -> Text -> IO LifecycleDecision
-lookupPrincipal :: DirectoryHandle -> Text -> IO (Maybe PrincipalRecord)
+consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
+lookupPrincipal :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
 data RunSkip = RunSkip
   { agentName :: !Text, principalId :: !(Maybe Text),
     stage :: !Text, detail :: !Text, reason :: !Text }
 recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO ()
-recordLoadStates :: Hasql.Pool.Pool -> [(FilePath, Either LoadError AgentDecl)] -> IO (Either Text ())
-
--- shikigami-core : Shikigami.Agent.Loader
-loadAgentsReport :: FilePath -> IO [(FilePath, Either LoadError AgentDecl)]
+recordLoadStates :: Hasql.Pool.Pool -> AgentLoadReport -> IO (Either Text ())
 
 -- shikigami-core : Shikigami.Sink.Types
 data SinkOutcome = Delivered !Text | Stubbed | DeniedOutcome !Text
@@ -291,9 +306,19 @@ data SinkOutcome = Delivered !Text | Stubbed | DeniedOutcome !Text
 -- Shikigami.Flow.Capability.SinkEnv  each gain: directory :: !DirectoryHandle
 ```
 
-Database artifacts: `shikigami.agent_load_state` and `shikigami.run_skips` (Milestone 2). CLI artifacts: `--directory`/`--directory-refresh` options on `worker`/`scheduler`/`consume-stream`/`consume-events`, and the `shikigami agents list|sync` command group. Cross-plan touchpoints: `docs/plans/21-database-backed-sink-permission-grants.md` (backfills its `sink_grants.principal_id`), `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md` (shared loader consolidation — see Decision Log), `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md` (MasterPlan 7 — later adds an optional declared `identity.principal` Dhall field; when it lands, a declared principal takes precedence over this plan's name-based directory join inside `consultLifecycle`/`lookupPrincipal`, a one-function change here), and the improvement request `docs/improvement-requests/consult-meibo-agent-lifecycle.md` (scope authority; update its status when this plan completes).
+Database artifacts: `shikigami.agent_load_state` and `shikigami.run_skips` (Milestone 2).
+CLI artifacts: lifecycle columns and `sync` added to plan 30's `agents` command group, plus
+`--directory`/`--directory-refresh` on the long-running commands. Hard dependencies: plan
+30 owns that command group and plan 33 defines `identity.principal`. Plan 20's
+`AgentLoadReport` is the shared loader contract. Soft dependency: plan 21 provides the
+nullable `sink_grants.principal_id` backfill target. The improvement request remains the
+scope authority.
 
 
 ## Revision Notes
 
-- 2026-07-08: Cross-plan consistency pass after initial authoring — added the touchpoint with `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md` (declared `identity.principal` will take precedence over the name-based directory join when that plan lands). Reason: the seam was documented on plan 33's side only; MASTERPLAN.md requires integration points to be visible from both plans.
+- 2026-07-08: Cross-plan consistency pass after initial authoring — added the touchpoint with `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`. The 2026-07-22 revision supersedes the original either-order assumption.
+- 2026-07-22: Made plans 30 and 33 hard predecessors, switched load-state persistence to
+  plan 20's `AgentLoadReport`, and changed `agents list` from a new command to an extension
+  of plan 30's command. Declared identity is available from the start, with name fallback
+  only for manifests that omit the optional field.

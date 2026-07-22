@@ -113,14 +113,12 @@ asserts the rendered service commands.
   This is the soft dependency the MasterPlan records between EP-4 (this plan) and EP-2 (29).
   Date: 2026-07-08
 
-- Decision: The configuration reference documents today's verified surface and names the
-  owning plan for configuration that does not exist yet, rather than inventing variable names.
-  Rationale: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (model-provider
-  keys/URLs) and `docs/plans/22-outbound-authentication-for-sink-clients.md` (sink credentials)
-  are the authoritative owners of those names; both are unwritten scaffolds as of 2026-07-08.
-  Inventing names here would create silent integration conflicts. The reference gets a
-  "reserved configuration" passage pointing at those plans, to be filled when they land.
-  Date: 2026-07-08
+- Decision: Land the configuration reference after plans 13, 22, 28, 29, and 32 and
+  document their actual surfaces; do not ship reserved placeholders.
+  Rationale: those plans author provider, credential/HTTP, observability, health, and
+  kanmon settings. Packaging is the portfolio closure step, so waiting avoids publishing
+  an immediately stale reference and lets the composed smoke test exercise real settings.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -309,14 +307,9 @@ failure behavior — `PG_CONNECTION_STRING` aborts the process when unset), ever
 default (from `shikigami-cli/src/Shikigami/Cli.hs`, cited in Context), and the
 process-compose/systemd incarnation of each. Include the `CODD_*` variables the migrate path
 needs (`CODD_CONNECTION`, `CODD_MIGRATION_DIRS`, `CODD_EXPECTED_SCHEMA_DIR`, `CODD_SCHEMAS`,
-as set in `Justfile` lines 33-37). Close with a "reserved configuration" section that names
-the owning plans for surface that does not exist yet: model-provider configuration
-(`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md`), outbound sink credentials
-(`docs/plans/22-outbound-authentication-for-sink-clients.md`), structured-logging and metrics
-knobs (`docs/plans/28-structured-logging-metrics-and-trace-propagation.md`), and health-server
-ports (`docs/plans/29-health-liveness-and-worker-loop-supervision.md`). When those plans land,
-their authors extend this document — that contract is recorded in the MasterPlan's Integration
-Points.
+as set in `Justfile` lines 33-37). Include the actual model-provider configuration from plan
+13, sink and kanmon credentials from plans 22/32, observability settings from plan 28, and
+health ports from plan 29. Cite each owning implementation; do not retain a reserved section.
 
 Acceptance: the document exists and every variable/flag in it traces to a cited file:line in
 this repo (spot-check at least `PG_CONNECTION_STRING` and the worker flags).
@@ -514,9 +507,10 @@ Packaging: `nix flake show` lists `nixosModules.shikigami`, and `nix flake check
 including `checks.<system>.nixos-module-eval`, which must fail if the module stops rendering
 `shikigami worker --agents` (or the other three subcommands) into the services' `ExecStart`.
 
-Configuration reference: `docs/operations/configuration.md` exists and covers exactly the
-surface verified in Context and Orientation (two env vars, per-command flags, `CODD_*`), with
-reserved sections naming plans 13, 22, 28, and 29 by path.
+Configuration reference: `docs/operations/configuration.md` exists and covers the existing
+database/migration surface plus the actual provider, sink-auth, observability, health, and
+kanmon settings produced by plans 13, 22, 28, 29, and 32. Every entry cites its owning
+implementation; there are no reserved placeholders.
 
 Regression: `cabal build all` and `cabal test all` still pass inside `nix develop`. The only
 test suite, `shikigami-core-test`, provisions its own ephemeral Postgres via
@@ -579,9 +573,16 @@ dependency on `docs/plans/29-health-liveness-and-worker-loop-supervision.md` (re
 upgrade from exec/started conditions to `/readyz` HTTP probes; nothing here blocks on it);
 integration dependency with
 `docs/plans/28-structured-logging-metrics-and-trace-propagation.md` (its logging/metrics env
-vars and flags must be added to the configuration reference and the NixOS module options when
-they exist); documentation dependency on
+vars and flags are added to the configuration reference and the NixOS module); documentation
+and closure dependency on
 `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` and
-`docs/plans/22-outbound-authentication-for-sink-clients.md` (owners of the model-provider and
-sink-credential variable names, unwritten as of 2026-07-08 — the reference reserves sections
-for them rather than inventing names).
+`docs/plans/22-outbound-authentication-for-sink-clients.md` (owners of model-provider and
+sink-credential names), plus plan 32's kanmon configuration. The plan is implementable
+earlier, but should land after these soft dependencies.
+
+
+## Revision Notes
+
+- 2026-07-22: Made this the operations-closure plan. The configuration reference now
+  waits for and documents actual settings from plans 13, 22, 28, 29, and 32 instead of
+  publishing reserved placeholders.

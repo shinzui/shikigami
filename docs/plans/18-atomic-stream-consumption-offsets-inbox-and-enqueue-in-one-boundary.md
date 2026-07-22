@@ -103,7 +103,7 @@ enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId
 ensureRunQueue :: Pool -> IO (Either UsageError ())
 ```
 
-`enqueueRunJobTx` is `Tx.statement SendMessage { queueName = runQueueName, messageBody = MessageBody (toJSON job), delay = Nothing } Pgmq.Hasql.Statements.Message.sendMessage` — no `createQueue` inside the transaction. Import `Hasql.Transaction qualified as Tx` and the pgmq statement module (`shikigami-core.cabal` already depends on the package that exposes the `Pgmq` façade; add `pgmq-hasql` to the library's `build-depends` if the statement module is not re-exported — verify with `cabal build`). `ensureRunQueue` runs pgmq `createQueue runQueueName` once (`Pool.use`); pgmq's `create` is create-if-not-exists, so this is idempotent. The existing IO-level `enqueueRunJob` keeps working unchanged in this plan (docs/plans/20 hardens it; if that plan has already landed, adopt its `ensureRunQueue` instead of adding a second one — coordinate via the MasterPlan's integration point on this module).
+`enqueueRunJobTx` is `Tx.statement SendMessage { queueName = runQueueName, messageBody = MessageBody (toJSON job), delay = Nothing } Pgmq.Hasql.Statements.Message.sendMessage` — no `createQueue` inside the transaction. Import `Hasql.Transaction qualified as Tx` and the pgmq statement module (`shikigami-core.cabal` already depends on the package that exposes the `Pgmq` façade; add `pgmq-hasql` to the library's `build-depends` if the statement module is not re-exported — verify with `cabal build`). `ensureRunQueue` runs pgmq `createQueue runQueueName` once (`Pool.use`); pgmq's `create` is create-if-not-exists, so this is idempotent. The existing IO-level `enqueueRunJob` keeps working unchanged here; plan 20 is a downstream consumer and hardens it after this plan lands.
 
 In `Shikigami/Trigger/Consumer.hs`, make the inbox handlers do the enqueue. Change `inboxHandler` (Consumer.hs:198-208) so that, for each matching agent, it builds the job with `runJobFromEnvelope` and enqueues it in the transaction:
 
@@ -223,4 +223,14 @@ Shikigami.Trigger.Consumer.processDecodedIntegrationEvent ::
 -- signatures but now run forever with reconnect+backoff.
 ```
 
-Integration point (from the MasterPlan): this plan and docs/plans/20 both touch `Shikigami/Trigger/Enqueue.hs`. This plan owns `enqueueRunJobTx` and `ensureRunQueue`; docs/plans/20 hardens the IO-level helpers (per-enqueue `createQueue`, timestamp keys, epoch fallback) and must consume `ensureRunQueue` rather than duplicate it. Whichever lands second reconciles imports and the CLI startup call. The `RunJob` idempotency-key conventions (`<agent>:<activityId>` for stream, `<agent>:<messageId>` for events) are load-bearing for the worker's workflow dedupe and must not change here.
+Integration point (from the MasterPlan): this plan owns `enqueueRunJobTx` and
+`ensureRunQueue`; plan 20 hard-depends on this plan, then hardens the IO-level helpers and
+consumes `ensureRunQueue`. The `RunJob` idempotency-key conventions
+(`<agent>:<activityId>` for stream, `<agent>:<messageId>` for events) are load-bearing for
+the worker's workflow dedupe and must not change here.
+
+
+## Revision Notes
+
+- 2026-07-22: Recorded plan 20 as a hard downstream consumer of `ensureRunQueue` and
+  removed the previous either-order/duplicate-helper fallback.

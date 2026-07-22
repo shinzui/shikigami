@@ -94,10 +94,10 @@ without the enforcement.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | None | cross-MP: plans 21, 22 (MasterPlan 4) | Not Started |
-| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | None | cross-MP: plan 23 (MasterPlan 4, consumes `identity`), plan 16 (MasterPlan 2, dead-field note) | Not Started |
+| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plan 22 (MasterPlan 4) | cross-MP: plan 21 (MasterPlan 4), plans 19 (MasterPlan 3), 27 (MasterPlan 5) | Not Started |
+| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plan 20 (MasterPlan 3) | cross-MP: plan 16 (MasterPlan 2) | Not Started |
 | 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | None | EP-2 (memory.scope field); cross-MP: plan 13 (ops-level only, see Dependency Graph) | Not Started |
-| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2 | cross-MP: plan 24 (MasterPlan 5, step-versioning discipline) | Not Started |
+| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plan 24 (MasterPlan 5) | None | Not Started |
 | 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | upstream baikai C1/C2 + shikumi C5 (cross-repo) | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -113,7 +113,9 @@ was not modified. Its upstream hard dependencies (baikai `Baikai.Mcp.*`, shikumi
 
 ## Dependency Graph
 
-EP-2 goes first in spirit but blocks almost nothing in practice. Its artifact — the additive
+EP-2 follows plan 20, which owns the canonical agent load report and loud/strict loader.
+EP-2 extends that seam with enabled-agent selection rather than introducing another
+directory walk. Within this MasterPlan, EP-2 goes first. Its artifact — the additive
 Dhall-field pattern (`Agent.dhall` field + `default` entry + `Shikigami.Api.Agent` mirror +
 `validate` proof) — is what EP-4 hard-depends on: EP-4 adds `delegates : List Text` to the
 same `Agent` record and its `default`, and doing that before EP-2 lands would establish the
@@ -125,13 +127,12 @@ fallback, retention/archival) need nothing from EP-2 and can start immediately; 
 shared-scope milestone consumes the `memory.scope` field EP-2 defines. If EP-2 slips, EP-3
 lands its first three milestones and holds the fourth.
 
-EP-1 is independent within this MasterPlan and can run fully in parallel. Its cross-MP soft
-dependencies: docs/plans/21-database-backed-sink-permission-grants.md (MasterPlan 4) owns the
-database grant table that will gate the new sink kind — until then EP-1 extends the existing
-static `defaultGrantTable` stub in `Shikigami.Sink.Permission`, which is exactly the seam plan
-21 swaps; and docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4) owns
-real outbound auth headers — EP-1 ships a config-supplied static bearer token for the stub
-proof and leaves the header seam for plan 22.
+EP-1 hard-depends on docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4),
+which owns `HttpEnv`, `TokenSource`, and `postJSONWithHeaders`; EP-1 extends those records for
+kanmon. Its remaining cross-MP soft dependencies are plan 21, which owns the database grant
+table; plan 19, which settles delivery receipts and idempotency; and plan 27, which
+consolidates the sink-intent module. These soft edges make the preferred landing order
+plan 21/19/27 → EP-1 without blocking schema/client work after plan 22.
 
 EP-3's relationship to docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md was
 verified in code and is weaker than assumed: kioku's distiller does need a model, but kioku
@@ -153,9 +154,14 @@ now; M3-M5 wait on the upstream repos. Its cross-MP soft dependency on plan 13 i
 MCP tools are only exercised by a model that actually issues tool calls, so the end-to-end
 payoff arrives with a real provider.
 
-Parallelism summary: EP-1, EP-2, EP-3 (milestones 1-3), and EP-5 (M1-M2) can all proceed
-concurrently by different contributors; EP-4 starts when EP-2's schema machinery is merged;
-EP-3 milestone 4 and EP-5 M3-M5 follow their soft dependencies.
+EP-4 also hard-depends on plan 24. Delegation changes the durable agent-run workflow and must
+be designed and landed under the workflow-versioning discipline and active-patch plumbing,
+not merely promise additive changes before that discipline exists.
+
+Parallelism summary: after plan 20, EP-2 can proceed alongside EP-3 milestones 1-3 and EP-5
+M1-M2. EP-1 begins after plan 22. EP-4 starts when both EP-2 and plan 24 are complete; EP-3
+milestone 4 and EP-5 M3-M5 follow their own dependencies. This is the MasterPlan-7 slice of
+the canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
 ## Integration Points
@@ -182,7 +188,7 @@ signature; EP-1 must not change that signature.
 
 IP-3 — the durable agent-run workflow's step surface
 (shikigami-core/src/Shikigami/Agent/Workflow.hs and Shikigami/Agent/Workflow/Name.hs).
-Involved: EP-4 and (cross-MP) plan 24. EP-4 removes the research-supervisor special case and
+Involved: EP-4 and (cross-MP hard dependency) plan 24. EP-4 removes the research-supervisor special case and
 introduces a shared `ingestJobStepName` constant (today the literal `"ingest-job"` appears
 independently in Workflow.hs and Delegate.hs:68). Any change to journaled step names or step
 order in `agentRunWorkflow` must follow the versioning discipline that plan 24 (MasterPlan 5)
@@ -198,16 +204,19 @@ the field or its alternatives without updating the other; the shape above is nor
 both.
 
 IP-5 — the `identity` field. Involved: EP-2 (defines) and cross-MP plan 23 (MasterPlan 4,
-consumes). EP-2 defines `identity : Optional { principal : Text }` (default `None`); plan 23
-owns joining that principal to meibo and driving lifecycle control from it. The field name
-and shape (`identity.principal`, a meibo principal identifier as Text) is the agreed contract;
-plan 23 must be updated if it assumed a different shape.
+consumes after EP-2). EP-2 defines `identity : Optional { principal : Text }` (default `None`);
+plan 23 owns joining that principal to meibo and driving lifecycle control from it, with a
+name-based fallback only when the optional field is absent.
 
 IP-6 — the shared sink HTTP layer (shikigami-core/src/Shikigami/Sink/Http.hs). Involved: EP-1
-and cross-MP plan 22. Today `postJSON` supports no custom headers; EP-1 adds an additive
-header-capable variant for the kanmon bearer token. Plan 22 (MasterPlan 4) owns where those
-header values come from (real token minting); EP-1 only creates the mechanical seam and a
-config-supplied static token.
+and cross-MP plan 22. Plan 22 defines `HttpEnv`, `TokenSource`, and
+`postJSONWithHeaders`; EP-1 adds `kanmonToken`/`kanmonHttp` to its credential records and
+uses `SHIKIGAMI_KANMON_TOKEN`. `KanmonConfig` carries no secret and EP-1 creates no second
+header helper. Plan 28 adds `traceparent` through the same function.
+
+IP-7 — agent loading and inspection. Plan 20 defines `loadAgentsReport` and loud/strict
+loading. EP-2 adds enabled-agent selection over that report. Plan 30 consumes the report for
+the `agents` operator command; plan 23 later persists and annotates it with lifecycle state.
 
 
 ## Progress
@@ -221,7 +230,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-1 M4: `stub-kanmon` CLI command and the end-to-end outbox-to-egress proof (delivered, deduplicated, denied).
 - [ ] EP-2 M1: `identity`/`memory`/`enabled` fields in `schema/Agent.dhall` with defaults; all existing manifests validate unchanged.
 - [ ] EP-2 M2: Haskell mirror types on `AgentDecl`; loader/decoder proof; `validate` prints the new surface.
-- [ ] EP-2 M3: `enabled` enforced loudly by a consolidated `loadAgents`; `recallLimit`/`recordPolicy` enforced in the run paths.
+- [ ] EP-2 M3: `enabled` enforced over plan 20's canonical load report; `recallLimit`/`recordPolicy` enforced in the run paths.
 - [ ] EP-2 M4: docs/user/writing-agents.md updated; proof manifest exercising all three fields.
 - [ ] EP-3 M1: kioku distill timer worker wired as the worker's fifth loop (env-gated); L1 timers actually fire.
 - [ ] EP-3 M2: recall fallback bounded and recency-ordered.
@@ -257,9 +266,10 @@ interactions between child plans. Provide concise evidence.
   requirement, and `DistillRuntime` is a record of plain functions so tests can stub it.
 - `loadAgents` is copy-pasted in three CLI modules (shikigami-cli/src/Shikigami/Cli/Commands/
   Worker.hs:45-49, Scheduler.hs:77-80, ConsumeStream.hs:90-93) and silently drops manifests
-  that fail to load (`pure [a | Right a <- loaded]`). EP-2's "skip disabled agents LOUDLY"
-  requirement therefore expands slightly: it consolidates the helper into
-  `Shikigami.Agent.Loader` and makes load failures loud too (EP-2 Decision Log).
+  that fail to load (`pure [a | Right a <- loaded]`). The portfolio audit found that four
+  plans proposed overlapping fixes. Ownership is now plan 20 (canonical report/logging) →
+  EP-2 (enabled selection) and plan 30 (inspection) → plan 23
+  (persistence/lifecycle); EP-2 no longer consolidates the base loader.
 - Plan 12 predates this MasterPlan and already carried a `master_plan` frontmatter key
   pointing at the cross-repo baikai MasterPlan 6. See Decision Log for how this was resolved.
 
@@ -325,6 +335,18 @@ plan.
   name (Delegate.hs:64-71) and keiro replays by step name; plan 24 (MasterPlan 5) owns the
   general versioning machinery, and until it lands the only safe move is additive (IP-3).
   Date: 2026-07-08
+- Decision: Make plan 20 a hard predecessor of EP-2, plan 22 a hard predecessor of EP-1,
+  and plan 24 a hard predecessor of EP-4.
+  Rationale: these plans now consume concrete shared artifacts (`loadAgentsReport`,
+  authenticated `HttpEnv`/`postJSONWithHeaders`, and workflow-versioning discipline plus
+  patch plumbing). Encoding those as hard edges removes provisional implementations and
+  gives the portfolio a deterministic landing order.
+  Date: 2026-07-22
+- Decision: Plan 23 consumes EP-2's declared `identity.principal`; it no longer lands
+  first and relies on a later one-function override.
+  Rationale: the optional field preserves compatibility for existing manifests, while
+  ordering the plans avoids shipping and then replacing name-only identity resolution.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -333,3 +355,11 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-22: Added cross-MasterPlan prerequisites for plans 20, 22, and 24; unified
+  HTTP ownership with MasterPlan 4; ordered the shared loader/agent-command work; and
+  made plan 23 consume the identity field after it exists. These changes align
+  MasterPlan 7 with the canonical MP-2 through MP-7 execution waves in MasterPlan 2.

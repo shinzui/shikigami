@@ -43,7 +43,7 @@ MasterPlan 3 — this initiative only makes that death observable); in-workflow 
 (owned by `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md` in
 MasterPlan 3 — this initiative owns only the operator-issued cancel); and the definition of the
 model-provider and outbound-credential configuration (owned by `docs/plans/13-...` and
-`docs/plans/22-...` — the configuration reference reserves sections for them).
+`docs/plans/22-...` — the configuration reference documents their settled surfaces).
 
 
 ## Decomposition Strategy
@@ -85,10 +85,10 @@ endpoint*: rejected because the substrate's metrics hooks are typed for the Open
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | None | None | Not Started |
+| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | None | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
 | EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | None | EP-1 | Not Started |
-| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | None | EP-1 | Not Started |
-| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | None | EP-2 | Not Started |
+| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plan 20 (MasterPlan 3) | EP-1 | Not Started |
+| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | None | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP-# prefix.
@@ -96,9 +96,10 @@ Hard Deps and Soft Deps reference other rows by their EP-# prefix.
 
 ## Dependency Graph
 
-There are no hard dependencies in this initiative — every plan compiles and delivers on its own,
-so all four can start immediately. The ordering is entirely soft, driven by which outputs a plan
-*benefits from* rather than *requires*.
+EP-1, EP-2, and EP-4 can start independently. EP-3 hard-depends on plan 20's canonical
+`AgentLoadReport`; it owns presentation of that report through `agents list`. EP-1 milestones
+1 and 2 can start immediately, while its HTTP trace-propagation milestone waits for plan 22's
+authenticated `postJSONWithHeaders` seam.
 
 EP-1 (observability) is the natural first mover because it defines the observability vocabulary
 and the `Shikigami.Log` module that EP-2 and EP-3 would ideally emit through. But EP-2 and EP-3
@@ -106,17 +107,19 @@ do not block on it: EP-2's health server can ship with plain logging and adopt `
 later; EP-3's subcommands are one-shot CLIs that need no structured logging at all. That is why
 EP-1 is a *soft* dep of both, not a hard one.
 
-EP-2 and EP-3 are mutually independent and independent of each other's internals — health
-plumbing versus read-only operator queries touch disjoint code — so they run fully in parallel
-with each other and with EP-1.
+After plan 20 supplies EP-3's cross-MasterPlan loader dependency, EP-2 and EP-3 are
+independent of each other's internals — health plumbing versus read-only operator queries
+touch disjoint code — so they can run in parallel with each other and with EP-1.
 
-EP-4 (deployable stack) softly depends on EP-2: its process-compose and systemd readiness probes
+EP-4 (deployable stack) softly depends on EP-1 and EP-2: its process-compose and systemd readiness probes
 are best pointed at EP-2's `/readyz` endpoint. Until EP-2 lands, EP-4 ships with exec-based and
 `process_started` probes and upgrades them afterward (EP-4 spells this out). EP-4 also consumes
 EP-1's configuration surface — the metrics/logging env vars EP-1 introduces must appear in EP-4's
-configuration reference — an integration concern, not an ordering constraint. The pragmatic
-sequence, if one contributor works serially, is EP-1 → (EP-2 ∥ EP-3) → EP-4; with parallel
-contributors, all four start at once and reconcile at the integration points below.
+configuration reference. Cross-MasterPlan plans 13, 22, and 32 own provider, sink-auth, and
+channel-egress configuration; EP-4 should land after those surfaces stabilize rather than
+publish reserved placeholders. The pragmatic sequence is plan 22 → EP-1 M3; plan 20 → EP-3;
+EP-1/EP-2 and the external configuration owners → EP-4. This is the MasterPlan-6 slice of the
+canonical MP-2 through MP-7 waves in MasterPlan 2.
 
 
 ## Integration Points
@@ -145,11 +148,12 @@ probes; the shared contract is the endpoint paths and the flag name.
 **IP-D — Configuration surface (EP-1 extends; EP-4 documents).** EP-4 owns
 `docs/operations/configuration.md`, the single enumeration of every env var and flag. EP-1 may
 add observability knobs (beyond the standard `OTEL_*` family, e.g. a metrics-exposition fallback
-switch); any such addition must be reflected in EP-4's reference. EP-4's reference also reserves
+switch); any such addition must be reflected in EP-4's reference. EP-4's reference also includes
 sections for the model-provider config owned by
-`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) and the
+`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2), the
 outbound-credential config owned by `docs/plans/22-outbound-authentication-for-sink-clients.md`
-(MasterPlan 4), to be filled by those plans' authors.
+(MasterPlan 4), and channel-egress config from plan 32. EP-4 lands after those surfaces and
+documents their actual names rather than reserved placeholders.
 
 **IP-E — Cross-MasterPlan cancellation surface (EP-3 with MasterPlan 3's plan 17).** EP-3's
 `runs cancel <workflow-id>` and plan 17's in-workflow run timeout both write keiro's terminal
@@ -164,6 +168,16 @@ supervisor restarts it). The actual reconnect/backoff fix — so the loop recove
 restart — is owned by
 `docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`. EP-2
 must not duplicate plan 18's in-loop recovery.
+
+**IP-G — Authenticated HTTP tracing (EP-1 with plan 22).** Plan 22 owns `HttpEnv`,
+`TokenSource`, and `postJSONWithHeaders`. EP-1 Milestone 3 adds `traceparent` through that
+helper so auth, timeouts, and trace propagation share one request path. Plan 32 consumes the
+same helper for kanmon.
+
+**IP-H — Agent inspection (EP-3 with plans 20, 33, and 23).** Plan 20 owns
+`AgentLoadReport`; EP-3 renders it and owns the `agents` command group. Plan 33 adds enabled
+state to declarations, and plan 23 later extends EP-3's output with principal/lifecycle state
+and adds `sync`. No other plan creates an `agents list` parser or walks the directory.
 
 
 ## Progress
@@ -227,19 +241,20 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 
 - Decision: Decompose Operations & Observability into four plans — observability (28), health &
   supervision (29), operator CLI (30), deployable stack (31) — with EP-1 as the soft-first
-  vocabulary owner and no hard dependencies.
+  vocabulary owner and no original intra-MasterPlan hard dependencies. The 2026-07-22
+  portfolio revision adds plan 20 as EP-3's cross-MasterPlan hard dependency.
   Rationale: the four concerns touch largely disjoint code and each yields a distinct operator-
   visible capability, so they are independently verifiable and can run in parallel. Folding
   health into observability, or the CLI into the stack, was rejected as producing lopsided plans
   with mixed risk profiles (see Decomposition Strategy).
-  Date: 2026-07-08
+  Date: 2026-07-22
 
-- Decision: Make every inter-plan dependency soft, not hard.
-  Rationale: each plan compiles and delivers standalone. EP-2/EP-3 can emit through
-  `Shikigami.Log` if EP-1 has landed but function without it; EP-4 can probe `/readyz` if EP-2
-  has landed but ships with exec probes otherwise. Serializing them with hard deps would extend
-  the timeline for no correctness gain.
-  Date: 2026-07-08
+- Decision: Keep intra-MasterPlan dependencies soft, but make plan 20 a cross-MasterPlan
+  hard dependency of EP-3. EP-1 M3 also waits for plan 22's authenticated HTTP seam.
+  Rationale: health and operator queries remain independent, but `agents list` now consumes
+  a concrete shared report and HTTP tracing must compose with authentication rather than
+  create a second helper.
+  Date: 2026-07-22
 
 - Decision: EP-1 owns the observability vocabulary as an explicit Integration Point (IP-A) that
   MasterPlans 2-5 also consume.
@@ -256,8 +271,25 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
   of loop death. Naming the seams prevents duplicated or conflicting implementations of the same
   keiro marker and the same consume loop.
   Date: 2026-07-08
+- Decision: EP-4 is the operations-closure plan and should land after plans 13, 22, and
+  32 plus EP-1/EP-2 have stabilized their configuration and health surfaces.
+  Rationale: a configuration reference with placeholders immediately becomes stale;
+  packaging last lets `just dev` and the NixOS module prove the actual final surface.
+  Date: 2026-07-22
+- Decision: EP-3 owns the `agents` command group, plan 20 owns its report, and plan 23
+  extends it after plan 33 defines declared identity.
+  Rationale: this eliminates duplicate CLI parsers and directory traversal across three
+  MasterPlans.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-22: Added plan 20 as EP-3's hard dependency, routed HTTP tracing through plan
+  22, assigned `agents` command ownership, and made EP-4 the portfolio's configuration/
+  packaging closure. These changes align MasterPlan 6 with the MP-2 through MP-7 waves.

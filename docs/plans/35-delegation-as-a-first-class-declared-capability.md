@@ -47,12 +47,13 @@ declared supervisor delegates to allow-listed children and synthesizes their out
 undeclared target is refused; a cycle is refused; an over-budget delegation is refused; and a
 failing child triggers sibling cancellation with a collected partial result.
 
-This plan hard-depends on
-docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md: it adds the
-`delegates`/`delegationBudget` fields to the same `Agent` record and must follow the additive
-field-with-default pattern that plan 33 establishes (MasterPlan
-docs/masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md,
-IP-1).
+This plan hard-depends on two predecessors. Plan 33
+(docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md) establishes
+the additive field-with-default pattern used when `delegates`/`delegationBudget` are added
+to the same `Agent` record (MasterPlan 7, IP-1). Plan 24
+(docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md) establishes the
+versioning discipline, patch plumbing, and step inventory required before changing the
+durable agent-run workflow (MasterPlan 5, IP-3).
 
 
 ## Progress
@@ -499,10 +500,19 @@ Cross-plan dependencies:
   (MasterPlan EP-2): the `delegates`/`delegationBudget` fields must follow plan 33's additive
   field-with-default pattern in the same `Agent` record (MasterPlan IP-1). Do not add these
   fields before plan 33's pattern is merged.
-- Soft/cross-MP: any change to `agentRunWorkflow`'s journaled step names or order must respect
-  docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md (MasterPlan 5,
-  IP-3); this plan is additive-only and keeps existing step names byte-identical.
+- HARD depends on docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md
+  (MasterPlan 5, IP-3). This plan changes the durable agent-run workflow and consumes
+  plan 24's versioning discipline, active-patch plumbing, and step-name inventory. Existing
+  step names remain byte-identical, and any new steps or guarded behavior are recorded in
+  that inventory.
 
 Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 `cabal run shikigami -- validate <file>`; `just create-database` +
 `withShikigamiMigratedDatabase` for the delegation workflow tests.
+
+
+## Revision Notes
+
+- 2026-07-22: Promoted plan 24 from a soft coordination note to a hard dependency.
+  Delegation now begins only after the workflow-versioning discipline and patch plumbing
+  exist, matching the MP-2 through MP-7 execution order.

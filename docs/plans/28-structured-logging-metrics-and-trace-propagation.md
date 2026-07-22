@@ -62,8 +62,8 @@ the HTTP POST to the sink endpoint.
       `IntegrationEvent.traceContext`; test proves `keiro.keiro_outbox.traceparent` is non-null
       after `enqueueSinkIntents`.
 - [ ] M3: `publishSinkIntent` opens a `sink.publish` span parented on the stored trace context,
-      and the outbound HTTP POST carries a `traceparent` header
-      (`postJSONWithHeaders` added to `Shikigami.Sink.Http`).
+      and the outbound HTTP POST carries a `traceparent` header through plan 22's
+      `postJSONWithHeaders`.
 
 
 ## Surprises & Discoveries
@@ -114,6 +114,15 @@ the HTTP POST to the sink endpoint.
   never fills it (`traceContext = Nothing`, `Shikigami/Agent/Workflow.hs:541`). Using the field
   the substrate already persists beats inventing a side channel.
   Date: 2026-07-08
+
+- Decision: Milestone 3 consumes the authenticated `HttpEnv` and
+  `postJSONWithHeaders` defined by
+  `docs/plans/22-outbound-authentication-for-sink-clients.md`; it does not create a
+  second header helper.
+  Rationale: trace headers must compose with authorization headers and the shared
+  timeout/manager policy. Extending the plan-22 seam preserves both while keeping
+  bearer-token handling out of this observability plan.
+  Date: 2026-07-22
 
 - Decision: Keep the "no endpoint set → no-op providers" behavior of
   `Shikigami.Telemetry.withRunTracer` in its successor `withRunTelemetry`.
@@ -344,14 +353,15 @@ Third, continue the trace at the publisher. `publishSinkIntent` (`Workflow.hs:56
 receives the `OutboxRow` whose `event :: IntegrationEvent` now carries `traceContext`. Wrap the
 `dispatch` call in a `sink.publish` span (kind Consumer — it continues the producer span) whose
 parent is reconstructed from the stored `traceparent`; attributes `agent`, `sink_kind`,
-`outbox.message_id`. Fourth, propagate onward over HTTP: add
+`outbox.message_id`. Fourth, propagate onward over HTTP: consume
 
 ```haskell
-postJSONWithHeaders :: (ToJSON a) => [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
 ```
 
-to `Shikigami.Sink.Http` (same body as `postJSON`, `Http.hs:31-51`, with the extra headers
-appended), re-define `postJSON = postJSONWithHeaders []`, and have the sink clients
+from `Shikigami.Sink.Http` as defined by plan 22, appending the trace header to the
+authentication headers already injected from `HttpEnv`; `postJSON env =
+postJSONWithHeaders env []`. Have the sink clients
 (`Shikigami.Sink.KawaClient`, `Shikigami.Sink.KizashiClient`, `Shikigami.Sink.Danwa`) accept an
 optional traceparent from `SinkContext` (add a `traceparent :: Maybe Text` field) and send
 `("traceparent", …)`. `publishSinkIntent` fills that field from the row's context.
@@ -380,7 +390,8 @@ Expected: `Test suite shikigami-core-test: PASS` (the suite provisions ephemeral
 TestSupport.hs:12`; no services needed).
 
 M1 verification — capture and parse worker logs (requires the local stack from
-`docs/plans/31-...md`, or a manually started Postgres with `PG_CONNECTION_STRING` set):
+`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`,
+or a manually started Postgres with `PG_CONNECTION_STRING` set):
 
 ```bash
 cabal run shikigami -- worker --agents agents 2>worker.log &
@@ -477,16 +488,25 @@ Signatures that must exist at the end of each milestone (full module paths):
   (keiro `Outbox.hs:297-303`);
   `runWorkflowTimerWorker :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)`
   (keiro `Workflow/Sleep.hs:305-311`).
-- M3: `Shikigami.Sink.Http.postJSONWithHeaders :: (ToJSON a) => [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)`;
+- M3: consume `Shikigami.Sink.Http.postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)` from plan 22;
   `Shikigami.Sink.Types.SinkContext` gains `traceparent :: !(Maybe Text)`;
   `sinkIntentEvent` takes the trace context and sets
   `Keiro.Integration.Event.IntegrationEvent.traceContext :: Maybe TraceContext` (field at
   `keiro-core/src/Keiro/Integration/Event.hs:107`; `TraceContext` at `Event.hs:146-150`).
 
-Cross-plan contracts (mirrored in the MasterPlan's Integration Points): the vocabulary defined
+Cross-plan contracts (mirrored in the MasterPlan's Integration Points): Milestones 1 and 2
+may proceed independently, but Milestone 3 has a hard milestone dependency on plan 22's
+authenticated HTTP seam. The vocabulary defined
 here (Decision Log, last entry) is what plans in MasterPlans 2-5 emit against; the new env/flag
 surface (none beyond the standard `OTEL_*` family, unless the M2 fallback adds a knob) must be
 recorded in `docs/operations/configuration.md` owned by
 `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`;
 `docs/plans/29-health-liveness-and-worker-loop-supervision.md` will reuse `Shikigami.Log` for
 its loop-supervision events (soft; this plan does not depend on it).
+
+
+## Revision Notes
+
+- 2026-07-22: Routed HTTP trace propagation through plan 22's authenticated
+  `postJSONWithHeaders` helper. Milestones 1–2 remain independently implementable;
+  Milestone 3 waits for plan 22 so auth and tracing compose on one request path.

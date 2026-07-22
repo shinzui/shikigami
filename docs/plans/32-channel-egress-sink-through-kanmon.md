@@ -50,9 +50,9 @@ This section must always reflect the actual current state of the work.
 
 - [ ] M1: add the `ChannelEgress` alternative to the `Sink` union in schema/Agent.dhall and mirror it in Shikigami.Api.Agent; extend `sinkKindOf`.
 - [ ] M1: add the proof manifest `agents/proof/channel-reply.dhall`; `cabal run shikigami -- validate` accepts it and all existing manifests still validate.
-- [ ] M2: add `postJSONWith` (header-capable POST) to Shikigami.Sink.Http; add `KanmonConfig` to Shikigami.Sink.Config.
+- [ ] M2: extend plan 22's `SinkCredentials`/`SinkHttp` with kanmon and consume its `postJSONWithHeaders`; add `KanmonConfig` to Shikigami.Sink.Config.
 - [ ] M2: new module Shikigami.Sink.KanmonClient (`buildEgressRequest`, `postEgress`); pure request-shape unit tests in shikigami-core/test/Main.hs.
-- [ ] M3: dispatcher arm in Shikigami.Sink.runSink; `kanmon` field on `SinkContext`, `AgentRunDeps`, `WorkerEnv`; `--kanmon-url`/`--kanmon-token` worker flags; grant-table entry for the proof agent.
+- [ ] M3: dispatcher arm in Shikigami.Sink.runSink; `kanmon` field on `SinkContext`, `AgentRunDeps`, `WorkerEnv`; `--kanmon-url` plus `SHIKIGAMI_KANMON_TOKEN`; grant-table entry for the proof agent.
 - [ ] M4: new module Shikigami.Sink.KanmonStub + `stub-kanmon` CLI command; WAI-level stub tests.
 - [ ] M4: end-to-end proof — enqueue-run against the worker + stub-kanmon; delivered, deduplicated on re-dispatch, denied for `intruder`.
 - [ ] Docs: add ChannelEgress to docs/user/sinks.md and the sink list in docs/user/writing-agents.md.
@@ -106,17 +106,15 @@ Record every decision made while working on the plan.
   schema or client change.
   Date: 2026-07-08
 
-- Decision: Authentication is a config-supplied static bearer token
-  (`KanmonConfig.bearerToken :: Maybe Text`) sent as `Authorization: Bearer <token>`; minting
-  real per-agent tokens is out of scope and owned by
-  docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4).
+- Decision: Authentication uses plan 22's `TokenSource` and `HttpEnv`; this plan extends
+  `SinkCredentials` with `kanmonToken` loaded from `SHIKIGAMI_KANMON_TOKEN` and
+  `SinkHttp` with `kanmonHttp`. `KanmonConfig` carries only the base URL.
   Rationale: kanmon's verifier is currently a config token map
   (`Kanmon.Egress.Config.EgressAuthConfig` / `configVerifier`) explicitly designed to be
   swapped for real shomei JWKS verification with no kanmon change; mirroring that interim
-  shape here means plan 22 swaps one seam (`postJSONWith` header construction), not two.
-  This plan only adds the mechanical header capability to Shikigami.Sink.Http (additive
-  `postJSONWith`; the existing `postJSON` is untouched).
-  Date: 2026-07-08
+  shape behind plan 22's token interface keeps kanmon consistent with every other sink
+  and permits a later shomei-backed `TokenSource` swap without changing this client.
+  Date: 2026-07-22
 
 - Decision: Permission gating reuses the existing static `defaultGrantTable` stub
   (Permission.hs:53-61) by granting `SChannelEgress` to the proof agent only; the
@@ -262,20 +260,20 @@ backward-compatible).
 
 ### Milestone 2 — `KanmonConfig` and the `KanmonClient`
 
-Scope: a pure, unit-testable client for kanmon's wire contract. In
-shikigami-core/src/Shikigami/Sink/Http.hs add an additive helper (keep `postJSON` untouched):
+Scope: a pure, unit-testable client for kanmon's wire contract. Consume the canonical
+helper from plan 22 in `shikigami-core/src/Shikigami/Sink/Http.hs`:
 
 ```haskell
-postJSONWith :: (ToJSON a) => [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
 ```
 
-identical to `postJSON` except the extra headers are appended to `requestHeaders` (content
-type stays). In shikigami-core/src/Shikigami/Sink/Config.hs add:
+Do not add another helper. Plan 22 already composes the `HttpEnv` token with caller headers
+and defines `postJSON env = postJSONWithHeaders env []`. In
+shikigami-core/src/Shikigami/Sink/Config.hs add:
 
 ```haskell
 data KanmonConfig = KanmonConfig
-  { baseUrl :: !Text,            -- e.g. "http://localhost:8090"
-    bearerToken :: !(Maybe Text) -- interim static token; plan 22 owns real minting
+  { baseUrl :: !Text -- e.g. "http://localhost:8090"
   }
   deriving stock (Eq, Show)
 ```
@@ -301,11 +299,11 @@ which resolves `conversation_key` per the Decision Log (declared key, else outpu
 `triggering_activity_id` from the activity's `activityId`. Third the sender:
 
 ```haskell
-postEgress :: KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)
+postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)
 ```
 
-which POSTs to `<baseUrl>/channels/<channel>/actions/<action>` via `postJSONWith` with the
-bearer header when configured, decodes the 200 body, and renders non-2xx as
+which POSTs to `<baseUrl>/channels/<channel>/actions/<action>` via
+`postJSONWithHeaders httpEnv []`, decodes the 200 body, and renders non-2xx as
 `Left` (the outbox publisher maps `Failed` to a retry, so 5xx retries and the idempotency key
 makes that safe; a 403 is also a `Left`, which retries — acceptable at-least-once behavior,
 noted for plan 19's delivery-truth work).
@@ -337,13 +335,15 @@ ChannelEgress {} ->
   case buildEgressRequest sink (mkSourceEventId ctx) (triggeringActivity ctx) output of
     Left e -> pure (Failed e)
     Right req -> do
-      r <- postEgress (kanmon ctx) channel action req
+      r <- postEgress (kanmonHttp (sinkHttp ctx)) (kanmon ctx) channel action req
       pure (either Failed (Delivered . activity_id) r)
 ```
 
-Add worker CLI flags `--kanmon-url` (default `http://localhost:8090`) and `--kanmon-token`
-(optional) in shikigami-cli/src/Shikigami/Cli.hs and Commands/Worker.hs, mirroring
-`--kawa-url`. Grant the proof agent in `defaultGrantTable` (Permission.hs:53-61): add
+Add worker CLI flag `--kanmon-url` (default `http://localhost:8090`) in
+shikigami-cli/src/Shikigami/Cli.hs and Commands/Worker.hs, mirroring `--kawa-url`. Extend
+plan 22's `SinkCredentials` with `kanmonToken`, loaded from
+`SHIKIGAMI_KANMON_TOKEN`, and `SinkHttp` with `kanmonHttp`. Grant the proof agent in
+`defaultGrantTable` (Permission.hs:53-61): add
 `("channel-reply", Set.fromList [SChannelEgress])`. Do not grant anyone else — the denial
 proof relies on that.
 
@@ -424,7 +424,7 @@ Terminal 2, the worker (DB env comes from the dev shell; `PG_CONNECTION_STRING` 
 as for any worker run):
 
 ```bash
-cabal run shikigami -- worker --agents agents/proof --kanmon-url http://localhost:8090 --kanmon-token proof-token
+SHIKIGAMI_KANMON_TOKEN=proof-token cabal run shikigami -- worker --agents agents/proof --kanmon-url http://localhost:8090
 ```
 
 Terminal 3, enqueue a run whose payload carries a conversation key:
@@ -465,7 +465,7 @@ channel `intercom`, action `reply`, no static key), the static grant
 3. An agent without the grant gets `DeniedOutcome` with reason
    `agent 'intruder' is not granted ChannelEgress`, the run does not fail, and nothing is
    POSTed (the existing denied-sink contract: logged, skipped, recorded).
-4. A wrong `--kanmon-token` yields 401 from the stub, surfaced as a `Failed` outcome, which
+4. A wrong `SHIKIGAMI_KANMON_TOKEN` yields 401 from the stub, surfaced as a `Failed` outcome, which
    the outbox publisher retries (observable as repeated stub 401 log lines) — proving errors
    are not swallowed.
 5. All prior manifests validate unchanged: `cabal run shikigami -- validate
@@ -497,17 +497,18 @@ Owned and defined by this plan (all in this repo):
 - `schema/Agent.dhall` — the `ChannelEgress` alternative on `Sink` (shape in the Decision Log).
 - `Shikigami.Api.Agent` (shikigami-api) —
   `ChannelEgress {channel :: !Text, action :: !Text, conversationKey :: !(Maybe Text)}` on `Sink`.
-- `Shikigami.Sink.Http` — `postJSONWith :: ToJSON a => [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)` (additive; `postJSON` unchanged).
-- `Shikigami.Sink.Config` — `data KanmonConfig = KanmonConfig {baseUrl :: !Text, bearerToken :: !(Maybe Text)}`.
+- `Shikigami.Sink.Http` — consume plan 22's `postJSONWithHeaders :: ToJSON a => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)`.
+- `Shikigami.Sink.Config` — `data KanmonConfig = KanmonConfig {baseUrl :: !Text}`.
+- `Shikigami.Sink.Auth` — extend `SinkCredentials` with `kanmonToken :: Maybe TokenSource` and `SinkHttp` with `kanmonHttp :: HttpEnv`; `credentialsFromEnv` reads `SHIKIGAMI_KANMON_TOKEN`.
 - `Shikigami.Sink.KanmonClient` — `EgressActionRequest`/`EgressActionResponse` wire types
   (snake_case keys matching Kanmon.Egress),
   `buildEgressRequest :: Sink -> Text -> Maybe ActivityEnvelope -> Value -> Either Text EgressActionRequest`,
-  `postEgress :: KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)`.
+  `postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)`.
 - `Shikigami.Sink` — `sinkKindOf (ChannelEgress {}) = SChannelEgress`; the `runSink` arm.
 - `Shikigami.Sink.KanmonStub` — `StubKanmonOptions`, `stubKanmonApplication`, `runStubKanmon`;
   CLI command `stub-kanmon --port N [--token T]`.
 - `Shikigami.Sink.Types` / `Shikigami.Agent.Workflow` / `Shikigami.Worker` / CLI — the
-  `kanmon :: KanmonConfig` plumbing and `--kanmon-url`/`--kanmon-token` flags; the additive
+  `kanmon :: KanmonConfig` plumbing and `--kanmon-url` plus `SHIKIGAMI_KANMON_TOKEN`; the additive
   `triggeringActivity :: Maybe ActivityEnvelope` on the internal `SinkIntent` and on
   `SinkContext`.
 
@@ -519,12 +520,20 @@ Consumed contracts (external, verified in source — do not redefine):
   `(provider, idempotency_key)`. Locate kanmon via `mori registry show kanmon --full`.
 - `Shikigami.Sink.Permission.checkGrant` — signature frozen; the grant *storage* is swapped by
   docs/plans/21-database-backed-sink-permission-grants.md (MasterPlan 4).
-- Outbound auth header *values* — owned by
-  docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4); this plan only
-  supplies the static-token seam.
+- Authenticated HTTP layer — hard dependency on
+  docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4); this plan
+  extends its credential and HTTP records for kanmon and does not add another helper.
 - keiro outbox (`Keiro.Outbox.enqueueOutboxTx`, `publishClaimedOutbox`) — already in use by
   every sink; unchanged.
 
 Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 `just create-database` for the Postgres-backed tests
 (`Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase :: (Text -> IO a) -> IO a`).
+
+
+## Revision Notes
+
+- 2026-07-22: Made plan 22 a hard dependency and replaced the serializable
+  `KanmonConfig.bearerToken`, `--kanmon-token`, and duplicate `postJSONWith` helper with
+  plan 22's `TokenSource`, `SHIKIGAMI_KANMON_TOKEN`, `HttpEnv`, and
+  `postJSONWithHeaders`.

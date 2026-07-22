@@ -260,4 +260,10 @@ Shikigami.Worker.handleRunJob :: WorkerEnv -> Maybe Attempt -> Value -> IO AckDe
 Shikigami.Trigger.Enqueue.runDeadLetterQueueName :: QueueName
 ```
 
-Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); shibuya `type Shibuya.Handler.Handler es msg = Ingested es msg -> Eff es AckDecision` (pinned tag) with `Ingested { envelope :: Envelope msg, ack :: AckHandle es, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; pgmq adapter `AckRetry (RetryDelay delay)` implemented as a relative `set_vt` (redelivery after `delay`), auto-dead-letter at `readCount > maxRetries`. Integration points with sibling plans: docs/plans/20 consumes `classifyOutcome` for its routing failures and shares `Shikigami/Worker.hs`; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
+Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); shibuya `type Shibuya.Handler.Handler es msg = Ingested es msg -> Eff es AckDecision` (pinned tag) with `Ingested { envelope :: Envelope msg, ack :: AckHandle es, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; pgmq adapter `AckRetry (RetryDelay delay)` implemented as a relative `set_vt` (redelivery after `delay`), auto-dead-letter at `readCount > maxRetries`. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
+
+
+## Revision Notes
+
+- 2026-07-22: Recorded plan 20 as a hard downstream consumer of this plan's ack
+  classification, eliminating its conditional ad-hoc routing decision.
