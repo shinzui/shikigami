@@ -48,8 +48,10 @@ This section must always reflect the actual current state of the work.
 
 - [ ] M1: Indexed session resolution (kioku `getBySubjectRef`); generation-aware input
       delivery and result loading (stop hard-coding generation 0).
+- [ ] Prerequisites: plans 36, 39, and 24 complete; stable timer/awakeable/rotation ids are checked in `domain/shikigami.keiro`.
 - [ ] M2: Idle-timeout durable timer per turn; on fire, complete the kioku session and end
       the workflow; a subsequent message opens a new epoch reusing the session lineage.
+- [ ] M2: cancel or generation/version every superseded idle timer; stale completions are harmless before and after continue-as-new.
 - [ ] M3: Journal rotation via `continueAsNew` every N turns behind a patch guard;
       `restoreSeed` at the top of the body; `ContinuedAsNew` handled as success.
 - [ ] M4: Racing-message smoothing (next-message awakeable pre-armed; delivery no longer an
@@ -78,6 +80,11 @@ Record every decision made while working on the plan.
   session-reuse scan; a completed session with a stable subjectRef gives the next epoch a
   lineage to continue via kioku's `previousSessionId`.
   Date: 2026-07-08
+- Decision: Each idle timer carries a durable turn/generation token and is cancelled when
+  supported; the fire action and workflow both reject stale tokens.
+  Rationale: simply re-arming leaves old timers able to terminate a later active turn,
+  especially across continue-as-new generation changes.
+  Date: 2026-07-22
 - Decision: Rotate the journal with `continueAsNew` on a turn-count cadence (default 20
   turns), guarded by a `patch` id.
   Rationale: `continueAsNew` is keiro's bounded-journal mechanism for unbounded workflows
@@ -235,7 +242,10 @@ session for the conversation and resolution does not enumerate unrelated agent s
 create a decoy session for the same agent/different subjectRef and assert it is not
 selected).
 
-Milestone 2 — idle timeout and session completion. Add an idle-timeout awakeable alongside
+Milestone 2 — idle timeout and session completion. First add the idle timer, awakeable,
+payload discriminator, router relationship, and terminal step identity to
+`domain/shikigami.keiro`; run plan 39's checker, compatibility diff, scaffold, and generated
+harness, then fill only hand-owned behavior holes. Add a versioned idle-timeout awakeable alongside
 the next-message awakeable in the loop. Model it on approvals: define a timeout payload and
 a fire action (a conversation-scoped analog of `approvalTimeoutFireAction`,
 `Approval.hs:124-142`) that signals the idle awakeable, and register that fire action in the
@@ -243,8 +253,11 @@ worker's timer loop (today `Worker.hs:119` fires only
 `Scheduler.shikigamiTimerFallback`; the timer worker takes one fire action, so route by the
 timer payload's `kind` discriminator as approvals do — or run a combined fire action). In
 the loop (`loop`/`processTurn` restructure), after processing a turn, arm the idle timer for
-the configured window and await a sum of {next message, idle fired}: on next-message,
-process the turn and re-arm; on idle-fired, journal a terminal step (`idle-timeout`),
+the configured window and await a sum of {next message, idle fired}. On next-message,
+cancel the old timer where supported and advance the durable timeout token before
+re-arming. On idle-fired, compare timer token and workflow generation/turn; stale
+completions are acknowledged without effect. Only the current token journals a terminal
+step (`idle-timeout`),
 complete the kioku session (`Session.complete` with a summary like "conversation idle
 timeout"), and RETURN from the workflow body (outcome `Completed`). Add the idle window to
 `ConversationEnv` (a `NominalDiffTime`, default e.g. 30 minutes) so tests can set it to
@@ -262,7 +275,9 @@ workflow completed and `Session.getById` shows `status = "completed"`; then run 
 message and assert a NEW running session whose `previousSessionId` is the completed one, and
 the conversation continues.
 
-Milestone 3 — journal rotation. Restructure the loop to carry a turn counter as workflow
+Milestone 3 — journal rotation. Update the checked specification with the rotation patch id,
+seed/continue-as-new relationship, and generation-aware workflow topology; accept its diff and
+regenerate before runtime edits. Restructure the loop to carry a turn counter as workflow
 state and rotate every N turns. At the top of the body call
 `restoreSeed ConversationSeed{agentName, turnsSoFar}` (a small `ToJSON`/`FromJSON` record).
 In the loop, after processing turn number `k`, if `k mod rotateEvery == 0` call
@@ -357,6 +372,8 @@ Accepted when these behaviors are observable:
 2. Idle completion: after firing the idle timer on a parked conversation,
    `Session.getById` reports `status = "completed"` and the workflow outcome is `Completed`;
    `countPendingAwakeables` for that conversation returns 0.
+   Fire a superseded timer after a newer message and after continue-as-new; both must
+   leave the active conversation/session running and produce no terminal step.
 3. New epoch: a message after timeout starts a fresh running session whose
    `previousSessionId` is the completed session id; turns continue in the new session.
 4. Bounded journal: with `rotateEvery = 2`, after 5 turns at least one rotation occurred
@@ -389,6 +406,9 @@ combined action, and record it in the Decision Log.
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36, 39, and 24. Every timer, awakeable, patch, and continue-as-
+new identity is represented in the checked Keiro DSL and its harness.
 
 Dependencies: `keiro` (`Keiro.Workflow`: `continueAsNew`, `restoreSeed`,
 `currentRunGeneration`, `currentGeneration`, `patch`; `Keiro.Workflow.Sleep`/timer wiring
@@ -426,3 +446,10 @@ idle fire action; the resume loop already carries rotated generations via plan 2
 the SinkIntent machinery the conversation reply uses (`prepareConversationReplySinkIntent`,
 `Conversation.hs:391-414`); coordinate merge order per plan 27's Integration Points so the
 reply path keeps using the single shared module.
+
+
+## Revision Notes
+
+- 2026-07-22: Added plan 39's checked topology gate and corrected idle timeout handling
+  to cancel/version superseded timers and ignore stale completions across turns and
+  continue-as-new generations.

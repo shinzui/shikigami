@@ -43,6 +43,8 @@ the HTTP POST to the sink endpoint.
 
 ## Progress
 
+- [ ] Prerequisites: plans 36/37 complete; telemetry lifecycle is owned by process composition roots in server/workers packages.
+
 - [ ] M1: `Shikigami.Log` module written (JSON-lines logger, levels, event names, key-value
       fields); vocabulary documented in the module header.
 - [ ] M1: every `hPutStrLn stderr` call site in `Shikigami.Worker`, `Shikigami.Sink`,
@@ -64,6 +66,8 @@ the HTTP POST to the sink endpoint.
 - [ ] M3: `publishSinkIntent` opens a `sink.publish` span parented on the stored trace context,
       and the outbound HTTP POST carries a `traceparent` header through plan 22's
       `postJSONWithHeaders`.
+- [ ] M4: bracket tracer/meter/exporter providers through graceful shutdown and flush;
+      bounded HTTP request logging runs inside OTel, excludes health paths, and records no bodies/query/auth/cookies/arbitrary headers.
 
 
 ## Surprises & Discoveries
@@ -72,6 +76,23 @@ the HTTP POST to the sink endpoint.
 
 
 ## Decision Log
+
+- Decision: Process composition roots acquire and bracket OTel providers/exporters,
+  flush on graceful shutdown, and place bounded request logging inside trace middleware.
+  Rationale: global/unbracketed providers lose tail telemetry and cannot reliably
+  correlate request logs with active trace/span ids.
+  Date: 2026-07-22
+- Decision: Production access logs use the fixed API-standard whitelist: UTC time, method,
+  raw path without query, status, monotonic duration, optional trace/span IDs, and bounded
+  user agent. They never use `wai-extra`'s body-capturing JSON formatter.
+  Rationale: bodies, arbitrary headers, and query strings are credential-bearing surfaces;
+  a small in-repo WAI middleware can observe status and active OTel context without consuming
+  either body.
+  Date: 2026-07-22
+- Decision: Standard `OTEL_*` variables remain SDK-owned; any Shikigami-specific
+  telemetry setting is declared through plan 37's Settei config.
+  Rationale: re-parsing the standard SDK surface creates divergent precedence/behavior.
+  Date: 2026-07-22
 
 - Decision: Build a minimal in-repo JSON-lines logger (`Shikigami.Log`) instead of adopting
   katip, co-log, or monad-logger.
@@ -336,17 +357,12 @@ First, replace `noopTracer` with `withRunTelemetry` in `Commands/Scheduler.hs:38
 `shikigami.consume-stream`, `shikigami.consume-events`.
 
 Second, capture context at the producer. In `enqueueSinkIntents` (`Workflow.hs:386-440`) the
-`sink.dispatch` span is already open when intents are built; obtain the current span's
-`SpanContext` (via `OpenTelemetry.Trace.Core.getSpanContext` on the span `withSpan'` provides)
-and render the W3C header string `00-<trace-id>-<span-id>-<trace-flags>`. keiro depends on
-`hs-opentelemetry-propagator-w3c` for exactly this encoding; add the same package to
-`shikigami-core.cabal` and use its encoder rather than hand-formatting (verify the exact
-function by reading that package's `OpenTelemetry.Propagator.W3CTraceContext` module source; if
-its API is awkward to call outside a propagator, hand-render — the format is stable — and say
-so in Surprises & Discoveries). Pass the rendered value into `sinkIntentEvent`
+`sink.dispatch` span is already open when intents are built; call Keiro's released
+`traceContextFromCurrentSpan :: MonadIO m => m (Maybe TraceContext)` and pass its result into
+`sinkIntentEvent`
 (`Workflow.hs:523-544`) as a new parameter and set
-`traceContext = Just TraceContext { traceparent, tracestate = Nothing }` instead of `Nothing`
-(`Workflow.hs:541`). Apply the same change to the builder in
+`traceContext` instead of hard-coding `Nothing` (`Workflow.hs:541`). Do not hand-render W3C
+headers or add a parallel propagator helper. Apply the same change to the builder in
 `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs`.
 
 Third, continue the trace at the publisher. `publishSinkIntent` (`Workflow.hs:561-583`)
@@ -356,7 +372,7 @@ parent is reconstructed from the stored `traceparent`; attributes `agent`, `sink
 `outbox.message_id`. Fourth, propagate onward over HTTP: consume
 
 ```haskell
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 ```
 
 from `Shikigami.Sink.Http` as defined by plan 22, appending the trace header to the
@@ -369,9 +385,43 @@ optional traceparent from `SinkContext` (add a `traceparent :: Maybe Text` field
 Acceptance: the Postgres-level proof is a new test (M3 step) in
 `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs` — run a workflow that enqueues a sink
 intent under a real tracer, then assert `SELECT traceparent FROM keiro.keiro_outbox` is
-non-null and starts with `00-`. The wire-level proof is `stub-kawa` logging a `traceparent`
-request header (extend its request log while here), or the collector showing `agent.run` and
-`sink.publish` in one trace.
+non-null and starts with `00-`. The wire-level proof captures `traceparent` in a test-only
+recording stub without adding arbitrary headers to production access logs; the collector then
+shows `agent.run` and `sink.publish` in one trace.
+
+### Milestone 4 — provider lifetime and production request logging
+
+Scope: make telemetry survive normal shutdown and make every served request observable without
+creating a credential or memory leak.
+
+Every server, worker, consumer, scheduler, and short-lived administrative executable that
+initializes telemetry brackets one tracer provider and one meter provider in its composition
+root. Build those executables with `-threaded`. Initialize and install the providers before
+constructing `newOpenTelemetryWaiMiddleware`; pass the same tracer into Keiro. On release,
+stop accepting work, drain in-flight work within the graceful-shutdown deadline, force-flush
+then shut down the tracer provider, and shut down the meter provider. A disabled SDK yields
+no-op providers through the same path. Keep standard `OTEL_*` parsing in the SDK.
+
+Add `Shikigami.Server.RequestLog.requestLogMiddleware` in the server package. It emits exactly
+one JSON line with UTC `time`, `method`, `path = rawPathInfo` (never the query string), numeric
+`status`, monotonic `duration_ms`, optional lowercase `trace_id`/`span_id` read from the active
+WAI request context, and the bounded `user_agent` allowlisted header. Truncate the decoded user
+agent to 256 Unicode scalar values and mark truncation; do not log request/response bodies,
+body sizes, `Authorization`, cookies, arbitrary headers, query values, or application error
+details. Render the complete line before one handle write so concurrent requests cannot
+interleave it. Exclude exact `/health/live` and `/health/ready` paths.
+
+Compose middleware outside-in as
+`otelMiddleware (requestLogMiddleware include (exceptionBoundary servantApp))`. The exception
+boundary converts escaped exceptions to the standard RFC 7807 500 response; the request logger
+observes the actual status and never invents a second renderer. `logStdoutDev` and
+`wai-extra`'s JSON formatter remain development-only and are absent from production boot.
+
+Tests send bodies, query secrets, authorization/cookie headers, long user agents, successful
+and failing responses, health probes, and an incoming `traceparent`. They assert one parseable
+line per included request, exact field names, truncation, matching trace correlation, no planted
+secret, no health lines, and correct middleware ordering. A shutdown test proves queued spans
+are exported before provider teardown.
 
 
 ## Concrete Steps
@@ -394,7 +444,7 @@ M1 verification — capture and parse worker logs (requires the local stack from
 or a manually started Postgres with `PG_CONNECTION_STRING` set):
 
 ```bash
-cabal run shikigami -- worker --agents agents 2>worker.log &
+cabal run shikigami-worker -- --config config/worker-observability-dev.yaml 2>worker.log &
 cabal run shikigami -- enqueue-run heartbeat
 sleep 5; kill %1
 jq -r '.event' < worker.log | sort | uniq -c
@@ -417,7 +467,7 @@ config is the reference setup, or skip to the fallback exposition):
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-cabal run shikigami -- worker --agents agents 2>worker.log
+cabal run shikigami-worker -- --config config/worker-observability-dev.yaml 2>worker.log
 ```
 
 Expected: the collector's debug output prints `shikigami.runs.started` datapoints after an
@@ -466,9 +516,12 @@ into the outbox (independently useful and safe — keiro treats it as opaque).
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 36 and 37. Plan 22 remains required for outbound trace-header
+composition. The server package owns request middleware; workers own loop spans/metrics.
+
 Dependencies: `hs-opentelemetry-api`, `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp`
-are already in `shikigami-core.cabal:89-91`; add `hs-opentelemetry-propagator-w3c` (keiro
-already depends on it — same source tree, `/Users/shinzui/Keikaku/bokuno/keiro`). keiro
+are already in `shikigami-core.cabal:89-91`; use Keiro's public W3C bridge rather than adding a
+second direct propagator dependency. keiro
 provides `Keiro.Telemetry (KeiroMetrics, newKeiroMetrics)` and
 `Keiro.Outbox (publishClaimedOutbox, sampleOutboxBacklog)`; kioku provides
 `Kioku.App (AppEnv (..))`. No logging framework is added.
@@ -488,11 +541,15 @@ Signatures that must exist at the end of each milestone (full module paths):
   (keiro `Outbox.hs:297-303`);
   `runWorkflowTimerWorker :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)`
   (keiro `Workflow/Sleep.hs:305-311`).
-- M3: consume `Shikigami.Sink.Http.postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)` from plan 22;
+- M3: consume `Shikigami.Sink.Http.postJSONWithHeaders` and preserve plan 22's typed
+  `HttpFailure` classification while adding trace propagation;
   `Shikigami.Sink.Types.SinkContext` gains `traceparent :: !(Maybe Text)`;
   `sinkIntentEvent` takes the trace context and sets
   `Keiro.Integration.Event.IntegrationEvent.traceContext :: Maybe TraceContext` (field at
   `keiro-core/src/Keiro/Integration/Event.hs:107`; `TraceContext` at `Event.hs:146-150`).
+- M4: `Shikigami.Server.RequestLog.requestLogMiddleware :: (Request -> Bool) -> Middleware`;
+  the server composition root constructs OTel WAI middleware only after provider installation,
+  nests the request logger inside it, and brackets tracer/meter flush and shutdown.
 
 Cross-plan contracts (mirrored in the MasterPlan's Integration Points): Milestones 1 and 2
 may proceed independently, but Milestone 3 has a hard milestone dependency on plan 22's
@@ -510,3 +567,8 @@ its loop-supervision events (soft; this plan does not depend on it).
 - 2026-07-22: Routed HTTP trace propagation through plan 22's authenticated
   `postJSONWithHeaders` helper. Milestones 1–2 remain independently implementable;
   Milestone 3 waits for plan 22 so auth and tracing compose on one request path.
+- 2026-07-22: Added OTel lifecycle/flush and safe request-logging middleware ordering;
+  made plans 36/37 hard prerequisites while leaving standard `OTEL_*` handling SDK-owned.
+- 2026-07-22: Replaced hand-rendered W3C propagation with Keiro's public
+  `traceContextFromCurrentSpan` bridge and specified the complete production request-log field,
+  redaction, middleware, health-exclusion, and shutdown contract.

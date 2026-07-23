@@ -94,26 +94,27 @@ without the enforcement.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plan 22 (MasterPlan 4) | cross-MP: plan 21 (MasterPlan 4), plans 19 (MasterPlan 3), 27 (MasterPlan 5) | Not Started |
-| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plan 20 (MasterPlan 3) | cross-MP: plan 16 (MasterPlan 2) | Not Started |
-| 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | None | EP-2 (memory.scope field); cross-MP: plan 13 (ops-level only, see Dependency Graph) | Not Started |
-| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plan 24 (MasterPlan 5) | None | Not Started |
-| 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | upstream baikai C1/C2 + shikumi C5 (cross-repo) | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
+| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, and 37 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Not Started |
+| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20 and 36 | cross-MP: plan 16 (MasterPlan 2) | Not Started |
+| 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | EP-2; cross-MP: plans 36 and 37 | None | Not Started |
+| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24 and 36–39 | None | Not Started |
+| 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | cross-MP: plans 36 and 37; upstream baikai C1/C2 + authorization and shikumi C5 | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
 
 Registry note on EP-5: plan 12 pre-exists this MasterPlan (authored 2026-06-27 as child C6 of
 the cross-repo MasterPlan `shinzui/baikai:docs/masterplans/6-mcp-support-across-the-agent-stack.md`).
-Its frontmatter `master_plan` key now points at this MasterPlan (the one permitted frontmatter
-edit); its prior cross-repo membership is preserved here and in the Decision Log, and its body
-was not modified. Its upstream hard dependencies (baikai `Baikai.Mcp.*`, shikumi
+Its frontmatter `master_plan` key points at this MasterPlan; its prior cross-repo membership
+is preserved here and in the Decision Log, and its body was updated by the 2026-07-22
+conformance/security pass. Its upstream hard dependencies (baikai `Baikai.Mcp.*`, shikumi
 `shikumi-tools` adapter) live in other repositories and are tracked inside plan 12 itself.
 
 
 ## Dependency Graph
 
-EP-2 follows plan 20, which owns the canonical agent load report and loud/strict loader.
+EP-2 follows plans 36 and 20, which own package placement and the canonical agent load
+report/loud loader.
 EP-2 extends that seam with enabled-agent selection rather than introducing another
 directory walk. Within this MasterPlan, EP-2 goes first. Its artifact — the additive
 Dhall-field pattern (`Agent.dhall` field + `default` entry + `Shikigami.Api.Agent` mirror +
@@ -122,45 +123,51 @@ same `Agent` record and its `default`, and doing that before EP-2 lands would es
 pattern twice and force a merge of two schema shapes. EP-4 is therefore the only hard edge
 inside this MasterPlan.
 
-EP-3 soft-depends on EP-2: three of its four milestones (distillation worker, bounded recall
-fallback, retention/archival) need nothing from EP-2 and can start immediately; only its
-shared-scope milestone consumes the `memory.scope` field EP-2 defines. If EP-2 slips, EP-3
-lands its first three milestones and holds the fourth.
+EP-3 hard-depends on EP-2 and plans 36/37. The `memory` policy defines bounds and
+enablement for every lifecycle loop, plan 36 assigns the worker package, and plan 37
+owns settings. The complete supervised loop lands once rather than shipping an
+unbounded environment-gated precursor.
 
-EP-1 hard-depends on docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4),
+EP-1 hard-depends on plans 36/37,
+docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md, and
+docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4),
 which owns `HttpEnv`, `TokenSource`, and `postJSONWithHeaders`; EP-1 extends those records for
-kanmon. Its remaining cross-MP soft dependencies are plan 21, which owns the database grant
-table; plan 19, which settles delivery receipts and idempotency; and plan 27, which
+kanmon. Plan 19 owns the permanent/transient receipt and Keiro terminal-outcome mapping.
+Its remaining cross-MP soft dependencies are plan 21, which owns the database grant
+table, and plan 27, which
 consolidates the sink-intent module. These soft edges make the preferred landing order
-plan 21/19/27 → EP-1 without blocking schema/client work after plan 22.
+plan 21/27 → EP-1 after plans 19/22 without blocking schema/client work.
 
 EP-3's relationship to docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md was
 verified in code and is weaker than assumed: kioku's distiller does need a model, but kioku
 ships its own wiring — `Kioku.Distill.Runtime.newDistillRuntime` registers the Claude provider
 and pins `anthropic_claude_haiku_4_5` itself (kioku-core/src/Kioku/Distill/Runtime.hs:60-74).
-So EP-3 has no code dependency on plan 13 at all; the only shared concern is operational (an
-`ANTHROPIC_API_KEY` in the worker's environment), and EP-3's tests use a stubbed
+So EP-3 has no code dependency on plan 13 at all; its live provider credential is an opaque
+reference resolved through plan 37's Settei composition root, and EP-3's tests use a stubbed
 `DistillRuntime` (its fields are plain function records) so CI needs no key.
 
-EP-5 (plan 12) soft-depends on EP-2 for the field pattern (its M1 adds `mcpServers` to the
+EP-5 (plan 12) hard-depends on plans 36/37 plus its upstream client, adapter, and
+authorization contracts, and soft-depends on EP-2 for the field pattern (its M1 adds `mcpServers` to the
 same `Agent` record) and, per its own Interfaces section, hard-depends on cross-repo upstream
 work (baikai `Baikai.Mcp.Client`/`Baikai.Mcp.Tool`, the shikumi `shikumi-tools` MCP adapter)
-plus a `cabal.project` re-pin. Its scope in one paragraph: an agent manifest gains an
-`mcpServers : List McpServer` field ({name, url, transport, auth}, default `[]`); at run time
-the runtime connects each declared server, registers its tools into a `ToolRegistry` under
+plus a coherent released dependency update. Its scope in one paragraph: an agent manifest
+gains an `mcpServers : List McpServer` field ({name, url, transport,
+credential-reference}, default `[]`); at run time the runtime connects each authorized
+declared server, registers only authorized tools into a `ToolRegistry` under
 `mcp__<server>__<tool>` names, surfaces them to the Skill/ShikumiProgram behavior loops, and
 bracket-closes the connections with the run. Its M1-M2 (schema + registry seam) can proceed
 now; M3-M5 wait on the upstream repos. Its cross-MP soft dependency on plan 13 is qualitative:
 MCP tools are only exercised by a model that actually issues tool calls, so the end-to-end
 payoff arrives with a real provider.
 
-EP-4 also hard-depends on plan 24. Delegation changes the durable agent-run workflow and must
-be designed and landed under the workflow-versioning discipline and active-patch plumbing,
-not merely promise additive changes before that discipline exists.
+EP-4 also hard-depends on plans 24 and 36–39. Delegation changes the durable agent-run
+workflow and must update the checked Keiro DSL, pass its generated/harness drift gate,
+land under the workflow-versioning discipline and active-patch plumbing, and use plan 38's
+pg-migrate plan for its durable global budget ledger.
 
-Parallelism summary: after plan 20, EP-2 can proceed alongside EP-3 milestones 1-3 and EP-5
-M1-M2. EP-1 begins after plan 22. EP-4 starts when both EP-2 and plan 24 are complete; EP-3
-milestone 4 and EP-5 M3-M5 follow their own dependencies. This is the MasterPlan-7 slice of
+Parallelism summary: after plan 20, EP-2 can proceed alongside EP-5 M1-M2. EP-3 starts after
+EP-2 and plans 36/37. EP-1 begins after plan 22. EP-4 starts after EP-2 and plans 24/36–39;
+EP-5 M3-M5 follows its upstream authorization/client/adapter dependencies. This is the MasterPlan-7 slice of
 the canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
@@ -201,7 +208,9 @@ the shape: `memory : { scope : < AgentScope | Shared >, recallLimit : Natural, r
 recordPolicy = OnSuccess }`, and enforces `recallLimit`/`recordPolicy`. EP-3 implements the
 `scope = Shared` semantics over `Shikigami.Memory.Scope.sharedScope`. Neither plan may rename
 the field or its alternatives without updating the other; the shape above is normative for
-both.
+both. `Natural` values are converted through checked, bounded validation before any
+`Int`, SQL limit, batch size, timer, or allocation; zero and oversized values receive
+specific validation errors rather than wrapping or exhausting resources.
 
 IP-5 — the `identity` field. Involved: EP-2 (defines) and cross-MP plan 23 (MasterPlan 4,
 consumes after EP-2). EP-2 defines `identity : Optional { principal : Text }` (default `None`);
@@ -210,13 +219,29 @@ name-based fallback only when the optional field is absent.
 
 IP-6 — the shared sink HTTP layer (shikigami-core/src/Shikigami/Sink/Http.hs). Involved: EP-1
 and cross-MP plan 22. Plan 22 defines `HttpEnv`, `TokenSource`, and
-`postJSONWithHeaders`; EP-1 adds `kanmonToken`/`kanmonHttp` to its credential records and
-uses `SHIKIGAMI_KANMON_TOKEN`. `KanmonConfig` carries no secret and EP-1 creates no second
-header helper. Plan 28 adds `traceparent` through the same function.
+`postJSONWithHeaders`; EP-1 adds duplicate direct `kanmon` fields to its credential/HTTP records and
+uses plan 37's Settei credential-reference setting and explicit legacy binding.
+`KanmonConfig` carries no secret and EP-1 creates no second header helper. Plan 28 adds
+`traceparent` through the same function. Permanent 4xx responses are classified once
+and dead-lettered/denied rather than retried forever; 429 and transient 5xx/network
+failures use the shared bounded retry policy.
 
 IP-7 — agent loading and inspection. Plan 20 defines `loadAgentsReport` and loud/strict
 loading. EP-2 adds enabled-agent selection over that report. Plan 30 consumes the report for
 the `agents` operator command; plan 23 later persists and annotates it with lifecycle state.
+
+IP-8 — checked delegation topology and global budget. Plan 39 owns
+`domain/shikigami.keiro`; EP-4 adds stable delegation steps/children there in the same
+change as runtime code. The remaining child/time/depth budget is persisted in `RunJob`
+lineage and consumed atomically across the entire descendant tree, not reset per parent
+or process. Cycle and allow-list checks happen before child creation; replay observes the
+same budget decision.
+
+IP-9 — MCP credentials and authorization. Plan 12 stores only credential references in
+agent Dhall. Secret values are resolved through plan 37's Settei composition root into
+non-serializable/redacted types; they never gain `Show`, JSON, or tool-output exposure.
+Upstream authorization must define which agent/principal may connect to which server and
+tool before runtime milestones begin; transport authentication alone is insufficient.
 
 
 ## Progress
@@ -226,22 +251,22 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [ ] EP-1 M1: `ChannelEgress` Sink variant in Dhall + Haskell mirror + proof manifest validates.
 - [ ] EP-1 M2: `KanmonConfig` + `KanmonClient` over a header-capable HTTP helper; request-shape unit tests.
-- [ ] EP-1 M3: dispatcher arm + grant gating + config plumbing through worker/CLI.
+- [ ] EP-1 M3: dispatcher arm + grant gating + Settei config plumbing; permanent-4xx versus transient retry classification.
 - [ ] EP-1 M4: `stub-kanmon` CLI command and the end-to-end outbox-to-egress proof (delivered, deduplicated, denied).
 - [ ] EP-2 M1: `identity`/`memory`/`enabled` fields in `schema/Agent.dhall` with defaults; all existing manifests validate unchanged.
 - [ ] EP-2 M2: Haskell mirror types on `AgentDecl`; loader/decoder proof; `validate` prints the new surface.
-- [ ] EP-2 M3: `enabled` enforced over plan 20's canonical load report; `recallLimit`/`recordPolicy` enforced in the run paths.
+- [ ] EP-2 M3: `enabled` enforced over plan 20's canonical load report; bounded checked conversion for `recallLimit` and all policy Naturals; `recordPolicy` enforced in run paths.
 - [ ] EP-2 M4: docs/user/writing-agents.md updated; proof manifest exercising all three fields.
-- [ ] EP-3 M1: kioku distill timer worker wired as the worker's fifth loop (env-gated); L1 timers actually fire.
-- [ ] EP-3 M2: recall fallback bounded and recency-ordered.
-- [ ] EP-3 M3: retention — periodic archival of old MemoryPattern rows via kioku `archive`.
+- [ ] EP-3 M1: kioku distill timer worker wired as a Settei-configured, fail-fast supervised worker loop; L1 timers actually fire.
+- [ ] EP-3 M2: recall fallback bounded and recency-ordered by server-side query limits.
+- [ ] EP-3 M3: retention — server-side bounded batches periodically archive old MemoryPattern rows via kioku `archive`.
 - [ ] EP-3 M4: `memory.scope = Shared` semantics implemented over `sharedScope` (record + recall).
 - [ ] EP-4 M1: `delegates : List Text` schema field (follows EP-2 pattern) + shared `ingestJobStepName` constant.
-- [ ] EP-4 M2: lineage + budget on `RunJob`; ancestor-cycle rejection and budget enforcement in `delegate`.
+- [ ] EP-4 M2: lineage + durable global descendant budget on `RunJob`; ancestor-cycle rejection and atomic budget enforcement in `delegate`.
 - [ ] EP-4 M3: `Delegate` Flow capability; allow-list enforced at the capability boundary.
 - [ ] EP-4 M4: failure policy — `awaitAllDelegated` (per-child Either) and sibling cancellation via keiro `cancelChild`.
 - [ ] EP-4 M5: research-supervisor re-expressed on the general mechanism; hardcoded task-name special case removed.
-- [ ] EP-5 M1: `mcpServers` schema field + mirror + examples (per plan 12).
+- [ ] EP-5 M1: `mcpServers` schema field with credential references only + mirror + examples (per plan 12).
 - [ ] EP-5 M2: build wiring (`shikumi-tools`) + `ToolRegistry` seam on `BehaviorEnv` (per plan 12).
 - [ ] EP-5 M3-M5: connect/register/close bracket, tool loop, end-to-end (blocked on upstream baikai/shikumi MCP work; per plan 12).
 
@@ -262,8 +287,9 @@ interactions between child plans. Provide concise evidence.
   actual code.
 - Kioku's distillation runtime is self-contained: `newDistillRuntime`
   (kioku-core/src/Kioku/Distill/Runtime.hs:60-74) registers the Claude provider and picks its
-  own model, so EP-3 has no code dependency on plan 13 — only an operational API-key
-  requirement, and `DistillRuntime` is a record of plain functions so tests can stub it.
+  own model, so EP-3 has no code dependency on plan 13. Its live credential is resolved by
+  plan 37 from an opaque reference, and `DistillRuntime` is a record of plain functions so
+  tests can stub it.
 - `loadAgents` is copy-pasted in three CLI modules (shikigami-cli/src/Shikigami/Cli/Commands/
   Worker.hs:45-49, Scheduler.hs:77-80, ConsumeStream.hs:90-93) and silently drops manifests
   that fail to load (`pure [a | Right a <- loaded]`). The portfolio audit found that four
@@ -272,6 +298,13 @@ interactions between child plans. Provide concise evidence.
   (persistence/lifecycle); EP-2 no longer consolidates the base loader.
 - Plan 12 predates this MasterPlan and already carried a `master_plan` frontmatter key
   pointing at the cross-repo baikai MasterPlan 6. See Decision Log for how this was resolved.
+- Fleet conformance audit (2026-07-22): configuration, package placement, and checked
+  durable topology are shared foundations, not per-feature choices. Plans 32–35 and 12
+  now consume plans 36/37/39 where applicable.
+- Safety audit (2026-07-22): unbounded Dhall `Natural` conversion, client-side memory
+  trimming, per-parent delegation budgets, and transport-only MCP authentication all
+  admit resource or authorization failures. The affected plans now require bounded
+  validation, server-side batching, a durable global budget, and explicit authz.
 
 
 ## Decision Log
@@ -336,11 +369,26 @@ plan.
   general versioning machinery, and until it lands the only safe move is additive (IP-3).
   Date: 2026-07-08
 - Decision: Make plan 20 a hard predecessor of EP-2, plan 22 a hard predecessor of EP-1,
-  and plan 24 a hard predecessor of EP-4.
+  and plans 24/39 hard predecessors of EP-4.
   Rationale: these plans now consume concrete shared artifacts (`loadAgentsReport`,
   authenticated `HttpEnv`/`postJSONWithHeaders`, and workflow-versioning discipline plus
   patch plumbing). Encoding those as hard edges removes provisional implementations and
   gives the portfolio a deterministic landing order.
+  Date: 2026-07-22
+- Decision: Schema Naturals are validated into bounded domain types before conversion;
+  memory reads and archival run in server-side bounded batches under supervised loops.
+  Rationale: Dhall's unbounded values and client-side trimming otherwise permit overflow,
+  excessive allocation, and scans that ignore the declared limits.
+  Date: 2026-07-22
+- Decision: Delegation uses a durable, global descendant budget and updates the checked
+  Keiro DSL; per-parent resettable counters are forbidden.
+  Rationale: a local budget allows exponential fan-out and gives replay/process restarts
+  different enforcement outcomes.
+  Date: 2026-07-22
+- Decision: Agent manifests contain MCP credential references only, and plan 12 waits for
+  an upstream authorization contract in addition to client/transport support.
+  Rationale: embedding secret values makes declarations serializable leak surfaces, while
+  authentication alone does not authorize an agent to a server or tool.
   Date: 2026-07-22
 - Decision: Plan 23 consumes EP-2's declared `identity.principal`; it no longer lands
   first and relies on a later one-function override.
@@ -363,3 +411,6 @@ Compare the result against the original vision.
   HTTP ownership with MasterPlan 4; ordered the shared loader/agent-command work; and
   made plan 23 consume the identity field after it exists. These changes align
   MasterPlan 7 with the canonical MP-2 through MP-7 execution waves in MasterPlan 2.
+- 2026-07-22: Added architecture/Settei/Keiro-DSL prerequisites and corrected egress
+  retry classification, bounded schema validation, memory batching/supervision, global
+  delegation budgets, and MCP credential-reference/authorization requirements.

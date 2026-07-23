@@ -40,20 +40,25 @@ After this plan, delegation is declared and governed. An agent lists whom it may
 A Flow can delegate through a capability (`delegate`/`awaitDelegated`/`awaitAllDelegated`
 effects), and every delegation is checked against the allow-list, rejected if it would form a
 cycle (an agent already in the ancestor chain), and denied once the run's child-run budget is
-exhausted. A supervisor can collect per-child results as `Either` values and cancel its
+exhausted. The budget is a single durable root-run budget, consumed atomically and
+idempotently by every child anywhere in the tree; sibling branches cannot each inherit and
+spend the same remainder. A supervisor can collect per-child results as `Either` values and cancel its
 siblings when one fails. The hardcoded research-supervisor special case is gone, re-expressed
 on the general mechanism. The observable proof is a set of real-Postgres workflow tests: a
 declared supervisor delegates to allow-listed children and synthesizes their outputs; an
 undeclared target is refused; a cycle is refused; an over-budget delegation is refused; and a
 failing child triggers sibling cancellation with a collected partial result.
 
-This plan hard-depends on two predecessors. Plan 33
+This plan hard-depends on the platform foundations. Plan 33
 (docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md) establishes
 the additive field-with-default pattern used when `delegates`/`delegationBudget` are added
 to the same `Agent` record (MasterPlan 7, IP-1). Plan 24
 (docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md) establishes the
 versioning discipline, patch plumbing, and step inventory required before changing the
 durable agent-run workflow (MasterPlan 5, IP-3).
+Plan 36 fixes package ownership, plan 37 provides the validated platform default, plan 38
+owns the budget-ledger migration, and plan 39 requires the changed workflow topology and
+step contract to pass the checked Keiro DSL evolution gate before runtime code is merged.
 
 
 ## Progress
@@ -62,10 +67,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `delegates : List Text` and `delegationBudget : Optional Natural` to schema/Agent.dhall (defaults `[]` / `None`) and mirror on `AgentDecl`; a `noopSummary`-behavior supervisor manifest validates.
+- [ ] Prerequisites: plans 24, 33, and 36–39 have landed; the checked Keiro specification records the delegation topology before implementation.
+- [ ] M1: add `delegates : List Text` and `delegationBudget : Optional Natural` to schema/Agent.dhall (defaults `[]` / `None`), validate the latter into a bounded `DelegationBudget`, and mirror it on `AgentDecl`; a `noopSummary`-behavior supervisor manifest validates.
 - [ ] M1: introduce the shared `ingestJobStepName` constant and use it in both Workflow.hs and Delegate.hs (retire the two independent `"ingest-job"` literals).
-- [ ] M2: add `lineage : [Text]` and `childBudgetRemaining : Maybe Int` to `RunJob`; propagate and decrement across `delegate`.
-- [ ] M2: ancestor-cycle rejection (reject a target already in the lineage) and budget rejection in `delegate`/`checkDepth`; new `DelegationError` constructors.
+- [ ] M2: add `lineage : [Text]` and `delegationBudgetId : Maybe DelegationBudgetId` to `RunJob`; initialize one durable root budget and propagate its identity across every descendant.
+- [ ] M2: atomically and idempotently reserve one global budget slot per deterministic child workflow id; add ancestor-cycle and exhausted-budget rejection.
 - [ ] M3: a `Delegate` Flow capability (`delegate`, `awaitDelegated`, `awaitAllDelegated`) added to `FlowEffects`; allow-list enforced at the capability boundary.
 - [ ] M4: `awaitAllDelegated :: [Delegated a] -> Eff es [Either Text a]` and sibling cancellation via keiro `cancelChild`; a failure-policy field or awaitAll variant.
 - [ ] M5: re-express `runResearchSupervisor` on the general mechanism (allow-list + budget + awaitAll); delete the `task == researchSupervisorTaskName` special case.
@@ -92,6 +98,10 @@ implementation. Provide concise evidence.
   (/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Child.hs:272) and is unused in
   shikigami; `awaitDelegated` currently throws on a child failure (Delegate.hs:82-88), which
   is why a supervisor cannot collect partial results today.
+- (Review-time) Propagating a decremented scalar to each child does not bound the whole tree:
+  two siblings can each receive the same remainder and spend it independently, allowing total
+  descendants to exceed the root declaration. The budget must therefore be shared, durable,
+  atomic under concurrent siblings, and replay-idempotent.
 
 
 ## Decision Log
@@ -101,14 +111,16 @@ Record every decision made while working on the plan.
 - Decision: The declaration surface is `delegates : List Text` (default `[]`) — an allow-list
   of agent names this agent may delegate to — plus `delegationBudget : Optional Natural`
   (default `None` = use the platform default) — the maximum number of child runs one run may
-  spawn (transitively decremented and propagated). Both follow plan 33's additive
+  spawn across its complete descendant tree. Both follow plan 33's additive
   field-with-default pattern.
   Rationale: an allow-list is the minimal declaration that makes "may this agent delegate, and
   to whom" answerable from the manifest; a name list (not a richer capability grant) matches
   how the runtime already resolves agents by name (`find ((== agentName job) . agentDeclName)`,
   Workflow.hs:135). A budget as `Optional Natural` keeps existing manifests unchanged while
-  letting an operator cap a supervisor's fan-out; `None` defers to a code default
-  (`defaultDelegationBudget = 16`, generous but finite).
+  letting an operator cap a supervisor's fan-out; manifest decoding immediately validates it
+  into `DelegationBudget` (0–1000) so an unbounded `Natural` or partial `Natural`-to-`Int`
+  conversion never reaches runtime code. `None` uses plan 37's validated platform default
+  (`16` initially, finite and within the same domain).
   Date: 2026-07-08
 
 - Decision: Cycle detection uses an ancestor *chain* carried on `RunJob` as
@@ -120,14 +132,29 @@ Record every decision made while working on the plan.
   cheap `elem` and keeps the wire payload small; the depth-4 bound stays as a second guard.
   Date: 2026-07-08
 
-- Decision: Budget is carried as `childBudgetRemaining :: Maybe Int` on `RunJob`, decremented
-  once per spawned child and propagated to the child as `remaining - 1`. A run whose remaining
-  budget is `Just 0` refuses to delegate (`DelegationBudgetExhausted`). The root run seeds it
-  from its own `delegationBudget` (or the default).
-  Rationale: a per-run decrement-and-propagate is the standard way to bound a delegation tree
-  without a shared counter (which durable replay would corrupt); `Maybe` lets an unset budget
-  mean "seed from the declaration at the root", set thereafter.
-  Date: 2026-07-08
+- Decision: Budget is a durable root-run ledger identified by `DelegationBudgetId`. `RunJob`
+  carries only `delegationBudgetId :: Maybe DelegationBudgetId`; a root with `Nothing`
+  creates or finds its deterministic ledger, and every child carries the same identifier.
+  Before spawning a deterministic child workflow, `reserveDelegationSlot` atomically inserts
+  a reservation keyed by `(budgetId, childWorkflowId)` and increments `consumed` only for a
+  new reservation whose ledger is below `maximum`. Exhaustion yields
+  `DelegationBudgetExhausted`; replay of the same child reservation succeeds without another
+  increment.
+  Rationale: a remaining scalar copied into sibling jobs is not a global tree bound. A
+  database ledger serializes concurrent siblings, survives process restarts, and uses the
+  already-deterministic child workflow id as its idempotency key. The migration is owned by
+  plan 38 and the reservation plus child registration/pre-journaling must share one database
+  transaction so neither an orphan reservation nor an unbudgeted child can commit.
+  Date: 2026-07-22
+
+- Decision: Update the checked Keiro DSL specification from plan 39 before changing the
+  runtime. It records the delegation child edge, unchanged `"ingest-job"` journal name,
+  cancellation paths, and durable budget-reservation boundary; the generated/evolution diff
+  is a required CI gate.
+  Rationale: delegation changes durable topology and replay-visible input. Reviewing the
+  specification diff first makes compatibility choices explicit instead of discovering them
+  after Haskell implementation.
+  Date: 2026-07-22
 
 - Decision: Allow-list enforcement lives at the delegation call boundary, checked against the
   *delegating agent's* `delegates` list, and applies to both the imperative
@@ -240,8 +267,11 @@ Scope: an agent can declare its delegates and budget, and the brittle "ingest-jo
 centralized. In schema/Agent.dhall extend the `Agent` record (following plan 33's pattern):
 add `delegates : List Text` (default `[] : List Text`) and `delegationBudget : Optional
 Natural` (default `None Natural`) to `Type` and `default`. Mirror on `AgentDecl`
-(shikigami-api/src/Shikigami/Api/Agent.hs): `delegates :: ![Text]`, `delegationBudget ::
-!(Maybe Natural)`.
+(shikigami-api/src/Shikigami/Api/Agent.hs) with strict direct fields:
+`delegates :: ![Text]`, `delegationBudget :: !(Maybe DelegationBudget)`. Add a total smart
+constructor that accepts only `0..1000`; surface an actionable validation error for larger
+Dhalls rather than converting an arbitrary `Natural` to `Int`. The Settei platform default
+uses the same bounded type.
 
 Add `ingestJobStepName :: StepName` to shikigami-core/src/Shikigami/Agent/Workflow/Name.hs
 (value `StepName "ingest-job"` — byte-identical to today) and use it at both the workflow read
@@ -272,40 +302,49 @@ in  A.Agent::{
 Acceptance: `cabal run shikigami -- validate agents/proof/supervisor.dhall` decodes the two
 new fields; `cabal run shikigami -- validate agents/heartbeat.dhall` is unchanged (defaults).
 
-### Milestone 2 — Lineage, budget, cycle and budget rejection
+### Milestone 2 — Lineage, durable global budget, cycle and budget rejection
 
-Scope: `RunJob` carries the ancestor chain and remaining budget, and `delegate` enforces both.
-Add to `RunJob` (shikigami-api/src/Shikigami/Api/RunJob.hs): `lineage :: ![Text]` (root-to-current
-agent names; additive — decode old jobs as `[]`) and `childBudgetRemaining :: !(Maybe Int)`.
-Update every `RunJob` construction site to set them: the enqueuer(s) seed `lineage =
-[agentName]` and `childBudgetRemaining = Nothing` (the root fills the budget from its decl at
-run start); `delegate` (Delegate.hs) sets the child's `lineage = currentLineage ++ [childAgent]`
-and `childBudgetRemaining = Just (remaining - 1)`.
+Scope: `RunJob` carries the ancestor chain and the identity of one root budget, and
+`delegate` enforces both. Add to `RunJob` (shikigami-api/src/Shikigami/Api/RunJob.hs)
+`lineage :: ![Text]` (root-to-current agent names; additive, old jobs decode as `[]`) and
+`delegationBudgetId :: !(Maybe DelegationBudgetId)` (old/root jobs decode as `Nothing`). At
+root workflow start, deterministically derive a budget id from the root workflow id, insert
+the ledger with the agent or platform maximum using an idempotent insert, and carry that id
+on every descendant `RunJob`.
 
-Extend `DelegateCtx` (Delegate/Context.hs) with `lineage :: ![Text]` and `budgetRemaining ::
-!(Maybe Int)`, and extend `checkDepth` (or add a sibling `checkDelegation`) to also:
+Plan 38 adds schema-qualified tables for the ledger and its idempotent reservations. Use
+strict direct Haskell fields such as `budgetId`, `rootWorkflowId`, `maximum`, `consumed`, and
+`childWorkflowId`. The reservation operation locks/updates the ledger and records the child
+workflow id in the same transaction that registers and pre-journals the child. A conflict on
+an existing reservation is replay success; a new reservation at `consumed == maximum` is a
+typed exhaustion result. Add transaction/concurrency tests at the store boundary.
+
+Extend `DelegateCtx` (Delegate/Context.hs) with `lineage :: ![Text]` and
+`delegationBudgetId :: !DelegationBudgetId`, and extend `checkDepth` (or add a sibling
+`checkDelegation`) to also:
 
 ```haskell
 data DelegationError
   = DelegationDepthExceeded !Int
   | DelegationMissingSessionId
   | DelegationCycleDetected !Text        -- target already an ancestor
-  | DelegationBudgetExhausted            -- remaining budget is Just 0
+  | DelegationBudgetExhausted            -- durable root ledger has no unreserved slot
   | DelegationNotAllowed !Text           -- target not in the delegating agent's `delegates`
   | ...existing child-outcome constructors...
 ```
 
-In `delegate` (Delegate.hs:38-46), before spawning: reject when `childAgent \`elem\` lineage
-ctx` (`DelegationCycleDetected`), reject when `budgetRemaining ctx == Just 0`
-(`DelegationBudgetExhausted`), then decrement. The allow-list check needs the *delegating*
-agent's decl — pass it in (see M3/M5; `delegate` gains an `AgentDecl` or a pre-checked
-allow-list argument, or the caller invokes a shared `assertMayDelegate` guard before
-`delegate`). Keep the depth check as the outer guard.
+In `delegate` (Delegate.hs:38-46), before spawning, reject when `childAgent \`elem\`
+lineage ctx` (`DelegationCycleDetected`), compute the deterministic child workflow id, then
+attempt the atomic reservation/child-registration transaction. Map an exhausted ledger to
+`DelegationBudgetExhausted`. The allow-list check needs the *delegating* agent's declaration
+— pass it in (see M3/M5; `delegate` gains an `AgentDecl` or a pre-checked allow-list
+argument). Keep the depth check as an independent outer guard.
 
-Acceptance: `withShikigamiMigratedDatabase` tests: (a) delegating to `research-supervisor`
-from a lineage containing it yields `DelegationCycleDetected`; (b) delegating with
-`childBudgetRemaining = Just 0` yields `DelegationBudgetExhausted`; the existing depth test
-still passes.
+Acceptance: `withShikigamiMigratedDatabase` tests prove: (a) delegating to an agent already
+in the lineage yields `DelegationCycleDetected`; (b) concurrent siblings and grandchildren
+share one maximum and exactly that many distinct children can reserve slots; (c) replaying
+the same deterministic child after a process restart does not consume again; (d) the next
+distinct child yields `DelegationBudgetExhausted`; and (e) the existing depth test passes.
 
 ### Milestone 3 — The Flow delegate capability
 
@@ -325,7 +364,7 @@ with `delegate'`/`awaitOne'`/`awaitAll'` wrappers, and a `runDelegate :: Delegat
 agent's `delegates` list (`assertMayDelegate`, refusing with a Flow-visible error), (b)
 enforces cycle/budget via M2's guards, and (c) dispatches to `Shikigami.Agent.Delegate`.
 `DelegateEnv` carries the delegating `AgentDecl`, the `DelegateCtx` (built from the run's
-session/lineage/budget). Add `Delegate` to `FlowEffects`
+session, lineage, and durable budget id). Add `Delegate` to `FlowEffects`
 (shikigami-core/src/Shikigami/Flow.hs:28) and provide `runDelegate` in the Flow runner
 (`runFlowBehavior`, Workflow.hs:299-322) alongside `runActivity`/`runMemory`/`runSink`.
 
@@ -362,7 +401,7 @@ row lookup). `awaitAllDelegated` on the same set returns both results without th
 
 Scope: the general mechanism subsumes the demo. Rewrite `runResearchSupervisor`
 (Workflow.hs:344-372) to read its child agent names from the supervisor decl's `delegates`
-list, build the `DelegateCtx` with `lineage`/`budget` from the `RunJob`, delegate to each
+list, build the `DelegateCtx` with `lineage`/`delegationBudgetId` from the `RunJob`, delegate to each
 (through the allow-list guard), and collect via `awaitAllDelegated`, synthesizing the same
 output shape. Delete the `task == researchSupervisorTaskName` guard in `runBehaviorStep`
 (Workflow.hs:287-288); route supervisor behavior through a general "supervisor program" arm
@@ -431,9 +470,11 @@ Acceptance is behavioral, contrasted against today:
 3. Cycle refusal: an agent whose `lineage` already contains the target is refused with
    `DelegationCycleDetected`; A→B→A cannot form. Before: only depth-4 bounded it, so A→B→A→B
    was allowed.
-4. Budget refusal: with `delegationBudget = Some 1`, the first child spawns and a second
-   delegation in the same run (or a grandchild past the propagated budget) is refused with
-   `DelegationBudgetExhausted`. Before: no budget existed.
+4. Global budget refusal: with `delegationBudget = Some 3`, concurrently attempt children
+   from multiple sibling branches. Exactly three distinct child workflow ids reserve and
+   spawn across the whole root tree; all later distinct attempts receive
+   `DelegationBudgetExhausted`. Replaying any reserved child, including after reconstructing
+   the workflow runtime, succeeds without incrementing `consumed`. Before: no budget existed.
 5. Partial collection + cancellation: `awaitAllDelegated` returns per-child `Either` without
    throwing; `cancelSiblingsOnFailure` cancels not-yet-completed siblings on the first failure
    (the cancelled child's workflow row is `cancelled`). Before: `awaitDelegated` threw on any
@@ -449,12 +490,17 @@ under `Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase` (real Pos
 
 ## Idempotence and Recovery
 
-Delegation is already replay-safe: child workflow ids are deterministic UUIDv5s
+Delegation child identity is already replay-safe: child workflow ids are deterministic UUIDv5s
 (`delegatedWorkflowId`, Delegate.hs:97-107), so a parent replay recomputes the same child id
 and `spawnChild` is idempotent on it; the pre-journaled child "ingest-job" step dedupes on
-replay. The new fields are additive: `RunJob.lineage`/`childBudgetRemaining` decode as
-`[]`/`Nothing` for jobs enqueued before this plan, and the schema fields default to
-`[]`/`None`, so no migration and no manifest edits are needed. `cancelChild` returns `Bool`
+replay. The durable reservation uses that same child id as its uniqueness key, so replays do
+not spend another slot. Ledger creation is idempotent by deterministic root id; the
+reservation and child registration/pre-journal commit together. The new fields are additive:
+`RunJob.lineage`/`delegationBudgetId` decode as `[]`/`Nothing` for jobs enqueued before this
+plan; a resumed root with `Nothing` initializes or finds the deterministic ledger before it
+can delegate. Schema fields default to `[]`/`None`, so manifests need no edits. Plan 38's
+forward migration creates the ledger and reservation tables; rollback leaves them inert.
+`cancelChild` returns `Bool`
 (found or not) and is safe to call on an already-completed or already-cancelled child (it is a
 no-op), so `cancelSiblingsOnFailure` is safe under partial completion and re-runs. The
 step-name centralization keeps the wire value byte-identical, so in-flight journals from before
@@ -469,12 +515,13 @@ Owned and defined by this plan:
 
 - `schema/Agent.dhall` — `delegates : List Text` (default `[]`), `delegationBudget : Optional
   Natural` (default `None`) on `Agent`.
-- `Shikigami.Api.Agent` — `AgentDecl` gains `delegates :: ![Text]`, `delegationBudget ::
-  !(Maybe Natural)`.
-- `Shikigami.Api.RunJob` — `RunJob` gains `lineage :: ![Text]`, `childBudgetRemaining ::
-  !(Maybe Int)`.
+- `Shikigami.Api.Agent` — `DelegationBudget` is a bounded 0–1000 domain value;
+  `AgentDecl` gains `delegates :: ![Text]`, `delegationBudget :: !(Maybe DelegationBudget)`.
+- `Shikigami.Api.RunJob` — `RunJob` gains `lineage :: ![Text]`,
+  `delegationBudgetId :: !(Maybe DelegationBudgetId)`.
 - `Shikigami.Agent.Workflow.Name` — `ingestJobStepName :: StepName` (value `"ingest-job"`).
-- `Shikigami.Agent.Delegate.Context` — `DelegateCtx` gains `lineage`, `budgetRemaining`;
+- `Shikigami.Agent.Delegate.Context` — `DelegateCtx` gains `lineage`,
+  `delegationBudgetId`;
   `DelegationError` gains `DelegationCycleDetected`, `DelegationBudgetExhausted`,
   `DelegationNotAllowed`; `assertMayDelegate :: AgentDecl -> Text -> Either DelegationError ()`.
 - `Shikigami.Agent.Delegate` — cycle/budget/allow-list enforcement in `delegate`;
@@ -486,6 +533,12 @@ Owned and defined by this plan:
 - `Shikigami.Agent.Workflow` — `runResearchSupervisor` rewritten on the general mechanism; the
   `task == researchSupervisorTaskName` special case in `runBehaviorStep` removed; `runDelegate`
   wired into `runFlowBehavior`.
+- `Shikigami.Store.DelegationBudget` (name may follow plan 36's exact package layout) —
+  deterministic ledger initialization and atomic
+  `reserveDelegationSlot :: DelegationBudgetId -> WorkflowId -> ... -> ReservationResult`.
+- Plan 38 migration — schema-qualified delegation-budget and reservation tables, unique
+  child-workflow reservation key, maximum/consumed checks, and indexes used by the atomic
+  reservation statement.
 
 Consumed (no changes):
 
@@ -505,6 +558,14 @@ Cross-plan dependencies:
   plan 24's versioning discipline, active-patch plumbing, and step-name inventory. Existing
   step names remain byte-identical, and any new steps or guarded behavior are recorded in
   that inventory.
+- HARD depends on docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md
+  for package ownership and direct strict record-field conventions.
+- HARD depends on docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md for
+  the validated default `DelegationBudget`; no workflow module reads environment variables.
+- HARD depends on docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md
+  for the durable ledger/reservation migration and test database manifest.
+- HARD depends on docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md;
+  update the checked specification and accept its compatibility diff before runtime changes.
 
 Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 `cabal run shikigami -- validate <file>`; `just create-database` +
@@ -516,3 +577,6 @@ Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 - 2026-07-22: Promoted plan 24 from a soft coordination note to a hard dependency.
   Delegation now begins only after the workflow-versioning discipline and patch plumbing
   exist, matching the MP-2 through MP-7 execution order.
+- 2026-07-22: Replaced per-child remaining-budget propagation with a durable, atomic,
+  replay-idempotent root budget. Added bounded numeric validation, pg-migrate ownership,
+  Settei defaults, package boundaries, and the checked Keiro DSL evolution gate.

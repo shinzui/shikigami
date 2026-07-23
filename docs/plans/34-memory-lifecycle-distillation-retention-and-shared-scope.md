@@ -51,10 +51,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the kioku distill-timer loop as the worker's fifth concurrent loop (env-gated), building a `DistillRuntime`; L1 timers scheduled on conversation turns now fire.
+- [ ] Prerequisites: plans 36 and 37 have established the six-package service boundary and a single validated Settei configuration value; plan 33 has established bounded memory policy types.
+- [ ] M1: add the kioku distill-timer loop as the worker's fifth supervised concurrent loop, configured through Settei and building a `DistillRuntime`; L1 timers scheduled on conversation turns now fire.
 - [ ] M1: real-Postgres test — a conversation turn schedules an L1 timer; after advancing the clock and running the loop once, a consolidated memory exists.
-- [ ] M2: bound the recall fallback — `recallActiveByScope` takes a limit and orders by recency (newest first).
-- [ ] M3: a periodic maintenance task archives active MemoryPattern rows older than a threshold via kioku `archive`; run it inside the distill/maintenance loop.
+- [ ] M2: bound the recall fallback at the database boundary — a server-side read model accepts `RecallLimit`, orders newest-first, and returns no more than the requested rows.
+- [ ] M3: a periodic maintenance task archives active MemoryPattern rows older than a threshold via kioku `archive`; scan candidates in bounded, deterministic keyset batches inside the distill/maintenance loop.
 - [ ] M3: real-Postgres test — seeded old memories are archived (status flips to archived) and no longer recalled; recent ones survive.
 - [ ] M4: implement `memory.scope = Shared` — record and recall against `sharedScope` when the agent declares it; keep `AgentScope` as today.
 - [ ] M4: real-Postgres test — agent B with `scope = Shared` recalls a memory agent A recorded under `Shared`.
@@ -69,8 +70,9 @@ implementation. Provide concise evidence.
 - (Authoring-time) kioku's distiller is fully self-wired: `newDistillRuntime`
   (kioku-core/src/Kioku/Distill/Runtime.hs:60-74) calls `ClaudeApi.register` and pins
   `Models.anthropic_claude_haiku_4_5`, so this plan has **no code dependency** on
-  docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md — only an operational one (an
-  `ANTHROPIC_API_KEY` when the loop runs live). Because `DistillRuntime` is a record of plain
+  docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md. Its live credential is
+  nevertheless resolved through plan 37's Settei-owned secret/reference boundary rather than
+  read ad hoc in this module. Because `DistillRuntime` is a record of plain
   `IO`-returning functions, tests substitute a fake runtime with no network (recorded in the
   Decision Log).
 - (Authoring-time) kioku already exposes exactly the pieces needed: `runKiokuTimerWorkerLoop`
@@ -81,20 +83,24 @@ implementation. Provide concise evidence.
   (Memory.hs:177) lists active rows by type; `Kioku.Recall.getGlobal`/`getActiveByScope`
   (Recall.hs:512-535) read a scope, `ScopeGlobal` included. kioku's own worker CLI
   (kioku-cli Worker.hs:95-99) is the reference wiring to copy.
+- (Review-time) kioku's existing list-shaped read models are not sufficient for an operational
+  bound: fetching all rows and applying `take` or grouping in Haskell still permits database,
+  transfer, and heap cost to grow without limit. M2 and M3 therefore add or consume SQL read
+  models whose `ORDER BY`, `LIMIT`, and keyset cursor are enforced by Postgres.
 
 
 ## Decision Log
 
 Record every decision made while working on the plan.
 
-- Decision: Add the distill worker as a fifth concurrent loop in `runWorker`
-  (shikigami-core/src/Shikigami/Worker.hs:70), gated on an environment variable
-  (`SHIKIGAMI_DISTILL=1`) and building the `DistillRuntime` once at worker start.
+- Decision: Add the distill worker as a fifth supervised concurrent loop in `runWorker`
+  (shikigami-core/src/Shikigami/Worker.hs:70), enabled by the validated Settei configuration
+  value from plan 37 and building the `DistillRuntime` once at worker start.
   Rationale: `runWorker` already fans out four loops via nested `concurrently_`
-  (Worker.hs:70); adding a fifth is the minimal structural change. Env-gating keeps CI and
-  key-less local runs working (the runtime registers a Claude provider that needs a key to
-  *fire*, though building it does not), and mirrors kioku's own worker which degrades to
-  "timer worker only" when vector columns are absent (kioku-cli Worker.hs:80-81).
+  (Worker.hs:70); adding a fifth is the minimal structural change. A typed disabled setting
+  keeps CI and key-less local runs working, while an enabled setting is validated before any
+  loop starts. An unexpected loop exit fails the worker process so its process supervisor can
+  restart the complete service; it must not silently leave a partially healthy worker alive.
   Date: 2026-07-08
 
 - Decision: Use kioku's `runKiokuTimerWorkerLoop Nothing rt (scopedScanCandidates 5)
@@ -127,6 +133,15 @@ Record every decision made while working on the plan.
   losing a minimal working set. `MemoryPattern` is the only type shikigami writes today
   (Run.hs:104), so scoping to it protects distillation outputs.
   Date: 2026-07-08
+
+- Decision: Enforce recall and retention bounds in Postgres. Recall uses a newest-first query
+  with a validated `RecallLimit`; retention uses a stable `(created_at, memory_id)` keyset
+  cursor and a validated batch size, archiving one bounded batch at a time. Do not call an
+  unbounded list API and then `take`, sort, or group the result in Haskell.
+  Rationale: an application-side bound limits only the returned list after the database and
+  process have already paid the unbounded cost. SQL ordering, limits, and keyset pagination
+  make the memory and query-cost claim true under a large active-memory set.
+  Date: 2026-07-22
 
 - Decision: Keep `sharedScope` and give it semantics driven by `memory.scope`. When an agent
   declares `memory.scope = Shared`, its run records into and recalls from `sharedScope`
@@ -221,28 +236,31 @@ running `runKiokuTimerWorkerLoop Nothing rt (scopedScanCandidates 5) defaultPoll
 
 Scope: the worker actually runs kioku's distill timer loop, so scheduled L1 timers fire. In
 shikigami-core/src/Shikigami/Worker.hs add a `runDistillWorker :: WorkerEnv -> IO ()` modeled
-on kioku-cli's `runTimerLoop`:
+on kioku-cli's `runTimerLoop`, but consume plan 37's already-decoded configuration rather
+than reading the environment in the loop:
 
 ```haskell
 runDistillWorker :: WorkerEnv -> IO ()
-runDistillWorker env = do
-  enabled <- lookupEnv "SHIKIGAMI_DISTILL"
-  case enabled of
-    Just ('1':_) -> do
-      hPutStrLn stderr "[shikigami.worker] starting kioku distillation timer worker"
-      rt <- newDistillRuntime
-      result <- runAppIO (appEnv env)
-        (runKiokuTimerWorkerLoop Nothing rt (scopedScanCandidates 5) defaultDistillPollMicros)
-      either (\e -> hPutStrLn stderr ("[shikigami.worker] distill worker store error: " <> show e)) pure result
-    _ -> hPutStrLn stderr "[shikigami.worker] distillation disabled (set SHIKIGAMI_DISTILL=1 to enable)"
+runDistillWorker env =
+  case distillation (config env) of
+    Disabled -> pure ()
+    Enabled settings ->
+      bracket (newDistillRuntime settings) closeDistillRuntime $ \runtime ->
+        runDistillationAndMaintenance env settings runtime
 ```
 
 Thread it into the fan-out at Worker.hs:70 (add a fifth `concurrently_` level, or lift the
 list to `Async.mapConcurrently_ ($ env) [runQueueWorker, runResumeWorker, runOutboxPublisher,
 runTimerWorker, runDistillWorker]` for readability). Import `newDistillRuntime`,
-`runKiokuTimerWorkerLoop`, and `scopedScanCandidates` from kioku; add `System.Environment
-(lookupEnv)`. Because `fireKiokuTimer` ignores timers whose process-manager name it does not
-own, the new loop and shikigami's existing schedule/approval timer loop coexist without
+`runKiokuTimerWorkerLoop`, and `scopedScanCandidates` from kioku. The exact constructor and
+cleanup function must follow the released kioku API found through Mori; the sketch above
+expresses lifecycle ownership, not an API to guess. `WorkerConfig` contains strict,
+unprefixed fields such as `distillation`, `pollInterval`, and `maintenanceInterval`, with
+bounded duration/count newtypes validated by Settei. Do not add `lookupEnv` or accept a raw
+API key in this module. If the enabled loop returns unexpectedly, propagate the failure out
+of `runWorker`; the process supervisor owns restarts. Because `fireKiokuTimer` ignores timers
+whose process-manager name it does not own, the new loop and shikigami's existing
+schedule/approval timer loop coexist without
 double-firing (verify: the L1 process-manager name is `"kioku-l1-extract"`,
 Distill/Timer.hs:36-37; shikigami's are `"shikigami.scheduler"` and the approval names).
 
@@ -256,24 +274,21 @@ the scope that did not before. Use a fake `DistillRuntime` returning a fixed ext
 
 ### Milestone 2 — Bound and order the recall fallback
 
-Scope: the non-vector fallback no longer returns everything. Change `recallActiveByScope`
-(shikigami-core/src/Shikigami/Agent/Run.hs:214-219) to take a limit and order by recency:
+Scope: the non-vector fallback no longer fetches everything. Change `recallActiveByScope`
+(shikigami-core/src/Shikigami/Agent/Run.hs:214-219) to take plan 33's validated
+`RecallLimit`, and add or use a kioku read-model operation whose SQL orders and limits the
+result before it crosses the database boundary:
 
 ```haskell
-recallActiveByScope :: AppEnv -> Int -> MemoryScope -> IO [MemoryRecord]
-recallActiveByScope appEnv limit scope' = do
-  priorE <- runAppIO appEnv (Recall.getActiveByScope scope')
-  pure $ case priorE of
-    Right (Right ms) -> take (max 0 limit) (sortOn (Down . createdAt) ms)
-    _ -> []
+recallActiveByScope :: AppEnv -> RecallLimit -> MemoryScope -> IO [MemoryRecord]
 ```
 
-`MemoryRecord` has `createdAt :: UTCTime` (kioku-api Kioku/Api/Types.hs:111), so
-`sortOn (Down . createdAt)` gives newest-first; `take limit` bounds it. Pass the limit down
-from `recallPriorLearnings` (which, after plan 33, already receives a limit — if plan 33 has
-not landed, add the `Int` parameter here and thread the literal 10 at the call sites, matching
-plan 33's signature so the two plans converge). Add `Data.Ord (Down)` and `Data.List (sortOn)`
-imports.
+The backing query is schema-qualified, filters the exact active scope, and uses `ORDER BY
+created_at DESC, memory_id DESC LIMIT $n`. If the current released kioku API lacks this
+bounded read model, add it to kioku first (with its own tests and release), verify the
+released version and bounds, then consume it here; do not emulate it with
+`Recall.getActiveByScope`, `sortOn`, and `take`. Pass the already-bounded value down from
+`recallPriorLearnings` so invalid or enormous counts are not representable internally.
 
 Acceptance: a test seeds 25 active memories with increasing timestamps in a scope on a
 no-vector database (the test DB has no pgvector, so the fallback path is taken), calls
@@ -287,8 +302,9 @@ shikigami-core/src/Shikigami/Memory/Maintenance.hs:
 
 ```haskell
 data RetentionPolicy = RetentionPolicy
-  { maxAge :: !NominalDiffTime   -- default 30 days
-  , keepPerScope :: !Int         -- default 200 (newest kept regardless of age)
+  { maxAge :: !RetentionAge
+  , keepPerScope :: !KeepCount
+  , batchSize :: !MaintenanceBatchSize
   }
 
 archiveOldMemories ::
@@ -296,20 +312,25 @@ archiveOldMemories ::
   RetentionPolicy -> UTCTime -> Eff es Int   -- returns count archived
 ```
 
-which reads active `MemoryPattern` rows via `Kioku.Memory.getActiveRowsByType (Namespace
-"shikigami") MemoryPattern`, groups them by `(scopeKind, scopeRef)`, and within each scope
-sorts newest-first, keeps the first `keepPerScope`, and among the remainder archives those
-whose `createdAt` is older than `now - maxAge` by calling `Kioku.Memory.archive
-(ArchiveMemoryData memId now)`. Drive it from the distill loop: instead of the bare
+The read model selects at most `batchSize` eligible active `MemoryPattern` rows using stable
+keyset pagination and a schema-qualified SQL query. It applies the per-scope newest
+`keepPerScope` rule in SQL (for example with `row_number()` partitioned by scope), filters by
+the age cutoff, and orders by `(created_at, memory_id)` so every pass has a deterministic
+cursor. `archiveOldMemories` archives the returned identifiers with
+`Kioku.Memory.archive (ArchiveMemoryData {memoryId, archivedAt = now})`, then continues from
+the last cursor until a short batch is returned. It never loads or groups the entire active
+set in Haskell. If kioku does not expose this read model, contribute and release the bounded
+operation there before consuming it from shikigami. Drive it from the distill loop: instead
+of the bare
 `runKiokuTimerWorkerLoop`, run a small loop that alternates a timer-worker pass and, once per
 `maintenanceInterval` (default hourly), an `archiveOldMemories` pass; keep it in
-`runDistillWorker` so retention shares the distill loop's env gate and `AppEnv`.
+`runDistillWorker` so retention shares the distillation setting and `AppEnv`.
 
-Acceptance: a `withShikigamiMigratedDatabase` test seeds, in one scope, 5 memories older than
-`maxAge` beyond the keep-count and 3 recent ones, runs `archiveOldMemories` with a small
-`keepPerScope`, asserts the 5 old ones have `status = "archived"` (via
-`getActiveRowsByType`/`getActiveByScope` no longer returning them) and the recent ones remain
-active and recallable.
+Acceptance: a `withShikigamiMigratedDatabase` test seeds more than two maintenance batches
+across several scopes, including timestamp ties, runs `archiveOldMemories` with a small
+`keepPerScope`, and asserts every eligible old row is archived exactly once while recent and
+per-scope protected rows remain active. Query-level tests prove no page exceeds `batchSize`
+and cursors neither skip nor repeat tied rows.
 
 ### Milestone 4 — Shared scope semantics
 
@@ -331,9 +352,10 @@ Workflow.hs:267 (session start), Workflow.hs:595 (record), Flow/Capability.hs:92
 Flow/Capability.hs:105 (record). The session's own scope should follow the agent's declared
 scope too, so a `Shared` agent's session and memories co-locate.
 
-If plan 33 (which defines the `memory` field and `MemoryScopeDecl`) has not yet landed, this
-milestone is blocked on it — it is the plan's one hard input (MasterPlan: EP-3 soft-depends on
-EP-2, but *this milestone specifically* needs the field). Milestones 1-3 do not.
+Do not start implementation until plan 33 has landed: it defines the `memory` field,
+`MemoryScopeDecl`, and validated recall policy consumed throughout this plan. Plans 36 and 37
+must also have landed so worker ownership and configuration do not introduce a parallel
+architecture.
 
 Acceptance: a `withShikigamiMigratedDatabase` test declares agent A and agent B both with
 `memory.scope = Shared`, runs A (recording a memory), then runs B and asserts B's
@@ -342,16 +364,17 @@ is keyed by its own name). A control agent with `AgentScope` does not see it.
 
 ### Docs
 
-Update docs/user/memory.md: describe the L1/L2/L3 distillation loop and its env gate, the
-bounded recency recall, the retention policy and its defaults, and the `Shared` scope
+Update docs/user/memory.md: describe the L1/L2/L3 distillation loop and its typed Settei
+setting, the server-side bounded recency recall, the retention policy and its defaults, and the `Shared` scope
 (cross-referencing writing-agents.md's `memory` field from plan 33).
 
 
 ## Concrete Steps
 
 All commands from the repo root inside `nix develop`; database tests need
-`just create-database` once. The live distill loop needs `ANTHROPIC_API_KEY` set; the tests
-do not (fake runtime).
+`just create-database` once. The live distill loop needs the plan 37 Settei source for its
+credential reference; the tests do not (fake runtime). Never place a raw credential on a
+command line or in expected output.
 
 Step 1 — baseline build and tests:
 
@@ -360,10 +383,12 @@ cabal build all
 cabal test shikigami-core
 ```
 
-Step 2 — after M1, run the worker with distillation enabled and observe the loop start:
+Step 2 — after M1, supply a non-secret test configuration with distillation enabled and
+observe the loop start. Use plan 37's documented configuration entry point; the schematic
+command is:
 
 ```bash
-SHIKIGAMI_DISTILL=1 ANTHROPIC_API_KEY=... cabal run shikigami -- worker --agents agents/proof 2>&1 | head
+cabal run shikigami-worker -- --config config/worker-memory-lifecycle-proof.yaml
 ```
 
 Expected line:
@@ -372,10 +397,10 @@ Expected line:
 [shikigami.worker] starting kioku distillation timer worker
 ```
 
-Without `SHIKIGAMI_DISTILL=1`:
+With distillation disabled in the same Settei configuration:
 
 ```text
-[shikigami.worker] distillation disabled (set SHIKIGAMI_DISTILL=1 to enable)
+[shikigami.worker] distillation disabled
 ```
 
 Step 3 — after each milestone, the targeted DB test:
@@ -404,11 +429,13 @@ Acceptance is behavioral and database-observable:
    count in scope increases; the fake `DistillRuntime` proves the pipeline was invoked without
    a live model.
 2. Recall bounded: before, the fallback returns every active memory in scope
-   (Run.hs:214-219). After, with 25 seeded memories and limit 10, recall returns exactly the
-   10 newest, newest-first.
+   (Run.hs:214-219). After, seed far more rows than the limit and prove from the read-model
+   query result that Postgres returns exactly the 10 newest, newest-first. A regression test
+   must fail if the implementation fetches an unbounded list and truncates it in Haskell.
 3. Retention: before, nothing is ever archived — `Kioku.Memory.archive` is never called by
-   shikigami (grep the tree). After, `archiveOldMemories` flips old MemoryPattern rows to
-   `archived`; they stop appearing in `getActiveByScope`/recall while recent rows survive.
+   shikigami. After, `archiveOldMemories` processes a data set larger than two batches,
+   flips every eligible old MemoryPattern row to `archived`, and leaves recent/protected rows
+   active. Batch-size and tied-cursor assertions prove bounded, complete traversal.
 4. Shared scope: before, `sharedScope` is dead code and cross-agent recall is impossible.
    After, two `Shared` agents share a memory pool: B recalls what A recorded; an `AgentScope`
    control does not.
@@ -428,9 +455,10 @@ not re-fire a completed timer. `archive` is a no-op on an already-archived row
 (Memory.hs:90-92), so re-running the maintenance pass never double-archives or errors.
 `resolveMemoryScope` is a pure function; changing an agent's declared scope changes *future*
 records/recalls only — memories already written under the old scope stay where they are (a
-migration of existing memories is explicitly out of scope). The `SHIKIGAMI_DISTILL` gate means
-the new loop is opt-in: a deployment without the flag (or without an API key) behaves exactly
-as today. Rollback: unset the flag to disable distillation and maintenance; revert M2/M4 edits
+migration of existing memories is explicitly out of scope). The typed distillation setting
+means the new loop is opt-in: a deployment with `Disabled` behaves exactly as today, while an
+invalid enabled configuration fails before workers start. Rollback: set it to `Disabled` to
+stop distillation and maintenance; revert M2/M4 edits
 to restore unbounded fallback and agent-only scope — no data migration is needed either way.
 
 
@@ -438,11 +466,12 @@ to restore unbounded fallback and agent-only scope — no data migration is need
 
 Owned and defined by this plan:
 
-- `Shikigami.Worker` — `runDistillWorker :: WorkerEnv -> IO ()` as the fifth concurrent loop;
-  env-gated on `SHIKIGAMI_DISTILL`.
-- `Shikigami.Agent.Run` — `recallActiveByScope :: AppEnv -> Int -> MemoryScope -> IO
+- `Shikigami.Worker` — `runDistillWorker :: WorkerEnv -> IO ()` as the fifth supervised
+  concurrent loop; configured by plan 37's typed Settei value.
+- `Shikigami.Agent.Run` — `recallActiveByScope :: AppEnv -> RecallLimit -> MemoryScope -> IO
   [MemoryRecord]` (bounded, recency-ordered); the limit threaded from `recallPriorLearnings`.
-- `Shikigami.Memory.Maintenance` (new) — `RetentionPolicy {maxAge, keepPerScope}`,
+- `Shikigami.Memory.Maintenance` (new) — strict direct fields on
+  `RetentionPolicy {maxAge, keepPerScope, batchSize}`,
   `archiveOldMemories :: RetentionPolicy -> UTCTime -> Eff es Int`.
 - `Shikigami.Memory.Scope` — `resolveMemoryScope :: AgentDecl -> MemoryScope`; the direct
   `agentScope` call sites (Run.hs, Workflow.hs, Flow/Capability.hs) rewired through it.
@@ -456,20 +485,33 @@ Consumed from kioku (library, no changes — locate via `mori registry show kiok
 - `Kioku.Distill.L1.scopedScanCandidates :: Int -> FindMergeCandidates es` (no-vector finder).
 - `Kioku.Memory.archive :: ArchiveMemoryData -> Eff es (Either MemoryWriteError MemoryId)`
   with `ArchiveMemoryData {memoryId :: MemoryId, archivedAt :: UTCTime}`;
-  `Kioku.Memory.getActiveRowsByType :: Namespace -> MemoryType -> Eff es (Either
-  ReadModelError [MemoryRow])`.
-- `Kioku.Recall.getActiveByScope` / `getGlobal`; `MemoryRecord {createdAt :: UTCTime, ...}`;
+  plus a released bounded retention-candidate read model with SQL ordering, limit, and keyset
+  cursor. The existing unbounded `getActiveRowsByType` is not acceptable for the worker.
+- A released bounded recall-by-scope read model; the existing unbounded
+  `Kioku.Recall.getActiveByScope` / `getGlobal` is context only and must not back M2.
+  `MemoryRecord {createdAt :: UTCTime, ...}`;
   `MemoryRow {createdAt, scopeKind, scopeRef, status, memoryType, ...}`.
 
 Cross-plan dependencies:
 
-- Hard input for M4 only: the `memory` field / `MemoryScopeDecl` from
+- HARD depends on the `memory` field / `MemoryScopeDecl` and bounded `RecallLimit` from
   docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md (MasterPlan
-  IP-4). M1-M3 are independent of it.
-- No code dependency on docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md — only
-  the operational `ANTHROPIC_API_KEY` for the *live* distill loop (Surprises).
+  IP-4).
+- HARD depends on docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md
+  for worker/application ownership and record conventions.
+- HARD depends on docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md for
+  the single decoded worker configuration and credential-reference boundary.
+- No code dependency on docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md; live
+  distillation still needs the provider credential resolved through plan 37 (Surprises).
 
 Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 `just create-database` + `withShikigamiMigratedDatabase` for the real-Postgres tests. The new
 test module `Shikigami.MemoryLifecycleSpec` must be added to the
 `shikigami-core-test` suite's `other-modules` in shikigami-core/shikigami-core.cabal:118-126.
+
+
+## Revision Notes
+
+- 2026-07-22: Reworked configuration, supervision, recall, and retention to follow the
+  Settei/service patterns and operational API guidance. Bounds now apply in SQL rather than
+  after unbounded reads, and maintenance uses deterministic keyset batches.

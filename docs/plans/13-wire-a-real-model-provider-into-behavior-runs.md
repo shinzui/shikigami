@@ -24,32 +24,36 @@ LLM provider, so every skill run returns the literal string
 then durably recorded as the agent's "learning" in kioku memory. There is no code path,
 flag, or environment variable that can make the worker call a real model.
 
-After this plan, an operator can export two environment variables
-(`SHIKIGAMI_MODEL_PROVIDER=anthropic` and an `ANTHROPIC_API_KEY`) and the same worker
+After this plan, an operator selects a provider through plan 37's Settei application
+configuration (with explicit compatibility bindings for `SHIKIGAMI_MODEL_PROVIDER` and
+`ANTHROPIC_API_KEY` only inside the Settei adapter) and the same worker
 binary runs skills against a real Anthropic Claude model through baikai. The choice is
 LOUD: at startup the worker prints exactly which provider and model are active, and it
 refuses to start if the operator asked for a real provider but the key is missing. When
-the variables are absent, the stub remains the default (CI and the existing test suite
+the provider setting is absent, the stub remains the default (CI and the existing test suite
 stay deterministic and key-free) — but the startup log now says so explicitly, so a stub
 can never again masquerade silently as production. The kioku session row additionally
 records which model produced each run's output (`modelUsed`), so runs made by the stub
 are distinguishable from real runs forever after.
 
-This plan also establishes the repository's config-loading idiom (a typed record, one
-environment-reading resolver, loud redacted logging) that later plans — notably
-`docs/plans/22-outbound-authentication-for-sink-clients.md` — must reuse for their own
-credentials.
+Plan 37, not this feature plan, establishes the repository's configuration idiom. This
+plan contributes typed provider settings, validation, and a redacted description to the
+shared composition root. The provider secret remains a credential reference/redacted
+value and never gains `Show`, JSON, or log rendering.
 
 
 ## Progress
 
+- [ ] Prerequisites: plans 36 and 37 complete; provider modules live in the six-package
+      boundary and consume the shared Settei application config.
 - [ ] Milestone 1: `Shikigami.Behavior.Provider` module with `ProviderSelection`,
-      `resolveProviderSelection`, and `newBehaviorEnvFor`; `baikai-claude` added to
+      provider `Setting`s/validation, and `newBehaviorEnvFor`; `baikai-claude` added to
       `shikigami-core.cabal`; worker and `run-behavior` CLI resolve the selection and
       log it loudly; stub remains the default; `cabal test all` green.
 - [ ] Milestone 2: `Options` threaded through the skill arm (`BehaviorEnv.options`,
-      `runSkill`/`runSkillWith` take `Options`); explicit `ApiKeyEnv "ANTHROPIC_API_KEY"`
-      on the anthropic path; unit test proving the options reach the completion call.
+      `runSkill`/`runSkillWith` take `Options`); the already-resolved opaque credential is
+      lowered to Baikai only at the provider boundary; unit test proving the options reach
+      the completion call without an environment read.
 - [ ] Milestone 3: `modelUsed` recorded on session completion from the active
       `BehaviorEnv` model; live smoke transcript with a real key captured in this plan.
 
@@ -62,18 +66,18 @@ credentials.
 ## Decision Log
 
 - Decision: The real provider is baikai's Anthropic Messages handler (`baikai-claude`
-  package, `Baikai.Provider.Claude.Api.register`), selected by environment variables
-  (`SHIKIGAMI_MODEL_PROVIDER`, `SHIKIGAMI_MODEL`) rather than CLI flags.
-  Rationale: `cabal.project` already vendors the `baikai-claude` subdir
-  (`cabal.project:126-128`), so no new dependency source is needed; environment-variable
-  configuration matches the repository's existing idiom (`PG_CONNECTION_STRING` is read
-  with `getEnv` in every CLI command, e.g.
-  `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:28`); and secrets must never be
-  CLI arguments (they leak into process listings and shell history).
-  Date: 2026-07-08
-- Decision: The stub remains the default when `SHIKIGAMI_MODEL_PROVIDER` is unset, but
+  package, `Baikai.Provider.Claude.Api.register`), selected by Settei settings with
+  explicit legacy environment bindings rather than direct environment reads or secret
+  CLI flags.
+  Rationale: `cabal.project` already includes the `baikai-claude` subdir, but implementation
+  must use Mori for source/docs and verify the coherent current release against Hackage and
+  upstream tags before choosing bounds. Settei replaces the repository's fragmented direct
+  environment reads, and secrets must never be CLI arguments.
+  Date: 2026-07-22
+- Decision: The stub remains the default when `behavior.provider` is unset, but
   both branches log loudly at startup which provider is active; requesting `anthropic`
-  without a resolvable `ANTHROPIC_API_KEY` is a startup failure (exit 1), not a per-job
+  without a resolvable `credentials.providers.anthropic.api_key` is a typed configuration
+  startup failure (exit 4), not a per-job
   runtime error.
   Rationale: CI and the entire existing test suite (`shikigami-core/test`) depend on the
   deterministic, key-free stub; making a real key mandatory would break every
@@ -82,15 +86,18 @@ credentials.
   hole. Failing fast at startup prevents a misconfigured worker from draining the queue
   and journaling stub outputs while the operator believes a model is running.
   Date: 2026-07-08
-- Decision: This plan defines the shared config-loading idiom (typed record + one
-  `lookupEnv`-based resolver returning `Either Text`, loud logging with secrets rendered
-  through baikai's redacting `ApiKeySource` `Show`/`ToJSON`); plan 22 (sink credentials,
-  MasterPlan 4) must follow the same shape when it extends
-  `shikigami-core/src/Shikigami/Sink/Config.hs`.
-  Rationale: two ad-hoc config styles in one small codebase is how credentials end up
-  logged; deciding the idiom in the first config-bearing plan makes the later plan a
-  mechanical extension. Recorded as an Integration Point in the parent MasterPlan.
-  Date: 2026-07-08
+- Decision: Plan 37 owns Settei source composition, environment bindings, diagnostics,
+  and exit behavior; this plan owns only the provider domain settings and validation.
+  Rationale: feature plans should extend one configuration service instead of becoming
+  competing configuration frameworks.
+  Date: 2026-07-22
+- Decision: Baikai never resolves `ApiKeyEnv` in Shikigami. Settei resolves a secret
+  `CredentialValue`, and the provider composition root lowers it to Baikai's literal-key
+  representation immediately before constructing the process-local `Options`.
+  Rationale: allowing the client library to read an environment variable would create a
+  second precedence/redaction system outside Settei. The process-local options are never
+  serialized or logged, and the opaque application secret has no `Show` or JSON instances.
+  Date: 2026-07-22
 - Decision: Keep `newBehaviorEnv` / `newBehaviorEnvWithTraceSink` exported with their
   current stub-only semantics instead of changing their meaning in place.
   Rationale: the test suite constructs environments through them in many places
@@ -110,7 +117,7 @@ credentials.
 shikigami is a Haskell runtime (repo root `/Users/shinzui/Keikaku/bokuno/shikigami`)
 that runs "declared agents": each agent is a Dhall file (`schema/Agent.dhall`,
 examples under `agents/`) declaring a trigger, a behavior, and sinks. A worker process
-(`cabal run shikigami -- worker --agents agents/`) drains run jobs from a Postgres
+(the current pre-plan-36 `cabal run shikigami -- worker --agents agents/`) drains run jobs from a Postgres
 pgmq queue and drives each agent through a durable keiro workflow.
 
 The behavior union (`shikigami-api/src/Shikigami/Api/Agent.hs:55-66`) has four arms.
@@ -155,13 +162,13 @@ What baikai already provides (all verified in
   `anthropic_claude_opus_4_8` (see `baikai/src/Baikai/Models/Generated.hs`), each with
   the right `api = AnthropicMessages`, base URL, and cost/window metadata.
 - API keys are described by `Baikai.Auth.ApiKeySource`
-  (`ApiKeyLiteral | ApiKeyEnv | ApiKeyEnvChain`; `baikai/src/Baikai/Auth.hs:26-30`),
+  (`ApiKeyLiteral | ApiKeyEnv | ApiKeyEnvChain`; `baikai/src/Baikai/Auth.hs:26-30`) and
   carried in `Baikai.Options.Options.apiKey :: Maybe ApiKeySource`
-  (`baikai/src/Baikai/Options.hs:70-73`). When `apiKey` is `Nothing`, the Claude
-  handler falls back to the host-conventional variable from
-  `defaultApiKeyEnvForBaseUrl`, which is `ANTHROPIC_API_KEY` for `api.anthropic.com`
-  (`baikai/src/Baikai/Auth.hs:55-72`). `ApiKeySource`'s `Show`/`ToJSON` render literals
-  redacted, so key sources are safe to log.
+  (`baikai/src/Baikai/Options.hs:70-73`). Although the Claude handler can fall back to
+  `ANTHROPIC_API_KEY`, Shikigami must not use that fallback: plan 37 resolves all candidates,
+  provenance, and redaction first. Only the provider composition module may unwrap the opaque
+  `CredentialValue` long enough to construct `ApiKeyLiteral`; the `Options` value is never
+  logged, encoded, journaled, or stored.
 - `_Options` is deprecated in baikai in favour of `emptyOptions`
   (`baikai/src/Baikai/Options.hs:91-110`).
 
@@ -185,16 +192,16 @@ keiro journal step names (see MasterPlan Integration Points).
 
 ## Plan of Work
 
-The work is three milestones: introduce an explicit, environment-driven provider
+The work is three milestones: introduce an explicit, Settei-driven provider
 selection (behavior unchanged by default); thread real `Options` through the skill arm
 so the key source is explicit; and make the model identity observable in the durable
 session record, then prove the real path live.
 
-### Milestone 1 — Provider selection and loud environment construction
+### Milestone 1 — Provider selection and loud typed-config construction
 
 Scope: a new module `shikigami-core/src/Shikigami/Behavior/Provider.hs` plus wiring in
 the worker and `run-behavior` CLI commands. At the end of this milestone the worker
-prints which provider it runs and can be switched to Anthropic by environment variable,
+prints which provider it runs and can be switched to Anthropic by resolved setting,
 while all defaults and all tests behave exactly as before.
 
 Create `Shikigami.Behavior.Provider` exporting:
@@ -202,15 +209,25 @@ Create `Shikigami.Behavior.Provider` exporting:
 ```haskell
 data ProviderSelection
   = UseStub
-  | UseAnthropic !Model  -- a Baikai.Model value from the generated catalog
+  | UseAnthropic
+      { model :: !Model,
+        credential :: !CredentialValue
+      }
 
-resolveProviderSelection :: IO (Either Text ProviderSelection)
+providerSettings :: [Settei.Setting]
+resolveProviderSelection :: AppConfig -> Either ConfigError ProviderSelection
 describeProviderSelection :: ProviderSelection -> Text
 newBehaviorEnvFor :: ProviderSelection -> Maybe TraceSink -> IO BehaviorEnv
 lookupAnthropicModel :: Text -> Maybe Model
 ```
 
-`resolveProviderSelection` reads two variables with `System.Environment.lookupEnv`:
+`ProviderSelection` deliberately has no `Show`, `Read`, or JSON instances because its real
+branch owns an opaque credential. `describeProviderSelection` pattern-matches and renders only
+provider, model id, and `credential=present`.
+
+`resolveProviderSelection` reads typed values already resolved by plan 37. This plan declares
+the stable keys `behavior.provider`, `behavior.model`, and secret
+`credentials.providers.anthropic.api_key`. The Settei binding table preserves these legacy names:
 
 - `SHIKIGAMI_MODEL_PROVIDER` — `"stub"` (or unset) selects `UseStub`; `"anthropic"`
   selects the real provider; any other value is `Left` with a message listing the
@@ -221,37 +238,39 @@ lookupAnthropicModel :: Text -> Maybe Model
   `claude-haiku-4-5`, `claude-opus-4-8`, matching on the catalog `modelId` field). An
   unknown id is `Left` with the known ids in the message.
 
-For `anthropic`, `resolveProviderSelection` additionally checks
-`lookupEnv "ANTHROPIC_API_KEY"` and returns
-`Left "SHIKIGAMI_MODEL_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set"` when
-absent. This is the fail-fast: the worker must not start, drain jobs, and journal stub
-output while the operator believes a model is wired.
+For `anthropic`, `resolveProviderSelection` additionally requires the configured opaque
+credential value and returns a path-qualified `ConfigError` when absent. It never asks Baikai
+or `System.Environment` to resolve the secret. This is the fail-fast: the worker must not
+start, drain jobs, and journal stub output while the operator believes a model is wired.
 
 `newBehaviorEnvFor` builds the `BehaviorEnv`:
 
 - `UseStub` — exactly what `newBehaviorEnvWithTraceSink` does today
   (`registerStubProvider`, `model = stubModel`).
-- `UseAnthropic m` — call `Baikai.Provider.Claude.Api.register`, and also
+- `UseAnthropic {model, credential}` — call `Baikai.Provider.Claude.Api.register`, lower the
+  opaque credential to process-local Baikai `Options`, and also
   `registerStubProvider` (harmless, keeps the `Custom "stub"` tag answered for any
   test tooling in the same process), and set `model = m`.
 
 Both branches print one loud line to stderr, produced by `describeProviderSelection`:
 
 ```text
-[shikigami.behavior] model provider: STUB — no model will be called; set SHIKIGAMI_MODEL_PROVIDER=anthropic to use a real model
-[shikigami.behavior] model provider: anthropic model=claude-sonnet-4-6 (key from env ANTHROPIC_API_KEY)
+[shikigami.behavior] model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model
+[shikigami.behavior] model provider: anthropic model=claude-sonnet-4-6 credential=present
 ```
 
 Keep `newBehaviorEnv` and `newBehaviorEnvWithTraceSink` in
 `Shikigami.Behavior.Run` unchanged (stub-only); update their Haddock to say they are
 the deterministic test constructors and point at `newBehaviorEnvFor`.
 
-Wire the callers:
+Wire the callers in the worker executable components assigned to `shikigami-workers` by
+plan 36 (the legacy source locations named below are orientation only):
 
 - `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` (`runWorkerCmd`): replace the
   `newBehaviorEnvWithTraceSink (Just (otelSink tr))` call at line 30 with
   `resolveProviderSelection` followed by `newBehaviorEnvFor sel (Just (otelSink tr))`;
-  on `Left err`, print `[shikigami.worker] fatal: <err>` to stderr and `exitFailure`.
+  Configuration resolution happens before this call; typed failures use plan 37's standard
+  diagnostic and exit code 4 before any worker resource is acquired.
 - `shikigami-cli/src/Shikigami/Cli/Commands/RunBehavior.hs` (`runRunBehavior`): same
   substitution for its `newBehaviorEnv` call, so `run-behavior` becomes the cheapest
   live smoke test of the real provider (no database needed).
@@ -261,9 +280,10 @@ Add `baikai-claude` to the `build-depends` of the `shikigami-core` library stanz
 
 Acceptance: `cabal build all` and `cabal test all` pass; `cabal run shikigami --
 run-behavior --agent agents/triage-note.dhall --payload '{}'` with no environment
-variables prints the STUB provider line to stderr and the familiar
+provider override prints the STUB provider line to stderr and the familiar
 `{"reply":"stub-skill: instructions acknowledged; no model was called"}` to stdout;
-with `SHIKIGAMI_MODEL_PROVIDER=anthropic` and no key it exits 1 with the fatal message.
+with `--set behavior.provider=anthropic` and no credential source it exits 4 with a redacted,
+path-qualified configuration error.
 
 ### Milestone 2 — Thread Options through the skill arm
 
@@ -271,11 +291,11 @@ Scope: make the key source explicit instead of relying on the handler's implicit
 fallback, and remove the hardcoded `_Options`.
 
 Edit `shikigami-core/src/Shikigami/Behavior/Run.hs`: add `options :: !Options` to
-`BehaviorEnv`. `newBehaviorEnvFor` sets it to `emptyOptions` for the stub and to
-`emptyOptions { apiKey = Just (ApiKeyEnv "ANTHROPIC_API_KEY") }` for anthropic.
-Being explicit (rather than relying on baikai's `defaultApiKeyEnvForBaseUrl` fallback)
-makes any auth failure message name the exact variable, and it is the value the loud
-log line prints (via the redacting render).
+`BehaviorEnv`. `newBehaviorEnvFor` sets it to `emptyOptions` for the stub and, for Anthropic,
+uses a package-internal eliminator to lower `CredentialValue` into
+`emptyOptions { apiKey = Just (ApiKeyLiteral secretText) }`. Keep the eliminator adjacent to
+the provider builder, never export or retain `secretText`, and never render the resulting
+`Options`. Do not use `ApiKeyEnv` or Baikai's `defaultApiKeyEnvForBaseUrl` fallback.
 
 Edit `shikigami-core/src/Shikigami/Behavior/Skill.hs`: give `runSkill` and
 `runSkillWith` an `Options` parameter and pass it to the completion call instead of
@@ -302,9 +322,9 @@ Add a unit test (new file
 `shikigami-core/test/Shikigami/BehaviorProviderSpec.hs`, registered in
 `shikigami-core/test/Main.hs`): call `runSkillWith` with a capturing completion
 function (an `IORef` that stores the `Options` it received) against the fixture skill
-directory `agents/skills/triage-note`, and assert the captured `apiKey` equals
-`Just (ApiKeyEnv "ANTHROPIC_API_KEY")` when the env was built for anthropic, and
-`Nothing` for the stub. The capture seam exists precisely because `runSkillWith` takes
+directory `agents/skills/triage-note`, and use a sentinel opaque test credential to assert the
+captured `apiKey` is the expected literal source when the env was built for Anthropic and
+`Nothing` for the stub. Failure output must not contain the sentinel. The capture seam exists precisely because `runSkillWith` takes
 the completion function as an argument — no network, no key needed.
 
 Acceptance: `cabal test all` green including the new spec.
@@ -334,12 +354,15 @@ transcript into Surprises & Discoveries:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/shikigami
-export SHIKIGAMI_MODEL_PROVIDER=anthropic
-export SHIKIGAMI_MODEL=claude-haiku-4-5        # cheapest catalog entry
-export ANTHROPIC_API_KEY=sk-ant-...
-cabal run shikigami -- run-behavior --agent agents/triage-note.dhall \
+cabal run shikigami-run-behavior -- --config /run/secrets/shikigami-anthropic-smoke.yaml \
+  --agent agents/triage-note.dhall \
   --payload '{"text":"customer reports the export button crashes the app"}'
 ```
+
+The root-readable `0600` secret file is supplied out of band and ignored by Git. It sets
+`behavior.provider = anthropic`, `behavior.model = claude-haiku-4-5`, and the secret
+`credentials.providers.anthropic.api_key`; do not paste its value into this plan, a shell
+command, or the transcript.
 
 Expected: the stderr provider line names anthropic and the model; stdout is a
 `{"reply": ...}` object whose reply is a genuine model-written triage of the payload —
@@ -362,40 +385,34 @@ cabal test all
 Milestone 1 file work: create
 `shikigami-core/src/Shikigami/Behavior/Provider.hs`; add it to `exposed-modules` and
 add `baikai-claude` to `build-depends` in `shikigami-core/shikigami-core.cabal`; edit
-`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` and
-`shikigami-cli/src/Shikigami/Cli/Commands/RunBehavior.hs`.
+the worker and `run-behavior` command components after plan 36 relocates them into
+`shikigami-workers`; do not recreate `shikigami-cli`.
 
 Milestone 1 checks, with expected transcripts:
 
 ```bash
-cabal run shikigami -- run-behavior --agent agents/triage-note.dhall --payload '{}'
+cabal run shikigami-run-behavior -- --agent agents/triage-note.dhall --payload '{}' \
+  --config /run/secrets/shikigami/provider-live.yaml
 ```
 
 ```text
-[shikigami.behavior] model provider: STUB — no model will be called; set SHIKIGAMI_MODEL_PROVIDER=anthropic to use a real model
+[shikigami.behavior] model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model
 {"reply":"stub-skill: instructions acknowledged; no model was called"}
 ```
 
 ```bash
-SHIKIGAMI_MODEL_PROVIDER=anthropic cabal run shikigami -- run-behavior \
+cabal run shikigami-run-behavior -- --set behavior.provider=anthropic \
   --agent agents/triage-note.dhall --payload '{}'; echo "exit=$?"
 ```
 
 ```text
-[shikigami] fatal: SHIKIGAMI_MODEL_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set
-exit=1
+[shikigami] config: credentials.providers.anthropic.api_key is required when behavior.provider=anthropic
+exit=4
 ```
 
-```bash
-SHIKIGAMI_MODEL_PROVIDER=anthropic SHIKIGAMI_MODEL=no-such-model \
-  ANTHROPIC_API_KEY=dummy cabal run shikigami -- run-behavior \
-  --agent agents/triage-note.dhall --payload '{}'; echo "exit=$?"
-```
-
-```text
-[shikigami] fatal: unknown SHIKIGAMI_MODEL "no-such-model"; known: claude-sonnet-4-6, claude-haiku-4-5, claude-opus-4-8
-exit=1
-```
+The unknown-model case is an in-memory Settei resolution test using a sentinel secret, not a
+shell command carrying a fake key. It exits 4 and lists the known model ids while every
+diagnostic rendering omits the sentinel.
 
 Milestone 2 file work: edit `shikigami-core/src/Shikigami/Behavior/Run.hs` and
 `shikigami-core/src/Shikigami/Behavior/Skill.hs`; add
@@ -412,16 +429,15 @@ session assertion in `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs`; run t
 smoke shown in Milestone 3 (manual, key required).
 
 Worker startup check (needs a migrated local database; `just create-database` sets one
-up using the devShell's `PGHOST`/`PGDATABASE`):
+up using the dev stack's Settei source):
 
 ```bash
-export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"
-cabal run shikigami -- worker --agents agents/
+cabal run shikigami-worker -- --config config/dev.yaml
 ```
 
 ```text
 [worker] loaded 4 agents
-[shikigami.behavior] model provider: STUB — no model will be called; set SHIKIGAMI_MODEL_PROVIDER=anthropic to use a real model
+[shikigami.behavior] model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model
 [shikigami.worker] starting; draining shikigami_run_jobs
 ```
 
@@ -430,21 +446,24 @@ cabal run shikigami -- worker --agents agents/
 
 Behavioral acceptance, in order of strength:
 
-1. Default is unchanged and loud. With no new environment variables, `cabal test all`
+1. Default is unchanged and loud. With no provider override, `cabal test all`
    passes untouched tests, and both `worker` and `run-behavior` print the STUB provider
    line to stderr on startup. The stub reply text is byte-identical to before.
-2. Misconfiguration cannot run. `SHIKIGAMI_MODEL_PROVIDER=anthropic` without
-   `ANTHROPIC_API_KEY`, or with an unknown `SHIKIGAMI_MODEL`, exits 1 before any queue
-   draining, with the messages shown in Concrete Steps.
+2. Misconfiguration cannot run. `behavior.provider=anthropic` without
+   `credentials.providers.anthropic.api_key`, or with an unknown `behavior.model`, exits 4
+   before any queue draining, with the messages shown in Concrete Steps.
 3. Options provably reach the model call. `BehaviorProviderSpec` captures the `Options`
-   passed to the completion function and asserts the anthropic path carries
-   `Just (ApiKeyEnv "ANTHROPIC_API_KEY")`. This test fails before Milestone 2 (the
-   hardcoded `_Options` has `apiKey = Nothing`) and passes after.
+   passed to the completion function and asserts the Anthropic path carries the sentinel
+   literal lowered from the opaque Settei value. This test fails before Milestone 2 (the
+   hardcoded `_Options` has `apiKey = Nothing`) and passes after without reading the environment.
 4. Model identity is durable. The extended `AgentWorkflowSpec` assertion shows the
    completed kioku session row carries `modelUsed = Just "stub-v1"` under the stub;
    after a live run, querying the session row shows the real model id.
 5. Live smoke (manual). The Milestone 3 transcript shows a model-authored reply that is
    not the stub sentence, with the anthropic provider line on stderr.
+6. Configuration conformance. A test resolves equivalent file, secret, environment, and
+   CLI-source inputs through Settei; direct `getEnv`/`lookupEnv` calls do not exist in
+   provider code, and diagnostic output contains no API-key bytes.
 
 
 ## Idempotence and Recovery
@@ -460,7 +479,7 @@ spends real API money — use `claude-haiku-4-5` and a single small payload.
 
 ## Interfaces and Dependencies
 
-Libraries: `baikai` (already a dependency) and `baikai-claude` (added by this plan;
+Hard dependencies: plans 36 and 37. Libraries: `settei`, `baikai` (already a dependency) and `baikai-claude` (added by this plan;
 already fetched by `cabal.project:126-128`). No new external services.
 
 Signatures that must exist at the end (all verified against the baikai sources at
@@ -468,8 +487,13 @@ Signatures that must exist at the end (all verified against the baikai sources a
 
 ```haskell
 -- shikigami-core/src/Shikigami/Behavior/Provider.hs (new)
-data ProviderSelection = UseStub | UseAnthropic !Baikai.Model.Model
-resolveProviderSelection :: IO (Either Data.Text.Text ProviderSelection)
+data ProviderSelection
+  = UseStub
+  | UseAnthropic
+      { model :: !Baikai.Model.Model,
+        credential :: !Shikigami.App.Config.CredentialValue
+      }
+resolveProviderSelection :: Shikigami.App.Config.AppConfig -> Either ConfigError ProviderSelection
 describeProviderSelection :: ProviderSelection -> Data.Text.Text
 lookupAnthropicModel :: Data.Text.Text -> Maybe Baikai.Model.Model
 newBehaviorEnvFor :: ProviderSelection -> Maybe Baikai.Trace.TraceSink -> IO Shikigami.Behavior.Run.BehaviorEnv
@@ -479,7 +503,7 @@ data BehaviorEnv = BehaviorEnv
   { runtime :: !Handan.Runtime.Runtime,
     model :: !Baikai.Model.Model,
     options :: !Baikai.Options.Options,
-    traceSink :: !(Maybe Baikai.Trace.TraceSink)
+    traces :: !(Maybe Baikai.Trace.TraceSink)
   }
 
 -- shikigami-core/src/Shikigami/Behavior/Skill.hs (changed)
@@ -487,12 +511,16 @@ runSkill :: Baikai.Model.Model -> Baikai.Options.Options -> SkillDir -> Data.Aes
 runSkillWith :: Baikai.Model.Model -> Baikai.Options.Options -> SkillDir -> Data.Aeson.Value -> (Baikai.Model.Model -> Baikai.Context.Context -> Baikai.Options.Options -> IO Baikai.Response.Response) -> IO (Either RunError Data.Aeson.Value)
 ```
 
+Revision note (2026-07-22): Rebased configuration and package ownership on plans 36/37;
+removed the plan-local `lookupEnv` convention and made secret redaction/non-serialization
+an acceptance requirement.
+
 Consumed baikai interfaces (verified):
 
 ```haskell
 Baikai.Provider.Claude.Api.register :: IO ()                          -- baikai-claude .../Api.hs:101
 Baikai.Provider.Registry.completeRequest :: Model -> Context -> Options -> IO Response
-Baikai.Auth.ApiKeySource                                              -- Auth.hs:26 (redacting Show/ToJSON)
+Baikai.Auth.ApiKeySource                                              -- Auth.hs:26; process-local boundary only
 Baikai.Options.Options { apiKey :: Maybe ApiKeySource, ... }          -- Options.hs:70
 Baikai.Options.emptyOptions :: Options                                -- Options.hs:91
 Baikai.Models.Generated.anthropic_claude_sonnet_4_6 :: Model          -- Generated.hs:201
@@ -502,5 +530,5 @@ Baikai.Models.Generated.anthropic_claude_opus_4_8 :: Model            -- Generat
 
 Downstream consumers to keep compiling: `Shikigami.Agent.Workflow.runBehaviorStep`,
 `Shikigami.Agent.Run.runAgentWithMemory`, `Shikigami.Agent.Conversation` (line 165),
-and `Shikigami.Cli.Commands.RunBehavior` — all call `runBehavior`, whose signature this
+and the `run-behavior` command component in `shikigami-workers` — all call `runBehavior`, whose signature this
 plan does not change (plan 15 does).

@@ -47,11 +47,12 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [ ] M1: add `Identity`, `MemoryScope`, `RecordPolicy`, `MemoryPolicy` types and the `identity`/`memory`/`enabled` fields (with defaults) to schema/Agent.dhall; export the new names.
+- [ ] Prerequisites: plans 36 and 20 complete; record mirrors follow strict direct-field and Generic Lens conventions.
 - [ ] M1: prove byte-compatibility — `validate` over every existing manifest under `agents/` succeeds unchanged.
 - [ ] M2: mirror types in shikigami-api/src/Shikigami/Api/Agent.hs (`IdentityDecl`, `MemoryScopeDecl`, `RecordPolicy`, `MemoryPolicy`; three new `AgentDecl` fields); export them.
 - [ ] M2: proof manifest `agents/proof/declared-identity.dhall` exercising all three fields; loader unit test asserting the decoded values and the defaults.
 - [ ] M3: consume plan 20's `loadAgentsReport`; add enabled-agent selection with a loud skip line and keep plan 20's loud/strict failure behavior.
-- [ ] M3: enforce `recallLimit` (thread into both recall paths in Shikigami/Agent/Run.hs) and `recordPolicy` (Run.hs and Workflow.hs record steps).
+- [ ] M3: validate `recallLimit` into a bounded `RecallLimit` (1–1000) before any `Natural`→`Int`/SQL conversion; enforce it server-side in both recall paths; enforce `recordPolicy`.
 - [ ] M4: update docs/user/writing-agents.md (field table + new sections) and docs/user/memory.md.
 - [ ] M4: full-suite regression `cabal test all`.
 
@@ -89,6 +90,11 @@ Record every decision made while working on the plan.
   effectively enabled. `identity` is `Optional` because no current agent has a principal and
   there is no verification to fail against yet.
   Date: 2026-07-08
+- Decision: Dhall keeps `recallLimit : Natural`, but loading validates it into the
+  bounded domain type `RecallLimit` with inclusive range 1–1000 before runtime use.
+  Rationale: `Natural` is unbounded; unchecked conversion can overflow `Int` or authorize
+  excessive SQL rows/allocation. A named domain type makes the bound unavoidable.
+  Date: 2026-07-22
 
 - Decision: This plan *defines* all three fields but *enforces* only `enabled`,
   `recallLimit`, and `recordPolicy`. `memory.scope = Shared` semantics are implemented by
@@ -255,7 +261,7 @@ Scope: the runtime decodes the new fields. In shikigami-api/src/Shikigami/Api/Ag
 module's convention):
 
 ```haskell
-newtype IdentityDecl = IdentityDecl {principal :: Text}
+newtype IdentityDecl = IdentityDecl {principal :: !Text}
 
 data MemoryScopeDecl = AgentScope | Shared
 
@@ -349,7 +355,8 @@ from the MasterPlan's IP-3: do not rename or remove journaled steps; `Always`'s
 failure-record happens inside the existing `fail-session` step body or a *new appended* step
 (`record-failure`), never by reordering existing steps.
 
-Acceptance: (a) `cabal run shikigami -- worker --agents agents/proof ...` logs
+Acceptance: (a) `cabal run shikigami-worker -- --config
+config/worker-agent-schema-proof.yaml` logs
 `[loader] skipping disabled agent 'declared-identity' (agents/proof/declared-identity.dhall)`
 and the agent never runs; (b) a `withShikigamiMigratedDatabase` test runs a workflow for a
 decl with `recordPolicy = Never` and asserts no memory row is written while the session
@@ -411,7 +418,7 @@ Step 4 — after M3, observe the loud skip (no database needed to see the loader
 worker will then wait on its queue):
 
 ```bash
-cabal run shikigami -- worker --agents agents/proof 2>&1 | head -5
+cabal run shikigami-worker -- --config config/worker-agent-schema-proof.yaml 2>&1 | head -5
 ```
 
 Expected transcript (shape):
@@ -444,6 +451,8 @@ Acceptance is behavioral, with a before/after contrast:
 3. Recall limit: with `recallLimit = 3` and 5 seeded memories in the agent's scope, a run
    recalls exactly 3 (asserted via `recalledPrior` in `AgentRunResult`). Before: always 10 on
    the vector path and unbounded on the fallback path.
+   Values 0 and 1001 fail validation with path/value/bound diagnostics; a huge Natural
+   never reaches an `Int` conversion or query.
 4. Record policy: `Never` leaves zero memory rows for a successful run (session row still
    `completed`); `Always` leaves a `failure`-tagged row for a failing run; `OnSuccess`
    matches today's rows exactly.
@@ -467,6 +476,9 @@ well-formed declarations that explicitly opt out with `enabled = False`.
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 36 and 20. Public/declaration records use strict unprefixed
+fields under `DuplicateRecordFields` and Generic Lens conventions from plan 36.
+
 Owned and defined by this plan:
 
 - `schema/Agent.dhall` — `Identity`, `MemoryScope`, `RecordPolicy`, `MemoryPolicy` types;
@@ -475,6 +487,8 @@ Owned and defined by this plan:
 - `Shikigami.Api.Agent` (shikigami-api) — `IdentityDecl(..)`, `MemoryScopeDecl(..)`,
   `RecordPolicy(..)`, `MemoryPolicy(..)`; `AgentDecl` gains
   `identity :: !(Maybe IdentityDecl)`, `memory :: !MemoryPolicy`, `enabled :: !Bool`.
+- `Shikigami.Api.Agent.RecallLimit` — smart constructor/decoder enforcing 1–1000 and a
+  total accessor for the validated SQL/runtime bound.
 - `Shikigami.Agent.Loader` — consume plan 20's `AgentLoadReport` and
   `loadAgentsReport`; add `enabledAgentsFromReport :: AgentLoadReport -> IO [AgentDecl]`.
 - `Shikigami.Agent.Run` —
@@ -515,3 +529,5 @@ this plan and plan 30 before adding lifecycle state.
 - 2026-07-22: Replaced this plan's duplicate loader consolidation with a hard
   dependency on plan 20's `loadAgentsReport`, scoped this plan to enabled-agent
   selection, and removed the stale sink-field warning that would contradict plan 16.
+- 2026-07-22: Added plan 36 and bounded `Natural` validation; recall limits now become a
+  1–1000 domain type before any `Int`, query, or allocation use.

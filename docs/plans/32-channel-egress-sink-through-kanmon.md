@@ -49,10 +49,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [ ] M1: add the `ChannelEgress` alternative to the `Sink` union in schema/Agent.dhall and mirror it in Shikigami.Api.Agent; extend `sinkKindOf`.
+- [ ] Prerequisites: plans 36/37 and 22 complete; modules/configuration consume the six-package and Settei foundations.
 - [ ] M1: add the proof manifest `agents/proof/channel-reply.dhall`; `cabal run shikigami -- validate` accepts it and all existing manifests still validate.
 - [ ] M2: extend plan 22's `SinkCredentials`/`SinkHttp` with kanmon and consume its `postJSONWithHeaders`; add `KanmonConfig` to Shikigami.Sink.Config.
 - [ ] M2: new module Shikigami.Sink.KanmonClient (`buildEgressRequest`, `postEgress`); pure request-shape unit tests in shikigami-core/test/Main.hs.
-- [ ] M3: dispatcher arm in Shikigami.Sink.runSink; `kanmon` field on `SinkContext`, `AgentRunDeps`, `WorkerEnv`; `--kanmon-url` plus `SHIKIGAMI_KANMON_TOKEN`; grant-table entry for the proof agent.
+- [ ] M3: dispatcher arm; `kanmon` field through strict dependency records; Settei URL/credential-reference settings; permanent 4xx versus transient 429/5xx/network classification; grant-table entry for the proof agent.
 - [ ] M4: new module Shikigami.Sink.KanmonStub + `stub-kanmon` CLI command; WAI-level stub tests.
 - [ ] M4: end-to-end proof — enqueue-run against the worker + stub-kanmon; delivered, deduplicated on re-dispatch, denied for `intruder`.
 - [ ] Docs: add ChannelEgress to docs/user/sinks.md and the sink list in docs/user/writing-agents.md.
@@ -102,18 +103,26 @@ Record every decision made while working on the plan.
   repo's process-compose stack; a local stub keeps `cabal run` + `cabal test` hermetic. The
   stub mirrors the verified contract byte-for-byte (same route, same snake_case body, same
   `{activity_id, verb}` response, same 401/403/404 mapping, same idempotency on
-  `idempotency_key`), so the later swap is `--kanmon-url` pointing at the real service. No
-  schema or client change.
+  `idempotency_key`), so the later swap is a Settei base-URL value pointing at the real
+  service. No schema or client change.
   Date: 2026-07-08
 
 - Decision: Authentication uses plan 22's `TokenSource` and `HttpEnv`; this plan extends
-  `SinkCredentials` with `kanmonToken` loaded from `SHIKIGAMI_KANMON_TOKEN` and
-  `SinkHttp` with `kanmonHttp`. `KanmonConfig` carries only the base URL.
+  the duplicate-record surfaces with `kanmon :: Maybe TokenSource` on `SinkCredentials`
+  and `kanmon :: HttpEnv` on `SinkHttp`. Plan 37 resolves a credential reference; its
+  explicit legacy environment binding is adapter-only. `KanmonConfig` carries only the base
+  URL.
   Rationale: kanmon's verifier is currently a config token map
   (`Kanmon.Egress.Config.EgressAuthConfig` / `configVerifier`) explicitly designed to be
   swapped for real shomei JWKS verification with no kanmon change; mirroring that interim
   shape behind plan 22's token interface keeps kanmon consistent with every other sink
   and permits a later shomei-backed `TokenSource` swap without changing this client.
+  Date: 2026-07-22
+- Decision: Treat 400/401/403/404 as permanent delivery failures, 429 and retryable
+  5xx/network timeouts as transient, and feed the classification into plan 19's delivery
+  receipt/dead-letter semantics.
+  Rationale: authorization, route, and request-shape failures do not heal by retrying and
+  must not consume the outbox retry budget forever.
   Date: 2026-07-22
 
 - Decision: Permission gating reuses the existing static `defaultGrantTable` stub
@@ -264,7 +273,7 @@ Scope: a pure, unit-testable client for kanmon's wire contract. Consume the cano
 helper from plan 22 in `shikigami-core/src/Shikigami/Sink/Http.hs`:
 
 ```haskell
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 ```
 
 Do not add another helper. Plan 22 already composes the `HttpEnv` token with caller headers
@@ -299,14 +308,14 @@ which resolves `conversation_key` per the Decision Log (declared key, else outpu
 `triggering_activity_id` from the activity's `activityId`. Third the sender:
 
 ```haskell
-postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)
+postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either EgressFailure EgressActionResponse)
 ```
 
 which POSTs to `<baseUrl>/channels/<channel>/actions/<action>` via
 `postJSONWithHeaders httpEnv []`, decodes the 200 body, and renders non-2xx as
-`Left` (the outbox publisher maps `Failed` to a retry, so 5xx retries and the idempotency key
-makes that safe; a 403 is also a `Left`, which retries — acceptable at-least-once behavior,
-noted for plan 19's delivery-truth work).
+a typed permanent/transient error. 400/401/403/404 are terminal/dead-lettered; 429 and
+retryable 5xx/network failures use the shared bounded retry policy. The idempotency key
+makes transient retry safe.
 
 Acceptance: pure unit tests in shikigami-core/test/Main.hs assert (a) declared-key,
 output-key, and subject-fallback resolution; (b) the JSON encoding uses the exact snake_case
@@ -335,14 +344,20 @@ ChannelEgress {} ->
   case buildEgressRequest sink (mkSourceEventId ctx) (triggeringActivity ctx) output of
     Left e -> pure (Failed e)
     Right req -> do
-      r <- postEgress (kanmonHttp (sinkHttp ctx)) (kanmon ctx) channel action req
-      pure (either Failed (Delivered . activity_id) r)
+      r <- postEgress (kanmon (http ctx)) (kanmon ctx) channel action req
+      pure (either sinkOutcomeForEgressFailure (Delivered . activityId) r)
 ```
 
-Add worker CLI flag `--kanmon-url` (default `http://localhost:8090`) in
-shikigami-cli/src/Shikigami/Cli.hs and Commands/Worker.hs, mirroring `--kawa-url`. Extend
-plan 22's `SinkCredentials` with `kanmonToken`, loaded from
-`SHIKIGAMI_KANMON_TOKEN`, and `SinkHttp` with `kanmonHttp`. Grant the proof agent in
+`sinkOutcomeForEgressFailure` maps permanent HTTP/auth/routing/protocol failures to plan
+19's additive `PermanentFailure` and transient timeout/network/429/5xx failures to `Failed`.
+The outbox framework then owns terminal versus retry state through
+`PublishRejected`/`PublishFailed`; this module never updates Keiro tables.
+
+Extend plan 37's Settei declaration with the stable kanmon base-URL and credential-reference
+settings plus explicit legacy bindings. Extend plan 22's duplicate-record surfaces with
+`kanmon :: !(Maybe TokenSource)` on `SinkCredentials` and `kanmon :: !HttpEnv` on
+`SinkHttp`; the worker composition root receives the already-resolved values and no command
+module reads the environment. Grant the proof agent in
 `defaultGrantTable` (Permission.hs:53-61): add
 `("channel-reply", Set.fromList [SChannelEgress])`. Do not grant anyone else — the denial
 proof relies on that.
@@ -354,14 +369,16 @@ Acceptance: `cabal build all` clean; the M4 end-to-end scenario is now wired end
 Scope: a hermetic, observable end-to-end demonstration plus regression tests. New module
 shikigami-core/src/Shikigami/Sink/KanmonStub.hs modeled line-for-line on KawaStub.hs: a wai
 `Application` handling `POST /channels/{channel}/actions/{action}` that (a) checks
-`Authorization: Bearer <token>` when a token is configured (else accepts), returning 401 on
+`Authorization: Bearer <token>` when a credential reference is configured and resolved at the
+stub composition root (else accepts), returning 401 on
 mismatch; (b) returns 404 unless the channel/action pair is in a small configured allow list
 (default: `intercom`/`reply`); (c) keeps an in-memory `IORef (Map (Text, Text) Text)` from
 `(channel, idempotency_key)` to the minted activity id, returning the stored id on a
 duplicate; (d) responds 200 `{"activity_id": ..., "verb": "conversation.reply_sent"}` and
-logs one line per accepted action. Expose `runStubKanmon :: StubKanmonOptions -> IO ()` and
-wire a `stub-kanmon` CLI command (`--port`, `--token`) in Cli.hs +
-Commands/StubKanmon.hs, following StubKawa.hs.
+logs one bounded line per accepted action without bodies or credentials. Place the dev stub
+executable component in `shikigami-server` per plan 36, expose
+`runStubKanmon :: StubKanmonOptions -> IO ()`, and register `stub-kanmon`. Its port and optional
+credential reference are Settei settings; there is no raw `--token` or environment read.
 
 Tests, in shikigami-core/test/Main.hs (WAI level, `testWithApplication`, like the existing
 kawa stub tests): 200 + dedup on repeated `idempotency_key`; 401 with a wrong token; 404 for
@@ -417,14 +434,13 @@ Expected: all suites pass, including the new `KanmonClient` request-shape assert
 Step 4 — after M4, the end-to-end proof. Terminal 1, the stub:
 
 ```bash
-cabal run shikigami -- stub-kanmon --port 8090 --token proof-token
+cabal run shikigami -- stub-kanmon --config config/stub-kanmon-auth.yaml
 ```
 
-Terminal 2, the worker (DB env comes from the dev shell; `PG_CONNECTION_STRING` must be set
-as for any worker run):
+Terminal 2, the worker (database and sink settings come through the plan-37 Settei source):
 
 ```bash
-SHIKIGAMI_KANMON_TOKEN=proof-token cabal run shikigami -- worker --agents agents/proof --kanmon-url http://localhost:8090
+cabal run shikigami-worker -- --config config/channel-egress-proof.yaml
 ```
 
 Terminal 3, enqueue a run whose payload carries a conversation key:
@@ -453,7 +469,8 @@ Expected: green, including the workflow-level Delivered/Denied/dedup assertions.
 
 Acceptance is behavioral. Given `agents/proof/channel-reply.dhall` (a `ChannelEgress` sink,
 channel `intercom`, action `reply`, no static key), the static grant
-`channel-reply → {SChannelEgress}`, and `stub-kanmon` on port 8090 with token `proof-token`:
+`channel-reply → {SChannelEgress}`, and `stub-kanmon` on port 8090 with a matching opaque
+test credential supplied by its secret source:
 
 1. Enqueuing a run with payload `{"conversation_key":"conv-42", ...}` results in the stub
    receiving `POST /channels/intercom/actions/reply` with body
@@ -465,9 +482,9 @@ channel `intercom`, action `reply`, no static key), the static grant
 3. An agent without the grant gets `DeniedOutcome` with reason
    `agent 'intruder' is not granted ChannelEgress`, the run does not fail, and nothing is
    POSTed (the existing denied-sink contract: logged, skipped, recorded).
-4. A wrong `SHIKIGAMI_KANMON_TOKEN` yields 401 from the stub, surfaced as a `Failed` outcome, which
-   the outbox publisher retries (observable as repeated stub 401 log lines) — proving errors
-   are not swallowed.
+4. A wrong resolved credential yields 401 from the stub and is classified as a permanent
+   authorization failure: it is durably surfaced and not retried. A timeout, network error,
+   429, or 5xx remains transient and follows the bounded retry/DLQ policy.
 5. All prior manifests validate unchanged: `cabal run shikigami -- validate
    agents/heartbeat.dhall` output is identical to the pre-change baseline.
 
@@ -492,23 +509,30 @@ from manifests; the schema alternative can remain (unused alternatives are inert
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 19, 22, 36, and 37. Plan 19 owns the receipt/failure taxonomy and
+Keiro terminal `PublishRejected` mapping consumed here.
+
 Owned and defined by this plan (all in this repo):
 
 - `schema/Agent.dhall` — the `ChannelEgress` alternative on `Sink` (shape in the Decision Log).
 - `Shikigami.Api.Agent` (shikigami-api) —
   `ChannelEgress {channel :: !Text, action :: !Text, conversationKey :: !(Maybe Text)}` on `Sink`.
-- `Shikigami.Sink.Http` — consume plan 22's `postJSONWithHeaders :: ToJSON a => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)`.
+- `Shikigami.Sink.Http` — consume plan 22's typed `postJSONWithHeaders`, preserving
+  `HttpFailure` permanent/transient classification.
 - `Shikigami.Sink.Config` — `data KanmonConfig = KanmonConfig {baseUrl :: !Text}`.
-- `Shikigami.Sink.Auth` — extend `SinkCredentials` with `kanmonToken :: Maybe TokenSource` and `SinkHttp` with `kanmonHttp :: HttpEnv`; `credentialsFromEnv` reads `SHIKIGAMI_KANMON_TOKEN`.
+- `Shikigami.Sink.Auth` — extend `SinkCredentials` with
+  `kanmon :: Maybe TokenSource` and `SinkHttp` with `kanmon :: HttpEnv`; plan 37's Settei config supplies a
+  credential reference with an explicit legacy `SHIKIGAMI_KANMON_TOKEN` binding.
 - `Shikigami.Sink.KanmonClient` — `EgressActionRequest`/`EgressActionResponse` wire types
   (snake_case keys matching Kanmon.Egress),
   `buildEgressRequest :: Sink -> Text -> Maybe ActivityEnvelope -> Value -> Either Text EgressActionRequest`,
-  `postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either Text EgressActionResponse)`.
+  `postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either EgressFailure EgressActionResponse)`.
 - `Shikigami.Sink` — `sinkKindOf (ChannelEgress {}) = SChannelEgress`; the `runSink` arm.
-- `Shikigami.Sink.KanmonStub` — `StubKanmonOptions`, `stubKanmonApplication`, `runStubKanmon`;
-  CLI command `stub-kanmon --port N [--token T]`.
+- `shikigami-server`'s Kanmon test-stub vertical — `StubKanmonOptions`,
+  `stubKanmonApplication`, `runStubKanmon`; command `stub-kanmon --config ...`, with only a
+  credential reference admitted to configuration.
 - `Shikigami.Sink.Types` / `Shikigami.Agent.Workflow` / `Shikigami.Worker` / CLI — the
-  `kanmon :: KanmonConfig` plumbing and `--kanmon-url` plus `SHIKIGAMI_KANMON_TOKEN`; the additive
+  `kanmon :: KanmonConfig` plumbing and Settei URL/credential settings; the additive
   `triggeringActivity :: Maybe ActivityEnvelope` on the internal `SinkIntent` and on
   `SinkContext`.
 
@@ -535,5 +559,8 @@ Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 
 - 2026-07-22: Made plan 22 a hard dependency and replaced the serializable
   `KanmonConfig.bearerToken`, `--kanmon-token`, and duplicate `postJSONWith` helper with
-  plan 22's `TokenSource`, `SHIKIGAMI_KANMON_TOKEN`, `HttpEnv`, and
+  plan 22's `TokenSource`, credential-reference setting (with adapter-only legacy binding),
+  `HttpEnv`, and
   `postJSONWithHeaders`.
+- 2026-07-22: Added plans 36/37, replaced direct URL/token configuration with Settei,
+  and classified permanent 4xx separately from transient retryable failures.

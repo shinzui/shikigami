@@ -32,7 +32,8 @@ Separately, the agent run lifecycle (open session → recall → run behavior �
 `agent-run` demo CLI, with subtly different failure-path semantics. And the keiki lifecycle
 transducer for the at-risk flow is a parallel artifact that nothing checks the flow against.
 
-After this plan, the sink intent lives in exactly one module (`Shikigami.Sink.Intent`) with
+After this plan, the sink-intent wire contract has exactly one generated definition from
+plan 39's checked Keiro DSL, re-exported behind the hand-owned `Shikigami.Sink.Intent` vertical with
 a golden round-trip test that fails if the wire format ever changes, so the two producers
 and the one consumer can never silently disagree. The `agent-run` CLI drives the same
 durable lifecycle as the worker (or shares the exact same lifecycle functions), so there is
@@ -48,8 +49,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Extract `Shikigami.Sink.Intent` (SinkIntent, prepare/enqueue, deterministic ids,
-      event codec); delete both former copies; golden wire-format round-trip test.
+- [ ] M1: encode the existing sink-intent contract in `domain/shikigami.keiro`, regenerate its
+      structural type/codec, consolidate hand-owned prepare/enqueue/id behavior in
+      `Shikigami.Sink.Intent`, delete both former copies, and add golden wire tests.
 - [ ] M2: Unify the run lifecycle — `agent-run` CLI drives the durable workflow (or shares
       lifecycle functions); retire `runAgentWithMemory`'s divergent copy.
 - [ ] M3: keiki lifecycle conformance test for the at-risk flow (or documented as
@@ -70,11 +72,20 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
-- Decision: Extract the sink intent into a new module `Shikigami.Sink.Intent` under the
-  existing `Shikigami.Sink.*` namespace, and re-export the names the two call sites need so
+- Decision: Consolidation must leave plan 39's checked Keiro topology and generated
+  scaffold diff unchanged except for intentional owner/module wiring.
+  Rationale: code motion must not silently rename durable steps, patches, timers, or
+  awakeables.
+  Date: 2026-07-22
+
+- Decision: Plan 39's generated module owns the `SinkIntent` structural wire type and codec;
+  a hand-owned `Shikigami.Sink.Intent` module under the existing `Shikigami.Sink.*` namespace
+  re-exports it and owns preparation, deterministic identity, enqueue, and publish behavior.
+  Re-export the names the two call sites need so
   their import surface barely changes.
   Rationale: the machinery is sink-domain, not flow- or agent-workflow-specific; both
-  current homes are accidental. Keeping the exported names (`enqueueSinkIntentStep`,
+  current homes are accidental, and a third hand-written structural definition would violate
+  the generated-code firewall. Keeping the exported names (`enqueueSinkIntentStep`,
   `prepareSinkIntent`, `preparedSinkResult`, `enqueuePreparedSinkIntentTx`,
   `publishSinkIntent`, `PreparedSinkIntent`, `SinkIntent`) stable minimizes the diff.
   Date: 2026-07-08
@@ -188,9 +199,11 @@ non-test caller (`rg sharedScope` finds only its definition and export); it is d
 
 ## Plan of Work
 
-Milestone 1 — one sink intent module. Create `shikigami-core/src/Shikigami/Sink/Intent.hs`
-by moving the shared machinery there verbatim (do not re-derive it — copy the existing,
-byte-identical definitions so the wire format is provably unchanged): `SinkIntent`,
+Milestone 1 — one sink intent contract and module. First update
+`domain/shikigami.keiro` with the exact deployed event type, schema version, fields, JSON
+names, and outbox relationship, run `check`/`diff`, and regenerate through plan 39. The
+generated module owns `SinkIntent` and its codec; do not edit it. Create the hand-owned
+`shikigami-core/src/Shikigami/Sink/Intent.hs` vertical by moving the shared behavior there:
 `PreparedSinkIntent`, `prepareSinkIntent`, `preparedSinkResult`,
 `enqueuePreparedSinkIntentTx`, `enqueueSinkIntentStep`, `sinkIntentEvent`,
 `deterministicOutboxIdForMessage`, and the bulk `enqueueSinkIntents` and the
@@ -202,13 +215,15 @@ function and pass the sink configs explicitly; choose the smaller diff and recor
 - Delete `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` entirely and change its importer
   `shikigami-core/src/Shikigami/Flow/Capability.hs:39` to
   `import Shikigami.Sink.Intent (enqueueSinkIntentStep)`.
-- Delete the moved definitions from `shikigami-core/src/Shikigami/Agent/Workflow.hs`
-  (lines 96-106 for the type, 108-559 for the helpers) and import them from
+- Delete both hand-written `SinkIntent` definitions and the moved helpers from
+  `shikigami-core/src/Shikigami/Agent/Workflow.hs`; import the type from the generated module
+  through
   `Shikigami.Sink.Intent`; re-export from `Agent/Workflow.hs` if downstream modules import
   those names from there today (`Conversation.hs` imports `AgentWorkflow.prepareSinkIntent`
   etc. — either repoint those imports to `Shikigami.Sink.Intent` or keep the re-export; the
   re-export is the smaller diff).
-- Register `Shikigami.Sink.Intent` in `shikigami-core/shikigami-core.cabal`; remove
+- Register the hand-owned and generated modules per plan 39's firewall in
+  `shikigami-core/shikigami-core.cabal`; remove
   `Shikigami.Flow.SinkOutbox` from the module list.
 - Add the golden test `shikigami-core/test/Shikigami/SinkIntentSpec.hs` (register in
   `test/Main.hs`): construct a representative `SinkIntent` for each `Sink` constructor
@@ -219,16 +234,18 @@ function and pass the sink configs explicitly; choose the smaller diff and recor
   against a checked-in expected `ByteString` (a golden string in the test), so a field
   rename or reordering is caught even if it round-trips. Assert the event's `eventType` is
   `"shikigami.sink.dispatch-requested"` and `schemaVersion` is `1`. This is the tripwire
-  that makes future drift impossible to land silently.
+  that makes future drift impossible to land silently. The generated domain harness and DSL
+  evolution diff are part of the same acceptance gate.
 
 Acceptance: `cabal build all` succeeds; `rg "data SinkIntent" shikigami-core/src` finds
-exactly one definition; the FlowLifecycleSpec sink tests
+exactly one generated definition and no hand-written definition; deterministic scaffold and
+domain-harness checks pass; the FlowLifecycleSpec sink tests
 (`FlowLifecycleSpec.hs:83-97`) and AgentWorkflowSpec outbox assertions still pass unchanged
 (same outbox message ids, same delivered details) — proving the wire format and
 deterministic ids are byte-for-byte preserved; the new golden test passes.
 
 Milestone 2 — one run lifecycle. Retire the divergent copy. Preferred path: change
-`shikigami-cli/src/Shikigami/Cli/Commands/AgentRun.hs` so the non-activity branch (line 54,
+the `agent-run` command component assigned to `shikigami-workers` by plan 36 so the non-activity branch (currently line 54 in the legacy module,
 `runAgentWithMemory appEnv behEnv decl Aeson.Null`) instead constructs an `AgentRunDeps`
 (as the worker does, `shikigami-core/src/Shikigami/Worker.hs:194-206`) and calls
 `AgentWorkflow.runAgentRunWorkflow deps job` with a synthesized `RunJob` (idempotency key
@@ -308,7 +325,7 @@ Exercise the CLI after M2:
 
 ```bash
 just create-database
-cabal run shikigami -- agent-run at-risk-customer   # prints an across-run report; run twice, priors grow
+cabal run shikigami-agent-run -- at-risk-customer   # prints an across-run report; run twice, priors grow
 ```
 
 Finish:
@@ -332,8 +349,9 @@ SinkIntent
 Accepted when these behaviors hold:
 
 1. Single sink-intent definition: `rg "data SinkIntent" shikigami-core/src` returns one
-   hit; `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` no longer exists; both former
-   call sites import from `Shikigami.Sink.Intent`.
+   generated hit; `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` no longer exists; both
+   former call sites import through `Shikigami.Sink.Intent`; DSL check, deterministic scaffold,
+   domain harness, and evolution diff pass.
 2. Wire format preserved: the AgentWorkflowSpec outbox assertions
    (`AgentWorkflowSpec.hs:60-65,113-114,210-211`) and FlowLifecycleSpec sink assertions
    (`FlowLifecycleSpec.hs:83-97`) pass unchanged — same outbox message ids and delivered
@@ -351,13 +369,14 @@ Accepted when these behaviors hold:
 
 ## Idempotence and Recovery
 
-All work is code motion plus tests; builds and tests repeat safely, and each DB-backed test
-provisions its own migrated database. The M1 extraction is behavior-preserving by
-construction (verbatim move, not rewrite) and is verified by the unchanged outbox
+All work is checked-spec/code motion plus tests; builds and tests repeat safely, and each DB-backed test
+provisions its own migrated database. The M1 extraction is behavior-preserving by the checked
+specification plus byte-level golden tests and is verified by the unchanged outbox
 assertions, so there is no data-migration or deploy-ordering hazard: existing outbox rows
 and journals decode identically because the codec bytes are unchanged. If M1 accidentally
 alters the wire format (caught by the golden test or the spec outbox assertions), revert the
-offending edit and re-move verbatim. M2 changes only a demo CLI's code path; rolling it back
+offending edit, correct the spec/schema mapping or hand-owned wiring, and regenerate; never
+patch the generated file. M2 changes only a demo command's code path; rolling it back
 restores the old non-durable behavior with no persistent effect. M3 and M4 are tests and
 documentation, always safe to redo. Because this plan changes no journaled step names (it is
 the plan whose acceptance criterion is that names and bytes are unchanged), it introduces no
@@ -366,6 +385,9 @@ discipline governs.
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36 and 39. The checked DSL/harness is the topology tripwire;
+plans 19 and 28 remain preferred semantic predecessors.
 
 Dependencies: `keiro` (`Keiro.Outbox`, `Keiro.Integration.Event`,
 `Keiro.Workflow` journal-append helpers — all already used by the code being moved),
@@ -376,8 +398,10 @@ helpers retained in `Agent/Run.hs`). No new package dependencies.
 Signatures that must exist at the end (full paths):
 
 ```haskell
--- shikigami-core/src/Shikigami/Sink/Intent.hs (new; moved verbatim)
+-- plan-39 generated module, re-exported by Shikigami.Sink.Intent
 data SinkIntent          -- agent, runId, ordinal, occurredAt, danwaTarget, sink, output
+
+-- shikigami-core/src/Shikigami/Sink/Intent.hs (hand-owned behavior)
 data PreparedSinkIntent
 prepareSinkIntent        :: WorkflowId -> StepName -> Text -> Text -> Int
                          -> Maybe UTCTime -> Maybe DanwaTarget -> Sink -> Value -> UTCTime
@@ -399,7 +423,7 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/Capability.hs` (
 `enqueueSinkIntentStep`), `shikigami-core/src/Shikigami/Agent/Conversation.hs` (imports
 `prepareSinkIntent`, `preparedSinkResult`, `enqueuePreparedSinkIntentTx` — repoint or via
 re-export), `shikigami-core/src/Shikigami/Worker.hs` (`publishSinkIntent` for the outbox
-publisher), and `shikigami-cli/src/Shikigami/Cli/Commands/AgentRun.hs` (rewired in M2).
+publisher), and the `agent-run` component in `shikigami-workers` (rewired in M2).
 
 Integration Points (cross-plan):
 
@@ -422,3 +446,6 @@ Integration Points (cross-plan):
 - 2026-07-22: Replaced the either-order rule with the preferred landing order plans
   19 and 28 → plan 27. Consolidation now moves the final delivery and trace semantics
   once instead of moving old code and rebasing it immediately.
+- 2026-07-22: Added plan 39 as a hard predecessor and made topology/scaffold diff
+  stability an explicit consolidation acceptance criterion.
+- [ ] Prerequisites: plans 36 and 39 complete; plans 19 and 28 land before final consolidation.

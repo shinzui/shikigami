@@ -27,7 +27,7 @@ always answers "no approval required" and whose notify hooks are no-ops
 parked on `awaitAcknowledgement` therefore notifies nobody and can only time out
 (fallback 900 seconds, `shikigami-core/src/Shikigami/Agent/Workflow.hs:312-314`).
 
-After this plan, an operator can declare (via environment configuration) that certain
+After this plan, an operator can declare through plan 37's Settei configuration that certain
 sink kinds require human approval. When such an agent runs, the workflow parks, a real
 notification is posted through an existing sink — a danwa conversation message or a
 kizashi signal — containing a human-readable prompt and a resolution token, and a human
@@ -48,8 +48,10 @@ notification path, and a real resolution path.
 
 ## Progress
 
+- [ ] Prerequisites: plans 17, 22, 36, and 37 complete; approval policy extends the
+      shared Settei application config and uses the canonical authenticated HTTP layer.
 - [ ] Milestone 1: `Shikigami.Agent.Approval.Policy` module — `ApprovalPolicy`,
-      `resolveApprovalPolicy` (env-driven), `policyApprovalEnv` with danwa/kizashi
+      settings/validation, `policyApprovalEnv` with danwa/kizashi
       `postAsk`; unit tests for policy parsing and the requiresApproval gate.
 - [ ] Milestone 2: worker wiring — `WorkerEnv` carries the policy; `agentRunDeps` uses
       `policyApprovalEnv` and the policy deadline; loud startup log of the active
@@ -67,16 +69,15 @@ notification path, and a real resolution path.
 
 ## Decision Log
 
-- Decision: Approval policy comes from environment configuration
+- Decision: Approval policy comes from Settei configuration with explicit compatibility bindings for
   (`SHIKIGAMI_APPROVAL_REQUIRE`, `SHIKIGAMI_APPROVAL_CHANNEL`,
   `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`) and lives behind a small `ApprovalPolicy`
   record and one `requiresApprovalFor` function — not in the Dhall agent schema yet.
   Rationale: plan 33 owns identity, memory policy, and enablement, not approval policy.
   Keeping approval configuration behind one small pure interface still permits a
   future, explicitly scoped schema plan to replace the source without changing the
-  machinery. Environment configuration follows the config idiom established by plan
-  13.
-  Date: 2026-07-08
+  machinery. Plan 37 owns source precedence, diagnostics, and process exit behavior.
+  Date: 2026-07-22
 - Decision: The notification path reuses existing sink clients — danwa
   (`Shikigami.Sink.Danwa`) for `ViaDanwa`, kizashi (`Shikigami.Sink.KizashiClient`)
   for `ViaKizashi` — rather than introducing a new notification channel.
@@ -93,6 +94,13 @@ notification path, and a real resolution path.
   raw clients would bypass the credential, timeout, and connection-manager policy that
   plan 22 establishes and would leave a second HTTP path for later contributors to
   reconcile.
+  Date: 2026-07-22
+- Decision: Preserve plan 22's HTTP failure class in the journaled notify step. A transient
+  notification error throws before the step is recorded so plan 17 can retry it; a permanent
+  400/401/403/404-class error is recorded as a permanent approval-notification failure and
+  completes the run with a dead-letterable `Left` rather than retrying forever.
+  Rationale: an unavailable service may recover, but an invalid credential, forbidden action,
+  or bad route needs operator repair. The workflow must retain that distinction.
   Date: 2026-07-22
 - Decision: The resolution path is a CLI command (`resolve-approval <token>
   --approve/--reject`), not an HTTP endpoint.
@@ -199,11 +207,11 @@ end-to-end demonstration.
 
 Scope: a new module `shikigami-core/src/Shikigami/Agent/Approval/Policy.hs` (add to
 `exposed-modules` in `shikigami-core.cabal`). At the end, a policy can be parsed from
-the environment and turned into a fully functional `ApprovalEnv` — testable without a
+the resolved application config and turned into a fully functional `ApprovalEnv` — testable without a
 worker.
 
-The policy record and resolver (following plan 13's config idiom — typed record, one
-`lookupEnv` resolver returning `Either Text`, loud description function):
+The policy record and resolver extend plan 37's typed Settei configuration and retain a
+loud, secret-safe description function:
 
 ```haskell
 data ApprovalPolicy = ApprovalPolicy
@@ -212,11 +220,11 @@ data ApprovalPolicy = ApprovalPolicy
     deadline :: !(Maybe NominalDiffTime)
   }
 
-resolveApprovalPolicy :: IO (Either Text (Maybe ApprovalPolicy))
+resolveApprovalPolicy :: AppConfig -> Either Text (Maybe ApprovalPolicy)
 describeApprovalPolicy :: Maybe ApprovalPolicy -> Text
 ```
 
-`resolveApprovalPolicy` reads:
+Settei declares stable keys and explicit legacy environment bindings for:
 
 - `SHIKIGAMI_APPROVAL_REQUIRE` — comma-separated `sinkKindText` names
   (e.g. `KawaDigest,KizashiSignal`). Unset or empty means `Nothing` (no policy,
@@ -258,39 +266,40 @@ Resolve with: shikigami resolve-approval 7f3c9a12-...-uuid --approve   (or --rej
   function pattern-matches on the `DanwaConversation` sink variant only to satisfy its
   current caller; the new helper takes the rendered text directly so the approval path
   does not fabricate a fake `Sink` value. Call it as
-  `postText (danwaClientEnv sinkHttp) danwaConfig renderedAsk`.
+  `postText (danwa sinkHttp) danwaConfig renderedAsk`.
   For `ViaKizashi`: build a `CreateSignalReq` directly (`Sink/Wire.hs:56-67`) with
   `actor` = the agent name from the prompt context, `recipient = defaultRecipient` of
   the `KizashiConfig`, `source = "shinzui/shikigami"`, `signalType = AgentRequest`,
   `priority = High`, `importance = 80`, `intent` = the prompt, and
   `contextTags = ["approval:" <> awakeableIdText aid]`; post with
-  `postSignal (kizashiHttp sinkHttp)`.
-  In both channels a `Left`/error result is rethrown via
-  `ioError . userError` so the journaled notify step fails and is retried on resume
-  (see Decision Log).
+  `postSignal (kizashi sinkHttp)`.
+  In both channels map the typed client error to `ApprovalNotificationError`. The journaled
+  notify step returns `Either PermanentNotificationError ()`: transient failures throw before
+  journaling and retry on resume, while permanent failures are journaled and propagate as the
+  run's permanent `Left` under plan 17.
 
-Tests (new `shikigami-core/test/Shikigami/ApprovalPolicySpec.hs`, registered in
-`test/Main.hs`): policy parsing happy/edge cases via `setEnv`/`unsetEnv` (run them in
-one sequential test group since the process environment is global), and a pure check
-that `requiresApproval` gates by kind. Acceptance: `cabal test all` green.
+Tests (in the package/test layout assigned by plan 36): decode policy values through plan
+37's `Config ApprovalPolicy` using in-memory Settei sources, cover happy/edge cases and a
+malformed winning value, and check that `requiresApproval` gates by kind. Do not add a
+plan-local environment resolver or process-global `setEnv` tests.
 
 ### Milestone 2 — Wire the policy into the worker
 
 Scope: the production worker consults the policy. `shikigami-core/src/Shikigami/Worker.hs`:
-add `approvalPolicy :: !(Maybe ApprovalPolicy)` to `WorkerEnv` (lines 55-63); in
+add `policy :: !(Maybe ApprovalPolicy)` to `WorkerEnv` (lines 55-63); in
 `agentRunDeps` (lines 194-206) replace `approval = Approval.defaultApprovalEnv` and
 `deadline = Nothing` with:
 
 ```haskell
-approval = case approvalPolicy env of
+approval = case policy env of
   Nothing -> Approval.defaultApprovalEnv
-  Just policy -> Policy.policyApprovalEnv policy (sinkHttp env) (danwa env) (kizashi env),
-deadline = Policy.deadline =<< approvalPolicy env
+  Just settings -> Policy.policyApprovalEnv settings (http env) (danwa env) (kizashi env),
+deadline = Policy.deadline =<< policy env
 ```
 
-In `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` (`runWorkerCmd`): call
-`resolveApprovalPolicy`; `Left` is fatal (stderr + `exitFailure`, same shape as plan
-13's provider errors); log `describeApprovalPolicy` unconditionally:
+At the plan-36 worker composition root, consume the already-resolved plan 37 application
+config. Typed resolution failure has already stopped startup; log `describeApprovalPolicy`
+unconditionally without values from secret settings:
 
 ```text
 [shikigami.worker] approval policy: none — all sinks auto-approved
@@ -317,10 +326,10 @@ lines 337-363 of the existing spec).
 
 ### Milestone 3 — The resolve-approval CLI
 
-Scope: new command module
-`shikigami-cli/src/Shikigami/Cli/Commands/ResolveApproval.hs` and registration in
-`shikigami-cli/src/Shikigami/Cli.hs` (add a `ResolveApproval` constructor to `Command`,
-a `command "resolve-approval" ...` branch to the parser, and a `run` clause).
+Scope: a direct administrative command component in `shikigami-server`, owned by the
+approval vertical (for example `Shikigami.Approval.Command`). Register the preserved
+`shikigami resolve-approval` spelling in the server-owned dispatcher selected by plan 36;
+do not recreate the removed `shikigami-cli` package.
 
 CLI shape:
 
@@ -329,12 +338,12 @@ shikigami resolve-approval TOKEN --approve
 shikigami resolve-approval TOKEN --reject "not in business hours"
 ```
 
-Implementation: parse `TOKEN` with `Data.UUID.fromText` (invalid → stderr + exit 1);
+Implementation: parse `TOKEN` with `Data.UUID.fromText` (invalid usage → stderr + exit 2);
 wrap as `AwakeableId` (constructor exported, `Keiro.Workflow.Awakeable`); build the
 decision — `Approved (object ["approved" .= True, "via" .= ("cli" :: Text)])` or
-`Rejected reason`; connect the store exactly as `EnqueueRun` does
-(`getEnv "PG_CONNECTION_STRING"`, `withStore (defaultConnectionSettings connStr)`),
-build `AppEnv` with `Kioku.App.noopTracer`; call
+`Rejected reason`. Resolve plan 37's Settei `AppConfig` before acquiring resources, obtain
+the typed database settings from it, bracket the store and telemetry through the shared
+server composition helpers, and call
 `resolveApproval appEnv aid decision`. Print `resolved: true` and exit 0 when it
 returns `True`; print `resolved: false (unknown or already-resolved token)` and exit 1
 on `False`. Note `resolveApproval` only signals the awakeable — the running worker's
@@ -371,24 +380,18 @@ Milestone 1: create `shikigami-core/src/Shikigami/Agent/Approval/Policy.hs`; add
 `shikigami-core/test/Shikigami/ApprovalPolicySpec.hs`; register both in the cabal file
 and `test/Main.hs`.
 
-Milestone 2: edit `shikigami-core/src/Shikigami/Worker.hs` (WorkerEnv, agentRunDeps)
-and `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`; extend the integration
-tests.
+Milestone 2: edit the core approval/workflow modules and the worker composition component
+assigned to `shikigami-workers` by plan 36; extend the integration tests.
 
-Milestone 3: create `shikigami-cli/src/Shikigami/Cli/Commands/ResolveApproval.hs`;
-edit `shikigami-cli/src/Shikigami/Cli.hs`; add the command to
-`shikigami-cli/shikigami-cli.cabal` `other-modules` if listed there.
+Milestone 3: add the approval command module and executable component to
+`shikigami-server`; register the preserved command spelling in its dispatcher.
 
 Milestone 4 — end-to-end, three terminals, local database prepared with
 `just create-database`:
 
 ```bash
 # terminal 1 — the worker with an approval policy
-export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"
-export SHIKIGAMI_APPROVAL_REQUIRE=KawaDigest
-export SHIKIGAMI_APPROVAL_CHANNEL=danwa
-export SHIKIGAMI_APPROVAL_DEADLINE_SECONDS=3600
-cabal run shikigami -- worker --agents agents/ --danwa-url http://localhost:8080
+cabal run shikigami-worker -- --config config/approval-demo.yaml
 ```
 
 ```text
@@ -438,14 +441,14 @@ the awakeable token and that approve→one outbox row / reject→zero rows.
 
 Manual acceptance is Milestone 4's transcript: enqueue → park with visible ask
 containing a token → CLI approve → resume → sink dispatched exactly once; and the
-reject and timeout variants (for timeout, set
-`SHIKIGAMI_APPROVAL_DEADLINE_SECONDS=5`, enqueue, do not resolve, and observe the
+reject and timeout variants (for timeout, set `approval.deadline_seconds: 5` in the
+Settei input, enqueue, do not resolve, and observe the
 worker's timer loop fire the timeout and the run complete with the sink suppressed).
 
-Failure-mode checks: `SHIKIGAMI_APPROVAL_REQUIRE=Bogus` makes the worker exit 1 naming
-the valid kinds; killing danwa (wrong `--danwa-url`) makes the notify step fail and the
-run retry rather than silently proceeding — visible as repeated
-`[shikigami.worker] ... (retry)` lines, never a completed run with an undelivered ask.
+Failure-mode checks: a winning `approval.require: Bogus` value makes `--check-config` exit 4
+naming valid kinds before acquiring resources. A danwa timeout/5xx leaves the notify step
+unrecorded and retryable; a 401/403 records a permanent notification failure and dead-letters
+without another HTTP request. Neither path silently proceeds to approval.
 
 
 ## Idempotence and Recovery
@@ -471,7 +474,7 @@ data ApprovalPolicy = ApprovalPolicy
     channel :: !Shikigami.Agent.Approval.ApprovalChannel,
     deadline :: !(Maybe Data.Time.NominalDiffTime)
   }
-resolveApprovalPolicy :: IO (Either Data.Text.Text (Maybe ApprovalPolicy))
+resolveApprovalPolicy :: Shikigami.App.Config.AppConfig -> Either Data.Text.Text (Maybe ApprovalPolicy)
 describeApprovalPolicy :: Maybe ApprovalPolicy -> Data.Text.Text
 policyApprovalEnv ::
   ApprovalPolicy ->
@@ -481,11 +484,15 @@ policyApprovalEnv ::
   Kioku.Id.SessionId ->
   Shikigami.Agent.Approval.ApprovalEnv
 
--- shikigami-core/src/Shikigami/Sink/Danwa.hs (added helper)
-postText :: Servant.Client.ClientEnv -> Shikigami.Sink.Config.DanwaConfig -> Data.Text.Text -> IO (Either Data.Text.Text Data.Text.Text)
+data ApprovalNotificationError
+  = TransientNotification !Text
+  | PermanentNotification !Text
 
--- shikigami-cli/src/Shikigami/Cli/Commands/ResolveApproval.hs (new)
-runResolveApproval :: String -> Bool -> Maybe String -> IO ()   -- token, approve?, reject reason
+-- shikigami-core/src/Shikigami/Sink/Danwa.hs (added helper)
+postText :: Servant.Client.ClientEnv -> Shikigami.Sink.Config.DanwaConfig -> Data.Text.Text -> IO (Either DanwaError Data.Text.Text)
+
+-- command/application boundary (package assigned by plan 36)
+runResolveApproval :: ApprovalToken -> ApprovalDecision -> IO ResolveResult
 ```
 
 Existing interfaces consumed (all verified in-tree):
@@ -496,7 +503,7 @@ Shikigami.Agent.Approval.resolveApproval :: AppEnv -> AwakeableId -> ApprovalDec
 Shikigami.Agent.Approval.ApprovalDecision (Approved | Rejected | TimedOut)                        -- Approval.hs:65-70
 Keiro.Workflow.Awakeable.AwakeableId (AwakeableId)                    -- constructor exported, Awakeable.hs:52,119
 Keiro.Workflow.Awakeable.awakeableIdText :: AwakeableId -> Text       -- Awakeable.hs:130
-Shikigami.Sink.KizashiClient.postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
+Shikigami.Sink.KizashiClient.postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either KizashiError SignalResponse)
 Shikigami.Sink.Wire.CreateSignalReq (..)                              -- Wire.hs:56-67
 Shikigami.Sink.Permission.sinkKindText :: SinkKind -> Text            -- Permission.hs:43-49
 Shikigami.Api.Agent.SignalType (AgentRequest)                         -- Api/Agent.hs:21-29
@@ -504,15 +511,16 @@ Kioku.App.noopTracer, Kioku.App.AppEnv (..)
 Kiroku.Store.Connection (withStore, defaultConnectionSettings)
 ```
 
-Hard dependency: `docs/plans/22-outbound-authentication-for-sink-clients.md` defines
+Hard dependencies: plans 17, 36, and 37, and
+`docs/plans/22-outbound-authentication-for-sink-clients.md`, which defines
 `SinkHttp`, `HttpEnv`, the authenticated danwa `ClientEnv`, and the final `postSignal`
-signature consumed above. Soft dependency: plan 13 defines the typed environment
-resolver and loud startup-description convention reused by `resolveApprovalPolicy`.
+signature consumed above. Plan 37 defines the configuration service and startup
+diagnostics; plan 17 supplies the permanent/transient workflow failure discipline; plan 13
+is only a soft model-provider integration neighbor.
 
 No new package dependencies: `uuid` (via keiro), `containers`, `danwa-client`, and
-`optparse-applicative` (CLI) are already in scope. Coordinate the additive worker-startup
-edits with plans 13, 15, and 16; plan 13 also edits `Cli/Commands/Worker.hs`, so keep each
-plan's additions in separate, clearly named blocks in `runWorkerCmd`.
+`optparse-applicative` are already in scope. Coordinate the additive worker-startup
+edits with plans 13, 15, and 16 in the plan-36 worker composition root.
 
 
 ## Revision Notes
@@ -520,3 +528,7 @@ plan's additions in separate, clearly named blocks in `runWorkerCmd`.
 - 2026-07-22: Removed the nonexistent approval-policy dependency on plan 33 and made
   plan 22 a hard dependency. Approval notifications now consume authenticated
   `SinkHttp` clients instead of introducing an unauthenticated parallel path.
+- 2026-07-22: Rebased policy configuration on plans 36/37 and replaced the plan-local
+  `lookupEnv` resolver with Settei settings and validation.
+- 2026-07-22: Preserved plan 22's typed HTTP failure class through the approval notify step;
+  permanent 4xx errors dead-letter while transient failures remain replayable under plan 17.

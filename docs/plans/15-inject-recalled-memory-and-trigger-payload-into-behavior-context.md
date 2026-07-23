@@ -97,6 +97,14 @@ contains what the first run learned.
   so no key is needed — but the feature is only *meaningful* once a real model reads
   the context.
   Date: 2026-07-08
+- Decision: Implement only after plan 36 establishes the six-package service architecture.
+  Keep `BehaviorInput` in the API/domain package that owns behavior contracts and keep
+  provider/session wiring in the application/infrastructure packages selected there. Records
+  use strict, direct fields (`payload`, `recalled`) with `DuplicateRecordFields`; do not add
+  type- or module-prefixed selectors.
+  Rationale: this plan changes a cross-package behavior boundary. Landing it first would
+  preserve the current package coupling and make the architecture migration harder.
+  Date: 2026-07-22
 - Decision: The Flow example's use of prior memory is a deliberately simple, auditable
   rule: a recalled learning that mentions this activity's subject id and the word
   "escalated" forces a high verdict.
@@ -239,15 +247,15 @@ Update the call sites:
 - `Agent/Conversation.hs:165`: pass `recalled = []` with a comment that conversation
   context travels as turns inside `behaviorPayload` (lines 254-263); unifying those is
   future work, not this plan.
-- `Cli/Commands/RunBehavior.hs`: `recalled = []` (the command is DB-less by design;
-  keep its help text honest by appending "no memory" to the `progDesc` in
-  `shikigami-cli/src/Shikigami/Cli.hs` if desired).
+- The `run-behavior` command component assigned to `shikigami-workers` by plan 36:
+  `recalled = []` (the command is DB-less by design; keep its help text honest by appending
+  "no memory" to its worker-package parser description).
 - Update `Program/Registry.hs` `noopSummaryTask.taskParse` to read the `payload` key
   (`Right . fromMaybe Aeson.Null . fmap decodeOrString . Map.lookup "payload"` in
   spirit — parse the JSON text back to `Value`, falling back to `Null`), and extend
   `noopSummaryProgram` to echo its input under an `"input"` field of the fixed body.
-  Any test asserting the old fixed body (`grep -rn "noop-summary produced" 
-  shikigami-core/test shikigami-cli`) must be updated in the same commit.
+  Any test asserting the old fixed body (`rg "noop-summary produced" shikigami-core/test
+  shikigami-workers`) must be updated in the same commit.
 
 Tests (new `shikigami-core/test/Shikigami/BehaviorInputSpec.hs`, registered in
 `test/Main.hs`):
@@ -338,7 +346,7 @@ Milestone 1 files: `shikigami-core/src/Shikigami/Behavior/Run.hs`,
 `shikigami-core/src/Shikigami/Agent/Run.hs`,
 `shikigami-core/src/Shikigami/Agent/Conversation.hs`,
 `shikigami-core/src/Shikigami/Program/Registry.hs`,
-`shikigami-cli/src/Shikigami/Cli/Commands/RunBehavior.hs`, new test
+the `run-behavior` command component in `shikigami-workers`, new test
 `shikigami-core/test/Shikigami/BehaviorInputSpec.hs` (+ `test/Main.hs`,
 `shikigami-core.cabal`). Use `cabal build all` as the call-site finder after changing
 the `runBehavior` signature — the four sites listed in Context are the expected
@@ -356,7 +364,7 @@ Demo transcript to verify by hand (stub provider; shows the program arm now seei
 payload):
 
 ```bash
-cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall \
+cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall \
   --payload '{"source":"demo"}'
 ```
 
@@ -443,6 +451,15 @@ Kioku.Memory.record / Kioku.Memory.Domain.RecordMemoryData (..)   -- test-side m
 
 Dependency notes: no new packages (`kioku-api` already provides `MemoryRecord` to
 `shikigami-core`). Soft dependency on plan 13 (ordering only, see Decision Log).
+HARD dependency on
+`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`; place
+the interfaces in the packages it assigns rather than extending the legacy monolith.
 Constraint from the parent MasterPlan: existing journaled step names
 (`recall`, `run-behavior`, and the rest) must not be renamed or reordered; this plan
 complies — only step *bodies* and pure functions change.
+
+
+## Revision Notes
+
+- 2026-07-22: Added the six-package architecture prerequisite and made the direct strict
+  record-field convention explicit for the new behavior boundary.

@@ -27,13 +27,10 @@ and the worker already handles a `Cancelled` outcome (`shikigami-core/src/Shikig
 but nothing in shikigami can *issue* a cancel.
 
 After this plan, an operator has a read-mostly, safe-by-default set of subcommands:
-`shikigami agents list` (declared agents with load state and a trigger summary),
-`shikigami runs list` and `shikigami runs show <id>` (keiro workflow status joined with the
-kioku session), `shikigami runs cancel <workflow-id>` (issue a keiro cancellation; destructive,
-needs `--confirm`), `shikigami dlq list` and `shikigami dlq replay <msg-id>` (inspect the pgmq
-archive of poison run jobs and re-enqueue one; replay needs `--confirm`), and
-`shikigami outbox status` (counts of pending and dead-lettered sink intents from the keiro
-outbox). Every destructive operation refuses to run without `--confirm`.
+`shikigami agents list`, `shikigami runs list|show|cancel`,
+`shikigami dlq list|show|replay|discard|repair` over plan 17's real dead-letter queue,
+and `shikigami outbox status`. Every destructive operation refuses to run without
+`--confirm` and emits a structured audit event.
 
 The user-visible proof: with a run in flight, `shikigami runs list` prints a table with its
 workflow id and status `running`; `shikigami runs cancel <id> --confirm` flips it, and a
@@ -44,17 +41,17 @@ back on the live queue.
 
 ## Progress
 
-- [ ] M1: `shikigami agents list` — loads manifests from `--agents`, prints name, behavior kind,
+- [ ] M1: `shikigami agents list` — loads manifests from Settei `agents.directory`, prints name, behavior kind,
       trigger summary, and load state (loaded / failed-to-parse).
-- [ ] M2: `Shikigami.Operator.Query` module with read-only hasql statements over
+- [ ] Prerequisites: plans 36/37 and plan 20 complete; plan 17's real DLQ is available before M4.
+- [ ] M2: public `Shikigami.Operator.Query` module with schema-qualified read-only hasql statements over
       `keiro.keiro_workflows`, `kiroku.kioku_sessions`, `keiro.keiro_workflow_steps`, and the
-      pgmq archive; `shikigami runs list` and `shikigami runs show <id>` built on it.
+      documented substrate tables; list/step reads use bounded keyset pages; `shikigami runs list` and `shikigami runs show <id>` built on it.
 - [ ] M3: `shikigami runs cancel <workflow-id> --confirm` issues a keiro cancellation
       (`appendJournalEntry … WorkflowCancelled`); verified to flip `keiro.keiro_workflows.status`
       to `cancelled`.
-- [ ] M4: `shikigami dlq list` and `shikigami dlq replay <msg-id> --confirm` over the pgmq
-      archive table `pgmq.a_shikigami_run_jobs`; replay re-sends the archived body to the live
-      queue.
+- [ ] M4: `shikigami dlq list|show|replay|discard|repair` over plan 17's real
+      `shikigami_run_jobs_dlq`; no operator command depends on PGMQ archive internals.
 - [ ] M4: `shikigami outbox status` — counts of `keiro.keiro_outbox` rows by status.
 - [ ] M5: `--confirm` gate on every destructive subcommand; a test proves the gate refuses
       without it.
@@ -106,29 +103,27 @@ back on the live queue.
   and risk drifting from the source of truth.
   Date: 2026-07-08
 
-- Decision: Dead-letter tooling reads the pgmq archive table `pgmq.a_shikigami_run_jobs`
-  directly and replays by re-sending the archived message body to the live queue.
-  Rationale: shikigami's shibuya pgmq adapter is configured with `deadLetterConfig = Nothing`
-  (the default from `Shibuya.Adapter.Pgmq.Config.defaultConfig`,
-  `/Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya-pgmq-adapter/.../Config.hs:288`), so
-  poison jobs are pgmq-*archived* (moved from `pgmq.q_shikigami_run_jobs` to
-  `pgmq.a_shikigami_run_jobs` — the archive table pgmq creates per queue, DDL embedded in
-  `shikigami-migrations/sql-migrations/2026-06-24-13-00-00-pgmq-schema.sql:1120-1160`, columns
-  `msg_id, read_ct, enqueued_at, archived_at, vt, message, headers`) rather than routed to a
-  DLQ. pgmq-hs exposes no "read archive" function (verified), so `dlq list` runs a plain hasql
-  `SELECT` over `pgmq.a_shikigami_run_jobs`. Replay reuses shikigami's own
-  `Shikigami.Trigger.Enqueue.enqueueRunJob` path (which `sendMessage`s to the live queue), so a
-  replayed job re-enters the exact drain path a fresh job would; it does not delete the archive
-  row (archives are permanent), keeping replay idempotent and auditable.
-  Date: 2026-07-08
+- Decision: Dead-letter tooling targets plan 17's configured direct DLQ and uses public
+  queue/store helpers or schema-qualified documented SQL. PGMQ archive tables are not an
+  operator contract.
+  Rationale: a real DLQ supports inspection, controlled replay, repair, and discard;
+  incidental archive layout is private, incomplete remediation state.
+  Date: 2026-07-22
 
-- Decision: Read-only by default; every destructive subcommand (`runs cancel`, `dlq replay`)
+- Decision: Read-only by default; every destructive subcommand (`runs cancel`, `dlq replay|discard|repair`)
   requires an explicit `--confirm` flag and prints what it will do first.
   Rationale: the MasterPlan scopes this plan as "read-mostly and safe". A single `--confirm`
   switch (optparse `switch`) is unambiguous and testable; without it the command prints the
-  intended action and exits non-zero. `runs cancel` and `dlq replay` are the only two write
-  paths; everything else is a `SELECT` or a manifest read.
+  intended action and exits non-zero. Every mutation emits an audit event; list/show are
+  pure reads.
   Date: 2026-07-08
+
+- Decision: Every row-producing database query is server-side bounded and keyset-paginated.
+  `PageSize` accepts 1–200 (default 50); opaque cursors encode stable timestamp/id tuples.
+  Rationale: a CLI is not an excuse for unbounded database transfer or heap use. Keyset
+  pages remain stable as runs/DLQ items are appended and avoid offset scan cost. This is not
+  a public Relay API, so GraphQL connection wrappers do not apply.
+  Date: 2026-07-22
 
 - Decision: This plan owns the `agents` operator command group but consumes plan 20's
   `AgentLoadReport`; plan 23 later extends the command with principal/lifecycle state and
@@ -158,6 +153,11 @@ every `*.dhall` from a directory via `Shikigami.Agent.Loader.loadAgent`, skippin
 failures) and how to reach Postgres (`getEnv "PG_CONNECTION_STRING"` then
 `Kiroku.Store.Connection.withStore`, e.g. `Commands/Scheduler.hs:36-37`, exposing a hasql `Pool`
 via `StoreConnection.pool st`).
+
+Those paths describe the starting tree only. Plan 36 runs first: these direct administrative
+commands and their dispatcher live in the operator vertical of `shikigami-server`, and plan 37
+supplies one resolved `AppConfig`; none of the new command modules copy the legacy `getEnv`
+pattern.
 
 Terms of art. An *agent run* is one execution of a declared agent. Its durable state spans two
 libraries. *keiro* is the durable-workflow engine; a run is a keiro *workflow*, and its status
@@ -216,16 +216,18 @@ required.
 Scope: the simplest read-only subcommand, establishing the `agents` command group and the output
 convention (a compact aligned table by default; `--json` for machine consumption).
 
-Add an `Agents AgentsSub` constructor and an `agents` `command` with a `list` subparser to
-`Cli.hs`. Create `shikigami-cli/src/Shikigami/Cli/Commands/Agents.hs` (`runAgentsList ::
-FilePath -> Bool -> IO ()`, taking `--agents DIR` (default `agents`) and `--json`). Consume
+Add an `Agents AgentsSub` constructor and an `agents` `command` with a `list` subparser to the
+server-owned dispatcher. Create an agents command module in the operator vertical
+(`runAgentsList :: FilePath -> OutputMode -> IO ()`, taking the validated
+`agents.directory` value (default `agents`)
+and `--json`). Consume
 `Shikigami.Agent.Loader.loadAgentsReport` from plan 20 and render every
 `AgentLoaded`/`AgentLoadFailed` entry, so an operator sees broken manifests without a second
 directory traversal. For each loaded `AgentDecl`, print name,
 behavior kind (reuse `Shikigami.Agent.Run.behaviorKindText`), and a trigger summary (`schedule
 <cron>` / `stream <topic/match>` / `event <eventType>` derived from the `Trigger` constructor).
 
-Acceptance: `shikigami agents list --agents agents` prints one row per manifest, including a
+Acceptance: `shikigami agents list --config config/operator-dev.yaml` prints one row per manifest, including a
 `failed` row for `agents/broken.dhall` (which exists in the repo).
 
 ### Milestone 2 — `runs list` / `runs show` (read-only queries)
@@ -238,21 +240,23 @@ independent, `runs list` keys on `keiro.keiro_workflows` alone and `runs show` l
 up by the run's agent + time window, or by a stored linkage — record the finding in Surprises &
 Discoveries and adjust. (The Decision Log's join assumption is the hypothesis; M2 verifies it.)
 
-Create `shikigami-cli/src/Shikigami/Cli/Commands/Runs.hs` and a query module
-`shikigami-cli/src/Shikigami/Operator/Query.hs` (or under `shikigami-core` if shared) holding
-read-only hasql `Statement`s:
+Create the runs command in the package assigned by plan 36 and a public
+`Shikigami.Operator.Query` module holding read-only hasql `Statement`s:
 
 ```haskell
-listRuns   :: Maybe Text -> Statement () [RunRow]     -- optional status filter
-showRun    :: Text -> Statement () (Maybe RunDetail)  -- by workflow id
-listSteps  :: Text -> Statement () [StepRow]          -- keiro.keiro_workflow_steps for one run
+listRuns  :: Statement (RunFilter, PageRequest RunCursor) (Page RunRow RunCursor)
+showRun   :: Statement WorkflowId (Maybe RunDetail)
+listSteps :: Statement (WorkflowId, PageRequest StepCursor) (Page StepRow StepCursor)
 ```
 
 `listRuns` selects `workflow_id, workflow_name, status, attempts, created_at, updated_at,
 completed_at` from `keiro.keiro_workflows` (optionally `WHERE status = $1`), left-joined to
 `kiroku.kioku_sessions` on the verified key for `agent_id`, `summary`, `error_message`.
-`showRun` returns one run plus its session fields; `runs show` additionally prints the step trail
-from `listSteps`. `runs list` accepts `--status running|suspended|...` and `--json`.
+`showRun` returns one run plus its session fields; `runs show` additionally prints the step
+trail from `listSteps`. SQL orders by stable `(updated_at, workflow_id)` and applies `LIMIT
+pageSize + 1` to determine a next cursor; step pages use `(recorded_at, step_name)`. `runs
+list` accepts `--status`, `--limit`, `--after`, and `--json`; `runs show` bounds its step
+trail with the same validated page types.
 
 Acceptance: with a run in flight (enqueue one, worker draining), `shikigami runs list` shows its
 id and `running`; `shikigami runs show <id>` prints the joined session and the step names
@@ -260,8 +264,9 @@ recorded so far.
 
 ### Milestone 3 — `runs cancel`
 
-Scope: the first write path, gated by `--confirm`. In `Commands/Runs.hs`, add `runRunsCancel ::
-Text -> Bool -> IO ()`. Without `--confirm`, print `would cancel workflow <id> (<name>, status
+Scope: the first write path, gated by `--confirm`. In the runs command module, add
+`runRunsCancel :: WorkflowId -> Confirmation -> IO ()`. Without confirmation, print
+`would cancel workflow <id> (<name>, status
 <current>)` and exit non-zero. With it, look up the workflow's `workflow_name` (needed by
 `appendJournalEntry`) via `showRun`, then run keiro's append in the store effect:
 `appendJournalEntry name (WorkflowId id) (WorkflowCancelled recordedAt)` inside `runStorePool`
@@ -272,33 +277,27 @@ Acceptance: `shikigami runs cancel <id> --confirm` on a `running` run makes a su
 `shikigami runs show <id>` report `cancelled`; without `--confirm` it prints the plan and changes
 nothing.
 
-### Milestone 4 — `dlq list` / `dlq replay` and `outbox status`
+### Milestone 4 — real DLQ inspect/remediate and `outbox status`
 
-Scope: dead-letter inspection and replay, plus outbox counts. Add a `Dlq DlqSub` and
-`Outbox OutboxSub` command group. In a new `Commands/Dlq.hs`: `runDlqList` runs a read-only
-`SELECT msg_id, enqueued_at, archived_at, read_ct, message FROM pgmq.a_shikigami_run_jobs ORDER
-BY archived_at DESC` and prints msg id, archived-at, read count, and the agent name pulled from
-the `message` JSON (`RunJob.agentName`); `runDlqReplay :: Integer -> Bool -> IO ()` selects the
-one archived row by `msg_id`, decodes its `message` to a `Shikigami.Api.RunJob`, and (with
-`--confirm`) calls `Shikigami.Trigger.Enqueue.enqueueRunJob pool job` to re-enqueue it onto the
-live queue; without `--confirm` it prints `would replay msg <id> for agent <name>` and exits
-non-zero. It does not delete the archive row. In `Commands/Outbox.hs`: `runOutboxStatus` runs
-`SELECT status, count(*) FROM keiro.keiro_outbox GROUP BY status` and prints a small table
-(`pending`, `sent`, `dead`).
+Scope: use plan 17's `shikigami_run_jobs_dlq` through public helpers or schema-qualified
+documented SQL. `list`/`show` render message id, original attempt/reason/metadata, agent,
+and timestamps. `dlq list` uses the same bounded `--limit`/`--after` pattern with a stable
+timestamp/message-id keyset. `replay --confirm` validates/optionally repairs the payload, sends it to
+the live queue with an audit correlation id, and marks/removes the DLQ item according to
+the queue API so repeated commands cannot enqueue unbounded copies accidentally.
+`discard --confirm` records the operator/reason before finalization. `repair --confirm`
+requires an explicit replacement payload and validates `RunJob` before mutation. No
+query touches `pgmq.a_*`. `outbox status` remains schema-qualified and read-only.
 
-Acceptance: enqueue a deliberately malformed job (an agent name that does not exist triggers the
-`PoisonPill` dead-letter path, `Worker.hs:146`), let the worker drain it, then
-`shikigami dlq list` shows its archived msg id; `shikigami dlq replay <msg-id> --confirm`
-re-enqueues it (a fresh `enqueue-run`-style message id is returned). `shikigami outbox status`
-prints nonzero counts after a run with sinks.
+Acceptance: a poison job lands in the direct DLQ; list/show render it. Replay, repair,
+and discard each refuse without confirmation, succeed once with confirmation, and emit
+auditable state. The old PGMQ archive layout is never queried.
 
 ### Milestone 5 — confirm-gate test
 
-Scope: prove the safety gate. Add a test to `shikigami-core-test` (or a new CLI test target if
-the CLI grows one) that calls the cancel/replay handlers with `confirm = False` against a
-`withShikigamiMigratedDatabase` database seeded with one running workflow / one archived job, and
-asserts no state changed (status still `running`; archive row still present; live queue still
-empty). This is the observable proof that destructive commands are safe by default.
+Scope: prove parser-to-handler dispatch and safety gates in a CLI test target. Seed one
+running workflow and one direct-DLQ item; exercise cancel/replay/repair/discard without
+confirmation and assert no state changes, then each confirmed path and its audit event.
 
 Acceptance: the test fails before the gate is added (or with the gate inverted) and passes with
 it.
@@ -306,10 +305,8 @@ it.
 
 ## Concrete Steps
 
-All commands run from the repo root inside `nix develop`, with `PG_CONNECTION_STRING` set (use
-the stack from
-`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
-or a manual Postgres).
+All commands run from the repo root inside `nix develop`, using the Settei dev-stack source
+from `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`.
 
 Build:
 
@@ -323,7 +320,7 @@ Expected: `Test suite shikigami-core-test: PASS`.
 M1:
 
 ```bash
-cabal run shikigami -- agents list --agents agents
+cabal run shikigami -- agents list --config config/operator-dev.yaml
 ```
 
 Expected (columns; broken.dhall shows a failed load-state):
@@ -407,34 +404,38 @@ Acceptance is behavior an operator can observe:
 3. `shikigami runs cancel <id> --confirm` flips a running workflow to `cancelled` (verified via
    `runs show` and a direct `SELECT status FROM keiro.keiro_workflows`); without `--confirm` it
    changes nothing and exits non-zero.
-4. `shikigami dlq list` shows archived poison run jobs from `pgmq.a_shikigami_run_jobs`;
-   `dlq replay <msg-id> --confirm` re-enqueues one onto `shikigami_run_jobs` (a new message id is
-   returned) and leaves the archive row intact.
+4. `shikigami dlq list|show` inspect the direct DLQ; replay/repair/discard are confirmed,
+   audited, and change exactly one item. No command queries PGMQ archive tables.
 5. `shikigami outbox status` prints per-status counts from `keiro.keiro_outbox`.
-6. The M5 test proves the `--confirm` gate: with `confirm = False`, cancel/replay make no state
-   change.
+6. The M5 CLI parser/dispatch test proves the `--confirm` gate: cancel/replay/repair/
+   discard make no state change without confirmation and reach the correct handler once confirmed.
 7. Regression: `cabal build all` and `cabal test all` pass; the twelve existing subcommands are
    unchanged.
+8. Pagination: seeding more than two pages, including tied timestamps, yields bounded pages
+   with no duplicate or missing ids; invalid limits fail argument validation before SQL runs.
 
 
 ## Idempotence and Recovery
 
+The direct-queue contract requires mutations to claim and finalize exactly one DLQ item and
+record an audit correlation id, so repeating a completed replay does not enqueue another
+copy. Inspection remains schema-qualified and read-only.
+
 All inspection subcommands are pure reads and safe to run repeatedly. `runs cancel` is
-idempotent at the keiro level — appending `WorkflowCancelled` to an already-cancelled workflow is
-a no-op transition (keiro upserts the same terminal status), and the command additionally refuses
-to act on an already-terminal run, so a double-cancel is harmless. `dlq replay` re-sends a copy
-to the live queue and never deletes the archive row, so re-running it enqueues another copy; the
-run's own idempotency key (the `RunJob.idempotencyKey`, which is the keiro workflow id) means the
-worker de-duplicates a replayed job that already ran to completion (the workflow is already
-`completed`), so replay is safe though not automatically deduped at the queue level — the
-`--confirm` prompt names the agent so the operator does not fat-finger it. No schema changes are
-made; nothing to roll back on the data side.
+idempotent at the keiro level and refuses already-terminal runs. DLQ replay/repair/discard
+uses claim/finalize plus an audit correlation id; an interrupted claim becomes available
+again, while an already finalized operation reports its terminal state without a second
+enqueue. No schema change is owned by this plan.
 
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 36, 37, 20, and plan 17 for M4. Commands live in
+`shikigami-server`, receive Settei database settings at the composition root, and use public query/
+store modules with schema-qualified SQL.
+
 Dependencies: hard dependency on plan 20's `AgentLoadReport` API; `hasql`, `hasql-pool`,
-`kiroku-store` (already in `shikigami-cli.cabal`), plus
+`kiroku-store` (moved to the server executable component by plan 36), plus
 `keiro`/`keiro-core` and `kioku` transitively via `shikigami-core`. keiro provides
 `Keiro.Workflow (appendJournalEntry, WorkflowId (..), WorkflowName (..))` and
 `Keiro.Workflow.Types (WorkflowJournalEvent (WorkflowCancelled))`; shikigami provides
@@ -443,24 +444,27 @@ Dependencies: hard dependency on plan 20's `AgentLoadReport` API; `hasql`, `hasq
 `Shikigami.Agent.Workflow.Name.agentRunWorkflowName` and
 `Shikigami.Agent.Conversation.conversationWorkflowName`. No new external dependency.
 
-Verified upstream signatures (2026-07-08):
+Verified upstream signatures are rechecked during implementation through Mori. Plan 17's
+direct-DLQ helper/config is the dead-letter contract; the PGMQ archive layout is not.
+
+Previously verified signatures:
 `appendJournalEntry :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es ()`
 (keiro `Workflow.hs:745-746`); `WorkflowCancelled { recordedAt :: !UTCTime }` (keiro
 `Workflow/Types.hs:194`); `enqueueRunJob :: Pool -> RunJob -> IO (Either UsageError MessageId)`
-(shikigami `Trigger/Enqueue.hs:52`). Archive table `pgmq.a_shikigami_run_jobs` columns
-(`msg_id, read_ct, enqueued_at, last_read_at, archived_at, vt, message, headers`) per the
-pgmq schema embedded at `shikigami-migrations/sql-migrations/2026-06-24-13-00-00-pgmq-schema.sql:1120-1160`.
+(shikigami `Trigger/Enqueue.hs:52`).
 
 New modules/handlers that must exist at the end:
 
-- M1: `Shikigami.Cli.Commands.Agents.runAgentsList :: FilePath -> Bool -> IO ()`.
+- M1: `Shikigami.Operator.Agents.Command.runAgentsList :: FilePath -> OutputMode -> IO ()`.
 - M2: `Shikigami.Operator.Query` (read-only `Statement`s over `keiro.keiro_workflows`,
-  `kiroku.kioku_sessions`, `keiro.keiro_workflow_steps`); `Shikigami.Cli.Commands.Runs`
-  (`runRunsList`, `runRunsShow`).
-- M3: `Shikigami.Cli.Commands.Runs.runRunsCancel :: Text -> Bool -> IO ()`.
-- M4: `Shikigami.Cli.Commands.Dlq` (`runDlqList`, `runDlqReplay :: Integer -> Bool -> IO ()`);
-  `Shikigami.Cli.Commands.Outbox.runOutboxStatus`.
-- Cli.hs: new `Command` constructors and `command`/subparser blocks for `agents`, `runs`, `dlq`,
+  `kiroku.kioku_sessions`, `keiro.keiro_workflow_steps`); `Shikigami.Operator.Runs.Command`
+  (`runRunsList`, `runRunsShow`); bounded `PageSize`, `PageRequest`, `RunCursor`, and
+  `StepCursor` types.
+- M3: `Shikigami.Operator.Runs.Command.runRunsCancel :: WorkflowId -> Confirmation -> IO ()`.
+- M4: `Shikigami.Operator.Dlq.Command` (`runDlqList`, `runDlqShow`, `runDlqReplay`,
+  `runDlqRepair`, `runDlqDiscard`);
+  `Shikigami.Operator.Outbox.Command.runOutboxStatus`.
+- The server dispatcher: new `Command` constructors and `command`/subparser blocks for `agents`, `runs`, `dlq`,
   `outbox`, each destructive leaf carrying a `switch (long "confirm")`.
 
 Cross-plan contracts (mirrored in the MasterPlan's Integration Points):
@@ -481,3 +485,6 @@ subcommands should emit an audit `Shikigami.Log` event (soft dependency).
 - 2026-07-22: Made plan 20's `AgentLoadReport` a hard dependency and assigned this plan
   ownership of the `agents` command group. Plan 23 now extends that command instead of
   defining a competing `agents list`.
+- 2026-07-22: Rebased on plans 36/37, replaced PGMQ archive coupling with plan 17's real
+  DLQ and complete inspect/repair/replay/discard flow, required schema-qualified public
+  queries, and expanded CLI parser/dispatch/confirmation tests.

@@ -29,11 +29,12 @@ This section must always reflect the actual current state of the work.
 
 - [ ] Milestone 1: add `FailureClass`/`classifyRunError`/`TransientBehaviorFailure` to `Shikigami.Behavior.Error`; throw transients in `runBehaviorStep`.
 - [ ] Milestone 1: tests — transient failure re-executes on second run; permanent failure replays without re-execution.
-- [ ] Milestone 2: extract pure `classifyOutcome` in `Shikigami.Worker`; attempt-aware backoff; dead-letter queue configured on the pgmq adapter.
+- [ ] Prerequisites: plans 36/37 complete; worker ownership and Settei configuration are settled.
+- [ ] Milestone 2: extract pure `classifyOutcome`; preserve shibuya as sole ack owner; normalize PGMQ's one-based attempt and use the shared `mkRetryPolicy`; configure a real dead-letter queue.
 - [ ] Milestone 2: tests — classification table test; dead-letter queue receives permanent failures.
 - [ ] Milestone 3: thread the shibuya lease into `handleRunJob`; periodic heartbeat around the workflow execution.
 - [ ] Milestone 3: test — pgmq visibility-extension primitive prevents redelivery.
-- [ ] Milestone 4: wall-clock run timeout (`runTimeout`) and configurable approval `deadline` in `WorkerEnv`; CLI/env wiring.
+- [ ] Milestone 4: wall-clock run timeout (`runTimeout`) and configurable approval `deadline` in `WorkerEnv`; Settei wiring.
 - [ ] Milestone 4: test — a run exceeding the budget yields a retry decision and completes on the next attempt.
 - [ ] Register `Shikigami.RetrySemanticsSpec` in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
 
@@ -69,6 +70,17 @@ Record every decision made while working on the plan.
 - Decision: On run timeout, return a retry decision (not dead-letter).
   Rationale: The journal preserves all completed steps, so the retry resumes from the last journaled step rather than restarting; a slow run frequently completes within a second budget. Repeated timeouts exhaust `maxRetries` and land in the dead-letter queue anyway.
   Date: 2026-07-08
+- Decision: PGMQ delivery attempts are one-based. Normalize that value once at the
+  adapter boundary and build delays/ceilings with the shared `mkRetryPolicy`; do not
+  reinterpret `Envelope.attempt` as zero-based.
+  Rationale: the old formula is off by one against PGMQ `read_ct` and would reach retry
+  ceilings/delays at different deliveries than the framework.
+  Date: 2026-07-22
+- Decision: The shibuya handler returns exactly one `AckDecision`; it never deletes,
+  archives, commits, or moves the message directly.
+  Rationale: framework-owned acknowledgement preserves transactional DLQ behavior and
+  prevents duplicate finalization.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -139,7 +151,7 @@ classifyOutcome ::
   AckDecision
 ```
 
-with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (PoisonPill err)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (PoisonPill …)` as today (Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`. Add `retryDelayFor :: Maybe Attempt -> RetryDelay` computing exponential backoff `min 60 (2 ^ attempt)` seconds (attempt is shibuya's zero-based delivery counter, `Envelope.attempt`, populated by the pgmq adapter from pgmq's `readCount`; `Nothing` means 1 second). In `runOneAgent`, wrap the workflow execution in `try @SomeException`-style handling that specifically catches `TransientBehaviorFailure` and maps it to `AckRetry (retryDelayFor attempt)` with a stderr log; also catch keiro's `WorkflowError` (exported by `Keiro.Workflow`; its `WorkflowJournalAppendError` constructor signals a concurrent duplicate execution) and map it to `AckRetry` — by the time the retry fires, the original executor has either finished (replay returns its result) or died (the journal resumes). `runConversationAgent`'s `Left err -> AckRetry 1s` (Worker.hs:159-161) switches to `retryDelayFor attempt` too.
+with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (PoisonPill err)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (PoisonPill …)` as today (Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`. Treat PGMQ `read_ct`/the first delivery as attempt 1, normalize `Nothing` to that first attempt, and derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
 
 Configure the adapter with a DLQ: in `runQueueWorker` (Worker.hs:76), replace `defaultConfig runQueueName` with
 
@@ -170,9 +182,16 @@ runJobHandler env ingested@Ingested {envelope = Envelope {payload = p, attempt}}
 
 `withAsync` (from `async`, already a transitive dependency; add `async` to `shikigami-core.cabal` build-depends if not present) cancels the heartbeat when the handler returns. Each tick pushes visibility 30 seconds ahead; a crashed worker stops ticking and the message becomes visible within ~30 seconds — crash-recovery latency is unchanged. Thread `attempt` through to `handleRunJob`/`runOneAgent` for Milestone 2's backoff (change `handleRunJob :: WorkerEnv -> Value -> IO AckDecision` to `WorkerEnv -> Maybe Attempt -> Value -> IO AckDecision`).
 
-Milestone 4 — explicit run timeout. Scope: `shikigami-core/src/Shikigami/Worker.hs`, `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`. At the end, every run has a wall-clock budget (default 300 seconds) and the approval deadline is configurable instead of hardcoded `Nothing`.
+Milestone 4 — explicit run timeout. Scope: the worker module assigned by plan 36 and
+plan 37's Settei application config. At the end, every run has a wall-clock budget
+(default 300 seconds) and the approval deadline is configurable instead of hardcoded `Nothing`.
 
-Add to `WorkerEnv` (Worker.hs:55-63) two fields: `runTimeout :: !(Maybe NominalDiffTime)` and `approvalDeadline :: !(Maybe NominalDiffTime)`. In `runOneAgent`, wrap the workflow execution in `System.Timeout.timeout (toMicros (runTimeout env))`; a `Nothing` result (budget exceeded) logs and returns `AckRetry (retryDelayFor attempt)` — the journal makes the retry a resume, not a restart. In `agentRunDeps` (Worker.hs:205), replace `deadline = Nothing` with `deadline = approvalDeadline env`. In `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` (`runWorkerCmd`, lines 24-43), read `SHIKIGAMI_RUN_TIMEOUT_SECONDS` (default `"300"`; `"0"` disables) and `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` (default unset → `Nothing`, preserving today's behavior) via `System.Environment.lookupEnv`, and populate the new fields. The interaction is deliberate: the run timeout must comfortably exceed one heartbeat interval, and because the heartbeat keeps the message invisible, the timeout — not the visibility window — is what bounds a wedged run.
+Add to `WorkerEnv` two fields: `runTimeout :: !(Maybe NominalDiffTime)` and
+`approvalDeadline :: !(Maybe NominalDiffTime)`. Wrap workflow execution with the
+timeout and return the shared retry decision when it expires. Declare stable Settei
+keys with explicit legacy bindings for `SHIKIGAMI_RUN_TIMEOUT_SECONDS` and
+`SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`; validate positivity/bounds before constructing
+the environment. No worker module calls `lookupEnv`.
 
 Journal-versioning constraint (applies to every milestone): no journaled step is renamed and no journaled value encoding changes; the only observable-journal change in this plan is that transient failures stop producing journal entries at all, which is strictly additive-safe per docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md.
 
@@ -222,7 +241,7 @@ Acceptance is behavioral, verified by tests that fail before the change and pass
 
 Transient re-execution (fails before): build `AgentRunDeps` whose hooks' `beforeStepBody` throws `TransientBehaviorFailure "simulated 503"` on the first entry into `"run-behavior"` (IORef-latched, as in AgentWorkflowSpec.hs:73-82). Call `runAgentRunWorkflow deps job`; assert it throws. Call it again with the same job (same `WorkflowId`); assert `Right (Completed (Right _))` and that the step-body counter for `"run-behavior"` is 2 — the body re-ran. Before this plan the equivalent scenario (a behavior returning `Left`) yields `Completed (Left _)` on both calls with the body having run once. Also drive the real classification path: an agent whose behavior is `ShikumiProgram { task = "nonexistent" }` produces `UnknownTask` → `Permanent` → journaled `Left`; assert two consecutive runs return the same `Completed (Left _)` and the body ran once (replay, correct for permanent).
 
-Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` yields 1s at `Nothing`, 1s/2s/4s… at attempts 0/1/2, capped at 60s.
+Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the one-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization.
 
 Heartbeat primitive: against the migrated database's pgmq schema, create a queue, send a message, read it with a 2-second visibility timeout, extend visibility by 30 seconds (the same `set_vt`-based operation the adapter's lease uses — `Pgmq` session API from `pgmq-hasql`), sleep 3 seconds, and assert a second read returns no message (it would be redelivered without the extension — that variant is the fails-before half of the pair).
 
@@ -237,6 +256,9 @@ Every edit is additive or a local rewrite; re-running builds and tests is safe. 
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36 and 37. The worker lives in the package assigned by plan
+36 and receives validated timeout/retry settings from plan 37's Settei composition root.
 
 Libraries and why: keiro (`Keiro.Workflow` — `step`, `runWorkflow`, `WorkflowOutcome (..)`, `WorkflowError (..)`; journaling semantics this plan leans on), shibuya-core (`Shibuya.Core.Ack` — `AckDecision (..)`, `RetryDelay (..)`, `DeadLetterReason (..)`; `Shibuya.Core.Ingested` — `Ingested (..)` including `lease`; `Shibuya.Core.Lease` — `Lease (..)`; `Shibuya.Core.Types` — `Envelope (..)` including `attempt :: Maybe Attempt`), shibuya-pgmq-adapter (`Shibuya.Adapter.Pgmq.Config` — `defaultConfig`, `PgmqAdapterConfig (..)`, `DeadLetterConfig (..)`, `DeadLetterTarget (..)`), pgmq-hasql (queue creation for the DLQ; visibility-extension session for the heartbeat test), `async` (`Control.Concurrent.Async.withAsync`), `base` (`System.Timeout.timeout`), effectful (`Effectful.withEffToIO`, `UnliftStrategy (ConcUnlift …)`).
 
@@ -267,3 +289,6 @@ Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflo
 
 - 2026-07-22: Recorded plan 20 as a hard downstream consumer of this plan's ack
   classification, eliminating its conditional ad-hoc routing decision.
+- 2026-07-22: Corrected attempts to PGMQ's one-based semantics, adopted the shared
+  `mkRetryPolicy`, made acknowledgement framework-owned, and moved timeout/deadline
+  configuration to Settei.

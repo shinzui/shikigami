@@ -41,7 +41,10 @@ generation (`keiro/src/Keiro/Workflow.hs`, in the keiro checkout at
 
 After this initiative, an operator can redeploy shikigami while agent runs, flows, and danwa
 conversations are suspended mid-flight, and those instances resume correctly under the new
-code: in-flight instances take the old code path where the shape changed (guarded by keiro
+code. Before implementation, a checked `domain/shikigami.keiro` specification inventories
+workflow names, stable steps, patches, timers, awakeables, and continue-as-new boundaries;
+CI rejects drift between that specification and the harness/scaffold. In-flight
+instances take the old code path where the shape changed (guarded by keiro
 `patch`), fresh instances take the new path, and no journaled step is ever silently replayed
 into the wrong position. Flows can remember and recall memory without duplicating writes on
 replay. A danwa conversation ends on idle timeout (completing its kioku session), rotates
@@ -68,10 +71,14 @@ registry module with load-time validation.
 
 ## Decomposition Strategy
 
-The initiative decomposes along four functional concerns, each independently deliverable
-and verifiable:
+The initiative decomposes into a checked-DSL foundation plus four functional concerns,
+each independently deliverable and verifiable:
 
-First, the versioning mechanism itself (EP-1, plan 24). Everything else in this MasterPlan
+First, plan 39 inventories the durable topology in `domain/shikigami.keiro`, checks and
+scaffolds it, wires generated artifacts behind a firewall with typed implementation
+holes, and adds a CI diff gate. It does not generate business logic.
+
+Second, the versioning mechanism itself (EP-1, plan 24). Everything else in this MasterPlan
 changes the journaled step structure of workflows that may have instances in flight, so the
 discipline (what step changes are safe, when to use `patch`, when to use `continueAsNew`,
 how to name steps) and the plumbing (threading `WorkflowRunOptions.activePatches` through
@@ -80,19 +87,19 @@ the one capability whose step naming is deploy-fragile today (`emitSignal` ordin
 that fix defines the caller-supplied-label convention the other plans reuse, and adds
 load-time validation that a declared `Flow{name}` resolves in the flow registry.
 
-Second, replay safety of flow memory (EP-2, plan 25). This is a self-contained correctness
+Third, replay safety of flow memory (EP-2, plan 25). This is a self-contained correctness
 hole — flow `remember`/`recall` are raw IO, not journaled steps — whose fix (journaled
 steps with stable labels, deterministic memory ids) depends on plan 24's label convention
 and discipline but on nothing else. It is separable from the conversation work because it
 changes the `Memory` capability and its interpreter, not the conversation loop.
 
-Third, the conversation workflow lifecycle (EP-3, plan 26). The danwa conversation is the
+Fourth, the conversation workflow lifecycle (EP-3, plan 26). The danwa conversation is the
 one workflow that actually lives long enough for journal growth and code evolution to hurt,
 so it is the first consumer of `continueAsNew` and the discipline. It is a distinct
 functional concern (conversation semantics: idle timeout, session completion, message
 racing) that can be built and tested independently once plan 24's mechanism exists.
 
-Fourth, consolidation (EP-4, plan 27). Duplicated SinkIntent machinery and run lifecycles
+Fifth, consolidation (EP-4, plan 27). Duplicated SinkIntent machinery and run lifecycles
 are how versioning discipline gets silently violated: a fix applied to one copy and not the
 other changes wire format or step semantics for half the system. Consolidation is mostly
 code motion that must preserve journaled step names and JSON wire format byte-for-byte, so
@@ -112,10 +119,11 @@ consolidation reviewable against it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | None | None | Not Started |
-| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | EP-1 | None | Not Started |
-| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | EP-1 | None | Not Started |
-| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | None | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
+| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | cross-MP: plan 36 | None | Not Started |
+| 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Not Started |
+| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1 | None | Not Started |
+| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1 | None | Not Started |
+| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -123,14 +131,16 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-1 is the foundation and has no dependencies. It delivers three artifacts the others
+F1 follows the package architecture in plan 36 and is the first durable-workflow gate.
+Every EP must keep `domain/shikigami.keiro`, the generated scaffold, the typed holes,
+and the handwritten harness in sync. EP-1 then delivers three artifacts the others
 consume: the versioning discipline document (`docs/workflow-versioning.md`), the
 `Shikigami.Workflow.Versioning` module (the process-wide `activePatches` set and the
 `WorkflowRunOptions`/`WorkflowResumeOptions` values threaded into every workflow run and
 the resume worker), and the caller-supplied-label convention for capability step names
 (established by the `emitSignal` fix).
 
-EP-2 hard-depends on EP-1. It converts flow `remember`/`recall` into journaled keiro steps,
+EP-2 hard-depends on F1 and EP-1. It converts flow `remember`/`recall` into journaled keiro steps,
 which changes the journaled step structure of a workflow type (`shikigami.agent-run` running
 a Flow behavior) that can have suspended instances in flight across a deploy. It needs
 EP-1's discipline to reason about that change (purely additive steps need no patch guard),
@@ -139,13 +149,13 @@ patch plumbing available in case implementation reveals a non-additive edge. It 
 the same module (`shikigami-core/src/Shikigami/Flow/Capability.hs`) whose `Sink` effect
 EP-1 re-signatures; serializing them avoids conflicting capability API changes.
 
-EP-3 hard-depends on EP-1. Journal rotation via `continueAsNew` requires EP-1's run-options
+EP-3 hard-depends on F1 and EP-1. Journal rotation via `continueAsNew` requires EP-1's run-options
 plumbing (the rotation outcome must be handled by callers that today treat `ContinuedAsNew`
 as an error, `shikigami-core/src/Shikigami/Agent/Conversation.hs:105`), and restructuring
 the turn loop changes step ordering in the longest-lived workflow in the system, which must
 be shipped behind EP-1's patch discipline so in-flight conversations survive the deploy.
 
-EP-4 soft-depends on EP-1: consolidation must preserve journaled step names and the
+EP-4 hard-depends on F1 and soft-depends on EP-1: consolidation must preserve journaled step names and the
 SinkIntent wire format byte-for-byte, and EP-1's discipline document is the standard the
 consolidation diff is reviewed against. EP-4 can start any time (its work is code motion
 plus tests) but should land after the discipline exists and after cross-MasterPlan plans
@@ -164,6 +174,13 @@ the MasterPlan-5 slice of the canonical MP-2 through MP-7 waves in MasterPlan 2.
 
 
 ## Integration Points
+
+Checked durable topology (`domain/shikigami.keiro`): plan 39 owns the authoritative
+inventory, checker/scaffolder invocation, generated-artifact firewall, typed holes,
+harness, and CI diff gate. Plans 24–27 update the DSL and its stable identifiers in the
+same change as any handwritten workflow change. Generated code may call typed holes;
+it may not own provider selection, authorization, database transactions, or other
+business decisions.
 
 Flow capability effect signatures (`shikigami-core/src/Shikigami/Flow/Capability.hs`):
 EP-1 changes the `Sink` effect (`EmitSignal` gains a caller-supplied stable label) and EP-2
@@ -200,7 +217,9 @@ the inventory unchanged.
 Conversation ingress and workflow identity (`shikigami-core/src/Shikigami/Agent/Conversation.hs`
 and `shikigami-core/src/Shikigami/Worker.hs:143-162`): owned by EP-3. EP-1 only notes the
 existing `ContinuedAsNew` pattern-match sites (`Worker.hs:192`, `Conversation.hs:105`);
-EP-3 changes their behavior.
+EP-3 changes their behavior. Every idle timer is versioned or explicitly cancelled
+when a new turn arrives, and stale timer completions are ignored by generation/token;
+otherwise an old timer can terminate an active conversation after journal rotation.
 
 
 ## Progress
@@ -218,7 +237,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-2 M3: `IOE`/`Store` removed from flow-facing `FlowEffects`; `Acknowledgement` capability added.
 - [ ] EP-2 M4: `rememberWith` metadata options (priority, confidence, memoryType, supersedes) delivered.
 - [ ] EP-3 M1: Session-first ingress with indexed session resolution (kioku subjectRef query) and epoch-capable workflow identity.
-- [ ] EP-3 M2: Idle-timeout timer ends the workflow and completes the kioku session.
+- [ ] EP-3 M2: versioned/cancelled idle-timeout timer ends only the intended idle generation and completes the kioku session.
 - [ ] EP-3 M3: Journal rotation via `continueAsNew` every N turns; generation-aware delivery and result loading.
 - [ ] EP-3 M4: Racing-message smoothing (pre-armed next-message awakeable; busy-path is not an error).
 - [ ] EP-4 M1: `Shikigami.Sink.Intent` shared module extracted; both former copies deleted; golden wire-format round-trip test.
@@ -241,6 +260,12 @@ interactions between child plans. Provide concise evidence.
   session query (`kioku-core/src/Kioku/Session.hs` exports only `getByScope` and friends;
   `SessionsByScopeQuery` filters scope fields only), so EP-3's indexed session resolution
   requires a small kioku-side read-model addition rather than a shikigami-only change.
+- Fleet conformance audit (2026-07-22): the Keiro DSL checker/scaffolder can make the
+  durable topology reviewable before code changes, but only if generated artifacts stay
+  behind a firewall and CI compares them with the checked-in specification.
+- Runtime-pattern audit (2026-07-22): an idle timeout that is merely re-armed leaves a
+  stale completion able to end a later active turn. Plan 26 now requires cancellation or
+  generation/version validation, including across continue-as-new.
 
 
 ## Decision Log
@@ -248,8 +273,9 @@ interactions between child plans. Provide concise evidence.
 Record every decomposition or coordination decision made while working on the master
 plan.
 
-- Decision: Decompose into four plans with plan 24 as the sole foundation; make 25 and 26
-  hard-depend on it and 27 soft-depend on it.
+- Decision: Add plan 39 as the checked-DSL foundation; plan 24 remains the versioning
+  mechanism foundation. Plans 24–27 hard-depend on the DSL gate, 25/26 hard-depend on
+  24, and 27 soft-depends on 24.
   Rationale: 25 and 26 both change journaled step structure of workflow types with
   in-flight instances and need the patch discipline and stable-label mechanism 24 creates;
   27 is code motion whose safety criterion (byte-for-byte step names and wire format) is
@@ -285,6 +311,16 @@ plan.
   delegation must change a durable workflow only after patch plumbing and the step-name
   inventory exist.
   Date: 2026-07-22
+- Decision: Every durable-topology change updates `domain/shikigami.keiro` and passes
+  checker, scaffold, harness, and generated-diff gates before merge.
+  Rationale: stable workflow identifiers are an externally persisted compatibility
+  surface; review must compare declared intent with executable wiring.
+  Date: 2026-07-22
+- Decision: Conversation idle timers are cancelled or generation-versioned, and stale
+  completions are harmless across normal turns and continue-as-new.
+  Rationale: re-arming alone is insufficient in a durable journal and can terminate a
+  newly active conversation.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -300,3 +336,8 @@ Compare the result against the original vision.
 - 2026-07-22: Ordered plan 27 after plans 19 and 28 and made plan 24 an explicit
   prerequisite of MasterPlan 7's delegation work. This aligns the durable-evolution
   initiative with the canonical MP-2 through MP-7 execution waves.
+- 2026-07-22: Added plan 39 as the checked Keiro DSL foundation, made all durable plans
+  consume its evolution gate, and corrected plan 26's idle timeout to require stale-
+  timer cancellation or generation validation.
+- [ ] F1 M1–M4: durable topology inventory, checked Keiro DSL, scaffold/harness, and CI
+      drift gate from plan 39 are complete.

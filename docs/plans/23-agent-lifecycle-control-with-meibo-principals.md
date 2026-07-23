@@ -28,8 +28,9 @@ Explicitly out of scope, per the improvement request: the shikigami HTTP API, th
 ## Progress
 
 - [ ] Milestone 1: `Shikigami.Directory` module — types, cached view, file stub source, refresher; unit tests.
-- [ ] Milestone 2: migrations for `shikigami.agent_load_state` and `shikigami.run_skips`; persist plan 20's canonical load report (`agents/broken.dhall` visible as failed).
-- [ ] Milestone 3: lifecycle kill switch at all trigger-fire and sink-dispatch points, with recorded skips and fail-open semantics; real-Postgres tests.
+- [ ] Prerequisites: plans 36/37/38, 30, and 33 complete.
+- [ ] Milestone 2: pg-migrate changes for `shikigami.agent_load_state` and `shikigami.run_skips`; persist plan 20's canonical load report.
+- [ ] Milestone 3: lifecycle kill switch at all trigger-fire and sink-dispatch points; fail closed before the first valid snapshot, then serve last-known valid on refresh failure; real-Postgres tests.
 - [ ] Milestone 4: principal join — sessions record principal ids; extend plan 30's `shikigami agents list` and add `sync` to reconcile declared↔principal orphans and backfill `sink_grants.principal_id`.
 - [ ] Final: end-to-end pause/resume demonstration transcript captured; `cabal test all` green.
 
@@ -42,13 +43,25 @@ Explicitly out of scope, per the improvement request: the shikigami HTTP API, th
 
 ## Decision Log
 
-- Decision: The directory stub source is a local JSON file (`--directory <file>` on the worker/scheduler/consumer commands), polled into an in-memory cached view, rather than a stub HTTP server.
+- Decision: The directory stub source is a local JSON file selected by plan 37's typed
+  `DirectorySettings`, polled into an in-memory cached view, rather than a stub HTTP server.
   Rationale: The consult must be a cache read on the hot path (IR requirement 1: "no hot path blocks on meibo synchronously"), so the runtime needs the cached-view machinery regardless of transport; a file source exercises that machinery with the least ceremony and is trivially editable mid-test (pause = edit the file). The real meibo swap replaces only the `DirectorySource` function (fetch from meibo's read API or fold the `meibo.v1` topic) behind the same `DirectoryHandle`.
   Date: 2026-07-08
 
-- Decision: Fail open. If the directory source errors, keep serving the last successfully loaded view; if no view was ever loaded (or no `--directory` was given), treat every agent as `active` with no principal.
-  Rationale: Mandated by the improvement request ("a meibo outage fails open to the last-known lifecycle", per C14's change rule). This is the deliberate opposite of the permission gate in `docs/plans/21-database-backed-sink-permission-grants.md`, which fails closed: grants are a trust boundary, lifecycle is an operational switch, and an outage of the directory must not silence the fleet.
-  Date: 2026-07-08
+- Decision: Fail closed until the first valid configured directory snapshot. After one
+  successful load, a refresh error keeps serving the last-known valid view. A deliberately
+  disabled directory source is a separate explicit Settei mode, not indistinguishable
+  from a failed/never-loaded source.
+  Rationale: "last-known" requires a known snapshot; allowing before one exists can run
+  an agent whose paused/deactivated policy has never been observed.
+  Date: 2026-07-22
+
+- Decision: A configured valid snapshot that does not contain the declared principal or
+  compatibility handle also denies execution (`UnknownPrincipal`); only the explicit
+  `DirectoryDisabled` Settei mode bypasses lifecycle enforcement.
+  Rationale: Absence is not evidence of an active principal. Treating an unknown entry as
+  active would recreate the cold-start fail-open hole after every successful refresh.
+  Date: 2026-07-22
 
 - Decision: Record trigger-level skips in a new `shikigami.run_skips` table; record sink-level skips through the existing `SinkOutcome` channel by adding a `SkippedLifecycle !Text` constructor (`shikigami-core/src/Shikigami/Sink/Types.hs:42-48`).
   Rationale: A trigger-level skip happens before any run, workflow, or kioku session exists, so there is nothing to attach it to — hence a table (the IR asks for an "attributable skipped outcome"; agent name + principal id + trigger kind + reason + timestamp is exactly that, and a fleet page can query it). A sink-level skip happens where `DeniedOutcome` already flows (journaled `SinkResult`s at `Shikigami/Agent/Workflow.hs:424-425`, publish-time log at `Shikigami/Sink.hs:45`), so reusing that channel keeps recording uniform; a distinct constructor (not `DeniedOutcome` with a special reason) keeps permission denials and lifecycle skips distinguishable in journals and logs. Adding a constructor is JSON-backward-compatible: old journaled rows decode unchanged, and new rows only appear after this code ships.
@@ -76,7 +89,13 @@ Explicitly out of scope, per the improvement request: the shikigami HTTP API, th
 
 ## Context and Orientation
 
-Repository layout: `shikigami-core` (runtime library), `shikigami-cli` (the `shikigami` executable; parser in `shikigami-cli/src/Shikigami/Cli.hs`, command modules under `Shikigami/Cli/Commands/`), `shikigami-migrations` (codd-managed SQL; create files with `just new-migration <slug>`, apply with `just migrate` — the recipe touches the `.cabal` file to force the Template-Haskell re-embed of `sql-migrations/*.sql`, see the Justfile comments at lines 20-27), `shikigami-api` (wire types). Everything builds inside `nix develop` with `cabal build all` / `cabal test all`. Real-Postgres tests use `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs:12-19`), which already includes the `shikigami` schema in its managed set.
+The current repository begins with legacy `shikigami-core`, `shikigami-cli`,
+`shikigami-migrations`, and `shikigami-api` packages. Plans 36 and 38 run first and replace
+that ownership/migration model with the six-package service architecture and pg-migrate
+component, manifest, complete application plan, CLI, and test support. This plan places every
+new module in those assigned packages and uses the public pg-migrate test support; it does
+not create another Codd file or extend the legacy monolith. Everything builds inside
+`nix develop` with `cabal build all` / `cabal test all`.
 
 Terms. A "principal" is a directory entry: an `agent_…` id plus a handle (the human name, which equals the Dhall `name` field for shikigami agents) plus a lifecycle. "Lifecycle" is one of `active`, `paused`, `deactivated`; paused/deactivated agents must neither fire nor deliver. A "trigger fire" is the moment shikigami decides to enqueue a run job for an agent; a "sink dispatch" is the moment a run's output is sent to an external service. The "directory view" is an in-memory snapshot mapping handle → principal record, refreshed in the background — never queried synchronously on the hot path.
 
@@ -98,14 +117,26 @@ Session attribution: `Shikigami.Agent.Workflow.openSession` (Workflow.hs:248-275
 
 ### Milestone 1 — the directory view
 
-Scope: a new module `shikigami-core/src/Shikigami/Directory.hs` (add to `exposed-modules`) providing the cached, fail-open directory consult, with a file-backed stub source. Pure logic unit-tested without a database.
+Scope: a directory module in the package assigned by plan 36 providing fail-closed
+cold start and last-known-valid refresh behavior, with a file-backed stub source and
+Settei configuration from plan 37.
 
-Types and functions (see Interfaces and Dependencies for full signatures): `Lifecycle` (`Active | Paused | Deactivated`), `PrincipalRecord { principalId, handle, lifecycle }`, `DirectoryView` (a `Map Text PrincipalRecord` keyed by handle, plus the load timestamp), `DirectorySource` (an `IO (Either Text DirectoryView)`), `fileDirectorySource :: FilePath -> DirectorySource` (decode the JSON stub file), `DirectoryHandle` (an `IORef` of the last good view plus the source), `newDirectoryHandle`, `refreshDirectory` (run the source; on `Right` swap the view, on `Left` log one stderr line and keep the previous view — fail open), `startDirectoryRefresher :: DirectoryHandle -> Int -> IO ()` (a `forever` loop with `threadDelay`, refresh every N seconds; the worker runs it under its existing `concurrently_` fan-out at Worker.hs:70), and the two consult functions used by call sites:
+Types and functions (see Interfaces and Dependencies for full signatures): `Lifecycle`
+(`Active | Paused | Deactivated`), `PrincipalRecord {principalId, handle, lifecycle}`,
+`DirectoryView` (a `Map Text PrincipalRecord` keyed by handle, plus the load timestamp),
+`DirectorySource` (an `IO (Either Text DirectoryView)`), `fileDirectorySource :: FilePath ->
+DirectorySource` (decode the JSON stub file), and `DirectoryHandle` (an `IORef` state that
+distinguishes no valid snapshot from last-known valid). `refreshDirectory` swaps on `Right`;
+on `Left`, it retains a prior valid view but remains unavailable when no prior view exists.
+`startDirectoryRefresher :: DirectoryHandle -> RefreshInterval -> IO ()` is a supervised
+loop using a bounded Settei duration; an unexpected exit fails its process. Consults are:
 
 ```haskell
 data LifecycleDecision
-  = AllowRun !(Maybe PrincipalRecord)   -- active, or unknown to the directory (fail open)
+  = AllowRun !(Maybe PrincipalRecord)   -- active in a valid snapshot, or explicitly disabled mode
   | SkipRun !PrincipalRecord !Text      -- paused/deactivated, with the reason text
+  | UnknownPrincipal !Text              -- absent from an otherwise valid configured snapshot
+  | DirectoryUnavailable !Text          -- configured source has no valid snapshot
 
 consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
 lookupPrincipal  :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
@@ -123,7 +154,10 @@ The stub file format mirrors the C14 principal shape so real meibo data drops in
 ]
 ```
 
-`emptyDirectoryHandle :: IO DirectoryHandle` (no source; always the empty view) is what commands use when `--directory` is absent, preserving today's behavior exactly. Unit tests (plain tasty cases in a new `shikigami-core/test/Shikigami/DirectorySpec.hs`, registered in `test/Main.hs`): active → `AllowRun (Just …)`; paused → `SkipRun … "lifecycle paused"`; unknown handle → `AllowRun Nothing`; a failing source after one good load keeps serving the old view; a never-loaded handle allows everything.
+An explicit `DirectoryDisabled` Settei mode preserves compatibility when directory
+integration is intentionally off. Configured-but-never-loaded returns
+`DirectoryUnavailable` and startup/readiness fails closed. Tests distinguish disabled,
+cold-start failure, valid active/paused, and refresh failure after a good snapshot.
 
 Acceptance: `cabal test all` green with the new group.
 
@@ -133,10 +167,11 @@ Scope: two small tables and persistence of plan 20's canonical load report. At t
 `agents/broken.dhall` produces a visible failed-load row and a loud stderr line instead of
 a silent skip.
 
-Run `just new-migration agent-load-state-and-run-skips` and give it this body (keeping the generated `-- codd: in-txn` header; replace the template's `search_path` line):
+Run `cabal run shikigami-migrate -- new agent-load-state-and-run-skips`, edit the
+generated pg-migrate change, and update/verify the exact component manifest and complete
+application plan:
 
 ```sql
--- codd: in-txn
 
 -- Migration: agent-load-state-and-run-skips (improvement request: consult-meibo-agent-lifecycle)
 CREATE SCHEMA IF NOT EXISTS shikigami;
@@ -158,40 +193,72 @@ CREATE TABLE IF NOT EXISTS shikigami.run_skips (
   stage        TEXT        NOT NULL CHECK (stage IN ('trigger','sink','drain')),
   detail       TEXT        NOT NULL,   -- trigger kind or sink kind
   reason       TEXT        NOT NULL,   -- e.g. 'lifecycle paused'
-  occurred_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  idempotency_key TEXT     NULL,
+  occurred_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (stage, idempotency_key)
 );
-CREATE INDEX IF NOT EXISTS run_skips_agent_idx ON shikigami.run_skips (agent_name, occurred_at);
+CREATE INDEX IF NOT EXISTS shikigami.run_skips_agent_idx
+  ON shikigami.run_skips (agent_name, occurred_at);
 ```
 
-(The `CREATE SCHEMA IF NOT EXISTS shikigami` is idempotent whether or not plan 21's migration ran first — codd applies both in timestamp order regardless of which plan merged first.)
+(Plan 38's manifest/application plan defines exact order; no Codd timestamp ordering is
+consulted.)
 
 Load-state persistence: consume the `AgentLoadReport` returned by plan 20's
 `loadAgentsLoud`. Add `Shikigami.Directory.LoadStateStore` (or a section of
 `Shikigami.Directory`) with `recordLoadStates :: Hasql.Pool.Pool -> AgentLoadReport -> IO
 (Either Text ())` (upsert per manifest path, schema-qualified
-`shikigami.agent_load_state`) and `recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO ()`.
+`shikigami.agent_load_state`) and
+`recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO (Either StoreError ())`. Insert skips with
+`ON CONFLICT (stage, idempotency_key) DO NOTHING`; PostgreSQL still permits multiple rows
+where the key is `NULL`. A failed durable skip write is not swallowed before queue
+acknowledgement.
 At the existing CLI call sites, add only `recordLoadStates` after loading; retain plan 20's
 logging, summary, and strict-mode behavior and plan 33's enabled selection.
 
-Acceptance: `just migrate` applies; `cabal run shikigami -- worker --agents agents …` prints the loud failure line for `broken.dhall`; `psql … -c "TABLE shikigami.agent_load_state"` shows a `failed` row for `agents/broken.dhall` with the Dhall error, and `loaded` rows for the others.
+Acceptance: `just migrate` applies; `cabal run shikigami-worker -- --config
+yaml:config/worker-lifecycle-dev.yaml` prints the loud failure line for `broken.dhall`;
+`psql … -c "TABLE shikigami.agent_load_state"` shows a `failed` row for
+`agents/broken.dhall` with the Dhall error, and `loaded` rows for the others.
 
-### Milestone 3 — the kill switch
+### Milestone 3 — the fail-closed/last-known lifecycle kill switch
 
-Scope: consult the cached view before every trigger fire and sink dispatch; record skips; fail open. At the end, editing the stub file pauses and resumes an agent live.
+Scope: consult the cached view before every trigger fire and sink dispatch; record skips;
+fail closed when a configured source has no valid snapshot and use last-known valid only
+after a successful refresh. Editing the stub file pauses and resumes an agent live.
 
-Threading: add `directory :: !DirectoryHandle` to `SchedulerEnv` (`Shikigami/Trigger/Scheduler.hs:36-39`), `WorkerEnv` (Worker.hs:55-63), `AgentRunDeps` (Workflow.hs:79-89), `SinkContext` (Types.hs:29-38), and `SinkEnv` (Capability.hs) — the same placements plan 21 uses for `GrantSource`. Also pass the pool where skips must be recorded (SchedulerEnv already has one; the consumer commands have `pool st`). Add `--directory FILE` (optional) and `--directory-refresh SECONDS` (default 30) options to the `worker`, `scheduler`, `consume-stream`, and `consume-events` commands in `Shikigami/Cli.hs`; each command builds `newDirectoryHandle (fileDirectorySource file)`, performs one initial `refreshDirectory`, and (worker/scheduler) runs `startDirectoryRefresher` alongside its loops (worker: add to the `concurrently_` chain at Worker.hs:70). Without `--directory`, `emptyDirectoryHandle` keeps everything active.
+Threading: add `directory :: !DirectoryHandle` to `SchedulerEnv`
+(`Shikigami/Trigger/Scheduler.hs:36-39`), `WorkerEnv` (Worker.hs:55-63), `AgentRunDeps`
+(Workflow.hs:79-89), `SinkContext` (Types.hs:29-38), and `SinkEnv` (Capability.hs)—the same
+placements plan 21 uses for `GrantSource`. Also pass the pool where skips must be recorded
+(SchedulerEnv already has one; the consumer commands have `pool st`). Plan 37's Settei
+adapter decodes `DirectoryDisabled | DirectoryFile {path, refreshInterval}` once at each
+composition root. Configured commands perform an initial refresh before becoming ready and
+run the refresher under their supervised loop group. `DirectoryDisabled` alone constructs a
+bypass handle; a missing, malformed, or unreachable configured source is not converted to
+disabled mode.
 
 Check sites, in order:
 
 1. `scheduleFireAction` (Scheduler.hs:92-103): before `enqueueScheduledRun`, `consultLifecycle`; on `SkipRun`, `recordRunSkip` (stage `trigger`, detail `schedule`) and — important — still `armNextRun` for the following tick and still return the fired event id, so the schedule keeps ticking while paused and resumes cleanly on unpause.
 2. The two consumer `onHit`s (ConsumeStream.hs:45-53, 75-86): on `SkipRun`, log `[stream] SKIP agent=… (lifecycle paused)` and `recordRunSkip` (stage `trigger`, detail `stream`/`event`) instead of enqueueing.
-3. `handleRunJob` (Worker.hs:132-141): after decoding the `RunJob`, on `SkipRun` record (stage `drain`, detail = the job's trigger kind) and return `AckOk` (the job is consumed, not retried — a paused agent's queued jobs drain away; this matches "pausing stops fires" and avoids an unbounded retry loop).
+3. `handleRunJob` (Worker.hs:132-141): after decoding the `RunJob`, on a lifecycle denial
+   record stage `drain` with the job idempotency key and return `AckOk` only after that insert
+   commits. A transient store failure returns the retry disposition from plans 17/18; the
+   durable skip's uniqueness key makes replay safe. A successfully recorded paused job is
+   consumed rather than retried, so pausing drains stale queued work without a retry loop.
 4. Sink enqueue-time — `buildSinkIntent` (Workflow.hs:420-440), `prepareSinkIntent` (Workflow.hs:475-514), and `Flow.SinkOutbox.prepareSinkIntent` (SinkOutbox.hs:83-121): consult beside `checkGrant`; on skip produce `SinkResult kind (SkippedLifecycle reason)` with no outbox message (mirror of the denied arm at Workflow.hs:424-425).
 5. Sink publish-time — `Shikigami.Sink.dispatch` (Sink.hs:39-47): consult beside the grant check; on skip log `[sink] skipped (lifecycle): …` and return `SkippedLifecycle` (like `DeniedOutcome`, `publishSinkIntent` at Workflow.hs:581-583 must treat it as non-`Failed`, completing the outbox row without delivering — extend that `case` accordingly).
 
 Add the `SkippedLifecycle !Text` constructor to `SinkOutcome` (Types.hs:42-48) and satisfy every `case` the compiler flags.
 
-Tests (new `shikigami-core/test/Shikigami/LifecycleGateSpec.hs`, registered in `test/Main.hs`; use `withShikigamiMigratedDatabase` + `withStore` per the AgentWorkflowSpec.hs:51-56 pattern): (a) a workflow run with a handle-paused directory produces `SkippedLifecycle` sink results and zero outbox rows (`Keiro.Outbox.listOutbox`); (b) `handleRunJob` with a paused agent returns `AckOk`, inserts a `run_skips` row (query it back), and opens no session; (c) with an empty/never-loaded directory the same run behaves exactly as before this plan (fail open); (d) `dispatch` with a paused identity returns `SkippedLifecycle` and the stub server receives nothing (the `testWithApplication` pattern from `test/Main.hs`).
+Tests (new `LifecycleGateSpec` in the package assigned by plan 36, registered in its test
+suite, using plan 38's real-Postgres support): (a) a workflow run with a paused principal
+produces `SkippedLifecycle` sink results and zero outbox rows; (b) `handleRunJob` with a
+paused agent returns `AckOk`, records a skip, and opens no session; (c) configured/no-snapshot
+returns `DirectoryUnavailable` and neither enqueues nor dispatches, while explicit
+`DirectoryDisabled` preserves compatibility; (d) a valid snapshot missing the principal
+returns `UnknownPrincipal`; and (e) dispatch against a paused principal sends no request.
 
 Acceptance: tests green; the manual pause/resume transcript under Validation works.
 
@@ -201,13 +268,20 @@ Scope: runs are attributed to principal ids and the declared↔directory join is
 
 Session attribution: in `openSession` (Workflow.hs:248-275), call `lookupPrincipal
 (directory deps) (principal <$> identity decl) (name decl)` and set `agentId` to the
-resolved principal id, falling back to the declared principal value and then the agent name.
+resolved principal id. A configured lifecycle mode cannot reach session creation for an
+unknown principal; explicit disabled mode may fall back to the declared principal value and
+then the agent name for compatibility.
 
-Reconciliation surface: extend plan 30's
-`shikigami-cli/src/Shikigami/Cli/Commands/Agents.hs` and existing parser:
+Reconciliation surface: extend plan 30's `Shikigami.Operator.Agents.Command` in
+`shikigami-server` and its server-owned parser:
 
-- Extend plan 30's `shikigami agents list --agents DIR [--directory FILE]`: load the directory view once and add principal id/lifecycle columns to every report entry, then print directory principals with no manifest as `NO MANIFEST`. Add `agents sync` beside the existing `list` parser.
-- `shikigami agents sync --agents DIR --directory FILE`: additionally `recordLoadStates` to the database and, when plan 21's table exists, backfill `UPDATE shikigami.sink_grants g SET principal_id = $2, updated_at = now() WHERE g.agent_name = $1 AND g.principal_id IS DISTINCT FROM $2` for each resolved principal (the integration point with `docs/plans/21-database-backed-sink-permission-grants.md`; if the table is absent, print a notice and skip).
+- Extend plan 30's `shikigami agents list --config PATH`: consume the same Settei directory
+  settings, load the directory view once, add principal id/lifecycle columns, and print
+  directory principals with no manifest as `NO MANIFEST`. Add `agents sync` beside the
+  existing `list` parser.
+- `shikigami agents sync --config PATH`: additionally `recordLoadStates` and, when plan 21's
+  table exists, backfill the schema-qualified `shikigami.sink_grants.principal_id` for each
+  resolved principal. If that soft dependency is absent, print a notice and skip.
 
 Tests: extend `LifecycleGateSpec` — after a run with a directory that maps the agent, the kioku session row's `agent_id` equals the principal id (query `kioku_sessions` via `Kioku.Session` as AgentWorkflowSpec does); after `sync` against a database with plan 21's seed rows, the matching `sink_grants` rows carry the principal id.
 
@@ -216,11 +290,12 @@ Acceptance: `shikigami agents list` output matches the format above against `age
 
 ## Concrete Steps
 
-All from `/Users/shinzui/Keikaku/bokuno/shikigami` inside `nix develop`; dev Postgres via process-compose; `export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"`.
+All from `/Users/shinzui/Keikaku/bokuno/shikigami` inside `nix develop`; database and
+directory settings come from the process-compose Settei source.
 
 ```bash
 nix develop
-just new-migration agent-load-state-and-run-skips
+cabal run shikigami-migrate -- new agent-load-state-and-run-skips
 # edit the generated file per Milestone 2
 just migrate
 cabal build all
@@ -237,7 +312,11 @@ cat > /tmp/meibo-stub.json <<'EOF'
 EOF
 ```
 
-Pause/resume demonstration: start the worker with `--agents agents --directory /tmp/meibo-stub.json --directory-refresh 5` (plus the usual `--kawa-url`/`--kizashi-url`/`--danwa-url`/`--danwa-agent` flags and a running `stub-kawa`). The `heartbeat` schedule fires normally. Edit the file, changing `"lifecycle": "active"` to `"lifecycle": "paused"`; within one refresh interval the worker logs skips instead of runs:
+Pause/resume demonstration: use plan 37's documented Settei sources to configure the worker
+with `agents` as its manifest directory and `DirectoryFile {path =
+"/tmp/meibo-stub.json", refreshInterval = 5 seconds}` (plus the normal dependency settings).
+The `heartbeat` schedule fires normally. Edit the file, changing `"lifecycle": "active"` to
+`"lifecycle": "paused"`; within one refresh interval the worker logs skips instead of runs:
 
 ```text
 [scheduler] SKIP agent=heartbeat (lifecycle paused)
@@ -248,7 +327,7 @@ and `psql … -c "SELECT agent_name, stage, detail, reason FROM shikigami.run_sk
 Load-state demonstration:
 
 ```bash
-cabal run shikigami -- agents list --agents agents --directory /tmp/meibo-stub.json
+cabal run shikigami -- agents list --config config/operator-dev.yaml
 ```
 
 Expected shape (exact principal ids per your stub file):
@@ -262,15 +341,35 @@ broken            FAILED   (agents/broken.dhall: …dhall type error…)
 
 ## Validation and Acceptance
 
-Acceptance mirrors the improvement request's acceptance sketch, verbatim and observable: (1) pausing an agent in the directory (stub file today) stops schedule/stream/event fires and sink dispatch after cache refresh, with skipped outcomes recorded in `shikigami.run_skips` (trigger/drain stages) and `SkippedLifecycle` sink results (sink stage); reactivating resumes it — no process restarts, no file deletions. (2) `agents/broken.dhall` produces a visible failed-load state (loud stderr line, `shikigami.agent_load_state` row, `agents list` output) instead of a silent skip. (3) A run's kioku session carries the agent principal id, and `shikigami agents list` joins declarations, principals, load states without heuristics. (4) A directory outage (delete the stub file mid-run) changes nothing: the last-known view keeps serving, verified by the fail-open tests. Automated: `cabal test all` green including `DirectorySpec` and `LifecycleGateSpec`; the exact test commands are `cabal test all` (or `cabal test shikigami-core-test` for the single suite).
+Acceptance is observable: pausing stops fires/dispatch after refresh with durable skips;
+reactivating resumes. Failed manifests are queryable, sessions carry principal ids, and
+the operator join is exact. A configured directory that fails before its first snapshot
+prevents worker readiness/execution; after a good snapshot, deleting the stub keeps
+serving precisely that last-known view. `DirectorySpec`, `LifecycleGateSpec`, and the
+full test suite prove disabled, cold-start failure, and post-snapshot outage separately.
 
 
 ## Idempotence and Recovery
 
-The migration is idempotent (`IF NOT EXISTS`) and codd skips applied files; re-running `just migrate` is safe. `recordLoadStates` upserts by manifest path and `recordRunSkip` appends — both safe to repeat; skip recording is best-effort (a failed insert logs and never blocks a decision). Every behavioral change is guarded by the presence of `--directory`: omit the flag and the runtime is byte-for-byte today's behavior, so the feature deploys dark and rolls back by dropping the flag. Pausing is always reversible by editing the lifecycle back to `active` (or removing the entry — unknown handles fail open to allowed). Queued jobs for a paused agent are consumed-and-recorded (`AckOk`), not dead-lettered, so unpausing never replays a backlog of stale runs — if that surprises during implementation, revisit in the Decision Log rather than silently changing the ack.
+Plan 38's pg-migrate manifest/application plan owns replay and verification; re-running its
+`up`/`verify` path never reapplies an accepted change. `recordLoadStates` upserts by manifest
+path. `recordRunSkip` must use the trigger/job idempotency key when one exists so a replay does
+not create duplicate skip rows; at call sites without such an identity, appending an
+observational skip is acceptable and documented. A persistence failure must not turn a deny
+into an allow: retain the lifecycle decision, emit a bounded critical error, and fail the
+owning loop/process if the durable audit is required for acknowledgement.
+
+Plan 37 distinguishes explicit `DirectoryDisabled` from a configured source that has not
+loaded. A configured cold-start failure and an unknown principal remain fail closed; refresh
+failure after a good snapshot keeps the last-known valid view. Pausing is reversible by
+editing lifecycle back to active. Queued jobs for a paused agent are consumed-and-recorded
+(`AckOk`), so unpausing does not replay a stale backlog.
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36, 37, 38, 30, and 33. Plan 20 supplies the load report.
+Lifecycle settings come through Settei and database changes through pg-migrate.
 
 No new external dependencies: `aeson`, `containers`, `hasql`, `hasql-pool`, `directory`, `filepath`, and `optparse-applicative` are already dependencies of the packages touched. Meibo is deliberately not depended on (see Surprises & Discoveries); the swap point is `DirectorySource` only. Interfaces that must exist at the end (full module paths):
 
@@ -284,16 +383,21 @@ type DirectorySource = IO (Either Text DirectoryView)
 fileDirectorySource :: FilePath -> DirectorySource
 data DirectoryHandle
 newDirectoryHandle :: DirectorySource -> IO DirectoryHandle
-emptyDirectoryHandle :: IO DirectoryHandle
+disabledDirectoryHandle :: IO DirectoryHandle
 refreshDirectory :: DirectoryHandle -> IO ()
-startDirectoryRefresher :: DirectoryHandle -> Int -> IO ()
-data LifecycleDecision = AllowRun !(Maybe PrincipalRecord) | SkipRun !PrincipalRecord !Text
+startDirectoryRefresher :: DirectoryHandle -> RefreshInterval -> IO ()
+data LifecycleDecision
+  = AllowRun !(Maybe PrincipalRecord)
+  | SkipRun !PrincipalRecord !Text
+  | UnknownPrincipal !Text
+  | DirectoryUnavailable !Text
 consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
 lookupPrincipal :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
 data RunSkip = RunSkip
   { agentName :: !Text, principalId :: !(Maybe Text),
-    stage :: !Text, detail :: !Text, reason :: !Text }
-recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO ()
+    stage :: !Text, detail :: !Text, reason :: !Text,
+    idempotencyKey :: !(Maybe Text) }
+recordRunSkip :: Hasql.Pool.Pool -> RunSkip -> IO (Either StoreError ())
 recordLoadStates :: Hasql.Pool.Pool -> AgentLoadReport -> IO (Either Text ())
 
 -- shikigami-core : Shikigami.Sink.Types
@@ -307,8 +411,8 @@ data SinkOutcome = Delivered !Text | Stubbed | DeniedOutcome !Text
 ```
 
 Database artifacts: `shikigami.agent_load_state` and `shikigami.run_skips` (Milestone 2).
-CLI artifacts: lifecycle columns and `sync` added to plan 30's `agents` command group, plus
-`--directory`/`--directory-refresh` on the long-running commands. Hard dependencies: plan
+CLI artifacts: lifecycle columns and `sync` added to plan 30's `agents` command group; all
+long-running commands consume plan 37's shared `DirectorySettings`. Hard dependencies: plan
 30 owns that command group and plan 33 defines `identity.principal`. Plan 20's
 `AgentLoadReport` is the shared loader contract. Soft dependency: plan 21 provides the
 nullable `sink_grants.principal_id` backfill target. The improvement request remains the
@@ -322,3 +426,6 @@ scope authority.
   plan 20's `AgentLoadReport`, and changed `agents list` from a new command to an extension
   of plan 30's command. Declared identity is available from the start, with name fallback
   only for manifests that omit the optional field.
+- 2026-07-22: Added plans 36–38, replaced Codd/direct flags with pg-migrate and Settei,
+  and corrected lifecycle availability to fail closed before the first valid snapshot
+  with last-known-valid fallback only after successful synchronization.

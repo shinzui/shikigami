@@ -19,7 +19,11 @@ MasterPlan 1 bootstrapped shikigami into a runtime that provably runs the whole
 declared-agent loop — triggers, durable workflows, behaviors, sinks, memory — but it
 did so on deliberate stubs, and several of those stubs *report success*. An
 architecture review (2026-07) found four places where the production worker path is
-wired to fakes with no configuration escape hatch, each verified in code:
+wired to fakes with no configuration escape hatch, each verified in code. A subsequent
+portfolio-conformance review also found two prerequisites shared by all four streams:
+Shikigami has not yet adopted the fleet's six-package deployed-service architecture or
+its Settei configuration model. Those prerequisites are now explicit children rather
+than conventions repeated differently in feature plans:
 
 1. The worker always builds its behavior environment with a stub LLM provider, so every
    Skill agent "succeeds" with the fixed sentence
@@ -42,8 +46,9 @@ wired to fakes with no configuration escape hatch, each verified in code:
    `KizashiSignal.recipientFrom` and `DanwaConversation.topic` are silently ignored
    (`Sink/KizashiClient.hs:22-45`, `Sink/Danwa.hs:24-31`).
 
-When this MasterPlan is complete, the production path is *honest*: an operator can wire
-a real Anthropic model with two environment variables and the worker says loudly which
+When this MasterPlan is complete, the production path is *honest*: Shikigami has the
+standard six-package boundary, every executable resolves typed configuration through
+Settei, and an operator can wire a real Anthropic model without exposing secrets while the worker says loudly which
 provider is active (stub included); a human can be asked for approval through danwa or
 kizashi and answer from the CLI, with the tested durable park/resume/timeout semantics
 unchanged; agents actually use what they remember and what triggered them, in both
@@ -64,8 +69,10 @@ otherwise.
 
 ## Decomposition Strategy
 
-The review's findings fall into four distinct functional concerns, and the
-decomposition follows the concerns rather than the files: **model execution** (what
+The review's findings fall into six distinct concerns. Two are foundations:
+**deployed-service architecture** (where runtime responsibilities live) and
+**configuration** (how every executable obtains validated settings). Four are feature
+concerns, and the decomposition follows the concerns rather than the files: **model execution** (what
 runs a Skill), **human-in-the-loop** (who may stop a sink), **context assembly** (what
 the behavior gets to see), and **sink truth** (what happens to the output). Each
 produces an independently demonstrable behavior — a real model reply, a CLI-resolved
@@ -85,8 +92,9 @@ plan (33, MasterPlan 7) was rejected: silently ignored fields are a present-tens
 runtime lie, not a future schema concern, and the fix (honor or reject) requires no
 schema change.
 
-Plans 14 and 16 share only additive record fields, but their portfolio landing order is
-now plan 16 → plan 22 → plan 14: plan 22 wraps the settled sink clients with the
+Plan 36 establishes the six-package shape, then plan 37 establishes Settei inside that
+shape. Plans 14 and 16 share only additive record fields, but their portfolio landing order is
+now plan 36 → plan 37 → plans 16/17/19 → plan 22 → plan 14: plan 22 wraps the settled sink clients with the
 authenticated `SinkHttp` that approval notifications consume. Plan 15 is sequenced
 after 13 by soft dependency (same-file coordination, and the feature is only meaningful
 with a real model) but is not blocked by it.
@@ -96,20 +104,23 @@ with a real model) but is not blocked by it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | None | None | Not Started |
-| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | cross-MP: plan 22 (MasterPlan 4) | EP-1 | Not Started |
-| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | None | EP-1 | Not Started |
-| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | None | None | Not Started |
+| F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Not Started |
+| F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Not Started |
+| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F2 | None | Not Started |
+| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F2; cross-MP: plans 17 and 22 | EP-1 | Not Started |
+| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F1 | EP-1 | Not Started |
+| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F2 | None | Not Started |
 
 
 ## Dependency Graph
 
-EP-1, EP-3, and EP-4 have no hard dependencies and compile against the current tree.
-EP-2 has one cross-MasterPlan hard dependency on
+F1 is the first implementation step. F2 follows F1 because configuration ownership is
+expressed at executable and package boundaries. EP-1 and EP-4 then consume F2; EP-3
+consumes F1 and soft-depends on EP-1. EP-2 has two hard dependencies: F2 and
 `docs/plans/22-outbound-authentication-for-sink-clients.md`: approval asks are outbound
 danwa or kizashi calls and must use plan 22's authenticated `SinkHttp` rather than
 introduce a second, unauthenticated client path. EP-2 also soft-depends on EP-1 for the
-typed environment-resolver convention.
+model-provider integration seam, not for configuration ownership.
 
 The remaining intra-MasterPlan soft dependency is EP-3 on EP-1. Both edit
 `shikigami-core/src/Shikigami/Behavior/Run.hs` and `Behavior/Skill.hs`; EP-1 defines
@@ -138,10 +149,16 @@ adapters and merge work. The canonical landing order is expressed as waves; plan
 the same wave may proceed in parallel unless an intra-MasterPlan dependency says
 otherwise.
 
-Foundation wave: land plan 13 (model/config convention), plan 16 (honest sink
-behavior), plans 17 and 18 (worker failure taxonomy and transactional enqueue), plan
-21 (grant schema), and plan 24 (workflow-versioning discipline). These artifacts have
-no cross-MasterPlan prerequisites.
+Foundation wave: land plans 36 (package architecture), 37 (Settei configuration), 38
+(pg-migrate transition), and 39 (checked Keiro DSL). These four plans turn recurring
+fleet conventions into owned, testable prerequisites. No later plan may recreate a
+seventh top-level package, raw environment resolver, Codd migration path, or unchecked
+workflow topology.
+
+Core semantics wave: land plan 13 (model provider), plan 16 (honest sink behavior),
+plans 17 and 18 (worker failure taxonomy and transactional enqueue), plan 21 (grant
+schema), and plan 24 (workflow-versioning discipline) after their applicable
+foundation predecessors.
 
 Shared-seam wave: land plan 20 after plans 17 and 18 so it consumes their worker and
 enqueue seams; land plan 22 after plans 13 and 16 so it owns the single authenticated,
@@ -174,22 +191,27 @@ The exact edge ledger is:
 
 | Consumer | Predecessor(s) | Strength |
 |---|---|---|
-| plan 14 | plan 22 | Hard: approval asks import `SinkHttp` and authenticated clients |
+| all deployed feature plans | plan 36 | Hard: package and executable ownership must be settled first |
+| every process/config plan | plan 37 | Hard: Settei is the sole process-configuration surface |
+| every database-evolution plan | plan 38 | Hard: pg-migrate owns components, manifests, CLI, and test support |
+| plans 24–27 and 35 | plan 39 | Hard: durable topology and identifiers pass the checked Keiro DSL gate |
+| plan 14 | plans 17 and 22 | Hard: approval asks import authenticated clients and preserve failure class through workflow retry/dead-letter semantics |
 | plan 19 | plan 28 M1 | Hard: delivery events import `Shikigami.Log` |
+| plan 22 | plan 19 | Hard: authenticated clients preserve the terminal/transient delivery taxonomy |
 | plan 20 | plans 17 and 18 | Hard: routing/enqueue hardening consumes their final seams |
 | plans 25 and 26 | plan 24 | Hard: both change durable workflow behavior |
 | plan 23 | plans 30 and 33 | Hard: it extends the owned CLI and consumes declared identity |
 | plan 30 | plan 20 | Hard: `agents list` renders `AgentLoadReport` |
-| plan 32 | plan 22 | Hard: kanmon extends the canonical auth/HTTP layer |
+| plan 32 | plans 19 and 22 | Hard: kanmon extends the canonical auth/HTTP layer and terminal delivery taxonomy |
 | plan 33 | plan 20 | Hard: enabled selection consumes `AgentLoadReport` |
-| plan 35 | plans 24 and 33 | Hard: delegation changes the durable workflow and agent schema |
-| plan 22 | plans 13 and 16 | Preferred landing order: reuse final config and sink-client shapes |
+| plan 35 | plans 24, 33, and 38 | Hard: delegation changes the durable workflow/agent schema and adds a durable global budget ledger |
+| plan 22 | plans 13 and 16 | Preferred landing order: reuse final provider and sink-client shapes |
 | plan 27 | plans 19, 24, and 28 | Preferred landing order: consolidate final semantics once |
 | plan 31 | plans 13, 22, 28, 29, and 32 | Preferred landing order: document and package settled surfaces |
 
 Plan 28 Milestone 3 also waits for plan 22, while its logging and metrics milestones can
-start immediately. Plan 34 Milestone 4 waits for plan 33; its earlier memory-lifecycle
-milestones can proceed independently.
+start immediately. Plan 34 starts after plan 33 so its scope semantics and bounded memory
+policy are the only types threaded through the lifecycle worker.
 
 
 ## Integration Points
@@ -202,15 +224,14 @@ recalled }` record and the context-assembly logic that renders it. EP-1 defines 
 EP-3 extends. End state:
 `runBehavior :: BehaviorEnv -> AgentDecl -> BehaviorInput -> IO (Either RunError Value)`.
 
-**Config-loading idiom — shared with MasterPlan 4's plan 22 (EP-1 defines).**
-`docs/plans/22-outbound-authentication-for-sink-clients.md` will add credential fields
-to `shikigami-core/src/Shikigami/Sink/Config.hs`. EP-1 establishes the repository's
-one config idiom first: a typed record per concern, a single `lookupEnv`-based
-resolver returning `Either Text` (fatal at startup on `Left`), and a loud one-line
-stderr description of the resolved choice with secrets rendered through baikai's
-redacting `ApiKeySource`. Plan 22 must consume this idiom, not invent a second one.
-EP-2's `resolveApprovalPolicy` and EP-4's `ReiConfig` already follow it inside this
-MasterPlan.
+**Configuration boundary — plan 37 defines; all feature plans consume.**
+`docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md` owns stable
+keys, typed strict records, explicit environment bindings, source precedence,
+redaction, diagnostics, and exit semantics. Plans 13, 14, 16, 22, 28–32, and 34 must
+declare Settei `Setting`s and extend the process-level application config rather than
+calling `getEnv`/`lookupEnv` or building one-off parsers. Secrets are credential
+references or redacted secret types and never gain `Show`, JSON, or log rendering.
+Standard OpenTelemetry environment variables remain SDK-owned as plan 37 documents.
 
 **Keiro journal discipline — `Agent/Workflow.hs` step structure vs. MasterPlan 5's
 plan 24 (all four EPs constrained).**
@@ -230,7 +251,8 @@ explicit keep-constructor decision).
 `docs/plans/22-outbound-authentication-for-sink-clients.md` owns `SinkHttp`, the shared
 connection managers, `TokenSource`, and the canonical header-capable POST helper. EP-2
 uses those artifacts for danwa/kizashi approval asks and does not open a parallel raw
-HTTP path. `ApprovalPolicy` remains a small environment-backed record local to EP-2.
+HTTP path. `ApprovalPolicy` remains a small typed record local to EP-2, resolved as
+part of the Settei application config defined by plan 37.
 Plan 33 does not own approval policy—it owns identity, memory policy, and enablement—so
 there is no approval dependency on MasterPlan 7.
 
@@ -250,19 +272,23 @@ that helper; plan 32 adds the kanmon `HttpEnv`/token source and consumes the sam
 No plan may add a second `postJSONWith` variant or store bearer-token text in a
 serializable sink config.
 
-**Worker construction — `WorkerEnv`/`AgentRunDeps`/`Cli.hs` worker flags (EP-1, EP-2,
-EP-4).** Three plans add fields (provider selection, approval policy, `ReiConfig`) and
-flags/env-reads to the same constructors. All additions are independent record fields;
+**Worker construction — `WorkerEnv`/`AgentRunDeps`/worker executable (EP-1, EP-2,
+EP-4).** Three plans add fields (provider selection, approval policy, `ReiConfig`) to
+the same constructors and extend plan 37's Settei config. All additions are independent record fields;
 merge order is irrelevant, but each plan keeps its additions in a clearly-named block
-inside `runWorkerCmd` so the merges stay mechanical.
+inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Progress
 
-- [ ] EP-1 M1: provider selection module + loud env construction; stub default; worker
+- [ ] F1 M1–M4: six-package architecture, ownership rules, API boundary, and package
+      tests from plan 36 are complete.
+- [ ] F2 M1–M4: every executable uses Settei with explicit bindings, diagnostics,
+      secret redaction, and compatibility tests from plan 37.
+- [ ] EP-1 M1: provider selection module + loud typed-config construction; stub default; worker
       and run-behavior wired; tests green.
-- [ ] EP-1 M2: `Options` threaded through the skill arm with explicit
-      `ApiKeyEnv "ANTHROPIC_API_KEY"`; capture-seam test.
+- [ ] EP-1 M2: `Options` threaded through the skill arm; Settei's opaque credential is
+      lowered only at the Baikai boundary, with no library environment fallback; capture-seam test.
 - [ ] EP-1 M3: `modelUsed` recorded on sessions; live anthropic smoke transcript.
 - [ ] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
@@ -274,7 +300,7 @@ inside `runWorkerCmd` so the merges stay mechanical.
       payload+prior via `ArgMap`; capture tests.
 - [ ] EP-3 M2: payload-aware `recallQuery`.
 - [ ] EP-3 M3: `classifyRisk` uses prior; memory-flips-verdict workflow test.
-- [ ] EP-4 M1: `ReiConfig`/`--rei-url`; ReiAction fails loudly or really POSTs;
+- [ ] EP-4 M1: Settei-backed `ReiConfig`; ReiAction fails loudly or really POSTs;
       `Stubbed` no longer produced.
 - [ ] EP-4 M2: `resolvedRecipient` through `SinkIntent`; `Actor` routing honored;
       old-row decode-compat test.
@@ -284,6 +310,9 @@ inside `runWorkerCmd` so the merges stay mechanical.
 
 ## Surprises & Discoveries
 
+- Fleet conformance audit (2026-07-22): the portfolio repeated package-placement and
+  raw-environment conventions in nearly every child plan. Plans 36 and 37 now own those
+  cross-cutting decisions once, and downstream plans depend on them.
 - Cross-MasterPlan audit (2026-07-22): plan 33 contains no approval-policy work,
   despite the earlier EP-2 integration note saying it might replace the policy source.
   The false edge was removed; approval policy remains owned by plan 14.
@@ -299,8 +328,9 @@ inside `runWorkerCmd` so the merges stay mechanical.
 
 ## Decision Log
 
-- Decision: Decompose the review's findings into four child plans along functional
-  concerns (model execution, human-in-the-loop, context assembly, sink truth), with
+- Decision: Decompose the review into two foundation plans plus four feature plans:
+  architecture (36), configuration (37), model execution (13), human-in-the-loop (14),
+  context assembly (15), and sink truth (16), with
   the dependency matrix EP-1=plan 13, EP-2=plan 14, EP-3=plan 15, EP-4=plan 16;
   EP-3 soft-depends on EP-1. The 2026-07-22 revision adds plan 22 as EP-2's
   cross-MasterPlan hard dependency.
@@ -319,7 +349,7 @@ inside `runWorkerCmd` so the merges stay mechanical.
   sacrificing CI.
   Date: 2026-07-08
 - Decision: For `ReiAction`, ship loud failure now (`PublishFailed` into the visible
-  outbox retry path) behind an off-by-default `--rei-url` real-client flag, rather
+  outbox retry path) behind an off-by-default `sinks.rei.base_url` Settei setting, rather
   than waiting for rei to grow an API or keeping the success-reporting stub.
   Rationale: verified that rei (`/Users/shinzui/Keikaku/bokuno/rei-project/rei`) is a
   CLI-only application with no HTTP surface; the choice was between two honest options
@@ -336,12 +366,16 @@ inside `runWorkerCmd` so the merges stay mechanical.
   contract; breaking it now would silently invalidate parked or historical workflows
   and pre-empt MasterPlan 5's migration story.
   Date: 2026-07-08
-- Decision: EP-1 defines the environment-variable config idiom; EP-2 and EP-4 follow
-  it within this MasterPlan, and plan 22 (MasterPlan 4) is directed to reuse it.
-  Rationale: one config style keeps credentials out of argv and logs (baikai's
-  redacting `ApiKeySource` is the model) and makes later config surfaces (plan 31's
-  deployable stack) a rename problem instead of a redesign.
-  Date: 2026-07-08
+- Decision: Plan 37 owns configuration through Settei; feature plans may define domain
+  settings but may not read the environment or invent precedence rules directly.
+  Rationale: one typed composition point provides consistent source ordering,
+  diagnostics, validation, and secret redaction across every binary.
+  Date: 2026-07-22
+- Decision: Plan 36 owns the exact six-package architecture and the public HTTP/API
+  boundary used by later plans.
+  Rationale: package ownership and API-generation rules must be settled before feature
+  plans add executables, configuration, or public endpoints.
+  Date: 2026-07-22
 - Decision: Coordinate MasterPlans 2–7 through the child-plan waves in Dependency Graph,
   not by imposing a coarse MP-2 → MP-3 → … → MP-7 chain.
   Rationale: the actual hard edges cross initiative numbers in both directions (for
@@ -369,3 +403,5 @@ inside `runWorkerCmd` so the merges stay mechanical.
   plan 33, and fixed ownership of the shared HTTP seam. The update prevents numeric
   MasterPlan order from driving implementation and gives contributors a single acyclic
   landing order.
+- 2026-07-22: Added plans 36 and 37 as architecture and Settei foundations, rewired all
+  MP-2 children to consume them, and replaced the obsolete `lookupEnv` convention.

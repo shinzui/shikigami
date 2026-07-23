@@ -19,14 +19,27 @@ Shikigami is a declared-agent runtime: agents are declared in Dhall manifests, t
 
 After this initiative, every hand-off is honest. A behavior failure caused by a flaky LLM or HTTP call is genuinely re-executed on retry instead of being replayed from the journal three times and archived. A run that takes longer than 30 seconds — that is, any real LLM call — is no longer redelivered mid-flight into a concurrent duplicate execution. A Kafka event whose processing hits a transient Postgres outage is retried instead of being permanently skipped by an unconditional offset commit; and once the inbox accepts an event, the corresponding run job is enqueued in the same database transaction, so a crash cannot strand an event in the "processed but never enqueued" state. A run record that says a sink was "Delivered" actually means the downstream HTTP call succeeded, not merely that a row was inserted into the outbox; retried sink publishes no longer duplicate kizashi signals or orphan danwa conversations. Routing of run jobs is decided by the job's declared trigger kind, the scheduler applies an explicit catch-up policy after downtime instead of firing every missed minute, and failures that today vanish (kioku session/memory write errors, unloadable agent manifests, unparseable crons) are loud.
 
-In scope: retry/timeout/heartbeat semantics of the run-job worker (`shikigami-core/src/Shikigami/Worker.hs`, `shikigami-core/src/Shikigami/Agent/Workflow.hs`); atomicity of the Kafka consumer path (`shikigami-core/src/Shikigami/Trigger/Consumer.hs`, `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`); truthfulness of sink outcomes and client-side idempotency toward kawa, kizashi, and danwa (`shikigami-core/src/Shikigami/Agent/Workflow.hs`, `shikigami-core/src/Shikigami/Sink/*`); and explicit routing, scheduler catch-up, and loud failure reporting (`shikigami-core/src/Shikigami/Trigger/Scheduler.hs`, the three CLI loaders under `shikigami-cli/src/Shikigami/Cli/Commands/`).
+In scope: the pg-migrate transition that makes every new correctness table part of one
+complete component plan; retry/timeout/heartbeat semantics of the run-job worker;
+atomicity of the Kafka consumer path; truthfulness of sink outcomes and client-side
+idempotency toward kawa, kizashi, and danwa; and explicit routing, scheduler catch-up,
+and loud failure reporting. Package placement follows plan 36 rather than the legacy
+`shikigami-cli` paths, and all process configuration follows plan 37.
 
 Explicitly excluded: structured logging/metrics infrastructure (docs/plans/28), health/liveness and loop supervision (docs/plans/29), the operator CLI for inspecting runs and dead letters (docs/plans/30), per-agent lifecycle state recorded against meibo principals (docs/plans/23, MasterPlan 4 — this initiative only stops the silence around manifest load failures), consolidation of the duplicated sink-intent machinery (docs/plans/27, MasterPlan 5 — this initiative fixes the semantics of that machinery in place), and upstream API changes to kizashi or danwa to add server-side idempotency keys (documented as follow-ups inside EP-3; this initiative delivers client-side mitigations only).
 
 
 ## Decomposition Strategy
 
-The initiative decomposes along the four independent hand-off boundaries of the runtime, because each boundary has its own failure mode, its own files, and its own independently observable fix. The queue-to-workflow boundary (EP-1) is about what "retry" means once a job is in a handler: journaled step results versus thrown exceptions, visibility timeouts, and wall-clock budgets. The stream-to-queue boundary (EP-2) is about transactional atomicity between three stores: Kafka offsets, the keiro inbox table, and the pgmq queue — all decisions there are commit-ordering decisions. The workflow-to-downstream boundary (EP-3) is about what "Delivered" means and how retried publishes behave against three concrete downstream APIs. The trigger-and-configuration surface (EP-4) is a set of smaller, related correctness fixes — routing, scheduler catch-up, swallowed errors — that individually would be too thin for standalone plans but together form one coherent "the system tells the truth about what it is doing" work stream.
+The initiative has one database-evolution foundation and four independent hand-off
+boundaries. F1 replaces Codd with the fleet pg-migrate component/manifest/application-
+plan model before any child adds tables. The queue-to-workflow boundary (EP-1) is about
+what "retry" means once a job is in a handler, including PGMQ's one-based attempt
+number and shibuya's framework-owned acknowledgement. The stream-to-queue boundary
+(EP-2) is about transactional atomicity between Kafka offsets, the keiro inbox table,
+and pgmq. The workflow-to-downstream boundary (EP-3) is about truthful receipts and
+retry behavior. The trigger surface (EP-4) owns explicit routing, scheduler catch-up,
+and loud failures; configuration itself belongs to plan 37.
 
 Alternatives considered. A single "fix all correctness bugs" ExecPlan was rejected: it would span more than ten files across four unrelated subsystems and exceed five milestones, and the four streams need no shared code to proceed. Splitting EP-4 into three micro-plans (routing, scheduler, loudness) was rejected because each is one to two milestones and they share the same review context (the trigger surface) and the same test modules. Merging EP-1 and EP-4 because both edit `Shikigami/Worker.hs` was rejected: the ack-classification concern (EP-1) and the routing concern (EP-4) touch adjacent but different functions, and the seam between them is narrow enough to manage as an integration point rather than a merge. Sequencing EP-3 behind the MasterPlan-5 consolidation (docs/plans/27) was rejected: the consolidation is refactoring and should preserve semantics, so the semantics should be fixed first (see Integration Points).
 
@@ -37,10 +50,11 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | None | None | Not Started |
-| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | None | None | Not Started |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plan 28 M1 (MasterPlan 6) | cross-MP: plan 16 (MasterPlan 2) | Not Started |
-| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2 | None | Not Started |
+| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 and 37 | None | Not Started |
+| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 and 37 | None | Not Started |
+| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 and 37 | None | Not Started |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16 and 28 M1 | None | Not Started |
+| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plan 37 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -48,7 +62,8 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 ## Dependency Graph
 
-EP-1 and EP-2 can start independently. EP-3 starts after plan 28 Milestone 1 defines
+F1 follows plans 36 and 37 and gates every new Shikigami migration. EP-1 and EP-2 can
+then start independently. EP-3 starts after F1 and plan 28 Milestone 1 defines
 `Shikigami.Log`. EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
 and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
 implementations. Three additional coordination edges exist.
@@ -59,25 +74,50 @@ EP-2 precedes EP-4 on `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. EP-2 ad
 `enqueueRunJobTx` and `ensureRunQueue`; EP-4 hardens the IO-level helpers by consuming
 those artifacts and never conditionally invents them.
 
-EP-3 has a cross-MasterPlan integration edge, not with a plan in this registry but with docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md (MasterPlan 5), which plans to consolidate the very sink-intent machinery EP-3 modifies. EP-3 should land first; if the consolidation proceeds concurrently, it must preserve EP-3's semantics (the `Enqueued` outcome, per-sink outbox keys, and the delivery-receipt guard). All journaled-value changes in EP-1 and EP-3 must also respect the versioning discipline that docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md (MasterPlan 5) establishes: additive only — no renames of journaled step names, no encoding changes that fail to decode already-journaled values.
+EP-3 has cross-MasterPlan integration edges with plan 27 (consolidation) and plans 22/32
+(typed HTTP classification). EP-3 lands before plan 32 and defines `Enqueued`,
+`PermanentFailure`, per-sink outbox keys, delivery receipts, and the Keiro-owned terminal
+publish outcome; plan 27 must preserve them. All journaled-value changes in EP-1/EP-3 also
+respect plan 24's additive-only versioning discipline.
 
 EP-3 hard-depends on plan 28 Milestone 1, which defines `Shikigami.Log`, and preferably
 follows plan 16, which makes each sink handler truthful. EP-3 then records delivery semantics
 using the final sink outcomes and structured logger; plan 27 lands afterward and consolidates
 the settled semantics. The sink chain is plan 16 plus plan 28 M1 → EP-3 → plan 27.
 
-EP-1 and EP-2 can proceed in parallel while plan 28 M1 lands; EP-3 follows that logging
+EP-1 and EP-2 can proceed in parallel while F1 and plan 28 M1 land; EP-3 follows those
 milestone, and EP-4 starts after EP-1 and EP-2. This is the MasterPlan-3 slice of the
 canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
 ## Integration Points
 
-Worker handler and ack classification — `shikigami-core/src/Shikigami/Worker.hs`. Involved: EP-1, EP-4. EP-1 defines the shape: it changes `runJobHandler` to carry the shibuya lease for heartbeating, extracts a pure outcome-to-`AckDecision` classification with attempt-aware backoff, and removes the string-prefix dead-letter matching (today at `Worker.hs:184-185`). EP-4 consumes it: its new `routeRunJob` decides which orchestration path runs (`runConversationAgent` versus `runOneAgent`, today chosen by payload decode at `Worker.hs:139-141`) and expresses its failure cases through EP-1's classification rather than ad-hoc `AckDecision`s.
+Worker handler and ack classification — server/worker modules assigned by plan 36.
+Involved: EP-1, EP-4. EP-1 keeps shibuya's `QueueProcessor` as the sole acknowledgement
+owner, carries its lease for heartbeat, normalizes PGMQ's first delivery to attempt 1,
+and derives retry delay with the shared `mkRetryPolicy` vocabulary. EP-4 consumes that
+taxonomy and routes from an explicit `triggerKind` discriminator; payload decodability
+is never used as the route selector.
 
-Run-job enqueue module — `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Involved: EP-2, EP-4. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` (no queue creation inside the transaction) and `ensureRunQueue :: Pool -> IO (Either UsageError ())` called once at process startup. EP-4 extends the module: it removes `createQueue` from the per-enqueue path of `enqueueRunJob` (relying on `ensureRunQueue`), removes or re-keys `enqueueAddressedRun`, and replaces the epoch fallback in `runJobFromEnvelope`.
+Run-job enqueue module — core/worker modules assigned by plan 36. Involved: EP-2,
+EP-4. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` with no
+queue creation inside the transaction and a startup `ensureRunQueue`. Every inbox
+record reaches one explicit terminal disposition: enqueued, duplicate, permanent
+dead-letter, or transient failure with no offset commit. Kafka processing keeps
+durable dead-letter/halt behavior and uses shibuya's serial/framework-owned commit
+boundary rather than a parallel acknowledgement loop. EP-4 consumes that seam.
 
-Journaled sink outcome values — `shikigami-core/src/Shikigami/Sink/Types.hs` (`SinkOutcome`) and the step values journaled by `shikigami-core/src/Shikigami/Agent/Workflow.hs` (`dispatch-sinks` and the per-reply sink steps). Involved: EP-3 here; docs/plans/24 and docs/plans/27 in MasterPlan 5. EP-3 owns the change: it adds an `Enqueued` constructor (additive — old journaled `Delivered` values must still decode) and re-keys outbox messages per sink ordinal. Constraint on everyone: journaled step names (`ingest-job`, `lookup-agent`, `open-session`, `recall`, `run-behavior`, `dispatch-sinks`, `record`, `complete`, and the conversation steps) are never renamed, and value encodings only change backward-compatibly. The docs/plans/27 consolidation must treat EP-3's final semantics as the specification it preserves.
+Database evolution — plan 38 owns the `pg-migrate` component, exact-byte manifest,
+complete application plan, compatibility import, CLI, and test-support contract. EP-3
+adds delivery receipts only through that component; plans 21 and 23 do the same for
+their tables. No child creates timestamped Codd files or replays legacy DDL.
+
+Journaled sink outcome values—`SinkOutcome` and the values journaled by `dispatch-sinks` and
+per-reply steps. Involved: EP-3 here; plans 22/32 for typed HTTP failures; plans 24/27 in
+MasterPlan 5. EP-3 owns additive `Enqueued` and `PermanentFailure` constructors, per-sink
+keys, and the released Keiro `PublishRejected` terminal mapping; old `Delivered`/`Failed`
+values remain decodable. Journaled step names are never renamed and value evolution stays
+backward-compatible. Plan 27 preserves these final semantics.
 
 Workflow result encoding — `agentRunWorkflow`'s return type `Either Text AgentRunResult` (journaled by keiro as the workflow completion value). Involved: EP-1. Decision recorded here so no plan trips over it: EP-1 does not change this type. Transient failures are expressed by throwing (never journaled), so a journaled `Left` comes to mean "permanent failure" without any encoding change to already-completed workflows.
 
@@ -93,19 +133,20 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
-- [ ] EP-1: Milestone 2 — worker ack classification with attempt-aware backoff and a real dead-letter queue
+- [ ] F1: Milestones 1–4 — pg-migrate component, exact manifest, complete plan, Codd ledger-only import, CLI/test/deployment cutover
+- [ ] EP-1: Milestone 2 — one-based PGMQ attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
 - [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
 - [ ] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
 - [ ] EP-2: Milestone 1 — transactional enqueue: inbox transaction and pgmq send commit atomically
-- [ ] EP-2: Milestone 2 — offset commit only on success or handled-skip; store errors do not commit
-- [ ] EP-2: Milestone 3 — Kafka reconnect loop with backoff and a logged poison-record policy
-- [ ] EP-3: Milestone 1 — journaled outcome renamed to Enqueued; logSinkResult implemented
-- [ ] EP-3: Milestone 2 — sink delivery receipts table; publish outcomes recorded and queryable
+- [ ] EP-2: Milestone 2 — offset commit only after an explicit terminal inbox disposition; transient/store errors do not commit
+- [ ] EP-2: Milestone 3 — supervised serial Kafka loop with reconnect backoff and durable dead-letter/halt poison policy
+- [ ] EP-3: Milestone 1 — additive Enqueued/PermanentFailure outcomes and released Keiro PublishRejected; logSinkResult implemented
+- [ ] EP-3: Milestone 2 — pg-migrate-managed sink delivery receipts table; publish outcomes and reconciliation state recorded and queryable
 - [ ] EP-3: Milestone 3 — retry-safe dispatch: kizashi send-guard and danwa conversation reuse
 - [ ] EP-3: Milestone 4 — per-sink outbox keys; head-of-line isolation between a run's sinks
-- [ ] EP-4: Milestone 1 — routing on RunJob.triggerKind with typed failure for undecodable conversation payloads
+- [ ] EP-4: Milestone 1 — routing on an explicit RunJob trigger discriminator with typed failure for mismatched/undecodable payloads
 - [ ] EP-4: Milestone 2 — scheduler catch-up policy (skip-missed/coalesce default) and timer-kind dispatch fix
-- [ ] EP-4: Milestone 3 — kioku errors propagated or logged; no silently discarded store results
+- [ ] EP-4: Milestone 3 — critical kioku errors propagate to retry/failure; best-effort writes are explicitly classified and logged
 - [ ] EP-4: Milestone 4 — loud agent/cron loading with strict mode; enqueue-path hardening (keys, queue creation, epoch fallback, UUIDv5 bytes)
 
 
@@ -117,6 +158,13 @@ interactions between child plans. Provide concise evidence.
 - Planning research (2026-07-08): keiro has no per-step retry policy or step options at all — the framework's documented contract (keiro `Keiro/Workflow.hs` module haddock and the `Step` handler, which journals only after the step body returns) is that transient failures should be thrown so the step re-runs on the next execution. This turned EP-1's design from "add a retry policy" into "stop journaling transient failures", which is a smaller and more idiomatic change.
 - Planning research (2026-07-08): the shibuya version shikigami pins (cabal.project tag `3f276ee` of shinzui/shibuya) already exposes `lease :: Maybe (Lease es)` on the `Ingested` value the handler receives, and the pinned pgmq adapter populates it. EP-1's heartbeat needs no dependency bump.
 - Planning research (2026-07-08): neither kizashi's create-signal endpoint nor danwa's start/join/post endpoints accept any client-supplied id or idempotency key, and danwa has no lookup-by-external-key. EP-3's downstream idempotency is therefore necessarily client-side (a delivery-receipt guard in shikigami's own database), with upstream API changes recorded as follow-ups.
+- Fleet conformance audit (2026-07-22): `pg-migrate` already supplies the component,
+  manifest, complete application-plan, Codd ledger importer, CLI, and test support this
+  initiative needs. Continuing to author Codd migrations would create a second schema
+  authority and make delivery-receipt rollout unverifiable.
+- Runtime-pattern audit (2026-07-22): PGMQ attempts are one-based and shibuya owns
+  acknowledgement/commit. Retry and inbox plans were corrected to consume those facts
+  rather than layering zero-based math or a second ack loop over the framework.
 
 
 ## Decision Log
@@ -124,7 +172,8 @@ interactions between child plans. Provide concise evidence.
 Record every decomposition or coordination decision made while working on the master
 plan.
 
-- Decision: Decompose into exactly four ExecPlans along hand-off boundaries (queue→workflow, stream→queue, workflow→downstream, trigger/config surface), registered as EP-1=docs/plans/17, EP-2=docs/plans/18, EP-3=docs/plans/19, EP-4=docs/plans/20.
+- Decision: Decompose into one database foundation plus four ExecPlans along hand-off
+  boundaries, registered as F1=plan 38 and EP-1 through EP-4=plans 17–20.
   Rationale: Each boundary has a distinct failure mode, distinct files, and an independently observable fix; one mega-plan would exceed the ExecPlan size guidance and none of the streams share code artifacts that would force merging.
   Date: 2026-07-08
 
@@ -133,6 +182,16 @@ plan.
   Rationale: the earlier soft/integration treatment required conditional duplicate
   implementations in EP-4. Serializing EP-4 behind EP-1/EP-2 removes that ambiguity;
   EP-3 remains independent of them and follows plan 28 Milestone 1.
+  Date: 2026-07-22
+- Decision: Retry math uses PGMQ's one-based attempt count and the shared
+  `mkRetryPolicy`; shibuya remains the sole acknowledgement owner.
+  Rationale: preserving adapter/framework ownership prevents off-by-one retry ceilings,
+  duplicate acknowledgements, and process-specific retry dialects.
+  Date: 2026-07-22
+- Decision: Every new Shikigami table is delivered through plan 38's pg-migrate
+  component and complete application plan; the Codd transition imports history only.
+  Rationale: one schema authority makes fresh installs, upgrades, verification, tests,
+  and rollback evidence agree on the exact migration prefix.
   Date: 2026-07-22
 
 - Decision: EP-1 keeps `agentRunWorkflow`'s result type `Either Text AgentRunResult` unchanged and expresses transience by throwing; a journaled `Left` becomes "permanent" by construction.
@@ -176,3 +235,6 @@ Compare the result against the original vision.
   prerequisite to hard dependencies, assigned canonical loader ownership to EP-4, and
   added the cross-MasterPlan sink landing chain. This aligns MasterPlan 3 with the MP-2
   through MP-7 execution waves.
+- 2026-07-22: Added plan 38 as the database foundation; aligned retries, queue attempts,
+  acknowledgements, inbox dispositions, Kafka poison behavior, and receipt migrations
+  with the verified runtime and pg-migrate patterns.

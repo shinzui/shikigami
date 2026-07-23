@@ -18,7 +18,7 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 Shikigami's stream triggers turn Kafka events into agent runs. Today that pipeline can silently lose an event forever in two distinct ways: the consumer commits the Kafka offset even when processing failed (so a transient Postgres outage permanently skips every event that arrived during it), and the run-job enqueue happens outside the database transaction that marks the event as processed (so a crash in the gap leaves the event marked "done" with no run ever enqueued — and the deduplicating inbox guarantees it is never retried). A third gap makes the whole consumer fragile: any Kafka error terminates the subscribe loop with a single stderr line, and the process stops consuming until someone restarts it.
 
-After this plan, "the inbox accepted the event" and "the run job is on the queue" are one atomic fact — they commit in the same Postgres transaction — and the Kafka offset is committed only after that transaction commits (or after a deliberate, logged skip of an undecodable record). Transient store errors leave the offset uncommitted so the event is redelivered, and the consumer reconnects with backoff instead of dying. You can see it working in the new test module `Shikigami.StreamInboxSpec`: an event processed successfully leaves exactly one inbox row and exactly one pgmq message; a mid-processing failure leaves neither; a redelivered event enqueues nothing twice.
+After this plan, "the inbox accepted the event" and "the run job is on the queue" are one atomic fact — they commit in the same Postgres transaction — and the Kafka offset is committed only after an explicit durable terminal disposition: enqueued, duplicate, or permanently dead-lettered. Transient failures leave the offset uncommitted so the event is redelivered. Undecodable/poison records are written to a durable dead-letter target (or halt the partition if that write fails), never merely logged and discarded. Consumption is serial and acknowledgement/offset commit remains framework-owned.
 
 
 ## Progress
@@ -29,9 +29,10 @@ This section must always reflect the actual current state of the work.
 
 - [ ] Milestone 1: `enqueueRunJobTx` and `ensureRunQueue` in `Shikigami.Trigger.Enqueue`; hit-enqueue moved inside the inbox transaction for both the activity and the integration-event consumers.
 - [ ] Milestone 1: tests — atomic success, atomic rollback, duplicate delivery enqueues once.
-- [ ] Milestone 2: `RecordDisposition` threaded through `processRecord`/`processEventRecord`; offsets committed only on `Commit`; store errors abort the poll loop without committing.
+- [ ] Prerequisites: plans 36/37 complete; consumer ownership and Settei Kafka settings are settled.
+- [ ] Milestone 2: `RecordDisposition` covers enqueued, duplicate, permanent-dead-letter, and transient failure; offsets commit only for a durable terminal disposition.
 - [ ] Milestone 2: test — a failing disposition leaves no inbox row and no message (and the loop signals retry rather than committing).
-- [ ] Milestone 3: outer reconnect loop with exponential backoff around both subscriptions; poison-record (decode-failure) policy logged with topic/partition/offset.
+- [ ] Milestone 3: shibuya `Serial`/framework-owned consume loop with bounded reconnect policy; poison records go to a durable DLQ and halt rather than commit if DLQ persistence fails.
 - [ ] CLI updates: `consume-stream`/`consume-events` `onHit` becomes logging-only; startup calls `ensureRunQueue`.
 - [ ] Register `Shikigami.StreamInboxSpec` in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
 
@@ -56,9 +57,18 @@ Record every decision made while working on the plan.
   Rationale: After `pollMessage` the client's in-memory position has advanced past the record even without a commit; re-consuming it in-place would require explicit partition seeks. Rebuilding the consumer resumes from the last committed offset, which is exactly the record that failed — correct and simple. The keiro inbox dedupes any records that were already processed before the crash, so over-delivery is harmless.
   Date: 2026-07-08
 
-- Decision: Keep skip-and-commit for records that fail `integrationEventFromKafka` decoding, but make the skip loud (topic/partition/offset, error, payload size) and count it.
-  Rationale: An undecodable record can never succeed on redelivery, so not committing would wedge the partition (head-of-line blocking behind a poison record). A quarantine topic/table is deliberately out of scope; the log line carries enough to recover the record from Kafka by offset. Revisit if a real producer bug ever emits undecodable batches.
-  Date: 2026-07-08
+- Decision: A record is committed only after an explicit durable terminal disposition.
+  Undecodable records are stored in a dead-letter target with topic, partition, offset,
+  bounded payload evidence, and error; if that write fails, consumption halts without
+  committing.
+  Rationale: a log line is not recoverable state. This avoids both partition wedging and
+  silent data loss while retaining an operator remediation path.
+  Date: 2026-07-22
+- Decision: Use shibuya's serial processing/acknowledgement boundary; application code
+  returns a disposition and never independently commits an offset.
+  Rationale: one framework owner preserves record order and prevents double commits or
+  a commit racing durable inbox/DLQ state.
+  Date: 2026-07-22
 
 - Decision: Build `RunJob`s inside the consumer (via the existing pure builders) instead of keeping the enqueue in the CLI's `onHit` callback.
   Rationale: Atomicity requires the enqueue inside the inbox transaction, which lives in `Shikigami.Trigger.Consumer`; a callback that performs IO cannot run inside a `Tx.Transaction`. `onHit` survives as a logging hook only.
@@ -94,7 +104,11 @@ Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test
 
 ## Plan of Work
 
-Milestone 1 — one transaction: inbox row + run-job message. Scope: `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`, `shikigami-core/src/Shikigami/Trigger/Consumer.hs`, `shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`. At the end, a matched event's run job is enqueued inside the inbox transaction, and a crash anywhere leaves either both facts or neither.
+Milestone 1 — one transaction: inbox row + run-job message. Scope:
+`shikigami-core/src/Shikigami/Trigger/Enqueue.hs`, the consumer vertical relocated to
+`shikigami-workers` by plan 36, and its consume-stream/consume-events composition components.
+At the end, a matched event's run job is enqueued inside the inbox transaction, and a crash
+anywhere leaves either both facts or neither.
 
 In `Shikigami/Trigger/Enqueue.hs`, add a transaction-composable send and a startup queue-ensurer:
 
@@ -120,23 +134,43 @@ inboxHandler include agents event =
 
 Mirror the change in `eventInboxHandler` (Consumer.hs:216-231): build the `TriggeredByEvent` `RunJob` inline (agent name, payload, `occurredAt = receivedAt`-style current time passed in from `processEventRecord`, idempotency key `name a <> ":" <> event ^. #messageId` — the same key `ConsumeStream.hs:82` uses today) and `enqueueRunJobTx` it before returning the hits. Note the enqueue is intentionally not deduplicated by pgmq — dedupe lives one level up: a redelivered Kafka record is `InboxDuplicate` and never reaches the handler, and the worker's keiro workflow id (the job's idempotency key) collapses any residual duplicates downstream.
 
-Update `shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`: `onHit` in both `runConsumeStream` (lines 45-53) and `runConsumeEvents` (lines 75-86) becomes logging-only (the `MATCH agent=…` line); delete the CLI-side enqueue calls; call `ensureRunQueue (pool st)` once after `withStore` acquires the store and fail fast (exit non-zero with the error printed) if it returns `Left`.
+Update the two consumer composition components in `shikigami-workers`: `onHit` in both
+`runConsumeStream` and `runConsumeEvents` becomes logging-only; delete command-side enqueue
+calls; call `ensureRunQueue (pool st)` once after the shared composition root acquires the
+store and fail startup through its typed error path if it returns `Left`.
 
-Milestone 2 — commit offsets only on success or deliberate skip. Scope: `shikigami-core/src/Shikigami/Trigger/Consumer.hs`. At the end, the poll loop distinguishes "done with this record" from "must see this record again".
+Milestone 2 — commit offsets only after durable terminal disposition. Scope: the
+consumer module assigned by plan 36. At the end, the serial processor distinguishes
+enqueued, duplicate, permanently dead-lettered, and transient-failure outcomes.
 
 Introduce a disposition type and have both record processors return it:
 
 ```haskell
 data RecordDisposition
-  = CommitRecord            -- processed, duplicate, or deliberately skipped: commit the offset
-  | RetryRecord !Text       -- transient failure: do NOT commit; restart consumption
+  = Enqueued
+  | Duplicate
+  | PermanentlyDeadLettered !DeadLetterId
+  | TransientFailure !Text
 ```
 
-Rework `processRecord` (Consumer.hs:127-160) and `processEventRecord` (Consumer.hs:162-194): decode failure from `integrationEventFromKafka` → log `[stream] poison record skipped topic=… partition=… offset=… err=…` and `CommitRecord`; inbox result `InboxProcessed hits` → run the logging `onHit`s and `CommitRecord`; `InboxDuplicate` → `CommitRecord`; any other `InboxResult` (`InboxInProgress`, `InboxPreviouslyFailed`, `InboxHandlerFailed` — see keiro `Keiro.Inbox.Types.InboxResult`) → log and `CommitRecord` (the inbox has durably recorded its verdict); inbox error (`Left ierr`) and store error (outer `Left serr`) → `RetryRecord` with the rendered error. In the poll loops (Consumer.hs:90-97, 116-124), commit only on `CommitRecord`; on `RetryRecord reason`, log and abort the loop by throwing a dedicated exception (define `newtype ConsumerRetry = ConsumerRetry Text` with an `Exception` instance) so Milestone 3's outer loop tears the consumer down and reconnects — resuming from the last committed offset, i.e. redelivering the failed record.
+Rework both record processors so `InboxProcessed` yields `Enqueued`,
+`InboxDuplicate` yields `Duplicate`, transient inbox/store/in-progress outcomes yield
+`TransientFailure`, and any prior failed/handler-failed result is committed only after
+the same transaction records a permanent dead-letter row. Decode failures follow the
+same dead-letter path with topic, partition, offset, error, and a bounded payload digest/
+sample. The framework commits only the first three terminal constructors. If dead-letter
+persistence fails, return `TransientFailure` and leave the offset uncommitted.
 
-Milestone 3 — reconnect with backoff; keep the consumer alive. Scope: `shikigami-core/src/Shikigami/Trigger/Consumer.hs`. At the end, neither a `KafkaError` nor a `ConsumerRetry` kills the consumer permanently.
+Milestone 3 — serial framework supervision. Scope: the worker package and plan 37's
+Settei Kafka settings. Register each subscription as a shibuya `Serial` processor (or
+the verified equivalent serial mode) so record ordering and acknowledgement stay owned
+by the framework. Apply the shared bounded retry policy to reconnectable broker/store
+failures; programming exceptions escape so the process supervisor can restart it.
 
-Wrap the body of `subscribeActivityStream` and `subscribeIntegrationEventStream` in an outer `forever`-style loop with exponential backoff (1s doubling to a 60s cap, reset on a successful poll iteration — track "last iteration succeeded" in an `IORef`): each iteration builds a fresh consumer via `runEff . runError @KafkaError $ runKafkaConsumer props sub loop`, catches `ConsumerRetry` (from Milestone 2), and treats both `Left kafkaErr` and the caught retry as "log, sleep backoff, rebuild". Factor the shared skeleton into a local `superviseConsumer :: Text -> IO (Either KafkaError ()) -> IO ()` helper so both subscriptions use identical policy. Every reconnect logs the reason and the backoff delay. This changes the functions' contract from "returns on first error" to "runs forever"; both CLI callers already expect a blocking call.
+Do not add a second `commitOffsetMessage` loop around shibuya. Application code returns
+the typed disposition; the adapter converts terminal dispositions to its commit/ack and
+transient dispositions to retry. Tests assert exactly one commit decision per record and
+strict serial order across a failure/redelivery boundary.
 
 
 ## Concrete Steps
@@ -162,8 +196,9 @@ StreamInbox
   matched event atomically records inbox row and enqueues run job:  OK
   redelivered event is InboxDuplicate and enqueues nothing:         OK
   handler failure rolls back both inbox row and message:            OK
-  store failure yields RetryRecord and commits nothing:             OK
-  decode failure yields CommitRecord (poison skip):                 OK
+  store failure yields TransientFailure and commits nothing:       OK
+  poison record is durably dead-lettered before commit:             OK
+  failed dead-letter persistence halts without commit:              OK
 ```
 
 Manual Kafka-resilience check (needs the demo stack):
@@ -171,7 +206,7 @@ Manual Kafka-resilience check (needs the demo stack):
 ```bash
 nix develop -c just create-database
 nix develop -c process-compose up   # brings up Postgres + Kafka per process-compose.yaml
-cabal run shikigami -- consume-stream --agents agents ...
+cabal run shikigami-consume-stream -- --config config/consume-stream-dev.yaml
 # in another shell: restart the Kafka broker process
 ```
 
@@ -182,15 +217,19 @@ Expected consumer stderr: a `reconnecting in 1s: …` line (then 2s, 4s… if th
 
 Acceptance is a set of tests in `shikigami-core/test/Shikigami/StreamInboxSpec.hs` that exercise the extracted transactional core against a real Postgres (`withShikigamiMigratedDatabase`), plus the manual broker-restart check above. To make the core testable without Kafka, factor `processRecord` so the part after `integrationEventFromKafka` is an exported function taking the decoded event — for example `processDecodedActivity :: AppEnv -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IntegrationEvent -> Maybe KafkaDeliveryRef -> IO RecordDisposition` — and have the Kafka loop call it. Tests then drive it with hand-built `IntegrationEvent`s (encode a sample `ActivityEnvelope` with `Keiro.Integration.Event.encodeJsonIntegrationEvent`, as `sinkIntentEvent` in `Shikigami/Agent/Workflow.hs:523-544` demonstrates).
 
-Atomic success (fails before): with one declared stream agent matching the event, call the core once; assert disposition `CommitRecord`, exactly one message on `shikigami_run_jobs` (read it back with pgmq-hasql `readMessage` through the pool and decode the `RunJob`, asserting its `idempotencyKey` is `<agent>:<activityId>`), and one completed inbox row (re-deliver and expect `InboxDuplicate`, or query `keiro.keiro_inbox` via `Keiro.Inbox` helpers). Before this plan the enqueue does not happen at all from the consumer module, so the message assertion fails.
+Atomic success (fails before): with one declared stream agent matching the event, call the core once; assert disposition `Enqueued`, exactly one message on `shikigami_run_jobs` (read it back with pgmq-hasql `readMessage` through the pool and decode the `RunJob`, asserting its `idempotencyKey` is `<agent>:<activityId>`), and one completed inbox row. Before this plan the enqueue does not happen at all from the consumer module, so the message assertion fails.
 
-Duplicate delivery: call the core twice with the same event; assert both dispositions are `CommitRecord` and the queue holds exactly one message.
+Duplicate delivery: call the core twice with the same event; assert `Enqueued` then
+`Duplicate`, one framework commit per terminal disposition, and exactly one queue message.
 
-Atomic rollback (fails before): drive the handler-failure path — pass an agents list whose enqueue is forced to fail inside the transaction (simplest: a variant of the core function parameterized by the `Tx.Transaction` handler, tested with a handler that runs `enqueueRunJobTx` and then `Tx.condemn`; the production wiring is the specialization). Assert the call reports a failure disposition (`RetryRecord`), the queue is empty, and a subsequent normal delivery of the same event is processed (`InboxProcessed`, one message) — proving the inbox row rolled back with the message.
+Atomic rollback (fails before): force enqueue failure inside the transaction. Assert
+`TransientFailure`, an empty queue, no commit, and successful redelivery.
 
-Store failure: run the core against an `AppEnv` whose pool has been released (`Hasql.Pool.release`); assert `RetryRecord` — the disposition that leaves the offset uncommitted.
+Store failure: run against an unavailable pool; assert `TransientFailure` and no commit.
 
-Poison skip: feed a `KafkaInboundRecord` whose payload is garbage bytes through the un-factored entry (or call `integrationEventFromKafka` and assert the branch); assert `CommitRecord` and that the log line contains topic, partition, and offset.
+Poison handling: feed garbage bytes; assert a durable dead-letter row contains delivery
+coordinates, error, and bounded evidence before `PermanentlyDeadLettered` permits commit.
+Force dead-letter persistence to fail and assert `TransientFailure` with no commit.
 
 End-to-end behavior beyond tests: with the demo stack running and `PG_CONNECTION_STRING` set, stop Postgres, publish an activity fixture (`cabal run shikigami -- publish-fixture …`), observe the consumer log `RetryRecord`-driven reconnects without committing, restart Postgres, and observe the same event get processed and enqueued exactly once — where today it would have been committed-over and lost.
 
@@ -202,6 +241,9 @@ All edits are code-only; no migrations. Re-running tests is safe — each test g
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 36 and 37. Consumer code lives in the worker package and reads
+Kafka/DLQ settings only through the Settei application config.
+
 Libraries and why: keiro (`Keiro.Inbox.runInboxTransaction :: Maybe KeiroMetrics -> InboxDedupePolicy -> IntegrationEvent -> Maybe KafkaDeliveryRef -> (IntegrationEvent -> Tx.Transaction a) -> Eff es (Either InboxError (InboxResult a))` — verified in keiro `src/Keiro/Inbox.hs:80-88`; the handler runs inside the transaction, `attemptOneTx` at Inbox.hs:350-377; `Keiro.Inbox.Types.InboxResult (InboxProcessed, InboxDuplicate, InboxInProgress, InboxPreviouslyFailed, InboxHandlerFailed)`), hasql-transaction (`Hasql.Transaction` — `statement`, `condemn`), pgmq-hasql (`Pgmq.Hasql.Statements.Message.sendMessage :: Statement SendMessage MessageId` — verified transaction-composable; session-level `createQueue`, `readMessage` for tests), hasql-pool (`Pool`, `UsageError`), kafka-effectful (`pollMessage`, `commitOffsetMessage`, `runKafkaConsumer`, `KafkaError` — unchanged usage, new supervision around it).
 
 Signatures that must exist at the end (full module paths):
@@ -212,15 +254,15 @@ Shikigami.Trigger.Enqueue.enqueueRunJobTx :: RunJob -> Hasql.Transaction.Transac
 Shikigami.Trigger.Enqueue.ensureRunQueue :: Hasql.Pool.Pool -> IO (Either Hasql.Pool.UsageError ())
 
 -- shikigami-core/src/Shikigami/Trigger/Consumer.hs
-data Shikigami.Trigger.Consumer.RecordDisposition = CommitRecord | RetryRecord !Text
+data Shikigami.Trigger.Consumer.RecordDisposition
+  = Enqueued | Duplicate | PermanentlyDeadLettered !DeadLetterId | TransientFailure !Text
 Shikigami.Trigger.Consumer.processDecodedActivity ::
   AppEnv -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) ->
   IntegrationEvent -> Maybe KafkaDeliveryRef -> IO RecordDisposition
 Shikigami.Trigger.Consumer.processDecodedIntegrationEvent ::
   AppEnv -> [AgentDecl] -> (EventHit -> IO ()) ->
   IntegrationEvent -> Maybe KafkaDeliveryRef -> IO RecordDisposition
--- subscribeActivityStream / subscribeIntegrationEventStream keep their existing
--- signatures but now run forever with reconnect+backoff.
+-- subscriptions are registered through shibuya's serial/framework-owned commit path.
 ```
 
 Integration point (from the MasterPlan): this plan owns `enqueueRunJobTx` and
@@ -234,3 +276,6 @@ the worker's workflow dedupe and must not change here.
 
 - 2026-07-22: Recorded plan 20 as a hard downstream consumer of `ensureRunQueue` and
   removed the previous either-order/duplicate-helper fallback.
+- 2026-07-22: Replaced log-and-skip poison handling with a durable dead-letter/halt
+  policy, made every inbox result an explicit terminal/transient disposition, and moved
+  serial acknowledgement/offset ownership to shibuya. Added plans 36/37 prerequisites.

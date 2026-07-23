@@ -27,8 +27,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: `Enqueued` constructor in `SinkOutcome`; all three enqueue sites journal `Enqueued`; `sinkResultDetail` and tests updated; `logSinkResult` implemented; publisher summary logged.
-- [ ] Milestone 2: `sink_deliveries` migration; `publishSinkIntent` records outcomes and skips already-delivered messages.
+- [ ] Milestone 1: additive `Enqueued` and `PermanentFailure` constructors in `SinkOutcome`; enqueue sites tell the truth; released Keiro `PublishRejected` terminal outcome is available; logging/tests updated.
+- [ ] Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete.
+- [ ] Milestone 2: pg-migrate-managed `sink_deliveries` change; `publishSinkIntent` records explicit pending/attempting/delivered/failed/dead/unknown states and skips only proven delivered messages.
 - [ ] Milestone 2: tests — receipt row recorded with downstream id; second publish of a delivered message does not re-POST.
 - [ ] Milestone 3: danwa fresh-conversation retry reuses the recorded conversation id.
 - [ ] Milestone 3: test — post-failure retry does not start a second conversation.
@@ -56,6 +57,23 @@ Record every decision made while working on the plan.
 - Decision: Record delivery receipts in a new shikigami-owned table written by the publish transport (`publishSinkIntent`), and use the same table as a send-guard (skip dispatch when a receipt with status `delivered` exists for the outbox message).
   Rationale: keiro's outbox has no publish-outcome callbacks (verified: keiro `src/Keiro/Outbox.hs` — observation is via returned summaries and row status only), and its `keiro.keiro_outbox.status` cannot carry the downstream id we need for reconciliation. The transport is the one place that knows the real outcome. The guard turns "keiro retries the whole transport call" into at-most-once dispatch per outbox message except for a crash in the narrow window between downstream success and receipt commit — an explicitly documented at-least-once floor that no client-side scheme can beat without server-side idempotency keys.
   Date: 2026-07-08
+- Decision: Receipt state distinguishes `pending`, `attempting`, `delivered`, `failed`,
+  `dead`, and `unknown`; a reconciliation pass compares terminal keiro outbox rows with
+  receipts and materializes `unknown` when downstream success cannot be proven.
+  Rationale: treating every non-error return or missing receipt as delivered recreates
+  the same truthfulness bug. `unknown` preserves the irreducible crash window without
+  lying and gives operators a repair target.
+  Date: 2026-07-22
+
+- Decision: Preserve permanent versus transient transport failures. `Failed` remains the
+  backward-compatible transient constructor; `PermanentFailure` is additive. Map transient
+  failures to Keiro `PublishFailed` and permanent failures to a public terminal
+  `PublishRejected` outcome owned by Keiro, which marks the row dead without another send.
+  Rationale: Returning success for a rejected request would make the outbox lie, while
+  directly updating Keiro tables would violate framework ownership. If the selected released
+  Keiro cohort lacks `PublishRejected`, add it upstream with state/summary/ordering tests,
+  release the coherent cohort, verify registry/tags, and then update Shikigami's bound.
+  Date: 2026-07-22
 
 - Decision: Per-sink outbox ordering keys `runId <> ":" <> ordinal` on the `dispatch-sinks` fan-out; the conversation-reply path keeps `key = runId` (the kioku session id).
   Rationale: A run's sinks are independent destinations — under keiro's `PerKeyHeadOfLine` policy (verified default, keiro `src/Keiro/Outbox/Types.hs:221-230`) a shared key makes sink 0's failure block sink 1 for up to `maxAttempts = 10` publishes with `ConstantBackoff 2`. Danwa replies within one conversation, by contrast, genuinely require order, which the shared per-conversation key provides.
@@ -92,18 +110,30 @@ Downstream idempotency. kawa is safe: the doorway dedupes on `(source, source_ev
 
 Consumers of `Delivered` you must not break: `Shikigami.Agent.Conversation.sinkResultDetail` (`shikigami-core/src/Shikigami/Agent/Conversation.hs:446-448`) extracts the `Delivered` detail as the reply's message id (tests assert an `outbox:` prefix, `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:198-199`), and `Shikigami/Sink.hs:55-65` constructs real `Delivered` values from actual HTTP responses (those remain correct — they happen after HTTP).
 
-Infrastructure facts: shikigami's migrations are embedded SQL files under `shikigami-migrations/sql-migrations/` applied by codd; `just new-migration <slug>` scaffolds a correctly-timestamped file, and `withShikigamiMigratedDatabase` (test support) applies them in tests, so a new table is immediately test-visible. The `shikigami` Postgres schema already exists (see `2026-06-24-12-00-00-shikigami-fired.sql`). `AgentRunDeps.appEnv` gives `publishSinkIntent` access to the kiroku store pool (`Kioku.App.AppEnv { store, … }`, pool via `Kiroku.Store.Connection.pool`).
+Infrastructure facts: plan 38 replaces the legacy Codd runner with one pg-migrate
+component, exact-byte manifest, complete application plan, CLI, and public test support.
+This plan adds its receipt change only through that component. `AgentRunDeps.appEnv`
+gives `publishSinkIntent` access to the kiroku store pool.
 
 
 ## Plan of Work
 
 Milestone 1 — tell the truth in the journal and the logs. Scope: `Sink/Types.hs`, `Agent/Workflow.hs`, `Flow/SinkOutbox.hs`, `Agent/Conversation.hs`, `Worker.hs`, existing tests. At the end, no code path claims `Delivered` before HTTP, and publisher dead-letters are visible in the worker log.
 
-Add `Enqueued !Text` to `SinkOutcome` in `shikigami-core/src/Shikigami/Sink/Types.hs` (keep `Delivered` — it remains the post-HTTP truth; the derived aeson instances make the addition backward-compatible for already-journaled values). Switch the three enqueue sites to `Enqueued ("outbox:" <> messageId)`: Workflow.hs:440, Workflow.hs:492, Flow/SinkOutbox.hs:100. Update `sinkResultDetail` (Conversation.hs:446-448) to match `Enqueued detail` as well as `Delivered detail` (order: `Enqueued` first; `Delivered` kept for old journaled turns replaying). Update the AgentWorkflowSpec assertions that check the `outbox:` prefix — they read `replyMessageId`, which now flows from `Enqueued`. Implement `logSinkResult` (Workflow.hs:629-630) through plan 28's `Shikigami.Log`, naming agent, run idempotency key, sink kind, and outcome. In `runOutboxPublisher` (Worker.hs:103-112), stop discarding the summary: emit structured `published`/`retried`/`dead` fields when any is non-zero and a dead-letter event with the `haltedOn` id if present.
+Add `Enqueued !Text` and `PermanentFailure !Text` to `SinkOutcome` in
+`Shikigami.Sink.Types` (keep `Delivered` and `Failed`; additive derived encodings preserve old
+journals). Switch the three enqueue sites to `Enqueued`. Update all exhaustive matches and
+tests. Obtain the coherent released Keiro cohort with `PublishRejected !Text`; do not emulate
+it with raw SQL or `PublishSucceeded`. Implement `logSinkResult` through plan 28's logger and
+emit publisher summary/dead-letter events.
 
-Milestone 2 — durable delivery receipts and the send-guard. Scope: new migration, new module `shikigami-core/src/Shikigami/Sink/Delivery.hs`, `Agent/Workflow.hs` (`publishSinkIntent`). At the end, every publish attempt's real outcome is queryable, and re-publishing an already-delivered message is a no-op.
+Milestone 2 — durable delivery receipts, reconciliation, and the send-guard. Scope: a
+plan-38 pg-migrate change, a delivery store module, and `publishSinkIntent`. At the end,
+every publish attempt has an explicit state, and only a proven `delivered` receipt
+suppresses a repeat send.
 
-Scaffold the migration (`just new-migration sink-deliveries`) with:
+Create the pg-migrate change with `shikigami-migrate new sink-deliveries`, add it to the
+exact manifest/application plan, and define:
 
 ```sql
 CREATE TABLE shikigami.sink_deliveries (
@@ -113,18 +143,28 @@ CREATE TABLE shikigami.sink_deliveries (
   agent text NOT NULL,
   ordinal int NOT NULL,
   sink_kind text NOT NULL,
-  status text NOT NULL,              -- 'delivered' | 'failed' | 'conversation-started'
+  status text NOT NULL CHECK
+    (status IN ('pending','attempting','delivered','failed','dead','unknown','conversation-started')),
   detail text,                       -- downstream id on success; error text on failure
   updated_at timestamptz NOT NULL
 );
-CREATE INDEX sink_deliveries_run_idx ON shikigami.sink_deliveries (run_id);
+CREATE INDEX shikigami.sink_deliveries_run_idx ON shikigami.sink_deliveries (run_id);
 ```
 
-Create `Shikigami.Sink.Delivery` with hasql statements and pool-level helpers: `recordDelivery :: Pool -> DeliveryReceipt -> IO (Either UsageError ())` (upsert on `receipt_key`), `lookupDelivery :: Pool -> Text -> IO (Either UsageError (Maybe DeliveryReceipt))`, and a plain record `DeliveryReceipt` mirroring the columns. Rework `publishSinkIntent` (Workflow.hs:561-583): it already receives `AgentRunDeps`, so take the pool from `appEnv`. Before dispatching, `lookupDelivery` by the outbox message id; if a `delivered` receipt exists, log a `skip: already delivered` line and return `PublishSucceeded` without HTTP. After dispatch, record the receipt: `Delivered detail` → status `delivered` with the downstream id; `Failed err` → status `failed` with the error (and return `PublishFailed err` so keiro retries); `DeniedOutcome`/`Stubbed` → status `delivered` with a marker detail (they are terminal non-sends). A receipt-write failure after a successful send must not fail the publish (that would guarantee a duplicate on retry): log it loudly and return `PublishSucceeded` — this is the documented at-least-once floor.
+Create `Shikigami.Sink.Delivery` with schema-qualified hasql statements and pool-level
+helpers, plus a plain `DeliveryReceipt` mirroring the columns. Rework `publishSinkIntent`:
+write `attempting` before dispatch; a proven `delivered` receipt returns
+`PublishSucceeded` without HTTP. Map `Delivered` to receipt `delivered` and
+`PublishSucceeded`; transient `Failed` to receipt `failed` and `PublishFailed`; additive
+`PermanentFailure` to receipt `dead` and Keiro `PublishRejected`; and
+`DeniedOutcome`/`Stubbed` to a terminal non-send receipt plus `PublishSucceeded`. A
+receipt-write failure after downstream success cannot safely trigger another send: record a
+critical `unknown` reconciliation item/event and return success, preserving the documented
+irreducible crash-window floor rather than guaranteeing a duplicate.
 
 Milestone 3 — danwa retry safety. Scope: `Sink/Types.hs` (`SinkContext`), `Sink.hs`, `Sink/Danwa.hs`, `Agent/Workflow.hs`. At the end, a retried untargeted danwa sink reuses the conversation it already started.
 
-Thread a guard capability into dispatch without giving the sink modules a pool dependency: add to `SinkContext` (Sink/Types.hs) a field `deliveryGuard :: !(Maybe DeliveryGuard)` where
+Thread a guard capability into dispatch without giving the sink modules a pool dependency: add to `SinkContext` (Sink/Types.hs) a direct field `receipts :: !(Maybe DeliveryGuard)` where
 
 ```haskell
 data DeliveryGuard = DeliveryGuard
@@ -145,8 +185,8 @@ Give `sinkIntentEvent` (Workflow.hs:523-544) an explicit ordering-key parameter 
 All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami` inside `nix develop`.
 
 ```bash
-just new-migration sink-deliveries
-# edit the generated shikigami-migrations/sql-migrations/<ts>-sink-deliveries.sql per Plan of Work
+cabal run shikigami-migrate -- new sink-deliveries
+# edit the generated pg-migrate change, then update/verify the exact manifest and application plan
 nix develop -c cabal build all
 ```
 
@@ -182,6 +222,12 @@ Journal truth (fails before): run `runAgentRunWorkflow` for an agent with one `K
 
 Receipt recording (fails before): enqueue a sink intent (run the workflow), then drive one publish pass — call `Keiro.Outbox.publishClaimedOutbox (publishSinkIntent deps) defaultPublishOptions Nothing` under `runAppIO appEnv` with the kizashi stub URL in `deps`. Assert the stub received exactly one POST, the summary says `published = 1`, and `lookupDelivery` returns a `delivered` receipt whose detail is the stub's signal id (`"sig_stub"`).
 
+Permanent rejection: a stub 401/403/404 response maps through plan 22's typed HTTP error to
+`PermanentFailure`, records receipt `dead`, and yields Keiro `PublishRejected`; the outbox row
+becomes dead after one request. A 429/500/network failure maps to `Failed`/`PublishFailed` and
+remains retryable. This test also runs in the upstream Keiro cohort for summary and ordering
+semantics.
+
 Send-guard (fails before): after the pass above, manually reset the outbox row to `pending` (or simpler: call `publishSinkIntent deps row` directly a second time with the same `OutboxRow`). Assert it returns `PublishSucceeded` and the stub's request count is still 1 — before this plan the count reaches 2, which is exactly the kizashi duplicate-signal bug.
 
 Danwa conversation reuse (fails before): a danwa stub whose post-message endpoint fails the first call with HTTP 500 and succeeds afterwards, while counting `POST /conversations` calls. First `publishSinkIntent` for an untargeted `DanwaConversation` intent → `PublishFailed`, start-count 1, and a `conversation-started` sub-receipt exists. Second call → `PublishSucceeded`, start-count still 1, and the message was posted into the first conversation id. Before the change, start-count reaches 2 (orphaned conversation).
@@ -193,10 +239,18 @@ Operationally: run the worker and force a sink target down; the worker log now s
 
 ## Idempotence and Recovery
 
-The migration is additive (new table) and applied idempotently by codd; re-running `just migrate` is safe. All receipt writes are upserts keyed by `receipt_key`, so replays converge. The send-guard makes re-running the publisher safe by construction; the residual duplicate window (crash after downstream success, before receipt commit) is documented and bounded to one duplicate per crash. Rolling back the code but keeping the table is harmless (the table just stops being written); rolling back the migration requires dropping the table only after the code rollback. Milestone 4's key change affects only new outbox rows; in-flight rows with the old per-run key drain under the old ordering — no backfill needed.
+The migration is additive and applied/verified through plan 38's pg-migrate CLI and
+complete application plan. All receipt writes are upserts keyed by `receipt_key`, so
+replays converge. The reconciliation pass is idempotent and never promotes `unknown` to
+`delivered` without downstream evidence. The send-guard makes re-running the publisher
+safe only for proven delivered receipts; unknown outcomes remain visible for operator
+repair. Rolling back code while retaining the table is harmless.
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36, 37, 38, and plan 28 Milestone 1; preferred predecessor:
+plan 16. Schema work uses `pg-migrate`/`pg-migrate-test-support`, never Codd.
 
 Libraries and why: keiro (`Keiro.Outbox` — `publishClaimedOutbox`, `defaultPublishOptions` (`maxAttempts = 10`, `ConstantBackoff 2`, `orderingPolicy = PerKeyHeadOfLine`, verified in keiro `src/Keiro/Outbox/Types.hs:221-230`), `OutboxRow (..)`, `PublishOutcome (..)`, `OutboxPublishSummary (..)`, `lookupOutbox`/`listOutbox` for inspection; outbox state in table `keiro.keiro_outbox`, status ∈ `pending|publishing|sent|failed|dead`), hasql/hasql-pool (the receipts table statements), warp/wai (test stubs, already test dependencies), aeson (backward-compatible constructor addition).
 
@@ -205,11 +259,12 @@ Signatures that must exist at the end (full module paths):
 ```haskell
 -- shikigami-core/src/Shikigami/Sink/Types.hs
 data Shikigami.Sink.Types.SinkOutcome
-  = Delivered !Text | Enqueued !Text | Stubbed | DeniedOutcome !Text | Failed !Text
+  = Delivered !Text | Enqueued !Text | Stubbed | DeniedOutcome !Text
+  | Failed !Text | PermanentFailure !Text
 data Shikigami.Sink.Types.DeliveryGuard = DeliveryGuard
   { lookupReceipt :: !(Text -> IO (Maybe Text)),
     recordReceipt :: !(Text -> Text -> IO ()) }
--- SinkContext gains: deliveryGuard :: !(Maybe DeliveryGuard)
+-- SinkContext gains: receipts :: !(Maybe DeliveryGuard)
 
 -- shikigami-core/src/Shikigami/Sink/Delivery.hs (new)
 data Shikigami.Sink.Delivery.DeliveryReceipt = DeliveryReceipt
@@ -229,6 +284,9 @@ Hard cross-MasterPlan predecessor: plan 28 Milestone 1 supplies `Shikigami.Log`,
 this plan imports for delivery and publisher events. Preferred predecessor: plan 16 first
 makes every handler produce truthful success/failure outcomes. Plan 27 lands after this
 plan and preserves these semantics.
+The selected coherent released Keiro cohort must expose terminal `PublishRejected`; verify
+the release against the authoritative registry/upstream tags after inspecting source through
+Mori. If absent, this plan owns the upstream addition/release before Shikigami consumes it.
 
 
 ## Revision Notes
@@ -236,3 +294,8 @@ plan and preserves these semantics.
 - 2026-07-22: Made plan 28 Milestone 1 a hard prerequisite, kept plan 16 as a preferred
   predecessor, and changed `logSinkResult`/publisher summaries to use the structured
   logger. The sink sequence is now plan 16 plus plan 28 M1 → plan 19 → plan 27.
+- 2026-07-22: Moved receipt schema evolution to plan 38's pg-migrate component and
+  added explicit terminal/unknown receipt states plus a reconciliation acceptance path.
+- 2026-07-22: Added an additive permanent-failure path backed by Keiro-owned
+  `PublishRejected`, so stable 4xx failures dead-letter once without raw table mutation or
+  repeated HTTP calls.

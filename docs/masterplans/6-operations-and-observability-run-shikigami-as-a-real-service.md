@@ -24,9 +24,14 @@ die silently while the process lingers; there is no health endpoint to probe; th
 list agents, list or cancel runs, or inspect dead letters; and the whole thing runs only inside
 a nix dev shell, with `process-compose` starting Postgres and nothing else.
 
-After this initiative, shikigami runs as a real service. An operator sees structured JSON logs
-they can filter with `jq`, real metrics and end-to-end traces exported over OTLP, and HTTP
-`/healthz`/`/readyz` endpoints on every long-running command. A dead loop takes the process down
+After this initiative, shikigami runs as a real service. An operator sees structured JSON logs,
+real metrics and end-to-end traces exported over OTLP, and exact HTTP `/health/live`/`/health/ready`
+endpoints on every long-running command. The public server uses Shikigami's typed Servant API;
+worker roles consume the equivalent released injectable probe surface from
+`shibuya-metrics`, preserving the rule that `shikigami-workers` never depends on the sibling
+API or server package. Both use `NamedRoutes` and terminal `MultiVerb`; OpenAPI is generated
+from each served route type, non-health errors use RFC 7807 problem details, and bounded request logs run inside OTel
+middleware with health paths excluded. A dead loop takes the process down
 so a supervisor restarts it. From the command line an operator can list agents, list and inspect
 runs (keiro workflow status joined with the kioku session), cancel a stuck run, and inspect and
 replay dead-lettered jobs — all read-mostly, with destructive actions gated behind `--confirm`.
@@ -55,7 +60,7 @@ producing a distinct user-visible capability:
    is the "can I see what it's doing" layer. It is first because it defines the observability
    *vocabulary* (metric names, log event names, attribute keys) that every other plan — and
    every plan in MasterPlans 2-5 — emits against.
-2. **Health & supervision (EP-2, plan 29)** — per-loop heartbeats, `/healthz`/`/readyz`, and
+2. **Health & supervision (EP-2, plan 29)** — per-loop heartbeats, `/health/live`/`/health/ready`, and
    fail-fast supervision. This is the "is it alive, and does it die honestly" layer. Its
    endpoints feed EP-4's readiness probes.
 3. **Operator CLI (EP-3, plan 30)** — `agents list`, `runs list/show/cancel`, `dlq list/replay`,
@@ -85,10 +90,10 @@ endpoint*: rejected because the substrate's metrics hooks are typed for the Open
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | None | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
-| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | None | EP-1 | Not Started |
-| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plan 20 (MasterPlan 3) | EP-1 | Not Started |
-| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | None | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
+| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36 and 37 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
+| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36 and 37; upstream released Shibuya probe contract | EP-1 | Not Started |
+| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, and 37 | EP-1 | Not Started |
+| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36, 37, and 38 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP-# prefix.
@@ -96,7 +101,10 @@ Hard Deps and Soft Deps reference other rows by their EP-# prefix.
 
 ## Dependency Graph
 
-EP-1, EP-2, and EP-4 can start independently. EP-3 hard-depends on plan 20's canonical
+Plans 36 and 37 precede every child; plan 38 additionally precedes EP-4. EP-2 also waits for
+the additive released Shibuya probe contract specified by plan 29, because importing the
+Shikigami API/server route tree into workers would violate plan 36. After those
+foundations, EP-1 and EP-2 can start independently. EP-3 hard-depends on plan 20's canonical
 `AgentLoadReport`; it owns presentation of that report through `agents list`. EP-1 milestones
 1 and 2 can start immediately, while its HTTP trace-propagation milestone waits for plan 22's
 authenticated `postJSONWithHeaders` seam.
@@ -111,11 +119,12 @@ After plan 20 supplies EP-3's cross-MasterPlan loader dependency, EP-2 and EP-3 
 independent of each other's internals — health plumbing versus read-only operator queries
 touch disjoint code — so they can run in parallel with each other and with EP-1.
 
-EP-4 (deployable stack) softly depends on EP-1 and EP-2: its process-compose and systemd readiness probes
-are best pointed at EP-2's `/readyz` endpoint. Until EP-2 lands, EP-4 ships with exec-based and
+EP-4 (deployable stack) hard-depends on the package, Settei, and pg-migrate foundations
+and softly depends on EP-1 and EP-2: its process-compose and systemd readiness probes
+are best pointed at EP-2's `/health/ready` endpoint. Until EP-2 lands, EP-4 ships with exec-based and
 `process_started` probes and upgrades them afterward (EP-4 spells this out). EP-4 also consumes
-EP-1's configuration surface — the metrics/logging env vars EP-1 introduces must appear in EP-4's
-configuration reference. Cross-MasterPlan plans 13, 22, and 32 own provider, sink-auth, and
+plan 37's Settei surface — every operational setting must appear in EP-4's
+configuration reference. Standard `OTEL_*` variables remain SDK-owned. Cross-MasterPlan plans 13, 22, and 32 own provider, sink-auth, and
 channel-egress configuration; EP-4 should land after those surfaces stabilize rather than
 publish reserved placeholders. The pragmatic sequence is plan 22 → EP-1 M3; plan 20 → EP-3;
 EP-1/EP-2 and the external configuration owners → EP-4. This is the MasterPlan-6 slice of the
@@ -139,16 +148,28 @@ artifact is documented in EP-1's Decision Log; changes to it are made in EP-1 fi
 action audit lines should go through it once it exists. Because both can function without it,
 this is a soft consumption, not a compile dependency.
 
-**IP-C — Health endpoints and `--health-port` (EP-2 defines; EP-4 consumes).** EP-2 adds
-`GET /healthz` and `GET /readyz` and a `--health-port` flag to the four long-running commands.
-EP-4 wires these as process-compose `http_get` readiness probes and systemd health config, and
-must list `--health-port` in the configuration reference. Until EP-2 lands, EP-4 uses exec
-probes; the shared contract is the endpoint paths and the flag name.
+**IP-C — Typed service API and health endpoints (plan 36 and upstream Shibuya define; EP-2
+extends; EP-4 consumes).** The server package exposes the Shikigami `NamedRoutes`; worker
+roles consume the released external `shibuya-metrics` probe application without a sibling
+API/server dependency. Both terminal status variants use typed `MultiVerb` with handwritten
+`AsUnion`. `GET /health/live` and `GET /health/ready` are exact, unauthenticated,
+redirect-free routes returning the standard `ProbeStatus {status, check, failingSince}`;
+they are the deliberate exception to the RFC 7807 error envelope. EP-2 adds their checks,
+EP-4 wires process-compose and systemd probes, and plan 37 owns the health-port
+setting/binding. Each owner derives its artifact from the exact served proxy and checks
+schema/response conformance. No handwritten WAI health router remains.
 
-**IP-D — Configuration surface (EP-1 extends; EP-4 documents).** EP-4 owns
-`docs/operations/configuration.md`, the single enumeration of every env var and flag. EP-1 may
-add observability knobs (beyond the standard `OTEL_*` family, e.g. a metrics-exposition fallback
-switch); any such addition must be reflected in EP-4's reference. EP-4's reference also includes
+**IP-C2 — Request observability (EP-1/EP-2).** OTel middleware wraps the bounded
+request logger so log records can include trace/span correlation. The logger records
+only UTC time, method, raw path without query, status, monotonic duration, a bounded user
+agent, and optional trace/span IDs. It never logs bodies, body sizes, query values,
+credentials, cookies, application error details, or arbitrary headers, and excludes exact
+`/health/live` and `/health/ready` paths.
+
+**IP-D — Configuration surface (plan 37 defines; EP-4 documents).** EP-4 owns
+`docs/operations/configuration.md`, the single enumeration of every Settei key, source,
+legacy environment binding, and flag. EP-1 may add typed observability settings, but
+standard `OTEL_*` variables remain SDK-owned. EP-4's reference also includes
 sections for the model-provider config owned by
 `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2), the
 outbound-credential config owned by `docs/plans/22-outbound-authentication-for-sink-clients.md`
@@ -163,8 +184,8 @@ owns the operator-issued cancel. If plan 17 lands a shared cancel helper, EP-3 s
 rather than duplicate the append.
 
 **IP-F — Cross-MasterPlan consume-loop death (EP-2 with MasterPlan 3's plan 18).** EP-2 makes a
-dead Kafka consume loop *observable* (readiness flips to 503, the process exits non-zero so a
-supervisor restarts it). The actual reconnect/backoff fix — so the loop recovers without a full
+dead Kafka consume loop observable through its heartbeat and fail-fast process exit, so a
+supervisor restarts it without making Kafka a readiness dependency. The actual reconnect/backoff fix — so the loop recovers without a full
 restart — is owned by
 `docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`. EP-2
 must not duplicate plan 18's in-loop recovery.
@@ -179,6 +200,13 @@ same helper for kanmon.
 state to declarations, and plan 23 later extends EP-3's output with principal/lifecycle state
 and adds `sync`. No other plan creates an `agents list` parser or walks the directory.
 
+**IP-I — Operator data and dead letters (EP-3 with plans 17 and 38).** Queries use the
+public store/query modules or schema-qualified SQL against documented tables; they do
+not depend on unqualified `search_path`. Plan 17 creates the real run-job dead-letter
+queue. EP-3 provides inspect, repair/replay, and discard commands against that queue,
+with confirmation/audit tests. It does not treat PGMQ's incidental archive table as the
+operational DLQ. Any operator-side schema change is delivered through plan 38.
+
 
 ## Progress
 
@@ -192,12 +220,16 @@ EP-1 — Structured logging, metrics, and trace propagation:
       populated everywhere; queue-depth/outbox/consumer instruments live.
 - [ ] EP-1 M3: scheduler and consumers traced; `traceparent` propagated into the outbox;
       `sink.publish` span wraps the outbound HTTP POST with a `traceparent` header.
+- [ ] EP-1 M4: OTel provider/exporter lifecycle is bracketed at process composition roots;
+      bounded request logging runs inside OTel and excludes health paths.
 
 EP-2 — Health, liveness, and worker loop supervision:
 
-- [ ] EP-2 M1: `Shikigami.Health` warp server serving `/healthz` and `/readyz`; `--health-port`
-      on the four commands.
-- [ ] EP-2 M2: per-loop heartbeats reflected in `/healthz`; real dependency checks in `/readyz`.
+- [ ] EP-2 prerequisite/M1: the released Shibuya probe API and Shikigami server API serve
+      exact typed `NamedRoutes`/`MultiVerb` `/health/live` and `/health/ready` routes;
+      OpenAPI is generated from each served proxy; Settei owns port configuration.
+- [ ] EP-2 M2: per-loop heartbeats feed worker-role `/health/live`; PostgreSQL readiness is exposed
+      through `/health/ready` without Kafka or downstream HTTP cascade dependencies.
 - [ ] EP-2 M3: fail-fast supervision (loop death exits non-zero); resume loop
       restart-with-backoff.
 
@@ -206,15 +238,17 @@ EP-3 — Operator CLI:
 - [ ] EP-3 M1: `agents list`.
 - [ ] EP-3 M2: `Shikigami.Operator.Query` + `runs list` / `runs show`.
 - [ ] EP-3 M3: `runs cancel --confirm`.
-- [ ] EP-3 M4: `dlq list` / `dlq replay --confirm` + `outbox status`.
-- [ ] EP-3 M5: `--confirm` gate proven by test.
+- [ ] EP-3 M4: schema-qualified `dlq inspect|repair|replay|discard` against the real
+      dead-letter queue plus `outbox status`.
+- [ ] EP-3 M5: confirmation, audit, parser, and command-dispatch gates proven by CLI tests.
 
 EP-4 — Deployable service stack:
 
 - [ ] EP-4 M1: Kafka in the dev shell + full `process-compose` stack + `just dev`.
 - [ ] EP-4 M2: end-to-end smoke through the composed stack.
 - [ ] EP-4 M3: NixOS module exported + flake eval check.
-- [ ] EP-4 M4: `docs/operations/configuration.md`.
+- [ ] EP-4 M4: Settei configuration reference, pg-migrate startup gate, and graceful
+      shutdown/drain behavior documented and proven.
 
 
 ## Surprises & Discoveries
@@ -233,8 +267,23 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 - keiro has **no** top-level "cancel workflow by id"; cancellation is appending the
   `WorkflowCancelled` marker via `appendJournalEntry`. This is why EP-3's `runs cancel` uses the
   journal, not a raw `UPDATE`, and why IP-E exists.
-- Poison run jobs are pgmq-*archived* (`deadLetterConfig = Nothing`), and pgmq-hs exposes no
-  archive reader — so EP-3's `dlq list` is a direct `SELECT` over `pgmq.a_shikigami_run_jobs`.
+- The current runtime archives poison run jobs because `deadLetterConfig = Nothing`.
+  Plan 17 replaces that incidental archive with a real dead-letter queue; EP-3 targets
+  the real queue and never couples operator behavior to PGMQ's private archive layout.
+- API conformance audit (2026-07-22): health and OTel were covered previously, but the
+  plans omitted `NamedRoutes`/`MultiVerb`, same-type OpenAPI generation, RFC 7807,
+  middleware ordering, and a bounded request-log whitelist. IP-C/IP-C2 now make the entire HTTP
+  contract explicit. Relay pagination is intentionally not required because no public
+  list endpoint is planned; any future list endpoint must add it before implementation.
+- Package/API conformance audit (2026-07-22): serving the Shikigami server route tree from
+  worker executables would violate the six-package dependency budget. Current
+  `shibuya-metrics` already owns worker health HTTP, but its handwritten router and legacy
+  bodies do not meet the new API standard. EP-2 now hard-depends on an additive released
+  Shibuya probe surface with injectable checks, standard typed routes/status documents, and
+  same-proxy OpenAPI.
+- Deployment conformance audit (2026-07-22): this repository targets process-compose
+  locally and a NixOS module in deployment. Kubernetes overlays are therefore not
+  applicable unless the deployment target changes; no speculative manifests are added.
 
 
 ## Decision Log
@@ -281,6 +330,30 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
   Rationale: this eliminates duplicate CLI parsers and directory traversal across three
   MasterPlans.
   Date: 2026-07-22
+- Decision: The public service boundary follows the full API pattern: `NamedRoutes`,
+  terminal `MultiVerb`, OpenAPI from the served proxy, RFC 7807 for non-health errors,
+  and bounded request logging inside OTel. Health reports are the documented exception.
+  Rationale: one typed route tree keeps server behavior, documentation, error variants,
+  middleware, and contract tests from drifting.
+  Date: 2026-07-22
+- Decision: Health uses two package-correct implementations of one wire contract: the public
+  server extends `shikigami-api`, while workers consume a released external
+  `shibuya-metrics` probe application. Workers never import sibling API/server packages.
+  Rationale: this is the only route that preserves both the strict six-package dependency
+  graph and exact health endpoints on every deployed process without duplicating a
+  handwritten local WAI server.
+  Date: 2026-07-22
+- Decision: EP-3 operates on plan 17's real dead-letter queue and exposes inspect,
+  repair/replay, and discard with confirmation and audit coverage.
+  Rationale: PGMQ archive internals are not an operational contract and cannot support
+  a truthful remediation workflow.
+  Date: 2026-07-22
+- Decision: EP-4 deploys through process-compose and NixOS, uses plan 37's Settei
+  configuration and plan 38's migration gate, and proves graceful drain/shutdown.
+  Kubernetes overlays are out of scope while no Kubernetes target exists.
+  Rationale: deployment artifacts should match the actual target and lifecycle instead
+  of creating untested parallel configuration surfaces.
+  Date: 2026-07-22
 
 
 ## Outcomes & Retrospective
@@ -293,3 +366,8 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 - 2026-07-22: Added plan 20 as EP-3's hard dependency, routed HTTP tracing through plan
   22, assigned `agents` command ownership, and made EP-4 the portfolio's configuration/
   packaging closure. These changes align MasterPlan 6 with the MP-2 through MP-7 waves.
+- 2026-07-22: Split server and worker probe ownership across Shikigami and a required released
+  Shibuya probe API so health conformance no longer violates the six-package dependency graph.
+- 2026-07-22: Added architecture/Settei/pg-migrate foundations; completed the API best-
+  practices pass; corrected DLQ operations; and added OTel lifecycle, graceful shutdown,
+  schema qualification, and the explicit NixOS-not-Kubernetes deployment decision.

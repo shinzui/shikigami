@@ -33,7 +33,8 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
 
 ## Progress
 
-- [ ] Milestone 1: `shikigami.sink_grants` migration written, applied, and seeded with the five current defaults.
+- [ ] Prerequisites: plans 36/37/38 complete.
+- [ ] Milestone 1: `shikigami.sink_grants` pg-migrate change added to the exact manifest and complete application plan, applied, verified, and seeded with the five current defaults.
 - [ ] Milestone 2: `GrantSource` introduced; all four gate call sites read it; worker boots a DB-backed source; existing tests pass with the static source.
 - [ ] Milestone 3: `shikigami grants list|grant|revoke` CLI implemented and manually verified.
 - [ ] Milestone 4: real-Postgres tests for the DB gate, seed data, and revocation-between-enqueue-and-publish; full `cabal test all` green.
@@ -55,7 +56,7 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
   Date: 2026-07-08
 
 - Decision: On a database error during a grant lookup, the gate fails closed (the sink is denied with the error in the reason text).
-  Rationale: C11 is a trust boundary; delivering to an external service when we cannot prove a grant exists is the failure mode the gate exists to prevent. Contrast with the meibo lifecycle gate (plan 23), which fails open per the improvement request — lifecycle is an operational kill switch, not a trust boundary.
+  Rationale: C11 is a trust boundary; delivering to an external service when we cannot prove a grant exists is the failure mode the gate exists to prevent. Plan 23 likewise fails closed until its first valid lifecycle snapshot, then serves the last-known valid snapshot during refresh outages.
   Date: 2026-07-08
 
 - Decision: Model the injectable seam as a small sum type `GrantSource = StaticGrants (Map Text (Set SinkKind)) | DbGrants Pool` with `checkGrant :: GrantSource -> AgentIdentity -> SinkKind -> IO (Either Denied ())`, rather than threading a bare function value.
@@ -88,9 +89,15 @@ Where the gate is called — there are four call sites, in two phases:
    - A near-duplicate `prepareSinkIntent` in `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs:101`, reached from the Flow behavior DSL via `enqueueSinkIntentStep` (SinkOutbox.hs:50-61, called from `Shikigami/Flow/Capability.hs:124`). (`docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` plans to merge these duplicates; do not merge them here, just thread the same source through both.)
 2. Publish time: `Shikigami.Sink.dispatch` (`shikigami-core/src/Shikigami/Sink.hs:39-47`) re-checks the grant (line 42) before routing to the per-sink handler; a denial logs `[sink] skipped (denied): …` to stderr (line 45) and returns `DeniedOutcome`. `dispatch` is invoked by the outbox publisher via `publishSinkIntent` (Workflow.hs:561-583), which maps any non-`Failed` outcome — including `DeniedOutcome` — to `PublishSucceeded` (lines 581-583), so a denied publish completes the outbox row without delivering. This denial-recording behavior must not change.
 
-Migrations. Shikigami's own SQL lives in `shikigami-migrations/sql-migrations/` (currently two files: `2026-06-24-12-00-00-shikigami-fired.sql` and `2026-06-24-13-00-00-pgmq-schema.sql`); the rest of the schema arrives by composing the kioku migration set (which itself composes kiroku and keiro) — see `shikigami-migrations/src/Shikigami/Migrations.hs:29-33`. Migration files are embedded into the `shikigami-migrate` binary at compile time by a Template Haskell `embedDir` splice (Migrations.hs:46). Because GHC only tracks files that existed at the last compile, the `just migrate` recipe (Justfile lines 29-37) touches `shikigami-migrations/shikigami-migrations.cabal` first to force re-embedding — always create migrations with `just new-migration <slug>` and apply with `just migrate`, never by hand. The `just new-migration` template pins `SET search_path TO kiroku, pg_catalog;` because most shikigami tables live in the `kiroku` schema; this migration instead creates and uses a dedicated `shikigami` schema (replace the template's `search_path` line as shown below). The test-support helper `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs:12-19`) already lists `shikigami` among the schemas it manages, so no test-support change is needed. Note that the application's connection pool (kiroku-store) sets `search_path` to `kiroku`, so all runtime SQL against the new table must schema-qualify it as `shikigami.sink_grants`.
+Migrations. Plan 38 owns Shikigami's pg-migrate component, exact-byte manifest,
+complete application plan, CLI, legacy Codd-history import, and public test support.
+This plan contributes one forward-only grant change through that interface; it does not
+create timestamped Codd files or a second runner. Runtime SQL remains schema-qualified
+as `shikigami.sink_grants`.
 
-Database access idiom. `shikigami-core` already depends on `hasql`, `hasql-pool`, and `hasql-transaction` (shikigami-core.cabal). The runtime obtains a `Hasql.Pool.Pool` from the kiroku store (`Kiroku.Store.Connection.withStore` … `pool st` — see `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:31-35` and `Shikigami.Trigger.Enqueue.enqueueRunJob` for the `Pool.use` pattern). CLI commands read the connection string from the `PG_CONNECTION_STRING` environment variable (Worker.hs:28).
+Database access follows plan 36's package ownership. Runtime and CLI composition roots
+receive validated database settings through plan 37's Settei config; command modules do
+not call `getEnv`/`lookupEnv`.
 
 
 ## Plan of Work
@@ -101,10 +108,10 @@ The work is four milestones. Each is independently verifiable; 2 depends on 1 (t
 
 Scope: create the `shikigami` schema and the `shikigami.sink_grants` table, seeded with rows equivalent to `defaultGrantTable`. At the end, `just migrate` applies cleanly to a fresh and to an existing database, and `psql` shows nine seed rows.
 
-Run `just new-migration sink-grants` at the repo root; it prints the created file path (`shikigami-migrations/sql-migrations/<UTC timestamp>-sink-grants.sql`). Replace the generated body (keeping the `-- codd: in-txn` first line) with:
+Run `cabal run shikigami-migrate -- new sink-grants`, edit the generated pg-migrate
+change, and add its exact identity/checksum to the component manifest and complete plan:
 
 ```sql
--- codd: in-txn
 
 -- Migration: sink-grants
 -- The C11 per-agent-per-sink grant table. One row per (agent, sink kind); a row
@@ -142,7 +149,8 @@ INSERT INTO shikigami.sink_grants (agent_name, sink_kind, granted_by) VALUES
 ON CONFLICT (agent_name, sink_kind) DO NOTHING;
 ```
 
-The sink-kind strings must match `sinkKindText` (Permission.hs:43-49) exactly. Apply with `just migrate` (idempotent; codd records applied files by name and skips them on re-run).
+The sink-kind strings must match `sinkKindText` exactly. Apply and verify with the
+plan-38 `shikigami-migrate plan|up|verify` workflow.
 
 Acceptance: `psql -h "$PGHOST" -d "$PGDATABASE" -c "TABLE shikigami.sink_grants"` shows nine rows, all `granted = t`.
 
@@ -163,14 +171,14 @@ Put the SQL in a new module `shikigami-core/src/Shikigami/Sink/GrantStore.hs` (a
 module Shikigami.Sink.GrantStore
   ( GrantRow (..),
     lookupGrant,   -- Pool -> Text -> SinkKind -> IO (Either Text (Maybe Bool))
-    listGrants,    -- Pool -> IO (Either Text [GrantRow])
+    listGrants,    -- Pool -> GrantPageRequest -> IO (Either Text GrantPage)
     upsertGrant,   -- Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
     revokeGrant,   -- Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
   )
 where
 ```
 
-`lookupGrant` executes `SELECT granted FROM shikigami.sink_grants WHERE agent_name = $1 AND sink_kind = $2` via `Hasql.Pool.use pool (Hasql.Session.statement …)` with `Hasql.Statement.Statement` and the `rowMaybe` decoder (mirror the statement style used elsewhere in the repo; the table name must stay schema-qualified because the pool's `search_path` is `kiroku`). `upsertGrant` is `INSERT … (agent_name, sink_kind, granted, granted_by, granted_at, updated_at) VALUES ($1,$2,TRUE,$3,now(),now()) ON CONFLICT (agent_name, sink_kind) DO UPDATE SET granted = TRUE, granted_by = EXCLUDED.granted_by, granted_at = now(), revoked_by = NULL, revoked_at = NULL, updated_at = now()`. `revokeGrant` is `UPDATE shikigami.sink_grants SET granted = FALSE, revoked_by = $3, revoked_at = now(), updated_at = now() WHERE agent_name = $1 AND sink_kind = $2` (revoking a non-existent grant is a no-op that the CLI reports). `GrantRow` carries agent name, principal id (Maybe), sink kind text, granted flag, and the audit columns for `listGrants` (ordered by agent_name, sink_kind).
+`lookupGrant` executes `SELECT granted FROM shikigami.sink_grants WHERE agent_name = $1 AND sink_kind = $2` via `Hasql.Pool.use pool (Hasql.Session.statement …)` with `Hasql.Statement.Statement` and the `rowMaybe` decoder (mirror the statement style used elsewhere in the repo; the table name must stay schema-qualified because the pool's `search_path` is `kiroku`). `upsertGrant` is `INSERT … (agent_name, sink_kind, granted, granted_by, granted_at, updated_at) VALUES ($1,$2,TRUE,$3,now(),now()) ON CONFLICT (agent_name, sink_kind) DO UPDATE SET granted = TRUE, granted_by = EXCLUDED.granted_by, granted_at = now(), revoked_by = NULL, revoked_at = NULL, updated_at = now()`. `revokeGrant` is `UPDATE shikigami.sink_grants SET granted = FALSE, revoked_by = $3, revoked_at = now(), updated_at = now() WHERE agent_name = $1 AND sink_kind = $2` (revoking a non-existent grant is a no-op that the CLI reports). `GrantRow` carries agent name, principal id (Maybe), sink kind text, granted flag, and the audit columns. `listGrants` is server-side keyset pagination ordered by `(agent_name, sink_kind)`, accepts a validated `PageSize` from 1 through 200 plus an optional opaque cursor, fetches `size + 1`, and returns at most `size` rows plus the next cursor. It never loads the complete table.
 
 Thread the source. Compilation errors after the signature change enumerate every site; concretely:
 
@@ -178,7 +186,10 @@ Thread the source. Compilation errors after the signature change enumerate every
 - `Shikigami.Agent.Workflow.AgentRunDeps` gains `grants :: !GrantSource`. `buildSinkIntent` (Workflow.hs:420-440) and `prepareSinkIntent` (Workflow.hs:475-514) take the source as an argument (enqueueSinkIntents and enqueueSinkIntentStep pass it down; `enqueueSinkIntentStep`'s exported signature gains a leading `GrantSource` parameter). `publishSinkIntent` (Workflow.hs:561-583) puts `grants = grants deps` into the `SinkContext` it builds.
 - `Shikigami.Flow.SinkOutbox.prepareSinkIntent` (SinkOutbox.hs:83-…) and `enqueueSinkIntentStep` (SinkOutbox.hs:50-61) gain the same parameter; `Shikigami.Flow.Capability.SinkEnv` gains a `grants :: !GrantSource` field and `runSink` passes it through (Capability.hs:124). The `SinkEnv` construction in `runFlowBehavior` (Workflow.hs:316-322) forwards `grants deps`.
 - `Shikigami.Agent.Conversation`: `prepareConversationReplySinkIntent` (Conversation.hs:392-…) gains the parameter; `ConversationEnv` gains a `grants` field; construction sites are `Shikigami.Worker` (Worker.hs:90-97 and 148-155) and any CLI command that builds one (grep `ConversationEnv {`).
-- Boot: `Shikigami.Worker.WorkerEnv` gains `grants :: !GrantSource`; `agentRunDeps` (Worker.hs:194-206) forwards it. `Shikigami.Cli.Commands.Worker.runWorkerCmd` builds `DbGrants (StoreConnection.pool st)` inside the `withStore` block (Worker.hs:31-42). Do the same in every other `AgentRunDeps`/`WorkerEnv` construction site (grep `AgentRunDeps {` — at least `Shikigami/Cli/Commands/AgentRun.hs` and the test helpers).
+- Boot: `Shikigami.Worker.WorkerEnv` gains `grants :: !GrantSource`; `agentRunDeps`
+  forwards it. The worker and agent-run composition components in `shikigami-workers` build
+  `DbGrants (StoreConnection.pool st)` inside the shared store bracket. Do the same in every
+  other `AgentRunDeps`/`WorkerEnv` construction site (`rg 'AgentRunDeps\s*\{'` plus the test helpers).
 - Tests: `testDeps` in `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs` and `ctxFor` in `shikigami-core/test/Main.hs` inject `StaticGrants defaultGrantTable`, preserving the existing "heartbeat allowed / intruder denied" assertions unchanged.
 
 Acceptance: `cabal build all` and `cabal test all` pass; `grep -rn "checkGrant" shikigami-core/src` shows no remaining call that does not pass a `GrantSource`.
@@ -187,9 +198,15 @@ Acceptance: `cabal build all` and `cabal test all` pass; `grep -rn "checkGrant" 
 
 Scope: a new `shikigami grants` subcommand group. At the end, list/grant/revoke work against the dev database.
 
-Add `shikigami-cli/src/Shikigami/Cli/Commands/Grants.hs` with `runGrantsList :: IO ()`, `runGrantsGrant :: Text -> Text -> Maybe Text -> IO ()`, `runGrantsRevoke :: Text -> Text -> Maybe Text -> IO ()`. Each reads `PG_CONNECTION_STRING` via `getEnv` (the Worker.hs:28 idiom), opens a store with `Kiroku.Store.Connection.withStore (defaultConnectionSettings connStr)`, and calls the corresponding `Shikigami.Sink.GrantStore` function with `pool st`. Parse the sink-kind argument by matching the five `sinkKindText` strings (reject anything else with the valid list in the error). `list` prints one line per row: agent name, sink kind, `granted`/`revoked`, principal id if present, and the audit trail (`granted_by`/`granted_at` or `revoked_by`/`revoked_at`).
+Add the grants command as a direct administrative executable component in
+`shikigami-server`, as assigned by plan 36. It receives
+validated database settings from plan 37's Settei composition root and calls the grant
+store through the existing pool; no command reads the environment directly. Parse the
+sink-kind argument against the five canonical strings and print the audit trail.
 
-Wire it into `shikigami-cli/src/Shikigami/Cli.hs`: extend the `Command` sum with `GrantsList | GrantsGrant Text Text (Maybe Text) | GrantsRevoke Text Text (Maybe Text)`, and add a `command "grants" (info (subparser …))` group with `list`, `grant AGENT SINK_KIND [--by WHO]`, and `revoke AGENT SINK_KIND [--by WHO]` following the existing parser style.
+Register `grants list|grant|revoke` in the server-owned dispatcher. `grants list` accepts
+`--limit` and `--after`, validates before opening the pool, prints the next opaque cursor, and
+never exposes raw cursor internals as positional database fields.
 
 Acceptance: the transcript under Validation and Acceptance.
 
@@ -198,7 +215,7 @@ Acceptance: the transcript under Validation and Acceptance.
 Scope: prove the DB gate beyond compilation. Add `shikigami-core/test/Shikigami/GrantStoreSpec.hs` (register its `tests :: TestTree` in `shikigami-core/test/Main.hs`'s `testGroup "shikigami"` list and in the test-suite's `other-modules`). Using `withShikigamiMigratedDatabase` + `withStore` (the exact pattern at AgentWorkflowSpec.hs:51-56), assert:
 
 1. Seed data: `checkGrant (DbGrants pool) (AgentIdentity "heartbeat") SKawaDigest` is `Right ()`; `… (AgentIdentity "intruder") SKawaDigest` is `Left (Denied …)`; `… (AgentIdentity "danwa-heartbeat") SKizashiSignal` is `Left (Denied …)` (granted one kind, asking another).
-2. Runtime grant: after `upsertGrant pool "digest-watcher" SKawaDigest (Just "test")`, the same check flips to `Right ()`; after `revokeGrant …`, it flips back to `Left`, and `listGrants` shows the row with `granted = False` and a `revoked_at`.
+2. Runtime grant: after `upsertGrant pool "digest-watcher" SKawaDigest (Just "test")`, the same check flips to `Right ()`; after `revokeGrant …`, it flips back to `Left`, and a bounded `listGrants` page shows the row with `granted = False` and a `revoked_at`. Seed more than one page and prove traversal has no gaps or duplicates.
 3. Revocation between enqueue and publish: run a full agent workflow via `runAgentRunWorkflow` with `grants = DbGrants pool` for an agent whose sink is granted (reuse AgentWorkflowSpec's `testDeps`/`job` fixtures, adapted); assert one outbox row exists (`Keiro.Outbox.listOutbox` as at AgentWorkflowSpec.hs:60); then `revokeGrant` and drive the publisher (`publishClaimedOutbox (AgentWorkflow.publishSinkIntent deps) …` as `Shikigami.Worker.runOutboxPublisher` does, Worker.hs:103-112) against a stub sink server (the `testWithApplication` + `stubKizashiApp` pattern in test/Main.hs); assert the stub received zero requests and the publish outcome succeeded (row completed, nothing delivered).
 
 Acceptance: `cabal test all` green; the new group visible in the tasty output.
@@ -210,8 +227,8 @@ All commands from the repo root `/Users/shinzui/Keikaku/bokuno/shikigami`, insid
 
 ```bash
 nix develop
-just new-migration sink-grants
-# edit shikigami-migrations/sql-migrations/<ts>-sink-grants.sql per Milestone 1
+cabal run shikigami-migrate -- new sink-grants
+# edit the pg-migrate change and update/verify the manifest and complete plan
 just migrate
 psql -h "$PGHOST" -d "$PGDATABASE" -c "SELECT agent_name, sink_kind, granted FROM shikigami.sink_grants ORDER BY 1,2"
 ```
@@ -240,12 +257,13 @@ cabal build all
 cabal test all
 ```
 
-CLI smoke test (requires `PG_CONNECTION_STRING`, e.g. `export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"`):
+CLI smoke test (uses the same checked Settei source as the server-owned administrative
+dispatcher; the file supplies `database.connection_string`):
 
 ```bash
-cabal run shikigami -- grants list
-cabal run shikigami -- grants grant digest-watcher KawaDigest --by nadeem
-cabal run shikigami -- grants revoke digest-watcher KawaDigest --by nadeem
+cabal run shikigami -- grants list --config config/operator-dev.yaml
+cabal run shikigami -- grants grant digest-watcher KawaDigest --by nadeem --config config/operator-dev.yaml
+cabal run shikigami -- grants revoke digest-watcher KawaDigest --by nadeem --config config/operator-dev.yaml
 ```
 
 
@@ -253,10 +271,10 @@ cabal run shikigami -- grants revoke digest-watcher KawaDigest --by nadeem
 
 Beyond the milestone acceptances above, the end-to-end demonstration is: a sink permission changes at runtime with no rebuild.
 
-1. Terminal A: `cabal run shikigami -- stub-kawa --port 8088`.
-2. Terminal B: start the worker: `cabal run shikigami -- worker --agents agents/proof --kawa-url http://localhost:8088 --kizashi-url http://localhost:1 --danwa-url http://localhost:1 --danwa-agent part_test` (env: `PG_CONNECTION_STRING` as above).
-3. Terminal C: enqueue a run for the proof agent: `cabal run shikigami -- enqueue-run digest-watcher --payload '{}'` (adjust to the proof agent's expected payload; any agent with a `KawaDigest` sink works). Because `digest-watcher` has no grant row, the worker logs a denial (the `DeniedOutcome` reason contains `has no grant for KawaDigest`) and stub-kawa logs nothing.
-4. `cabal run shikigami -- grants grant digest-watcher KawaDigest --by nadeem`, enqueue again: stub-kawa now logs `[stub-kawa] accepted source=shinzui/shikigami …` — the grant took effect without touching the worker process.
+1. Terminal A: `cabal run shikigami -- stub-kawa --config config/stub-kawa-dev.yaml`.
+2. Terminal B: start `cabal run shikigami-worker -- --config config/worker-grants-dev.yaml`. The checked file supplies `database.connection_string`, `agents.directory`, the Kawa stub URL through `sinks.kawa.base_url`, and any deliberately unreachable unused sink URLs.
+3. Terminal C: enqueue a run for the proof agent through the server-owned command: `cabal run shikigami -- enqueue-run digest-watcher --payload '{}' --config config/operator-dev.yaml` (adjust to the proof agent's expected payload; any agent with a `KawaDigest` sink works). Because `digest-watcher` has no grant row, the worker logs a denial (the `DeniedOutcome` reason contains `has no grant for KawaDigest`) and stub-kawa logs nothing.
+4. Run `cabal run shikigami -- grants grant digest-watcher KawaDigest --by nadeem --config config/operator-dev.yaml`, enqueue again: stub-kawa now logs `[stub-kawa] accepted source=shinzui/shikigami …` — the grant took effect without touching the worker process.
 5. `grants revoke`, enqueue again: back to a recorded denial.
 
 Automated acceptance: `cabal test all` passes, including the new `GrantStoreSpec` group (seed rows honored, grant/revoke round-trip, revocation between enqueue and publish delivers nothing). The pre-existing dispatch tests in `shikigami-core/test/Main.hs` ("denied: skipped and recorded, no POST" etc.) still pass unchanged apart from injecting `StaticGrants defaultGrantTable` — proving the pure seam survived.
@@ -264,10 +282,16 @@ Automated acceptance: `cabal test all` passes, including the new `GrantStoreSpec
 
 ## Idempotence and Recovery
 
-The migration is idempotent DDL (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING` seeds) and codd skips already-applied files, so `just migrate` can be re-run freely. Never edit an applied migration file (codd keys by filename); to change the schema later, add a new migration. `upsertGrant`/`revokeGrant` are idempotent upserts/updates; repeating a CLI command converges to the same row state. If Milestone 2 is merged before Milestone 1's migration is applied to a given database, every grant lookup fails closed (all sinks denied with `grant lookup failed`) — safe but loud; apply `just migrate` first in any environment. Rollback of the whole feature is reverting the Haskell changes; the table can remain (it is additive and unreferenced by anything else).
+The change is forward-only and plan 38 verifies the applied manifest prefix/checksum.
+Never edit an applied change; add a new manifest entry. Seed writes and grant commands
+are idempotent. Deployments run the pg-migrate verification/startup gate before new code;
+without the table, grant lookups fail closed and loudly.
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36, 37, and 38. The schema is managed only by pg-migrate and
+the CLI receives database configuration through Settei.
 
 No new external dependencies: `hasql`, `hasql-pool`, `hasql-transaction`, `containers`, and `optparse-applicative` are already depended on by the relevant packages. New/changed interfaces that must exist at the end:
 
@@ -284,7 +308,11 @@ data GrantRow = GrantRow
     granted :: !Bool, grantedBy :: !(Maybe Text), grantedAt :: !UTCTime,
     revokedBy :: !(Maybe Text), revokedAt :: !(Maybe UTCTime) }
 lookupGrant :: Hasql.Pool.Pool -> Text -> SinkKind -> IO (Either Text (Maybe Bool))
-listGrants  :: Hasql.Pool.Pool -> IO (Either Text [GrantRow])
+data GrantCursor = GrantCursor {agentName :: !Text, sinkKind :: !Text}
+newtype PageSize = PageSize Word16 -- private constructor; smart decoder accepts 1..200
+data GrantPageRequest = GrantPageRequest {size :: !PageSize, after :: !(Maybe GrantCursor)}
+data GrantPage = GrantPage {items :: ![GrantRow], next :: !(Maybe GrantCursor)}
+listGrants  :: Hasql.Pool.Pool -> GrantPageRequest -> IO (Either Text GrantPage)
 upsertGrant :: Hasql.Pool.Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
 revokeGrant :: Hasql.Pool.Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
 
@@ -298,4 +326,11 @@ data AgentRunDeps = AgentRunDeps { …existing fields…, grants :: !GrantSource
 data SinkEnv = SinkEnv { …existing fields…, grants :: !GrantSource }
 ```
 
-Database artifact: table `shikigami.sink_grants` as in Milestone 1 (primary key `(agent_name, sink_kind)`, nullable `principal_id` reserved for `docs/plans/23-agent-lifecycle-control-with-meibo-principals.md`, `sink_kind` CHECK-constrained to the five `sinkKindText` strings including `ChannelEgress` for `docs/plans/32-channel-egress-sink-through-kanmon.md`). CLI artifact: `shikigami grants list|grant|revoke` in `shikigami-cli/src/Shikigami/Cli.hs` + `Shikigami/Cli/Commands/Grants.hs`.
+Database artifact: table `shikigami.sink_grants` as in Milestone 1 (primary key `(agent_name, sink_kind)`, nullable `principal_id` reserved for `docs/plans/23-agent-lifecycle-control-with-meibo-principals.md`, `sink_kind` CHECK-constrained to the five `sinkKindText` strings including `ChannelEgress` for `docs/plans/32-channel-egress-sink-through-kanmon.md`). Command artifact: `shikigami grants list|grant|revoke` in the grants vertical of `shikigami-server`.
+
+
+## Revision Notes
+
+- 2026-07-22: Rebased package/config ownership on plans 36/37 and replaced every Codd
+  authoring/deployment instruction with plan 38's pg-migrate component, manifest,
+  complete plan, CLI, verification, and test-support workflow.

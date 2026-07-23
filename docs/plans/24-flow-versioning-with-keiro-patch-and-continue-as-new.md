@@ -73,6 +73,12 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
+- Decision: `domain/shikigami.keiro` is the authoritative durable-topology inventory;
+  this plan's discipline and active patches must agree with its checker/scaffold/harness.
+  Rationale: stable names are persisted compatibility identifiers and need a machine-
+  checked declaration/code drift gate, not prose alone.
+  Date: 2026-07-22
+
 - Decision: Fix `emitSignal` with caller-supplied stable labels plus a `patch` guard, not
   with keiro's `freshOrdinal`.
   Rationale: `freshOrdinal` is also a per-run counter and keiro's own documentation warns
@@ -349,23 +355,21 @@ shikigamiWorkflowRunOptions`). Add `"shikigami.emit-signal-labels-v1"` to
 Acceptance: FlowLifecycle tests pass with the new label-based outbox detail, and the M5
 deploy-simulation test (below) proves the old-branch behavior.
 
-Milestone 4 — load-time flow validation. In `shikigami-core/src/Shikigami/Flow.hs` export a
-runtime-free name list so callers can validate without constructing approval environments:
+Milestone 4 — load-time flow validation. Add the flow names and their stable workflow
+relationships to plan 39's checked `domain/shikigami.keiro` specification, regenerate, and
+export the generated runtime-free name list so callers can validate without constructing
+approval environments:
 
 ```haskell
 registeredFlowNames :: [Text]
 ```
 
-Implement it as a literal list (`["at-risk-customer"]`) adjacent to `flowRegistry`, with a
-comment stating the two must stay in sync, or — better — restructure `flowRegistry` to be
-built from a list of `(Text, LifecycleDiagram, FlowRuntime -> Value -> Eff es Value)`
-entries so the names cannot diverge; choose whichever keeps the diff minimal, and note the
-choice in the Decision Log. Then: in
-`shikigami-cli/src/Shikigami/Cli/Commands/Validate.hs`, after the manifest parses, add a
+The generated list is the validation source; hand-owned `flowRegistry` construction must have a
+conformance test proving it contains exactly that set. Do not maintain a second literal list or
+edit a generated module. Then, in the validation command component in `shikigami-server`, after the manifest parses, add a
 case for `Flow {name = flowName}` that fails (`exitFailure` with
 `validate: unknown flow <name>; registered flows: ...`) when `flowName` is not in
-`registeredFlowNames`. In `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` (function
-`runWorkerCmd`, which loads every `agents/*.dhall` at boot), validate each loaded
+`registeredFlowNames`. In the worker composition component in `shikigami-workers`, validate each loaded
 `AgentDecl` the same way and refuse to start listing the offending agents. Acceptance: a
 manifest with `behavior = Flow { name = "no-such-flow" }` is rejected by
 `cabal run shikigami -- validate <path>` with a non-zero exit, and the worker refuses to
@@ -479,7 +483,7 @@ The change is accepted when all of the following observable behaviors hold.
 1. Discipline document: `docs/workflow-versioning.md` exists, contains the rules, the
    keiro-semantics summary, the step-name inventory, and the emitSignal worked example;
    `AGENTS.md` points to it.
-2. Patch plumbing: `rg "runWorkflow " shikigami-core/src shikigami-cli/src` shows no
+2. Patch plumbing: `rg "runWorkflow " shikigami-core/src shikigami-workers/src shikigami-server/src` shows no
    production call site using the default-options entry point for the agent-run or
    conversation workflows; all go through `Shikigami.Workflow.Versioning`.
 3. Deploy simulation: `cabal test shikigami-core-test --test-options='-p Versioning'`
@@ -518,6 +522,9 @@ sites exist yet (i.e., revert M3 first, then M2).
 
 
 ## Interfaces and Dependencies
+
+Hard dependencies: plans 36 and 39. Every step/patch/name change updates the checked
+Keiro DSL and passes its generated-artifact diff gate.
 
 Libraries and modules used, all already dependencies of `shikigami-core` (see
 `shikigami-core/shikigami-core.cabal`): `keiro` (workflow runtime), `effectful`,
@@ -580,3 +587,6 @@ any added durable steps.
 
 - 2026-07-22: Added plan 35 as a hard downstream consumer of the workflow-versioning
 discipline and patch plumbing, matching the cross-MasterPlan execution order.
+- 2026-07-22: Added plan 39 as a hard checked-DSL predecessor and made the DSL/checker/
+  scaffold/harness/diff gate part of purpose, acceptance, and interfaces.
+- [ ] Prerequisite: plans 36 and 39 complete; update the checked Keiro DSL before changing durable code.

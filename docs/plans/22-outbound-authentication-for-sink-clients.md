@@ -18,23 +18,28 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 Shikigami agents deliver their outputs to other services over HTTP ("sinks"): activity digests to kawa, signals to kizashi, and conversation messages to danwa. Today every one of those requests goes out with no credentials at all — the only header the HTTP helper sends is `content-type` (`shikigami-core/src/Shikigami/Sink/Http.hs:31-51`), and the local kawa stub explicitly omits the real doorway's auth gate (`shikigami-core/src/Shikigami/Sink/KawaStub.hs:8`). The real kawa/kizashi/danwa services will require shomei-issued bearer tokens (`docs/initial-spec.md`, IR-2, lines 889-900), so the moment shikigami points at a real endpoint, every sink delivery would fail with 401 — and there is nowhere to even configure a credential.
 
-After this plan, each sink client sends `Authorization: Bearer <token>` when a per-sink token is configured (via environment variables today, via a shomei service-token fetch later behind the same interface), all outbound HTTP goes through one shared connection manager with explicit timeouts (today a brand-new `Manager` is built per request, Http.hs:37, and requests can hang indefinitely on a stuck server), tokens are never logged or serialized, and the `stub-kawa` server can be told to enforce a token so the whole authenticated path is testable end to end:
+After this plan, each sink client sends `Authorization: Bearer <token>` when a per-sink
+credential reference is resolved through plan 37's Settei application config (static
+secret source today, shomei service-token fetch later behind the same interface), all
+outbound HTTP goes through one shared connection manager with explicit timeouts, tokens
+are never logged or serialized, and `stub-kawa` can enforce the authenticated path end to end:
 
 ```bash
 # terminal A: the stub now rejects unauthenticated ingest
-cabal run shikigami -- stub-kawa --port 8088 --require-token s3cret
+cabal run shikigami -- stub-kawa --config config/stub-kawa-auth.yaml
 
 # terminal B: the worker sends the token
-SHIKIGAMI_KAWA_TOKEN=s3cret cabal run shikigami -- worker --agents agents ...
+cabal run shikigami-worker -- --config config/worker-auth.yaml
 ```
 
 
 ## Progress
 
-- [ ] Milestone 1: shared `Manager` with timeouts; `postJSON` takes an `HttpEnv` and injects a bearer header; kawa/kizashi clients rewired.
-- [ ] Milestone 2: credential configuration from env vars (`SHIKIGAMI_{KAWA,KIZASHI,DANWA}_TOKEN`), threaded from the CLI boot to every dispatch; redacted `Show`; boot log states which sinks have tokens (never the values).
+- [ ] Milestone 1: shared `Manager` with timeouts and bounded request/response bodies; `postJSON` takes an `HttpEnv`, injects auth, and preserves typed failure class; kawa/kizashi clients rewired.
+- [ ] Prerequisites: plans 36/37 complete; HTTP modules follow the six-package boundary and credentials come from Settei.
+- [ ] Milestone 2: Settei credential-reference configuration with explicit legacy bindings, threaded from composition root to dispatch; secret types have no `Show`/JSON instances; boot log states which sinks have credentials (never values).
 - [ ] Milestone 3: danwa client path authenticated (local servant runner over the shared token-injecting manager, replacing `Danwa.runDanwa`).
-- [ ] Milestone 4: `stub-kawa --require-token` enforcement plus tests (header asserted by a stub server; 401 path exercised).
+- [ ] Milestone 4: stub-kawa credential-reference enforcement plus tests (header asserted by a stub server; 401 path exercised).
 - [ ] Milestone 5: shomei token-source seam documented and typed (`TokenSource`), static implementation shipped; `cabal test all` green.
 
 
@@ -45,24 +50,44 @@ SHIKIGAMI_KAWA_TOKEN=s3cret cabal run shikigami -- worker --agents agents ...
 
 ## Decision Log
 
-- Decision: Ship static per-sink tokens first, behind a `TokenSource` interface (`fetchToken :: IO (Either Text BearerToken)`), and defer shomei-issued service tokens to a later swap of the `TokenSource` implementation.
+- Decision: Ship static per-sink tokens first, behind a `TokenSource` interface
+  (`fetchToken :: IO (Either CredentialFailure BearerToken)`), and defer shomei-issued
+  service tokens to a later swap of the `TokenSource` implementation.
   Rationale: Verified against the shomei source at `/Users/shinzui/Keikaku/bokuno/shomei` (registered in mori as `shinzui/shomei`): the claims model already carries capability scopes (`AuthClaims` with `scopes :: Set Scope`, `roles`, and the `act` actor claim — `shomei-core/src/Shomei/Domain/Claims.hs:38-52`), signing and verification exist (`signAccessToken`, `shomei-jwt/src/Shomei/Jwt/Sign.hs:125-126`; `verifyToken`, `shomei-jwt/src/Shomei/Jwt/Verify.hs:77`), but the only issuance path builds tokens with `scopes = Set.empty` (`shomei-core/src/Shomei/Workflow/Session.hs:44-56`, line 52) — identity, not capability. Scoped service-token issuance is exactly the IR-2 request into the shomei repo (`docs/initial-spec.md:889-900`) and has not shipped. Designing the interface now and implementing static-first means zero shikigami churn when it does.
   Date: 2026-07-08
 
 - Decision: Tokens live only in a boot-time `SinkHttp`/`TokenSource` value, never in the `KawaConfig`/`KizashiConfig`/`DanwaConfig` records (`shikigami-core/src/Shikigami/Sink/Config.hs:12-31`).
-  Rationale: `DanwaConfig` derives `ToJSON`/`FromJSON` (Config.hs:30-31) and sink intents are serialized into the transactional outbox as JSON (`SinkIntent` in `Shikigami/Agent/Workflow.hs:96-106`); putting a secret in a config record is one derived instance away from persisting it in the database or printing it in a log. `BearerToken` gets a redacting `Show` and no JSON instances, so the type system keeps secrets out of every serialization path.
+  Rationale: `DanwaConfig` derives `ToJSON`/`FromJSON` (Config.hs:30-31) and sink intents are serialized into the transactional outbox as JSON (`SinkIntent` in `Shikigami/Agent/Workflow.hs:96-106`); putting a secret in a config record is one derived instance away from persisting it in the database or printing it in a log. `BearerToken` has a private constructor and no `Show` or JSON instances, so the type system keeps secrets out of every serialization path.
   Date: 2026-07-08
 
-- Decision: Two managers at boot — one shared plain manager (timeouts only) used by `postJSON` for kawa and kizashi, and one danwa manager whose `managerModifyRequest` injects the danwa bearer header. Both created once at process start.
+- Decision: Two TLS-capable managers at boot — one shared manager used by `postJSON` for kawa
+  and kizashi, and one danwa manager whose request hook injects the danwa bearer header and
+  whose response hook enforces the same body limit. Both are created once at process start;
+  redirects are disabled so credentials cannot be replayed to a redirect target.
   Rationale: kawa/kizashi requests are built by our own code, so `postJSON` can add the header explicitly per request from its `HttpEnv`. The danwa path goes through the generated servant client (`danwa-client`: `Danwa.Client.runDanwa :: String -> ClientM a -> IO (Either ClientError a)`, `/Users/shinzui/Keikaku/bokuno/danwa/danwa-client/src/Danwa/Client.hs:99-103`), which builds requests internally and — worse — allocates a fresh unauthenticated `Manager` on every call. Rather than patching the danwa repo, shikigami builds its own `ClientEnv` (`mkClientEnv`) over a manager whose `managerModifyRequest` adds the header; that hook is the supported http-client seam for exactly this. It also fixes the per-call manager allocation on the danwa path for free.
   Date: 2026-07-08
 
-- Decision: Response timeout of 30 seconds via `managerResponseTimeout = responseTimeoutMicro 30_000_000` on both managers; keep `defaultManagerSettings` (plain HTTP) as the base.
-  Rationale: All configured sink base URLs today are local plain-HTTP endpoints (dev stubs); 30s is generous for a doorway POST but bounds a hung server, which currently blocks the outbox publisher loop (`Shikigami.Worker.runOutboxPublisher`, Worker.hs:103-112) indefinitely. HTTPS (a TLS manager) becomes necessary only when a real remote endpoint ships; note it as a follow-up in the masterplan rather than adding `http-client-tls` speculatively.
+- Decision: Response timeout of 30 seconds via
+  `managerResponseTimeout = responseTimeoutMicro 30_000_000` on both managers, based on
+  `http-client-tls`'s `tlsManagerSettings` so HTTP and HTTPS endpoints share one path.
+  Rationale: 30s bounds a hung doorway request, which currently blocks the outbox publisher
+  loop indefinitely. Authentication must not require a later manager replacement when a real
+  endpoint moves from a local HTTP stub to HTTPS.
   Date: 2026-07-08
 
-- Decision: Configuration idiom is environment variables read in the CLI command modules (`lookupEnv`), matching the existing `PG_CONNECTION_STRING` pattern (`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:28`).
-  Rationale: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (MasterPlan 2) lands first and defines the typed `lookupEnv` resolver, fatal-on-invalid startup behavior, and loud redacted description convention. This plan applies that convention to sink tokens instead of establishing a competing one.
+- Decision: Bound encoded request and decoded response bytes in the HTTP layer with validated
+  `HttpLimits`; never use an unbounded lazy-body helper for remote responses.
+  Rationale: a timeout does not cap memory. A compromised or broken service can stream an
+  arbitrarily large body, while an oversized behavior output can create an equally large
+  request. Limits are Settei domain values and violations are typed permanent protocol/input
+  failures.
+  Date: 2026-07-22
+
+- Decision: Plan 37 owns Settei source composition, explicit legacy environment
+  bindings, validation, diagnostics, and exit semantics. This plan declares per-sink
+  credential-reference settings only; command/client modules never call `lookupEnv`.
+  Rationale: credentials need one typed/redacted composition root and must not become
+  process arguments, serializable config, or arbitrary log values.
   Date: 2026-07-22
 - Decision: This plan owns the repository's one header-capable JSON POST seam:
   `postJSONWithHeaders :: HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO ...`;
@@ -71,6 +96,15 @@ SHIKIGAMI_KAWA_TOKEN=s3cret cabal run shikigami -- worker --agents agents ...
   14 needs authenticated approval notifications. A helper that carries `HttpEnv` lets
   authentication supplied by `TokenSource` compose with caller headers without exposing
   bearer tokens in serializable configs or creating three similar functions.
+  Date: 2026-07-22
+- Decision: Preserve HTTP failure class. Treat malformed/oversized requests, oversized
+  responses, redirects, and 4xx responses as permanent by default; 408, 425, and 429 are
+  transient, and a client may give a documented endpoint-specific meaning to 409. Treat
+  timeouts, network failures, and 5xx as transient. Callers and the outbox map the typed class
+  instead of parsing error text or retrying every non-2xx response.
+  Rationale: credentials and URLs do not repair themselves during a tight retry loop, while
+  throttling and service outages do. A typed `HttpFailure` keeps this distinction consistent
+  for kawa, kizashi, danwa, approvals, and kanmon.
   Date: 2026-07-22
 
 
@@ -110,36 +144,44 @@ Create `shikigami-core/src/Shikigami/Sink/Auth.hs` (add to `exposed-modules`):
 
 ```haskell
 module Shikigami.Sink.Auth
-  ( BearerToken (..),
+  ( BearerToken,
     TokenSource (..),
+    credentialToken,
     staticTokenSource,
-    renderAuthHeader,
   )
 where
 
-import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Data.Text.Encoding qualified as TE
 
--- | An opaque bearer credential. Show is redacted so a token can never leak
--- through error messages, logs, or derived instances. Deliberately has NO
--- ToJSON/FromJSON instances.
+-- | An opaque bearer credential. The constructor is private and the type has
+-- no Show, Read, ToJSON, or FromJSON instance.
 newtype BearerToken = BearerToken Text
   deriving stock (Eq)
 
-instance Show BearerToken where
-  show _ = "BearerToken <redacted>"
+credentialToken :: CredentialValue -> BearerToken
+
+data CredentialFailure = CredentialFailure
+  { reference :: !CredentialRef,
+    reason :: !CredentialFailureReason
+  }
+  deriving stock (Eq, Show)
+
+data CredentialFailureReason
+  = CredentialBackendUnavailable
+  | CredentialExpired
+  | CredentialRejected
+  deriving stock (Eq, Show)
 
 -- | Where tokens come from. Static today (a constant); a shomei-backed source
 -- later fetches a scoped service token, caches it until expiry, and refreshes —
 -- behind this same one-method interface, so nothing downstream changes.
-newtype TokenSource = TokenSource {fetchToken :: IO (Either Text BearerToken)}
+newtype TokenSource = TokenSource {fetchToken :: !(IO (Either CredentialFailure BearerToken))}
 
-staticTokenSource :: Text -> TokenSource
-staticTokenSource t = TokenSource (pure (Right (BearerToken t)))
+staticTokenSource :: BearerToken -> TokenSource
+staticTokenSource token = TokenSource (pure (Right token))
 
-renderAuthHeader :: BearerToken -> ByteString
-renderAuthHeader (BearerToken t) = "Bearer " <> TE.encodeUtf8 t
+-- renderAuthHeader lives in an unexposed package-internal module used only by
+-- the HTTP request builder.
 ```
 
 Rework `shikigami-core/src/Shikigami/Sink/Http.hs`:
@@ -147,16 +189,19 @@ Rework `shikigami-core/src/Shikigami/Sink/Http.hs`:
 ```haskell
 data HttpEnv = HttpEnv
   { manager :: !Manager,
-    token :: !(Maybe TokenSource)
+    token :: !(Maybe TokenSource),
+    limits :: !HttpLimits
   }
 
 newSinkManager :: IO Manager
 newSinkManager =
   newManager
-    defaultManagerSettings {managerResponseTimeout = responseTimeoutMicro 30_000_000}
+    tlsManagerSettings
+      { managerResponseTimeout = responseTimeoutMicro 30_000_000
+      }
 
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
-postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either Text LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
+postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 postJSON env = postJSONWithHeaders env []
 ```
 
@@ -164,51 +209,90 @@ postJSON env = postJSONWithHeaders env []
 uses `manager env` instead of `newManager` (deleting line 37). It starts with the
 caller-supplied headers, adds `content-type`, and then resolves authentication: with
 `Nothing` it sends no authorization header; with `Just src` it runs `fetchToken src` — a
-`Left e` becomes `Left ("token fetch failed: " <> e)` without issuing the request (fail
+`Left e` becomes a typed transient credential failure without issuing the request (fail
 closed), and a `Right tok` adds `("authorization", renderAuthHeader tok)`. Define
-`postJSON` only as the empty-extra-header wrapper. Error strings must never interpolate
-the token (the redacted `Show` guards accidents, but do not `show` the header value either).
+`postJSON` only as the empty-extra-header wrapper. Rendered diagnostics carry only stable
+error categories and credential-reference names; provider error text is not retained and the
+secret type cannot be rendered. Set `redirectCount = 0` on the request and classify every 3xx
+as a permanent unexpected-response failure so the authorization header is never forwarded to
+a redirect target.
+Encode the request once and reject it before network IO if it exceeds `requestBytes`. Read
+the response through a streaming/bounded http-client path, abort after `responseBytes + 1`,
+and never construct an unbounded lazy body. Tests cover exact-boundary and one-byte-over
+request/response cases.
 
-Rewire the two callers: `postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)` (`KawaClient.hs:86-95`) and `postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)` (`KizashiClient.hs:57-65`) gain the leading `HttpEnv` parameter and pass it to `postJSON`. Their call sites are in `Shikigami.Sink.runSink` (Sink.hs:51-65) — which reads the envs from `SinkContext` (next milestone). For this milestone to compile independently, add the `SinkContext` fields now (see Milestone 2's record shapes) and let `test/Main.hs`'s `ctxFor` build a token-less env with a per-test `newSinkManager`.
+Rewire the two callers: `postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO
+(Either KawaError Text)` and `postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO
+(Either KizashiError SignalResponse)` gain the leading `HttpEnv` parameter and preserve the
+typed failure class from `postJSON`. Their call sites read the direct `http` field from
+`SinkContext`; tests build a token-less environment with a per-test manager and explicit
+test `HttpLimits`.
+Preserve `HttpFailure` through client-specific errors. At the sink boundary, map permanent
+failures to plan 19's additive `PermanentFailure` and transient failures to the existing
+`Failed`; plan 19 maps those to Keiro `PublishRejected`/`PublishFailed`.
 
 Acceptance: `cabal test all` green (existing kawa/kizashi/danwa dispatch tests unchanged in behavior); `grep -n "newManager" shikigami-core/src/Shikigami/Sink/Http.hs` shows it only inside `newSinkManager`.
 
-### Milestone 2 — credential configuration and threading
+### Milestone 2 — Settei credential configuration and threading
 
-Scope: read per-sink tokens from the environment once at boot, and thread a `SinkHttp` bundle along the existing config path so every dispatch uses it. At the end, the worker logs which sinks are authenticated at startup, and requests carry the header (assertable via the Milestone 4 tests).
+Scope: resolve per-sink credential references once in plan 37's Settei composition root
+and thread a `SinkHttp` bundle along the existing config path. At the end, the worker
+logs presence only and requests carry the header.
 
 Add to `Shikigami.Sink.Auth` (or a small `Shikigami.Sink.HttpEnv` section in Http.hs — keep it in one place):
 
 ```haskell
 data SinkHttp = SinkHttp
-  { kawaHttp :: !HttpEnv,
-    kizashiHttp :: !HttpEnv,
-    danwaClientEnv :: !Servant.Client.ClientEnv
+  { kawa :: !HttpEnv,
+    kizashi :: !HttpEnv,
+    danwa :: !Servant.Client.ClientEnv
   }
 
 data SinkCredentials = SinkCredentials
-  { kawaToken :: !(Maybe TokenSource),
-    kizashiToken :: !(Maybe TokenSource),
-    danwaToken :: !(Maybe TokenSource)
+  { kawa :: !(Maybe TokenSource),
+    kizashi :: !(Maybe TokenSource),
+    danwa :: !(Maybe TokenSource)
   }
 
-credentialsFromEnv :: IO SinkCredentials  -- SHIKIGAMI_KAWA_TOKEN, SHIKIGAMI_KIZASHI_TOKEN, SHIKIGAMI_DANWA_TOKEN
-newSinkHttp :: SinkCredentials -> DanwaConfig -> IO SinkHttp
+credentialsFromConfig :: AppConfig -> Either ConfigError SinkCredentials
+newSinkHttp :: HttpLimits -> SinkCredentials -> DanwaConfig -> IO SinkHttp
 ```
 
-`credentialsFromEnv` maps `lookupEnv` results through `staticTokenSource` (empty string counts as unset). `newSinkHttp` builds one `newSinkManager` shared by `kawaHttp`/`kizashiHttp`, and the danwa `ClientEnv` per Milestone 3. Threading (same path as the existing configs): `WorkerEnv` (Worker.hs:55-63) gains `sinkHttp :: !SinkHttp`; `agentRunDeps` (Worker.hs:194-206) forwards it into a new `AgentRunDeps.sinkHttp` field (Workflow.hs:79-89); `publishSinkIntent` (Workflow.hs:561-583) puts it into a new `SinkContext.sinkHttp` field (Types.hs:29-38); `runSink` (Sink.hs:51-65) passes `kawaHttp`/`kizashiHttp`/`danwaClientEnv` to the respective handlers. Update every other `AgentRunDeps`/`SinkContext` construction site the compiler flags (at minimum `Shikigami/Cli/Commands/AgentRun.hs`, `Shikigami/Agent/Conversation.hs` if it builds contexts, `test/Main.hs`, `test/Shikigami/AgentWorkflowSpec.hs`).
+`credentialsFromConfig` resolves validated Settei credential references to private
+`BearerToken` values at the composition root and maps them through `staticTokenSource`;
+missing required values fail typed startup validation.
+`newSinkHttp` builds the shared managers/client environments. Thread `SinkHttp` through
+the strict records from the plan-36 composition root to dispatch, updating every
+constructor site the compiler identifies.
 
-In `Shikigami.Cli.Commands.Worker.runWorkerCmd` (Worker.hs:24-43): `creds <- credentialsFromEnv`, `sinkHttp <- newSinkHttp creds danwaCfg`, put it in `WorkerEnv`, and log one boot line per sink, e.g. `[worker] sink auth: kawa=token kizashi=none danwa=none` — presence only, never values.
+At the worker composition root, obtain `creds <- credentialsFromConfig appConfig`, build
+`SinkHttp`, and log one boot line per sink—presence only, never values.
 
-Acceptance: `cabal build all`; starting the worker with `SHIKIGAMI_KAWA_TOKEN=x` prints `kawa=token`; without it, `kawa=none`. `grep -rn "SHIKIGAMI_.*_TOKEN" shikigami-cli/src` shows exactly one reading site.
+Acceptance: `cabal build all`; plan 37's explain diagnostics show only a redacted winning
+source for the kawa credential reference, and the worker prints `kawa=token` or `kawa=none`
+without the reference's value. Production modules contain no direct environment read.
 
 ### Milestone 3 — authenticated danwa client path
 
 Scope: route the danwa sink through a boot-time servant `ClientEnv` whose manager injects the danwa token, replacing the per-call unauthenticated `Danwa.runDanwa`.
 
-In `newSinkHttp`, build the danwa side: resolve the token once per request via `managerModifyRequest` — create `danwaManager <- newManager defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 30_000_000, managerModifyRequest = addDanwaAuth }` where `addDanwaAuth req` fetches from the configured `TokenSource` (if any) and prepends the `authorization` header (leave the request untouched when no source is configured; on fetch failure let the request proceed unauthenticated and let the server's 401 surface as a `Failed` outcome — the outbox publisher's normal retry path). Then `url <- parseBaseUrl (Text.unpack (baseUrl danwaCfg))` and `pure (mkClientEnv danwaManager url)`. This needs `servant-client` as an explicit `shikigami-core` dependency (it is already in the build plan transitively via `danwa-client`, so the freeze/plan does not change).
+In `newSinkHttp`, build the danwa side with a dedicated manager whose
+`managerModifyRequest` fetches from the configured `TokenSource` and prepends the
+authorization header. The same hook sets `redirectCount = 0` and rejects a generated request
+body over `requestBytes` before network IO. If no source is configured, leave the
+authorization header untouched. If a
+configured source fails, throw a private typed `CredentialUnavailable` exception from the
+hook, catch it at the client boundary, and return a typed sink failure without issuing the
+HTTP request; never degrade to an unauthenticated request. Set the same bounded response
+timeout and install `managerModifyResponse` to wrap the response `BodyReader`, count chunks,
+and throw a private `ResponseTooLarge` as soon as reading would exceed `responseBytes`.
+This bounds servant-client's otherwise eager body decode too. Parse the configured base URL
+once and construct one boot-time `ClientEnv`.
 
-In `shikigami-core/src/Shikigami/Sink/Danwa.hs`: change `runDanwa :: ClientEnv -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)` (was `DanwaConfig` first, Danwa.hs:24) — it still needs `agentParticipant` from `DanwaConfig`, so pass both (`ClientEnv` for transport, `DanwaConfig` for the participant id). Replace the two `Danwa.runDanwa (Text.unpack (baseUrl cfg))` calls (lines 36, 64) with `Servant.Client.runClientM action env`. Update the dispatcher call (Sink.hs:64) to pass `danwaClientEnv (sinkHttp ctx)`.
+In `Shikigami.Sink.Danwa`, change `runDanwa` to accept the boot-time `ClientEnv` and return
+`Either DanwaError Text`, retaining the permanent/transient class from Servant/client
+failures. It still receives `DanwaConfig` for participant identity. Replace per-call
+`Danwa.runDanwa` with `runClientM` and pass `danwa (http ctx)` from the dispatcher.
 
 Note on `managerModifyRequest`: it is applied to every request through that manager (including internal retries), which is why the danwa manager is separate from the kawa/kizashi manager — the hook must never leak the danwa token to other hosts.
 
@@ -218,14 +302,28 @@ Acceptance: existing `danwaTests` in `test/Main.hs` pass with a `ClientEnv` buil
 
 Scope: make the authenticated path provable end to end.
 
-`StubKawaOptions` (KawaStub.hs:37-42) gains `requireToken :: !(Maybe Text)`; `stubKawaApplication` gains the same parameter and, when set, checks the `Authorization` request header equals `"Bearer " <> token` before the existing body handling — otherwise responds `401` with body `unauthorized` and logs `[stub-kawa] rejected: missing/invalid token` (never the presented value). Update the module comment (KawaStub.hs:8) — the auth gate is now optionally imitated. CLI: add `--require-token TOKEN` to the `stub-kawa` parser in `Shikigami/Cli.hs` and thread through `Shikigami/Cli/Commands/StubKawa.hs`.
+`StubKawaOptions` gains `requireToken :: !(Maybe BearerToken)`; the Settei surface accepts a
+credential reference and resolves it at the stub executable's composition root. When set,
+`stubKawaApplication` compares the request header in constant time before body handling;
+otherwise it returns a typed 401 problem response and logs only
+`[stub-kawa] rejected: missing/invalid token`. Do not add a raw-token command-line option.
 
 Tests in `shikigami-core/test/Main.hs` (or a new `Shikigami/SinkAuthSpec.hs` registered in `Main.hs`):
 
-1. Header injection: a recording warp stub (pattern of `stubKizashiApp`) captures `requestHeaders`; `postJSON (HttpEnv mgr (Just (staticTokenSource "s3cret"))) url body` results in exactly one request whose `authorization` header is `Bearer s3cret`; with `token = Nothing`, no `authorization` header is present.
-2. Enforcement: `stubKawaApplication` with `requireToken = Just "s3cret"`: a dispatch through a `SinkContext` whose `kawaHttp` has the matching static source yields `Delivered`; with no token, the outcome is `Failed` mentioning `HTTP 401` (which the worker maps to retry — delivery truth is unchanged).
-3. Token fetch failure: a `TokenSource` returning `Left "boom"` makes `postJSON` return `Left "token fetch failed: boom"` without the stub receiving any request.
-4. Redaction: `show (BearerToken "s3cret")` is `"BearerToken <redacted>"`.
+1. Header injection: a recording Warp stub captures request headers; use a test-only smart
+   constructor to build a `BearerToken`, then `staticTokenSource token`. The request contains
+   the expected authorization bytes; `Nothing` sends no header. No failure output renders the
+   token.
+2. Enforcement: `stubKawaApplication` with the same opaque test token accepts the matching
+   `HttpEnv`; with no token it returns HTTP 401 and records no ingest.
+3. Token fetch failure: a `TokenSource` returning a typed `CredentialFailure` makes
+   `postJSON` return the corresponding transient `HttpFailure` without the stub receiving any
+   request or rendering backend error text.
+4. Non-renderability: compile-time/API tests prove production code has no `Show`, `Read`, or
+   JSON instance and cannot access the private constructor.
+5. Limits and redirects: kawa/kizashi and servant-based danwa tests cover exact-boundary and
+   one-byte-over request/response bodies; a 3xx target receives no follow-up request or
+   authorization header.
 
 Acceptance: `cabal test all` green including the new group.
 
@@ -250,16 +348,17 @@ cabal test all
 End-to-end transcript (after Milestone 4). Terminal A:
 
 ```bash
-cabal run shikigami -- stub-kawa --port 8088 --require-token s3cret
+cabal run shikigami -- stub-kawa --config config/stub-kawa-auth.yaml
 ```
 
-Terminal B — unauthenticated delivery fails loudly (expect the outbox publisher to log a failed publish with `HTTP 401`, and stub-kawa to log a rejection):
+Terminal B — unauthenticated delivery fails loudly (expect the outbox publisher to log a
+failed publish with `HTTP 401`, and stub-kawa to log a rejection). The checked config file
+contains the database, agent directory, and sink URLs but intentionally omits
+`credentials.sinks.kawa.token`:
 
 ```bash
-export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"
-cabal run shikigami -- worker --agents agents --kawa-url http://localhost:8088 \
-  --kizashi-url http://localhost:1 --danwa-url http://localhost:1 --danwa-agent part_test
-cabal run shikigami -- enqueue-run heartbeat --payload '{}'
+cabal run shikigami-worker -- --config config/worker-auth-missing.yaml
+cabal run shikigami -- enqueue-run heartbeat --payload '{}' --config config/operator-dev.yaml
 ```
 
 Expected stub-kawa output in terminal A:
@@ -268,11 +367,11 @@ Expected stub-kawa output in terminal A:
 [stub-kawa] rejected: missing/invalid token
 ```
 
-Restart the worker with the token and enqueue again:
+Restart the worker with the credential reference enabled through plan 37's Settei sources
+and enqueue again:
 
 ```bash
-SHIKIGAMI_KAWA_TOKEN=s3cret cabal run shikigami -- worker --agents agents --kawa-url http://localhost:8088 \
-  --kizashi-url http://localhost:1 --danwa-url http://localhost:1 --danwa-agent part_test
+cabal run shikigami-worker -- --config config/worker-auth.yaml
 ```
 
 Expected stub-kawa output:
@@ -290,60 +389,88 @@ And the worker boot line:
 
 ## Validation and Acceptance
 
-Acceptance is behavioral: (1) with `--require-token` on stub-kawa and no `SHIKIGAMI_KAWA_TOKEN`, a `KawaDigest` sink dispatch ends `Failed … HTTP 401` and nothing is ingested; (2) with the matching token exported, the same dispatch ends `Delivered` and stub-kawa logs `accepted`; (3) no token value ever appears in any log line, error message, or database row — verify by grepping the worker/stub stderr capture for `s3cret` after the transcript above (zero matches), and by `show`ing a `BearerToken` in GHCi (`cabal repl shikigami-core`) and observing `BearerToken <redacted>`; (4) `cabal test all` passes, including the header-injection, enforcement, fetch-failure, and redaction tests of Milestone 4; (5) reading `shikigami-core/src/Shikigami/Sink/Http.hs` shows a single process-lifetime manager path and `managerResponseTimeout` set (the per-request `newManager` at the old line 37 is gone).
+Acceptance is behavioral: (1) with stub enforcement enabled and no worker credential, a
+`KawaDigest` dispatch ends in typed HTTP 401 failure and nothing is ingested; (2) with the
+matching reference resolved, it is delivered; (3) a planted token appears nowhere in logs,
+errors, diagnostics, database rows, or JSON, and production code cannot `show` it; (4)
+configured token-source failure issues no request; and (5) the full suite passes with one
+process-lifetime manager path and bounded timeouts.
 
 
 ## Idempotence and Recovery
 
-All changes are code-only (no migrations, no persisted state), so re-running builds and tests is trivially safe. The rollout is backward compatible at every step: with no `SHIKIGAMI_*_TOKEN` env vars set, requests are byte-identical to today's (modulo the added timeout), and stub-kawa without `--require-token` behaves exactly as before — so the feature can be deployed dark and enabled per environment by setting variables. If a wrong token is configured, deliveries fail with `HTTP 401` and remain in the outbox retry loop (`Failed` → `PublishFailed` → retried by `runOutboxPublisher`), so fixing the variable and restarting the worker resumes delivery without data loss. Never commit a real token to the repo; the transcripts above use throwaway values.
+Plan 37 explicitly binds the legacy `SHIKIGAMI_*_TOKEN` names, so rollout remains backward
+compatible while also supporting file/secret sources. No sink/command module reads those
+names directly, and no credential value is admitted to serializable configuration.
+
+All changes are code-only. With no credential reference, requests are byte-identical to
+today except for the timeout; stub enforcement disabled behaves as before. A wrong credential
+returns a permanent 401 failure and is not automatically retried; a resolver failure fails
+closed before the request. Correct the secret source/reference and use the audited replay
+path where appropriate. Never place raw
+tokens in repositories, process arguments, or example configuration files.
 
 
 ## Interfaces and Dependencies
 
-Dependency changes: add `servant-client` (and `http-types` if not already direct) to `shikigami-core`'s `build-depends`; both are already in the build plan via `danwa-client`/`warp`, so no freeze changes. No new external services: kawa/kizashi are stubbed in-repo, danwa's client is `danwa-client` (source at `/Users/shinzui/Keikaku/bokuno/danwa/danwa-client`).
+Hard dependencies: plans 19, 36, and 37. Plan 19 supplies the additive permanent-failure
+outcome and Keiro terminal mapping; plan 37 supplies application config and the secret
+boundary. Plan 13 no longer defines configuration conventions.
+
+Dependency changes: add `servant-client`, `http-client-tls`, and `http-types` if they are not
+already direct dependencies of `shikigami-core`. Before choosing bounds, use Mori for source
+and verify the current Hackage release/upstream tag. No new external services: kawa/kizashi
+are stubbed in-repo, danwa's client is `danwa-client` (source at
+`/Users/shinzui/Keikaku/bokuno/danwa/danwa-client`).
 
 Signatures that must exist at the end (full module paths):
 
 ```haskell
 -- shikigami-core : Shikigami.Sink.Auth (new)
-newtype BearerToken = BearerToken Text          -- Show redacted; no To/FromJSON
-newtype TokenSource = TokenSource {fetchToken :: IO (Either Text BearerToken)}
-staticTokenSource :: Text -> TokenSource
-renderAuthHeader :: BearerToken -> ByteString
+newtype BearerToken = BearerToken Text          -- private constructor; no Show/Read/JSON
+data CredentialFailure = CredentialFailure
+  { reference :: !CredentialRef, reason :: !CredentialFailureReason }
+newtype TokenSource = TokenSource {fetchToken :: !(IO (Either CredentialFailure BearerToken))}
+credentialToken :: CredentialValue -> BearerToken
+staticTokenSource :: BearerToken -> TokenSource
+-- package-internal only: renderAuthHeader :: BearerToken -> ByteString
 data SinkCredentials = SinkCredentials
-  { kawaToken, kizashiToken, danwaToken :: !(Maybe TokenSource) }
-credentialsFromEnv :: IO SinkCredentials
+  { kawa, kizashi, danwa :: !(Maybe TokenSource) }
+credentialsFromConfig :: AppConfig -> Either ConfigError SinkCredentials
 data SinkHttp = SinkHttp
-  { kawaHttp :: !HttpEnv, kizashiHttp :: !HttpEnv, danwaClientEnv :: !ClientEnv }
-newSinkHttp :: SinkCredentials -> DanwaConfig -> IO SinkHttp
+  { kawa :: !HttpEnv, kizashi :: !HttpEnv, danwa :: !ClientEnv }
+newSinkHttp :: HttpLimits -> SinkCredentials -> DanwaConfig -> IO SinkHttp
 
 -- shikigami-core : Shikigami.Sink.Http
-data HttpEnv = HttpEnv {manager :: !Manager, token :: !(Maybe TokenSource)}
-newSinkManager :: IO Manager
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either Text LBS.ByteString)
-postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either Text LBS.ByteString)
+data HttpLimits = HttpLimits {requestBytes :: !ByteLimit, responseBytes :: !ByteLimit}
+data HttpEnv = HttpEnv
+  { manager :: !Manager, token :: !(Maybe TokenSource), limits :: !HttpLimits }
+newSinkManager :: IO Manager -- TLS-capable; timeout set once
+data HttpFailure = PermanentHttpFailure ... | TransientHttpFailure ...
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
+postJSON :: (ToJSON a) => HttpEnv -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 
 -- shikigami-core : Shikigami.Sink.KawaClient
 postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
 
 -- shikigami-core : Shikigami.Sink.KizashiClient
-postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
+postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either KizashiError SignalResponse)
 
 -- shikigami-core : Shikigami.Sink.Danwa
-runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)
+runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError Text)
 
 -- shikigami-core : Shikigami.Sink.KawaStub
 data StubKawaOptions = StubKawaOptions
   { port :: !Int, republishTopic :: !(Maybe Text), broker :: !(Maybe Text),
-    requireToken :: !(Maybe Text) }
-stubKawaApplication :: IORef (Map (Text, Text) Text) -> Maybe Republisher -> Maybe Text -> Application
+    requireToken :: !(Maybe BearerToken) }
+stubKawaApplication :: IORef (Map (Text, Text) Text) -> Maybe Republisher -> Maybe BearerToken -> Application
 
 -- shikigami-core : Shikigami.Sink.Types / Shikigami.Agent.Workflow / Shikigami.Worker
--- SinkContext, AgentRunDeps, WorkerEnv each gain: sinkHttp :: !SinkHttp
+-- SinkContext, AgentRunDeps, WorkerEnv each gain: http :: !SinkHttp
 ```
 
-Soft landing dependencies: plan 13 defines the configuration convention and plan 16
-settles the sink-client/request shapes this plan wraps. Consumers: plan 14 uses
+Soft landing dependency: plan 16 settles the sink-client/request shapes this plan wraps.
+Consumers: plan 14 uses
 `SinkHttp` for authenticated approval asks; plan 28 passes `traceparent` through
 `postJSONWithHeaders`; plan 32 extends `SinkCredentials`/`SinkHttp` with kanmon and
 uses the same helper. Plan 21 touches the same record constructors but is semantically
@@ -355,3 +482,8 @@ independent.
 - 2026-07-22: Made plan 13 the configuration-convention predecessor and assigned this
   plan sole ownership of `postJSONWithHeaders`. Plans 14, 28, and 32 now consume this
   authenticated seam rather than defining raw or incompatible HTTP helpers.
+- 2026-07-22: Superseded plan 13's config ownership with plans 36/37; replaced direct
+  token environment reads with Settei credential references and explicit legacy bindings.
+- 2026-07-22: Applied the record/security pass: direct duplicate fields (`kawa`, `kizashi`,
+  `danwa`, `http`), private non-renderable tokens, reference-only process surfaces, and
+  fail-closed danwa credential resolution.

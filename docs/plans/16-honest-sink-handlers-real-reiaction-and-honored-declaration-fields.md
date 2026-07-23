@@ -36,7 +36,7 @@ gets typed, validated Dhall that does nothing.
 
 After this plan: a `ReiAction` dispatch with no rei endpoint configured **fails
 loudly** — `PublishFailed`, visible outbox retries, never fake success — and a new
-`--rei-url` worker flag enables a real HTTP client when rei grows a callable API (it
+Settei `sinks.rei.base_url` setting enables a real HTTP client when rei grows a callable API (it
 has none today; verified below). `recipientFrom = Actor` actually routes the kizashi
 signal to the triggering activity's actor; `SubjectOwner`/`AreaOwner` declarations are
 rejected at `validate` time unless they carry a `defaultRecipient` (there is no
@@ -48,7 +48,9 @@ any more — it is either honored or rejected up front.
 
 ## Progress
 
-- [ ] Milestone 1: `ReiConfig` + `--rei-url` flag; `ReiAction` dispatch fails loudly
+- [ ] Prerequisites: plans 36/37 complete; sink modules follow the six-package boundary
+      and `ReiConfig` is part of the shared Settei application config.
+- [ ] Milestone 1: Settei-backed `ReiConfig`; `ReiAction` dispatch fails loudly
       when unconfigured and POSTs a defined wire DTO when configured; `Stubbed` no
       longer produced; tests for both branches.
 - [ ] Milestone 2: recipient resolution — `resolvedRecipient` threaded from the
@@ -66,15 +68,16 @@ any more — it is either honored or rejected up front.
 ## Decision Log
 
 - Decision: `ReiAction` fails loudly by default instead of gaining a speculative
-  client, with the real client gated behind `--rei-url`.
+  client, with the real client gated behind the Settei `sinks.rei.base_url` setting.
   Rationale: rei (verify with `mori registry show rei --full`; source at
   `/Users/shinzui/Keikaku/bokuno/rei-project/rei`) is a CLI application — packages
   `rei-cli` and `rei-core`, event-sourced over hasql/pgmq — with **no HTTP server**
   (no servant/warp/wai in either cabal file; `http-client` appears only as an outbound
   dependency). There is nothing to call over the network today. Faking success is the
   bug this MasterPlan removes; failing into the outbox's retry/dead-letter path makes
-  the gap visible and self-healing the day an endpoint exists. The `--rei-url` flag and
-  wire DTO are defined now so enabling the client later is configuration, not surgery.
+  the gap visible and self-healing the day an endpoint exists. The stable Settei key and
+  wire DTO are defined now so enabling the client later is configuration, not surgery;
+  no plan-local URL flag is added.
   Date: 2026-07-08
 - Decision: Keep the `Stubbed` constructor of `SinkOutcome`
   (`shikigami-core/src/Shikigami/Sink/Types.hs:42-48`) but stop producing it.
@@ -201,7 +204,7 @@ Edits:
 
 ```haskell
 newtype ReiConfig = ReiConfig
-  { baseUrl :: Maybe Text  -- Nothing = no rei endpoint exists/configured
+  { baseUrl :: !(Maybe Text)  -- Nothing = no rei endpoint exists/configured
   }
 ```
 
@@ -222,17 +225,16 @@ data ReiActionReq = ReiActionReq
 - Replace `shikigami-core/src/Shikigami/Sink/ReiAction.hs`'s stub with
   `runReiAction :: ReiConfig -> SinkContext -> Sink -> Value -> IO (Either Text Text)`:
   `baseUrl = Nothing` → `Left "ReiAction sink 'intention <id>' not delivered: no rei
-  endpoint is configured (rei exposes no callable API yet; start the worker with
-  --rei-url when one exists)"`; `Just url` → `postJSON (url <> "/v1/agent-actions")`
+  endpoint is configured (rei exposes no callable API yet; configure
+  sink.rei.base_url when one exists)"`; `Just url` → `postJSON (url <> "/v1/agent-actions")`
   with a `ReiActionReq` (dedup key from the existing `mkSourceEventId ctx`,
   `Sink/Types.hs:59-61`), mapping transport errors to `Left`.
 - `shikigami-core/src/Shikigami/Sink.hs:62`: the branch becomes
   `ReiAction {} -> either Failed Delivered <$> runReiAction (rei ctx) ctx sink output`.
 - Wiring: `Worker.WorkerEnv` gains `rei :: !ReiConfig`; `publishSinkIntent`'s
   `SinkContext` construction (`Agent/Workflow.hs:566-579`) and `AgentRunDeps` gain the
-  config; CLI flag `--rei-url` (optional, no default) added to the `worker` command in
-  `shikigami-cli/src/Shikigami/Cli.hs` and threaded through
-  `Cli/Commands/Worker.hs`. Tests constructing deps
+  config; declare the setting and its optional legacy binding in plan 37's Settei
+  composition root. Tests constructing deps
   (`AgentWorkflowSpec.testDepsWithAgents` etc.) pass `ReiConfig Nothing`.
 
 Tests (new `shikigami-core/test/Shikigami/SinkHonestySpec.hs`): `dispatch` on a
@@ -244,7 +246,7 @@ dedup key. Assert `publishSinkIntent`-level mapping too: `Failed → PublishFail
 (construct an `OutboxRow` around an encoded intent, or unit-test the outcome mapping
 directly).
 
-Acceptance: `cabal test all` green; running the worker without `--rei-url` and
+Acceptance: `cabal test all` green; running the worker without `sinks.rei.base_url` and
 enqueuing an agent with a `ReiAction` sink shows repeated
 `[sink]`-failure/outbox-retry lines instead of the old
 `[sink] ReiAction stubbed ...` success.
@@ -302,7 +304,7 @@ Edits:
 - `Sink/Danwa.hs`: bind `topic` in `runDanwa`; `postToFreshConversation` prepends
   `"[" <> topic <> "]\n"` to the message content when topic is non-empty. Replies to
   an existing `DanwaTarget` are unchanged.
-- `Cli/Commands/Validate.hs`: after the existing skill check, validate sinks: for each
+- The validation command component in `shikigami-server`: after the existing skill check, validate sinks: for each
   `KizashiSignal` with `recipientFrom` of `SubjectOwner` or `AreaOwner` and
   `defaultRecipient = Nothing`, print
   `validate: sink error: recipientFrom=<strategy> requires defaultRecipient (no
@@ -348,8 +350,8 @@ Milestone 1 files: `shikigami-core/src/Shikigami/Sink/Config.hs`,
 `Sink/Types.hs`, `Sink/Wire.hs`, `Sink/ReiAction.hs`, `Sink.hs`,
 `shikigami-core/src/Shikigami/Worker.hs`,
 `shikigami-core/src/Shikigami/Agent/Workflow.hs` (SinkContext construction in
-`publishSinkIntent`, `AgentRunDeps`), `shikigami-cli/src/Shikigami/Cli.hs`,
-`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`, new
+`publishSinkIntent`, `AgentRunDeps`), the worker composition component in
+`shikigami-workers`, and the server-owned command dispatcher from plan 36, plus new
 `shikigami-core/test/Shikigami/SinkHonestySpec.hs` (+ `test/Main.hs`, cabal). Expect
 `AgentWorkflowSpec`'s `testDeps*` helpers to need the extra `ReiConfig Nothing`
 field — the compiler will list them.
@@ -359,8 +361,8 @@ prepareSinkIntent, publishSinkIntent), `Flow/Capability.hs` +
 `Flow/SinkOutbox.hs` (thread the resolved recipient parameter),
 `Sink/Types.hs`, `Sink/KizashiClient.hs`, tests.
 
-Milestone 3 files: `Sink/Danwa.hs`, new `Shikigami/Sink/Validate.hs`,
-`Cli/Commands/Validate.hs`, tests. Then re-validate fixtures:
+Milestone 3 files: `Sink/Danwa.hs`, new `Shikigami/Sink/Validate.hs`, a validation command
+component in `shikigami-server`, and tests. Then re-validate fixtures:
 
 ```bash
 for f in agents/*.dhall agents/detectors/*.dhall agents/proof/*.dhall; do
@@ -372,7 +374,8 @@ Expected: every existing manifest prints `OK` except `agents/broken.dhall`, whic
 deliberate load-failure fixture and must keep failing for its original reason.
 
 Live observation of the loud failure (optional, needs the local database from
-`just create-database`): start the worker without `--rei-url`, `enqueue-run heartbeat`
+`just create-database`): start the worker with a checked Settei config that omits
+`sinks.rei.base_url`, then `enqueue-run heartbeat`
 (heartbeat is granted `SReiAction`; give it a ReiAction sink in a scratch copy of the
 manifest), and watch the outbox publisher log the publish failure on each pass instead
 of announcing success once.
@@ -382,12 +385,13 @@ of announcing success once.
 
 The plan is accepted when all of the following are observable:
 
-1. No fake success: with no `--rei-url`, a `ReiAction` dispatch produces
+1. No fake success: with no `sinks.rei.base_url` setting, a `ReiAction` dispatch produces
    `SinkResult SReiAction (Failed …)` and `publishSinkIntent` returns `PublishFailed`
    (asserted in `SinkHonestySpec`); the outbox row remains unpublished and is retried
    — verifiable live as repeated publisher log lines, and in tests via
    `Keiro.Outbox.listOutbox` state.
-2. Real client path: with a stub `--rei-url`, the captured POST body is a
+2. Real client path: with `sinks.rei.base_url` pointing at a stub through the worker's
+   checked Settei source, the captured POST body is a
    `ReiActionReq` carrying the declared `intentionId`, `note`, the behavior output,
    and the deterministic `sourceEventId` — retries of the same run send the same key.
 3. `Actor` routing: an intent built from a job whose trigger payload is
@@ -422,7 +426,7 @@ New/changed interfaces (repository-relative paths):
 
 ```haskell
 -- shikigami-core/src/Shikigami/Sink/Config.hs
-newtype ReiConfig = ReiConfig { baseUrl :: Maybe Data.Text.Text }
+newtype ReiConfig = ReiConfig { baseUrl :: !(Maybe Data.Text.Text) }
 
 -- shikigami-core/src/Shikigami/Sink/Types.hs
 data SinkContext = SinkContext
@@ -463,8 +467,8 @@ External facts this plan depends on (verified 2026-07-08): rei has no HTTP API
 (`/Users/shinzui/Keikaku/bokuno/rei-project/rei` — application-type project,
 `rei-cli`/`rei-core`, no server packages); danwa conversations have no topic attribute
 (`/Users/shinzui/Keikaku/bokuno/danwa/danwa-api/src/Danwa/Conversation/Api.hs:3,139-148`).
-No new package dependencies. Independent of plans 13/14/15 except for shared additive
-edits to `WorkerEnv`/`AgentRunDeps`/`Cli.hs` (worker flag blocks) — coordinate merges
+Hard dependencies: plans 36 and 37. No new package dependencies. Independent of plans
+13/14/15 except for shared additive edits to `WorkerEnv`/`AgentRunDeps` — coordinate merges
 mechanically. Cross-MasterPlan notes: plan 22 extends `Sink/Config.hs` with
 credentials after this plan's request/client shapes settle (keep `ReiConfig`
 self-contained); plan 19 (MasterPlan 3) lands after this plan and owns retry/dead-letter
@@ -476,3 +480,5 @@ policy for failed publishes — this plan only makes the failure real.
 - 2026-07-22: Recorded this plan as the sink-path predecessor of plans 22 and 19.
   Authentication wraps the settled client shapes, and delivery truth consumes the
   settled handler outcomes.
+- 2026-07-22: Replaced the plan-local `--rei-url` configuration path with the shared
+  Settei application config and made plans 36/37 explicit prerequisites.

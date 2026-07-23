@@ -68,6 +68,11 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
+- Decision: Labeled memory steps are declared in plan 39's checked Keiro DSL and pass
+  checker/scaffold/harness/generated-diff CI with the handwritten interpreter.
+  Rationale: deterministic ids do not protect against declaration/code step-name drift.
+  Date: 2026-07-22
+
 - Decision: No `patch` guard is needed for journaling `remember`/`recall` as steps.
   Rationale: the old interpreter journaled NOTHING for memory operations, so the change is
   purely additive step insertion — an in-flight flow resumed under the new code finds no
@@ -229,7 +234,11 @@ in one change, but record the observed red output in Surprises & Discoveries fir
 Acceptance: the test exists and demonstrably fails against the unmodified interpreter (keep
 the failing-run transcript).
 
-Milestone 2 — journal the Memory capability. Edit
+Milestone 2 — journal the Memory capability. Before editing runtime code, add every stable
+`recall:<label>` and `remember:<label>` identity and its workflow relationship to
+`domain/shikigami.keiro`; run plan 39's check, compatibility diff, scaffold, and generated
+harness. Reference generated identity facts where the scaffold exposes them and keep the
+effect/interpreter in hand-owned holes. Then edit
 `shikigami-core/src/Shikigami/Flow/Capability.hs`:
 
 1. Re-signature the effect with caller-supplied labels (same convention as plan 24's
@@ -452,6 +461,9 @@ retreat in the Decision Log.
 
 ## Interfaces and Dependencies
 
+Hard dependencies: plans 36, 39, and 24. Generated artifacts stay behind plan 39's
+firewall; the handwritten memory interpreter fills typed holes.
+
 Dependencies: `keiro` (`Keiro.Workflow`: `step`, `StepName`, `currentWorkflow`,
 `currentRunGeneration`), `kioku` (`Kioku.Memory.record/getMemoryRowById/getActiveRowsByScope`,
 `Kioku.Memory.Domain.RecordMemoryData`, `Kioku.Api.Types.{MemoryType, Confidence}`,
@@ -487,3 +499,10 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.h
 `shikigami-core/src/Shikigami/Agent/Workflow.hs` (`runFlowBehavior` interpreter stack),
 `shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`, and plan 27's future
 `Shikigami.Sink.Intent` (unaffected, but shares `Flow/Capability.hs` imports).
+
+
+## Revision Notes
+
+- 2026-07-22: Added the checked Keiro DSL as a hard prerequisite and made labeled memory
+  steps part of the specification/scaffold/harness/diff acceptance gate.
+- [ ] Prerequisites: plans 36, 39, and 24 complete; update `domain/shikigami.keiro` for every new labeled durable step.
