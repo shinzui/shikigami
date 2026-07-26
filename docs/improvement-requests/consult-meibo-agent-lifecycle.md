@@ -16,6 +16,17 @@ Implementation is gated on `shinzui/meibo` shipping its service and `meibo.v1` t
 seam can be built earlier behind a config/stub, the same pattern used for the shomei and
 kikan-en gates.
 
+
+## Planning Coverage
+
+Tracking intention: `intention_01kyeb9jn6evntbk13tey07n1c`.
+
+This request already has planning coverage in
+[MasterPlan 4: Identity and trust, grants, outbound auth, and agent lifecycle control](../masterplans/4-identity-and-trust-grants-outbound-auth-and-agent-lifecycle-control.md)
+and [Plan 23: Agent lifecycle control with Meibo principals](../plans/23-agent-lifecycle-control-with-meibo-principals.md).
+Plan 23 retains its original historical intention in frontmatter; the intention above tracks
+this improvement-request inventory without replacing that lineage.
+
 ## Context
 
 Kikan ratified **`shinzui/meibo`** (名簿) as the organizational directory (contract **C14** in
