@@ -16,6 +16,19 @@ contract. It is advisory: it may record findings and request attention, but it m
 a merge or edit a repository.
 
 
+## Planning Coverage
+
+Tracking intention: `intention_01kyeb9heqecv8041cmwqwqg3q`.
+
+This request is tracked by [MasterPlan 9: Architecture-practice review flow](../masterplans/9-architecture-practice-review-flow.md)
+and its child ExecPlans:
+
+- [Plan 43: Define architecture-practice review contracts](../plans/43-define-architecture-practice-review-contracts.md)
+- [Plan 44: Acquire revision-pinned architecture-practice evidence](../plans/44-acquire-revision-pinned-architecture-practice-evidence.md)
+- [Plan 45: Persist and adjudicate architecture-practice reviews](../plans/45-persist-and-adjudicate-architecture-practice-reviews.md)
+- [Plan 46: Orchestrate review delivery and end-to-end conformance](../plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md)
+
+
 ## Context
 
 Kikan Use Case 006 asks an agent to review a changed Architecture Decision Record (ADR)
