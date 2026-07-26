@@ -16,6 +16,18 @@ the durable delegation primitive already shipped and on the pending first-class 
 delegation work in `docs/plans/35-delegation-as-a-first-class-declared-capability.md`.
 
 
+## Planning Coverage
+
+Tracking intention: `intention_01kyeb9j20e8prwv62v7mzp574`.
+
+This request is tracked by [MasterPlan 8: Declarative router agents](../masterplans/8-declarative-router-agents.md)
+and its child ExecPlans:
+
+- [Plan 40: Declare specialist expertise and router policy](../plans/40-declare-specialist-expertise-and-router-policy.md)
+- [Plan 41: Resolve lifecycle-aware router candidate catalogs](../plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md)
+- [Plan 42: Execute replay-safe typed routing and delegation](../plans/42-execute-replay-safe-typed-routing-and-delegation.md)
+
+
 ## Context
 
 Shikigami can run declared agents and its workflow runtime can spawn and await delegated
