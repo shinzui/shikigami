@@ -19,8 +19,10 @@
       --ready: #247a4b;
       --queued: #67736f;
       --partial: #9a6417;
+      --done: #4a7f6a;
       --shadow: 0 16px 42px rgba(31, 43, 38, 0.12);
       --radius: 18px;
+      --mp0: #6b7280;
       --mp2: #1d6f8a;
       --mp3: #6b5bb7;
       --mp4: #a04e75;
@@ -45,7 +47,9 @@
         --ready: #69cf8f;
         --queued: #9ba9a2;
         --partial: #e2a84d;
+        --done: #7fae99;
         --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+        --mp0: #9aa3af;
         --mp2: #58a8c4;
         --mp3: #9888e0;
         --mp4: #d17ca3;
@@ -388,6 +392,14 @@
       background: color-mix(in srgb, var(--ready) 7%, var(--panel-solid));
     }
 
+    .wave.finished {
+      border-style: dashed;
+      border-color: color-mix(in srgb, var(--done) 40%, var(--line));
+      background: color-mix(in srgb, var(--done) 4%, transparent);
+    }
+
+    .wave.finished .wave-header span { color: var(--done); font-weight: 800; }
+
     .wave-header {
       display: flex;
       align-items: center;
@@ -445,6 +457,29 @@
     .status.blocked { color: var(--blocked); }
     .status.partial { color: var(--partial); }
     .status.queued { color: var(--queued); }
+    .status.done { color: var(--done); border-style: solid; background: color-mix(in srgb, var(--done) 12%, transparent); }
+
+    .plan-card.done {
+      border-color: color-mix(in srgb, var(--done) 40%, var(--line));
+      background: color-mix(in srgb, var(--done) 5%, var(--panel-solid));
+    }
+
+    .plan-card.done h3 { color: var(--muted); }
+    .plan-card.done::before { opacity: .4; }
+
+    .plan-card.ready {
+      border-color: color-mix(in srgb, var(--ready) 55%, var(--line));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--ready) 22%, transparent);
+    }
+
+    .exception {
+      display: block;
+      margin-top: 6px;
+      color: var(--partial);
+      font-size: .64rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
 
     .plan-card h3 {
       margin: 8px 0 6px;
@@ -587,39 +622,41 @@
   <main class="page">
     <section class="hero" aria-labelledby="page-title">
       <div class="hero-copy">
-        <p class="eyebrow">Unfinished portfolio · reviewed 30 July 2026</p>
-        <h1 id="page-title">Build order, without the guesswork.</h1>
+        <p class="eyebrow">Unfinished portfolio · reviewed 31 July 2026</p>
+        <h1 id="page-title">The foundation is in. Six fronts open.</h1>
         <p class="lede">
-          Thirty-six unfinished ExecPlans become one dependency-aware sequence. The foundation
-          chain is intentionally narrow: package ownership, Settei configuration, one released
-          library cohort, migration and checked-workflow gates—then the product work fans out.
+          The narrow foundation chain is finished: package ownership, Settei configuration and
+          the released library cohort all landed on 31 July, and MasterPlan 2's model-provider,
+          context-assembly and sink-honesty work went with them. Thirty-one plans remain, and
+          for the first time the front is wide rather than serial—six are startable today.
         </p>
       </div>
       <aside class="start-card" aria-label="Where to start">
         <div>
           <p class="eyebrow">Start here</p>
-          <h2>Plan 36 is the first code change.</h2>
-          <p>Plan 43's contract design and the seven open upstream requests can move in parallel. Kioku IR-1 is complete.</p>
+          <h2>Six plans are startable now.</h2>
+          <p>Every hard predecessor of plans 17, 18, 28, 38, 39 and 43 is complete. Plans 12 and 29 can also begin, with upstream-gated milestones deferred.</p>
         </div>
         <div class="start-actions">
-          <div class="start-action"><span class="step-number">1</span><div><strong>Plan 36</strong><p>Set the six-package service boundary.</p></div></div>
-          <div class="start-action"><span class="step-number">2</span><div><strong>Plan 37</strong><p>Adopt Settei as the only process config surface.</p></div></div>
-          <div class="start-action"><span class="step-number">3</span><div><strong>Plan 47</strong><p>Port the coherent released library cohort after plan 37; Kioku 0.2 is ready.</p></div></div>
+          <div class="start-action"><span class="step-number">1</span><div><strong>Plans 38 &amp; 39</strong><p>Widest unblocking: 38 gates five plans, 39 gates five more.</p></div></div>
+          <div class="start-action"><span class="step-number">2</span><div><strong>Plans 17 &amp; 18</strong><p>Together they release plan 20, and 17 is half of plan 14's gate.</p></div></div>
+          <div class="start-action"><span class="step-number">3</span><div><strong>Plan 28 M1</strong><p>The log vocabulary plan 19 hard-depends on; M3 still follows plan 22.</p></div></div>
         </div>
       </aside>
     </section>
 
     <section class="summary" aria-label="Portfolio summary">
-      <div class="metric"><strong>36</strong><span>unfinished ExecPlans</span></div>
-      <div class="metric"><strong>8</strong><span>unfinished MasterPlans</span></div>
+      <div class="metric"><strong>31</strong><span>unfinished ExecPlans</span></div>
+      <div class="metric"><strong>6</strong><span>startable today · 2 partially</span></div>
+      <div class="metric"><strong>6</strong><span>completed 31 July</span></div>
       <div class="metric"><strong>7</strong><span>open upstream gates · 1 closed</span></div>
-      <div class="metric"><strong>11</strong><span>implementation waves</span></div>
     </section>
 
     <section class="controls" aria-label="Graph controls">
       <input class="search" id="search" type="search" placeholder="Search plan number or title…" aria-label="Search plans">
       <select class="select" id="mp-filter" aria-label="Filter by MasterPlan">
         <option value="all">All MasterPlans</option>
+        <option value="0">Unregistered</option>
         <option value="2">MP 2 · Production reality</option>
         <option value="3">MP 3 · Correctness &amp; delivery</option>
         <option value="4">MP 4 · Identity &amp; trust</option>
@@ -632,6 +669,7 @@
       <button class="filter-button" id="ready-filter" aria-pressed="false">Startable now</button>
       <button class="filter-button" id="blocked-filter" aria-pressed="false">Upstream-gated</button>
       <button class="filter-button" id="critical-filter" aria-pressed="false">Critical path</button>
+      <button class="filter-button" id="done-toggle" aria-pressed="false">Hide completed</button>
       <button class="filter-button" id="soft-toggle" aria-pressed="false">Show soft edges</button>
       <div class="legend" aria-label="Edge legend">
         <span><span class="line-sample" aria-hidden="true">&#160;</span> hard</span>
@@ -645,7 +683,7 @@
         <header class="graph-header">
           <div>
             <h2>Dependency board</h2>
-            <p>Scroll horizontally through the waves. Select a card to expose every direct dependency; the default view suppresses long transitive foundation lines.</p>
+            <p>Scroll horizontally through the waves. Select a card to expose every direct dependency; the default view suppresses long transitive foundation lines. Waves 1–3 are complete; the green-ringed cards in waves 0, 4 and 5 are the live front.</p>
           </div>
         </header>
         <div class="scroll-region" id="scroll-region">
@@ -666,11 +704,21 @@
         <h2>Select a plan or request</h2>
         <p class="detail-copy">Solid lines are hard implementation dependencies. Dashed amber lines are preferred landing order. Dotted red lines are upstream gates. The small dot marks the portfolio critical path.</p>
         <div class="detail-section">
+          <h3>Status vocabulary</h3>
+          <ul class="dependency-list">
+            <li><strong>Done</strong> — Complete in its MasterPlan registry.</li>
+            <li><strong>Ready</strong> — every hard predecessor is done, no upstream gate.</li>
+            <li><strong>Partial gate</strong> — hard predecessors done, but an upstream request defers some milestones.</li>
+            <li><strong>Queued</strong> — at least one hard predecessor is unfinished.</li>
+          </ul>
+        </div>
+        <div class="detail-section">
           <h3>Current recommendation</h3>
           <ul class="dependency-list">
-            <li><strong>Code:</strong> begin plan 36.</li>
-            <li><strong>Parallel design:</strong> begin plan 43.</li>
-            <li><strong>Coordination:</strong> advance the seven open upstream requests; retain completed Kioku IR-1 as cohort evidence.</li>
+            <li><strong>Widest unblocking:</strong> plans 38 and 39 — each releases five downstream plans.</li>
+            <li><strong>Toward plan 14:</strong> plan 17, then the 38 → 19 → 22 chain.</li>
+            <li><strong>Startable in parallel:</strong> plans 18, 28 M1, 43; plans 12 M1–M2 and 29's local half.</li>
+            <li><strong>Coordination:</strong> all seven upstream requests are still <code>proposed</code>.</li>
           </ul>
         </div>
       </aside>
@@ -682,17 +730,18 @@
         <table>
           <thead><tr><th>Wave</th><th>Work</th><th>Entry rule</th></tr></thead>
           <tbody>
-            <tr><td>0</td><td>Seven open upstream requests; completed Kioku IR-1 evidence; plan 43 contract design</td><td>Parallel coordination/design work; package build still waits for plan 47.</td></tr>
-            <tr><td>1</td><td>36</td><td>First code change.</td></tr>
-            <tr><td>2</td><td>37</td><td>After 36; Settei becomes the only application config layer.</td></tr>
-            <tr><td>3</td><td>47</td><td>After plan 37; Kioku 0.2 satisfies the former release gate, so upgrade the dependency cohort as a unit.</td></tr>
-            <tr><td>4</td><td>38, 39, 28 M1</td><td>Migration, checked topology, and log vocabulary may proceed in parallel.</td></tr>
-            <tr><td>5</td><td>13, 16, 17, 18, 21, 24</td><td>Core semantics; respect 38→21 and 39→24.</td></tr>
-            <tr><td>6</td><td>20, 19, 22, 15, 25, 26, 30, 33</td><td>Build shared seams once: 17+18→20; 16+28→19→22; 20→30/33.</td></tr>
-            <tr><td>7</td><td>14, 23, 27, 29, 32, 34, 35, 12 runtime</td><td>Feature completion; several milestones remain upstream-gated.</td></tr>
-            <tr><td>8</td><td>40 → 41 → 42</td><td>Router declaration, catalog, then replay-safe execution.</td></tr>
-            <tr><td>9</td><td>44 and 45 → 46</td><td>Practice-review evidence/memory, then end-to-end orchestration.</td></tr>
+            <tr><td>0</td><td><strong>43</strong>; seven open upstream requests; completed Kioku IR-1 evidence</td><td><strong>Open.</strong> Plan 43 is now fully startable — plan 47 landed, so package implementation no longer waits.</td></tr>
+            <tr><td>1</td><td><s>36</s></td><td>Complete 31 July. Six packages, composition roots, asserted dependency arrows.</td></tr>
+            <tr><td>2</td><td><s>37</s></td><td>Complete 31 July, except the migration executable's Settei unification — reassigned to plan 38.</td></tr>
+            <tr><td>3</td><td><s>47</s></td><td>Complete 31 July. One released cohort selected by version; the codd stack was removed here.</td></tr>
+            <tr><td>4</td><td><strong>38, 39, 28 M1</strong></td><td><strong>Open, all three startable in parallel.</strong> Plan 38's scope narrowed to the ledger import and cutover.</td></tr>
+            <tr><td>5</td><td><s>13</s>, <s>16</s>, <strong>17</strong>, <strong>18</strong>, 21, 24</td><td>13 and 16 complete (13 minus its live smoke). 17 and 18 startable now; 21 waits for 38, 24 for 39.</td></tr>
+            <tr><td>6</td><td>20, 19, 22, <s>15</s>, 25, 26, 30, 33</td><td>15 complete. Rest queued: 17+18→20; 16+28M1→19→22; 20→30/33; 24+39→25/26.</td></tr>
+            <tr><td>7</td><td>14, 23, 27, <strong>29</strong>, 32, 34, 35, <strong>12</strong> runtime</td><td>12 and 29 have startable local halves now; the rest follow the registry edges.</td></tr>
+            <tr><td>8</td><td>40 → 41 → 42</td><td>Router declaration, catalog, then replay-safe execution. All wait on plan 33.</td></tr>
+            <tr><td>9</td><td>44 and 45 → 46</td><td>Practice-review evidence/memory, then end-to-end orchestration. All wait on plan 43.</td></tr>
             <tr><td>10</td><td>31</td><td>Operations closure after the public configuration and health surfaces settle.</td></tr>
+            <tr><td>—</td><td>48</td><td><strong>Unregistered.</strong> Belongs to no MasterPlan; declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites.</td></tr>
           </tbody>
         </table>
       </div>
@@ -703,6 +752,7 @@
 
   <script>
     const masterPlans = {
+      0: {name: "Unregistered — no MasterPlan", path: null},
       2: {name: "Production reality", path: "../masterplans/2-production-reality-de-stub-the-runtime-behavior-and-integration-path.md"},
       3: {name: "Correctness & delivery", path: "../masterplans/3-correctness-and-delivery-semantics-stop-dropping-and-duplicating-work.md"},
       4: {name: "Identity & trust", path: "../masterplans/4-identity-and-trust-grants-outbound-auth-and-agent-lifecycle-control.md"},
@@ -739,42 +789,43 @@
     ];
 
     const plans = [
-      {n:43,w:0,mp:9,s:"ready",c:true,t:"Define architecture-practice review contracts",d:"Contract design can start now; package implementation consumes plan 47.",deps:[],soft:[47]},
-      {n:36,w:1,mp:2,s:"ready",c:true,t:"Align with the six-package deployed-service architecture",d:"First code change. Establish package and composition-root ownership.",deps:[]},
-      {n:37,w:2,mp:2,s:"queued",c:true,t:"Adopt Settei configuration across binaries",d:"One typed configuration value; env/YAML/CLI sources; no Kubernetes adapter.",deps:[36]},
-      {n:47,w:3,mp:2,s:"queued",c:true,t:"Upgrade to the coherent July 2026 dependency cohort",d:"Kioku 0.2 is released; port the major-version cohort together after plan 37.",deps:[37]},
-      {n:38,w:4,mp:3,s:"queued",c:true,t:"Migrate database evolution from Codd to pg-migrate",d:"Own the historical ledger import and operational cutover.",deps:[36,37,47]},
-      {n:39,w:4,mp:5,s:"queued",c:true,t:"Adopt a checked Keiro DSL specification and evolution gate",d:"State-shape, codec, coverage and opaque gates on Keiro 0.4.",deps:[36,47]},
-      {n:28,w:4,mp:6,s:"queued",c:false,t:"Structured logging, metrics and trace propagation",d:"M1 defines the shared log vocabulary; HTTP propagation follows plan 22.",deps:[36,37,47],soft:[22]},
-      {n:13,w:5,mp:2,s:"queued",c:false,t:"Wire a real model provider into behavior runs",d:"Baikai 0.4 smart constructors and in-band error translation.",deps:[36,37,47]},
-      {n:16,w:5,mp:2,s:"queued",c:false,t:"Make sink handlers honest",d:"Stop reporting stubs and ignored fields as successful delivery.",deps:[36,37,47]},
-      {n:17,w:5,mp:3,s:"queued",c:true,t:"Behavior retries, run timeouts and visibility heartbeat",d:"Public Shibuya Message API, zero-based attempts, lease heartbeat.",deps:[36,37,47]},
-      {n:18,w:5,mp:3,s:"queued",c:true,t:"Atomic stream consumption",d:"Offsets, inbox and queue enqueue commit in one boundary.",deps:[36,37,47]},
-      {n:21,w:5,mp:4,s:"queued",c:false,t:"Database-backed sink permission grants",d:"Canonical pg-migrate component and nullable principal seam.",deps:[36,37,38,47]},
-      {n:24,w:5,mp:5,s:"queued",c:true,t:"Flow versioning with patch and continue-as-new",d:"Durable topology changes pass plan 39 and Keiro 0.4 gates.",deps:[39,47]},
-      {n:20,w:6,mp:3,s:"queued",c:true,t:"Explicit trigger routing and loud failures",d:"Consumes final retry taxonomy and atomic enqueue seam.",deps:[17,18,37,47]},
-      {n:19,w:6,mp:3,s:"partial",c:true,t:"Sink delivery truth and downstream idempotency",d:"Receipt work can start; terminal rejection waits for Keiro IR-3.",deps:[16,28,38,47],up:["u-keiro-outbox"]},
-      {n:22,w:6,mp:4,s:"queued",c:true,t:"Outbound authentication for sink clients",d:"The only authenticated, header-capable HTTP layer.",deps:[19,36,37,47],soft:[13,16]},
-      {n:15,w:6,mp:2,s:"queued",c:false,t:"Inject recalled memory and trigger payload",d:"Request-side context assembly; meaningful after the real provider.",deps:[36,47],soft:[13]},
+      {n:43,w:0,mp:9,s:"ready",c:true,t:"Define architecture-practice review contracts",d:"Now fully startable: plan 47 landed, so package implementation no longer waits on the cohort.",deps:[],soft:[47]},
+      {n:36,w:1,mp:2,s:"done",c:true,t:"Align with the six-package deployed-service architecture",d:"Six packages, composition roots, a generated OpenAPI contract, and a test that fails the build on a forbidden sibling edge.",deps:[]},
+      {n:37,w:2,mp:2,s:"done",c:true,t:"Adopt Settei configuration across binaries",d:"Nine of ten binaries resolve one typed AppConfig with fixed precedence, rejected unknown keys and redacted secrets.",deps:[36],x:"shikigami-migrate still resolves DATABASE_URL itself — a cabal package cycle; reassigned to plan 38."},
+      {n:47,w:3,mp:2,s:"done",c:true,t:"Upgrade to the coherent July 2026 dependency cohort",d:"The whole cohort selected from Hackage by version, no allow-newer between co-developed packages. The codd stack was removed here.",deps:[37]},
+      {n:38,w:4,mp:3,s:"ready",c:true,t:"Migrate database evolution from Codd to pg-migrate",d:"Scope narrowed by plan 47: the API port already landed, so this owns the historical ledger import and the operational cutover.",deps:[36,37,47]},
+      {n:39,w:4,mp:5,s:"ready",c:true,t:"Adopt a checked Keiro DSL specification and evolution gate",d:"State-shape, codec, coverage and opaque gates on Keiro 0.4. Inherits the un-enveloped run-job queue from plan 47.",deps:[36,47]},
+      {n:28,w:4,mp:6,s:"ready",c:true,t:"Structured logging, metrics and trace propagation",d:"M1 defines the log vocabulary plan 19 hard-depends on. M3's HTTP propagation still follows plan 22.",deps:[36,37,47],soft:[22]},
+      {n:13,w:5,mp:2,s:"done",c:false,t:"Wire a real model provider into behavior runs",d:"behavior.provider selects the provider, the stub can no longer run unannounced, and every completed session records which model answered.",deps:[36,37,47],x:"The live Anthropic smoke was not performed — no credential in this environment. One command to close."},
+      {n:16,w:5,mp:2,s:"done",c:false,t:"Make sink handlers honest",d:"ReiAction really delivers or really fails into the outbox; Actor routing and danwa topic honored; unresolvable strategies refused at validate time.",deps:[36,37,47]},
+      {n:17,w:5,mp:3,s:"ready",c:true,t:"Behavior retries, run timeouts and visibility heartbeat",d:"Public Shibuya Message API, zero-based attempts, lease heartbeat. Consumes plan 47's now-visible in-band provider failures.",deps:[36,37,47]},
+      {n:18,w:5,mp:3,s:"ready",c:true,t:"Atomic stream consumption",d:"Offsets, inbox and queue enqueue commit in one boundary.",deps:[36,37,47]},
+      {n:21,w:5,mp:4,s:"queued",c:false,t:"Database-backed sink permission grants",d:"Canonical pg-migrate component and nullable principal seam. Waits only for plan 38.",deps:[36,37,38,47]},
+      {n:24,w:5,mp:5,s:"queued",c:true,t:"Flow versioning with patch and continue-as-new",d:"Durable topology changes pass plan 39 and Keiro 0.4 gates. Waits only for plan 39.",deps:[39,47]},
+      {n:20,w:6,mp:3,s:"queued",c:true,t:"Explicit trigger routing and loud failures",d:"Consumes final retry taxonomy and atomic enqueue seam. Waits for plans 17 and 18.",deps:[17,18,37,47]},
+      {n:19,w:6,mp:3,s:"queued",c:true,t:"Sink delivery truth and downstream idempotency",d:"Plan 16 gave it truthful failures to manage. Waits for plans 38 and 28 M1; terminal rejection also needs Keiro IR-3.",deps:[16,28,38,47],up:["u-keiro-outbox"]},
+      {n:22,w:6,mp:4,s:"queued",c:true,t:"Outbound authentication for sink clients",d:"The only authenticated, header-capable HTTP layer. Plans 13 and 16 settled the client shapes it wraps.",deps:[19,36,37,47],soft:[13,16]},
+      {n:15,w:6,mp:2,s:"done",c:false,t:"Inject recalled memory and trigger payload",d:"Both arms receive the payload and recalled memories; the recall query is built from the payload's own words.",deps:[36,47],soft:[13]},
       {n:25,w:6,mp:5,s:"queued",c:true,t:"Replay-safe flow memory capabilities",d:"Journaled labeled recall/remember with deterministic ids.",deps:[24,39,47]},
-      {n:26,w:6,mp:5,s:"partial",c:false,t:"Conversation workflow lifecycle",d:"Indexed session resolution waits for Kioku IR-2.",deps:[24,39,47],up:["u-kioku-reads"]},
-      {n:30,w:6,mp:6,s:"queued",c:false,t:"Operator CLI for runs, agents and dead letters",d:"Consumes the canonical AgentLoadReport and Settei root.",deps:[20,36,37,47],soft:[28]},
-      {n:33,w:6,mp:7,s:"queued",c:true,t:"Agent schema evolution",d:"Owns additive identity, memory policy and enablement fields.",deps:[20,36,47],soft:[16]},
-      {n:14,w:7,mp:2,s:"queued",c:false,t:"Approval and human-in-the-loop end to end",d:"Uses final retry semantics and the shared authenticated client.",deps:[17,22,47],soft:[13]},
+      {n:26,w:6,mp:5,s:"queued",c:false,t:"Conversation workflow lifecycle",d:"Waits for plans 24 and 39; indexed session resolution also waits for Kioku IR-2.",deps:[24,39,47],up:["u-kioku-reads"]},
+      {n:30,w:6,mp:6,s:"queued",c:false,t:"Operator CLI for runs, agents and dead letters",d:"Consumes the canonical AgentLoadReport and Settei root. Waits for plan 20.",deps:[20,36,37,47],soft:[28]},
+      {n:33,w:6,mp:7,s:"queued",c:true,t:"Agent schema evolution",d:"Owns additive identity, memory policy and enablement fields. Waits for plan 20; gates plans 34, 40 and 23.",deps:[20,36,47],soft:[16]},
+      {n:14,w:7,mp:2,s:"queued",c:false,t:"Approval and human-in-the-loop end to end",d:"MasterPlan 2's last open child. Blocked on plan 17 and on plan 22, which is itself four plans deep.",deps:[17,22,47],soft:[13]},
       {n:23,w:7,mp:4,s:"queued",c:false,t:"Agent lifecycle control with Meibo principals",d:"File-backed DirectoryHandle is the accepted startable slice.",deps:[30,33,36,37,38,47],soft:[20,21]},
-      {n:27,w:7,mp:5,s:"queued",c:false,t:"Consolidate sink-intent and run-lifecycle machinery",d:"Move settled delivery, trace and wire semantics once.",deps:[19,24,28,39,47]},
-      {n:29,w:7,mp:6,s:"partial",c:false,t:"Health, liveness and worker-loop supervision",d:"Local health work can start; Shibuya probe slice waits for IR-1.",deps:[36,37,47],soft:[28],up:["u-shibuya-probe"]},
+      {n:27,w:7,mp:5,s:"queued",c:false,t:"Consolidate sink-intent and run-lifecycle machinery",d:"Inherits three concrete duplications found by plans 15 and 16: two SinkIntent copies, a dead enqueue step, and a double recall on the flow arm.",deps:[19,24,28,39,47]},
+      {n:29,w:7,mp:6,s:"partial",c:false,t:"Health, liveness and worker-loop supervision",d:"Startable now — plan 36 left a finished Shikigami.Health.Handler seam to supply checks into. The worker-probe slice waits for Shibuya IR-1.",deps:[36,37,47],soft:[28],up:["u-shibuya-probe"]},
       {n:32,w:7,mp:7,s:"queued",c:false,t:"Channel egress sink through Kanmon",d:"Extends canonical HTTP/auth and terminal delivery semantics.",deps:[19,22,36,37,47],soft:[21,27]},
-      {n:34,w:7,mp:7,s:"partial",c:false,t:"Memory lifecycle, retention and shared scope",d:"Distillation can start; SQL-bounded reads wait for Kioku IR-2.",deps:[33,36,37,47],up:["u-kioku-reads"]},
+      {n:34,w:7,mp:7,s:"queued",c:false,t:"Memory lifecycle, retention and shared scope",d:"Waits for plan 33; SQL-bounded reads also wait for Kioku IR-2.",deps:[33,36,37,47],up:["u-kioku-reads"]},
       {n:35,w:7,mp:7,s:"queued",c:true,t:"Delegation as a first-class declared capability",d:"Durable global budgets, lineage and checked topology.",deps:[24,33,36,37,38,39,47]},
-      {n:12,w:7,mp:7,s:"partial",c:false,t:"Per-agent MCP server declaration",d:"M1–M2 can land; live connect/invoke waits for three upstream contracts.",deps:[36,37,47],soft:[13,33],up:["u-baikai-mcp","u-shikumi-mcp","u-kikan-en-auth"]},
+      {n:12,w:7,mp:7,s:"partial",c:false,t:"Per-agent MCP server declaration",d:"M1–M2 startable now; live connect/invoke waits for three upstream contracts. Inherits plan 13's catalog-decoder precedent.",deps:[36,37,47],soft:[13,33],up:["u-baikai-mcp","u-shikumi-mcp","u-kikan-en-auth"]},
       {n:40,w:8,mp:8,s:"queued",c:true,t:"Declare specialist expertise and router policy",d:"Extends plan 33's additive declaration pattern.",deps:[33,47]},
       {n:41,w:8,mp:8,s:"queued",c:true,t:"Resolve lifecycle-aware router candidate catalogs",d:"Journaled catalog input; plan 23 is an attributed enhancement.",deps:[33,40,47],soft:[23]},
       {n:42,w:8,mp:8,s:"queued",c:true,t:"Execute replay-safe typed routing and delegation",d:"Extends plan 35 rather than creating another delegation path.",deps:[35,40,41,47]},
-      {n:44,w:9,mp:9,s:"partial",c:true,t:"Acquire revision-pinned practice evidence",d:"Stub reader can land; live adapter waits for Kikan IR-5.",deps:[43,47],up:["u-kikan-content"]},
+      {n:44,w:9,mp:9,s:"queued",c:true,t:"Acquire revision-pinned practice evidence",d:"Stub reader can land once plan 43 defines the contracts; the live adapter waits for Kikan IR-5.",deps:[43,47],up:["u-kikan-content"]},
       {n:45,w:9,mp:9,s:"queued",c:true,t:"Persist and adjudicate practice reviews",d:"Consumes labeled rememberWith and the plan 43 contracts.",deps:[25,43,47]},
-      {n:46,w:9,mp:9,s:"partial",c:true,t:"Orchestrate review delivery and end-to-end conformance",d:"Joins routing, evidence, memory and honest sink delivery.",deps:[16,19,25,35,42,43,44,45,47],up:["u-kikan-content"]},
-      {n:31,w:10,mp:6,s:"queued",c:true,t:"Deployable service stack",d:"Final process-compose/NixOS packaging and configuration reference.",deps:[36,37,38,47],soft:[13,22,28,29,32]}
+      {n:46,w:9,mp:9,s:"queued",c:true,t:"Orchestrate review delivery and end-to-end conformance",d:"Joins routing, evidence, memory and honest sink delivery.",deps:[16,19,25,35,42,43,44,45,47],up:["u-kikan-content"]},
+      {n:31,w:10,mp:6,s:"queued",c:true,t:"Deployable service stack",d:"Final process-compose/NixOS packaging and configuration reference.",deps:[36,37,38,47],soft:[13,22,28,29,32]},
+      {n:48,w:7,mp:0,s:"queued",c:false,t:"Portable one-off repository agent harness",d:"Belongs to no MasterPlan and appears in no registry. Declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites; 13, 15, 36, 37 and 47 are done.",deps:[12,13,15,31,36,37,47]}
     ].map((plan) => ({
       ...plan,
       id: "p" + plan.n,
@@ -814,11 +865,12 @@
         44:"44-acquire-revision-pinned-architecture-practice-evidence.md",
         45:"45-persist-and-adjudicate-architecture-practice-reviews.md",
         46:"46-orchestrate-review-delivery-and-end-to-end-conformance.md",
-        47:"47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md"
+        47:"47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md",
+        48:"48-add-a-portable-one-off-repository-agent-harness.md"
       }[plan.n]
     }));
 
-    const state = {selected:null, ready:false, blocked:false, critical:false, soft:false, mp:"all", query:""};
+    const state = {selected:null, ready:false, blocked:false, critical:false, done:false, soft:false, mp:"all", query:""};
     const planById = new Map(plans.map((p) => [p.id, p]));
     const requestById = new Map(requests.map((r) => [r.id, r]));
     const nodeById = new Map([...planById, ...requestById]);
@@ -828,6 +880,10 @@
     const edgesSvg = document.getElementById("edges");
     const detailPanel = document.getElementById("detail-panel");
     const emptyState = document.getElementById("empty-state");
+
+    function statusLabel(s) {
+      return s === "partial" ? "partial gate" : s;
+    }
 
     function planLabel(n) {
       const p = plans.find((item) => item.n === n);
@@ -842,17 +898,24 @@
       ).join("");
 
       waveTrack.innerHTML = waves.map((wave) => {
-        const cards = plans.filter((p) => p.w === wave.id).map((p) =>
-          '<button class="plan-card" id="' + p.id + '" data-node="' + p.id + '" ' +
+        const inWave = plans.filter((p) => p.w === wave.id);
+        const cards = inWave.map((p) =>
+          '<button class="plan-card ' + p.s + '" id="' + p.id + '" data-node="' + p.id + '" ' +
             'style="--mp-color:var(--mp' + p.mp + ')">' +
-            '<span class="card-top"><span class="plan-number">PLAN ' + p.n + ' · MP ' + p.mp + '</span>' +
-            '<span class="status ' + p.s + '">' + (p.s === "partial" ? "partial gate" : p.s) + '</span></span>' +
+            '<span class="card-top"><span class="plan-number">PLAN ' + p.n + ' · ' +
+            (p.mp ? 'MP ' + p.mp : 'NO MP') + '</span>' +
+            '<span class="status ' + p.s + '">' + statusLabel(p.s) + '</span></span>' +
             '<h3>' + p.t + '</h3><p>' + p.d + '</p>' +
+            (p.x ? '<span class="exception">Except: ' + p.x + '</span>' : '') +
             (p.c ? '<i class="critical-dot" title="Critical path"></i>' : '') +
           '</button>'
         ).join("");
-        return '<section class="wave ' + (wave.id === 1 ? "current" : "") + '" data-wave="' + wave.id + '">' +
-          '<header class="wave-header"><strong>Wave ' + wave.id + '</strong><span>' + wave.label + '</span></header>' +
+        // A wave is "current" when something in it can actually be picked up today.
+        const live = inWave.some((p) => p.s === "ready" || p.s === "partial");
+        const finished = inWave.length > 0 && inWave.every((p) => p.s === "done");
+        return '<section class="wave ' + (live ? "current" : finished ? "finished" : "") + '" data-wave="' + wave.id + '">' +
+          '<header class="wave-header"><strong>Wave ' + wave.id + '</strong><span>' +
+          (finished ? "complete" : wave.label) + '</span></header>' +
           '<div class="wave-cards">' + cards + '</div></section>';
       }).join("");
 
@@ -864,9 +927,14 @@
     function visiblePlan(plan) {
       const q = state.query.trim().toLowerCase();
       if (state.mp !== "all" && String(plan.mp) !== state.mp) return false;
-      if (state.ready && plan.s !== "ready") return false;
-      if (state.blocked && !["blocked","partial"].includes(plan.s)) return false;
+      // "Startable now" means every hard predecessor is done — whether or not an
+      // upstream request defers some later milestone.
+      if (state.ready && !["ready","partial"].includes(plan.s)) return false;
+      // "Upstream-gated" keys off an actual upstream request, not off readiness,
+      // so a queued plan waiting on both a plan and an IR still shows here.
+      if (state.blocked && !(plan.up || []).length) return false;
       if (state.critical && !plan.c) return false;
+      if (state.done && plan.s === "done") return false;
       if (q && !("plan " + plan.n + " " + plan.t + " mp " + plan.mp).toLowerCase().includes(q)) return false;
       return true;
     }
@@ -884,6 +952,7 @@
         const q = state.query.trim().toLowerCase();
         const requestVisible = !state.ready && state.mp === "all" && !state.critical &&
           (!state.blocked || request.state !== "completed") &&
+          (!state.done || request.state !== "completed") &&
           (!q || (request.repo + " " + request.title).toLowerCase().includes(q));
         el.classList.toggle("is-hidden", !requestVisible);
       });
@@ -924,14 +993,26 @@
       drawEdges();
     }
 
+    function isDone(n) {
+      const p = plans.find((item) => item.n === n);
+      return Boolean(p) && p.s === "done";
+    }
+
     function listItems(items, kind) {
       if (!items || !items.length) return '<li>None.</li>';
       return items.map((item) => {
         if (kind === "upstream") {
           const request = requestById.get(item);
-          return '<li><strong>' + request.repo + '</strong><br>' + request.title + '</li>';
+          return '<li><strong>' + request.repo + '</strong><br>' + request.title +
+            ' · <em>' + (request.state || "proposed") + '</em></li>';
         }
-        return '<li><strong>' + planLabel(item) + '</strong></li>';
+        // Mark which predecessors are already satisfied — the point of the board is
+        // to show what is actually left in front of a plan.
+        const mark = kind === "hard"
+          ? (isDone(item) ? ' <em style="color:var(--done)">· done</em>'
+                          : ' <em style="color:var(--partial)">· outstanding</em>')
+          : '';
+        return '<li><strong>' + planLabel(item) + '</strong>' + mark + '</li>';
       }).join("");
     }
 
@@ -948,16 +1029,30 @@
       const plan = planById.get(id);
       if (plan) {
         const downstream = plans.filter((p) => (p.deps || []).includes(plan.n)).map((p) => p.n);
+        const outstanding = (plan.deps || []).filter((n) => !isDone(n));
+        const verdict = plan.s === "done"
+          ? 'Complete.' + (plan.x ? ' <strong>Except:</strong> ' + plan.x : '')
+          : outstanding.length
+            ? 'Blocked on ' + outstanding.length + ' unfinished predecessor' +
+              (outstanding.length === 1 ? '' : 's') + ': ' +
+              outstanding.map((n) => 'plan ' + n).join(', ') + '.'
+            : (plan.up || []).length
+              ? 'Startable now. Some milestones wait on an upstream request.'
+              : 'Startable now — every hard predecessor is complete.';
         detailPanel.innerHTML =
-          '<p class="detail-kicker">Wave ' + plan.w + ' · MasterPlan ' + plan.mp + '</p>' +
+          '<p class="detail-kicker">Wave ' + plan.w + ' · ' +
+          (plan.mp ? 'MasterPlan ' + plan.mp : 'No MasterPlan') + '</p>' +
           '<h2>Plan ' + plan.n + ' · ' + plan.t + '</h2>' +
           '<p class="detail-copy">' + plan.d + '</p>' +
+          '<div class="detail-section"><h3>Verdict</h3><p class="detail-copy">' + verdict + '</p></div>' +
           '<div class="detail-section"><h3>Hard predecessors</h3><ul class="dependency-list">' + listItems(plan.deps, "hard") + '</ul></div>' +
           '<div class="detail-section"><h3>Preferred order</h3><ul class="dependency-list">' + listItems(plan.soft, "soft") + '</ul></div>' +
           '<div class="detail-section"><h3>Upstream gates</h3><ul class="dependency-list">' + listItems(plan.up, "upstream") + '</ul></div>' +
-          '<div class="detail-section"><h3>Direct consumers</h3><ul class="dependency-list">' + listItems(downstream, "hard") + '</ul></div>' +
+          '<div class="detail-section"><h3>Direct consumers</h3><ul class="dependency-list">' + listItems(downstream, "consumer") + '</ul></div>' +
           '<a class="open-link" href="' + plan.path + '">Open ExecPlan</a> ' +
-          '<a class="open-link" href="' + masterPlans[plan.mp].path + '">Open MasterPlan</a>';
+          (masterPlans[plan.mp] && masterPlans[plan.mp].path
+            ? '<a class="open-link" href="' + masterPlans[plan.mp].path + '">Open MasterPlan</a>'
+            : '');
       } else {
         const request = requestById.get(id);
         const consumers = request.state === "completed"
@@ -1017,6 +1112,9 @@
           const source = plans.find((p) => p.n === dep);
           if (!source) return;
           const selectedEdge = state.selected === plan.id || state.selected === source.id;
+          // Satisfied predecessors are no longer part of the forward picture, so their
+          // edges only appear when you actually select one end of them.
+          if (source.s === "done" && !selectedEdge) return;
           const near = Math.abs(plan.w - source.w) <= 2;
           if (selectedEdge || near || (plan.c && source.c)) addPath(source.id, plan.id, "hard", selectedEdge);
         });
@@ -1047,6 +1145,7 @@
     toggle("ready-filter", "ready");
     toggle("blocked-filter", "blocked");
     toggle("critical-filter", "critical");
+    toggle("done-toggle", "done");
     toggle("soft-toggle", "soft");
 
     renderNodes();
