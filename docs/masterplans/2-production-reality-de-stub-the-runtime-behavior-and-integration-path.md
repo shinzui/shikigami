@@ -361,9 +361,13 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       `shikigami-core/test/Shikigami/AppConfigSpec.hs` pin precedence, strictness, the
       accepted key and binding lists, and the absence of a planted secret from every
       rendering. 132 tests pass across seven suites.
-- [ ] F2 remaining: `shikigami-migrate` still uses codd's `CODD_*` contract. Blocked by a
-      cabal package cycle (see Surprises & Discoveries); reassigned to plan 38, which owns
-      the migration CLI.
+- [ ] F2 remaining: `shikigami-migrate` resolves `DATABASE_URL` with `lookupEnv` instead of
+      the shared `AppConfig`. The codd half of this item is closed — F3 (plan 47) moved the
+      whole migration stack to pg-migrate, so the `CODD_*` contract no longer exists
+      anywhere (`shikigami-migrations/app/Main.hs`, `Justfile:31,38`, `cabal.project:74-79`).
+      What remains is only the Settei unification, still blocked by the cabal package cycle
+      (see Surprises & Discoveries); reassigned to plan 38, which owns the migration CLI and
+      can restructure the package boundary.
 - [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
       released Keiki 0.4 / Keiro 0.4 bounds and codec-compatibility evidence.
 - [x] (2026-07-31) F3 M1–M5: `cabal.project` selects the whole cohort from Hackage by
@@ -566,9 +570,14 @@ inside the plan-36 worker composition root so the merges stay mechanical.
   `shikigami-migrations:test-support`, so the reverse edge makes the two packages mutually
   dependent and cabal's solver — which detects cycles at package rather than component
   granularity — refuses the whole project with
-  `rejecting: shikigami-core:*test (cyclic dependencies)`. The migration executable keeps
-  codd's `CODD_*` contract, documented at its call site. Plan 38 owns the migration CLI and
-  is the right place to restructure the boundary.
+  `rejecting: shikigami-core:*test (cyclic dependencies)`. The migration executable therefore
+  reads its one variable itself, documented at its call site. Plan 38 owns the migration CLI
+  and is the right place to restructure the boundary.
+  Superseded in part (2026-07-31): when written, that one variable was codd's `CODD_*`
+  contract. F3 (plan 47) moved the migration stack to pg-migrate, so the executable now reads
+  `DATABASE_URL`. **The cycle itself is unchanged and still binding** — it is a property of
+  the package graph, not of the migration library, so any later plan wanting configuration in
+  `shikigami-migrations` inherits it regardless of which migration tool is in use.
 - Plan 37 implementation (2026-07-31): the configuration surface is **one** `AppConfig`
   shared by every binary, not one per binary, with per-binary requirements expressed as a
   `Role` and checked after resolution. Plans 13, 14, 16, 22, 28–32 and 34 extend that single
@@ -676,6 +685,21 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-31: Corrected the F2-remaining record, which had gone stale. Its Progress entry
+  and the plan 37 Surprises entry both still said `shikigami-migrate` uses codd's `CODD_*`
+  contract; F3 (plan 47) removed codd from the repository entirely, and the executable has
+  read `DATABASE_URL` and driven pg-migrate subcommands since. Verified in the working tree
+  rather than inferred: `shikigami-migrations.cabal` names only `pg-migrate*` packages,
+  `shikigami-migrations/app/Main.hs` calls `lookupEnv "DATABASE_URL"` and
+  `runMigrationCommand`, `Justfile:31,38` pass `DATABASE_URL`, `cabal.project:74-79` records
+  the removal of codd and its two forks, and every surviving `codd` string in code is prose
+  explaining the absence. F2's open item is now stated as what it actually is — the
+  executable does not resolve through the shared `AppConfig` — and the cabal package cycle
+  is marked as the durable cause, independent of which migration library is in use. No code
+  changed. **`docs/plans/38-...md:80,139` still describes rewriting the `CODD_*` surface as
+  its own work; that scope narrowing is already recorded in this MasterPlan's plan 47
+  Surprises entry and should be absorbed into plan 38 when it is implemented.**
 
 - 2026-07-31: Marked EP-3 (plan 15) Complete. The third runtime lie is closed: both
   executable behavior arms now receive the trigger payload and the memories the journaled
