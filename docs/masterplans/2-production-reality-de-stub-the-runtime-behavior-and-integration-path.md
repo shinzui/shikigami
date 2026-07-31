@@ -111,7 +111,7 @@ with a real model) but is not blocked by it.
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Not Started |
-| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Not Started |
+| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Complete (2026-07-31) |
 
 
 ## Dependency Graph
@@ -386,16 +386,43 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       payload+prior via `ArgMap`; capture tests.
 - [ ] EP-3 M2: payload-aware `recallQuery`.
 - [ ] EP-3 M3: `classifyRisk` uses prior; memory-flips-verdict workflow test.
-- [ ] EP-4 M1: Settei-backed `ReiConfig`; ReiAction fails loudly or really POSTs;
-      `Stubbed` no longer produced.
-- [ ] EP-4 M2: `resolvedRecipient` through `SinkIntent`; `Actor` routing honored;
-      old-row decode-compat test.
-- [ ] EP-4 M3: danwa `topic` visible; `validate` rejects unresolvable
-      `recipientFrom`; all fixtures re-validated.
+- [x] (2026-07-31) EP-4 M1: `sinks.rei.base_url` declared with no default; ReiAction fails
+      with a message naming the intention and the key, or really POSTs a `ReiActionReq`
+      carrying the deterministic dedup key; `Stubbed` deprecated and no longer produced.
+      Both halves asserted — the handler's outcome, and that outcome's effect on the
+      outbox verdict.
+- [x] (2026-07-31) EP-4 M2: `resolvedRecipient` through both copies of `SinkIntent`;
+      `Actor` routing honored, the two directory strategies warn; old rows decode /and/ the
+      pinned pre-upgrade bytes are unchanged, because the record now encodes with
+      `omitNothingFields`.
+- [x] (2026-07-31) EP-4 M3: danwa `topic` opens a fresh conversation; `validate` rejects a
+      directory strategy with no `defaultRecipient`; every shipped manifest re-validated.
 
 
 ## Surprises & Discoveries
 
+- Plan 16 implementation (2026-07-31): **`SinkIntent` is defined twice, and the publisher
+  decodes both copies with one of them.** `Shikigami.Agent.Workflow` and
+  `Shikigami.Flow.SinkOutbox` each carry the record because the flow module cannot import
+  the workflow module without a cycle; `publishSinkIntent` decodes rows from both paths
+  with the workflow's copy. A field added to one and not the other is dropped in transit
+  with nothing to notice — the flow path would have journaled a resolved recipient the
+  publisher never read. `Shikigami.WireCompatSpec` now asserts the two encoders produce
+  identical bytes. **Plan 27 inherits this as a concrete reason to consolidate**, along
+  with `Agent.Workflow.enqueueSinkIntentStep`, which is exported, duplicates the flow
+  module's function, and is called by nothing.
+- Plan 16 implementation (2026-07-31): **a new field on a journaled or outboxed record
+  should be added with `omitNothingFields`, not by rewriting the pinned byte fixture.**
+  Aeson emits `"field":null` by default, which would have changed the encoder and forced
+  `WireCompatSpec`'s pre-upgrade bytes to be edited — discarding the evidence they exist to
+  preserve. Encoding with `omitNothingFields` makes a record that does not use the new
+  field byte-identical to one written before it existed. **Plans 19, 22, 27, and 35 all add
+  fields to durable records and should do the same.**
+- Plan 16 implementation (2026-07-31): the plan's fixture-revalidation loop expects only
+  `agents/broken.dhall` to fail. **`agents/detectors/schema.dhall` fails too, and always
+  did** — it is a retired tombstone that is a record type rather than a manifest, rejected
+  on the Dhall annotation before any sink check. Not a regression; recorded so the next
+  plan running that loop does not investigate it.
 - Plan 13 implementation (2026-07-31): **a cross-key requirement belongs in the Settei
   declaration, not in a function beside it.** Plan 13 specified
   `resolveProviderSelection :: AppConfig -> Either ConfigError ProviderSelection`. Settei's
@@ -616,6 +643,21 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-31: Marked EP-4 (plan 16) Complete. The fourth runtime lie is closed: a
+  `ReiAction` either really delivers or really fails into the outbox retry path, and the
+  three declaration fields that were parsed and discarded are now honored (`Actor` routing,
+  danwa `topic`) or refused up front (`SubjectOwner`/`AreaOwner` with nothing to fall back
+  to). `Stubbed` survives only as a decoder for historical journals. Recorded three
+  findings other plans depend on: `SinkIntent` is duplicated across the agent-run and flow
+  paths with the publisher decoding both through one copy — now guarded by a byte-equality
+  test and left to plan 27 to consolidate, together with a dead `enqueueSinkIntentStep`; a
+  field added to a durable record should use `omitNothingFields` so the pinned wire fixture
+  stays true rather than being rewritten, which plans 19, 22, 27, and 35 will each need;
+  and `agents/detectors/schema.dhall`'s validation failure is pre-existing and not a sink
+  error. Plan 19 now has truthful failures to manage, and plan 22 has settled client shapes
+  to wrap. **EP-3 (plan 15) is the only remaining child of this MasterPlan that is
+  implementable** — EP-2 (plan 14) still waits on plans 17 and 22.
 
 - 2026-07-31: Marked EP-1 (plan 13) Complete except the live smoke. The first of the four
   runtime lies is closed: `behavior.provider` selects the provider, the stub is still the

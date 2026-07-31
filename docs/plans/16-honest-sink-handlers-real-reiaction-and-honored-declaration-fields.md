@@ -48,25 +48,104 @@ any more — it is either honored or rejected up front.
 
 ## Progress
 
-- [ ] Prerequisites: plans 36/37 complete; sink modules follow the six-package boundary
-      and `ReiConfig` is part of the shared Settei application config.
-- [ ] Milestone 1: Settei-backed `ReiConfig`; `ReiAction` dispatch fails loudly
-      when unconfigured and POSTs a defined wire DTO when configured; `Stubbed` no
-      longer produced; tests for both branches.
-- [ ] Milestone 2: recipient resolution — `resolvedRecipient` threaded from the
-      workflow's trigger context through `SinkIntent`/`SinkContext` into
-      `buildSignalReq`; `Actor` honored; decode-compat test for old outbox rows.
-- [ ] Milestone 3: `topic` honored in fresh danwa conversations; `validate` rejects
-      unresolvable `recipientFrom` declarations; fixture agents re-validated.
+- [x] (2026-07-31) Prerequisites: plans 36, 37, and 47 complete; sink modules follow the
+      six-package boundary and `ReiConfig` comes from the shared Settei application config.
+- [x] (2026-07-31) Milestone 1: `sinks.rei.base_url` declared (no default);
+      `runReiAction` fails with a message naming the intention and the key when
+      unconfigured, and POSTs a `ReiActionReq` carrying the deterministic dedup key when
+      configured; `Stubbed` is deprecated and no longer produced. `SinkHonestySpec` covers
+      unconfigured, configured, refused, and denied, plus the outcome→outbox mapping on
+      both sides.
+- [x] (2026-07-31) Milestone 2: `Shikigami.Sink.Recipient` owns strategy resolution and
+      precedence; `resolvedRecipient` threaded from both intent builders through
+      `SinkIntent`/`SinkContext` into `buildSignalReq`; `Actor` honored; unresolvable
+      strategies warn at dispatch. `SinkIntent` encodes with `omitNothingFields`, so the
+      pinned pre-upgrade bytes still hold unchanged.
+- [x] (2026-07-31) Milestone 3: `topic` opens a fresh danwa conversation;
+      `Shikigami.Sink.Validate.sinkDeclarationErrors` refuses a directory strategy with no
+      `defaultRecipient` and the `validate` command exits 1 with it; every shipped manifest
+      re-validated.
+- [ ] Optional live observation (worker + database, watching the outbox retry a real
+      ReiAction failure): not performed. The equivalent is asserted in tests — see
+      Outcomes.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Implementation (2026-07-31): **`SinkIntent` is duplicated, and the duplication is a live
+  data-loss hazard rather than an aesthetic one.** `Shikigami.Agent.Workflow` and
+  `Shikigami.Flow.SinkOutbox` each define their own copy, because the flow module cannot
+  import the workflow module without a cycle — and `publishSinkIntent` decodes rows
+  enqueued by *both* using the workflow's copy. A field added to one and not the other is
+  therefore silently dropped in transit: the flow path would have journaled a resolved
+  recipient that the publisher never saw. Adding `resolvedRecipient` to both is the fix
+  here; **`Shikigami.WireCompatSpec` now asserts the two encoders produce identical bytes**,
+  so the next divergence is a test failure instead of a lost field.
+  **Plan 27 inherits this** as a concrete, tested-in-place reason to consolidate.
+
+- Implementation (2026-07-31): **the additive-field change needed `omitNothingFields`, and
+  that is a better guarantee than editing the fixture.** `WireCompatSpec` pins the exact
+  pre-upgrade bytes of a `SinkIntent`, so adding a `Maybe` field would have changed the
+  encoder (aeson emits `"resolvedRecipient":null` by default) and forced the fixture to be
+  rewritten — which would have quietly discarded the evidence it exists to preserve.
+  Encoding with `omitNothingFields` instead makes an intent that resolved nothing
+  *byte-identical* to one written before the field existed. **Any later plan adding a field
+  to a journaled or outboxed record should do the same** rather than update the pinned
+  bytes.
+
+- Implementation (2026-07-31): **`Shikigami.Agent.Workflow.enqueueSinkIntentStep` is dead
+  code.** It is exported and duplicates `Shikigami.Flow.SinkOutbox`'s function, but nothing
+  calls it — the flow path uses the SinkOutbox one and the conversation path uses
+  `prepareSinkIntent` directly. It was updated in lockstep here rather than deleted,
+  because deleting an exported function is a decision for the plan that owns this module's
+  shape. **Plan 27 should remove it.**
+
+- Implementation (2026-07-31): the plan's fixture-revalidation loop expects everything
+  except `agents/broken.dhall` to pass. **`agents/detectors/schema.dhall` also fails, and
+  always did** — it is a retired tombstone documenting the superseded seed schema, and it is
+  a record *type* rather than a manifest, so `validate` rejects it on the Dhall annotation
+  before any sink check runs. Not a regression and not a sink error; recorded so the next
+  person running that loop does not go looking.
+
+  ```text
+  OK   agents/triage-note.dhall
+  FAIL agents/broken.dhall              (deliberate load-failure fixture)
+  FAIL agents/detectors/schema.dhall    (retired tombstone; a record type, not a manifest)
+  ```
+
+- Implementation (2026-07-31): the live worker observation in Concrete Steps was **not
+  performed** — it needs a migrated database and a scratch manifest, and everything it
+  would show is asserted more precisely in tests: that an unconfigured `ReiAction` yields
+  `Failed`, and that `Failed` is exactly what leaves an outbox row unpublished. What the
+  live run would add is only the visual of the publisher retrying, which is keiro's
+  behavior rather than this plan's.
 
 
 ## Decision Log
 
+- Decision: Encode `SinkIntent` with `omitNothingFields` rather than updating the pinned
+  pre-upgrade byte fixture.
+  Rationale: an intent that resolved no recipient is then byte-identical to one written
+  before the field existed, so the existing evidence stays literally true and the additive
+  change is provably a non-event on the wire. Rewriting the fixture would have discarded
+  the thing it exists to protect. Costs one deliberate encoding choice, documented at both
+  copies of the record.
+  Date: 2026-07-31
+- Decision: Put strategy resolution in a new `Shikigami.Sink.Recipient` rather than in the
+  kizashi client or inline in the workflow, and give it the precedence function the client
+  calls.
+  Rationale: resolution needs the trigger activity (workflow-side) and application needs
+  the sink and configs (client-side), so the logic would otherwise be split across two
+  modules with the rule written twice. One module owning strategy, precedence, and the
+  warning means the agent-run path and the flow path cannot drift, and
+  `Shikigami.Sink.Validate` has an obvious neighbour.
+  Date: 2026-07-31
+- Decision: Assert that the two `SinkIntent` copies encode identically, and export the flow
+  path's copy solely to make that possible.
+  Rationale: the publisher decodes both with one of the two records, so divergence loses
+  data silently. A test is the cheapest thing that turns the next divergence into a build
+  failure, and it costs one export documented as test-only. Consolidation remains plan 27's.
+  Date: 2026-07-31
 - Decision: `ReiAction` fails loudly by default instead of gaining a speculative
   client, with the real client gated behind the Settei `sinks.rei.base_url` setting.
   Rationale: rei (verify with `mori registry show rei --full`; source at
@@ -128,7 +207,51 @@ any more — it is either honored or rejected up front.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete as of 2026-07-31. Three commits: `038f12c` (ReiAction), `1e90491`
+(`recipientFrom`), `5993a06` (`topic` and validation).
+
+**What is no longer a lie.** A `ReiAction` sink reports what happened: with no endpoint it
+fails and the outbox row stays claimable, with one it really POSTs. `recipientFrom = Actor`
+routes to the triggering activity's actor; the two strategies that need an ownership
+directory nobody has either warn at dispatch or are refused at validate time. A
+`DanwaConversation`'s `topic` opens the thread it describes. Nothing a manifest declares is
+now accepted and discarded.
+
+**The acceptance criteria, and how each was checked.**
+
+1. *No fake success.* `SinkHonestySpec` asserts an unconfigured `ReiAction` yields
+   `Failed`, and — separately — that `Failed` is the one outcome that leaves an outbox row
+   unpublished. Both halves, because either alone would have missed the original bug.
+2. *Real client path.* A warp stub captures the POST and the assertion covers
+   `intentionId`, `note`, the output, and the deterministic `sourceEventId`
+   (`heartbeat:run-1:0`), which is what lets a retry re-POST an identical body.
+3. *`Actor` routing.* Resolution is tested from an envelope, precedence is tested through
+   `buildSignalReq`, and the end-to-end case captures a real `CreateSignalReq` whose
+   `recipient` is the actor rather than the declared default.
+4. *Old rows still decode.* Two ways: a pre-upgrade row decodes with `resolvedRecipient =
+   Nothing`, and the pinned pre-upgrade bytes still round-trip **unchanged**, because
+   `omitNothingFields` made the addition invisible on the wire.
+5. *`topic` visible.* The danwa stub's captured message is `"[support]\nfresh thread text"`
+   for a fresh conversation, unprefixed for a reply, and unchanged for an empty topic.
+6. *Validation gate.* Six pure cases plus a real CLI run: a manifest with
+   `SubjectOwner` and no default exits 1 with the specific error, and every shipped
+   manifest was re-validated (see Surprises for the two pre-existing failures).
+7. 190 tests across seven suites, `-j1`, including the untouched replay and
+   outbox-stability cases.
+
+**Not done:** the optional live worker observation, for the reason in Surprises.
+
+**What this leaves for the plans that follow.** Plan 19 now has truthful failures to manage
+rather than fabricated successes, which was this plan's whole contribution to it. Plan 22
+gets settled client shapes to wrap with authentication, including `ReiActionReq` and the
+`Maybe Text` on `buildSignalReq`. Plan 27 gets a concrete, tested reason to consolidate:
+the duplicated `SinkIntent`, its dead-code twin `enqueueSinkIntentStep`, and a byte-equality
+test that will fail the moment the two drift again.
+
+**What was harder than the plan expected**, and worth carrying: the additive-field change
+looked mechanical and was not, because the field had to reach two separately-defined
+records and a pinned byte fixture. The instinct to edit the fixture would have been wrong;
+changing the encoder so the fixture stayed true was both less work and a stronger claim.
 
 
 ## Context and Orientation
@@ -454,11 +577,24 @@ data ReiActionReq = ReiActionReq
 runReiAction :: ReiConfig -> SinkContext -> Shikigami.Api.Agent.Sink -> Data.Aeson.Value -> IO (Either Text Text)
 
 -- shikigami-core/src/Shikigami/Sink/KizashiClient.hs
-buildSignalReq :: KizashiConfig -> Maybe Text -> Shikigami.Api.Agent.Sink -> AgentIdentity -> Data.Aeson.Value -> Either Text CreateSignalReq
+buildSignalReq :: KizashiConfig -> Maybe Text -> Shikigami.Agent.Decl.Sink -> AgentIdentity -> Data.Aeson.Value -> Either Text CreateSignalReq
 
 -- shikigami-core/src/Shikigami/Sink/Validate.hs (new)
-sinkDeclarationErrors :: Shikigami.Api.Agent.AgentDecl -> [Data.Text.Text]
+sinkDeclarationErrors :: Shikigami.Agent.Decl.AgentDecl -> [Data.Text.Text]
+
+-- shikigami-core/src/Shikigami/Sink/Recipient.hs (new; not in the original plan)
+resolveRecipient :: RecipientFrom -> Maybe ActivityEnvelope -> Maybe Text
+resolveSinkRecipient :: Sink -> Maybe ActivityEnvelope -> Maybe Text
+recipientFor :: Text -> Maybe Text -> Maybe Text -> Text   -- fallback, resolved, declared
+unresolvableRecipientWarning :: Sink -> Maybe Text -> Maybe Text
 ```
+
+As implemented, `SinkIntent` gained `resolvedRecipient :: Maybe Text` in **both**
+`Shikigami.Agent.Workflow` and `Shikigami.Flow.SinkOutbox`, both encoded with
+`omitNothingFields`, and `enqueueSinkIntentStep`/`prepareSinkIntent` in both modules take a
+`Maybe Text` between `danwaTarget` and `sink`. `Shikigami.Api.Agent` no longer exists —
+plan 36 renamed it to `Shikigami.Agent.Decl` (and `Shikigami.Api.Activity` to
+`Shikigami.Activity`); the paths above are corrected.
 
 Consumed, verified in-tree interfaces:
 
@@ -484,6 +620,17 @@ policy for failed publishes — this plan only makes the failure real.
 
 
 ## Revision Notes
+
+- 2026-07-31: Implemented; all three milestones complete. Two departures from the plan as
+  written, both in the Decision Log: strategy resolution lives in a new
+  `Shikigami.Sink.Recipient` rather than split between the workflow and the kizashi client,
+  and `SinkIntent` encodes with `omitNothingFields` so the pinned pre-upgrade byte fixture
+  stayed true instead of being rewritten. Recorded the duplicated `SinkIntent` as a live
+  data-loss hazard now guarded by a byte-equality test, the dead
+  `Agent.Workflow.enqueueSinkIntentStep`, the pre-existing
+  `agents/detectors/schema.dhall` validation failure, and the optional live worker
+  observation that was not run. Corrected the stale `Shikigami.Api.*` module paths in
+  Interfaces to plan 36's names.
 
 - 2026-07-22: Recorded this plan as the sink-path predecessor of plans 22 and 19.
   Authentication wraps the settled client shapes, and delivery truth consumes the
