@@ -411,6 +411,10 @@ prepareConversationReplySinkIntent decl sid msg@AddressedMessage {conversationId
             parentMessageId = Just msgMessageId
           }
     )
+    -- No resolved recipient: a conversation reply is a danwa sink, which has no
+    -- recipientFrom strategy, and the turn was triggered by an addressed message
+    -- rather than by an activity envelope.
+    Nothing
     Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
     (Aeson.object ["reply" Aeson..= replyText])
     now

@@ -25,7 +25,10 @@ import Data.Text qualified as Text
 import Network.HTTP.Types (hContentType, status200, status404, status503)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Agent.Decl (Sink (..))
+-- Qualified: @Actor@ names both an activity's actor and the routing strategy
+-- that reads it.
+import Shikigami.Activity qualified as Activity
+import Shikigami.Agent.Decl (Priority (High), RecipientFrom (..), SignalType (Alert), Sink (..))
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -37,9 +40,11 @@ import Shikigami.Sink
     SinkResult (..),
     dispatch,
   )
+import Shikigami.Sink.KizashiClient (buildSignalReq)
 import Shikigami.Sink.Permission (SinkKind (SReiAction))
+import Shikigami.Sink.Recipient (resolveSinkRecipient, unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (unconfiguredMessage)
-import Shikigami.Sink.Wire (ReiActionReq (..))
+import Shikigami.Sink.Wire (CreateSignalReq (..), ReiActionReq (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -48,8 +53,119 @@ tests =
   testGroup
     "sink honesty"
     [ reiActionTests,
-      outcomeMappingTests
+      outcomeMappingTests,
+      recipientTests
     ]
+
+-- ── recipientFrom ───────────────────────────────────────────────────────────
+
+-- | @recipientFrom@ was parsed, type-checked, and never read: every signal went
+-- to the declared default or the configured fallback whatever the manifest said.
+--
+-- Only @Actor@ is resolvable, and only upstream of the client, where the trigger
+-- activity is in scope — so the cases below check both ends. Resolution turns an
+-- envelope into an actor id; the client prefers that over the declaration's
+-- default; and the two strategies that need an ownership directory nobody has
+-- resolve to nothing and say so out loud instead of inventing a recipient.
+recipientTests :: TestTree
+recipientTests =
+  testGroup
+    "recipientFrom is honored or reported, never ignored"
+    [ testCase "Actor resolves to the triggering activity's actor" $
+        resolveSinkRecipient (signalWith Actor (Just "ops")) (Just triggerActivity) @?= Just "person:mai",
+      testCase "Actor with no triggering activity resolves to nothing" $
+        resolveSinkRecipient (signalWith Actor (Just "ops")) Nothing @?= Nothing,
+      testCase "the strategies needing an ownership directory resolve to nothing" $
+        mapM_
+          (\strategy -> resolveSinkRecipient (signalWith strategy (Just "ops")) (Just triggerActivity) @?= Nothing)
+          [SubjectOwner, AreaOwner],
+      testCase "a non-signal sink has no recipient to resolve" $
+        resolveSinkRecipient sampleReiSink (Just triggerActivity) @?= Nothing,
+      testCase "a resolved recipient beats the declaration's default" $
+        recipientOf (Just "person:mai") (Just "ops") @?= Right "person:mai",
+      testCase "the declaration's default beats the deployment fallback" $
+        recipientOf Nothing (Just "ops") @?= Right "ops",
+      testCase "the deployment fallback is the last resort" $
+        recipientOf Nothing Nothing @?= Right "recipient_default",
+      -- Silence here would mean a signal quietly reaching whoever the fallback
+      -- names, which is the failure mode the whole plan is about.
+      testCase "an unresolvable strategy produces a warning naming itself" $
+        case unresolvableRecipientWarning (signalWith SubjectOwner (Just "ops")) Nothing of
+          Just warning -> do
+            assertBool ("the warning should name the strategy:\n" <> Text.unpack warning) ("SubjectOwner" `Text.isInfixOf` warning)
+            assertBool ("the warning should say what it fell back to:\n" <> Text.unpack warning) ("defaultRecipient" `Text.isInfixOf` warning)
+          Nothing -> assertFailure "an unresolvable strategy must warn",
+      testCase "a strategy that was honored produces no warning" $
+        unresolvableRecipientWarning (signalWith Actor Nothing) (Just "person:mai") @?= Nothing,
+      testCase "a non-signal sink produces no warning" $
+        unresolvableRecipientWarning sampleReiSink Nothing @?= Nothing,
+      testCase "the resolved recipient reaches the signal the client builds" do
+        recorded <- newIORef []
+        testWithApplication (pure (stubKizashiApp recorded)) \port -> do
+          let ctx =
+                (ctxWith (ReiConfig {baseUrl = Nothing}))
+                  { kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = "recipient_default"},
+                    recipientOverride = Just "person:mai"
+                  }
+          _ <- dispatch ctx (signalWith Actor (Just "ops")) sampleOutput
+          posted <- readIORef recorded
+          case posted of
+            [CreateSignalReq {recipient}] -> recipient @?= "person:mai"
+            other -> assertFailure ("expected exactly one signal, got " <> show (length other))
+    ]
+
+-- | 'recipientFor' as the client applies it, wrapped so a failure prints the
+-- built request rather than a bare string.
+recipientOf :: Maybe Text -> Maybe Text -> Either Text Text
+recipientOf resolved declared =
+  fmap (\CreateSignalReq {recipient} -> recipient) $
+    buildSignalReq
+      KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
+      resolved
+      (signalWith Actor declared)
+      (AgentIdentity "triage-note")
+      sampleOutput
+
+signalWith :: RecipientFrom -> Maybe Text -> Sink
+signalWith recipientFrom defaultRecipient =
+  KizashiSignal
+    { source = "shinzui/shikigami",
+      signalType = Alert,
+      priority = High,
+      importance = 7,
+      recipientFrom,
+      defaultRecipient,
+      intentTemplate = "escalate this",
+      extraContextTags = []
+    }
+
+-- | An activity whose actor is a person, so a resolved recipient is visibly not
+-- the agent's own name or the fallback.
+triggerActivity :: Activity.ActivityEnvelope
+triggerActivity =
+  Activity.ActivityEnvelope
+    { Activity.activityId = "act_1",
+      Activity.occurredAt = "2026-07-31T09:00:00Z",
+      Activity.source = "shinzui/rei",
+      Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person:mai", Activity.session = Nothing},
+      Activity.subject = Activity.Subject {Activity.subjectType = "intention", Activity.subjectId = "int_42"},
+      Activity.verb = "intention.stalled",
+      Activity.payload = sampleOutput,
+      Activity.contextRefs = [],
+      Activity.idempotencyKey = "act_1"
+    }
+
+stubKizashiApp :: IORef [CreateSignalReq] -> Application
+stubKizashiApp ref req respond =
+  case (requestMethod req, pathInfo req) of
+    ("POST", ["v1", "signals"]) -> do
+      body <- strictRequestBody req
+      case eitherDecode body of
+        Right signal -> do
+          modifyIORef' ref (signal :)
+          respond (responseLBS status200 [(hContentType, "application/json")] (encode (object ["signalId" .= ("sig_stub" :: Text), "lifecycleState" .= ("active" :: Text)])))
+        Left err -> respond (responseLBS status404 [] (LBS8.pack err))
+    _ -> respond (responseLBS status404 [] "not found")
 
 -- ── ReiAction ───────────────────────────────────────────────────────────────
 
@@ -154,6 +270,7 @@ ctxWith rei =
       danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
       rei,
       danwaTarget = Nothing,
+      recipientOverride = Nothing,
       occurredAt = Nothing
     }
   where

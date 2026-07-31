@@ -60,6 +60,7 @@ library
     Shikigami.Sink.KawaClient
     Shikigami.Sink.KizashiClient
     Shikigami.Sink.Permission
+    Shikigami.Sink.Recipient
     Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
     Shikigami.Sink.Wire

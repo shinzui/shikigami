@@ -35,6 +35,11 @@ data SinkContext = SinkContext
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
     danwaTarget :: !(Maybe DanwaTarget),
+    -- | The recipient a @KizashiSignal@'s @recipientFrom@ strategy resolved to,
+    -- decided upstream where the trigger activity is in scope and carried here
+    -- on the sink intent. 'Nothing' means either that the sink is not a signal
+    -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
+    recipientOverride :: !(Maybe Text),
     occurredAt :: !(Maybe UTCTime)
   }
 

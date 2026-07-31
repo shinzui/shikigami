@@ -29,6 +29,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByStream))
 import Shikigami.Agent.Workflow (SinkIntent (..))
+import Shikigami.Flow.SinkOutbox qualified as FlowOutbox
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
   ( DanwaTarget (..),
@@ -124,8 +125,44 @@ outboxTests =
         toJSON decoded @?= toJSON (SinkResult {kind = SKizashiSignal, outcome = Delivered "sig_1"}),
       testCase "the deprecated Stubbed outcome still decodes" do
         decoded <- decodeOrFail @SinkResult preUpgradeStubbed
-        toJSON decoded @?= toJSON (SinkResult {kind = SReiAction, outcome = Stubbed})
+        toJSON decoded @?= toJSON (SinkResult {kind = SReiAction, outcome = Stubbed}),
+      -- The decode above proves a pre-upgrade row parses; this proves what it
+      -- parses to. A row written before recipientFrom was honored must route
+      -- exactly as it did then — falling back to the declaration's own default —
+      -- rather than acquiring a recipient nobody chose.
+      testCase "a pre-upgrade row carries no resolved recipient" do
+        SinkIntent {resolvedRecipient} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
+        resolvedRecipient @?= Nothing,
+      testCase "an intent that resolved a recipient says so" do
+        let resolved = sampleSinkIntent {resolvedRecipient = Just "person:nadeem"}
+        decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
+        toJSON decoded @?= toJSON resolved,
+      -- The agent-run path and the flow path each carry their own copy of this
+      -- record, because the module that enqueues flow intents cannot import the
+      -- one that publishes them without a cycle. The publisher decodes both with
+      -- the agent-run copy, so a field on one and not the other is dropped in
+      -- transit with nothing to notice. Merging them belongs to
+      -- docs/plans/27-consolidate-the-sink-dispatch-and-delivery-machinery.md;
+      -- until then this is what makes the divergence a test failure.
+      testCase "the flow path's duplicate SinkIntent encodes identically" $
+        toJSON flowSinkIntent @?= toJSON sampleSinkIntent
     ]
+
+-- | The same intent, built through "Shikigami.Flow.SinkOutbox"'s copy of the
+-- record. Written out field by field on purpose: a conversion function would
+-- hide exactly the mismatch this is looking for.
+flowSinkIntent :: FlowOutbox.SinkIntent
+flowSinkIntent =
+  FlowOutbox.SinkIntent
+    { FlowOutbox.agent = "at-risk-watch",
+      FlowOutbox.runId = "run_1",
+      FlowOutbox.ordinal = 0,
+      FlowOutbox.occurredAt = Just sampleTime,
+      FlowOutbox.danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
+      FlowOutbox.resolvedRecipient = Nothing,
+      FlowOutbox.sink = sampleSink,
+      FlowOutbox.output = outputValue
+    }
 
 sampleSinkIntent :: SinkIntent
 sampleSinkIntent =
@@ -135,18 +172,25 @@ sampleSinkIntent =
       ordinal = 0,
       occurredAt = Just sampleTime,
       danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
-      sink =
-        KizashiSignal
-          { source = "shikigami",
-            signalType = Alert,
-            priority = High,
-            importance = 7,
-            recipientFrom = SubjectOwner,
-            defaultRecipient = Just "ops",
-            intentTemplate = "escalate",
-            extraContextTags = ["a"]
-          },
+      -- Absent, and therefore absent from the bytes below: this field was added
+      -- after those rows were written, and @omitNothingFields@ is what keeps an
+      -- intent that does not use it byte-identical to one that predates it.
+      resolvedRecipient = Nothing,
+      sink = sampleSink,
       output = outputValue
+    }
+
+sampleSink :: Sink
+sampleSink =
+  KizashiSignal
+    { source = "shikigami",
+      signalType = Alert,
+      priority = High,
+      importance = 7,
+      recipientFrom = SubjectOwner,
+      defaultRecipient = Just "ops",
+      intentTemplate = "escalate",
+      extraContextTags = ["a"]
     }
 
 outputValue :: Value

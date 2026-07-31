@@ -15,6 +15,7 @@ module Shikigami.Sink
 where
 
 import Data.Aeson (Value)
+import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Sink.Config
@@ -22,6 +23,7 @@ import Shikigami.Sink.Danwa (runDanwa)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
 import Shikigami.Sink.KizashiClient (buildSignalReq, postSignal)
 import Shikigami.Sink.Permission
+import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (runReiAction)
 import Shikigami.Sink.Types
 import Shikigami.Sink.Wire (SignalResponse (..))
@@ -53,8 +55,13 @@ runSink ctx sink output = case sink of
     env <- buildEnvelope ctx sink output
     r <- postEnvelope (kawa ctx) env
     pure (either (Failed . renderKawaError) Delivered r)
-  KizashiSignal {} ->
-    case buildSignalReq (kizashi ctx) sink (identity ctx) output of
+  KizashiSignal {} -> do
+    -- A strategy that was declared and could not be honored is said out loud;
+    -- the alternative is a signal quietly reaching whoever the fallback names.
+    traverse_
+      (hPutStrLn stderr . Text.unpack)
+      (unresolvableRecipientWarning sink (recipientOverride ctx))
+    case buildSignalReq (kizashi ctx) (recipientOverride ctx) sink (identity ctx) output of
       Left e -> pure (Failed e)
       Right req -> do
         r <- postSignal (kizashi ctx) req

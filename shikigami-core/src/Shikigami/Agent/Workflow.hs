@@ -79,6 +79,7 @@ import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
 import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
+import Shikigami.Sink.Recipient (resolveSinkRecipient)
 
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
@@ -98,17 +99,44 @@ data AgentRunHooks = AgentRunHooks
     afterStepBody :: !(StepName -> IO ())
   }
 
+-- | What the outbox carries: everything the publisher needs to dispatch one sink
+-- later, in a different process, after a restart.
+--
+-- __This record is duplicated__ in "Shikigami.Flow.SinkOutbox", which enqueues
+-- the flow path's intents, because that module cannot import this one without a
+-- cycle. 'publishSinkIntent' decodes both with /this/ type, so a field added to
+-- one and not the other is silently dropped on the way out.
+-- @Shikigami.WireCompatSpec@ asserts the two encoders agree; consolidating them
+-- is @docs\/plans\/27-consolidate-the-sink-dispatch-and-delivery-machinery.md@.
+--
+-- Encoded with @omitNothingFields@ so that an intent carrying no optional values
+-- is byte-identical to one written before those fields existed. That is what
+-- makes adding a field here a genuine non-event for rows already sitting in a
+-- database — see @Shikigami.WireCompatSpec@, which pins the pre-upgrade bytes.
 data SinkIntent = SinkIntent
   { agent :: !Text,
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
+    -- | What the sink's @recipientFrom@ strategy resolved to, decided here
+    -- because the trigger activity is only in scope on this side of the outbox.
+    -- Absent on every row written before this field existed, which decodes as
+    -- 'Nothing' and behaves exactly as it did then.
+    resolvedRecipient :: !(Maybe Text),
     sink :: !Sink,
     output :: !Value
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON SinkIntent where toJSON = genericToJSON sinkIntentOptions
+
+instance FromJSON SinkIntent where parseJSON = genericParseJSON sinkIntentOptions
+
+-- | Shared with "Shikigami.Flow.SinkOutbox"'s copy of the record; the two must
+-- stay identical.
+sinkIntentOptions :: Options
+sinkIntentOptions = defaultOptions {omitNothingFields = True}
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
@@ -324,7 +352,8 @@ runFlowBehavior deps sid decl job flowName =
         { FlowCapability.agent = agentName job,
           FlowCapability.runId = idText sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
-          FlowCapability.danwaTarget = Nothing
+          FlowCapability.danwaTarget = Nothing,
+          FlowCapability.activity = Just (activityFromJob job)
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope
@@ -437,6 +466,9 @@ enqueueSinkIntents job decl sid output = do
                     ordinal,
                     occurredAt = Just jobOccurredAt,
                     danwaTarget = Nothing,
+                    -- Resolved here, not in the publisher: the trigger activity
+                    -- is in scope on this side of the outbox and not the other.
+                    resolvedRecipient = resolveSinkRecipient sink (Just (activityFromJob job)),
                     sink,
                     output
                   }
@@ -453,14 +485,15 @@ enqueueSinkIntentStep ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
+  Maybe Text ->
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output = do
+enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now)
+  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -486,11 +519,12 @@ prepareSinkIntent ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
+  Maybe Text ->
   Sink ->
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now = do
+prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
@@ -510,6 +544,7 @@ prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' d
                 ordinal,
                 occurredAt = occurredAt',
                 danwaTarget = danwaTarget',
+                resolvedRecipient = resolvedRecipient',
                 sink,
                 output
               }
@@ -569,7 +604,7 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, sink, output} -> liftIO do
+        Right SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
           result <-
             dispatch
               SinkContext
@@ -581,6 +616,7 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
                   danwa = depsDanwa,
                   rei = depsRei,
                   danwaTarget = danwaTarget,
+                  recipientOverride = resolvedRecipient,
                   occurredAt = occurredAt
                 }
               sink

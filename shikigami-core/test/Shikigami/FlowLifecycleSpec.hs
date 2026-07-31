@@ -255,7 +255,16 @@ runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
       body
   where
     memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl flowAgent, sessionId = Nothing}
-    sinkEnv = SinkEnv {agent = flowAgent, runId = "flow-test-run", occurredAt = Just flowOccurredAt, danwaTarget = Nothing}
+    sinkEnv =
+      SinkEnv
+        { agent = flowAgent,
+          runId = "flow-test-run",
+          occurredAt = Just flowOccurredAt,
+          danwaTarget = Nothing,
+          -- The same activity the flow's own capability sees, so a signal
+          -- emitted from inside it resolves recipientFrom the way production does.
+          activity = Just sampleActivity
+        }
     body =
       runActivity sampleActivity
         . runMemory memoryEnv

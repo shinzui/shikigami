@@ -1,5 +1,12 @@
 module Shikigami.Flow.SinkOutbox
   ( enqueueSinkIntentStep,
+
+    -- * The duplicated wire type
+
+    -- | Exported only so @Shikigami.WireCompatSpec@ can assert it encodes
+    -- identically to "Shikigami.Agent.Workflow"'s copy. Nothing else should use
+    -- it; the publisher decodes with that copy, not this one.
+    SinkIntent (..),
   )
 where
 
@@ -9,7 +16,7 @@ import Data.Aeson.Types (parseEither)
 import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
-import Effectful (Eff, IOE, liftIO, (:>))
+import Effectful (Eff, IOE, (:>))
 import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), enqueueOutboxTx)
@@ -30,17 +37,34 @@ import Shikigami.Prelude
 import Shikigami.Sink (DanwaTarget, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))
 
+-- | The flow path's copy of "Shikigami.Agent.Workflow"'s @SinkIntent@.
+--
+-- It exists because this module cannot import that one without a cycle, and it
+-- must stay structurally identical to it: 'Shikigami.Agent.Workflow.publishSinkIntent'
+-- decodes rows enqueued here with /that/ record, so a field present on one and
+-- missing from the other is dropped in transit with nothing to notice.
+-- @Shikigami.WireCompatSpec@ asserts the two encoders produce the same bytes;
+-- merging them is
+-- @docs\/plans\/27-consolidate-the-sink-dispatch-and-delivery-machinery.md@.
 data SinkIntent = SinkIntent
   { agent :: !Text,
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
+    resolvedRecipient :: !(Maybe Text),
     sink :: !Sink,
     output :: !Value
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON SinkIntent where toJSON = genericToJSON sinkIntentOptions
+
+instance FromJSON SinkIntent where parseJSON = genericParseJSON sinkIntentOptions
+
+-- | Must match "Shikigami.Agent.Workflow"'s options exactly.
+sinkIntentOptions :: Options
+sinkIntentOptions = defaultOptions {omitNothingFields = True}
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
@@ -55,14 +79,15 @@ enqueueSinkIntentStep ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
+  Maybe Text ->
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output = do
+enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now)
+  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -88,11 +113,12 @@ prepareSinkIntent ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
+  Maybe Text ->
   Sink ->
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' sink output now = do
+prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
@@ -112,6 +138,7 @@ prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' d
                 ordinal,
                 occurredAt = occurredAt',
                 danwaTarget = danwaTarget',
+                resolvedRecipient = resolvedRecipient',
                 sink,
                 output
               }

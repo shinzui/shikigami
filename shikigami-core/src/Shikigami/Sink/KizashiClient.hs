@@ -15,12 +15,18 @@ import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
 import Shikigami.Sink.Http (postJSON)
 import Shikigami.Sink.Permission (AgentIdentity (..))
+import Shikigami.Sink.Recipient (recipientFor)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 
 -- | Build the C4 request from a @KizashiSignal@ sink + the behavior output. Fails for
 -- any other sink variant.
-buildSignalReq :: KizashiConfig -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
-buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} sink (AgentIdentity nm) output =
+--
+-- The @Maybe Text@ is what the declaration's @recipientFrom@ strategy resolved
+-- to, decided upstream where the trigger activity is available; see
+-- "Shikigami.Sink.Recipient" for why resolution does not happen here and for the
+-- precedence 'recipientFor' applies.
+buildSignalReq :: KizashiConfig -> Maybe Text -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
+buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient sink (AgentIdentity nm) output =
   case sink of
     KizashiSignal
       { source = src,
@@ -34,7 +40,7 @@ buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} sink (AgentI
         Right
           CreateSignalReq
             { actor = nm,
-              recipient = fromMaybe fallbackRecipient mrec,
+              recipient = recipientFor fallbackRecipient resolvedRecipient mrec,
               source = src,
               signalType = st,
               intent = tmpl,

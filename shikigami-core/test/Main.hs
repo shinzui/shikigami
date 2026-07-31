@@ -192,6 +192,7 @@ ctxFor ident kz kw =
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = Sink.ReiConfig {baseUrl = Nothing},
       danwaTarget = Nothing,
+      recipientOverride = Nothing,
       occurredAt = Nothing
     }
 
