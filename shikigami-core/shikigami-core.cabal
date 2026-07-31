@@ -56,8 +56,6 @@ library
     Shikigami.Sink.Danwa
     Shikigami.Sink.Http
     Shikigami.Sink.KawaClient
-    Shikigami.Sink.KawaStub
-    Shikigami.Sink.KawaStub.Republish
     Shikigami.Sink.KizashiClient
     Shikigami.Sink.Permission
     Shikigami.Sink.ReiAction
@@ -66,7 +64,6 @@ library
     Shikigami.Telemetry
     Shikigami.Trigger.Consumer
     Shikigami.Trigger.Enqueue
-    Shikigami.Trigger.Publish
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Scheduler
     Shikigami.Trigger.Stream
@@ -116,8 +113,6 @@ library
     , time                            >=1.12
     , uuid
     , vector                          >=0.13
-    , wai
-    , warp
     , yaml                            >=0.11
 
 test-suite shikigami-core-test
@@ -127,6 +122,7 @@ test-suite shikigami-core-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.DelegateContextSpec
+    Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
     Shikigami.SchedulerSpec
     Shikigami.SpikeWorkflowSpec

@@ -1,0 +1,111 @@
+{
+  "components": {
+    "schemas": {
+      "ProbeStatus": {
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "failingSince": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "check"
+        ],
+        "type": "object"
+      },
+      "UTCTime": {
+        "example": "2016-07-22T00:00:00Z",
+        "format": "yyyy-mm-ddThh:MM:ssZ",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "description": "The public HTTP API of the Shikigami declared-agent runtime.",
+    "title": "Shikigami",
+    "version": "0.1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "getHealthLive",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe passed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe failed"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getHealthReady",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe passed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe failed"
+          }
+        }
+      }
+    }
+  }
+}

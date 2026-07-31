@@ -15,6 +15,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
+import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
@@ -29,7 +30,6 @@ import Shikigami.Sink
     SinkResult (..),
   )
 import Shikigami.Sink qualified as Sink
-import Shikigami.Sink.KawaStub (stubKawaApplication)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
@@ -234,7 +234,7 @@ kawaTests =
     "KawaDigest"
     [ testCase "dispatch builds + posts envelope; idempotent on (source, source_event_id)" $ do
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
-        testWithApplication (pure (stubKawaApplication store Nothing)) $ \port -> do
+        testWithApplication (pure (kawaDoorwayApplication store)) $ \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
               dummyKz = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "r"}
               ctx = ctxFor (AgentIdentity "heartbeat") dummyKz kw

@@ -46,7 +46,23 @@ This section must always reflect the actual current state of the work.
       `docs/architecture/packages.md` written; `shikigami-api-test` added, whose
       `package boundary` case is the import proof. `cabal build all` and `cabal test all`
       pass (49 core tests, 8 api tests).
-- [ ] M2: create `shikigami-server`, move WAI/Warp and public HTTP composition into it, and add server tests.
+- [x] (2026-07-31T05:05:00Z) M2: create `shikigami-server`, move WAI/Warp and public HTTP composition into it, and add server tests.
+      Done: `shikigami-server` created with `Shikigami.Server.{App,Boot,Config,Seam}` and the
+      `Shikigami.Health.Handler` concept handler; `Shikigami.Sink.KawaStub`,
+      `Shikigami.Sink.KawaStub.Republish`, and `Shikigami.Trigger.Publish` moved out of core
+      into it, so core's library no longer depends on `wai` or `warp`; core's test suite
+      gained its own `Shikigami.Fixture.KawaStub` doorway. `shikigami-api` gained the
+      umbrella `Shikigami.Api` `NamedRoutes` record, `Shikigami.Health.Api` (the owned name
+      for `servant-health`'s `MultiVerb` 200/503 probe routes), and `Shikigami.Api.OpenApi`;
+      the `shikigami-openapi` executable generates `docs/api/openapi.json`, which is checked
+      in. Twelve server tests pass, including `servant-health`'s probe conformance kit, the
+      documented-equals-served path check, the 404 and 405 problem renderings, and the proof
+      that a passing probe is *not* problem details; fifteen api tests pass, including
+      artifact freshness, typed-alternative coverage, operation-id determinism, and schema
+      validation of encoded `ProbeStatus` and `ProblemDetails` values.
+      Remaining, by design: administrative and test-stub commands still live in
+      `shikigami-cli`, which now depends on `shikigami-server` for the moved modules; M4
+      redistributes them and deletes that package.
 - [ ] M3: create `shikigami-workers`, move queue, subscription, scheduler, outbox, timer, and resume composition into it, and add worker tests.
 - [ ] M4: create `shikigami-client`, derive the typed client from `shikigami-api`, redistribute existing CLI executables without adding a seventh package, and remove `shikigami-cli`.
 - [ ] M5: enforce package dependency and test-layout invariants; `cabal build all` and `cabal test all` pass.
@@ -165,6 +181,18 @@ Record every decision made while working on the plan.
   internal or security-sensitive detail. Operators get specifics from structured logging
   (`docs/plans/28-structured-logging-metrics-and-trace-propagation.md`); callers get a
   stable `code` to branch on.
+  Date: 2026-07-31
+
+- Decision: Core's test suite keeps its own minimal kawa doorway fixture
+  (`shikigami-core/test/Shikigami/Fixture/KawaStub.hs`) rather than importing the
+  production `stub-kawa` server.
+  Rationale: the production stub is a listener, so it moved to `shikigami-server`, and core
+  may not depend on that package. The kawa sink client still needs a downstream to POST
+  against, and the plan explicitly allows test-only downstream stubs to live with their
+  owning fixture. The fixture is the doorway contract only — accept
+  `POST /v1/sources/{source}/events`, deduplicate on `(source, source_event_id)` — with no
+  Kafka re-publishing, and mints counter ids so a failing assertion prints `act_1` rather
+  than a random TypeID.
   Date: 2026-07-31
 
 - Decision: The problem catalog has one `invalid_url` code rather than separate

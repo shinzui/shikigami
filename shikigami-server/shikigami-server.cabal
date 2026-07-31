@@ -1,0 +1,96 @@
+cabal-version: 3.0
+name:          shikigami-server
+version:       0.1.0.0
+synopsis:      Shikigami HTTP server and administrative commands
+build-type:    Simple
+
+common common
+  default-language:   GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    OverloadedLabels
+    OverloadedStrings
+
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+library
+  import:          common
+  hs-source-dirs:  src
+  exposed-modules:
+    Shikigami.Health.Handler
+    Shikigami.Server.App
+    Shikigami.Server.Boot
+    Shikigami.Server.Config
+    Shikigami.Server.Seam
+    Shikigami.Sink.KawaStub
+    Shikigami.Sink.KawaStub.Republish
+    Shikigami.Trigger.Publish
+
+  build-depends:
+    , aeson             >=2.2
+    , base              >=4.21 && <5
+    , bytestring
+    , case-insensitive
+    , containers        >=0.6
+    , effectful
+    , http-types
+    , hw-kafka-client
+    , kafka-effectful
+    , mmzk-typeid
+    , mtl
+    , servant           >=0.20 && <0.21
+    , servant-health    >=0.1  && <0.2
+    , servant-server    >=0.20 && <0.21
+    , shikigami-api
+    , shikigami-core
+    , text              >=2.1
+    , wai
+    , warp
+
+executable shikigami-server
+  import:         common
+  main-is:        Main.hs
+  hs-source-dirs: app/server
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base
+    , shikigami-server
+
+test-suite shikigami-server-test
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test
+  other-modules:
+    Shikigami.Server.DispatchSpec
+    Shikigami.Server.ProblemSpec
+
+  -- The probe conformance kit and the WAI round-trip tests run a real Warp
+  -- server; Warp's timer manager requires the threaded runtime.
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , http-client
+    , http-types
+    , lens
+    , openapi-hs
+    , servant
+    , servant-health
+    , servant-health:testkit
+    , servant-server
+    , shikigami-api
+    , shikigami-core
+    , shikigami-server
+    , tasty
+    , tasty-hunit
+    , text
+    , time
+    , wai
+    , warp

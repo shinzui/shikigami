@@ -51,6 +51,7 @@ library
     , optparse-applicative  >=0.18
     , shikigami-api
     , shikigami-core
+    , shikigami-server
     , text                  >=2.1
     , time                  >=1.12
 

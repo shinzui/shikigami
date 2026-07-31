@@ -3,6 +3,7 @@ packages:
   shikigami-core
   shikigami-cli
   shikigami-migrations
+  shikigami-server
 
 with-compiler: ghc-9.12.4
 
