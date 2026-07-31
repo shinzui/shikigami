@@ -14,11 +14,11 @@ where
 
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context (Context (..), _Context)
+import Baikai.Error (BaikaiError (..), isRetryable)
 import Baikai.Message (user)
 import Baikai.Model (Model)
-import Baikai.Options (Options, _Options)
+import Baikai.Options (Options)
 import Baikai.Provider.Registry (completeRequest)
-import Baikai.Error (BaikaiError (..), isRetryable)
 import Baikai.Response (Response, flattenAssistantBlocks, responseError)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson.Text (encodeToLazyText)
@@ -87,17 +87,28 @@ parseManifest t =
 -- | Run the skill against the given model: system prompt = the skill description,
 -- first user message = the instruction body plus the trigger payload rendered as JSON.
 -- Returns the assistant reply as @{"reply": <text>}@.
-runSkill :: Model -> SkillDir -> Value -> IO (Either RunError Value)
-runSkill model dir payload =
-  runSkillWith model dir payload completeRequest
+--
+-- The 'Options' are the caller's, not this module's. They carry the credential the
+-- process resolved (see 'Shikigami.Behavior.Run.BehaviorEnv'), so a run's key
+-- source is whatever configuration said and never what a provider handler found
+-- in the environment.
+runSkill :: Model -> Options -> SkillDir -> Value -> IO (Either RunError Value)
+runSkill model options dir payload =
+  runSkillWith model options dir payload completeRequest
 
+-- | 'runSkill' with the completion function supplied.
+--
+-- The seam exists for tracing, and it is also what lets a test observe exactly
+-- what would have been sent — including which credential source the options
+-- carry — without a key, a network, or a registered provider.
 runSkillWith ::
   Model ->
+  Options ->
   SkillDir ->
   Value ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
-runSkillWith model dir payload complete = do
+runSkillWith model options dir payload complete = do
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
@@ -108,7 +119,7 @@ runSkillWith model dir payload complete = do
                 messages = V.singleton (user (body manifest <> "\n\nTrigger payload: " <> renderPayload payload)),
                 tools = V.empty
               }
-      resp <- complete model ctx _Options
+      resp <- complete model ctx options
       -- baikai 0.4 reports provider failure in band: an error-shaped response
       -- carries no assistant text, so reading the reply alone would turn an
       -- outage into a successful empty answer.

@@ -13,6 +13,7 @@ module Shikigami.Behavior.Run
 where
 
 import Baikai.Model (Model)
+import Baikai.Options (Options, emptyOptions)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
 import Data.Aeson (Value)
@@ -28,11 +29,21 @@ import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Program.Registry (lookupTask)
 
--- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once) and
--- the model the skill arm dispatches with. Built once at worker startup.
+-- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once),
+-- the model the skill arm dispatches with, and the per-call options that model is
+-- dispatched under. Built once at worker startup.
+--
+-- 'options' is where the resolved API credential lives, in baikai's
+-- 'Baikai.Auth.ApiKeyLiteral' form. It is carried rather than looked up so that
+-- the key source is decided once, by "Shikigami.App.Config", instead of by
+-- whichever provider handler happens to run — baikai's own handlers will fall
+-- back to reading @ANTHROPIC_API_KEY@ from the environment when the field is
+-- empty, and a second credential path outside Settei is exactly what this avoids.
+-- The value is never logged, encoded, or journaled.
 data BehaviorEnv = BehaviorEnv
   { runtime :: !Runtime,
     model :: !Model,
+    options :: !Options,
     traceSink :: !(Maybe TraceSink)
   }
 
@@ -53,7 +64,7 @@ newBehaviorEnvWithTraceSink :: Maybe TraceSink -> IO BehaviorEnv
 newBehaviorEnvWithTraceSink traceSink = do
   rt <- newRuntime
   registerStubProvider
-  pure BehaviorEnv {runtime = rt, model = stubModel, traceSink}
+  pure BehaviorEnv {runtime = rt, model = stubModel, options = emptyOptions, traceSink}
 
 -- | Dispatch on the behavior union. The input @Value@ is the trigger payload; the
 -- output @Value@ is the behavior's result.
@@ -65,7 +76,7 @@ runBehavior env decl payload =
         Nothing -> pure (Left (UnknownTask t))
         Just tk -> runProgramTask (runtime env) tk payload
     Skill {path = p} ->
-      runSkillWithTrace (traceSink env) (model env) (SkillDir (Text.unpack p)) payload
+      runSkillWithTrace (traceSink env) (model env) (options env) (SkillDir (Text.unpack p)) payload
     Flow {} ->
       pure (Left (UnsupportedBehavior "Flow"))
     Deterministic {} ->
@@ -88,8 +99,8 @@ envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
     ErrorS -> Left (ProgramFailed msg)
     _ -> Right (maybe Aeson.Null id v)
 
-runSkillWithTrace :: Maybe TraceSink -> Model -> SkillDir -> Value -> IO (Either RunError Value)
-runSkillWithTrace Nothing model dir payload =
-  runSkill model dir payload
-runSkillWithTrace (Just sink) model dir payload =
-  runSkillWith model dir payload (BaikaiTrace.withTrace sink)
+runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> SkillDir -> Value -> IO (Either RunError Value)
+runSkillWithTrace Nothing model options dir payload =
+  runSkill model options dir payload
+runSkillWithTrace (Just sink) model options dir payload =
+  runSkillWith model options dir payload (BaikaiTrace.withTrace sink)

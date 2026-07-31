@@ -1,4 +1,20 @@
--- | The skill arm's handling of provider failure.
+-- | What the skill arm sends, and what it does with what comes back.
+--
+-- Two independent things are pinned here, both of which fail silently rather
+-- than loudly if they break.
+--
+-- == Which credential reaches the model call
+--
+-- The skill arm used to dispatch with a hardcoded empty options record, so the
+-- only way a request could authenticate was baikai's own fallback: the Claude
+-- handler reading @ANTHROPIC_API_KEY@ out of the process environment. That is a
+-- second credential path outside Settei's precedence, provenance, and redaction,
+-- and a deployment using it would authenticate as something @--explain-config@
+-- never mentioned. The cases below resolve a real configuration through Settei,
+-- build the environment a process would build, and read back the options the
+-- completion function actually received.
+--
+-- == Provider failure
 --
 -- Baikai 0.4 reports a failed call /in band/: the provider returns an
 -- error-shaped 'Response' with @stopReason = ErrorReason@, no assistant content,
@@ -19,27 +35,156 @@
 -- argument, so the responses below are constructed directly.
 module Shikigami.BehaviorProviderSpec (tests) where
 
+import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
+import Baikai.Context (Context)
 import Baikai.Error (BaikaiError, authError, rateLimited)
 import Baikai.Message (AssistantPayload (..))
-import Baikai.Model (Model, emptyModel)
+import Baikai.Model (Model, emptyModel, modelId)
+import Baikai.Options (Options (..), emptyOptions)
 import Baikai.Response (Response (..), emptyResponse, errorResponse)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as V
+import Settei.Env (envSnapshot, environmentSource)
+import Settei.Optparse (CliOverride, DiagnosticMode (NoDiagnostic), cliOverride)
+import Shikigami.App.Config
+  ( ProviderSelection (..),
+    Role (RunBehaviorRole),
+    anthropicApiKeyKey,
+    behaviorModelKey,
+    behaviorProvider,
+    behaviorProviderKey,
+    environmentBindings,
+  )
+import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
 import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Provider (describeProviderSelection, newBehaviorEnvFor)
+import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tests :: TestTree
-tests =
+tests = testGroup "behavior provider" [credentialTests, failureTests]
+
+-- ── Which credential reaches the model call ─────────────────────────────────
+
+-- | A token no default, description, key, or model id contains, so finding it
+-- anywhere it does not belong is unambiguous.
+sentinelKey :: Text
+sentinelKey = "sk-ant-s3cr3t-planted-token-42"
+
+credentialTests :: TestTree
+credentialTests =
   testGroup
-    "behavior provider failure"
+    "the credential configuration resolved is the one the call carries"
+    [ testCase "the Anthropic branch dispatches with the resolved key, not an environment lookup" do
+        selection <- selectionFor [cliOverride behaviorProviderKey "anthropic", cliOverride anthropicApiKeyKey sentinelKey]
+        env <- newBehaviorEnvFor selection Nothing
+        envModelId env @?= "claude-sonnet-4-6"
+        sent <- capturedOptions env
+        -- ApiKeyLiteral, not ApiKeyEnv: baikai must not be left to find a
+        -- credential of its own below Settei's composition root.
+        apiKey sent @?= Just (ApiKeyLiteral sentinelKey),
+      testCase "the chosen model travels with the options" do
+        selection <-
+          selectionFor
+            [ cliOverride behaviorProviderKey "anthropic",
+              cliOverride behaviorModelKey "claude-haiku-4-5",
+              cliOverride anthropicApiKeyKey sentinelKey
+            ]
+        env <- newBehaviorEnvFor selection Nothing
+        envModelId env @?= "claude-haiku-4-5",
+      testCase "the stub branch carries no credential at all" do
+        selection <- selectionFor []
+        case selection of
+          UseStub -> pure ()
+          UseAnthropic {} -> assertFailure "an unconfigured process must select the stub"
+        env <- newBehaviorEnvFor selection Nothing
+        sent <- capturedOptions env
+        apiKey sent @?= Nothing,
+      -- The description is what the process prints at startup, so it is the one
+      -- rendering of a selection that is guaranteed to reach a log.
+      testCase "the announced provider names the model and never the key" do
+        selection <- selectionFor [cliOverride behaviorProviderKey "anthropic", cliOverride anthropicApiKeyKey sentinelKey]
+        let described = describeProviderSelection selection
+        assertBool
+          ("the description should name the model:\n" <> Text.unpack described)
+          ("claude-sonnet-4-6" `Text.isInfixOf` described)
+        assertAbsent "the provider description" described
+        env <- newBehaviorEnvFor selection Nothing
+        sent <- capturedOptions env
+        assertAbsent "the options' Show rendering" (Text.pack (show sent))
+        assertAbsent "the options' JSON rendering" (Text.pack (show (Aeson.encode sent)))
+    ]
+
+-- | Resolve a real configuration through Settei and take the provider it chose.
+--
+-- Deliberately not a hand-built 'ProviderSelection': the thing worth proving is
+-- that a value an operator can actually supply arrives at the model call, and a
+-- constructor applied by hand would prove nothing about the declaration.
+selectionFor :: [CliOverride] -> IO ProviderSelection
+selectionFor overrides =
+  case resolved run of
+    Just config -> pure (behaviorProvider config)
+    Nothing ->
+      assertFailure
+        ("expected a resolved configuration, got exit " <> show (exitCode run) <> ":\n" <> Text.unpack (standardError run))
+  where
+    run =
+      appConfigRun
+        RunBehaviorRole
+        ConfigOptions {configPaths = [], namedSources = [], overrides, diagnosticMode = NoDiagnostic}
+        (Right [])
+        (environmentSource environmentBindings (envSnapshot []))
+
+-- | Run a skill through the environment and return the options the completion
+-- function was handed.
+capturedOptions :: BehaviorEnv -> IO Options
+capturedOptions BehaviorEnv {model = envModel, options = envOptions} = do
+  seen <- newIORef emptyOptions
+  result <-
+    runSkillWithFixture
+      envModel
+      envOptions
+      (\_model _ctx opts -> writeIORef seen opts >> pure (textResponse "captured"))
+  case result of
+    Right _ -> readIORef seen
+    Left err -> assertFailure ("the capturing run should succeed, got " <> show err)
+
+-- | The model an environment dispatches with. A plain selector would be
+-- ambiguous: 'Baikai.Response.Response' has a @model@ field too.
+envModelId :: BehaviorEnv -> Text
+envModelId BehaviorEnv {model = envModel} = modelId envModel
+
+runSkillWithFixture ::
+  Model ->
+  Options ->
+  (Model -> Context -> Options -> IO Response) ->
+  IO (Either RunError Value)
+runSkillWithFixture model options complete = do
+  root <- repositoryRoot
+  runSkillWith model options (SkillDir (root </> "agents" </> "skills" </> "triage-note")) Aeson.Null complete
+
+assertAbsent :: String -> Text -> IO ()
+assertAbsent label rendered =
+  assertBool
+    (label <> " leaked the planted credential:\n" <> Text.unpack rendered)
+    (not ("s3cr3t-planted-token-42" `Text.isInfixOf` rendered))
+
+-- ── Provider failure ────────────────────────────────────────────────────────
+
+failureTests :: TestTree
+failureTests =
+  testGroup
+    "an in-band provider failure is a failure"
     [ testCase "a successful reply is still a reply" do
         result <- runWith (const (pure (textResponse "triaged: billing")))
         case result of
@@ -62,18 +207,12 @@ tests =
     ]
 
 -- | Run the triage-note skill with an injected completion function.
---
--- Cabal runs a test suite from its package directory, so the skill is located
--- relative to the repository root rather than the working directory.
 runWith :: (Model -> IO Response) -> IO (Either RunError Value)
-runWith complete = do
-  root <- repositoryRoot
-  runSkillWith
-    emptyModel
-    (SkillDir (root </> "agents" </> "skills" </> "triage-note"))
-    Aeson.Null
-    (\model _ctx _opts -> complete model)
+runWith complete =
+  runSkillWithFixture emptyModel emptyOptions (\model _ctx _opts -> complete model)
 
+-- | Cabal runs a test suite from its package directory, so the skill fixture is
+-- located relative to the repository root rather than the working directory.
 repositoryRoot :: IO FilePath
 repositoryRoot = go [".", ".."]
   where

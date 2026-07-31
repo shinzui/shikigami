@@ -36,13 +36,15 @@ module Shikigami.Behavior.Provider
   )
 where
 
+import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Model (modelId)
+import Baikai.Options (Options (..), emptyOptions)
 import Baikai.Provider.Claude.Api qualified as Claude
 import Baikai.Trace (TraceSink)
 import Data.Text (Text)
 import Data.Text.IO qualified as TextIO
 import Handan.Runtime (newRuntime)
-import Shikigami.App.Config (ProviderSelection (..), lookupAnthropicModel)
+import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import System.IO qualified as IO
@@ -69,10 +71,27 @@ newBehaviorEnvFor selection traceSink = do
   registerStubProvider
   case selection of
     UseStub ->
-      pure BehaviorEnv {runtime, model = stubModel, traceSink}
-    UseAnthropic model _credential -> do
+      pure BehaviorEnv {runtime, model = stubModel, options = emptyOptions, traceSink}
+    UseAnthropic model credential -> do
       Claude.register
-      pure BehaviorEnv {runtime, model, traceSink}
+      pure BehaviorEnv {runtime, model, options = credentialOptions credential, traceSink}
+
+-- | Lower a resolved credential into the per-call options baikai dispatches with.
+--
+-- This is the single point where the Anthropic key exists as plaintext, and it
+-- exists there because the transport needs a string. The alternative baikai
+-- offers — leaving @apiKey@ empty and letting the Claude handler read
+-- @ANTHROPIC_API_KEY@ itself — is deliberately not taken: it would put a second
+-- credential path outside Settei's precedence, provenance, and redaction, so a
+-- deployment could end up authenticating as something @--explain-config@ never
+-- mentioned.
+--
+-- The result is process-local. 'Baikai.Options.Options' does have a 'Show' and a
+-- 'ToJSON', but both render an 'ApiKeyLiteral' as a redaction marker rather than
+-- its content, so an accidental trace of this value cannot spill the key.
+credentialOptions :: SecretText -> Options
+credentialOptions credential =
+  emptyOptions {apiKey = Just (ApiKeyLiteral (revealSecretText credential))}
 
 -- | The one line 'newBehaviorEnvFor' writes to standard error, in the same
 -- @[shikigami.\<component\>]@ shape as the worker's own startup lines.
