@@ -42,7 +42,8 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (RecordTurnData (..), SessionCommand (..), StartSessionData (..))
 import Kioku.Session.EventStream (sessionEventStream, sessionStream)
 import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..), sessionInlineProjection)
-import Kiroku.Store.Effect (Store, runStorePool)
+import Kiroku.Store.Effect (Store, runStoreResource)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -189,11 +190,12 @@ runConversationWorkflow ::
   AddressedMessage ->
   IO (Either StoreError (WorkflowOutcome ConversationTurnResult))
 runConversationWorkflow env mStart msg =
-  let AppEnv {store, tracer} = appEnv env
+  let AppEnv {connectionSettings, tracer} = appEnv env
    in runEff
         . runTracing tracer
         . runErrorNoCallStack
-        . runStorePool store
+        . withKirokuStore connectionSettings
+        . runStoreResource
         $ runWorkflow
           conversationWorkflowName
           (conversationWorkflowId msg)
@@ -326,7 +328,7 @@ recordTurnOnce env sid turnId desiredIndex role content turns =
       pure RecordedTurn {turnId, turnIndex}
 
 recordAssistantTurnAndEnqueueReply ::
-  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  (IOE :> es, Store :> es, KirokuStoreResource :> es, Error StoreError :> es) =>
   AgentDecl ->
   SessionId ->
   AddressedMessage ->

@@ -39,7 +39,8 @@ import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable)
 import Kioku.App (AppEffects, AppEnv (..))
 import Kioku.Id (SessionId)
-import Kiroku.Store.Effect (Store, runStorePool)
+import Kiroku.Store.Effect (Store, runStoreResource)
+import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
@@ -141,12 +142,16 @@ approvalTimeoutFireAction TimerRow {payload = timerPayload} =
               (WorkflowId ownerWorkflowId)
               (StepRecorded (awakeableStepPrefix <> awakeableIdText aid) eventPayload now)
 
+-- | Kioku 0.2 replaced 'AppEnv''s pre-built store with the connection settings it
+-- is built from, so the store is acquired per run rather than held open. This is
+-- 'Kioku.App.runAppIO' spelled out locally; keep it in step with that function.
 runApp :: AppEnv -> Eff AppEffects a -> IO (Either StoreError a)
 runApp env =
   runEff
     . runTracing (tracer env)
     . runErrorNoCallStack
-    . runStorePool (store env)
+    . withKirokuStore (connectionSettings env)
+    . runStoreResource
 
 notifyStepName :: StepName -> StepName
 notifyStepName (StepName name) = StepName (name <> ":notify")
@@ -169,7 +174,10 @@ armApprovalDeadline stepName aid deadline = do
             fireAt = addUTCTime deadline now,
             payload = Aeson.toJSON (approvalTimeoutPayload aid)
           }
-  runTransaction (scheduleTimerOnceTx request)
+  -- Keiro 0.4 reports whether this arm won the first-arm-wins insert. Arming an
+  -- approval deadline is idempotent by construction (the timer id is derived
+  -- from the workflow, generation, and step), so either answer is correct here.
+  void (runTransaction (scheduleTimerOnceTx request))
 
 approvalTimeoutTimerId :: WorkflowName -> WorkflowId -> Int -> StepName -> TimerId
 approvalTimeoutTimerId (WorkflowName workflowName) (WorkflowId workflowId) generation (StepName stepName) =

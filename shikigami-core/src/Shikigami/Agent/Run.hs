@@ -191,8 +191,11 @@ renderMemoryRecord (MemoryRecord {memoryId = mid, memoryType = mt, confidence = 
 recallPriorLearnings :: AppEnv -> MemoryScope -> Text -> IO [MemoryRecord]
 recallPriorLearnings appEnv scope' query = do
   cfg <- Embedding.resolveEmbeddingConfig
+  -- Kioku 0.2 probes the vector path against the dimension count the process is
+  -- configured with, so it can report a configured/declared mismatch instead of
+  -- silently failing every embedding write on the ::vector cast.
   capability <-
-    runAppIO appEnv RecallCapability.detectVectorCapability <&> \case
+    runAppIO appEnv (RecallCapability.detectVectorCapability (Embedding.dimensions cfg)) <&> \case
       Right cap -> cap
       Left _ -> RecallCapability.VectorExtensionUnavailable
   recalled <-

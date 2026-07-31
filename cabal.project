@@ -8,158 +8,74 @@ packages:
 
 with-compiler: ghc-9.12.4
 
--- Co-developed shinzui dependencies pinned by GitHub commit (no local-path /
--- corpus checkouts). dhall comes from Hackage (see build-depends bounds).
+-- The co-developed dependency cohort is selected from published Hackage
+-- releases. docs/dependency-cohort.md holds the release matrix, the upstream
+-- tag commit behind each release, and the compatibility evidence. Only
+-- packages with no Hackage release — or forks we still carry — are pinned by
+-- commit below.
 
--- kioku — reusable event-sourced memory/session library. Pinned to the
--- delegation-lineage commit required by ExecPlan 9.
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kioku.git
-  tag: 8bcfc282484dd59b0a0b25530cca4f3ad9034ce1
-  subdir: kioku-api kioku-core kioku-cli kioku-migrations
+constraints:
+  -- durable execution, event model, and agent memory
+    keiki                   ==0.4.0.0
+  , keiki-codec-json        ==0.4.0.0
+  , keiro                   ==0.4.0.1
+  , keiro-core              ==0.4.0.1
+  , keiro-migrations        ==0.4.0.1
+  , keiro-pgmq              ==0.4.0.1
+  , kioku-api               ==0.2.0.0
+  , kioku-core              ==0.2.0.0
+  , kioku-migrations        ==0.2.0.0
 
--- handan — typed-program runtime (used by EP-2's behavior runner).
+  -- typed model programs and providers
+  , shikumi                 ==0.3.0.1
+  , baikai                  ==0.4.1.0
+
+  -- worker runtime, queues, and the event store
+  , shibuya-core            ==0.8.0.1
+  , shibuya-pgmq-adapter    ==0.12.0.0
+  , shibuya-kiroku-adapter  ==0.4.0.0
+  , pgmq-core               ==0.4.0.1
+  , pgmq-hasql              ==0.4.0.1
+  , pgmq-effectful          ==0.4.0.1
+  , pgmq-migration          ==0.4.0.1
+  , kiroku-store            ==0.3.1.0
+  , kiroku-store-migrations ==0.3.0.0
+  , pg-migrate              ==1.1.0.0
+
+  -- process configuration (plan 37) and tracing (plan 28)
+  , settei                  ==0.2.0.0
+  , hs-opentelemetry-api    ==1.0.0.0
+  , hs-opentelemetry-sdk    ==1.0.0.0
+
+-- ── Dependencies with no Hackage release ───────────────────────────────────
+
+-- handan — typed-program runtime used by the behavior runner. Bumped to the
+-- commit that compiles against shikumi 0.3 / shikumi-trace 0.2.
 source-repository-package
   type: git
   location: https://github.com/shinzui/handan.git
-  tag: d25fac3f758d9f0143fc00f27437d4e477801321
+  tag: 8e98b0a955f908f70657c04f384b6286e4967422
   subdir: handan-core
 
--- shikumi — typed-program compiler; a kioku-core dependency. Tagged shikumi-0.1.0.1.
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/shikumi.git
-  tag: 36496deef05060ef9e49486225ab475541343f05
-  subdir: shikumi shikumi-trace
-
--- kafka-effectful — activity.v1 stream consumer (used by EP-4).
+-- kafka-effectful — activity.v1 stream consumer.
 source-repository-package
   type: git
   location: https://github.com/shinzui/kafka-effectful.git
   tag: f34a43cd476f7234848def9c0f08c54a1b67028e
 
--- danwa — conversation substrate client used by ExecPlan 8's CLI spike and,
--- later, the real DanwaConversation sink. Pinned to current origin/master.
+-- danwa — conversation substrate client behind the DanwaConversation sink.
 source-repository-package
   type: git
   location: https://github.com/shinzui/danwa.git
   tag: 301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9
   subdir: danwa-core danwa-api danwa-client
 
--- ↓↓↓ The kikan pin block, copied byte-identically from
---    https://github.com/shinzui/kioku.git:cabal.project (its source-repository-package
---    stanzas + footer). This is the coherent kikan set kioku was built against,
---    including baikai (a kioku-core dependency) at kioku's pinned commit. See IP-8.
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiki.git
-  tag: bc987f46393b604c335f034385b4c3c1ad118074
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiki.git
-  tag: bc987f46393b604c335f034385b4c3c1ad118074
-  subdir: keiki-codec-json
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiro.git
-  tag: f1d67a01b7457387a4861e7268d1c521ef82287d
-  subdir: keiro
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiro.git
-  tag: f1d67a01b7457387a4861e7268d1c521ef82287d
-  subdir: keiro-core
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiro.git
-  tag: f1d67a01b7457387a4861e7268d1c521ef82287d
-  subdir: keiro-migrations
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/keiro.git
-  tag: f1d67a01b7457387a4861e7268d1c521ef82287d
-  subdir: keiro-pgmq
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kiroku.git
-  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
-  subdir: kiroku-store
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kiroku.git
-  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
-  subdir: kiroku-store-migrations
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kiroku.git
-  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
-  subdir: kiroku-test-support
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kiroku.git
-  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
-  subdir: shibuya-kiroku-adapter
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/shibuya.git
-  tag: 3f276ee190e563fddb0bc81e01d62a96a1b31715
-  subdir: shibuya-core
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/pgmq-hs.git
-  tag: 973c1076f469448818de5d2044a483296be2c02e
-  subdir: pgmq-core pgmq-hasql pgmq-effectful pgmq-migration
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/baikai
-  tag: a219ace81af9fd8202e1805a16e9ed21356ad214
-  subdir: baikai baikai-claude baikai-effectful baikai-trace-otel
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/shibuya-pgmq-adapter.git
-  tag: 71a7b82223449d84c395b64e480c9cfe4ff274f1
-  subdir: shibuya-pgmq-adapter
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/hasql-migration
-  tag: 4aaff6c0919d1fe8e1c248c3ce4ce05775c59c8c
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/ephemeral-pg.git
-  tag: 304c160f25570ea5e225baf5024778c93f434b56
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/codd-project.git
-  tag: d176b3088f23ef2218c7a1f31835e8ee0c0601aa
-  subdir: codd
-
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/hasql-project.git
-  tag: 2bc7ace5db942d87962990bba0b2323ec4c67770
-  subdir: hasql-notifications
-
-package codd
-  tests: False
-  benchmarks: False
+-- codd, its hasql-migration fork, and the hasql-notifications fork are gone.
+-- kioku-migrations 0.2 publishes a pg-migrate MigrationComponent rather than a
+-- codd migration list, so there is nothing left in this repository that can
+-- consume codd; see docs/dependency-cohort.md. Importing an existing codd
+-- ledger into the native one is plan 38's job and uses the released
+-- pg-migrate-import-codd, not the fork.
 
 package blake3
   flags: -avx512 -avx2 -sse41 -sse2

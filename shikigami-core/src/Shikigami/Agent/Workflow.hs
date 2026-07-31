@@ -54,7 +54,8 @@ import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
-import Kiroku.Store.Effect (Store, runStorePool)
+import Kiroku.Store.Effect (Store, runStoreResource)
+import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import OpenTelemetry.Trace.Core qualified as Otel
@@ -146,7 +147,8 @@ runAgentRunWorkflow deps job =
    in runEff
         . runTracing (tracer env)
         . runErrorNoCallStack
-        . runStorePool (store env)
+        . withKirokuStore (connectionSettings env)
+        . runStoreResource
         $ runWorkflow
           agentRunWorkflowName
           (WorkflowId (jobIdempotencyKey job))
@@ -623,7 +625,8 @@ runKioku deps action =
    in runEff
         . runTracing (tracer env)
         . runErrorNoCallStack
-        . runStorePool (store env)
+        . withKirokuStore (connectionSettings env)
+        . runStoreResource
         $ action
 
 logSinkResult :: RunJob -> SinkResult -> IO ()

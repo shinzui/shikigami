@@ -39,7 +39,7 @@ tests =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
-            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 firstDue = atMinute 1
                 env = SchedulerEnv {pool, schedules = Map.singleton "heartbeat" cron}

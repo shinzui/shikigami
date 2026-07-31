@@ -38,9 +38,10 @@ runAgentRun agentArg mActivity config = do
     Right decl -> do
       connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
       behEnv <- newBehaviorEnv
-      withStore (defaultConnectionSettings connStr) $ \st -> do
+      let settings = defaultConnectionSettings connStr
+      withStore settings $ \_st -> do
         tr <- noopTracer
-        let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+        let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
         case mActivity of
           Just actPath -> do
             decoded <- Aeson.eitherDecodeFileStrict' actPath

@@ -8,7 +8,8 @@ import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflow, step)
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
-import Kiroku.Store.Effect (runStorePool)
+import Kiroku.Store.Effect (runStoreResource)
+import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Test.Tasty (TestTree, testGroup)
@@ -22,7 +23,7 @@ tests =
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {store = kirokuStore, tracer = tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer = tracer, metrics = Nothing}
             counter <- newIORef (0 :: Int)
             shouldCrash <- newIORef True
 
@@ -49,7 +50,8 @@ runSpikeWorkflow ::
 runSpikeWorkflow appEnv counter shouldCrash =
   runEff
     . runErrorNoCallStack
-    . runStorePool (store appEnv)
+    . withKirokuStore (connectionSettings appEnv)
+    . runStoreResource
     $ runWorkflow
       (WorkflowName "shikigami.spike")
       (WorkflowId "spike-replay")

@@ -16,7 +16,8 @@ import Kioku.Api.Types (MemoryRecord (..))
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
-import Kiroku.Store.Effect (runStorePool)
+import Kiroku.Store.Effect (runStoreResource)
+import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
@@ -221,7 +222,7 @@ runFlowWorkflowWithAgent flowAgent flow workflowId =
   withShikigamiMigratedDatabase \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
-      let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
       outcome <- runFlowBody appEnv flowAgent flow workflowId (object [])
       count <- outboxCount appEnv
       pure (outcome, count)
@@ -246,7 +247,8 @@ runFlowBody ::
 runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
   runEff
     . runErrorNoCallStack
-    . runStorePool (store appEnv)
+    . withKirokuStore (connectionSettings appEnv)
+    . runStoreResource
     $ runWorkflow
       (WorkflowName "shikigami.flow.spike")
       workflowId
@@ -267,7 +269,7 @@ withAtRiskFlow action =
       tracer <- noopTracer
       session <- genSessionId
       aidRef <- newIORef Nothing
-      let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
           runtime =
             FlowRuntime
               { approval = approvalEnv aidRef session,

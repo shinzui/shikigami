@@ -16,7 +16,8 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection qualified as StoreConnection
-import Kiroku.Store.Effect (Store, runStorePool)
+import Kiroku.Store.Effect (Store, runStoreResource)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (loadAgentsIn)
@@ -38,9 +39,10 @@ runSchedulerCmd config = do
   schedules <- traverse parseScheduleAgent (filter isSchedule agents)
   putStrLn ("[scheduler] loaded " <> show (length schedules) <> " scheduled agents")
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
-  StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) \st -> do
+  let settings = StoreConnection.defaultConnectionSettings connStr
+  StoreConnection.withStore settings \st -> do
     tracer <- noopTracer
-    let appEnv = AppEnv {store = st, tracer, metrics = Nothing}
+    let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
         env = SchedulerEnv {pool = StoreConnection.pool st, schedules = Map.fromList schedules}
     armAll appEnv schedules
     forever do
@@ -72,8 +74,9 @@ isSchedule :: AgentDecl -> Bool
 isSchedule AgentDecl {trigger = Schedule {}} = True
 isSchedule _ = False
 
-runStore :: AppEnv -> Eff '[Store, Error StoreError, IOE] a -> IO (Either StoreError a)
+runStore :: AppEnv -> Eff '[Store, KirokuStoreResource, Error StoreError, IOE] a -> IO (Either StoreError a)
 runStore appEnv =
   runEff
     . runErrorNoCallStack @StoreError
-    . runStorePool (store appEnv)
+    . withKirokuStore (connectionSettings appEnv)
+    . runStoreResource

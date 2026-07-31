@@ -52,7 +52,7 @@ tests =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                 deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
 
             firstRun <- runAgentRunWorkflow deps job
@@ -71,7 +71,7 @@ tests =
             behaviorEnv <- newBehaviorEnv
             counts <- newIORef Map.empty
             shouldCrash <- newIORef True
-            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName -> do
@@ -119,7 +119,7 @@ tests =
             behaviorEnv <- newBehaviorEnv
             counts <- newIORef Map.empty
             shouldCrash <- newIORef True
-            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName -> do
@@ -162,7 +162,7 @@ tests =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [flowDecl]
 
             result <- runAgentRunWorkflow deps flowJob
@@ -180,7 +180,7 @@ tests =
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     env =
                       Conversation.ConversationEnv
                         { Conversation.appEnv = appEnv,
@@ -234,7 +234,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 parentSession <- genSessionId
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
@@ -264,7 +264,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 proofAgents <- loadProofAgents
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
                     webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" 0
@@ -340,7 +340,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef)
 
                 parked <- runAgentRunWorkflow deps approvalJob
@@ -367,7 +367,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef)
 
                 parked <- runAgentRunWorkflow deps rejectedJob
@@ -392,7 +392,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
 
                 parked <- runAgentRunWorkflow deps timeoutJob
@@ -412,7 +412,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {store = kirokuStore, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
 
                 parked <- runAgentRunWorkflow deps answeredBeforeDeadlineJob

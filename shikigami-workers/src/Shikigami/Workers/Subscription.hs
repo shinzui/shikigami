@@ -43,9 +43,10 @@ runConsumeStream config = do
         <> Text.unpack broker
     )
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
-  withStore (defaultConnectionSettings connStr) $ \st -> do
+  let settings = defaultConnectionSettings connStr
+  withStore settings $ \st -> do
     tr <- noopTracer
-    let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+    let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
         cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaStreamGroup config}
         onHit hit = do
           putStrLn ("[stream] MATCH agent=" <> Text.unpack (Consumer.streamAgentName hit))
@@ -79,9 +80,10 @@ runConsumeEvents config = do
         <> Text.unpack broker
     )
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
-  withStore (defaultConnectionSettings connStr) $ \st -> do
+  let settings = defaultConnectionSettings connStr
+  withStore settings $ \st -> do
     tr <- noopTracer
-    let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+    let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
         cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaEventsGroup config}
         onHit hit = do
           putStrLn

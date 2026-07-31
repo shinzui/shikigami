@@ -33,7 +33,7 @@ import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..))
-import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Ingested (Message (..))
 import Shibuya.Core.Types (Envelope (..))
 import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
@@ -48,7 +48,7 @@ import System.IO (hPutStrLn, stderr)
 
 -- | The shibuya handler: lift the orchestration into the worker's effect row.
 runJobHandler :: (IOE :> es) => WorkerEnv -> Handler es Value
-runJobHandler env (Ingested {envelope = Envelope {payload = p}}) =
+runJobHandler env (Message {envelope = Envelope {payload = p}}) =
   liftIO (handleRunJob env p)
 
 -- | Orchestrate one drained job.

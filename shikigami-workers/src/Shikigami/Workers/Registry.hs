@@ -29,8 +29,8 @@ import Effectful.Error.Static (runErrorNoCallStack)
 import Kioku.App (AppEnv (..))
 import Pgmq.Effectful.Interpreter (PgmqRuntimeError, runPgmq)
 import Shibuya.Adapter.Pgmq (pgmqAdapter)
-import Shibuya.Adapter.Pgmq.Config (defaultConfig)
-import Shibuya.App (ProcessorId (..), SupervisionStrategy (IgnoreFailures), mkProcessor, runApp, waitApp)
+import Shibuya.Adapter.Pgmq.Config (defaultConfig, mkPgmqAdapterEnv)
+import Shibuya.App (AppConfig (..), ProcessorId (..), SupervisionStrategy (IgnoreFailures), mkProcessor, runApp, waitApp)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.RunJob.Worker (runJobHandler)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
@@ -57,12 +57,22 @@ runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
   result <-
     runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (pool env) . runTracing (tracer (appEnv env)) $ do
-      adapter <- pgmqAdapter (defaultConfig runQueueName)
-      let processor = mkProcessor adapter (runJobHandler env)
-      appResult <- runApp IgnoreFailures 100 [(ProcessorId "shikigami_run_jobs", processor)]
-      case appResult of
-        Left err -> liftIO (hPutStrLn stderr ("[shikigami.worker] app error: " <> show err))
-        Right h -> waitApp h
+      -- shibuya-pgmq-adapter 0.12 splits the adapter's runtime environment
+      -- (pool plus dead-letter/ack-failure callbacks) from its queue
+      -- configuration, and validates the latter before constructing anything.
+      adapterResult <- pgmqAdapter (mkPgmqAdapterEnv (pool env)) (defaultConfig runQueueName)
+      case adapterResult of
+        Left cfgErr ->
+          liftIO (hPutStrLn stderr ("[shikigami.worker] pgmq adapter config error: " <> show cfgErr))
+        Right adapter -> do
+          let processor = mkProcessor adapter (runJobHandler env)
+          appResult <-
+            runApp
+              AppConfig {strategy = IgnoreFailures, inboxSize = 100}
+              [(ProcessorId "shikigami_run_jobs", processor)]
+          case appResult of
+            Left err -> liftIO (hPutStrLn stderr ("[shikigami.worker] app error: " <> show err))
+            Right h -> waitApp h
   case result of
     Left perr -> hPutStrLn stderr ("[shikigami.worker] pgmq error: " <> show perr)
     Right () -> pure ()

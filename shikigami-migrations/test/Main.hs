@@ -1,66 +1,68 @@
 module Main (main) where
 
-import Codd.Parsing (AddedSqlMigration (..), SqlMigration (..))
-import Data.List (sort)
-import Shikigami.Migrations (shikigamiMigrations, shikigamiOwnMigrations)
+import Data.List (isInfixOf)
+import Shikigami.Migrations
+  ( embeddedMigrationEntries,
+    shikigamiMigrationPlan,
+    shikigamiMigrations,
+  )
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
 
 main :: IO ()
 main = defaultMain (testGroup "shikigami-migrations" [compositionTests])
 
--- | The migration set composes correctly.
+-- | The migration plan composes correctly.
 --
--- What this package owns is /composition/: shikigami's own SQL files appended to
--- the set kioku already publishes. Applying them is exercised on every run of
--- every other package's database tests, through the @test-support@ sublibrary.
--- What those runs cannot catch early is a composition mistake, because codd
--- rejects it at apply time with an error about timestamps rather than about the
--- mistake.
+-- What this package owns is /composition/: shikigami's own component ordered
+-- behind the components kiroku, keiro, and kioku publish. Applying the plan is
+-- exercised on every run of every other package's database tests, through the
+-- @test-support@ sublibrary. What those runs cannot catch early is a
+-- composition mistake, so these cases fail on it immediately, without a
+-- database.
 --
--- Note what is deliberately /not/ asserted: that the list is in timestamp order.
--- It is not, and need not be — kioku concatenates several published sets, and
--- codd orders them itself when applying. Asserting an order the system never
--- promised would be a test of this test.
+-- Under the July 2026 cohort, @kiokuMigrations@ is a single @pg-migrate@
+-- component rather than a pre-concatenated codd list, and ordering comes from
+-- declared component dependencies rather than from filename timestamps. The
+-- hazard is therefore no longer "duplicate timestamps" but "a component missing
+-- from the plan" or "shikigami ordered before the schema it builds on".
 --
--- The specific hazard is documented in "Shikigami.Migrations": @kiokuMigrations@
--- already composes kiroku, keiro, and kioku's own migrations, so prepending
--- kiroku or keiro again produces duplicate timestamps. These cases fail on that
--- immediately, without a database.
+-- @pg-migrate@ keeps 'Database.PostgreSQL.Migrate.MigrationPlan' abstract and
+-- exposes its resolved order only through 'Show', so that rendering is what
+-- these cases read. They deliberately do not import
+-- @Database.PostgreSQL.Migrate.Internal@.
 compositionTests :: TestTree
 compositionTests =
   testGroup
-    "migration set"
-    [ testCase "the set is non-empty and includes shikigami's own migrations" do
-        full <- shikigamiMigrations :: IO [AddedSqlMigration IO]
-        own <- shikigamiOwnMigrations :: IO [AddedSqlMigration IO]
-        assertBool "the composed set is empty" (not (null full))
-        assertBool "shikigami contributes no migrations of its own" (not (null own))
+    "migration plan"
+    [ testCase "shikigami's own component is well-formed" do
+        case shikigamiMigrations of
+          Left err -> assertFailure ("the shikigami component failed to define: " <> show err)
+          Right _ -> pure (),
+      testCase "shikigami embeds its own SQL" do
         assertBool
-          "the composed set does not contain shikigami's own migrations"
-          (all (`elem` fmap nameOf full) (fmap nameOf own)),
-      testCase "shikigami's own migrations come last" do
-        full <- shikigamiMigrations :: IO [AddedSqlMigration IO]
-        own <- shikigamiOwnMigrations :: IO [AddedSqlMigration IO]
-        let names = fmap nameOf full
-            ownNames = fmap nameOf own
-        drop (length names - length ownNames) names @?= ownNames,
-      testCase "no migration name appears twice" do
-        full <- shikigamiMigrations :: IO [AddedSqlMigration IO]
-        let names = sort (fmap nameOf full)
-        names @?= dedupe names,
-      testCase "no migration timestamp appears twice" do
-        full <- shikigamiMigrations :: IO [AddedSqlMigration IO]
-        let timestamps = sort (fmap (show . addedSqlTimestamp) full)
+          "no SQL was embedded from sql-migrations/manifest"
+          (not (null (foldr (:) [] embeddedMigrationEntries))),
+      testCase "the plan orders all four components by dependency" do
+        plan <- either (fail . show) pure shikigamiMigrationPlan
+        let rendered = show plan
         assertBool
-          ( "duplicate migration timestamps would be rejected by codd: "
-              <> show (duplicates timestamps)
-          )
-          (null (duplicates timestamps))
+          ("the plan does not name all four components: " <> rendered)
+          (all (\c -> quoted c `isInfixOf` rendered) components)
+        assertBool
+          ("the components are not in dependency order: " <> rendered)
+          (ascending (indexOf rendered . quoted <$> components))
     ]
   where
-    nameOf = migrationName . addedSqlMig
+    components = ["kiroku", "keiro", "kioku", "shikigami"]
 
-    dedupe = foldr (\x acc -> if [x] == take 1 acc then acc else x : acc) []
+    quoted c = "\"" <> c <> "\""
 
-    duplicates xs = [x | (x, y) <- zip xs (drop 1 xs), x == y]
+    indexOf haystack needle =
+      length (takeWhile (not . (needle `isInfixOf`)) (suffixes haystack))
+
+    suffixes xs = xs : case xs of
+      [] -> []
+      _ : rest -> suffixes rest
+
+    ascending xs = and (zipWith (<) xs (drop 1 xs))

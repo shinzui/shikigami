@@ -5,7 +5,9 @@ synopsis:
   Schema migrations for shikigami (composes kioku + shikigami_fired)
 
 build-type:         Simple
-extra-source-files: sql-migrations/*.sql
+extra-source-files:
+  sql-migrations/*.sql
+  sql-migrations/manifest
 
 common common
   default-language:   GHC2024
@@ -22,13 +24,14 @@ library
   hs-source-dirs:  src
   exposed-modules: Shikigami.Migrations
   build-depends:
-    , base              >=4.18   && <5
-    , bytestring        >=0.11   && <0.13
-    , codd              >=0.1.8  && <0.2
-    , codd-extras
-    , file-embed        >=0.0.15 && <0.0.17
-    , kioku-migrations
-    , time              >=1.12   && <1.15
+    , base                     >=4.18     && <5
+    , bytestring               >=0.11     && <0.13
+    , containers               >=0.6      && <0.8
+    , keiro-migrations         ^>=0.4.0.1
+    , kioku-migrations         ^>=0.2.0.0
+    , kiroku-store-migrations  ^>=0.3.0.0
+    , pg-migrate               ^>=1.1.0.0
+    , pg-migrate-embed         ^>=1.1.0.0
 
 executable shikigami-migrate
   import:         common
@@ -36,10 +39,15 @@ executable shikigami-migrate
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
+    , aeson                 >=2.2      && <2.3
     , base
-    , codd
+    , bytestring
+    , hasql                 >=1.10     && <1.11
+    , optparse-applicative  >=0.19     && <0.20
+    , pg-migrate            ^>=1.1.0.0
+    , pg-migrate-cli        ^>=1.1.0.0
     , shikigami-migrations
-    , time                  >=1.12 && <1.15
+    , text                  >=2.1      && <2.2
 
 test-suite shikigami-migrations-test
   import:         common
@@ -49,7 +57,6 @@ test-suite shikigami-migrations-test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , base
-    , codd
     , shikigami-migrations
     , tasty
     , tasty-hunit
@@ -60,9 +67,8 @@ library test-support
   hs-source-dirs:  test-support
   exposed-modules: Shikigami.Migrations.TestSupport
   build-depends:
-    , base                   >=4.18 && <5
-    , codd-extras
-    , codd-extras:ephemeral
+    , base                     >=4.18     && <5
+    , hasql                    >=1.10     && <1.11
+    , pg-migrate-test-support  ^>=1.1.0.0
     , shikigami-migrations
-    , text                   >=2.0  && <2.2
-    , time                   >=1.12 && <1.15
+    , text                     >=2.0      && <2.2

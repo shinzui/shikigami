@@ -31,8 +31,9 @@ runWorkerCmd config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTracer \tr -> do
     behEnv <- newBehaviorEnvWithTraceSink (Just (otelSink tr))
-    StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) $ \st -> do
-      let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
+    let settings = StoreConnection.defaultConnectionSettings connStr
+    StoreConnection.withStore settings $ \st -> do
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
           env =
             WorkerEnv
               { pool = StoreConnection.pool st,

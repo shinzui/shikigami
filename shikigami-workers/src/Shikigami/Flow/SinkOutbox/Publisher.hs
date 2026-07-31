@@ -20,6 +20,7 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
 import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
+import Keiro.Outbox.Types (OutboxRow (..))
 import Kioku.App (runAppIO)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps)
@@ -35,7 +36,14 @@ runOutboxPublisher env = do
   hPutStrLn stderr "[shikigami.worker] starting sink outbox publisher"
   forever do
     let deps = agentRunDeps env
-    result <- runAppIO (appEnv env) (publishClaimedOutbox (AgentWorkflow.publishSinkIntent deps) defaultPublishOptions Nothing)
+    -- Keiro 0.4 hands the publisher a whole claimed batch and expects one
+    -- outcome per row, so the single-row dispatcher is lifted rather than
+    -- rewritten: the batch semantics (ordering policy, marking) stay Keiro's.
+    let publishBatch rows =
+          traverse
+            (\row -> (outboxId row,) <$> AgentWorkflow.publishSinkIntent deps row)
+            rows
+    result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
     case result of
       Left err -> hPutStrLn stderr ("[shikigami.worker] outbox publisher store error: " <> show err)
       Right _summary -> pure ()

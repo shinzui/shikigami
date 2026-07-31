@@ -1,4 +1,4 @@
--- | @shikigami-migrate@: apply the database migrations.
+-- | @shikigami-migrate@: plan, apply, and verify the database migrations.
 --
 -- == Why this executable does not use the shared configuration declaration
 --
@@ -12,25 +12,92 @@
 -- dependencies)@ and refuses to build the project — because it detects cycles at
 -- package rather than component granularity.
 --
--- So this binary keeps codd's own @CODD_*@ environment contract, read by
--- @getCoddSettings@ below, in the same way
+-- So this binary reads @DATABASE_URL@ itself, in the same way
 -- @shikigami-workers\/src\/Shikigami\/Telemetry.hs@ keeps the OpenTelemetry SDK's
--- @OTEL_*@ contract: an external library owns those names and parses them
--- itself. See @justfile@'s @migrate@ recipe for the variables a developer sets.
+-- @OTEL_*@ contract: nothing else in the process has a configuration surface to
+-- share. It previously read codd's @CODD_*@ contract; the July 2026 cohort moved
+-- the whole stack to @pg-migrate@, so that contract no longer exists.
 --
 -- Unifying this surface belongs to
 -- @docs\/plans\/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md@,
--- which owns the
--- migration components, manifests, CLI, and test support and can restructure the
--- package boundary while it does so.
+-- which owns the migration components, manifests, CLI, and test support and can
+-- restructure the package boundary while it does so. That plan also owns
+-- importing an existing codd ledger into the native one; this executable
+-- initializes a fresh ledger and will refuse to re-apply migrations it has
+-- already recorded.
 module Main (main) where
 
-import Codd.Environment (getCoddSettings)
-import Data.Time (secondsToDiffTime)
-import Shikigami.Migrations (runShikigamiMigrationsNoCheck)
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as LazyByteString
+import Data.Text qualified as Text
+import Data.Text.IO qualified as Text.IO
+import Database.PostgreSQL.Migrate (defaultRunOptions)
+import Database.PostgreSQL.Migrate.CLI
+  ( CheckOptions (..),
+    ExitClass (ExitSucceeded),
+    ListOptions (..),
+    MigrationCommand (..),
+    NewOptions (..),
+    OutputFormat (JsonOutput, TextOutput),
+    OutputOptions (..),
+    PlanOptions (..),
+    RepairOptions (..),
+    StatusOptions (..),
+    UpOptions (..),
+    VerifyOptions (..),
+    cliEnvironment,
+    exitClass,
+    migrationCommandParser,
+    renderMigrationCommandJson,
+    renderMigrationCommandText,
+    runMigrationCommand,
+  )
+import Hasql.Connection.Settings qualified as Settings
+import Options.Applicative
+  ( execParser,
+    fullDesc,
+    helper,
+    info,
+    progDesc,
+    (<**>),
+  )
+import Shikigami.Migrations (shikigamiMigrationPlan)
+import System.Environment (lookupEnv)
+import System.Exit qualified as Exit
 
 main :: IO ()
 main = do
-  settings <- getCoddSettings
-  _ <- runShikigamiMigrationsNoCheck settings (secondsToDiffTime 5)
-  pure ()
+  plan <- either (fail . show) pure shikigamiMigrationPlan
+  command <-
+    execParser
+      ( info
+          (migrationCommandParser plan <**> helper)
+          (fullDesc <> progDesc "Manage the Shikigami database schema")
+      )
+  databaseUrl <-
+    lookupEnv "DATABASE_URL"
+      >>= maybe (fail "DATABASE_URL is required") pure
+  let environment =
+        cliEnvironment
+          (Settings.connectionString (Text.pack databaseUrl))
+          plan
+          defaultRunOptions
+  outcome <- runMigrationCommand environment command
+  case outputFormatOf command of
+    TextOutput -> Text.IO.putStrLn (renderMigrationCommandText outcome)
+    JsonOutput ->
+      LazyByteString.putStrLn (Aeson.encode (renderMigrationCommandJson outcome))
+  Exit.exitWith case exitClass outcome of
+    ExitSucceeded -> Exit.ExitSuccess
+    _ -> Exit.ExitFailure 1
+
+outputFormatOf :: MigrationCommand -> OutputFormat
+outputFormatOf = \case
+  Plan PlanOptions {output = OutputOptions format} -> format
+  List ListOptions {output = OutputOptions format} -> format
+  Check CheckOptions {output = OutputOptions format} -> format
+  Status StatusOptions {output = OutputOptions format} -> format
+  Verify VerifyOptions {output = OutputOptions format} -> format
+  Up UpOptions {output = OutputOptions format} -> format
+  Repair RepairOptions {output = OutputOptions format} -> format
+  New NewOptions {output = OutputOptions format} -> format
