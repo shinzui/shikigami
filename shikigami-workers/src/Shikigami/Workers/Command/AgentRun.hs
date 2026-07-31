@@ -17,7 +17,7 @@ import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderM
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -37,7 +37,7 @@ runAgentRun agentArg mActivity config = do
       exitFailure
     Right decl -> do
       connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
-      behEnv <- newBehaviorEnv
+      behEnv <- newBehaviorEnvFor (Config.behaviorProvider config) Nothing
       let settings = defaultConnectionSettings connStr
       withStore settings $ \_st -> do
         tr <- noopTracer

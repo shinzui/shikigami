@@ -170,12 +170,12 @@ consumeEventsRoleInfo =
           )
     }
 
--- | @shikigami-run-behavior@: run one behavior with deterministic stubs.
+-- | @shikigami-run-behavior@: run one agent's behavior, with no database.
 --
--- The only role that reads nothing from configuration: the manifest path and the
--- payload are per-invocation arguments, and the behavior runs against stubs with
--- no database and no model key. It still accepts the configuration and
--- diagnostic options, so @--describe-config@ answers the same way everywhere.
+-- The manifest path and the payload are per-invocation arguments; the only
+-- configuration it reads is which model provider to run. That makes it both the
+-- offline default (stubs, no key, no database) and the cheapest live check of a
+-- real provider, depending on nothing but @behavior.provider@.
 runBehaviorRoleInfo :: WorkerRoleInfo
 runBehaviorRoleInfo =
   WorkerRoleInfo
@@ -183,8 +183,8 @@ runBehaviorRoleInfo =
       role = RunBehaviorRole,
       parserInfo =
         withConfigOptions
-          "Run an agent's behavior with deterministic stubs (no DB, no key)"
-          ( (\path payload _ -> runRunBehavior path payload)
+          "Run an agent's behavior once, with no database"
+          ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
               <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
           )

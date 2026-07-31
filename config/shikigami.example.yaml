@@ -46,6 +46,24 @@ http:
   host: 127.0.0.1
   port: 8080
 
+behavior:
+  # stub calls no model and answers with a fixed sentence — deterministic, and
+  # what every test runs. anthropic calls a real Claude model, and then
+  # credentials.providers.anthropic.api_key below becomes required. Whichever is
+  # active is announced on stderr at startup and recorded on the kioku session.
+  provider: stub
+  # Only consulted when provider is anthropic. Must be an id from baikai's
+  # catalog; run --describe-config, or set a wrong one, to see the accepted list.
+  model: claude-sonnet-4-6
+
+# credentials:
+#   providers:
+#     anthropic:
+#       # Secret, and required only when behavior.provider is anthropic. Prefer a
+#       # separate 0600 file passed with a second --config, or the bound
+#       # ANTHROPIC_API_KEY variable, over writing it into a checked-in file.
+#       api_key: sk-ant-...
+
 sinks:
   kawa:
     base_url: http://localhost:8088

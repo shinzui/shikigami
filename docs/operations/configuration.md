@@ -124,9 +124,63 @@ nested under `kafka`.
 | `sinks.kizashi.default_recipient` | `recipient:default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. |
 | `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
 | `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
+| `behavior.provider` | `stub` | `SHIKIGAMI_BEHAVIOR_PROVIDER` | Which model runs a `Skill` behavior: `stub` calls no model, `anthropic` calls a real one. |
+| `behavior.model` | `claude-sonnet-4-6` | `SHIKIGAMI_BEHAVIOR_MODEL` | Anthropic model id. Only consulted when the provider is `anthropic`; decoded against baikai's catalog, so an unknown id is rejected here. |
+| `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |
 
 Environment bindings are explicit, one variable to one key. Nothing scans for a prefix, so
 a typo is a variable that does nothing rather than a value landing on the wrong key.
+
+Two variables keep an unprefixed spelling: `PG_CONNECTION_STRING`, which the dev shell
+already exports, and `ANTHROPIC_API_KEY`, which is what the ecosystem calls that
+credential. Binding the second one here is what keeps it flowing through Settei's
+precedence and redaction instead of being read behind Settei's back by the client library.
+
+
+## Choosing a model provider
+
+`behavior.provider` is the only conditional part of the surface, and the only one whose
+default is a deliberate fiction. Left alone it selects the **stub**: a provider that loads
+the skill, builds the same request a real model would get, and answers with a fixed
+sentence. That is what makes the test suite deterministic and key-free — and it is also
+what a misconfigured production worker would quietly do, which is why the stub is never
+silent. Every process announces its provider on standard error before it does any work:
+
+```text
+[shikigami.behavior] model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model
+[shikigami.behavior] model provider: anthropic model=claude-haiku-4-5 credential=present
+```
+
+The model id is also written into the kioku session row as `modelUsed`, so a run made by
+the stub stays distinguishable from a real one long after the log has rotated.
+
+Setting `behavior.provider: anthropic` makes `credentials.providers.anthropic.api_key`
+required. There is no partially-configured state: a worker asked for a real provider
+without a credential fails at configuration time, with the reserved exit code `4`, before
+it drains a single job.
+
+```text
+$ shikigami-worker --check-config --set behavior.provider=anthropic
+credentials.providers.anthropic.api_key: required value is missing
+$ echo $?
+4
+```
+
+`--describe-config` states the relationship rather than leaving it to be discovered:
+
+```text
+behavior.model [optional, conditional, public] ...
+credentials.providers.anthropic.api_key [required, conditional, secret] ...
+condition 1: behavior.provider -> behavior.model, credentials.providers.anthropic.api_key
+```
+
+`shikigami-run-behavior` opens no database and joins no queue, so it is the cheapest way to
+check a provider end to end:
+
+```bash
+$ shikigami-run-behavior --config /run/secrets/anthropic.yaml \
+    --agent agents/triage-note.dhall --payload '{"text":"the export button crashes"}'
+```
 
 
 ## Which binary needs what

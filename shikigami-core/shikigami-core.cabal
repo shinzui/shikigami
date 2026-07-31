@@ -38,6 +38,7 @@ library
     Shikigami.App.Config
     Shikigami.App.Config.Load
     Shikigami.Behavior.Error
+    Shikigami.Behavior.Provider
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
@@ -69,6 +70,7 @@ library
   build-depends:
     , aeson                        >=2.2
     , baikai
+    , baikai-claude
     , base                         >=4.21    && <5
     , bytestring
     , containers                   >=0.6
@@ -148,8 +150,8 @@ test-suite shikigami-core-test
     , settei-env
     , settei-optparse-applicative
     , settei-yaml
-    , shikigami-core
     , shibuya-core
+    , shikigami-core
     , shikigami-migrations:test-support
     , tasty
     , tasty-hunit

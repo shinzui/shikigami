@@ -29,6 +29,7 @@ constraints:
   -- typed model programs and providers
   , shikumi                 ==0.3.0.1
   , baikai                  ==0.4.1.0
+  , baikai-claude           ==0.4.0.1
 
   -- worker runtime, queues, and the event store
   , shibuya-core            ==0.8.0.1

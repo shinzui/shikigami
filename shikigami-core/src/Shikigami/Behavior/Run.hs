@@ -36,12 +36,19 @@ data BehaviorEnv = BehaviorEnv
     traceSink :: !(Maybe TraceSink)
   }
 
--- | Build the env once: construct the handan 'Runtime' and register the stub baikai
--- provider so the skill arm runs without a key.
+-- | Build a deterministic stub environment: construct the handan 'Runtime' and
+-- register the stub baikai provider so the skill arm runs without a key.
+--
+-- This is the /test/ constructor, and it is stub-only by design — it is what
+-- lets the suite run a whole agent loop with no key and a fixed reply. A process
+-- an operator configures builds its environment with
+-- 'Shikigami.Behavior.Provider.newBehaviorEnvFor', which honours
+-- @behavior.provider@ and announces what it chose.
 newBehaviorEnv :: IO BehaviorEnv
 newBehaviorEnv =
   newBehaviorEnvWithTraceSink Nothing
 
+-- | 'newBehaviorEnv' with a trace sink attached. Stub-only for the same reason.
 newBehaviorEnvWithTraceSink :: Maybe TraceSink -> IO BehaviorEnv
 newBehaviorEnvWithTraceSink traceSink = do
   rt <- newRuntime

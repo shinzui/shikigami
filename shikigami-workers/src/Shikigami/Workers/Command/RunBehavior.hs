@@ -9,14 +9,23 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Behavior.Run (newBehaviorEnv, runBehavior)
+import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config qualified as Config
+import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Behavior.Run (runBehavior)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
 -- | @run-behavior --agent <file> [--payload <json>]@: load a manifest, run its
--- behavior with deterministic stubs (no DB, no key), and print the output JSON.
-runRunBehavior :: FilePath -> Maybe String -> IO ()
-runRunBehavior path mpayload = do
+-- behavior, and print the output JSON.
+--
+-- It opens no database and joins no queue, which makes it the cheapest way to
+-- exercise a provider end to end: with @behavior.provider@ unset it prints the
+-- stub's fixed sentence, and with the Anthropic branch configured it is a single
+-- real model call. The provider line on standard error says which of those just
+-- happened, so the two are never confused.
+runRunBehavior :: FilePath -> Maybe String -> AppConfig -> IO ()
+runRunBehavior path mpayload config = do
   payload <- case mpayload of
     Nothing -> pure Aeson.Null
     Just raw -> case Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)) of
@@ -30,7 +39,7 @@ runRunBehavior path mpayload = do
       hPutStrLn stderr ("run-behavior: load error in " <> path <> ": " <> show err)
       exitFailure
     Right decl -> do
-      env <- newBehaviorEnv
+      env <- newBehaviorEnvFor (Config.behaviorProvider config) Nothing
       resultE <- runBehavior env decl payload
       case resultE of
         Left runErr -> do

@@ -52,6 +52,11 @@ module Shikigami.App.Config
     mkPort,
     portNumber,
 
+    -- * Which model runs a Skill behavior
+    ProviderSelection (..),
+    anthropicModels,
+    lookupAnthropicModel,
+
     -- * The declaration
     appConfig,
     appConfigSchema,
@@ -77,6 +82,9 @@ module Shikigami.App.Config
     kafkaIncludeAgentActorsKey,
     httpHostKey,
     httpPortKey,
+    behaviorProviderKey,
+    behaviorModelKey,
+    anthropicApiKeyKey,
     sinksKawaBaseUrlKey,
     sinksKawaSourceSegmentKey,
     sinksKizashiBaseUrlKey,
@@ -87,6 +95,9 @@ module Shikigami.App.Config
   )
 where
 
+import Baikai.Api (Api (AnthropicMessages))
+import Baikai.Model (Model, api, modelId, provider)
+import Baikai.Models.Generated (allModels, anthropic_claude_sonnet_4_6)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
@@ -143,6 +154,62 @@ portNumber (Port value) = value
 portExpectation :: Text
 portExpectation = "a TCP port between 1 and 65535"
 
+-- | Which model the @Skill@ behavior arm dispatches with, and what it
+-- authenticates as.
+--
+-- The two branches carry different things, which is exactly why this is a sum
+-- rather than three loose fields. A stub run needs nothing: it answers from a
+-- fixed string and never opens a socket. A real run cannot proceed without both
+-- a model and a credential, and a configuration that supplies one without the
+-- other is a misconfiguration an operator wants to hear about at startup rather
+-- than on the first job. Making the pair inseparable in the type means the
+-- declaration below is the only place that check has to live, and
+-- @--check-config@ performs it.
+--
+-- There is deliberately no 'Show', 'Read', or JSON instance: 'UseAnthropic'
+-- holds a 'SecretText'. Use
+-- 'Shikigami.Behavior.Provider.describeProviderSelection' to render it.
+data ProviderSelection
+  = -- | The deterministic, key-free stub. The default, and what every test runs.
+    UseStub
+  | -- | A real Anthropic Messages model and the credential to call it with.
+    UseAnthropic !Model !SecretText
+  deriving stock (Generic, Eq)
+
+-- | Which provider was asked for, before the branch's settings are resolved.
+--
+-- Private: it exists only as the scrutinee of the conditional declaration, and
+-- the resolved answer callers care about is 'ProviderSelection'.
+data ProviderChoice = ChooseStub | ChooseAnthropic
+  deriving stock (Generic, Eq, Show)
+
+renderProviderChoice :: ProviderChoice -> Text
+renderProviderChoice = \case
+  ChooseStub -> "stub"
+  ChooseAnthropic -> "anthropic"
+
+-- | Every Anthropic Messages model in baikai's generated catalog.
+--
+-- The catalog is the only source of truth for which model ids exist, what they
+-- cost, and which handler answers for them, so 'behavior.model' decodes against
+-- it rather than against a list transcribed here. That makes a typo'd model id
+-- an exit-4 configuration failure naming the accepted ids, instead of a request
+-- rejected by Anthropic on the first job.
+--
+-- The @provider@ test excludes catalog entries that reach a Claude model through
+-- somebody else's gateway; those need that gateway's credential, not this one.
+anthropicModels :: [Model]
+anthropicModels =
+  [ model
+  | model <- allModels,
+    api model == AnthropicMessages,
+    provider model == "anthropic"
+  ]
+
+-- | Find a catalog model by its upstream id, e.g. @claude-haiku-4-5@.
+lookupAnthropicModel :: Text -> Maybe Model
+lookupAnthropicModel wanted = lookup wanted [(modelId model, model) | model <- anthropicModels]
+
 -- ── The resolved configuration ──────────────────────────────────────────────
 
 -- | Everything any Shikigami process is configured with.
@@ -197,7 +264,16 @@ data AppConfig = AppConfig
     -- | Base URL of the danwa conversation server.
     danwaBaseUrl :: !Text,
     -- | danwa participant id Shikigami authors messages as.
-    danwaAgentParticipant :: !Text
+    danwaAgentParticipant :: !Text,
+    -- | Which model the @Skill@ behavior arm dispatches with.
+    --
+    -- The one field that is not named for a single key, because it is not
+    -- resolved from one: @behavior.provider@ chooses the branch, and the
+    -- Anthropic branch additionally resolves @behavior.model@ and
+    -- @credentials.providers.anthropic.api_key@. Keeping them one field is what
+    -- makes \"a real provider without a credential\" unrepresentable rather
+    -- than something every consumer has to re-check.
+    behaviorProvider :: !ProviderSelection
   }
   deriving stock (Generic, Eq)
 
@@ -229,6 +305,32 @@ appConfig =
     <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient:default")
     <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
     <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" "part_shikigami")
+    <*> behaviorProviderConfig
+
+-- | Which provider runs a Skill behavior, and what the real branch needs.
+--
+-- This is the declaration's one conditional path. @behavior.model@ and
+-- @credentials.providers.anthropic.api_key@ are consulted only when
+-- @behavior.provider@ selected @anthropic@, so a stub deployment is never asked
+-- for a credential it has no use for, and an Anthropic deployment cannot start
+-- without one: the key is 'required' inside the branch, which makes a missing
+-- credential an ordinary resolution failure with the reserved exit code, named
+-- by key, and caught by @--check-config@ before the worker opens anything.
+--
+-- Expressed with 'whenEq' rather than a post-resolution check so that the
+-- requirement appears in @--describe-config@ as a condition on the schema, and
+-- so it cannot be forgotten by a caller that resolves configuration and then
+-- builds a behavior environment its own way.
+behaviorProviderConfig :: Config ProviderSelection
+behaviorProviderConfig =
+  maybe UseStub (uncurry UseAnthropic)
+    <$> whenEq
+      (withDefault behaviorProviderSetting (constant "stub-provider" "No model is called until an operator asks for one" ChooseStub))
+      ChooseAnthropic
+      ( (,)
+          <$> withDefault behaviorModelSetting (constant "default-model" "The current general-purpose Claude model" anthropic_claude_sonnet_4_6)
+          <*> required anthropicApiKeySetting
+      )
 
 -- | The static schema, for @--describe-config@ and for tests.
 appConfigSchema :: Schema
@@ -349,6 +451,32 @@ sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base 
 sinksDanwaAgentParticipantSetting :: Setting Text
 sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" textDecoder id
 
+behaviorProviderSetting :: Setting ProviderChoice
+behaviorProviderSetting =
+  publicSettingWithRenderer
+    behaviorProviderKey
+    "Model provider the Skill behavior arm dispatches with: stub calls no model, anthropic calls a real one"
+    (enumDecoder [("stub", ChooseStub), ("anthropic", ChooseAnthropic)])
+    renderProviderChoice
+
+-- | Decoded against baikai's catalog, so an unknown id is rejected at
+-- resolution with the accepted ids in the message rather than by Anthropic on
+-- the first job.
+behaviorModelSetting :: Setting Model
+behaviorModelSetting =
+  publicSettingWithRenderer
+    behaviorModelKey
+    "Anthropic model the Skill behavior arm dispatches with, by upstream model id"
+    (enumDecoder [(modelId model, model) | model <- anthropicModels])
+    modelId
+
+anthropicApiKeySetting :: Setting SecretText
+anthropicApiKeySetting =
+  secretSetting
+    anthropicApiKeyKey
+    "Anthropic API key, required when behavior.provider is anthropic"
+    (SecretText <$> textDecoder)
+
 -- ── Stable keys ─────────────────────────────────────────────────────────────
 
 -- Keys are the deployment contract: renaming one silently ignores an operator's
@@ -403,6 +531,15 @@ sinksDanwaBaseUrlKey = stableKey "sinks.danwa.base_url"
 sinksDanwaAgentParticipantKey :: Key
 sinksDanwaAgentParticipantKey = stableKey "sinks.danwa.agent_participant"
 
+behaviorProviderKey :: Key
+behaviorProviderKey = stableKey "behavior.provider"
+
+behaviorModelKey :: Key
+behaviorModelKey = stableKey "behavior.model"
+
+anthropicApiKeyKey :: Key
+anthropicApiKeyKey = stableKey "credentials.providers.anthropic.api_key"
+
 -- | Every key this declaration accepts, in schema order.
 --
 -- Exists so a test can assert the accepted surface has not drifted, and so
@@ -425,9 +562,14 @@ stableKey value = either (\problem -> error (Text.unpack value <> ": invalid con
 --
 -- Explicit, not prefix-scanned: a typo in a variable name must be a variable
 -- that does nothing rather than a value that silently lands on the wrong key.
--- @PG_CONNECTION_STRING@ is kept under its historical spelling because the
--- development shell in @nix\/haskell.nix@ exports it and deployments already set
--- it; everything else uses the @SHIKIGAMI_@ prefix and mirrors its key.
+-- Two variables keep an unprefixed spelling. @PG_CONNECTION_STRING@ is what the
+-- development shell in @nix\/haskell.nix@ exports and what deployments already
+-- set. @ANTHROPIC_API_KEY@ is the name the whole ecosystem uses for that
+-- credential — baikai's own fallback reads it, developers already have it
+-- exported, and secret stores already publish it under that name — so binding it
+-- here is what keeps the value flowing through Settei's precedence and redaction
+-- instead of being read behind Settei's back. Everything else uses the
+-- @SHIKIGAMI_@ prefix and mirrors its key.
 --
 -- Validated once at module level. The test suite forces this value so that an
 -- invalid edit — a duplicate variable, two variables aimed at the same key, or
@@ -454,7 +596,10 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey
+          binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
+          binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey
         ]
     )
 

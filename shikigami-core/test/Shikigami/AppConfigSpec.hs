@@ -68,6 +68,9 @@ surfaceTests =
     [ testCase "the declaration accepts exactly these keys" $
         fmap renderKey declaredKeys
           @?= [ "agents.directory",
+                "behavior.model",
+                "behavior.provider",
+                "credentials.providers.anthropic.api_key",
                 "database.connection_string",
                 "http.host",
                 "http.port",
@@ -89,8 +92,11 @@ surfaceTests =
       testCase "every environment variable is bound to exactly one declared key" $
         sort boundVariables
           @?= sort
-            [ ("PG_CONNECTION_STRING", "database.connection_string"),
+            [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
+              ("PG_CONNECTION_STRING", "database.connection_string"),
               ("SHIKIGAMI_AGENTS_DIRECTORY", "agents.directory"),
+              ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
+              ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
               ("SHIKIGAMI_KAFKA_ACTIVITY_TOPIC", "kafka.activity.topic"),
