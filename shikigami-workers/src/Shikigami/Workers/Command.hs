@@ -7,142 +7,302 @@
 -- process could not honestly import both server and worker implementations
 -- without violating the package dependency graph.
 --
--- Every parser here produces an @IO ()@: the action to run once the options
--- parse. That shape is what lets @main@ be @join (execParser info)@ and, more
--- importantly, lets a test drive the parser purely with
--- @optparse-applicative@'s @execParserPure@ instead of shelling out to a built
--- binary to check that @--help@ works.
+-- == How configuration reaches a role
 --
--- Where the values come from is still the command line plus
--- @PG_CONNECTION_STRING@; making that a resolved, validated configuration is
--- owned by
--- @docs\/plans\/37-adopt-settei-configuration-across-shikigami-binaries.md@.
+-- Every role's parser produces a pair: the action to run, which takes the
+-- resolved 'Shikigami.App.Config.AppConfig', and the command-line configuration
+-- sources its own flags supplied. The flags an operator already knows —
+-- @--agents@, @--broker@, @--topic@, @--group@, @--kawa-url@ and the rest —
+-- survive, but as ordinary Settei sources aimed at declared keys rather than as
+-- private parsers. @--broker 10.0.0.1:9092@ and
+-- @--set kafka.broker=10.0.0.1:9092@ are the same thing, both appear in
+-- @--explain-config@ with their spelling, and neither can disagree with the
+-- other about what the default is.
+--
+-- 'runRole' is the whole of each executable's @main@: parse, resolve, act. That
+-- ordering is what makes @--check-config@ honest — configuration is fully
+-- resolved and the role's required keys are checked before the action opens a
+-- database, joins a consumer group, or registers a processor.
+--
+-- Every parser has the same result type, which is exactly why a dropped or
+-- misrouted flag is invisible to the type checker; 'workerRoles' exists so a
+-- test can drive all six parsers without listing them a second time.
 module Shikigami.Workers.Command
-  ( workerInfo,
-    schedulerInfo,
-    consumeStreamInfo,
-    consumeEventsInfo,
-    runBehaviorInfo,
-    agentRunInfo,
-    workerCommands,
+  ( -- * Roles
+    WorkerRoleInfo (..),
+    workerRoles,
+    runRole,
+
+    -- * The individual roles
+    workerRoleInfo,
+    schedulerRoleInfo,
+    consumeStreamRoleInfo,
+    consumeEventsRoleInfo,
+    runBehaviorRoleInfo,
+    agentRunRoleInfo,
   )
 where
 
-import Data.Text (Text)
+import Data.Maybe (catMaybes)
 import Options.Applicative
+import Settei.Optparse (cliOverride, cliSources, namedOption)
+import Settei.Source (Source)
+import Shikigami.App.Config
+  ( AppConfig,
+    Role (..),
+    agentsDirectoryKey,
+    kafkaActivityTopicKey,
+    kafkaBrokerKey,
+    kafkaEventsGroupKey,
+    kafkaEventsTopicKey,
+    kafkaIncludeAgentActorsKey,
+    kafkaStreamGroupKey,
+    sinksDanwaAgentParticipantKey,
+    sinksDanwaBaseUrlKey,
+    sinksKawaBaseUrlKey,
+    sinksKizashiBaseUrlKey,
+  )
+import Shikigami.App.Config.Load
+  ( ConfigOptions,
+    runAppConfig,
+    withConfigOptions,
+  )
 import Shikigami.Workers.Command.AgentRun (runAgentRun)
 import Shikigami.Workers.Command.RunBehavior (runRunBehavior)
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
 
--- | Every worker executable, paired with the name it is installed under.
+-- | One worker executable: what it is installed as, which role it plays for the
+-- purpose of required-key checking, and how its command line parses.
+data WorkerRoleInfo = WorkerRoleInfo
+  { binaryName :: !String,
+    role :: !Role,
+    parserInfo :: !(ParserInfo (AppConfig -> IO (), ConfigOptions))
+  }
+
+-- | Every worker executable, in the order they are documented.
 --
--- Exists so a test can assert that each one's @--help@ works without listing
--- them a second time, and so adding a role forces a decision about its name.
-workerCommands :: [(String, ParserInfo (IO ()))]
-workerCommands =
-  [ ("shikigami-worker", workerInfo),
-    ("shikigami-scheduler", schedulerInfo),
-    ("shikigami-consume-stream", consumeStreamInfo),
-    ("shikigami-consume-events", consumeEventsInfo),
-    ("shikigami-run-behavior", runBehaviorInfo),
-    ("shikigami-agent-run", agentRunInfo)
+-- Exists so a test can assert that each one's @--help@ works and keeps its
+-- flags, and so adding a role forces a decision about its name.
+workerRoles :: [WorkerRoleInfo]
+workerRoles =
+  [ workerRoleInfo,
+    schedulerRoleInfo,
+    consumeStreamRoleInfo,
+    consumeEventsRoleInfo,
+    runBehaviorRoleInfo,
+    agentRunRoleInfo
   ]
 
-agentsDirOption :: Parser FilePath
-agentsDirOption =
-  strOption
-    ( long "agents"
-        <> metavar "DIR"
-        <> value "agents"
-        <> showDefault
-        <> help "Agents manifest directory"
-    )
+-- | A worker executable's @main@: parse the command line, resolve configuration,
+-- then act.
+runRole :: WorkerRoleInfo -> IO ()
+runRole info = do
+  (action, options) <- execParser (parserInfo info)
+  config <- runAppConfig (role info) options
+  action config
 
-brokerOption :: Parser Text
-brokerOption =
-  strOption
-    ( long "broker"
-        <> metavar "HOST:PORT"
-        <> value "127.0.0.1:9092"
-        <> showDefault
-        <> help "Kafka broker"
-    )
+-- ── The roles ───────────────────────────────────────────────────────────────
 
 -- | @shikigami-worker@: drain the run-job queue and run agents end to end.
-workerInfo :: ParserInfo (IO ())
-workerInfo =
-  info
-    (parser <**> helper)
-    ( fullDesc
-        <> progDesc "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
-    )
-  where
-    parser =
-      runWorkerCmd
-        <$> agentsDirOption
-        <*> strOption (long "kawa-url" <> metavar "URL" <> value "http://localhost:8088" <> showDefault <> help "kawa (or stub-kawa) base URL")
-        <*> strOption (long "kizashi-url" <> metavar "URL" <> value "http://localhost:8089" <> showDefault <> help "kizashi base URL")
-        <*> strOption (long "danwa-url" <> metavar "URL" <> value "http://localhost:8080" <> showDefault <> help "danwa base URL")
-        <*> strOption (long "danwa-agent" <> metavar "PARTICIPANT" <> value "part_shikigami" <> showDefault <> help "danwa agent participant id used as message author")
+workerRoleInfo :: WorkerRoleInfo
+workerRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-worker",
+      role = WorkerRole,
+      parserInfo =
+        withConfigOptions
+          "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
+          (pure runWorkerCmd)
+          ( sourcesOf
+              [ agentsOption,
+                kawaUrlOption,
+                kizashiUrlOption,
+                danwaUrlOption,
+                danwaAgentOption
+              ]
+          )
+    }
 
 -- | @shikigami-scheduler@: arm Schedule triggers and drive timer firing.
-schedulerInfo :: ParserInfo (IO ())
-schedulerInfo =
-  info
-    ((runSchedulerCmd <$> agentsDirOption) <**> helper)
-    (fullDesc <> progDesc "Arm Schedule triggers and drive keiro timer firing")
+schedulerRoleInfo :: WorkerRoleInfo
+schedulerRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-scheduler",
+      role = SchedulerRole,
+      parserInfo =
+        withConfigOptions
+          "Arm Schedule triggers and drive keiro timer firing"
+          (pure runSchedulerCmd)
+          (sourcesOf [agentsOption])
+    }
 
 -- | @shikigami-consume-stream@: match declared stream agents against @activity.v1@.
-consumeStreamInfo :: ParserInfo (IO ())
-consumeStreamInfo =
-  info
-    (parser <**> helper)
-    (fullDesc <> progDesc "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs")
-  where
-    parser =
-      runConsumeStream
-        <$> agentsDirOption
-        <*> brokerOption
-        <*> strOption (long "topic" <> metavar "TOPIC" <> value "activity.v1" <> showDefault <> help "Topic")
-        <*> strOption (long "group" <> metavar "GROUP" <> value "shikigami-stream" <> showDefault <> help "Consumer group id")
-        <*> switch (long "include-agent-actors" <> help "Match agent-produced activities too (meta-detectors; off by default = feedback guard)")
+consumeStreamRoleInfo :: WorkerRoleInfo
+consumeStreamRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-consume-stream",
+      role = StreamConsumerRole,
+      parserInfo =
+        withConfigOptions
+          "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs"
+          (pure runConsumeStream)
+          streamConsumerSources
+    }
 
 -- | @shikigami-consume-events@: match declared event agents against a public topic.
-consumeEventsInfo :: ParserInfo (IO ())
-consumeEventsInfo =
-  info
-    (parser <**> helper)
-    (fullDesc <> progDesc "Consume public integration events, match Event triggers, and enqueue run jobs")
-  where
-    parser =
-      runConsumeEvents
-        <$> agentsDirOption
-        <*> brokerOption
-        <*> strOption (long "topic" <> metavar "TOPIC" <> value "danwa.message-addressed.v1" <> showDefault <> help "Integration-event topic")
-        <*> strOption (long "group" <> metavar "GROUP" <> value "shikigami-events" <> showDefault <> help "Consumer group id")
+consumeEventsRoleInfo :: WorkerRoleInfo
+consumeEventsRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-consume-events",
+      role = EventConsumerRole,
+      parserInfo =
+        withConfigOptions
+          "Consume public integration events, match Event triggers, and enqueue run jobs"
+          (pure runConsumeEvents)
+          ( sourcesOf
+              [ agentsOption,
+                brokerOption,
+                eventsTopicOption,
+                eventsGroupOption
+              ]
+          )
+    }
 
 -- | @shikigami-run-behavior@: run one behavior with deterministic stubs.
-runBehaviorInfo :: ParserInfo (IO ())
-runBehaviorInfo =
-  info
-    (parser <**> helper)
-    (fullDesc <> progDesc "Run an agent's behavior with deterministic stubs (no DB, no key)")
-  where
-    parser =
-      runRunBehavior
-        <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
-        <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
+--
+-- The only role that reads nothing from configuration: the manifest path and the
+-- payload are per-invocation arguments, and the behavior runs against stubs with
+-- no database and no model key. It still accepts the configuration and
+-- diagnostic options, so @--describe-config@ answers the same way everywhere.
+runBehaviorRoleInfo :: WorkerRoleInfo
+runBehaviorRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-run-behavior",
+      role = RunBehaviorRole,
+      parserInfo =
+        withConfigOptions
+          "Run an agent's behavior with deterministic stubs (no DB, no key)"
+          ( (\path payload _ -> runRunBehavior path payload)
+              <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
+              <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
+          )
+          (pure [])
+    }
 
 -- | @shikigami-agent-run@: run one agent through the kioku session lifecycle.
-agentRunInfo :: ParserInfo (IO ())
-agentRunInfo =
-  info
-    (parser <**> helper)
-    (fullDesc <> progDesc "Run an agent with the kioku session/memory lifecycle")
+agentRunRoleInfo :: WorkerRoleInfo
+agentRunRoleInfo =
+  WorkerRoleInfo
+    { binaryName = "shikigami-agent-run",
+      role = AgentRunRole,
+      parserInfo =
+        withConfigOptions
+          "Run an agent with the kioku session/memory lifecycle"
+          ( runAgentRun
+              <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
+              <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
+          )
+          (pure [])
+    }
+
+-- ── Command-line configuration sources ──────────────────────────────────────
+
+-- | Collect the flags that were actually given. An absent flag contributes no
+-- source, which is what leaves a configuration file, the environment, or the
+-- declared default in place.
+sourcesOf :: [Parser (Maybe Source)] -> Parser [Source]
+sourcesOf parsers = catMaybes <$> sequenceA parsers
+
+-- | The stream consumer's flags.
+streamConsumerSources :: Parser [Source]
+streamConsumerSources =
+  (<>)
+    <$> sourcesOf [agentsOption, brokerOption, activityTopicOption, streamGroupOption]
+    <*> includeAgentActorsSwitch
+
+-- | @--include-agent-actors@ takes no value, so it cannot be a 'namedOption'.
+-- Passing it contributes the same source a @--set@ override would, carrying the
+-- literal @true@; not passing it contributes nothing, which leaves the
+-- feedback-guard default in place.
+includeAgentActorsSwitch :: Parser [Source]
+includeAgentActorsSwitch =
+  toSources
+    <$> switch
+      ( long "include-agent-actors"
+          <> help "Match agent-produced activities too (meta-detectors; sets kafka.include_agent_actors)"
+      )
   where
-    parser =
-      runAgentRun
-        <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
-        <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
+    toSources False = []
+    toSources True = cliSources "--include-agent-actors" [cliOverride kafkaIncludeAgentActorsKey "true"]
+
+agentsOption :: Parser (Maybe Source)
+agentsOption =
+  namedOption
+    "--agents"
+    agentsDirectoryKey
+    (long "agents" <> metavar "DIR" <> help "Agents manifest directory (sets agents.directory)")
+
+brokerOption :: Parser (Maybe Source)
+brokerOption =
+  namedOption
+    "--broker"
+    kafkaBrokerKey
+    (long "broker" <> metavar "HOST:PORT" <> help "Kafka broker (sets kafka.broker)")
+
+activityTopicOption :: Parser (Maybe Source)
+activityTopicOption =
+  namedOption
+    "--topic"
+    kafkaActivityTopicKey
+    (long "topic" <> metavar "TOPIC" <> help "Activity topic (sets kafka.activity.topic)")
+
+eventsTopicOption :: Parser (Maybe Source)
+eventsTopicOption =
+  namedOption
+    "--topic"
+    kafkaEventsTopicKey
+    (long "topic" <> metavar "TOPIC" <> help "Integration-event topic (sets kafka.events.topic)")
+
+streamGroupOption :: Parser (Maybe Source)
+streamGroupOption =
+  namedOption
+    "--group"
+    kafkaStreamGroupKey
+    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.stream)")
+
+eventsGroupOption :: Parser (Maybe Source)
+eventsGroupOption =
+  namedOption
+    "--group"
+    kafkaEventsGroupKey
+    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.events)")
+
+kawaUrlOption :: Parser (Maybe Source)
+kawaUrlOption =
+  namedOption
+    "--kawa-url"
+    sinksKawaBaseUrlKey
+    (long "kawa-url" <> metavar "URL" <> help "kawa (or stub-kawa) base URL (sets sinks.kawa.base_url)")
+
+kizashiUrlOption :: Parser (Maybe Source)
+kizashiUrlOption =
+  namedOption
+    "--kizashi-url"
+    sinksKizashiBaseUrlKey
+    (long "kizashi-url" <> metavar "URL" <> help "kizashi base URL (sets sinks.kizashi.base_url)")
+
+danwaUrlOption :: Parser (Maybe Source)
+danwaUrlOption =
+  namedOption
+    "--danwa-url"
+    sinksDanwaBaseUrlKey
+    (long "danwa-url" <> metavar "URL" <> help "danwa base URL (sets sinks.danwa.base_url)")
+
+danwaAgentOption :: Parser (Maybe Source)
+danwaAgentOption =
+  namedOption
+    "--danwa-agent"
+    sinksDanwaAgentParticipantKey
+    (long "danwa-agent" <> metavar "PARTICIPANT" <> help "danwa agent participant id (sets sinks.danwa.agent_participant)")

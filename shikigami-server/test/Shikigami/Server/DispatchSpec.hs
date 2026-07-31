@@ -21,10 +21,10 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Servant.Health (ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.Paths (liveRawPath, readyRawPath)
 import Shikigami.Api.OpenApi (shikigamiOpenApi)
+import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Prelude
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
-import Shikigami.Server.Config (defaultServerConfig)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -70,4 +70,4 @@ withServer livenessCheck readinessCheck body =
       request <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
       statusCode . Http.responseStatus <$> Http.httpLbs request manager
   where
-    application = shikigamiApplication (newServerEnvWith defaultServerConfig livenessCheck readinessCheck)
+    application = shikigamiApplication (newServerEnvWith defaultAppConfig livenessCheck readinessCheck)

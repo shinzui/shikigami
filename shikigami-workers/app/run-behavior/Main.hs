@@ -1,9 +1,7 @@
 module Main (main) where
 
-import Control.Monad (join)
-import Options.Applicative (execParser)
-import Shikigami.Workers.Command (runBehaviorInfo)
+import Shikigami.Workers.Command (runBehaviorRoleInfo, runRole)
 
--- | @shikigami-run-behavior@. See "Shikigami.Workers.Command" for the role it plays.
+-- | See "Shikigami.Workers.Command" for the role this executable plays.
 main :: IO ()
-main = join (execParser runBehaviorInfo)
+main = runRole runBehaviorRoleInfo

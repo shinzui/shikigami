@@ -39,11 +39,11 @@ library
     Shikigami.Trigger.Publish
 
   build-depends:
-    , aeson                 >=2.2
-    , base                  >=4.21 && <5
+    , aeson                        >=2.2
+    , base                         >=4.21    && <5
     , bytestring
     , case-insensitive
-    , containers            >=0.6
+    , containers                   >=0.6
     , danwa-api
     , danwa-client
     , effectful
@@ -55,14 +55,16 @@ library
     , kiroku-store
     , mmzk-typeid
     , mtl
-    , optparse-applicative  >=0.18
-    , servant               >=0.20 && <0.21
-    , servant-health        >=0.1  && <0.2
-    , servant-server        >=0.20 && <0.21
+    , optparse-applicative         >=0.18
+    , servant                      >=0.20    && <0.21
+    , servant-health               >=0.1     && <0.2
+    , servant-server               >=0.20    && <0.21
+    , settei                       ==0.2.0.0
+    , settei-optparse-applicative  ==0.2.0.0
     , shikigami-api
     , shikigami-core
-    , text                  >=2.1
-    , time                  >=1.12
+    , text                         >=2.1
+    , time                         >=1.12
     , wai
     , warp
 

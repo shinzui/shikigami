@@ -3,10 +3,10 @@ module Main (main) where
 import Network.Wai (Application)
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
+import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Server.CommandSpec qualified as CommandSpec
-import Shikigami.Server.Config (defaultServerConfig)
 import Shikigami.Server.DispatchSpec qualified as DispatchSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
 import Test.Tasty (defaultMain, testGroup)
@@ -29,4 +29,4 @@ main =
 -- proves the two same-typed routes were not wired to each other's checks.
 mkTestApplication :: ProbeCheck -> ProbeCheck -> IO Application
 mkTestApplication livenessCheck readinessCheck =
-  pure (shikigamiApplication (newServerEnvWith defaultServerConfig livenessCheck readinessCheck))
+  pure (shikigamiApplication (newServerEnvWith defaultAppConfig livenessCheck readinessCheck))

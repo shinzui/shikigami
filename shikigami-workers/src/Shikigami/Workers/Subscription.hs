@@ -5,28 +5,35 @@ module Shikigami.Workers.Subscription
 where
 
 import Data.List (find)
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgentsIn)
+import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config qualified as Config
+import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Trigger.Consumer (StreamConfig (..), subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Consumer qualified as Consumer
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, enqueueRunJob, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
-import System.Environment (getEnv)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 
--- | @consume-stream --agents <dir> [--broker B --topic T --group G]@: run the
--- activity.v1 stream consumer; for each declared stream agent that matches an incoming
--- envelope, log the match and enqueue a run job (the stream→queue path). EP-5 folds
--- this into the full @worker@.
-runConsumeStream :: FilePath -> Text -> Text -> Text -> Bool -> IO ()
-runConsumeStream agentsDir broker topic grp includeAgentActors = do
+-- | Run the @activity.v1@ stream consumer; for each declared stream agent that
+-- matches an incoming envelope, log the match and enqueue a run job (the
+-- stream→queue path).
+--
+-- Broker, topic, consumer group, manifest directory and the feedback guard all
+-- come from the resolved configuration under @kafka.*@ and @agents.directory@;
+-- the @--broker@, @--topic@, @--group@, @--agents@ and
+-- @--include-agent-actors@ flags are command-line sources for those keys.
+runConsumeStream :: AppConfig -> IO ()
+runConsumeStream config = do
   hSetBuffering stdout LineBuffering
-  let include = if includeAgentActors then IncludeAgentActors else ExcludeAgentActors
-  agents <- loadAgentsIn agentsDir
+  let include = if Config.kafkaIncludeAgentActors config then IncludeAgentActors else ExcludeAgentActors
+      broker = Config.kafkaBroker config
+      topic = Config.kafkaActivityTopic config
+  agents <- loadAgentsIn (Config.agentsDirectory config)
   putStrLn
     ( "[stream] loaded "
         <> show (length agents)
@@ -35,11 +42,11 @@ runConsumeStream agentsDir broker topic grp includeAgentActors = do
         <> " on "
         <> Text.unpack broker
     )
-  connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
+  connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
   withStore (defaultConnectionSettings connStr) $ \st -> do
     tr <- noopTracer
     let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
-        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = grp}
+        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaStreamGroup config}
         onHit hit = do
           putStrLn ("[stream] MATCH agent=" <> Text.unpack (Consumer.streamAgentName hit))
           case find ((== Consumer.streamAgentName hit) . name) agents of
@@ -51,12 +58,18 @@ runConsumeStream agentsDir broker topic grp includeAgentActors = do
             Nothing -> pure ()
     subscribeActivityStream appEnv cfg include agents onHit
 
--- | Consume public integration events and enqueue matching `Trigger.Event`
--- agents. Use this for Danwa's `danwa.message-addressed.v1` topic.
-runConsumeEvents :: FilePath -> Text -> Text -> Text -> IO ()
-runConsumeEvents agentsDir broker topic grp = do
+-- | Consume public integration events and enqueue matching @Trigger.Event@
+-- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
+--
+-- Broker, topic, consumer group and manifest directory come from
+-- @kafka.broker@, @kafka.events.topic@, @kafka.groups.events@ and
+-- @agents.directory@.
+runConsumeEvents :: AppConfig -> IO ()
+runConsumeEvents config = do
   hSetBuffering stdout LineBuffering
-  agents <- loadAgentsIn agentsDir
+  let broker = Config.kafkaBroker config
+      topic = Config.kafkaEventsTopic config
+  agents <- loadAgentsIn (Config.agentsDirectory config)
   putStrLn
     ( "[events] loaded "
         <> show (length agents)
@@ -65,11 +78,11 @@ runConsumeEvents agentsDir broker topic grp = do
         <> " on "
         <> Text.unpack broker
     )
-  connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
+  connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
   withStore (defaultConnectionSettings connStr) $ \st -> do
     tr <- noopTracer
     let appEnv = AppEnv {store = st, tracer = tr, metrics = Nothing}
-        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = grp}
+        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaEventsGroup config}
         onHit hit = do
           putStrLn
             ( "[events] MATCH agent="

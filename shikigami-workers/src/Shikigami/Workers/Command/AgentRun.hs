@@ -14,8 +14,10 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord, runAgentWithMemory)
+import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config qualified as Config
+import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Run (newBehaviorEnv)
-import System.Environment (getEnv)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -23,9 +25,10 @@ import System.IO (hPutStrLn, stderr)
 -- either run the agent end to end with memory (open session → recall → run behavior →
 -- record learning → complete) and print the across-run report, or — with
 -- @--from-activity@ — map an @activity.v1@ envelope into a memory under the agent
--- scope. The connection string comes from the dev shell's @PG_CONNECTION_STRING@.
-runAgentRun :: String -> Maybe FilePath -> IO ()
-runAgentRun agentArg mActivity = do
+-- scope. The connection string comes from @database.connection_string@, which the
+-- development shell still supplies as @PG_CONNECTION_STRING@.
+runAgentRun :: String -> Maybe FilePath -> AppConfig -> IO ()
+runAgentRun agentArg mActivity config = do
   let path = resolvePath agentArg
   declE <- loadAgent path
   case declE of
@@ -33,7 +36,7 @@ runAgentRun agentArg mActivity = do
       hPutStrLn stderr ("agent-run: load error in " <> path <> ": " <> show err)
       exitFailure
     Right decl -> do
-      connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
+      connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
       behEnv <- newBehaviorEnv
       withStore (defaultConnectionSettings connStr) $ \st -> do
         tr <- noopTracer

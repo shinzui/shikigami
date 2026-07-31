@@ -7,14 +7,22 @@ import Danwa.Client qualified as Danwa
 import Danwa.Conversation.Api qualified as Conv
 import Danwa.Message.Api qualified as Msg
 import Data.Text qualified as Text
+import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config qualified as Config
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
 -- | @danwa-spike --danwa-url URL --human part_... --agent part_...@
 -- proves the outbound danwa client path before the real sink is wired.
-runDanwaSpike :: String -> String -> String -> IO ()
-runDanwaSpike danwaUrl humanArg agentArg = do
-  let human = Text.pack humanArg
+--
+-- The two participant ids stay command arguments because they identify the
+-- specific conversation this invocation creates. The danwa base URL is
+-- deployment configuration, so it comes from @sinks.danwa.base_url@ and
+-- @--danwa-url@ is a command-line source for that key.
+runDanwaSpike :: String -> String -> AppConfig -> IO ()
+runDanwaSpike humanArg agentArg config = do
+  let danwaUrl = Text.unpack (Config.danwaBaseUrl config)
+      human = Text.pack humanArg
       agent = Text.pack agentArg
       action = do
         conversation <-

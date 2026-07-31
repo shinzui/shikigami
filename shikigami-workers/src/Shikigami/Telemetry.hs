@@ -1,4 +1,22 @@
 -- | Runtime OpenTelemetry wiring for Shikigami.
+--
+-- == Why this module reads the environment directly
+--
+-- Everything else in this repository resolves configuration through
+-- "Shikigami.App.Config"; @getEnv@ and @lookupEnv@ are forbidden outside that
+-- declaration. This module is the one documented exception, and the exception is
+-- narrow: the @OTEL_*@ variables are a cross-language specification owned by the
+-- OpenTelemetry SDK, which parses them itself in
+-- @loadExporterEnvironmentVariables@ below. Re-declaring them as Shikigami
+-- settings would create a second, subtly different parser for names an operator
+-- already knows from every other service in the fleet, and would not remove the
+-- SDK's own reads. The single @lookupEnv@ here only asks whether the standard
+-- endpoint variable is set at all, so that a process with no collector runs
+-- against a no-op provider instead of failing to build an exporter.
+--
+-- A Shikigami-specific tracing *policy* — whether to trace at all, sampling
+-- decisions — would be an ordinary Settei setting. The standard variables stay
+-- SDK-owned.
 module Shikigami.Telemetry
   ( withRunTracer,
   )

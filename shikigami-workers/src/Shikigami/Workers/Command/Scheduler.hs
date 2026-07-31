@@ -20,17 +20,24 @@ import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (loadAgentsIn)
+import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config qualified as Config
+import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Trigger.Schedule (CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import System.Environment (getEnv)
 import System.IO (hPutStrLn, stderr)
 
-runSchedulerCmd :: FilePath -> IO ()
-runSchedulerCmd agentsDir = do
-  agents <- loadAgentsIn agentsDir
+-- | Arm every scheduled agent and drive keiro timer firing.
+--
+-- The manifest directory comes from @agents.directory@ (the @--agents@ flag is a
+-- command-line source for it) and the connection string from
+-- @database.connection_string@.
+runSchedulerCmd :: AppConfig -> IO ()
+runSchedulerCmd config = do
+  agents <- loadAgentsIn (Config.agentsDirectory config)
   schedules <- traverse parseScheduleAgent (filter isSchedule agents)
   putStrLn ("[scheduler] loaded " <> show (length schedules) <> " scheduled agents")
-  connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
+  connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   StoreConnection.withStore (StoreConnection.defaultConnectionSettings connStr) \st -> do
     tracer <- noopTracer
     let appEnv = AppEnv {store = st, tracer, metrics = Nothing}

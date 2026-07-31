@@ -1,9 +1,7 @@
 module Main (main) where
 
-import Control.Monad (join)
-import Options.Applicative (execParser)
-import Shikigami.Workers.Command (consumeEventsInfo)
+import Shikigami.Workers.Command (consumeEventsRoleInfo, runRole)
 
--- | @shikigami-consume-events@. See "Shikigami.Workers.Command" for the role it plays.
+-- | See "Shikigami.Workers.Command" for the role this executable plays.
 main :: IO ()
-main = join (execParser consumeEventsInfo)
+main = runRole consumeEventsRoleInfo

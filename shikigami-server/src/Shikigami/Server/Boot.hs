@@ -11,7 +11,8 @@
 -- operator scale, restart, or roll out the API independently of the background
 -- loops.
 module Shikigami.Server.Boot
-  ( runServer,
+  ( runServerMain,
+    runServer,
     newServerEnv,
     newServerEnvWith,
   )
@@ -20,19 +21,32 @@ where
 import Data.String (fromString)
 import Data.Text qualified as Text
 import Network.Wai.Handler.Warp qualified as Warp
+import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
-import Shikigami.App.Config (emptyAppConfig)
+import Shikigami.App.Config (AppConfig, Role (ServerRole))
+import Shikigami.App.Config.Load (runAppConfig)
 import Shikigami.Health.Handler (mkHealthChecks)
 import Shikigami.Server.App (shikigamiApplication)
-import Shikigami.Server.Config (ServerConfig (..))
+import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
 import Shikigami.Server.Seam (ServerEnv (..))
 import System.IO (hPutStrLn, stderr)
 
+-- | The @shikigami-server@ executable, start to finish.
+--
+-- Parse, resolve configuration, then serve. Nothing with a lifetime is created
+-- before 'runAppConfig' returns, so @--check-config@ and both
+-- @--describe-config@ forms complete without binding a socket.
+runServerMain :: IO ()
+runServerMain = do
+  options <- execParser serverParserInfo
+  config <- runAppConfig ServerRole options
+  runServer config
+
 -- | Build the environment handlers read, creating the stateful probe checks once.
-newServerEnv :: ServerConfig -> IO ServerEnv
-newServerEnv serverConfig = do
+newServerEnv :: AppConfig -> IO ServerEnv
+newServerEnv config = do
   (livenessCheck, readinessCheck) <- mkHealthChecks
-  pure (newServerEnvWith serverConfig livenessCheck readinessCheck)
+  pure (newServerEnvWith config livenessCheck readinessCheck)
 
 -- | Build the environment with probe checks supplied by the caller.
 --
@@ -41,11 +55,11 @@ newServerEnv serverConfig = do
 -- an umbrella record that swapped them would still compile; only a request that
 -- fails one check and not the other catches it, and that requires injecting the
 -- checks from outside.
-newServerEnvWith :: ServerConfig -> ProbeCheck -> ProbeCheck -> ServerEnv
-newServerEnvWith serverConfig livenessCheck readinessCheck =
+newServerEnvWith :: AppConfig -> ProbeCheck -> ProbeCheck -> ServerEnv
+newServerEnvWith config livenessCheck readinessCheck =
   ServerEnv
-    { config = serverConfig,
-      appConfig = emptyAppConfig,
+    { config = serverConfigFrom config,
+      appConfig = config,
       liveness = livenessCheck,
       readiness = readinessCheck
     }
@@ -55,9 +69,10 @@ newServerEnvWith serverConfig livenessCheck readinessCheck =
 -- The startup line goes to stderr so that it survives being piped, and names
 -- both the bound address and the probe paths an operator will point a health
 -- check at.
-runServer :: ServerConfig -> IO ()
-runServer serverConfig = do
-  env <- newServerEnv serverConfig
+runServer :: AppConfig -> IO ()
+runServer config = do
+  env <- newServerEnv config
+  let serverConfig = serverConfigFrom config
   hPutStrLn
     stderr
     ( "[shikigami.server] listening on "

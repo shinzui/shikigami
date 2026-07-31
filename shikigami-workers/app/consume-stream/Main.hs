@@ -1,9 +1,7 @@
 module Main (main) where
 
-import Control.Monad (join)
-import Options.Applicative (execParser)
-import Shikigami.Workers.Command (consumeStreamInfo)
+import Shikigami.Workers.Command (consumeStreamRoleInfo, runRole)
 
--- | @shikigami-consume-stream@. See "Shikigami.Workers.Command" for the role it plays.
+-- | See "Shikigami.Workers.Command" for the role this executable plays.
 main :: IO ()
-main = join (execParser consumeStreamInfo)
+main = runRole consumeStreamRoleInfo

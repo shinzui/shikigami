@@ -28,9 +28,9 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Servant.Health (ProbeVerdict (Healthy))
 import Servant.Server (ServerError (..))
 import Shikigami.Api.Problem (ProblemCode (..), ProblemDetails (..), problem)
+import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
-import Shikigami.Server.Config (defaultServerConfig)
 import Shikigami.Server.Seam (problemServerError)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
@@ -88,7 +88,7 @@ request method path =
     pure (statusCode (Http.responseStatus response), contentType, Http.responseBody response)
   where
     passing = pure Healthy
-    application = shikigamiApplication (newServerEnvWith defaultServerConfig passing passing)
+    application = shikigamiApplication (newServerEnvWith defaultAppConfig passing passing)
 
 -- | Assert the decoded body is the problem the caller expects.
 assertProblemBody :: LBS.ByteString -> Text -> Int -> Bool -> IO ()
