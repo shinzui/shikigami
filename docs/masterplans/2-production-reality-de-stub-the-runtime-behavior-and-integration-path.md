@@ -105,7 +105,7 @@ with a real model) but is not blocked by it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | In Progress; M1 complete |
+| F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Not Started |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Not Started; M0 complete |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Not Started |
@@ -324,8 +324,13 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Progress
 
-- [ ] F1 M1–M4: six-package architecture, ownership rules, API boundary, and package
-      tests from plan 36 are complete.
+- [x] (2026-07-31T06:05:00Z) F1 M1–M5: six-package architecture, ownership rules, API
+      boundary, and package tests from plan 36 are complete. The repository now has exactly
+      `shikigami-core`, `shikigami-api`, `shikigami-server`, `shikigami-workers`,
+      `shikigami-migrations`, and `shikigami-client`; `docs/architecture/packages.md` states
+      the arrows and executable ownership; `docs/api/openapi.json` is generated from the
+      served route proxy; and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs`
+      fails the build on a forbidden sibling edge. 101 tests pass across six suites.
 - [ ] F2 M1–M4: every executable uses Settei with explicit bindings, diagnostics,
       secret redaction, and compatibility tests from plan 37.
 - [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
@@ -374,6 +379,25 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - Upstream release update (2026-07-30): Kioku `v0.2.0.0` publishes all five
   packages with Keiki 0.4 / Keiro 0.4 bounds. Plan 47's external release gate
   is closed; its remaining hard predecessor is plan 37.
+- Plan 36 implementation (2026-07-31): the fleet dependency graph requires
+  `shikigami-api` to depend on `shikigami-core`, which is the reverse of the arrow that
+  existed. The declared-agent domain types moved into core and were renamed —
+  `Shikigami.Api.Agent` → `Shikigami.Agent.Decl`, `Shikigami.Api.Activity` →
+  `Shikigami.Activity`, `Shikigami.Api.RunJob` → `Shikigami.Agent.RunJob` — and
+  `Shikigami.Worker` was split into per-loop modules under `shikigami-workers`.
+  **Every child plan that cites the old module or file paths is now stale**; the mapping is
+  in plan 36's Decision Log, and each plan's own implementation is when to correct it.
+  Plans 28 and 31 additionally cite `shikigami-core/src/Shikigami/Telemetry.hs`, which is
+  now `shikigami-workers/src/Shikigami/Telemetry.hs`.
+- Plan 36 implementation (2026-07-31): health arrived as a real typed route rather than a
+  placeholder, because the released `servant-health` package already ships the exact
+  `MultiVerb` 200/503 probe surface the API standard requires. Plan 29 now supplies checks
+  into a finished seam (`Shikigami.Health.Handler`) instead of building the route tree, and
+  the OpenAPI cohort question is settled by that package's own bounds: `openapi-hs 5.0`,
+  `servant-openapi-hs 5.1`, `servant 0.20.3`.
+- Plan 36 implementation (2026-07-31): all builds and tests must run inside the Nix dev
+  shell. A bare `cabal build all` compiles everything and then fails at link with
+  `ld: library not found for -lrdkafka`. Use `nix develop --command cabal ...`.
 
 
 ## Decision Log
@@ -477,3 +501,11 @@ inside the plan-36 worker composition root so the merges stay mechanical.
   landing order.
 - 2026-07-22: Added plans 36 and 37 as architecture and Settei foundations, rewired all
   MP-2 children to consume them, and replaced the obsolete `lookupEnv` convention.
+
+- 2026-07-31: Marked F1 (plan 36) Complete. The repository now has the six-package
+  deployed-service architecture with the dependency arrows asserted by a test, a typed
+  public HTTP contract with a generated `docs/api/openapi.json`, and every command
+  redistributed to the package owning its runtime role. Recorded the module renames that
+  make older child-plan citations stale, the `servant-health` adoption that settles both
+  the health route and the OpenAPI cohort, and the Nix dev-shell requirement for all
+  builds. F2 (plan 37) is now the next implementable child.

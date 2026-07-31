@@ -98,7 +98,17 @@ This section must always reflect the actual current state of the work.
       `shikigami-scheduler`, `shikigami-consume-stream`, `shikigami-consume-events`,
       `shikigami-run-behavior`, `shikigami-agent-run` (workers); `shikigami-migrate`
       (migrations); `shikigami-client` (client); `shikigami-openapi` (api).
-- [ ] M5: enforce package dependency and test-layout invariants; `cabal build all` and `cabal test all` pass.
+- [x] (2026-07-31T06:05:00Z) M5: enforce package dependency and test-layout invariants; `cabal build all` and `cabal test all` pass.
+      Done: `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` parses every `.cabal`
+      file and asserts the six package names against `cabal.project`, the legal sibling
+      arrows per production library, core's forbidden third-party dependencies, that only
+      test suites use `shikigami-migrations:test-support`, and that every package shipping a
+      library also ships a test suite. That last assertion immediately failed on
+      `shikigami-migrations`, which now has a composition test for the migration set.
+      `nix develop --command cabal build all` is clean and
+      `nix develop --command cabal test all` passes 101 tests across six suites
+      (core 50, server 17, api 15, workers 12, migrations 4, client 3).
+      `cabal run shikigami-openapi` leaves `docs/api/openapi.json` unchanged.
 
 
 ## Surprises & Discoveries
@@ -128,6 +138,30 @@ implementation. Provide concise evidence.
   prelude — is domain, not HTTP contract, so the fix was to move those four modules into
   core rather than to weaken the graph. Nothing in `shikigami-api` was left behind, so
   the package was re-founded around the public HTTP contract it is named for.
+
+- 2026-07-31, M5: the package-architecture invariant test found a real gap on its first
+  run. `shikigami-migrations` shipped a production library and the public `test-support`
+  sublibrary that every other package's database tests depend on, but had no test suite of
+  its own:
+
+  ```text
+  every package that ships a library also ships a test suite: FAIL
+    packages with a library but no test suite: ["shikigami-migrations"]
+  ```
+
+  It now has one, testing what that package actually owns — composition of the migration
+  set — rather than re-testing application, which every other suite exercises on every
+  run. Writing it also corrected a wrong assumption: the composed list is *not* in
+  timestamp order, because kioku concatenates several published sets and codd orders them
+  itself at apply time. The assertion that claimed otherwise was removed rather than
+  weakened.
+
+- 2026-07-31, M4: four worker entry points each carried a private copy of "list the
+  directory, load every `*.dhall`, drop the ones that fail". The copies were identical,
+  which means the silent-skip behavior was four separate decisions nobody made. They are
+  now one `Shikigami.Agent.Loader.loadAgentsIn`, which is the single place
+  `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md`
+  needs to edit to make a broken manifest loud.
 
 - 2026-07-31, M1: `servant-health 0.1.0.0` (Hackage, `shinzui/servant-health`) already
   ships exactly the probe surface this plan's first route needs — `HealthApi`,
@@ -262,7 +296,45 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Complete, 2026-07-31.** The repository has exactly the six declared packages, the
+dependency direction is enforced by Cabal and asserted by a test, and every command that
+existed before still exists — under an executable that lives in the package owning its
+runtime role.
+
+Against the original purpose, point by point. The six packages exist and `find . -maxdepth
+2 -name '*.cabal'` lists exactly them. Dependency direction is enforced twice over: Cabal
+refuses an import that is not declared, and
+`shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` refuses a declaration that is
+not legal. Worker-role binary names are explicit — `shikigami-worker`,
+`shikigami-scheduler`, `shikigami-consume-stream`, `shikigami-consume-events`,
+`shikigami-run-behavior`, `shikigami-agent-run` — and each one's `--help` is covered by a
+test that also checks its documented flags by name. `shikigami-server` cannot start a
+background worker and `shikigami-worker` cannot open the application API listener, because
+neither package can see the other's code at all.
+
+Three things came out better than the plan required. Health arrived as a real typed route
+rather than a placeholder, because `servant-health` already ships the exact
+`MultiVerb` 200/503 surface the API standard asks for; plan 29 now supplies checks into a
+finished seam instead of building one. `docs/api/openapi.json` is generated, checked in,
+and guarded by a freshness test, so a change to the public contract shows up in review as
+a diff rather than as documentation drift. And the architecture test found a real gap on
+its first run — `shikigami-migrations` shipped a library with no test suite of its own —
+which is now closed by a composition test that fails on the exact mistake its own source
+comments warn about.
+
+Two things are deliberately left for the plans that own them. Configuration is still
+command-line flags plus `PG_CONNECTION_STRING`: `Shikigami.App.Config` and
+`Shikigami.Server.Config` exist as the composition points, but resolution, precedence,
+redaction, and diagnostics are plan 37's. And `Shikigami.Agent.Loader.loadAgentsIn` still
+skips a manifest that fails to load without saying so — four copies of that silence became
+one, which is what plan 20 needs in order to make it loud in a single place.
+
+One cost is worth stating plainly. Moving the declared-agent types into core meant renaming
+`Shikigami.Api.{Agent,Activity,RunJob}`, and roughly forty sibling plan documents cite the
+old module and file paths. Those citations are now stale. The mapping is in this plan's
+Decision Log, and each plan's own implementation is the right moment to correct its
+references — but a contributor reading an unrevised plan will hit paths that no longer
+exist, and should look here first.
 
 
 ## Context and Orientation
@@ -430,3 +502,18 @@ record derives `Generic`.
 
 Revision note (2026-07-22): Created from the portfolio conformance review so every later
 production, configuration, API, worker, and deployment plan has stable package boundaries.
+
+Revision note (2026-07-31): Implemented. All five milestones are complete and the Progress
+section records what each one delivered and what it deliberately left to a later plan. The
+Decision Log gained seven entries covering choices the plan did not specify: reversing the
+core/api arrow and renaming the three declared-agent modules that moved with it, the exact
+reading of "queue adapter" that keeps `Trigger.Enqueue` in core, the extension of the
+composition-module allowlist to per-package command parsers, adopting `servant-health` for
+the first route, discarding parser messages from error bodies, collapsing two URL problem
+codes into one, moving `Shikigami.Telemetry` to the workers package, splitting the old
+`Shikigami.Worker` into one module per loop, and giving core's test suite its own kawa
+doorway fixture. Surprises records the Nix dev-shell requirement, the `servant-health`
+discovery, the real gap the invariant test found in `shikigami-migrations`, and the
+duplicated agent-directory loaders. Outcomes states plainly that roughly forty sibling
+plan documents now cite module and file paths that no longer exist, with the mapping in the
+Decision Log.

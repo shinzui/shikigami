@@ -112,6 +112,7 @@ test-suite shikigami-core-test
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
+    Shikigami.PackageArchitectureSpec
     Shikigami.SpikeWorkflowSpec
 
   hs-source-dirs: test
@@ -121,7 +122,9 @@ test-suite shikigami-core-test
     , base
     , bytestring
     , containers
+    , directory
     , effectful
+    , filepath
     , hasql
     , hasql-pool
     , http-types

@@ -18,6 +18,7 @@ import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -44,6 +45,7 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           DelegateContextSpec.tests,
+          PackageArchitectureSpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests
