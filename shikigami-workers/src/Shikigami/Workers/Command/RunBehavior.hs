@@ -12,7 +12,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
-import Shikigami.Behavior.Run (runBehavior)
+import Shikigami.Behavior.Run (runBehavior, triggerOnly)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -40,7 +40,9 @@ runRunBehavior path mpayload config = do
       exitFailure
     Right decl -> do
       env <- newBehaviorEnvFor (Config.behaviorProvider config) Nothing
-      resultE <- runBehavior env decl payload
+      -- No recalled memories: recall needs a database and this command opens
+      -- none, so the behavior runs on the trigger payload alone.
+      resultE <- runBehavior env decl (triggerOnly payload)
       case resultE of
         Left runErr -> do
           hPutStrLn stderr ("run-behavior: " <> show runErr)

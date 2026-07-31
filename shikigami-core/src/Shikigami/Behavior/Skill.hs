@@ -28,7 +28,9 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Vector qualified as V
+import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Input (BehaviorInput (..))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 
@@ -85,16 +87,17 @@ parseManifest t =
           | otherwise -> Nothing
 
 -- | Run the skill against the given model: system prompt = the skill description,
--- first user message = the instruction body plus the trigger payload rendered as JSON.
+-- first user message = the instruction body, the trigger payload rendered as JSON,
+-- and the agent's prior learnings when it has any.
 -- Returns the assistant reply as @{"reply": <text>}@.
 --
 -- The 'Options' are the caller's, not this module's. They carry the credential the
 -- process resolved (see 'Shikigami.Behavior.Run.BehaviorEnv'), so a run's key
 -- source is whatever configuration said and never what a provider handler found
 -- in the environment.
-runSkill :: Model -> Options -> SkillDir -> Value -> IO (Either RunError Value)
-runSkill model options dir payload =
-  runSkillWith model options dir payload completeRequest
+runSkill :: Model -> Options -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
+runSkill model options dir input =
+  runSkillWith model options dir input completeRequest
 
 -- | 'runSkill' with the completion function supplied.
 --
@@ -105,10 +108,10 @@ runSkillWith ::
   Model ->
   Options ->
   SkillDir ->
-  Value ->
+  BehaviorInput ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
-runSkillWith model options dir payload complete = do
+runSkillWith model options dir BehaviorInput {payload, recalled} complete = do
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
@@ -116,7 +119,15 @@ runSkillWith model options dir payload complete = do
       let ctx =
             _Context
               { systemPrompt = Just (description manifest),
-                messages = V.singleton (user (body manifest <> "\n\nTrigger payload: " <> renderPayload payload)),
+                messages =
+                  V.singleton
+                    ( user
+                        ( body manifest
+                            <> "\n\nTrigger payload: "
+                            <> renderPayload payload
+                            <> renderPriorLearnings recalled
+                        )
+                    ),
                 tools = V.empty
               }
       resp <- complete model ctx options
@@ -141,6 +152,26 @@ renderProviderError BaikaiError {category, message, httpStatus} =
 -- | Compact JSON encoding of the trigger payload, for the user message.
 renderPayload :: Value -> Text
 renderPayload = TL.toStrict . encodeToLazyText
+
+-- | The recalled-memory section of the user message, or nothing at all when the
+-- agent has yet to learn anything.
+--
+-- An agent with no memories sends byte-identical requests to the ones it sent
+-- before memory was injected, so a first run is not paying for a heading that
+-- introduces an empty list.
+--
+-- The one-line memory format is deliberately the same as
+-- 'Shikigami.Agent.Run.renderMemoryRecord' and deliberately not a call to it:
+-- @Agent.Run@ imports "Shikigami.Behavior.Run", which imports this module, so
+-- importing it back would close a cycle. Change both if you change either.
+renderPriorLearnings :: [MemoryRecord] -> Text
+renderPriorLearnings [] = ""
+renderPriorLearnings memories =
+  "\n\nPrior learnings (most relevant first):\n"
+    <> Text.intercalate "\n" (renderMemory <$> memories)
+  where
+    renderMemory MemoryRecord {memoryId, memoryType, confidence, content} =
+      "- " <> memoryId <> " [" <> memoryType <> "/" <> confidence <> "] " <> content
 
 -- | Pull the first assistant text block out of a response (the stub returns exactly
 -- one). Falls back to empty text if the response carried no text block.

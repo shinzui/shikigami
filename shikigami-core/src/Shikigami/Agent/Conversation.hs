@@ -51,7 +51,7 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, triggerOnly)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
@@ -163,7 +163,11 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
   outputE <-
     step (StepName ("run-behavior:" <> msgMessageId)) do
       prior <- liftIO (loadTurns env sid)
-      liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (behaviorPayload msg prior))
+      -- No recalled memories: a conversation turn's context is the turn history,
+      -- and that already travels inside the payload ('behaviorPayload'). Giving
+      -- this path kioku recall as well is a question about how conversational
+      -- and durable memory relate, which this seam does not answer.
+      liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (triggerOnly (behaviorPayload msg prior)))
   output <- either (liftIO . ioError . userError . Text.unpack) pure outputE
   let replyText = renderLearning output
   (asstTurn, sinkResult) <-

@@ -183,7 +183,7 @@ runBehaviorRoleInfo =
       role = RunBehaviorRole,
       parserInfo =
         withConfigOptions
-          "Run an agent's behavior once, with no database"
+          "Run an agent's behavior once, with no database and no recalled memory"
           ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
               <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))

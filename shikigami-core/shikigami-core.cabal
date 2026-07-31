@@ -38,6 +38,7 @@ library
     Shikigami.App.Config
     Shikigami.App.Config.Load
     Shikigami.Behavior.Error
+    Shikigami.Behavior.Input
     Shikigami.Behavior.Provider
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
@@ -120,6 +121,7 @@ test-suite shikigami-core-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.AppConfigSpec
+    Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
@@ -140,6 +142,7 @@ test-suite shikigami-core-test
     , directory
     , effectful
     , filepath
+    , handan-core
     , hasql
     , hasql-pool
     , http-types

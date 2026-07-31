@@ -50,7 +50,7 @@ import Keiro.Workflow
     step,
   )
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Kioku.Api.Types (Confidence (MediumConfidence), MemoryType (MemoryPattern))
+import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..))
 import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText, parseId)
 import Kioku.Memory qualified as Memory
@@ -71,7 +71,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.Behavior.Run (BehaviorEnv, behaviorModelId, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Memory.Scope (agentScope)
@@ -212,8 +212,8 @@ runResolvedAgent deps job decl = do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
-        Flow {} -> runBehaviorStep deps sid decl job
-        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)
+        Flow {} -> runBehaviorStep deps sid decl job prior
+        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job prior)
   case behaviorE of
     Left err -> do
       _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
@@ -308,19 +308,31 @@ openSession deps job decl = liftIO do
       & runKioku deps
   pure sid
 
+-- | Run the declared behavior on the trigger payload and the memories the
+-- @recall@ step returned.
+--
+-- @prior@ is the journaled result of @recall@, not a fresh fetch: a run resumed
+-- after a crash replays the recorded list, so the behavior sees the same
+-- memories the original attempt did. The step's name and result shape are
+-- unchanged — only what the body is given.
 runBehaviorStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
   SessionId ->
   AgentDecl ->
   RunJob ->
+  [MemoryRecord] ->
   Eff es (Either Text Value)
-runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} =
+runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
     ShikumiProgram {task}
       | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor sid job
-    _ -> liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv deps) decl triggerPayload)
+    _ ->
+      liftIO
+        ( first (Text.pack . show)
+            <$> runBehavior (behaviorEnv deps) decl BehaviorInput {payload = triggerPayload, recalled = prior}
+        )
 
 runFlowBehavior ::
   (Workflow :> es, Store :> es, IOE :> es) =>

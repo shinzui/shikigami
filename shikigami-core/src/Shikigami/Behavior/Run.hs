@@ -5,11 +5,17 @@
 -- sinks (EP-3) consume its output value.
 module Shikigami.Behavior.Run
   ( BehaviorEnv (..),
+    BehaviorInput (..),
     RunError (..),
     behaviorModelId,
     newBehaviorEnv,
     newBehaviorEnvWithTraceSink,
+    programArgs,
     runBehavior,
+    -- | Exported for "Shikigami.BehaviorInputSpec", which runs a locally
+    -- constructed task to observe the argument map a real dispatch builds.
+    runProgramTask,
+    triggerOnly,
   )
 where
 
@@ -17,16 +23,20 @@ import Baikai.Model (Model, modelId)
 import Baikai.Options (Options, emptyOptions)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
-import Data.Aeson (Value)
+import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Text (encodeToLazyText)
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Lazy qualified as TL
 import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Program.Registry (lookupTask)
@@ -81,30 +91,49 @@ newBehaviorEnvWithTraceSink traceSink = do
   registerStubProvider
   pure BehaviorEnv {runtime = rt, model = stubModel, options = emptyOptions, traceSink}
 
--- | Dispatch on the behavior union. The input @Value@ is the trigger payload; the
--- output @Value@ is the behavior's result.
-runBehavior :: BehaviorEnv -> AgentDecl -> Value -> IO (Either RunError Value)
-runBehavior env decl payload =
+-- | Dispatch on the behavior union. The 'BehaviorInput' is what triggered the run
+-- and what the agent remembers; the output @Value@ is the behavior's result.
+runBehavior :: BehaviorEnv -> AgentDecl -> BehaviorInput -> IO (Either RunError Value)
+runBehavior env decl input =
   case behavior decl of
     ShikumiProgram {task = t} ->
       case lookupTask t of
         Nothing -> pure (Left (UnknownTask t))
-        Just tk -> runProgramTask (runtime env) tk payload
+        Just tk -> runProgramTask (runtime env) tk input
     Skill {path = p} ->
-      runSkillWithTrace (traceSink env) (model env) (options env) (SkillDir (Text.unpack p)) payload
+      runSkillWithTrace (traceSink env) (model env) (options env) (SkillDir (Text.unpack p)) input
     Flow {} ->
       pure (Left (UnsupportedBehavior "Flow"))
     Deterministic {} ->
       -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
       pure (Left (UnsupportedBehavior "Deterministic"))
 
--- | Run a program task: parse its input (the stub ignores the args), run it, and
+-- | Run a program task: parse its input from the argument map, run it, and
 -- extract the @Envelope@'s verdict as the output value.
-runProgramTask :: Runtime -> Task -> Value -> IO (Either RunError Value)
-runProgramTask rt (Task {taskParse = parse, taskRun = run}) _payload =
-  case parse Map.empty of
+runProgramTask :: Runtime -> Task -> BehaviorInput -> IO (Either RunError Value)
+runProgramTask rt (Task {taskParse = parse, taskRun = run}) input =
+  case parse (programArgs input) of
     Left err -> pure (Left (ProgramFailed err))
-    Right input -> envelopeToResult <$> run rt input
+    Right parsed -> envelopeToResult <$> run rt parsed
+
+-- | The behavior's input as handan's argument map — the program arm's equivalent
+-- of the skill arm's user message.
+--
+-- handan's parse seam is @taskParse :: ArgMap -> Either Text i@ over
+-- @Map Text Text@, so both values travel as compact JSON text under fixed keys.
+-- A task that does not care about either key ignores it, which is why this is
+-- safe for every task already registered; a task that does care reads
+-- @payload@ or @prior@. Previously this was @Map.empty@, so a program could not
+-- see what triggered it no matter what it asked for.
+programArgs :: BehaviorInput -> Map Text Text
+programArgs BehaviorInput {payload, recalled} =
+  Map.fromList
+    [ ("payload", compactJson payload),
+      ("prior", compactJson (toJSON (memoryContentText <$> recalled)))
+    ]
+
+compactJson :: Value -> Text
+compactJson = TL.toStrict . encodeToLazyText
 
 -- | Map a handan 'Envelope' to the runner's result: an @ErrorS@ status is a failure;
 -- otherwise the verdict (or @null@ if a pure effect produced none) is the output.
@@ -114,8 +143,8 @@ envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
     ErrorS -> Left (ProgramFailed msg)
     _ -> Right (maybe Aeson.Null id v)
 
-runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> SkillDir -> Value -> IO (Either RunError Value)
-runSkillWithTrace Nothing model options dir payload =
-  runSkill model options dir payload
-runSkillWithTrace (Just sink) model options dir payload =
-  runSkillWith model options dir payload (BaikaiTrace.withTrace sink)
+runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
+runSkillWithTrace Nothing model options dir input =
+  runSkill model options dir input
+runSkillWithTrace (Just sink) model options dir input =
+  runSkillWith model options dir input (BaikaiTrace.withTrace sink)

@@ -36,7 +36,7 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
-import Shikigami.Behavior.Run (BehaviorEnv, behaviorModelId, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 
@@ -76,8 +76,8 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
           }
   -- 2. recall what this agent already knows (empty on the first ever run)
   prior <- recallPriorLearnings appEnv scope' (recallQuery decl focusTxt)
-  -- 3. run the behavior
-  behaviorE <- runBehavior behEnv decl payload
+  -- 3. run the behavior, on what triggered it and what it already knows
+  behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
   case behaviorE of
     Left runErr -> do
       failedAt' <- getCurrentTime

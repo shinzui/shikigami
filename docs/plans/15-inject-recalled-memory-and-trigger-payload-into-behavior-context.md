@@ -44,9 +44,10 @@ contains what the first run learned.
 
 ## Progress
 
-- [ ] Milestone 1: `BehaviorInput` record; `runBehavior` takes it; both arms consume
+- [x] (2026-07-31) Milestone 1: `BehaviorInput` record (in its own module, re-exported
+      from `Behavior/Run.hs` — see Surprises); `runBehavior` takes it; both arms consume
       payload + recalled memories; all four call sites updated; capture-seam tests for
-      skill context and program args.
+      skill context and program args, confirmed to fail against the code they replace.
 - [ ] Milestone 2: payload-aware `recallQuery`; callers updated; unit test.
 - [ ] Milestone 3: `classifyRisk` uses `prior`; flow-level test showing a
       verdict changed by a recalled memory; workflow-level round-trip test (record →
@@ -55,7 +56,30 @@ contains what the first run learned.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Milestone 1 (2026-07-31): **`BehaviorInput` cannot live in `Behavior/Run.hs` as this
+  plan specified — that would close an import cycle.** `Run.hs` imports `Skill.hs` for
+  `runSkill`/`runSkillWith`, and this plan gives those functions a `BehaviorInput`
+  parameter, so `Skill.hs` needs the type too. The record now lives in a new
+  `shikigami-core/src/Shikigami/Behavior/Input.hs` and is re-exported from
+  `Shikigami.Behavior.Run`, so every consumer still sees it where the plan's Interfaces
+  section says it lives. The same cycle is why the plan told the skill arm to duplicate
+  `renderMemoryRecord`'s one-line format rather than import it; the duplication is now
+  marked in both places.
+- Milestone 1 (2026-07-31): **the `Flow` arm never passes through `runBehavior`, so
+  `BehaviorInput` does not reach it.** `runBehaviorStep` dispatches `Flow` to
+  `runFlowBehavior` before the `runBehavior` call, and a flow recalls for itself through
+  the `Memory` capability (`Shikigami/Flow/Capability.hs:97-98`, which calls the same
+  `recallPriorLearnings`). So the workflow now recalls twice on a flow run: once for the
+  journaled `recall` step, once inside the flow. That is not a correctness problem — the
+  flow's own recall is journaled by its `classify` step's position in the workflow — but
+  it is a duplicated query, and Milestone 3's flow work goes through the capability, not
+  through `BehaviorInput`. **Plan 27, which consolidates the duplicated run/flow paths,
+  should take this too.**
+- Milestone 1 (2026-07-31): `runProgramTask` is now exported from
+  `Shikigami.Behavior.Run`. Testing that the argument map reaches handan's parse seam
+  needs a task the registry does not contain, and adding a fixture task to
+  `Program/Registry.hs` would put a test double in the catalog of programs shikigami
+  actually runs. The export is annotated with why it exists.
 
 
 ## Decision Log

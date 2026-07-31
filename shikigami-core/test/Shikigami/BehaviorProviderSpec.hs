@@ -64,7 +64,7 @@ import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (describeProviderSelection, newBehaviorEnvFor)
-import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.Behavior.Run (BehaviorEnv (..), triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -171,7 +171,7 @@ runSkillWithFixture ::
   IO (Either RunError Value)
 runSkillWithFixture model options complete = do
   root <- repositoryRoot
-  runSkillWith model options (SkillDir (root </> "agents" </> "skills" </> "triage-note")) Aeson.Null complete
+  runSkillWith model options (SkillDir (root </> "agents" </> "skills" </> "triage-note")) (triggerOnly Aeson.Null) complete
 
 assertAbsent :: String -> Text -> IO ()
 assertAbsent label rendered =
