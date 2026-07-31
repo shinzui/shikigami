@@ -1,30 +1,26 @@
-module Shikigami.Cli.Commands.Worker
+module Shikigami.Workers.Command.Worker
   ( runWorkerCmd,
   )
 where
 
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
-import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
-import Shikigami.Agent.Decl (AgentDecl)
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentsIn)
 import Shikigami.Behavior.Run (newBehaviorEnvWithTraceSink)
 import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Workers.Config (WorkerEnv (..))
 import Shikigami.Workers.Registry (runWorkers)
-import System.Directory (listDirectory)
 import System.Environment (getEnv)
-import System.FilePath ((</>))
 
 -- | @worker --agents <dir> [--kawa-url U --kizashi-url U --danwa-url U --danwa-agent P]@: boot the supervised worker
 -- that drains @shikigami_run_jobs@, runs each agent end to end, and dispatches its sinks.
 runWorkerCmd :: FilePath -> Text -> Text -> Text -> Text -> IO ()
 runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent = do
-  agents <- loadAgents agentsDir
+  agents <- loadAgentsIn agentsDir
   putStrLn ("[worker] loaded " <> show (length agents) <> " agents")
   connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
   withRunTracer \tr -> do
@@ -42,9 +38,3 @@ runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent = do
                 danwa = DanwaConfig {baseUrl = danwaUrl, agentParticipant = danwaAgent}
               }
       runWorkers env
-
-loadAgents :: FilePath -> IO [AgentDecl]
-loadAgents dir = do
-  entries <- listDirectory dir
-  loaded <- mapM loadAgent [dir </> e | e <- entries, ".dhall" `isSuffixOf` e]
-  pure [a | Right a <- loaded]

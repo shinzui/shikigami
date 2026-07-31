@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.DanwaSpike
+module Shikigami.Server.Command.DanwaSpike
   ( runDanwaSpike,
   )
 where

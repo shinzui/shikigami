@@ -5,6 +5,7 @@ import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
+import Shikigami.Server.CommandSpec qualified as CommandSpec
 import Shikigami.Server.Config (defaultServerConfig)
 import Shikigami.Server.DispatchSpec qualified as DispatchSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
@@ -16,6 +17,7 @@ main =
     ( testGroup
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
+          CommandSpec.tests,
           DispatchSpec.tests,
           ProblemSpec.tests
         ]

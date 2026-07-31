@@ -81,7 +81,23 @@ This section must always reflect the actual current state of the work.
       shikigami-workers` prints nothing. Tests: api 15, server 12, core 45, workers 4.
       Remaining, by design: `Shikigami.Workers.Subscription` and the worker executables
       arrive in M4 with the commands they compose.
-- [ ] M4: create `shikigami-client`, derive the typed client from `shikigami-api`, redistribute existing CLI executables without adding a seventh package, and remove `shikigami-cli`.
+- [x] (2026-07-31T05:50:00Z) M4: create `shikigami-client`, derive the typed client from `shikigami-api`, redistribute existing CLI executables without adding a seventh package, and remove `shikigami-cli`.
+      Done: `shikigami-client` created with `Shikigami.Client` (derived from the served route
+      record with `genericClient`, so a call that does not match the API fails to compile)
+      and a `shikigami-client health` command. `shikigami-cli` deleted; its eleven command
+      modules moved to their owning packages — six to
+      `Shikigami.Server.Command.*` behind the `shikigami` administrative executable, five to
+      `Shikigami.Workers.{Command.*,Subscription}` behind the six worker-role executables.
+      The four duplicated directory loaders became one `Shikigami.Agent.Loader.loadAgentsIn`
+      in core. Every parser produces an `IO ()`, so `--help` smoke tests drive
+      `execParserPure` directly instead of shelling out: seventeen server tests and twelve
+      worker tests now include per-command help coverage, plus three client tests.
+      `cabal run shikigami -- --help`, `cabal run shikigami-worker -- --help`, and
+      `cabal run shikigami-client -- --help` all render.
+      Executables now: `shikigami-server`, `shikigami` (server); `shikigami-worker`,
+      `shikigami-scheduler`, `shikigami-consume-stream`, `shikigami-consume-events`,
+      `shikigami-run-behavior`, `shikigami-agent-run` (workers); `shikigami-migrate`
+      (migrations); `shikigami-client` (client); `shikigami-openapi` (api).
 - [ ] M5: enforce package dependency and test-layout invariants; `cabal build all` and `cabal test all` pass.
 
 

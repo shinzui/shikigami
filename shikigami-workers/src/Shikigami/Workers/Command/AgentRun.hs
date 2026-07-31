@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.AgentRun
+module Shikigami.Workers.Command.AgentRun
   ( runAgentRun,
   )
 where

@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.RenderLifecycle
+module Shikigami.Server.Command.RenderLifecycle
   ( runRenderLifecycle,
   )
 where

@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.PublishFixture
+module Shikigami.Server.Command.PublishFixture
   ( runPublishFixture,
   )
 where

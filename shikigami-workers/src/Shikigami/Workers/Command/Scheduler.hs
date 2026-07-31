@@ -1,14 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Shikigami.Cli.Commands.Scheduler
+module Shikigami.Workers.Command.Scheduler
   ( runSchedulerCmd,
   )
 where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forM_, forever)
-import Data.List (isSuffixOf)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -20,17 +19,15 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentsIn)
 import Shikigami.Trigger.Schedule (CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import System.Directory (listDirectory)
 import System.Environment (getEnv)
-import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 
 runSchedulerCmd :: FilePath -> IO ()
 runSchedulerCmd agentsDir = do
-  agents <- loadAgents agentsDir
+  agents <- loadAgentsIn agentsDir
   schedules <- traverse parseScheduleAgent (filter isSchedule agents)
   putStrLn ("[scheduler] loaded " <> show (length schedules) <> " scheduled agents")
   connStr <- Text.pack <$> getEnv "PG_CONNECTION_STRING"
@@ -73,9 +70,3 @@ runStore appEnv =
   runEff
     . runErrorNoCallStack @StoreError
     . runStorePool (store appEnv)
-
-loadAgents :: FilePath -> IO [AgentDecl]
-loadAgents dir = do
-  entries <- listDirectory dir
-  loaded <- mapM loadAgent [dir </> e | e <- entries, ".dhall" `isSuffixOf` e]
-  pure [a | Right a <- loaded]

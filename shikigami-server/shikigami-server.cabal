@@ -25,6 +25,13 @@ library
     Shikigami.Health.Handler
     Shikigami.Server.App
     Shikigami.Server.Boot
+    Shikigami.Server.Command
+    Shikigami.Server.Command.DanwaSpike
+    Shikigami.Server.Command.EnqueueRun
+    Shikigami.Server.Command.PublishFixture
+    Shikigami.Server.Command.RenderLifecycle
+    Shikigami.Server.Command.StubKawa
+    Shikigami.Server.Command.Validate
     Shikigami.Server.Config
     Shikigami.Server.Seam
     Shikigami.Sink.KawaStub
@@ -32,23 +39,30 @@ library
     Shikigami.Trigger.Publish
 
   build-depends:
-    , aeson             >=2.2
-    , base              >=4.21 && <5
+    , aeson                 >=2.2
+    , base                  >=4.21 && <5
     , bytestring
     , case-insensitive
-    , containers        >=0.6
+    , containers            >=0.6
+    , danwa-api
+    , danwa-client
     , effectful
+    , hasql-pool
     , http-types
     , hw-kafka-client
     , kafka-effectful
+    , kioku-api
+    , kiroku-store
     , mmzk-typeid
     , mtl
-    , servant           >=0.20 && <0.21
-    , servant-health    >=0.1  && <0.2
-    , servant-server    >=0.20 && <0.21
+    , optparse-applicative  >=0.18
+    , servant               >=0.20 && <0.21
+    , servant-health        >=0.1  && <0.2
+    , servant-server        >=0.20 && <0.21
     , shikigami-api
     , shikigami-core
-    , text              >=2.1
+    , text                  >=2.1
+    , time                  >=1.12
     , wai
     , warp
 
@@ -61,12 +75,23 @@ executable shikigami-server
     , base
     , shikigami-server
 
+executable shikigami
+  import:         common
+  main-is:        Main.hs
+  hs-source-dirs: app/admin
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base
+    , optparse-applicative
+    , shikigami-server
+
 test-suite shikigami-server-test
   import:         common
   type:           exitcode-stdio-1.0
   main-is:        Main.hs
   hs-source-dirs: test
   other-modules:
+    Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
     Shikigami.Server.ProblemSpec
 
@@ -81,6 +106,7 @@ test-suite shikigami-server-test
     , http-types
     , lens
     , openapi-hs
+    , optparse-applicative
     , servant
     , servant-health
     , servant-health:testkit

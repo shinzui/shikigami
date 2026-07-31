@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.EnqueueRun
+module Shikigami.Server.Command.EnqueueRun
   ( runEnqueueRun,
   )
 where

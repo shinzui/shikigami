@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.StubKawa
+module Shikigami.Server.Command.StubKawa
   ( runStubKawaCmd,
   )
 where

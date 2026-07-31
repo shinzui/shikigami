@@ -1,7 +1,7 @@
 packages:
   shikigami-api
   shikigami-core
-  shikigami-cli
+  shikigami-client
   shikigami-migrations
   shikigami-server
   shikigami-workers

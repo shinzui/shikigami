@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.Validate
+module Shikigami.Server.Command.Validate
   ( runValidate,
   )
 where

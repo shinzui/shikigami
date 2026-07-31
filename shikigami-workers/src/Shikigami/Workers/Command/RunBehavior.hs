@@ -1,4 +1,4 @@
-module Shikigami.Cli.Commands.RunBehavior
+module Shikigami.Workers.Command.RunBehavior
   ( runRunBehavior,
   )
 where

@@ -1,23 +1,21 @@
-module Shikigami.Cli.Commands.ConsumeStream
+module Shikigami.Workers.Subscription
   ( runConsumeStream,
     runConsumeEvents,
   )
 where
 
-import Data.List (find, isSuffixOf)
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentsIn)
 import Shikigami.Trigger.Consumer (StreamConfig (..), subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Consumer qualified as Consumer
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, enqueueRunJob, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
-import System.Directory (listDirectory)
 import System.Environment (getEnv)
-import System.FilePath ((</>))
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 
 -- | @consume-stream --agents <dir> [--broker B --topic T --group G]@: run the
@@ -28,7 +26,7 @@ runConsumeStream :: FilePath -> Text -> Text -> Text -> Bool -> IO ()
 runConsumeStream agentsDir broker topic grp includeAgentActors = do
   hSetBuffering stdout LineBuffering
   let include = if includeAgentActors then IncludeAgentActors else ExcludeAgentActors
-  agents <- loadAgents agentsDir
+  agents <- loadAgentsIn agentsDir
   putStrLn
     ( "[stream] loaded "
         <> show (length agents)
@@ -58,7 +56,7 @@ runConsumeStream agentsDir broker topic grp includeAgentActors = do
 runConsumeEvents :: FilePath -> Text -> Text -> Text -> IO ()
 runConsumeEvents agentsDir broker topic grp = do
   hSetBuffering stdout LineBuffering
-  agents <- loadAgents agentsDir
+  agents <- loadAgentsIn agentsDir
   putStrLn
     ( "[events] loaded "
         <> show (length agents)
@@ -85,10 +83,3 @@ runConsumeEvents agentsDir broker topic grp = do
             Right mid -> putStrLn ("[events]   enqueued run job " <> show mid)
             Left e -> putStrLn ("[events]   enqueue failed: " <> show e)
     subscribeIntegrationEventStream appEnv cfg agents onHit
-
--- | Load every @*.dhall@ manifest in a directory (skipping ones that fail to parse).
-loadAgents :: FilePath -> IO [AgentDecl]
-loadAgents dir = do
-  entries <- listDirectory dir
-  loaded <- mapM loadAgent [dir </> e | e <- entries, ".dhall" `isSuffixOf` e]
-  pure [a | Right a <- loaded]
