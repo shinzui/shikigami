@@ -110,7 +110,7 @@ with a real model) but is not blocked by it.
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
-| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | In Progress (2026-07-31) |
+| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Complete (2026-07-31) |
 | 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Complete (2026-07-31) |
 
 
@@ -267,6 +267,16 @@ recalled }` record and the context-assembly logic that renders it. EP-1 defines 
 EP-3 extends. End state:
 `runBehavior :: BehaviorEnv -> AgentDecl -> BehaviorInput -> IO (Either RunError Value)`.
 
+As implemented (2026-07-31), both plans have landed and this seam is settled.
+`BehaviorEnv` and `runBehavior` are in `shikigami-core/src/Shikigami/Behavior/Run.hs`;
+`BehaviorInput` is in `shikigami-core/src/Shikigami/Behavior/Input.hs` and re-exported
+from `Behavior/Run.hs`, because `Run` imports `Skill` and `runSkill`/`runSkillWith` take
+the input record too. A later plan adding to this seam extends `BehaviorInput` rather
+than adding a parameter, uses `triggerOnly` at any call site with no memory to offer,
+and keeps the skill arm's memory rendering local to `Behavior/Skill.hs` — importing
+`Shikigami.Agent.Run.renderMemoryRecord` would close a cycle, so the one-line format is
+duplicated there on purpose and marked in both places.
+
 **Configuration boundary — plan 37 defines; all feature plans consume.**
 `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md` owns stable
 keys, typed strict records, explicit environment bindings, source precedence,
@@ -382,10 +392,16 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       test (park → ask captured → approve → one outbox row).
 - [ ] EP-2 M3: `resolve-approval` CLI; token round-trip test.
 - [ ] EP-2 M4: manual three-terminal end-to-end transcript recorded.
-- [ ] EP-3 M1: `BehaviorInput` threaded into both arms; program arm receives
-      payload+prior via `ArgMap`; capture tests.
-- [ ] EP-3 M2: payload-aware `recallQuery`.
-- [ ] EP-3 M3: `classifyRisk` uses prior; memory-flips-verdict workflow test.
+- [x] (2026-07-31) EP-3 M1: `BehaviorInput` threaded into both arms; program arm
+      receives payload+prior via `ArgMap`; capture tests, confirmed to fail against the
+      code they replace. The record lives in `Shikigami.Behavior.Input` and is
+      re-exported from `Behavior/Run.hs` — see Surprises.
+- [x] (2026-07-31) EP-3 M2: payload-aware `recallQuery` — agent name, behavior kind,
+      declaration description, and the payload's string leaves one level deep, capped at
+      512 characters.
+- [x] (2026-07-31) EP-3 M3: `classifyRisk` takes `[MemoryRecord]` and uses prior; the
+      same calm payload the low-risk workflow case completes on instead emits a
+      high-risk signal when an escalation is in memory.
 - [x] (2026-07-31) EP-4 M1: `sinks.rei.base_url` declared with no default; ReiAction fails
       with a message naming the intention and the key, or really POSTs a `ReiActionReq`
       carrying the deterministic dedup key; `Stubbed` deprecated and no longer produced.
@@ -401,6 +417,23 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Surprises & Discoveries
 
+- Plan 15 implementation (2026-07-31): **a type that an existing function's new parameter
+  introduces belongs in a module the function's /callees/ can also import.** This
+  MasterPlan's Integration Points said EP-1 owns `BehaviorEnv` in `Behavior/Run.hs` and
+  EP-3 adds `BehaviorInput` there. That is not implementable: `Run.hs` imports
+  `Skill.hs`, and EP-3 gives `runSkill`/`runSkillWith` the new parameter, so `Skill.hs`
+  needs the type. `BehaviorInput` lives in `shikigami-core/src/Shikigami/Behavior/Input.hs`
+  and is re-exported from `Shikigami.Behavior.Run`, so the interface every consumer sees
+  is the one this MasterPlan documents. **Plans 12, 17, and 34 all add parameters to these
+  same functions and should check the callee side before choosing a module.**
+- Plan 15 implementation (2026-07-31): **the `Flow` arm never reaches `runBehavior`, so a
+  flow run now recalls twice.** `runBehaviorStep` dispatches `Flow` to `runFlowBehavior`
+  before the `runBehavior` call, and a flow recalls for itself through the `Memory`
+  capability, which calls the same `recallPriorLearnings`. The workflow's journaled
+  `recall` step still runs, and its result now goes to the behavior — which for a flow is
+  nobody. Not a correctness problem; a duplicated query and a second place memory enters
+  the same run. **Plan 27, which consolidates the duplicated agent-run and flow dispatch
+  paths, inherits this alongside the duplicated `SinkIntent`.**
 - Plan 16 implementation (2026-07-31): **`SinkIntent` is defined twice, and the publisher
   decodes both copies with one of them.** `Shikigami.Agent.Workflow` and
   `Shikigami.Flow.SinkOutbox` each carry the record because the flow module cannot import
@@ -643,6 +676,22 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-31: Marked EP-3 (plan 15) Complete. The third runtime lie is closed: both
+  executable behavior arms now receive the trigger payload and the memories the journaled
+  `recall` step returned, the recall query is built from the agent's description and the
+  payload's own words instead of a constant string, and the at-risk-customer example
+  flow's verdict demonstrably changes when it remembers a prior escalation on the same
+  subject. Recorded two findings other plans depend on: a type introduced by a new
+  parameter on an existing function must live where the function's callees can import it
+  too — this MasterPlan's own Integration Points asked for something that would have
+  closed an import cycle, and plans 12, 17, and 34 touch the same functions; and the
+  `Flow` arm never passes through `runBehavior`, so a flow run now issues two recall
+  queries, which plan 27 inherits along with the duplicated `SinkIntent`. The Behavior
+  run seam integration point is now settled and described as implemented.
+  **EP-2 (plan 14) is the only remaining child of this MasterPlan, and it is not yet
+  implementable** — its hard dependencies are plans 17 and 22, neither of which has
+  landed.
 
 - 2026-07-31: Marked EP-4 (plan 16) Complete. The fourth runtime lie is closed: a
   `ReiAction` either really delivers or really fails into the outbox retry path, and the
