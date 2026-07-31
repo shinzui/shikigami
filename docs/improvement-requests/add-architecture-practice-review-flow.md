@@ -1,10 +1,11 @@
 ---
-title: "Add the architecture-practice review flow"
+type: Improvement Request
+title: Add the architecture-practice review flow
+description: Orchestrate advisory architecture review against revision-pinned practice evidence.
+timestamp: "2026-07-30T00:43:00Z"
+requestId: IR-4
 status: proposed
-originator: kikan / Use Case 006
-target_repo: shinzui/shikigami
-contracts: [use-case-006, C1, C5, C16]
-created_at: 2026-07-25
+origin: mori://shinzui/kikan
 ---
 
 # Improvement Request: Add the Architecture-Practice Review Flow

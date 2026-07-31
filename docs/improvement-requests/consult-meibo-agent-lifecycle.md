@@ -1,10 +1,11 @@
 ---
-title: "Consult the meibo directory for agent lifecycle (pause/kill switch) and fleet identity"
+type: Improvement Request
+title: Consult the Meibo directory for agent lifecycle and fleet identity
+description: Gate agent execution on canonical Meibo lifecycle state and fleet identity.
+timestamp: "2026-07-30T00:40:00Z"
+requestId: IR-1
 status: proposed
-originator: kikan / meibo initial spec (contract C14)
-target_repo: shinzui/shikigami
-contracts: [C14, C5]
-created_at: 2026-07-07
+origin: mori://shinzui/kikan
 ---
 
 # Improvement Request: Consult `shinzui/meibo` for agent lifecycle and fleet identity

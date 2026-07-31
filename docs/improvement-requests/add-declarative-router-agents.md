@@ -1,10 +1,11 @@
 ---
-title: "Add declarative router agents"
+type: Improvement Request
+title: Add declarative router agents
+description: Declare specialist expertise and route work through durable, typed delegation.
+timestamp: "2026-07-30T00:42:00Z"
+requestId: IR-3
 status: proposed
-originator: kikan / Use Case 006
-target_repo: shinzui/shikigami
-contracts: [use-case-006, C5]
-created_at: 2026-07-25
+origin: mori://shinzui/kikan
 ---
 
 # Improvement Request: Add Declarative Router Agents

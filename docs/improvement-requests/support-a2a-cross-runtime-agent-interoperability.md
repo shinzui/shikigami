@@ -1,10 +1,11 @@
 ---
-title: "Support A2A cross-runtime agent interoperability"
+type: Improvement Request
+title: Support A2A cross-runtime agent interoperability
+description: Implement authenticated, authorized, durable delegation between independently deployed Shikigami runtimes.
+timestamp: "2026-07-30T00:45:00Z"
+requestId: IR-6
 status: proposed
-originator: kikan / cross-runtime delegation follow-on
-target_repo: shinzui/shikigami
-contracts: [C3, C5, C11, C13, use-case-005]
-created_at: 2026-07-30
+origin: mori://shinzui/kikan
 ---
 
 # Improvement Request: Support A2A Cross-Runtime Agent Interoperability
@@ -512,9 +513,9 @@ The request is accepted when an automated two-runtime proof demonstrates all of 
 - [A2A 1.0 specification](https://a2a-protocol.org/latest/specification/).
 - [A2A `v1.0.1` release](https://github.com/a2aproject/A2A/releases/tag/v1.0.1).
 - [A2A protocol repository](https://github.com/a2aproject/A2A).
-- `kikan:docs/improvement-requests/shikigami-cross-runtime-agent-delegation.md` — originating
+- `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-4` — originating
   transport-neutral contract.
-- `kikan:docs/use-cases/005-cross-cluster-production-diagnosis.md` — motivating edge-runtime use
+- `mori://shinzui/kikan/okf/use-cases/concepts/UC-5` — motivating edge-runtime use
   case and sequencing constraint.
 - `docs/plans/9-multi-agent-delegation-primitive.md` — shipped local durable primitive.
 - `docs/plans/35-delegation-as-a-first-class-declared-capability.md` — local declaration,
