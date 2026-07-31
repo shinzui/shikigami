@@ -19,6 +19,7 @@ import Keiki.Core
     RegFile (RNil),
     SymTransducer,
     TransducerValidationWarning,
+    ValidationOptions (..),
     defaultValidationOptions,
     validateTransducer,
   )
@@ -80,9 +81,33 @@ atRiskCustomerMermaid :: Text
 atRiskCustomerMermaid =
   toMermaidWith defaultMermaidOptions atRiskCustomerLifecycle
 
+-- | The checks this transducer is held to.
+--
+-- Keiki 0.4 added @checkStateChangingEpsilon@, which rejects an output-free edge
+-- that changes vertex: if you persist only emitted events, replaying the log
+-- cannot reproduce the forward state. Every edge here is output-free — the
+-- transducer's output type is @()@ — so the check fires on all four.
+--
+-- It is disabled, and the reason is that this transducer is not an event source.
+-- It is a rendered specification of the at-risk-customer lifecycle: it produces
+-- the Mermaid diagram and nothing else. The durable state for that lifecycle is
+-- Keiro's workflow journal, written by "Shikigami.Flow.AtRiskCustomer", and this
+-- transducer neither writes nor reads it. Keiki's warning — "never disable this
+-- for a transducer whose events are persisted" — is about a case that does not
+-- exist here.
+--
+-- Giving the lifecycle a real emitted-event type, so it could be validated under
+-- the full default option set, is a modelling change that belongs with
+-- @docs\/plans\/39-adopt-the-checked-keiro-dsl-for-durable-topology.md@, which
+-- owns durable topology and identifiers. Every other replay-safety check stays
+-- on.
+diagramValidationOptions :: ValidationOptions
+diagramValidationOptions =
+  defaultValidationOptions {checkStateChangingEpsilon = False}
+
 atRiskCustomerValidationWarnings :: [TransducerValidationWarning AtRiskCustomerState]
 atRiskCustomerValidationWarnings =
-  validateTransducer defaultValidationOptions atRiskCustomerLifecycle
+  validateTransducer diagramValidationOptions atRiskCustomerLifecycle
 
 classifyLowRisk :: InCtor AtRiskCustomerCommand '[]
 classifyLowRisk =

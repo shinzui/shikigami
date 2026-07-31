@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, isPrefixOf)
 import Shikigami.Migrations
   ( embeddedMigrationEntries,
     shikigamiMigrationPlan,
@@ -58,8 +58,9 @@ compositionTests =
 
     quoted c = "\"" <> c <> "\""
 
+    -- The offset of the needle's first occurrence.
     indexOf haystack needle =
-      length (takeWhile (not . (needle `isInfixOf`)) (suffixes haystack))
+      length (takeWhile (not . (needle `isPrefixOf`)) (suffixes haystack))
 
     suffixes xs = xs : case xs of
       [] -> []

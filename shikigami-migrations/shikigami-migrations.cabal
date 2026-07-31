@@ -28,10 +28,13 @@ library
     , bytestring               >=0.11     && <0.13
     , containers               >=0.6      && <0.8
     , keiro-migrations         ^>=0.4.0.1
+    , kioku-core               ^>=0.2.0.0
     , kioku-migrations         ^>=0.2.0.0
+    , kiroku-store             ^>=0.3.1.0
     , kiroku-store-migrations  ^>=0.3.0.0
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-embed         ^>=1.1.0.0
+    , text                     >=2.0      && <2.2
 
 executable shikigami-migrate
   import:         common

@@ -61,7 +61,7 @@ import Options.Applicative
     progDesc,
     (<**>),
   )
-import Shikigami.Migrations (shikigamiMigrationPlan)
+import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrationPlan)
 import System.Environment (lookupEnv)
 import System.Exit qualified as Exit
 
@@ -83,6 +83,11 @@ main = do
           plan
           defaultRunOptions
   outcome <- runMigrationCommand environment command
+  -- Applying the plan is only half the job; see 'reconcileShikigamiReadModels'.
+  -- Only the writing command does this, and only when it succeeded.
+  case (command, exitClass outcome) of
+    (Up {}, ExitSucceeded) -> reconcileShikigamiReadModels (Text.pack databaseUrl)
+    _ -> pure ()
   case outputFormatOf command of
     TextOutput -> Text.IO.putStrLn (renderMigrationCommandText outcome)
     JsonOutput ->

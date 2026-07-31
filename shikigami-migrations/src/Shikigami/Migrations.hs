@@ -26,12 +26,15 @@ module Shikigami.Migrations
     embeddedMigrationEntries,
     shikigamiMigrations,
     shikigamiMigrationPlan,
+    reconcileShikigamiReadModels,
   )
 where
 
+import Control.Exception (throwIO)
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Set qualified as Set
+import Data.Text (Text)
 import Database.PostgreSQL.Migrate
   ( DefinitionError,
     MigrationComponent,
@@ -42,7 +45,10 @@ import Database.PostgreSQL.Migrate
   )
 import Database.PostgreSQL.Migrate.Embed (embedMigrationManifest)
 import Keiro.Migrations qualified as Keiro
+import Kioku.App (runAppIO, withNoopAppEnv)
 import Kioku.Migrations qualified as Kioku
+import Kioku.ReadModel (reconcileReadModelRegistry)
+import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Migrations qualified as Kiroku
 
 -- | Shikigami's own SQL, embedded at compile time from @sql-migrations/manifest@.
@@ -79,3 +85,22 @@ shikigamiMigrationPlan = do
       either
         (error . (("invalid embedded " <> label <> " migration component: ") <>) . show)
         pure
+
+-- | Bring keiro's @keiro_read_models@ registry up to the identity the compiled
+-- Kioku expects.
+--
+-- Applying the plan is only half the job. Keiro records each read model's
+-- version and shape hash in a registry row and refuses to serve a query whose
+-- row disagrees with the code, and @registerReadModel@ only ever /inserts/ — so
+-- an existing row stays pinned at its old identity and every query for that
+-- model fails closed after a Kioku upgrade. @kioku-migrate up@ reconciles the
+-- registry for hosts that use it; a host running a composed plan directly, as
+-- this one does, must call this itself.
+--
+-- Run it at migration time, not at process startup, or every booting process
+-- races to write the registry. It is idempotent: a second run writes nothing.
+reconcileShikigamiReadModels :: Text -> IO ()
+reconcileShikigamiReadModels connectionString =
+  withNoopAppEnv (defaultConnectionSettings connectionString) \env -> do
+    outcome <- runAppIO env reconcileReadModelRegistry
+    either throwIO (const (pure ())) outcome

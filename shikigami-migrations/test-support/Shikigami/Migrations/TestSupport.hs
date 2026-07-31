@@ -20,7 +20,7 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
-import Shikigami.Migrations (shikigamiMigrationPlan)
+import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrationPlan)
 
 withShikigamiMigratedDatabase :: (Text -> IO a) -> IO a
 withShikigamiMigratedDatabase use = do
@@ -29,6 +29,9 @@ withShikigamiMigratedDatabase use = do
     PgMigrate.withMigratedDatabase plan \connection -> do
       connectionStringResult <- Connection.use connection connectionStringSession
       connectionString <- either (fail . show) pure connectionStringResult
+      -- Kioku 0.2 leaves the read-model registry to the host that applies the
+      -- plan. Without this, every projection query fails ReadModelUnregistered.
+      reconcileShikigamiReadModels connectionString
       use connectionString
   either (fail . show) pure result
 
