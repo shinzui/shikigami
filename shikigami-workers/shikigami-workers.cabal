@@ -153,6 +153,7 @@ test-suite shikigami-workers-test
     , kiroku-store
     , optparse-applicative
     , pgmq-hasql
+    , settei-env
     , shikigami-core
     , shikigami-migrations:test-support
     , shikigami-workers

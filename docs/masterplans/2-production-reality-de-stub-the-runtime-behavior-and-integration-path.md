@@ -106,7 +106,7 @@ with a real model) but is not blocked by it.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
-| F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | In Progress |
+| F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-07-31), except the migration executable — see Surprises |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Not Started; M0 complete |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Not Started |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
@@ -276,6 +276,18 @@ calling `getEnv`/`lookupEnv` or building one-off parsers. Secrets are credential
 references or redacted secret types and never gain `Show`, JSON, or log rendering.
 Standard OpenTelemetry environment variables remain SDK-owned as plan 37 documents.
 
+As implemented (2026-07-31), the shared artifacts are concrete. `AppConfig` and the
+`Config AppConfig` declaration live in `shikigami-core/src/Shikigami/App/Config.hs`; source
+assembly, the five diagnostics, and exit codes 2/3/4 live in
+`shikigami-core/src/Shikigami/App/Config/Load.hs`. A consuming plan adds a stable key, a
+`Setting` with a bounded decoder, a field on `AppConfig`, a line in `appConfig`, an
+environment binding, and entries in the key and binding lists of
+`shikigami-core/test/Shikigami/AppConfigSpec.hs` — the six-step recipe is at the end of
+`docs/operations/configuration.md`. Three rules bind them: declare a key only when code
+reads it, give every public setting a renderer, and express a per-binary requirement as a
+`Role` entry rather than a separate declaration. Operator flags are added with
+`Settei.Optparse.namedOption` aimed at a declared key, never as a private parser.
+
 **Keiro journal discipline — `Agent/Workflow.hs` step structure vs. MasterPlan 5's
 plan 24 (all four EPs constrained).**
 `docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md` introduces
@@ -331,8 +343,17 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       the arrows and executable ownership; `docs/api/openapi.json` is generated from the
       served route proxy; and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs`
       fails the build on a forbidden sibling edge. 101 tests pass across six suites.
-- [ ] F2 M1–M4: every executable uses Settei with explicit bindings, diagnostics,
-      secret redaction, and compatibility tests from plan 37.
+- [x] (2026-07-31T05:55:00Z) F2 M1–M4: nine of the ten executables resolve one typed
+      `AppConfig` through Settei with explicit environment bindings, fixed precedence,
+      rejected unknown keys, structurally redacted secrets, all five diagnostic modes, and
+      exit codes 2/3/4. `docs/operations/configuration.md` and
+      `config/shikigami.example.yaml` document the surface; 31 conformance cases in
+      `shikigami-core/test/Shikigami/AppConfigSpec.hs` pin precedence, strictness, the
+      accepted key and binding lists, and the absence of a planted secret from every
+      rendering. 132 tests pass across seven suites.
+- [ ] F2 remaining: `shikigami-migrate` still uses codd's `CODD_*` contract. Blocked by a
+      cabal package cycle (see Surprises & Discoveries); reassigned to plan 38, which owns
+      the migration CLI.
 - [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
       released Keiki 0.4 / Keiro 0.4 bounds and codec-compatibility evidence.
 - [ ] F3 M1–M5: verified dependency matrix, released API ports, wire/replay
@@ -398,6 +419,33 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - Plan 36 implementation (2026-07-31): all builds and tests must run inside the Nix dev
   shell. A bare `cabal build all` compiles everything and then fails at link with
   `ld: library not found for -lrdkafka`. Use `nix develop --command cabal ...`.
+- Plan 37 implementation (2026-07-31): **`shikigami-migrate` cannot consume the shared
+  configuration declaration, and every later plan that wants to configure a migration step
+  inherits this.** `shikigami-core`'s test suite depends on
+  `shikigami-migrations:test-support`, so the reverse edge makes the two packages mutually
+  dependent and cabal's solver — which detects cycles at package rather than component
+  granularity — refuses the whole project with
+  `rejecting: shikigami-core:*test (cyclic dependencies)`. The migration executable keeps
+  codd's `CODD_*` contract, documented at its call site. Plan 38 owns the migration CLI and
+  is the right place to restructure the boundary.
+- Plan 37 implementation (2026-07-31): the configuration surface is **one** `AppConfig`
+  shared by every binary, not one per binary, with per-binary requirements expressed as a
+  `Role` and checked after resolution. Plans 13, 14, 16, 22, 28–32 and 34 extend that single
+  declaration in `shikigami-core/src/Shikigami/App/Config.hs`; the six-step recipe is at the
+  end of `docs/operations/configuration.md`. Two conventions bind them. Only declare a key
+  something reads — `--describe-config` is a promise, and an accepted key nothing consults
+  breaks it, which is why this plan left `behavior.*`, `approval.*`, `credentials.*`,
+  `health.port`, `worker.run_timeout_seconds` and `http.request_max_bytes` to the plans that
+  introduce the code reading them. And give every public setting a renderer, or
+  `--explain-config` prints `<derived>` instead of the defaulted value.
+- Plan 37 implementation (2026-07-31): operator-facing flags are not an alternative to
+  settings. `Settei.Optparse.namedOption` makes a flag an ordinary command-line source aimed
+  at a declared key, so `--broker X` and `--set kafka.broker=X` are the same thing and
+  cannot disagree about defaults or decoders. Every plan adding a flag for something that is
+  really deployment configuration should do this rather than introduce a parser.
+- Plan 37 implementation (2026-07-31): `cabal test all` run in parallel intermittently fails
+  `shikigami-core-test` while every suite passes under `-j1` — the database-backed suites
+  each stand up an ephemeral PostgreSQL and contend. Trust `-j1` when judging a run.
 
 
 ## Decision Log
@@ -502,6 +550,13 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - 2026-07-22: Added plans 36 and 37 as architecture and Settei foundations, rewired all
   MP-2 children to consume them, and replaced the obsolete `lookupEnv` convention.
 
+- 2026-07-31: Marked F2 (plan 37) Complete except for the migration executable. Nine of the
+  ten binaries now resolve one typed `AppConfig` through Settei, with all five diagnostic
+  modes, reserved exit codes, rejected unknown keys, and a planted-secret conformance test.
+  Recorded the cabal package cycle that blocks `shikigami-migrate` and reassigned that piece
+  to plan 38; recorded the conventions later plans must follow when extending the single
+  declaration, and the parallel-test caveat. F3 (plan 47) is now the next implementable
+  child.
 - 2026-07-31: Marked F1 (plan 36) Complete. The repository now has the six-package
   deployed-service architecture with the dependency arrows asserted by a test, a typed
   public HTTP contract with a generated `docs/api/openapi.json`, and every command

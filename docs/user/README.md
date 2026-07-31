@@ -61,6 +61,7 @@ agent declaration in order:
 | **[Detectors](./detectors.md)** | Building the intelligence layer as declared agents |
 | **[The Living Loop](./living-loop.md)** | Running the worker end to end; closing the loop with `stub-kawa` |
 | **[CLI Reference](./cli.md)** | Every `shikigami` subcommand |
+| **[Configuration](../operations/configuration.md)** | Every setting each binary accepts, where values come from, and the `--check-config` / `--explain-config` diagnostics |
 
 ## Mental model in one picture
 

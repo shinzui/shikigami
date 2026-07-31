@@ -48,6 +48,7 @@
 module Shikigami.App.Config.Load
   ( -- * Parsing the command line
     ConfigOptions (..),
+    DiagnosticMode (..),
     configOptions,
     configOptionsWith,
     withConfigOptions,

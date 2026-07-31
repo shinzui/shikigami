@@ -92,6 +92,10 @@ stanzas.
    name of its *concept*. Moving `Shikigami.Trigger.Consumer` from core to workers does
    not rename it; it is still the trigger vertical.
 2. Technical composition module names are limited to this allowlist:
+   - `Shikigami.App.Config`, `Shikigami.App.Config.Load` — the one process-configuration
+     declaration and its loader, in `shikigami-core`. Every executable in every package
+     resolves its settings from these two modules; no other module may read the
+     environment. See `docs/operations/configuration.md`.
    - `Shikigami.Server.App`, `Shikigami.Server.Boot`, `Shikigami.Server.Config`,
      `Shikigami.Server.Seam`
    - `Shikigami.Workers.Config`, `Shikigami.Workers.Registry`,

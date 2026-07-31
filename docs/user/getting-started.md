@@ -83,7 +83,10 @@ $ just create-database     # creates the DB if missing, then runs `just migrate`
 
 This installs the kiroku event-store schema *and* shikigami's own read-model migrations
 (the suppression table) in one pass. The connection string is exposed as
-`PG_CONNECTION_STRING` by the dev shell; runtime commands read it automatically.
+`PG_CONNECTION_STRING` by the dev shell, which is the environment variable bound to the
+`database.connection_string` setting, so runtime commands pick it up automatically. See
+[Configuration](../operations/configuration.md) for the full surface and for the
+`--check-config` / `--explain-config` diagnostics every binary offers.
 
 To run Postgres itself locally, use the bundled process-compose:
 

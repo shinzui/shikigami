@@ -14,6 +14,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
+import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
@@ -44,6 +45,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+          AppConfigSpec.tests,
           DelegateContextSpec.tests,
           PackageArchitectureSpec.tests,
           FlowLifecycleSpec.tests,

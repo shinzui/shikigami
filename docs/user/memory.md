@@ -57,7 +57,9 @@ recorded learning mem_01k…
 
 The agent name resolves to `agents/<name>.dhall`; a path with `/` or a `.dhall` suffix is
 used as-is. This command needs the database — run `just create-database` first, and ensure
-`PG_CONNECTION_STRING` is set (the dev shell sets it).
+`database.connection_string` is set. The dev shell exports `PG_CONNECTION_STRING`, which is
+the environment variable bound to that setting; see
+[Configuration](../operations/configuration.md) for the other ways to supply it.
 
 ## Recording an activity as memory
 

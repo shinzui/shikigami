@@ -11,6 +11,7 @@
 module Shikigami.Server.CommandSpec (tests) where
 
 import Data.List (isInfixOf)
+import Data.Maybe (isNothing)
 import Options.Applicative
 import Shikigami.Server.Command (adminInfo, adminSubcommands)
 import Test.Tasty (TestTree, testGroup)
@@ -55,8 +56,44 @@ tests =
         let rendered = helpTextOf ["danwa-spike", "--help"]
         mapM_
           (\flag -> assertBool ("danwa-spike help does not mention " <> flag) (flag `isInfixOf` rendered))
-          ["--danwa-url", "--human", "--agent"]
+          ["--danwa-url", "--human", "--agent"],
+      -- The diagnostics live at the top level rather than inside a subcommand,
+      -- because `shikigami --describe-config` must answer without being told
+      -- which command it is about to not run.
+      testCase "the top-level command line offers every configuration diagnostic" do
+        let rendered = helpTextOf ["--help"]
+        mapM_
+          (\flag -> assertBool ("top-level help does not mention " <> flag <> ":\n" <> rendered) (flag `isInfixOf` rendered))
+          [ "--config",
+            "--set",
+            "--describe-config",
+            "--describe-config-json",
+            "--explain-config",
+            "--explain-config-json",
+            "--check-config"
+          ],
+      -- A diagnostic with no subcommand has to parse: it is how an operator
+      -- inspects the schema, and there is nothing to run.
+      testCase "a diagnostic parses with no subcommand at all" $
+        case execParserPure defaultPrefs adminInfo ["--describe-config"] of
+          Success (chosen, _) -> assertBool "no subcommand should have been chosen" (isNothing chosen)
+          Failure failure ->
+            let (message, _) = renderFailure failure "shikigami"
+             in assertBool ("--describe-config alone did not parse:\n" <> message) False
+          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
+      testCase "a subcommand's downstream flags name the configuration keys they set" do
+        assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
+        assertMentions ["stub-kawa", "--help"] ["kafka.broker"]
+        assertMentions ["danwa-spike", "--help"] ["sinks.danwa.base_url"]
     ]
+
+assertMentions :: [String] -> [String] -> IO ()
+assertMentions args expected =
+  mapM_
+    (\needle -> assertBool (unwords args <> " does not mention " <> needle <> ":\n" <> rendered) (needle `isInfixOf` rendered))
+    expected
+  where
+    rendered = helpTextOf args
 
 -- | Run the administrative parser on the given arguments and return what it
 -- printed.

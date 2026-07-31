@@ -1,0 +1,58 @@
+# A complete Shikigami configuration file.
+#
+# Pass it to any binary with --config, one or more times:
+#
+#   shikigami-worker --config config/shikigami.example.yaml
+#   shikigami-server --check-config --config config/shikigami.example.yaml
+#
+# Every key below is optional except database.connection_string, which the
+# worker roles refuse to start without. Omitting a key leaves its declared
+# default in place; run `shikigami-worker --describe-config` for the full
+# schema, or see docs/operations/configuration.md.
+#
+# Unknown keys are rejected rather than ignored, so a typo here fails the
+# process with exit code 4 rather than silently doing nothing.
+#
+# The values shown are the declared defaults, so this file as written changes
+# nothing except the connection string.
+
+database:
+  # Secret. Redacted in --explain-config and in every error message.
+  # Also bound to PG_CONNECTION_STRING, which the Nix dev shell exports.
+  connection_string: postgresql:///shikigami
+
+agents:
+  # Where the .dhall agent manifests live, relative to the working directory.
+  directory: agents
+
+kafka:
+  broker: 127.0.0.1:9092
+  activity:
+    # Consumed by shikigami-consume-stream.
+    topic: activity.v1
+  events:
+    # Consumed by shikigami-consume-events.
+    topic: danwa.message-addressed.v1
+  groups:
+    stream: shikigami-stream
+    events: shikigami-events
+  # Off is the feedback guard: it stops an agent's own output from triggering
+  # it again. Turn it on only for deliberate meta-detectors.
+  include_agent_actors: false
+
+http:
+  # 127.0.0.1 keeps a development server off the network; "*" binds every
+  # interface, which is what a container wants.
+  host: 127.0.0.1
+  port: 8080
+
+sinks:
+  kawa:
+    base_url: http://localhost:8088
+    source_segment: shinzui/shikigami
+  kizashi:
+    base_url: http://localhost:8089
+    default_recipient: recipient:default
+  danwa:
+    base_url: http://localhost:8080
+    agent_participant: part_shikigami

@@ -115,6 +115,7 @@ test-suite shikigami-core-test
   main-is:        Main.hs
   other-modules:
     Shikigami.AgentWorkflowSpec
+    Shikigami.AppConfigSpec
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
@@ -140,6 +141,10 @@ test-suite shikigami-core-test
     , kioku-core
     , kiroku-store
     , pgmq-hasql
+    , settei
+    , settei-env
+    , settei-optparse-applicative
+    , settei-yaml
     , shikigami-core
     , shikigami-migrations:test-support
     , tasty

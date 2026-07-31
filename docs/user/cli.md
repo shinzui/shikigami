@@ -20,9 +20,15 @@ shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--da
 ```
 
 Commands that record sessions, use the run queue, or use the Keiro inbox (`agent-run`,
-`enqueue-run`, `consume-stream`, `consume-events`, `worker`) read the connection string from
-the `PG_CONNECTION_STRING` environment variable (set by the dev shell) and need a migrated
-database (`just create-database`).
+`enqueue-run`, `consume-stream`, `consume-events`, `worker`) need the
+`database.connection_string` setting and a migrated database (`just create-database`). The
+dev shell exports `PG_CONNECTION_STRING`, the environment variable bound to that setting.
+
+Every binary also accepts `--config PATH`, `--set KEY=VALUE`, and the five configuration
+diagnostics (`--describe-config`, `--describe-config-json`, `--explain-config`,
+`--explain-config-json`, `--check-config`). See
+[Configuration](../operations/configuration.md) for the complete accepted surface, the
+precedence order, and which binary refuses to start without what.
 
 ---
 
@@ -62,7 +68,7 @@ resolves to `agents/<NAME>.dhall`; a path (contains `/` or ends in `.dhall`) is 
 
 With `--from-activity <FILE>`, instead of running the behavior it folds an `activity.v1`
 envelope (JSON) directly into the agent's memory (payload → content; verb/subject → tags).
-**Needs the DB** (`PG_CONNECTION_STRING`).
+**Needs the DB** (`database.connection_string`).
 
 → See [Memory & Sessions](./memory.md).
 
@@ -148,8 +154,10 @@ Boot the supervised worker. Loads every `.dhall` in `--agents`, then drains
 `shikigami_run_jobs`: for each job, run the agent's behavior, dispatch its (permission-gated)
 sinks to the configured services, and record a kioku session. Defaults:
 `--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`,
-`--danwa-url http://localhost:8080`, `--danwa-agent part_shikigami`.
-**Needs the DB** (`PG_CONNECTION_STRING`).
+`--danwa-url http://localhost:8080`, `--danwa-agent part_shikigami`. Each of those flags
+sets a declared configuration key, so `--kawa-url URL` and `--set sinks.kawa.base_url=URL`
+are the same thing.
+**Needs the DB** (`database.connection_string`).
 
 → See [The Living Loop](./living-loop.md).
 

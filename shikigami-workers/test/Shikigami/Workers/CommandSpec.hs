@@ -20,8 +20,11 @@
 module Shikigami.Workers.CommandSpec (tests) where
 
 import Data.List (isInfixOf)
+import Data.Text qualified as Text
 import Options.Applicative
-import Shikigami.App.Config (Role (..))
+import Settei.Env (envSnapshot, environmentSource)
+import Shikigami.App.Config
+import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
 import Shikigami.Workers.Command
   ( WorkerRoleInfo (..),
     agentRunRoleInfo,
@@ -33,7 +36,7 @@ import Shikigami.Workers.Command
     workerRoles,
   )
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 -- | The options every configurable executable offers, whatever its role.
 configurationFlags :: [String]
@@ -126,8 +129,99 @@ tests =
           ("kafka.groups.stream" `isInfixOf` streamHelp)
         assertBool
           ("consume-events --group must set kafka.groups.events:\n" <> eventsHelp)
-          ("kafka.groups.events" `isInfixOf` eventsHelp)
+          ("kafka.groups.events" `isInfixOf` eventsHelp),
+      resolutionTests
     ]
+
+-- | The flags actually reach the configuration they claim to.
+--
+-- The help-text cases above prove a flag exists and names a key. They cannot
+-- prove it is wired to that key: @namedOption@ takes the spelling and the target
+-- key as separate arguments, so a copy-paste that points @--kizashi-url@ at
+-- @sinks.kawa.base_url@ produces perfect help text and the wrong deployment.
+-- These cases run the real parser and then the real resolver, with an injected
+-- environment so they do not depend on the developer's shell.
+resolutionTests :: TestTree
+resolutionTests =
+  testGroup
+    "resolution through the real parser"
+    [ testCase "every worker flag lands on the setting it names" do
+        config <-
+          resolveArgs
+            workerRoleInfo
+            [ "--agents",
+              "/srv/agents",
+              "--kawa-url",
+              "http://kawa.internal",
+              "--kizashi-url",
+              "http://kizashi.internal",
+              "--danwa-url",
+              "http://danwa.internal",
+              "--danwa-agent",
+              "part_from_flag"
+            ]
+        agentsDirectory config @?= "/srv/agents"
+        kawaBaseUrl config @?= "http://kawa.internal"
+        kizashiBaseUrl config @?= "http://kizashi.internal"
+        danwaBaseUrl config @?= "http://danwa.internal"
+        danwaAgentParticipant config @?= "part_from_flag",
+      testCase "the stream consumer's flags land on the activity-stream settings" do
+        config <-
+          resolveArgs
+            consumeStreamRoleInfo
+            ["--broker", "b:9092", "--topic", "activity.test", "--group", "stream-test", "--include-agent-actors"]
+        kafkaBroker config @?= "b:9092"
+        kafkaActivityTopic config @?= "activity.test"
+        kafkaStreamGroup config @?= "stream-test"
+        kafkaIncludeAgentActors config @?= True
+        -- The event consumer's settings must be untouched by the stream
+        -- consumer's identically-spelled flags.
+        kafkaEventsTopic config @?= kafkaEventsTopic defaultAppConfig
+        kafkaEventsGroup config @?= kafkaEventsGroup defaultAppConfig,
+      testCase "the event consumer's flags land on the integration-event settings" do
+        config <- resolveArgs consumeEventsRoleInfo ["--topic", "events.test", "--group", "events-test"]
+        kafkaEventsTopic config @?= "events.test"
+        kafkaEventsGroup config @?= "events-test"
+        kafkaActivityTopic config @?= kafkaActivityTopic defaultAppConfig
+        kafkaStreamGroup config @?= kafkaStreamGroup defaultAppConfig,
+      testCase "omitting the feedback-guard switch leaves the guard on" do
+        config <- resolveArgs consumeStreamRoleInfo ["--broker", "b:9092"]
+        kafkaIncludeAgentActors config @?= False,
+      testCase "a --set override beats the equivalent named flag" do
+        config <- resolveArgs workerRoleInfo ["--agents", "/from-flag", "--set", "agents.directory=/from-set"]
+        agentsDirectory config @?= "/from-set"
+    ]
+
+-- | Parse the given arguments with a role's real parser, then resolve the
+-- sources it produced.
+--
+-- The environment is injected rather than read from the process, so these cases
+-- do not depend on the developer's shell. It supplies only a connection string,
+-- because every worker role but @run-behavior@ refuses to start without one and
+-- these cases are about where the /other/ values come from.
+resolveArgs :: WorkerRoleInfo -> [String] -> IO AppConfig
+resolveArgs info args =
+  case execParserPure defaultPrefs (parserInfo info) args of
+    Success (_, options) ->
+      let environment =
+            environmentSource
+              environmentBindings
+              (envSnapshot [("PG_CONNECTION_STRING", "postgresql:///shikigami-test")])
+          run = appConfigRun (role info) options (Right []) environment
+       in case resolved run of
+            Just config -> pure config
+            Nothing ->
+              assertFailure
+                ( binaryName info
+                    <> ": expected a resolved configuration, got exit "
+                    <> show (exitCode run)
+                    <> ":\n"
+                    <> Text.unpack (standardError run)
+                )
+    Failure failure ->
+      let (message, _) = renderFailure failure (binaryName info)
+       in assertFailure (binaryName info <> ": arguments did not parse:\n" <> message)
+    CompletionInvoked _ -> assertFailure "unexpected completion invocation"
 
 -- | Assert the rendered help mentions every flag the command is documented to take.
 assertHasAll :: WorkerRoleInfo -> [String] -> IO ()
