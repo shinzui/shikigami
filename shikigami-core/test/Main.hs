@@ -1,6 +1,7 @@
 module Main (main) where
 
-import Data.Aeson (Value, eitherDecode, encode, object, (.=))
+import Data.Aeson (Value (..), eitherDecode, encode, object, (.=))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LBS8
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict (Map)
@@ -316,7 +317,9 @@ danwaTests :: TestTree
 danwaTests =
   testGroup
     "DanwaConversation"
-    [ testCase "targeted reply posts through danwa and returns Delivered msg id" do
+    [ -- A reply ignores the declared topic on purpose: the thread already has
+      -- its context, and re-announcing it on every message would be noise.
+      testCase "targeted reply posts through danwa and returns Delivered msg id" do
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
@@ -326,8 +329,12 @@ danwaTests =
           r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
           outcome r @?= Delivered "msg_reply"
           reqs <- readIORef ref
-          assertEqual "one danwa message recorded" 1 (length reqs),
-      testCase "untargeted sink starts a conversation before posting" do
+          assertEqual "one danwa message recorded" 1 (length reqs)
+          postedContent reqs @?= Just "reply text",
+      -- danwa has no conversation topic to set, so a declared topic becomes the
+      -- first line of the opening message. Before this, it was accepted and
+      -- discarded.
+      testCase "untargeted sink starts a conversation and opens with the declared topic" do
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
@@ -337,7 +344,25 @@ danwaTests =
           outcome r @?= Delivered "msg_stub"
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
+          postedContent reqs @?= Just "[support]\nfresh thread text",
+      testCase "a declaration with no topic opens exactly as it did before" do
+        ref <- newIORef []
+        testWithApplication (pure (stubDanwaApp ref)) \port -> do
+          let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
+              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
+              sink = DanwaConversation {topic = ""}
+          _ <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          reqs <- readIORef ref
+          postedContent reqs @?= Just "fresh thread text"
     ]
+
+-- | The @content@ of the single message the danwa stub recorded.
+postedContent :: [Value] -> Maybe Text
+postedContent = \case
+  [Object o] -> case KeyMap.lookup "content" o of
+    Just (String s) -> Just s
+    _ -> Nothing
+  _ -> Nothing
 
 sampleOutput :: Data.Aeson.Value
 sampleOutput = object ["summary" .= ("heartbeat ok" :: Text), "activity_ref" .= ("activity://act_seed" :: Text)]

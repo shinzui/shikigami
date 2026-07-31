@@ -63,6 +63,7 @@ library
     Shikigami.Sink.Recipient
     Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
+    Shikigami.Sink.Validate
     Shikigami.Sink.Wire
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule

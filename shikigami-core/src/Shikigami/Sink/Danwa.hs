@@ -21,14 +21,35 @@ import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Types (DanwaTarget (..))
 
+-- | Post the behavior output into danwa.
+--
+-- The declared @topic@ is honored only when this opens a /fresh/ thread, and
+-- then as the first line of the opening message rather than as a conversation
+-- attribute — danwa's domain has no topic to set. A reply into an existing
+-- thread ignores it by design: the thread already has its context, and
+-- re-announcing the topic on every message would be noise.
+--
+-- In-band was chosen over rejecting the field at validate time because the field
+-- has real declarative value — a human opening the thread sees what it is about
+-- — and because rejecting it would invalidate manifests that are otherwise
+-- correct. What was not an option was continuing to accept it and do nothing.
 runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)
 runDanwa cfg identity target sink output =
   case sink of
-    DanwaConversation {} ->
+    DanwaConversation {topic} ->
       case target of
         Just t -> postReply cfg t (renderDanwaContent output)
-        Nothing -> postToFreshConversation cfg identity sink (renderDanwaContent output)
+        Nothing -> postToFreshConversation cfg identity sink (withTopicLine topic (renderDanwaContent output))
     _ -> pure (Left "runDanwa: not a DanwaConversation sink")
+
+-- | Prefix the opening message with the declared topic, if there is one.
+--
+-- An empty topic contributes nothing rather than an empty bracket, so a
+-- declaration that omits it reads exactly as it did before.
+withTopicLine :: Text -> Text -> Text
+withTopicLine topic content
+  | Text.null (Text.strip topic) = content
+  | otherwise = "[" <> Text.strip topic <> "]\n" <> content
 
 postReply :: DanwaConfig -> DanwaTarget -> Text -> IO (Either Text Text)
 postReply cfg (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do

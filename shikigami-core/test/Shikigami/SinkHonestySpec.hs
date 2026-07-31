@@ -28,7 +28,15 @@ import Network.Wai.Handler.Warp (testWithApplication)
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Decl (Priority (High), RecipientFrom (..), SignalType (Alert), Sink (..))
+import Shikigami.Agent.Decl
+  ( AgentDecl (..),
+    Behavior (..),
+    Priority (High),
+    RecipientFrom (..),
+    SignalType (Alert),
+    Sink (..),
+    Trigger (..),
+  )
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -44,6 +52,7 @@ import Shikigami.Sink.KizashiClient (buildSignalReq)
 import Shikigami.Sink.Permission (SinkKind (SReiAction))
 import Shikigami.Sink.Recipient (resolveSinkRecipient, unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (unconfiguredMessage)
+import Shikigami.Sink.Validate (sinkDeclarationErrors)
 import Shikigami.Sink.Wire (CreateSignalReq (..), ReiActionReq (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -54,7 +63,43 @@ tests =
     "sink honesty"
     [ reiActionTests,
       outcomeMappingTests,
-      recipientTests
+      recipientTests,
+      validationTests
+    ]
+
+-- ── Declarations that can never be honored ──────────────────────────────────
+
+-- | The line between \"warn at dispatch\" and \"refuse at validate\".
+--
+-- A strategy that falls back to a declared default is recoverable and only
+-- deserves a warning. A strategy that needs an ownership directory /and/ names
+-- nobody to fall back to has no correct answer at all — every signal it produces
+-- would go to the deployment-wide fallback, which is a person the manifest never
+-- mentioned. That is refused where the author can see it.
+validationTests :: TestTree
+validationTests =
+  testGroup
+    "a declaration that can never route is refused up front"
+    [ testCase "a directory strategy with no default is an error naming both" $
+        case sinkDeclarationErrors (agentWith [signalWith SubjectOwner Nothing]) of
+          [err] -> do
+            assertBool ("the error should name the strategy:\n" <> Text.unpack err) ("SubjectOwner" `Text.isInfixOf` err)
+            assertBool ("the error should name what is missing:\n" <> Text.unpack err) ("defaultRecipient" `Text.isInfixOf` err)
+          other -> assertFailure ("expected exactly one error, got " <> show other),
+      testCase "both directory strategies are refused" $
+        mapM_
+          (\strategy -> length (sinkDeclarationErrors (agentWith [signalWith strategy Nothing])) @?= 1)
+          [SubjectOwner, AreaOwner],
+      -- The shape agents/triage-note.dhall already ships: a directory strategy
+      -- is fine as long as the author said who to fall back to.
+      testCase "a directory strategy with a declared default is fine" $
+        sinkDeclarationErrors (agentWith [signalWith SubjectOwner (Just "person:nadeem")]) @?= [],
+      testCase "Actor needs no default, because it resolves" $
+        sinkDeclarationErrors (agentWith [signalWith Actor Nothing]) @?= [],
+      testCase "sinks with no routing at all are not the subject" $
+        sinkDeclarationErrors (agentWith [sampleReiSink]) @?= [],
+      testCase "every offending sink is reported, not just the first" $
+        length (sinkDeclarationErrors (agentWith [signalWith SubjectOwner Nothing, signalWith AreaOwner Nothing])) @?= 2
     ]
 
 -- ── recipientFrom ───────────────────────────────────────────────────────────
@@ -125,6 +170,18 @@ recipientOf resolved declared =
       (signalWith Actor declared)
       (AgentIdentity "triage-note")
       sampleOutput
+
+-- | A declaration carrying the given sinks; every other field is irrelevant to
+-- what 'sinkDeclarationErrors' looks at.
+agentWith :: [Sink] -> AgentDecl
+agentWith sinks =
+  AgentDecl
+    { name = "triage-note",
+      description = "a declaration used only for its sinks",
+      trigger = Schedule {cron = "*/5 * * * *"},
+      behavior = Skill {path = "agents/skills/triage-note"},
+      sinks
+    }
 
 signalWith :: RecipientFrom -> Maybe Text -> Sink
 signalWith recipientFrom defaultRecipient =
