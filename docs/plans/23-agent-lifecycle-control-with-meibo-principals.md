@@ -366,6 +366,15 @@ editing lifecycle back to active. Queued jobs for a paused agent are consumed-an
 (`AckOk`), so unpausing does not replay a stale backlog.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 30, 33, 36-38, and 47. It is not blocked on a Meibo
+client release: the file-backed `DirectorySource` and `DirectoryHandle` are the accepted first
+slice and keep a live-client adapter replaceable. Use released Kioku resource/session APIs from the
+plan-47 cohort; a future live Meibo source must preserve the same fail-closed/last-known-valid
+contract.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, 38, 30, and 33. Plan 20 supplies the load report.

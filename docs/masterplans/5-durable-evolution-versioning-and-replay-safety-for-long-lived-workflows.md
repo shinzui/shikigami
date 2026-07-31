@@ -119,11 +119,11 @@ consolidation reviewable against it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | cross-MP: plan 36 | None | Not Started |
+| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | cross-MP: plans 36 and 47 | None | Not Started |
 | 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Not Started |
-| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1 | None | Not Started |
-| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1 | None | Not Started |
-| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
+| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1; cross-MP: plan 47 | None | Not Started |
+| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1; cross-MP: plan 47; upstream Kioku IR-2 | None | Not Started |
+| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1; cross-MP: plan 47 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -270,6 +270,13 @@ interactions between child plans. Provide concise evidence.
 
 ## Decision Log
 
+- Decision: Put plan 47 before the checked Keiro DSL and every durable workflow change, and
+  gate subject-reference session resolution on Kioku IR-2.
+  Rationale: Keiro 0.4 changes state-shape and queue codec contracts, while indexed session
+  lookup belongs in Kioku rather than an unbounded Shikigami scan.
+  Date: 2026-07-30
+
+
 Record every decomposition or coordination decision made while working on the master
 plan.
 
@@ -332,6 +339,9 @@ Compare the result against the original vision.
 
 
 ## Revision Notes
+
+- 2026-07-30: Added plan 47, current Keiro 0.4 compatibility gates, and Kioku IR-2 for the
+  indexed conversation-session milestone.
 
 - 2026-07-22: Ordered plan 27 after plans 19 and 28 and made plan 24 an explicit
   prerequisite of MasterPlan 7's delegation work. This aligns the durable-evolution

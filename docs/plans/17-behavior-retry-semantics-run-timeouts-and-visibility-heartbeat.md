@@ -30,7 +30,7 @@ This section must always reflect the actual current state of the work.
 - [ ] Milestone 1: add `FailureClass`/`classifyRunError`/`TransientBehaviorFailure` to `Shikigami.Behavior.Error`; throw transients in `runBehaviorStep`.
 - [ ] Milestone 1: tests — transient failure re-executes on second run; permanent failure replays without re-execution.
 - [ ] Prerequisites: plans 36/37 complete; worker ownership and Settei configuration are settled.
-- [ ] Milestone 2: extract pure `classifyOutcome`; preserve shibuya as sole ack owner; normalize PGMQ's one-based attempt and use the shared `mkRetryPolicy`; configure a real dead-letter queue.
+- [ ] Milestone 2: extract pure `classifyOutcome`; preserve Shibuya as sole ack owner; consume the adapter's zero-based attempt and use the shared `mkRetryPolicy`; configure a real dead-letter queue.
 - [ ] Milestone 2: tests — classification table test; dead-letter queue receives permanent failures.
 - [ ] Milestone 3: thread the shibuya lease into `handleRunJob`; periodic heartbeat around the workflow execution.
 - [ ] Milestone 3: test — pgmq visibility-extension primitive prevents redelivery.
@@ -59,8 +59,8 @@ Record every decision made while working on the plan.
   Rationale: keiro journals the workflow completion value; changing the type would change the JSON encoding of already-completed workflows. Keeping it also deletes the `"unknown agent "` string-prefix hack for free: unknown-agent is just another permanent `Left`.
   Date: 2026-07-08
 
-- Decision: Keep the pgmq visibility timeout at 30 seconds and add a lease heartbeat, rather than raising the visibility timeout to cover the longest imaginable run.
-  Rationale: A large static timeout delays redelivery after a genuine worker crash by the full window; a heartbeat keeps crash-recovery latency at ~30s while protecting arbitrarily long healthy runs. The pinned shibuya (`cabal.project` tag `3f276ee`) already exposes `lease :: Maybe (Lease es)` on `Ingested` and the pinned shibuya-pgmq-adapter populates it via pgmq `set_vt`, so no dependency bump is needed.
+- Decision: Keep the PGMQ visibility timeout at 30 seconds and add a lease heartbeat, rather than raising the visibility timeout to cover the longest imaginable run.
+  Rationale: A large static timeout delays redelivery after a genuine worker crash by the full window; a heartbeat keeps crash-recovery latency at about 30 seconds while protecting arbitrarily long healthy runs. Shibuya 0.8 exposes `lease :: Maybe (Lease es)` on the handler's public `Message es msg`, and shibuya-pgmq-adapter 0.12 implements it with PGMQ `set_vt`.
   Date: 2026-07-08
 
 - Decision: Classify `RunError` conservatively: `UnknownTask`, `SkillLoadFailed`, `UnsupportedBehavior` are permanent; `ProgramFailed`, `SkillRunFailed` are transient.
@@ -70,12 +70,12 @@ Record every decision made while working on the plan.
 - Decision: On run timeout, return a retry decision (not dead-letter).
   Rationale: The journal preserves all completed steps, so the retry resumes from the last journaled step rather than restarting; a slow run frequently completes within a second budget. Repeated timeouts exhaust `maxRetries` and land in the dead-letter queue anyway.
   Date: 2026-07-08
-- Decision: PGMQ delivery attempts are one-based. Normalize that value once at the
-  adapter boundary and build delays/ceilings with the shared `mkRetryPolicy`; do not
-  reinterpret `Envelope.attempt` as zero-based.
-  Rationale: the old formula is off by one against PGMQ `read_ct` and would reach retry
-  ceilings/delays at different deliveries than the framework.
-  Date: 2026-07-22
+- Decision: Treat `Envelope.attempt` as zero-based and build delays/ceilings with the shared
+  `mkRetryPolicy`; do not normalize it again in Shikigami.
+  Rationale: shibuya-pgmq-adapter 0.12 already maps PGMQ's one-based `read_count` through
+  `Attempt (max 0 (readCount - 1))`. Subtracting again would make the first two deliveries
+  indistinguishable and shift retry ceilings.
+  Date: 2026-07-30
 - Decision: The shibuya handler returns exactly one `AckDecision`; it never deletes,
   archives, commits, or moves the message directly.
   Rationale: framework-owned acknowledgement preserves transactional DLQ behavior and
@@ -151,7 +151,7 @@ classifyOutcome ::
   AckDecision
 ```
 
-with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (PoisonPill err)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (PoisonPill …)` as today (Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`. Treat PGMQ `read_ct`/the first delivery as attempt 1, normalize `Nothing` to that first attempt, and derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
+with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (PoisonPill err)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (PoisonPill …)` as today (Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`. Treat `Envelope.attempt = Just (Attempt 0)` as the first delivery and `Nothing` as zero for adapters without attempt metadata. Derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` Shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
 
 Configure the adapter with a DLQ: in `runQueueWorker` (Worker.hs:76), replace `defaultConfig runQueueName` with
 
@@ -166,12 +166,18 @@ where `runDeadLetterQueueName` parses `"shikigami_run_jobs_dlq"` (add it next to
 
 Milestone 3 — visibility heartbeat. Scope: `shikigami-core/src/Shikigami/Worker.hs`. At the end, a handler extends its message lease every 10 seconds for as long as the run executes, so a 5-minute LLM call is never redelivered mid-flight.
 
-Change `runJobHandler` to keep the whole `Ingested` value: it already receives `Ingested { envelope, lease }` (the pinned shibuya-core `Shibuya.Core.Ingested` carries `lease :: !(Maybe (Lease es))`; `type Handler es msg = Ingested es msg -> Eff es AckDecision` at the pinned tag). Because `leaseExtend :: NominalDiffTime -> Eff es ()` lives in the handler's effect row but the heartbeat must tick concurrently with the IO orchestration, obtain an IO unlift with effectful's concurrent unlift — `withEffToIO (ConcUnlift Persistent (Limited 1))` from `Effectful` — and race the heartbeat against the work:
+Change `runJobHandler` to keep the whole public `Message` value: Shibuya 0.8 defines
+`type Handler es msg = Message es msg -> Eff es AckDecision` and
+`Message { envelope, lease }`, deliberately omitting the framework-owned acknowledgement
+handle. Because `leaseExtend :: NominalDiffTime -> Eff es ()` lives in the handler's effect row
+but the heartbeat must tick concurrently with the IO orchestration, obtain an IO unlift with
+effectful's concurrent unlift — `withEffToIO (ConcUnlift Persistent (Limited 1))` from
+`Effectful` — and race the heartbeat against the work:
 
 ```haskell
-runJobHandler env ingested@Ingested {envelope = Envelope {payload = p, attempt}} =
+runJobHandler env message@Message {envelope = Envelope {payload = p, attempt}} =
   withEffToIO (ConcUnlift Persistent (Limited 1)) \unlift ->
-    withAsync (heartbeat unlift (lease ingested)) \_ ->
+    withAsync (heartbeat unlift (lease message)) \_ ->
       handleRunJob env attempt p
   where
     heartbeat _ Nothing = pure ()
@@ -241,7 +247,7 @@ Acceptance is behavioral, verified by tests that fail before the change and pass
 
 Transient re-execution (fails before): build `AgentRunDeps` whose hooks' `beforeStepBody` throws `TransientBehaviorFailure "simulated 503"` on the first entry into `"run-behavior"` (IORef-latched, as in AgentWorkflowSpec.hs:73-82). Call `runAgentRunWorkflow deps job`; assert it throws. Call it again with the same job (same `WorkflowId`); assert `Right (Completed (Right _))` and that the step-body counter for `"run-behavior"` is 2 — the body re-ran. Before this plan the equivalent scenario (a behavior returning `Left`) yields `Completed (Left _)` on both calls with the body having run once. Also drive the real classification path: an agent whose behavior is `ShikumiProgram { task = "nonexistent" }` produces `UnknownTask` → `Permanent` → journaled `Left`; assert two consecutive runs return the same `Completed (Left _)` and the body ran once (replay, correct for permanent).
 
-Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the one-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization.
+Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the zero-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization.
 
 Heartbeat primitive: against the migrated database's pgmq schema, create a queue, send a message, read it with a 2-second visibility timeout, extend visibility by 30 seconds (the same `set_vt`-based operation the adapter's lease uses — `Pgmq` session API from `pgmq-hasql`), sleep 3 seconds, and assert a second read returns no message (it would be redelivered without the extension — that variant is the fails-before half of the pair).
 
@@ -255,12 +261,23 @@ Beyond tests, observe end-to-end: start the stack (`process-compose.yaml` provid
 Every edit is additive or a local rewrite; re-running builds and tests is safe. The new DLQ queue creation is idempotent (pgmq `create` is create-if-not-exists). Rollback of any milestone is a revert of its commits — no migrations and no journal-format changes are involved, so already-journaled workflows are unaffected in both directions. The one behavioral ratchet to be aware of when reverting Milestone 1: runs journaled after the change contain no `run-behavior` entry for attempts that failed transiently (nothing was journaled), which replays identically under old code. If a test database gets into a confusing state, `withShikigamiMigratedDatabase` provisions a fresh database per test, so there is no shared state to clean.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. Shibuya 0.8 handlers receive public
+`Message es msg` values containing `envelope` and optional `lease` and return one
+`AckDecision`; never retain the old `Ingested`/ack-handle API. The current PGMQ adapter
+already maps one-based `read_count` to zero-based `Envelope.attempt`, so attempt zero is
+first delivery and Shikigami must not subtract again. Use `AppConfig` and `OrderingPolicy`
+from the released Shibuya surface.
+
+
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36 and 37. The worker lives in the package assigned by plan
-36 and receives validated timeout/retry settings from plan 37's Settei composition root.
+Hard dependencies: plans 36, 37, and 47. The worker lives in the package assigned by plan
+36, receives validated timeout/retry settings from plan 37's Settei composition root, and
+targets the coherent released Shibuya/PGMQ cohort from plan 47.
 
-Libraries and why: keiro (`Keiro.Workflow` — `step`, `runWorkflow`, `WorkflowOutcome (..)`, `WorkflowError (..)`; journaling semantics this plan leans on), shibuya-core (`Shibuya.Core.Ack` — `AckDecision (..)`, `RetryDelay (..)`, `DeadLetterReason (..)`; `Shibuya.Core.Ingested` — `Ingested (..)` including `lease`; `Shibuya.Core.Lease` — `Lease (..)`; `Shibuya.Core.Types` — `Envelope (..)` including `attempt :: Maybe Attempt`), shibuya-pgmq-adapter (`Shibuya.Adapter.Pgmq.Config` — `defaultConfig`, `PgmqAdapterConfig (..)`, `DeadLetterConfig (..)`, `DeadLetterTarget (..)`), pgmq-hasql (queue creation for the DLQ; visibility-extension session for the heartbeat test), `async` (`Control.Concurrent.Async.withAsync`), `base` (`System.Timeout.timeout`), effectful (`Effectful.withEffToIO`, `UnliftStrategy (ConcUnlift …)`).
+Libraries and why: keiro (`Keiro.Workflow` — `step`, `runWorkflow`, `WorkflowOutcome (..)`, `WorkflowError (..)`; journaling semantics this plan leans on), shibuya-core (`Shibuya.Core.Ack` — `AckDecision (..)`, `RetryDelay (..)`, `DeadLetterReason (..)`; `Shibuya.Core.Ingested` — public `Message (..)` including `lease`; `Shibuya.Core.Lease` — `Lease (..)`; `Shibuya.Core.Types` — `Envelope (..)` including zero-based `attempt :: Maybe Attempt`), shibuya-pgmq-adapter (`Shibuya.Adapter.Pgmq.Config` — `defaultConfig`, `PgmqAdapterConfig (..)`, `DeadLetterConfig (..)`, `DeadLetterTarget (..)`), pgmq-hasql (queue creation for the DLQ; visibility-extension session for the heartbeat test), `async` (`Control.Concurrent.Async.withAsync`), `base` (`System.Timeout.timeout`), effectful (`Effectful.withEffToIO`, `UnliftStrategy (ConcUnlift …)`).
 
 Signatures that must exist at the end (full module paths):
 
@@ -282,13 +299,13 @@ Shikigami.Worker.handleRunJob :: WorkerEnv -> Maybe Attempt -> Value -> IO AckDe
 Shikigami.Trigger.Enqueue.runDeadLetterQueueName :: QueueName
 ```
 
-Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); shibuya `type Shibuya.Handler.Handler es msg = Ingested es msg -> Eff es AckDecision` (pinned tag) with `Ingested { envelope :: Envelope msg, ack :: AckHandle es, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; pgmq adapter `AckRetry (RetryDelay delay)` implemented as a relative `set_vt` (redelivery after `delay`), auto-dead-letter at `readCount > maxRetries`. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
+Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); Shibuya 0.8 `type Shibuya.Handler.Handler es msg = Message es msg -> Eff es AckDecision` with `Message { envelope :: Envelope msg, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; shibuya-pgmq-adapter 0.12 exposes zero-based attempts and implements `AckRetry (RetryDelay delay)` as a relative `set_vt`, with auto-dead-letter after the configured retry ceiling. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
 
 
 ## Revision Notes
 
 - 2026-07-22: Recorded plan 20 as a hard downstream consumer of this plan's ack
   classification, eliminating its conditional ad-hoc routing decision.
-- 2026-07-22: Corrected attempts to PGMQ's one-based semantics, adopted the shared
-  `mkRetryPolicy`, made acknowledgement framework-owned, and moved timeout/deadline
-  configuration to Settei.
+- 2026-07-30: Corrected the released adapter contract: `Message` replaces handler-facing
+  `Ingested`, acknowledgement remains framework-owned, and `Envelope.attempt` is already
+  zero-based after the adapter converts PGMQ `read_count`.

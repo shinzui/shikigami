@@ -462,6 +462,15 @@ stop distillation and maintenance; revert M2/M4 edits
 to restore unbounded fallback and agent-only scope — no data migration is needed either way.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 33, 36, 37, and 47. M2 and the bounded retention-reader
+part of M3 are blocked on Kioku IR-2 at
+`mori://shinzui/kioku/docs/improvement-requests/add-indexed-session-and-bounded-memory-read-models.md`.
+M1 distillation-loop wiring and local shared-scope work can proceed against released Kioku APIs.
+Never implement a database bound with application-side `take`/sort/group.
+
+
 ## Interfaces and Dependencies
 
 Owned and defined by this plan:

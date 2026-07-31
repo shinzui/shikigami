@@ -477,6 +477,15 @@ complete caller set — `cabal build all` lists any missed site. Rolling back is
 spends real API money — use `claude-haiku-4-5` and a single small payload.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. Port against Baikai 0.4.1.0: construct
+configuration with `emptyOptions`/`emptyContext` and treat provider failures reported in
+`Response.errorInfo` as failures, using `isRetryable` to feed plan 17's taxonomy. Do not
+construct hidden records directly or preserve an environment fallback below Settei's
+composition root.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 37. Libraries: `settei`, `baikai` (already a dependency) and `baikai-claude` (added by this plan;

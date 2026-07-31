@@ -384,6 +384,13 @@ the plan whose acceptance criterion is that names and bytes are unchanged), it i
 discipline governs.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 19, 24, 28, 39, and 47. Consolidate only after terminal
+outbox semantics, trace context, and Keiro 0.4 wire fixtures have settled, so the code moves once.
+The golden SinkIntent and workflow fixtures from plan 47 are mandatory acceptance evidence.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 39. The checked DSL/harness is the topology tripwire;

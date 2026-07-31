@@ -191,6 +191,14 @@ quiesce legacy writers, and never edit either ledger manually. Recover an ambigu
 nontransactional migration only through a reviewed `repair` request with evidence.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan follows plans 36, 37, and 47. Plan 47 owns the coherent package pins and ports
+migration-component imports to pg-migrate 1.1.0.0; this plan owns the historical Codd-ledger import,
+complete application manifest, operational cutover, and rollback proof. The two plans' migration
+changes must be integration-tested together, but Codd is removed only here.
+
+
 ## Interfaces and Dependencies
 
 Use the released coherent `pg-migrate`, `pg-migrate-embed`, `pg-migrate-cli`,

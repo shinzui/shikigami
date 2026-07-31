@@ -54,10 +54,10 @@ review lineage.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define architecture-practice review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | None | Not Started |
-| 2 | Acquire revision-pinned architecture-practice evidence | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1 | None | Not Started |
-| 3 | Persist and adjudicate architecture-practice reviews | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1 | None | Not Started |
-| 4 | Orchestrate review delivery and end-to-end conformance | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3 | None | Not Started |
+| 1 | Define architecture-practice review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | cross-MP: plan 47 for package implementation | Not Started |
+| 2 | Acquire revision-pinned architecture-practice evidence | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1; cross-MP: plan 47; upstream Kikan IR-5 for live adapter | None | Not Started |
+| 3 | Persist and adjudicate architecture-practice reviews | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1; cross-MP: plans 25 and 47 | None | Not Started |
+| 4 | Orchestrate review delivery and end-to-end conformance | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3; cross-MP: plans 16, 19, 25, 35, 47, and MasterPlan 8; upstream Kikan IR-5 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -147,12 +147,21 @@ interactions between child plans. Provide concise evidence.
 - Existing Kawa and Kizashi sink clients already expose the necessary wire families but use
   general JSON output. The review initiative can remain additive by producing typed JSON at
   the Flow boundary and using the established transactional outbox.
+- Kikan's current top-level improvement-request bundle assigns the
+  revision-pinned content-plane and ToolEnv work to IR-5. The child plans now
+  use its stable OKF concept URI.
 
 
 ## Decision Log
 
 Record every decomposition or coordination decision made while working on the master
 plan.
+
+- Decision: Keep plan 43 startable as contract design, make plan 47 the package-build
+  foundation, and gate only live evidence/conformance on Kikan IR-5.
+  Rationale: deterministic reader seams and fixtures are valuable independent work, while
+  production evidence must use the owned full-SHA content plane rather than ambient Git.
+  Date: 2026-07-30
 
 - Decision: Decompose the initiative into contracts, evidence, adjudicated memory, and
   orchestration/delivery.
@@ -184,3 +193,11 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-30: Repointed the live content-plane and conformance blocker from
+  the removed nested request to Kikan IR-5 and its stable OKF concept URI.
+- 2026-07-30: Added external edges to plans 25, 35, 47, MasterPlan 8, and Kikan IR-5;
+  separated stub-evidence work from the blocked live content-plane adapter.

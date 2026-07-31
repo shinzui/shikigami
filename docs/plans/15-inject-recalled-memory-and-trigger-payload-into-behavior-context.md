@@ -412,6 +412,13 @@ If a signature change leaves a call site behind, the build fails loudly; there i
 partial-runtime failure mode. Rollback is `git checkout` of the touched files.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plan 47 and soft-depends on plan 13. Use the released Kioku
+connection/resource API and Baikai 0.4 request/context construction. The tests remain request-side
+and hermetic, so implementation may proceed before live provider credentials exist.
+
+
 ## Interfaces and Dependencies
 
 New/changed interfaces (repository-relative module paths):

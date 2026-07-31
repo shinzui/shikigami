@@ -35,7 +35,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisite: `docs/plans/43-define-architecture-practice-review-contracts.md` has landed; re-check Kikan C16 plans 25/28/29 and the final Shikumi ToolEnv seam.
+- [ ] Prerequisite: `docs/plans/43-define-architecture-practice-review-contracts.md`
+  has landed; re-check Kikan C16 plans 25/28/29, Kikan IR-5, and the final
+  Shikumi ToolEnv seam.
 - [ ] M1: define a fail-closed `EvidenceReader`, pinned response types, and provenance/content validation.
 - [ ] M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
 - [ ] M2: accept prior validated resolutions as evidence without reading Kioku directly.
@@ -54,6 +56,9 @@ implementation. Provide concise evidence.
 - C16 blob responses expose a blob object id/content hash, while diff is primarily navigation
   evidence. Claims should cite the pinned blob excerpts discovered from a diff; do not rely on
   an unversioned diff snippet as the sole material citation.
+- Kikan IR-5 now provides the canonical OKF request for the revision-pinned
+  content plane and bounded tool environment. The deterministic reader seam
+  remains startable while that request is proposed.
 
 
 ## Decision Log
@@ -77,6 +82,13 @@ Record every decision made while working on the plan.
   Rationale: A declared reference can point at an arbitrarily large repository; the agent must
   not turn discovery into unbounded allocation or prompt growth.
   Date: 2026-07-25
+
+- Decision: Track the live adapter through Kikan IR-5.
+  Rationale: the current top-level Kikan improvement-request bundle assigns
+  `IR-5` to the revision-pinned content-plane and ToolEnv work; using the
+  stable concept URI prevents this plan from depending on a deleted nested
+  request path.
+  Date: 2026-07-30
 
 
 ## Outcomes & Retrospective
@@ -197,6 +209,15 @@ known fixture outputs rather than deleting broad paths. A partial content-plane 
 returned as data for `unresolved`, not retried indefinitely inside this module.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 43 and 47. Its deterministic `EvidenceReader`, fixtures,
+limits, and stub tests may land immediately after those predecessors. The live adapter is blocked on
+Kikan IR-5 at
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`;
+do not substitute ambient Git, host filesystem reads, or guessed ToolEnv APIs.
+
+
 ## Interfaces and Dependencies
 
 The implementation exposes this shape, adjusted only to match the final C16 client types:
@@ -228,7 +249,15 @@ acquireEvidence
   -> IO EvidenceBundle
 ```
 
-All records use direct strict fields. External dependencies are Kikan C16 plans 25/28/29 and
-the final Shikumi ToolEnv/content client discovered with Mori. Do not select dependency bounds
+All records use direct strict fields. External dependencies are Kikan C16 plans
+25/28/29, Kikan IR-5, and the final Shikumi ToolEnv/content client discovered
+with Mori. Do not select dependency bounds
 from the local corpus: when implementation adds a package dependency, verify its released
 version against the authoritative registry and upstream tags as required by `AGENTS.md`.
+
+
+## Revision Notes
+
+- 2026-07-30: Repointed the live content-plane/ToolEnv blocker to Kikan IR-5
+  and its stable OKF concept URI. The deterministic reader and fixture work
+  remain startable.

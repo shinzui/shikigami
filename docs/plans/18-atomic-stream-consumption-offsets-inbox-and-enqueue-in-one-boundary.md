@@ -239,6 +239,14 @@ End-to-end behavior beyond tests: with the demo stack running and `PG_CONNECTION
 All edits are code-only; no migrations. Re-running tests is safe — each test gets a fresh database. The consumer changes are safe to deploy mid-stream: offsets already committed are unaffected, and the new commit policy only withholds commits on failures that previously lost data. Rolling back reintroduces the old hazards but breaks nothing operationally. One deployment note: after this plan the consumer requires the `shikigami_run_jobs` queue to exist at startup (`ensureRunQueue` creates it, idempotently), so no ordering constraint actually arises. If a crash occurs between the inbox transaction and the offset commit, the record is redelivered and answered with `InboxDuplicate` — by design, the run job was already enqueued in the committed transaction, so nothing is lost or duplicated.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. Use PGMQ 0.4.0.1 and the current
+transaction/effectful APIs located through Mori. Queue creation remains outside the atomic inbox
+transaction; plan 38/pg-migrate owns schema components, while this plan owns the all-or-nothing
+runtime enqueue boundary.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 37. Consumer code lives in the worker package and reads

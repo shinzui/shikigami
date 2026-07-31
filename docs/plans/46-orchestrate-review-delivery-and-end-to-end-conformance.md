@@ -36,7 +36,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: `docs/plans/43-define-architecture-practice-review-contracts.md`, `docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md`, `docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md`, `docs/masterplans/8-declarative-router-agents.md`, `docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md`, `docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md`, `docs/plans/25-replay-safe-flow-memory-capabilities.md`, `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`, `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`, `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, and `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` have landed.
+- [ ] Prerequisites: `docs/plans/43-define-architecture-practice-review-contracts.md`, `docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md`, `docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md`, `docs/masterplans/8-declarative-router-agents.md`, `docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md`, `docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md`, `docs/plans/25-replay-safe-flow-memory-capabilities.md`, `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`, `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`, `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, and `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` have landed; Kikan IR-5 must also be completed for the live evidence path.
 - [ ] M1: finalize router/specialist declarations, register both Flows, and add checked step topology.
 - [ ] M2: implement replay-safe evidence, recall, verdict, provisional-memory, and resolution paths.
 - [ ] M3: publish Kawa review/resolution activities with `mori://` and `activity://` context refs.
@@ -59,6 +59,8 @@ implementation. Provide concise evidence.
   `activity://` context references. Shikigami's current Kawa client sets context refs to empty,
   so this plan must thread validated review refs into the existing request rather than invent a
   new envelope.
+- Kikan IR-5 is the current canonical request for the live revision-pinned
+  content-plane and ToolEnv seam used by plans 44 and 46.
 
 
 ## Decision Log
@@ -88,6 +90,12 @@ Record every decision made while working on the plan.
   Rationale: The model cannot repair missing provenance and must not infer an accusation from
   memory.
   Date: 2026-07-25
+
+- Decision: Gate live conformance on Kikan IR-5.
+  Rationale: Kikan's top-level OKF request bundle now gives the content-plane
+  and ToolEnv work a stable request identity; orchestration must consume that
+  settled contract rather than a deleted nested request path.
+  Date: 2026-07-30
 
 
 ## Outcomes & Retrospective
@@ -264,6 +272,15 @@ migrations and fixtures is safe. Upstream content/model/sink stubs remain local 
 deterministic.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 16, 19, 25, 35, 43-45, 47, and completed MasterPlan 8.
+The live end-to-end evidence path also waits for Kikan IR-5 at
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`. Orchestration must reuse the settled
+routing/delegation, memory, and terminal sink semantics; it may not add parallel lifecycle or
+delivery machinery.
+
+
 ## Interfaces and Dependencies
 
 The orchestration ports and coalescing surface are:
@@ -317,3 +334,9 @@ C16 plans 25/28/29. Kawa/Kizashi source and current API limitations were verifie
 Mori. Any package-bound change during implementation must be verified against the
 authoritative registry and upstream tags; the local corpus is API evidence, not release
 authority.
+
+
+## Revision Notes
+
+- 2026-07-30: Repointed the live evidence/conformance gate to Kikan IR-5 and
+  its stable OKF concept URI.

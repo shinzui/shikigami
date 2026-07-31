@@ -252,6 +252,13 @@ Operationally: run the scheduler, stop it for several minutes on a `* * * * *` a
 All changes are code-only; no migrations. Re-running builds and tests is safe (each DB-backed test gets a fresh database). The routing and scheduler changes are safe to deploy while jobs and timers are in flight: existing queued jobs still decode and route (now correctly), and existing armed timers fire once and re-arm under the new policy — a one-time drain of any pre-existing stale backlog may occur on first upgrade unless operators clear it, which is noted here as expected. The loud-loading default stays lenient (`agents.strict = false`), so upgrading does not suddenly refuse to start. Enqueue-key changes affect only newly produced jobs; in-flight jobs with old keys are unaffected. Rolling back reintroduces the silences but is otherwise clean.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 17, 18, 37, and 47. Consume Shibuya 0.8's public
+`Message`/`AckDecision` surface and the final zero-based attempt taxonomy from plan 17. Do not
+recreate queue setup, raw environment configuration, or a second agent loader.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36/37, 17, and 18. Catch-up/strict settings are Settei values;

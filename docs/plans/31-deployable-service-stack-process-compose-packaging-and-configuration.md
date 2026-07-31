@@ -592,6 +592,14 @@ are additive files (`flake.module.nix`, `nix/nixos-module.nix`, `nix/kafka-serve
 rollback is deleting them plus `git checkout -- process-compose.yaml Justfile`.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36-38 and 47 and closes after the operational surfaces it
+documents. The actual targets are process-compose and NixOS. Use Settei 0.2's env, YAML/formats,
+and optparse-applicative packages; do not add `settei-kubernetes` or Kubernetes overlays unless a
+real Kubernetes deployment target is separately approved.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, and 38. This closure plan also lands after the actual

@@ -459,6 +459,13 @@ out to break an out-of-tree flow author, the recovery is to re-add the constrain
 retreat in the Decision Log.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 24, 39, and 47. Use the released Kioku connection/resource
+API and Keiro 0.4 checked step/state codecs. Caller-supplied memory labels and deterministic ids
+must survive plan 47's old-state fixtures and plan 39's topology gate.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 39, and 24. Generated artifacts stay behind plan 39's

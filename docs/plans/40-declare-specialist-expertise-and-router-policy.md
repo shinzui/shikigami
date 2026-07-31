@@ -190,6 +190,13 @@ duplicate a plan-35 field. If implementation stops after Dhall changes, Haskell 
 will fail loudly until the mirror is updated; complete both sides in the same commit.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 33 and 47. It is the first MasterPlan-8 child and reuses
+plan 33's additive Dhall/Haskell declaration pattern. Keep policy closed, bounded, and backward
+compatible through defaults; do not start runtime routing here.
+
+
 ## Interfaces and Dependencies
 
 The final declaration surface is conceptually:

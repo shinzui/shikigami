@@ -217,6 +217,13 @@ cannot spend twice. A crash after some child spawns finds the same child ids thr
 instead of creating new workflows. Tests and DSL commands are safe to repeat.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 35, 40, 41, and 47; plans 24 and 39 are inherited through
+plan 35. Journal the exact candidate catalog and routing decision under Keiro 0.4 checked topology,
+and reuse plan 35's allow-list, global budget, cycle, and typed delegation paths.
+
+
 ## Interfaces and Dependencies
 
 The public domain and capability surface is:

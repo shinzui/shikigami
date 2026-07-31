@@ -69,8 +69,9 @@ This section must always reflect the actual current state of the work.
 - [ ] M2 — Registry seam: give `BehaviorEnv` a `tools :: ToolRegistry` field
   (default empty) and thread it into `runBehavior`.
 - [ ] Prerequisites — plans 36 and 37 have landed; baikai C1/C2, shikumi C5, and the upstream
-  per-action authorization seam are released and verified through Mori plus authoritative
-  registry/tags. Baikai C3 is additionally required for non-`None` authentication.
+  per-action authorization seam tracked by Kikan-En IR-3 are released and
+  verified through Mori plus authoritative registry/tags. Baikai C3 is
+  additionally required for non-`None` authentication.
 - [ ] M3 — Run lifecycle: add `withAgentMcpTools` (connect + register + bracket-close) in
   `Shikigami/Agent/Run.hs`; wrap the `runBehavior` call in `runAgentWithMemory` with it.
 - [ ] M4 — Skill loop: replace the single-completion `runSkill` with a bounded tool loop that
@@ -122,7 +123,11 @@ Record every decision made while working on the plan.
   prerequisite** for live wiring, owned by the per-action authorization seam in `shinzui/en` /
   `shinzui/shomei` (plan `shinzui/en:docs/plans/27-per-action-authorization-for-agent-tool-and-sink-dispatch.md`,
   the "C13" seam referenced in
-  `shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` gap #7).
+  `shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` gap
+  #7). Kikan-En IR-3,
+  `mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`, is the
+  canonical request for exposing that seam to Shikigami MCP connection and
+  exact tool invocation.
   Rationale: Treating a manifest declaration as permission would let an agent expand its own
   authority. M1/M2 may establish inert schema and seams, but M3–M5 must not connect, expose,
   or invoke a server until authorization is available. Check server access before connect and
@@ -690,6 +695,22 @@ Rollback: because the field defaults to `[]` and the registry defaults to empty,
 its prior single-completion behavior with no schema migration.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This note supersedes older dependency-version and placeholder-API wording in this plan.
+
+- Startable slice: M1-M2 may land after plans 36, 37, and 47; follow plan 33's additive
+  declaration-field pattern when it is available.
+- Blocked slice: M3-M5 require Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3
+  (`mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`). The current
+  released Baikai/Shikumi sources do not expose the named MCP modules, and a declaration is
+  never authorization.
+- Authenticated declarations carry only a Settei-resolved credential reference. Raw headers,
+  tokens, OAuth secrets, and authorization decisions never enter Dhall or journaled values.
+- Implement against the released upstream signatures after the requests land; illustrative
+  signatures earlier in this plan are not compatibility shims.
+
+
 ## Interfaces and Dependencies
 
 **Owned and defined by this plan (shikigami).**
@@ -752,7 +773,9 @@ flows through the per-action authz seam owned by `shinzui/en` /
 `shinzui/shomei` — plan
 `shinzui/en:docs/plans/27-per-action-authorization-for-agent-tool-and-sink-dispatch.md`, the
 "C13" seam recorded in
-`shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` (gap #7). Check the
+`shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` (gap #7), exposed
+to this runtime through Kikan-En IR-3 at
+`mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`. Check the
 server before connection and each tool before dispatch. A manifest declaration never grants
 authority.
 
@@ -790,3 +813,7 @@ Revision note (2026-07-22): Made upstream authorization a hard prerequisite for 
 wiring, replaced manifest secrets with Settei-resolved credential references, prohibited
 secret rendering/JSON/logging, and required released dependency verification via Mori plus
 authoritative registries/tags. Added plans 36/37 package and configuration prerequisites.
+
+Revision note (2026-07-30): Repointed the live authorization prerequisite to
+Kikan-En IR-3, the current OKF-profile request for per-action MCP connection
+and exact tool invocation. M1–M2 remain startable; M3–M5 remain blocked.

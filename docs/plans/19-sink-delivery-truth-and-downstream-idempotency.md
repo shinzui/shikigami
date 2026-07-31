@@ -247,6 +247,16 @@ safe only for proven delivered receipts; unknown outcomes remain visible for ope
 repair. Rolling back code while retaining the table is harmless.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 16, 28 M1, 38, and 47. Its terminal-delivery milestone is
+blocked on Keiro IR-3 at
+`mori://shinzui/keiro/docs/improvement-requests/add-an-explicit-terminal-outbox-rejection-outcome.md`.
+Keiro 0.4.0.1 has only `PublishSucceeded` and `PublishFailed`; do not emulate rejection with
+raw table mutation, success, or an unbounded retry. Handler truth and receipt-schema work may start
+before the upstream release.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, 38, and plan 28 Milestone 1; preferred predecessor:

@@ -471,6 +471,15 @@ defaults (and honoring Settei's `health.port`) avoids collisions. No database or
 made, so there is nothing to roll back on the data side.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. Its Shibuya worker-probe slice is blocked
+on Shibuya IR-1 at
+`mori://shinzui/shibuya/docs/improvement-requests/expose-a-public-worker-probe-contract.md`.
+The typed health API, local loop-heartbeat abstraction, and fail-fast supervision can proceed, but
+no plan may import Shibuya `Internal` modules or couple worker packages to the HTTP server.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 37 plus the released upstream Shibuya probe contract described

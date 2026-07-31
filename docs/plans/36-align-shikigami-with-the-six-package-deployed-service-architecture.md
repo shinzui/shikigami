@@ -226,6 +226,13 @@ executable and its smoke test passes. Cabal moves are recoverable by restoring t
 module and package declaration; no database or wire format changes occur in this plan.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This remains the first foundation plan and has no plan-47 dependency. It must land before
+plan 37 and define the package/composition-root ownership into which Settei and the dependency
+cohort are ported. Avoid temporary package shapes that the upgrade would immediately remove.
+
+
 ## Interfaces and Dependencies
 
 This plan hard-precedes `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`

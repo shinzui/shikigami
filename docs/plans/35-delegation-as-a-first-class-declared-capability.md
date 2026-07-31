@@ -509,6 +509,14 @@ case; the additive fields can stay (unread fields are inert); reverting M2-M4 re
 throw-on-failure `awaitDelegated` with the depth-only guard.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 24, 33, 36-39, and 47. It must use Keiro 0.4 checked
+workflow/state declarations, plan 38's pg-migrate ledger, and plan 47's replay/queue compatibility
+fixtures. Router execution in plan 42 extends this mechanism rather than defining another
+budget/lineage path.
+
+
 ## Interfaces and Dependencies
 
 Owned and defined by this plan:

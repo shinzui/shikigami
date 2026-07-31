@@ -212,6 +212,15 @@ usable; do not remove a binding until deployment configuration and documentation
 already moved to its replacement key.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+The foundation order is plan 36 → this plan → plan 47. Target Settei 0.2.0.0 and use
+`settei`, `settei-env`, the selected YAML/formats package, and
+`settei-optparse-applicative`. Do not add `settei-kubernetes`: plan 31 identifies
+process-compose and NixOS as the real deployment targets. Standard `OTEL_*` variables remain
+owned by the OpenTelemetry SDK; all Shikigami process settings use the single typed Settei value.
+
+
 ## Interfaces and Dependencies
 
 Core exports the inspectable declaration and non-secret domain config types from
@@ -224,10 +233,14 @@ strict unprefixed fields and generic-lens access. `CredentialRef` is a non-secre
 work in plans 12–35 where applicable.
 
 Pin the coherent released direct-adapter family (`settei`, `settei-env`, `settei-yaml`,
-`settei-optparse-applicative`, and `settei-kubernetes`) together. Do not add
-`settei-formats`/`settei-dhall` or copy the Settei source checkout's project-local
-`allow-newer` stanza.
+and `settei-optparse-applicative`) together. Do not add `settei-kubernetes`,
+`settei-formats`, or `settei-dhall` without a concrete source/deployment requirement, and do
+not copy the Settei source checkout's project-local `allow-newer` stanza.
 
 
 Revision note (2026-07-22): Created from the portfolio conformance review to replace the
 previous `lookupEnv` convention with the fleet Settei service and CLI standards.
+
+Revision note (2026-07-30): Verified Settei 0.2.0.0 and removed the Kubernetes adapter from
+the target family because Shikigami's declared deployment targets are process-compose and
+NixOS. Kept standard OpenTelemetry environment variables SDK-owned.

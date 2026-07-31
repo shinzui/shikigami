@@ -197,6 +197,14 @@ from its deterministic id. Tests provision isolated migrated Postgres databases 
 to repeat.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 25, 43, and 47. It consumes plan 25's labeled
+`rememberWith` and deterministic memory ids, then owns review persistence/adjudication. Keep
+external evidence acquisition behind plan 44's interface; this plan can be built against its stub
+bundle.
+
+
 ## Interfaces and Dependencies
 
 The domain helper surface is:

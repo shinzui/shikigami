@@ -199,6 +199,14 @@ the wire contract changes after implementation, add a new schema version and dec
 rather than reinterpreting version 1 in place.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This contract-only plan may start in parallel with the foundation chain, but any package
+implementation/fixture build consumes plan 47's released cohort. Its wire types precede plans 44 and
+45 and must remain judgment-free, versioned, bounded, and directly named under
+`DuplicateRecordFields`.
+
+
 ## Interfaces and Dependencies
 
 The module must expose at least these domain concepts (field lists above are normative even

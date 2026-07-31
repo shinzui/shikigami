@@ -521,6 +521,14 @@ reverted in an emergency, reverting to plain `runWorkflow` is safe provided no `
 sites exist yet (i.e., revert M3 first, then M2).
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 39 and 47. Implement against Keiro 0.4.0.1, including
+explicit state-shape hashes, checked structural/opaque declarations, codec comparison/goldens, and
+the released atomic `continueAsNew` behavior. Every topology change updates
+`domain/shikigami.keiro` and passes the plan-39 coverage/opaque gates.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 39. Every step/patch/name change updates the checked

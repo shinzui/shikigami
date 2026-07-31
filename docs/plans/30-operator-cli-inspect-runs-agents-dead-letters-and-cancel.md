@@ -428,6 +428,14 @@ again, while an already finalized operation reports its terminal state without a
 enqueue. No schema change is owned by this plan.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 20, 36, 37, and 47. Use the shared
+`AgentLoadReport`, Settei composition root, pg-migrate schema, and released Kioku/Keiro
+resource APIs. The command group is the extension point consumed later by plan 23; do not create a
+second agents CLI.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, 20, and plan 17 for M4. Commands live in

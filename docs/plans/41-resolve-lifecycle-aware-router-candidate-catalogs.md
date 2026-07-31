@@ -187,6 +187,13 @@ adapters behind the named interface so their later arrival replaces an adapter r
 the catalog algorithm.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 33, 40, and 47 and soft-depends on plan 23. Plan 33's local
+`enabled` field is the honest initial lifecycle source; when plan 23 is present, record the
+Meibo/directory snapshot as the source instead of silently changing catalog semantics.
+
+
 ## Interfaces and Dependencies
 
 The core interface is:

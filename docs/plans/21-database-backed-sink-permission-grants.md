@@ -288,6 +288,13 @@ are idempotent. Deployments run the pg-migrate verification/startup gate before 
 without the table, grant lookups fail closed and loudly.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36-38 and 47. Add its schema through the canonical
+pg-migrate component/application plan and resolve operational settings through Settei. The
+nullable principal seam remains intentionally compatible with the later lifecycle join.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, and 38. The schema is managed only by pg-migrate and

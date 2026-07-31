@@ -94,11 +94,11 @@ without the enforcement.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, and 37 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Not Started |
-| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20 and 36 | cross-MP: plan 16 (MasterPlan 2) | Not Started |
-| 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | EP-2; cross-MP: plans 36 and 37 | None | Not Started |
-| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24 and 36–39 | None | Not Started |
-| 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | cross-MP: plans 36 and 37; upstream baikai C1/C2 + authorization and shikumi C5 | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
+| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, 37, and 47 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Not Started |
+| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20, 36, and 47 | cross-MP: plan 16 (MasterPlan 2) | Not Started |
+| 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | EP-2; cross-MP: plans 36, 37, and 47; upstream Kioku IR-2 for M2/M3 | None | Not Started |
+| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24, 36–39, and 47 | None | Not Started |
+| 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | cross-MP: plans 36, 37, and 47; upstream Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3 for M3–M5 | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -150,7 +150,8 @@ EP-5 (plan 12) hard-depends on plans 36/37 plus its upstream client, adapter, an
 authorization contracts, and soft-depends on EP-2 for the field pattern (its M1 adds `mcpServers` to the
 same `Agent` record) and, per its own Interfaces section, hard-depends on cross-repo upstream
 work (baikai `Baikai.Mcp.Client`/`Baikai.Mcp.Tool`, the shikumi `shikumi-tools` MCP adapter)
-plus a coherent released dependency update. Its scope in one paragraph: an agent manifest
+and Kikan-En IR-3's per-action agent authorization contract, plus a coherent released
+dependency update. Its scope in one paragraph: an agent manifest
 gains an `mcpServers : List McpServer` field ({name, url, transport,
 credential-reference}, default `[]`); at run time the runtime connects each authorized
 declared server, registers only authorized tools into a `ToolRegistry` under
@@ -240,8 +241,8 @@ same budget decision.
 IP-9 — MCP credentials and authorization. Plan 12 stores only credential references in
 agent Dhall. Secret values are resolved through plan 37's Settei composition root into
 non-serializable/redacted types; they never gain `Show`, JSON, or tool-output exposure.
-Upstream authorization must define which agent/principal may connect to which server and
-tool before runtime milestones begin; transport authentication alone is insufficient.
+Kikan-En IR-3 must define which agent/principal may connect to which server and tool before
+runtime milestones begin; transport authentication alone is insufficient.
 
 
 ## Progress
@@ -268,7 +269,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-4 M5: research-supervisor re-expressed on the general mechanism; hardcoded task-name special case removed.
 - [ ] EP-5 M1: `mcpServers` schema field with credential references only + mirror + examples (per plan 12).
 - [ ] EP-5 M2: build wiring (`shikumi-tools`) + `ToolRegistry` seam on `BehaviorEnv` (per plan 12).
-- [ ] EP-5 M3-M5: connect/register/close bracket, tool loop, end-to-end (blocked on upstream baikai/shikumi MCP work; per plan 12).
+- [ ] EP-5 M3-M5: connect/register/close bracket, tool loop, end-to-end (blocked on upstream Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3; per plan 12).
 
 
 ## Surprises & Discoveries
@@ -308,6 +309,13 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision: Require plan 47 for every child and represent MCP and bounded-memory upstream
+  work as explicit milestone gates rather than blocking their whole ExecPlans.
+  Rationale: schema/registry seams and distillation wiring can land safely before live MCP or
+  new Kioku reads, provided runtime invocation and unbounded queries remain forbidden.
+  Date: 2026-07-30
+
 
 Record every decomposition or coordination decision made while working on the master
 plan.
@@ -386,7 +394,7 @@ plan.
   different enforcement outcomes.
   Date: 2026-07-22
 - Decision: Agent manifests contain MCP credential references only, and plan 12 waits for
-  an upstream authorization contract in addition to client/transport support.
+  Kikan-En IR-3's upstream authorization contract in addition to client/transport support.
   Rationale: embedding secret values makes declarations serializable leak surfaces, while
   authentication alone does not authorize an agent to a server or tool.
   Date: 2026-07-22
@@ -406,6 +414,11 @@ Compare the result against the original vision.
 
 
 ## Revision Notes
+
+- 2026-07-30: Recorded Kikan-En IR-3 as the canonical per-action authorization request for
+  EP-5 runtime milestones.
+- 2026-07-30: Added plan 47, linked Kioku IR-2 and the three MCP upstream requests, and
+  recorded which child milestones remain startable behind inert or bounded seams.
 
 - 2026-07-22: Added cross-MasterPlan prerequisites for plans 20, 22, and 24; unified
   HTTP ownership with MasterPlan 4; ordered the shared loader/agent-command work; and

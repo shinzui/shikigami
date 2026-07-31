@@ -90,10 +90,10 @@ endpoint*: rejected because the substrate's metrics hooks are typed for the Open
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36 and 37 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
-| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36 and 37; upstream released Shibuya probe contract | EP-1 | Not Started |
-| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, and 37 | EP-1 | Not Started |
-| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36, 37, and 38 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
+| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36, 37, and 47 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
+| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36, 37, and 47; upstream Shibuya IR-1 for worker probe | EP-1 | Not Started |
+| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, 37, and 47 | EP-1 | Not Started |
+| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36–38 and 47 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP-# prefix.
@@ -288,6 +288,13 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 
 ## Decision Log
 
+- Decision: Require plan 47 for all operations children and block only plan 29's Shibuya
+  worker-probe slice on Shibuya IR-1.
+  Rationale: OTel/Shibuya APIs must be ported coherently, but the typed health server and local
+  loop-supervision work remain independently deliverable.
+  Date: 2026-07-30
+
+
 - Decision: Decompose Operations & Observability into four plans — observability (28), health &
   supervision (29), operator CLI (30), deployable stack (31) — with EP-1 as the soft-first
   vocabulary owner and no original intra-MasterPlan hard dependencies. The 2026-07-22
@@ -362,6 +369,9 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 
 
 ## Revision Notes
+
+- 2026-07-30: Added plan 47 and Shibuya IR-1, separated startable health/supervision work
+  from the blocked public worker-probe adapter, and reaffirmed the NixOS/non-Kubernetes target.
 
 - 2026-07-22: Added plan 20 as EP-3's hard dependency, routed HTTP tracing through plan
   22, assigned `agents` command ownership, and made EP-4 the portfolio's configuration/

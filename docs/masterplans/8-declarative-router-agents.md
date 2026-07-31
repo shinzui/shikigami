@@ -51,9 +51,9 @@ unverifiable intermediate state.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | None | None | Not Started |
-| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1 | None | Not Started |
-| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2 | None | Not Started |
+| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | cross-MP: plans 33 and 47 | None | Not Started |
+| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; cross-MP: plans 33 and 47 | cross-MP: plan 23 | Not Started |
+| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; cross-MP: plans 35 and 47 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -144,6 +144,12 @@ interactions between child plans. Provide concise evidence.
 Record every decomposition or coordination decision made while working on the master
 plan.
 
+- Decision: Make plan 33 and plan 47 hard foundations for declaration/catalog work and make
+  plan 35 a hard predecessor of routed execution.
+  Rationale: the router extends the canonical agent schema and durable delegation machinery;
+  recreating either would split validation, budget, lineage, and replay semantics.
+  Date: 2026-07-30
+
 - Decision: Use one MasterPlan with three child plans: declaration, catalog, and durable
   execution.
   Rationale: These are independently verifiable functional boundaries with a natural data
@@ -170,3 +176,9 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-07-30: Added the previously prose-only external edges to plans 33, 35, and 47 and
+  kept plan 23 as a source-attributed soft dependency.

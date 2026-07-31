@@ -474,6 +474,14 @@ behavior-preserving for well-formed agents; this plan's enabled selection only r
 well-formed declarations that explicitly opt out with `enabled = False`.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 20, 36, and 47. It owns the additive declaration-field
+pattern consumed by plans 12, 23, 34, 35, and 40. Keep defaults backward compatible, reject unknown
+fields through the canonical loader, and update the checked Keiro/codec artifacts where durable
+values are affected.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 20. Public/declaration records use strict unprefixed

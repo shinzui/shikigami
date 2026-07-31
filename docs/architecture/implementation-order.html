@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shikigami implementation order</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f1e8;
+      --panel: rgba(255, 253, 247, 0.92);
+      --panel-solid: #fffdf7;
+      --ink: #17211e;
+      --muted: #62706b;
+      --line: #ccd4ce;
+      --hard: #176b62;
+      --soft: #a56b18;
+      --blocked: #b13b36;
+      --ready: #247a4b;
+      --queued: #67736f;
+      --partial: #9a6417;
+      --shadow: 0 16px 42px rgba(31, 43, 38, 0.12);
+      --radius: 18px;
+      --mp2: #1d6f8a;
+      --mp3: #6b5bb7;
+      --mp4: #a04e75;
+      --mp5: #526ba3;
+      --mp6: #317367;
+      --mp7: #8b612a;
+      --mp8: #8a4e3c;
+      --mp9: #516644;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111714;
+        --panel: rgba(24, 32, 28, 0.94);
+        --panel-solid: #18201c;
+        --ink: #edf5ef;
+        --muted: #a9b8b0;
+        --line: #3a4942;
+        --hard: #63c8bc;
+        --soft: #e6ad55;
+        --blocked: #f07872;
+        --ready: #69cf8f;
+        --queued: #9ba9a2;
+        --partial: #e2a84d;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+        --mp2: #58a8c4;
+        --mp3: #9888e0;
+        --mp4: #d17ca3;
+        --mp5: #8499d5;
+        --mp6: #63ad9d;
+        --mp7: #c49051;
+        --mp8: #c68169;
+        --mp9: #829a72;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--mp2) 16%, transparent), transparent 32rem),
+        radial-gradient(circle at 95% 10%, color-mix(in srgb, var(--mp6) 15%, transparent), transparent 31rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+
+    .page {
+      width: min(1800px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .hero-copy, .start-card, .controls, .graph-shell, .detail-panel, .order-table {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero-copy {
+      border-radius: 26px;
+      padding: clamp(24px, 4vw, 52px);
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: var(--hard);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 14ch;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.45rem, 6vw, 5.8rem);
+      font-weight: 500;
+      letter-spacing: -.052em;
+      line-height: .94;
+    }
+
+    .lede {
+      max-width: 70ch;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.5vw, 1.2rem);
+      line-height: 1.65;
+    }
+
+    .start-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border-radius: 26px;
+      padding: 28px;
+      background:
+        linear-gradient(150deg, color-mix(in srgb, var(--ready) 18%, var(--panel-solid)), var(--panel-solid));
+    }
+
+    .start-card h2 {
+      margin: 0 0 10px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 2rem;
+      font-weight: 500;
+    }
+
+    .start-card p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+    .start-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .start-action {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding-top: 10px;
+      border-top: 1px solid color-mix(in srgb, var(--ready) 25%, var(--line));
+    }
+
+    .step-number {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--ready);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .metric strong {
+      display: block;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 2rem;
+      font-weight: 500;
+    }
+
+    .metric span { color: var(--muted); font-size: .82rem; }
+
+    .controls {
+      position: sticky;
+      top: 8px;
+      z-index: 30;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 18px 0;
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    .search, .select, .filter-button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--panel-solid);
+    }
+
+    .search {
+      min-width: min(300px, 100%);
+      padding: 0 15px;
+    }
+
+    .select { padding: 0 34px 0 14px; }
+
+    .filter-button {
+      cursor: pointer;
+      padding: 0 14px;
+      transition: border-color .15s ease, transform .15s ease, background .15s ease;
+    }
+
+    .filter-button:hover { transform: translateY(-1px); }
+    .filter-button[aria-pressed="true"] {
+      border-color: var(--hard);
+      color: var(--hard);
+      background: color-mix(in srgb, var(--hard) 10%, var(--panel-solid));
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: .76rem;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .line-sample { width: 28px; height: 0; border-top: 2px solid var(--hard); }
+    .line-sample.soft { border-color: var(--soft); border-top-style: dashed; }
+    .line-sample.upstream { border-color: var(--blocked); border-top-style: dotted; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .graph-shell {
+      min-width: 0;
+      overflow: hidden;
+      border-radius: 22px;
+    }
+
+    .graph-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: end;
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .graph-header h2, .detail-panel h2, .order-table h2 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.65rem;
+      font-weight: 500;
+    }
+
+    .graph-header p { max-width: 64ch; margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+
+    .scroll-region {
+      overflow: auto;
+      max-height: 76vh;
+      scrollbar-color: var(--line) transparent;
+    }
+
+    .board {
+      position: relative;
+      min-width: 2780px;
+      min-height: 840px;
+      padding: 22px;
+    }
+
+    .edges {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .upstream-lane {
+      position: relative;
+      z-index: 3;
+      margin-bottom: 20px;
+      border: 1px dashed color-mix(in srgb, var(--blocked) 55%, var(--line));
+      border-radius: 15px;
+      padding: 12px;
+      background: color-mix(in srgb, var(--blocked) 4%, transparent);
+    }
+
+    .lane-title {
+      margin: 0 0 10px;
+      color: var(--blocked);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .request-grid {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .request-card, .plan-card {
+      position: relative;
+      z-index: 4;
+      width: 100%;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      text-align: left;
+      background: var(--panel-solid);
+      cursor: pointer;
+      transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, opacity .14s ease;
+    }
+
+    .request-card:hover, .plan-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(20, 32, 27, .12); }
+    .request-card:focus-visible, .plan-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--hard) 50%, transparent); outline-offset: 2px; }
+    .request-card.selected, .plan-card.selected { border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hard) 24%, transparent); }
+    .request-card.dimmed, .plan-card.dimmed { opacity: .22; }
+    .request-card.is-hidden, .plan-card.is-hidden { display: none; }
+
+    .request-card {
+      min-height: 86px;
+      border-color: color-mix(in srgb, var(--blocked) 45%, var(--line));
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .request-card small { color: var(--blocked); font-weight: 800; }
+    .request-card strong { display: block; margin-top: 5px; font-size: .76rem; line-height: 1.25; }
+    .request-card.completed {
+      border-color: color-mix(in srgb, var(--ready) 45%, var(--line));
+      background: color-mix(in srgb, var(--ready) 7%, var(--panel-solid));
+    }
+    .request-card.completed small { color: var(--ready); }
+
+    .wave-track {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(11, 230px);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .wave {
+      min-height: 610px;
+      border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+      border-radius: 15px;
+      padding: 11px;
+      background: color-mix(in srgb, var(--panel-solid) 54%, transparent);
+    }
+
+    .wave.current {
+      border-color: color-mix(in srgb, var(--ready) 52%, var(--line));
+      background: color-mix(in srgb, var(--ready) 7%, var(--panel-solid));
+    }
+
+    .wave-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wave-header strong { font-size: .78rem; }
+    .wave-header span { color: var(--muted); font-size: .69rem; }
+    .wave-cards { display: grid; gap: 9px; }
+
+    .plan-card {
+      min-height: 108px;
+      overflow: hidden;
+      border-radius: 13px;
+      padding: 11px 11px 12px 14px;
+    }
+
+    .plan-card::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: var(--mp-color);
+      content: "";
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .plan-number {
+      color: var(--mp-color);
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .05em;
+    }
+
+    .status {
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 2px 6px;
+      font-size: .58rem;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .status.ready { color: var(--ready); }
+    .status.blocked { color: var(--blocked); }
+    .status.partial { color: var(--partial); }
+    .status.queued { color: var(--queued); }
+
+    .plan-card h3 {
+      margin: 8px 0 6px;
+      font-size: .8rem;
+      line-height: 1.25;
+    }
+
+    .plan-card p {
+      display: -webkit-box;
+      overflow: hidden;
+      margin: 0;
+      color: var(--muted);
+      font-size: .68rem;
+      line-height: 1.35;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .critical-dot {
+      position: absolute;
+      right: 8px;
+      bottom: 7px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--hard);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--hard) 17%, transparent);
+    }
+
+    .detail-panel {
+      position: sticky;
+      top: 78px;
+      max-height: calc(100vh - 92px);
+      overflow: auto;
+      border-radius: 22px;
+      padding: 22px;
+    }
+
+    .detail-kicker {
+      margin: 0 0 7px;
+      color: var(--hard);
+      font-size: .7rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .detail-panel h2 { line-height: 1.08; }
+    .detail-copy { color: var(--muted); line-height: 1.55; font-size: .88rem; }
+
+    .detail-section {
+      margin-top: 19px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .detail-section h3 {
+      margin: 0 0 9px;
+      font-size: .7rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .dependency-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+    .dependency-list li { color: var(--muted); font-size: .8rem; line-height: 1.35; }
+    .dependency-list strong { color: var(--ink); }
+
+    .open-link {
+      display: inline-flex;
+      margin-top: 18px;
+      border-radius: 999px;
+      padding: 9px 13px;
+      color: #fff;
+      text-decoration: none;
+      background: var(--hard);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    code {
+      border-radius: 5px;
+      padding: 2px 4px;
+      color: var(--ink);
+      background: color-mix(in srgb, var(--line) 35%, transparent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .74rem;
+      overflow-wrap: anywhere;
+    }
+
+    .order-table {
+      margin-top: 18px;
+      overflow: hidden;
+      border-radius: 22px;
+    }
+
+    .order-table header { padding: 20px 22px 8px; }
+    .table-scroll { overflow-x: auto; padding: 0 22px 22px; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th, td { padding: 10px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+    td:first-child { width: 62px; color: var(--hard); font-weight: 850; }
+
+    .empty-state {
+      display: none;
+      position: absolute;
+      z-index: 8;
+      top: 300px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 20px;
+      background: var(--panel-solid);
+      color: var(--muted);
+    }
+
+    .empty-state.visible { display: block; }
+
+    @media (max-width: 1080px) {
+      .hero { grid-template-columns: 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .detail-panel { position: static; max-height: none; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .page { width: min(100% - 16px, 1800px); padding-top: 8px; }
+      .hero-copy, .start-card { border-radius: 18px; padding: 22px; }
+      .summary { grid-template-columns: 1fr 1fr; }
+      .legend { width: 100%; margin-left: 0; }
+      .search { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Unfinished portfolio · reviewed 30 July 2026</p>
+        <h1 id="page-title">Build order, without the guesswork.</h1>
+        <p class="lede">
+          Thirty-six unfinished ExecPlans become one dependency-aware sequence. The foundation
+          chain is intentionally narrow: package ownership, Settei configuration, one released
+          library cohort, migration and checked-workflow gates—then the product work fans out.
+        </p>
+      </div>
+      <aside class="start-card" aria-label="Where to start">
+        <div>
+          <p class="eyebrow">Start here</p>
+          <h2>Plan 36 is the first code change.</h2>
+          <p>Plan 43's contract design and the seven open upstream requests can move in parallel. Kioku IR-1 is complete.</p>
+        </div>
+        <div class="start-actions">
+          <div class="start-action"><span class="step-number">1</span><div><strong>Plan 36</strong><p>Set the six-package service boundary.</p></div></div>
+          <div class="start-action"><span class="step-number">2</span><div><strong>Plan 37</strong><p>Adopt Settei as the only process config surface.</p></div></div>
+          <div class="start-action"><span class="step-number">3</span><div><strong>Plan 47</strong><p>Port the coherent released library cohort after plan 37; Kioku 0.2 is ready.</p></div></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="summary" aria-label="Portfolio summary">
+      <div class="metric"><strong>36</strong><span>unfinished ExecPlans</span></div>
+      <div class="metric"><strong>8</strong><span>unfinished MasterPlans</span></div>
+      <div class="metric"><strong>7</strong><span>open upstream gates · 1 closed</span></div>
+      <div class="metric"><strong>11</strong><span>implementation waves</span></div>
+    </section>
+
+    <section class="controls" aria-label="Graph controls">
+      <input class="search" id="search" type="search" placeholder="Search plan number or title…" aria-label="Search plans">
+      <select class="select" id="mp-filter" aria-label="Filter by MasterPlan">
+        <option value="all">All MasterPlans</option>
+        <option value="2">MP 2 · Production reality</option>
+        <option value="3">MP 3 · Correctness &amp; delivery</option>
+        <option value="4">MP 4 · Identity &amp; trust</option>
+        <option value="5">MP 5 · Durable evolution</option>
+        <option value="6">MP 6 · Operations</option>
+        <option value="7">MP 7 · Platform completion</option>
+        <option value="8">MP 8 · Router agents</option>
+        <option value="9">MP 9 · Practice reviews</option>
+      </select>
+      <button class="filter-button" id="ready-filter" aria-pressed="false">Startable now</button>
+      <button class="filter-button" id="blocked-filter" aria-pressed="false">Upstream-gated</button>
+      <button class="filter-button" id="critical-filter" aria-pressed="false">Critical path</button>
+      <button class="filter-button" id="soft-toggle" aria-pressed="false">Show soft edges</button>
+      <div class="legend" aria-label="Edge legend">
+        <span><span class="line-sample" aria-hidden="true">&#160;</span> hard</span>
+        <span><span class="line-sample soft" aria-hidden="true">&#160;</span> soft</span>
+        <span><span class="line-sample upstream" aria-hidden="true">&#160;</span> upstream</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="graph-shell">
+        <header class="graph-header">
+          <div>
+            <h2>Dependency board</h2>
+            <p>Scroll horizontally through the waves. Select a card to expose every direct dependency; the default view suppresses long transitive foundation lines.</p>
+          </div>
+        </header>
+        <div class="scroll-region" id="scroll-region">
+          <div class="board" id="board">
+            <svg class="edges" id="edges" aria-hidden="true"></svg>
+            <section class="upstream-lane" aria-labelledby="upstream-title">
+              <h3 class="lane-title" id="upstream-title">Upstream requests · 7 open · 1 completed</h3>
+              <div class="request-grid" id="request-grid"></div>
+            </section>
+            <div class="wave-track" id="wave-track"></div>
+            <div class="empty-state" id="empty-state">No plans match this filter.</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="detail-panel" id="detail-panel" aria-live="polite">
+        <p class="detail-kicker">How to read this</p>
+        <h2>Select a plan or request</h2>
+        <p class="detail-copy">Solid lines are hard implementation dependencies. Dashed amber lines are preferred landing order. Dotted red lines are upstream gates. The small dot marks the portfolio critical path.</p>
+        <div class="detail-section">
+          <h3>Current recommendation</h3>
+          <ul class="dependency-list">
+            <li><strong>Code:</strong> begin plan 36.</li>
+            <li><strong>Parallel design:</strong> begin plan 43.</li>
+            <li><strong>Coordination:</strong> advance the seven open upstream requests; retain completed Kioku IR-1 as cohort evidence.</li>
+          </ul>
+        </div>
+      </aside>
+    </section>
+
+    <section class="order-table" aria-labelledby="order-heading">
+      <header><h2 id="order-heading">Wave-by-wave handoff</h2></header>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Wave</th><th>Work</th><th>Entry rule</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>Seven open upstream requests; completed Kioku IR-1 evidence; plan 43 contract design</td><td>Parallel coordination/design work; package build still waits for plan 47.</td></tr>
+            <tr><td>1</td><td>36</td><td>First code change.</td></tr>
+            <tr><td>2</td><td>37</td><td>After 36; Settei becomes the only application config layer.</td></tr>
+            <tr><td>3</td><td>47</td><td>After plan 37; Kioku 0.2 satisfies the former release gate, so upgrade the dependency cohort as a unit.</td></tr>
+            <tr><td>4</td><td>38, 39, 28 M1</td><td>Migration, checked topology, and log vocabulary may proceed in parallel.</td></tr>
+            <tr><td>5</td><td>13, 16, 17, 18, 21, 24</td><td>Core semantics; respect 38→21 and 39→24.</td></tr>
+            <tr><td>6</td><td>20, 19, 22, 15, 25, 26, 30, 33</td><td>Build shared seams once: 17+18→20; 16+28→19→22; 20→30/33.</td></tr>
+            <tr><td>7</td><td>14, 23, 27, 29, 32, 34, 35, 12 runtime</td><td>Feature completion; several milestones remain upstream-gated.</td></tr>
+            <tr><td>8</td><td>40 → 41 → 42</td><td>Router declaration, catalog, then replay-safe execution.</td></tr>
+            <tr><td>9</td><td>44 and 45 → 46</td><td>Practice-review evidence/memory, then end-to-end orchestration.</td></tr>
+            <tr><td>10</td><td>31</td><td>Operations closure after the public configuration and health surfaces settle.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <noscript><p>This artifact requires JavaScript to lay out and filter the dependency graph. The wave table above remains available without it.</p></noscript>
+  </main>
+
+  <script>
+    const masterPlans = {
+      2: {name: "Production reality", path: "../masterplans/2-production-reality-de-stub-the-runtime-behavior-and-integration-path.md"},
+      3: {name: "Correctness & delivery", path: "../masterplans/3-correctness-and-delivery-semantics-stop-dropping-and-duplicating-work.md"},
+      4: {name: "Identity & trust", path: "../masterplans/4-identity-and-trust-grants-outbound-auth-and-agent-lifecycle-control.md"},
+      5: {name: "Durable evolution", path: "../masterplans/5-durable-evolution-versioning-and-replay-safety-for-long-lived-workflows.md"},
+      6: {name: "Operations & observability", path: "../masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md"},
+      7: {name: "Platform completion", path: "../masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md"},
+      8: {name: "Declarative router agents", path: "../masterplans/8-declarative-router-agents.md"},
+      9: {name: "Architecture-practice review", path: "../masterplans/9-architecture-practice-review-flow.md"}
+    };
+
+    const waves = [
+      {id: 0, label: "Parallel now"},
+      {id: 1, label: "Architecture"},
+      {id: 2, label: "Configuration"},
+      {id: 3, label: "Cohort port"},
+      {id: 4, label: "Foundation fan-out"},
+      {id: 5, label: "Core semantics"},
+      {id: 6, label: "Shared seams"},
+      {id: 7, label: "Feature completion"},
+      {id: 8, label: "Router agents"},
+      {id: 9, label: "Practice reviews"},
+      {id: 10, label: "Operations close"}
+    ];
+
+    const requests = [
+      {id:"u-kioku-release", repo:"Kioku · IR-1", state:"completed", former:[47], title:"Release for Keiki 0.4 / Keiro 0.4", uri:"mori://shinzui/kioku/docs/improvement-requests/release-kioku-for-keiki-0-4-and-keiro-0-4.md", path:"../../../kioku/docs/improvement-requests/release-kioku-for-keiki-0-4-and-keiro-0-4.md"},
+      {id:"u-kioku-reads", repo:"Kioku · IR-2", title:"Indexed sessions and bounded memory reads", uri:"mori://shinzui/kioku/docs/improvement-requests/add-indexed-session-and-bounded-memory-read-models.md", path:"../../../kioku/docs/improvement-requests/add-indexed-session-and-bounded-memory-read-models.md"},
+      {id:"u-keiro-outbox", repo:"Keiro · IR-3", title:"Terminal outbox rejection outcome", uri:"mori://shinzui/keiro/docs/improvement-requests/add-an-explicit-terminal-outbox-rejection-outcome.md", path:"../../../keiro/docs/improvement-requests/add-an-explicit-terminal-outbox-rejection-outcome.md"},
+      {id:"u-shibuya-probe", repo:"Shibuya · IR-1", title:"Public worker probe contract", uri:"mori://shinzui/shibuya/docs/improvement-requests/expose-a-public-worker-probe-contract.md", path:"../../../shibuya-project/shibuya/docs/improvement-requests/expose-a-public-worker-probe-contract.md"},
+      {id:"u-baikai-mcp", repo:"Baikai · IR-2", title:"MCP client, tool and auth contracts", uri:"mori://shinzui/baikai/docs/improvement-requests/ship-the-mcp-client-tool-and-authentication-contracts.md", path:"../../../baikai/docs/improvement-requests/ship-the-mcp-client-tool-and-authentication-contracts.md"},
+      {id:"u-shikumi-mcp", repo:"Shikumi · IR-1", title:"MCP-to-ToolRegistry adapter", uri:"mori://shinzui/shikumi/docs/improvement-requests/ship-the-mcp-to-tool-registry-adapter.md", path:"../../../shikumi/docs/improvement-requests/ship-the-mcp-to-tool-registry-adapter.md"},
+      {id:"u-kikan-en-auth", repo:"Kikan-En · IR-3", title:"Per-action agent authorization", uri:"mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3", path:"../../../kikan-project/kikan-en/docs/improvement-requests/authorize-agent-mcp-tool-invocation-per-action.md"},
+      {id:"u-kikan-content", repo:"Kikan · IR-5", title:"Pinned content plane and ToolEnv", uri:"mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5", path:"../../../kikan/docs/improvement-requests/ship-the-revision-pinned-content-plane-and-tool-environment.md"}
+    ];
+
+    const plans = [
+      {n:43,w:0,mp:9,s:"ready",c:true,t:"Define architecture-practice review contracts",d:"Contract design can start now; package implementation consumes plan 47.",deps:[],soft:[47]},
+      {n:36,w:1,mp:2,s:"ready",c:true,t:"Align with the six-package deployed-service architecture",d:"First code change. Establish package and composition-root ownership.",deps:[]},
+      {n:37,w:2,mp:2,s:"queued",c:true,t:"Adopt Settei configuration across binaries",d:"One typed configuration value; env/YAML/CLI sources; no Kubernetes adapter.",deps:[36]},
+      {n:47,w:3,mp:2,s:"queued",c:true,t:"Upgrade to the coherent July 2026 dependency cohort",d:"Kioku 0.2 is released; port the major-version cohort together after plan 37.",deps:[37]},
+      {n:38,w:4,mp:3,s:"queued",c:true,t:"Migrate database evolution from Codd to pg-migrate",d:"Own the historical ledger import and operational cutover.",deps:[36,37,47]},
+      {n:39,w:4,mp:5,s:"queued",c:true,t:"Adopt a checked Keiro DSL specification and evolution gate",d:"State-shape, codec, coverage and opaque gates on Keiro 0.4.",deps:[36,47]},
+      {n:28,w:4,mp:6,s:"queued",c:false,t:"Structured logging, metrics and trace propagation",d:"M1 defines the shared log vocabulary; HTTP propagation follows plan 22.",deps:[36,37,47],soft:[22]},
+      {n:13,w:5,mp:2,s:"queued",c:false,t:"Wire a real model provider into behavior runs",d:"Baikai 0.4 smart constructors and in-band error translation.",deps:[36,37,47]},
+      {n:16,w:5,mp:2,s:"queued",c:false,t:"Make sink handlers honest",d:"Stop reporting stubs and ignored fields as successful delivery.",deps:[36,37,47]},
+      {n:17,w:5,mp:3,s:"queued",c:true,t:"Behavior retries, run timeouts and visibility heartbeat",d:"Public Shibuya Message API, zero-based attempts, lease heartbeat.",deps:[36,37,47]},
+      {n:18,w:5,mp:3,s:"queued",c:true,t:"Atomic stream consumption",d:"Offsets, inbox and queue enqueue commit in one boundary.",deps:[36,37,47]},
+      {n:21,w:5,mp:4,s:"queued",c:false,t:"Database-backed sink permission grants",d:"Canonical pg-migrate component and nullable principal seam.",deps:[36,37,38,47]},
+      {n:24,w:5,mp:5,s:"queued",c:true,t:"Flow versioning with patch and continue-as-new",d:"Durable topology changes pass plan 39 and Keiro 0.4 gates.",deps:[39,47]},
+      {n:20,w:6,mp:3,s:"queued",c:true,t:"Explicit trigger routing and loud failures",d:"Consumes final retry taxonomy and atomic enqueue seam.",deps:[17,18,37,47]},
+      {n:19,w:6,mp:3,s:"partial",c:true,t:"Sink delivery truth and downstream idempotency",d:"Receipt work can start; terminal rejection waits for Keiro IR-3.",deps:[16,28,38,47],up:["u-keiro-outbox"]},
+      {n:22,w:6,mp:4,s:"queued",c:true,t:"Outbound authentication for sink clients",d:"The only authenticated, header-capable HTTP layer.",deps:[19,36,37,47],soft:[13,16]},
+      {n:15,w:6,mp:2,s:"queued",c:false,t:"Inject recalled memory and trigger payload",d:"Request-side context assembly; meaningful after the real provider.",deps:[36,47],soft:[13]},
+      {n:25,w:6,mp:5,s:"queued",c:true,t:"Replay-safe flow memory capabilities",d:"Journaled labeled recall/remember with deterministic ids.",deps:[24,39,47]},
+      {n:26,w:6,mp:5,s:"partial",c:false,t:"Conversation workflow lifecycle",d:"Indexed session resolution waits for Kioku IR-2.",deps:[24,39,47],up:["u-kioku-reads"]},
+      {n:30,w:6,mp:6,s:"queued",c:false,t:"Operator CLI for runs, agents and dead letters",d:"Consumes the canonical AgentLoadReport and Settei root.",deps:[20,36,37,47],soft:[28]},
+      {n:33,w:6,mp:7,s:"queued",c:true,t:"Agent schema evolution",d:"Owns additive identity, memory policy and enablement fields.",deps:[20,36,47],soft:[16]},
+      {n:14,w:7,mp:2,s:"queued",c:false,t:"Approval and human-in-the-loop end to end",d:"Uses final retry semantics and the shared authenticated client.",deps:[17,22,47],soft:[13]},
+      {n:23,w:7,mp:4,s:"queued",c:false,t:"Agent lifecycle control with Meibo principals",d:"File-backed DirectoryHandle is the accepted startable slice.",deps:[30,33,36,37,38,47],soft:[20,21]},
+      {n:27,w:7,mp:5,s:"queued",c:false,t:"Consolidate sink-intent and run-lifecycle machinery",d:"Move settled delivery, trace and wire semantics once.",deps:[19,24,28,39,47]},
+      {n:29,w:7,mp:6,s:"partial",c:false,t:"Health, liveness and worker-loop supervision",d:"Local health work can start; Shibuya probe slice waits for IR-1.",deps:[36,37,47],soft:[28],up:["u-shibuya-probe"]},
+      {n:32,w:7,mp:7,s:"queued",c:false,t:"Channel egress sink through Kanmon",d:"Extends canonical HTTP/auth and terminal delivery semantics.",deps:[19,22,36,37,47],soft:[21,27]},
+      {n:34,w:7,mp:7,s:"partial",c:false,t:"Memory lifecycle, retention and shared scope",d:"Distillation can start; SQL-bounded reads wait for Kioku IR-2.",deps:[33,36,37,47],up:["u-kioku-reads"]},
+      {n:35,w:7,mp:7,s:"queued",c:true,t:"Delegation as a first-class declared capability",d:"Durable global budgets, lineage and checked topology.",deps:[24,33,36,37,38,39,47]},
+      {n:12,w:7,mp:7,s:"partial",c:false,t:"Per-agent MCP server declaration",d:"M1–M2 can land; live connect/invoke waits for three upstream contracts.",deps:[36,37,47],soft:[13,33],up:["u-baikai-mcp","u-shikumi-mcp","u-kikan-en-auth"]},
+      {n:40,w:8,mp:8,s:"queued",c:true,t:"Declare specialist expertise and router policy",d:"Extends plan 33's additive declaration pattern.",deps:[33,47]},
+      {n:41,w:8,mp:8,s:"queued",c:true,t:"Resolve lifecycle-aware router candidate catalogs",d:"Journaled catalog input; plan 23 is an attributed enhancement.",deps:[33,40,47],soft:[23]},
+      {n:42,w:8,mp:8,s:"queued",c:true,t:"Execute replay-safe typed routing and delegation",d:"Extends plan 35 rather than creating another delegation path.",deps:[35,40,41,47]},
+      {n:44,w:9,mp:9,s:"partial",c:true,t:"Acquire revision-pinned practice evidence",d:"Stub reader can land; live adapter waits for Kikan IR-5.",deps:[43,47],up:["u-kikan-content"]},
+      {n:45,w:9,mp:9,s:"queued",c:true,t:"Persist and adjudicate practice reviews",d:"Consumes labeled rememberWith and the plan 43 contracts.",deps:[25,43,47]},
+      {n:46,w:9,mp:9,s:"partial",c:true,t:"Orchestrate review delivery and end-to-end conformance",d:"Joins routing, evidence, memory and honest sink delivery.",deps:[16,19,25,35,42,43,44,45,47],up:["u-kikan-content"]},
+      {n:31,w:10,mp:6,s:"queued",c:true,t:"Deployable service stack",d:"Final process-compose/NixOS packaging and configuration reference.",deps:[36,37,38,47],soft:[13,22,28,29,32]}
+    ].map((plan) => ({
+      ...plan,
+      id: "p" + plan.n,
+      path: "../plans/" + {
+        12:"12-per-agent-mcp-server-declaration-in-agent-dhall.md",
+        13:"13-wire-a-real-model-provider-into-behavior-runs.md",
+        14:"14-approval-and-human-in-the-loop-end-to-end.md",
+        15:"15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md",
+        16:"16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md",
+        17:"17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md",
+        18:"18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md",
+        19:"19-sink-delivery-truth-and-downstream-idempotency.md",
+        20:"20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md",
+        21:"21-database-backed-sink-permission-grants.md",
+        22:"22-outbound-authentication-for-sink-clients.md",
+        23:"23-agent-lifecycle-control-with-meibo-principals.md",
+        24:"24-flow-versioning-with-keiro-patch-and-continue-as-new.md",
+        25:"25-replay-safe-flow-memory-capabilities.md",
+        26:"26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md",
+        27:"27-consolidate-sink-intent-and-run-lifecycle-machinery.md",
+        28:"28-structured-logging-metrics-and-trace-propagation.md",
+        29:"29-health-liveness-and-worker-loop-supervision.md",
+        30:"30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md",
+        31:"31-deployable-service-stack-process-compose-packaging-and-configuration.md",
+        32:"32-channel-egress-sink-through-kanmon.md",
+        33:"33-agent-schema-evolution-identity-memory-policy-and-enablement.md",
+        34:"34-memory-lifecycle-distillation-retention-and-shared-scope.md",
+        35:"35-delegation-as-a-first-class-declared-capability.md",
+        36:"36-align-shikigami-with-the-six-package-deployed-service-architecture.md",
+        37:"37-adopt-settei-configuration-across-shikigami-binaries.md",
+        38:"38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md",
+        39:"39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md",
+        40:"40-declare-specialist-expertise-and-router-policy.md",
+        41:"41-resolve-lifecycle-aware-router-candidate-catalogs.md",
+        42:"42-execute-replay-safe-typed-routing-and-delegation.md",
+        43:"43-define-architecture-practice-review-contracts.md",
+        44:"44-acquire-revision-pinned-architecture-practice-evidence.md",
+        45:"45-persist-and-adjudicate-architecture-practice-reviews.md",
+        46:"46-orchestrate-review-delivery-and-end-to-end-conformance.md",
+        47:"47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md"
+      }[plan.n]
+    }));
+
+    const state = {selected:null, ready:false, blocked:false, critical:false, soft:false, mp:"all", query:""};
+    const planById = new Map(plans.map((p) => [p.id, p]));
+    const requestById = new Map(requests.map((r) => [r.id, r]));
+    const nodeById = new Map([...planById, ...requestById]);
+    const waveTrack = document.getElementById("wave-track");
+    const requestGrid = document.getElementById("request-grid");
+    const board = document.getElementById("board");
+    const edgesSvg = document.getElementById("edges");
+    const detailPanel = document.getElementById("detail-panel");
+    const emptyState = document.getElementById("empty-state");
+
+    function planLabel(n) {
+      const p = plans.find((item) => item.n === n);
+      return p ? "Plan " + p.n + " · " + p.t : "Plan " + n;
+    }
+
+    function renderNodes() {
+      requestGrid.innerHTML = requests.map((r) =>
+        '<button class="request-card ' + (r.state || "proposed") + '" id="' + r.id + '" data-node="' + r.id + '">' +
+          '<small>' + r.repo + ' · ' + (r.state || "proposed") + '</small><strong>' + r.title + '</strong>' +
+        '</button>'
+      ).join("");
+
+      waveTrack.innerHTML = waves.map((wave) => {
+        const cards = plans.filter((p) => p.w === wave.id).map((p) =>
+          '<button class="plan-card" id="' + p.id + '" data-node="' + p.id + '" ' +
+            'style="--mp-color:var(--mp' + p.mp + ')">' +
+            '<span class="card-top"><span class="plan-number">PLAN ' + p.n + ' · MP ' + p.mp + '</span>' +
+            '<span class="status ' + p.s + '">' + (p.s === "partial" ? "partial gate" : p.s) + '</span></span>' +
+            '<h3>' + p.t + '</h3><p>' + p.d + '</p>' +
+            (p.c ? '<i class="critical-dot" title="Critical path"></i>' : '') +
+          '</button>'
+        ).join("");
+        return '<section class="wave ' + (wave.id === 1 ? "current" : "") + '" data-wave="' + wave.id + '">' +
+          '<header class="wave-header"><strong>Wave ' + wave.id + '</strong><span>' + wave.label + '</span></header>' +
+          '<div class="wave-cards">' + cards + '</div></section>';
+      }).join("");
+
+      document.querySelectorAll("[data-node]").forEach((button) => {
+        button.addEventListener("click", () => selectNode(button.dataset.node));
+      });
+    }
+
+    function visiblePlan(plan) {
+      const q = state.query.trim().toLowerCase();
+      if (state.mp !== "all" && String(plan.mp) !== state.mp) return false;
+      if (state.ready && plan.s !== "ready") return false;
+      if (state.blocked && !["blocked","partial"].includes(plan.s)) return false;
+      if (state.critical && !plan.c) return false;
+      if (q && !("plan " + plan.n + " " + plan.t + " mp " + plan.mp).toLowerCase().includes(q)) return false;
+      return true;
+    }
+
+    function applyFilters() {
+      let count = 0;
+      plans.forEach((plan) => {
+        const el = document.getElementById(plan.id);
+        const visible = visiblePlan(plan);
+        el.classList.toggle("is-hidden", !visible);
+        if (visible) count += 1;
+      });
+      requests.forEach((request) => {
+        const el = document.getElementById(request.id);
+        const q = state.query.trim().toLowerCase();
+        const requestVisible = !state.ready && state.mp === "all" && !state.critical &&
+          (!state.blocked || request.state !== "completed") &&
+          (!q || (request.repo + " " + request.title).toLowerCase().includes(q));
+        el.classList.toggle("is-hidden", !requestVisible);
+      });
+      emptyState.classList.toggle("visible", count === 0);
+      requestGrid.closest(".upstream-lane").style.display =
+        requests.some((r) => !document.getElementById(r.id).classList.contains("is-hidden")) ? "" : "none";
+      requestAnimationFrame(drawEdges);
+    }
+
+    function selectedNeighbors(id) {
+      if (!id) return new Set();
+      const neighbors = new Set([id]);
+      const plan = planById.get(id);
+      if (plan) {
+        [...(plan.deps || []), ...(plan.soft || [])].forEach((n) => neighbors.add("p" + n));
+        (plan.up || []).forEach((u) => neighbors.add(u));
+        plans.forEach((candidate) => {
+          if ((candidate.deps || []).includes(plan.n) || (candidate.soft || []).includes(plan.n)) neighbors.add(candidate.id);
+        });
+      } else {
+        plans.forEach((candidate) => {
+          if ((candidate.up || []).includes(id)) neighbors.add(candidate.id);
+        });
+        const request = requestById.get(id);
+        (request.former || []).forEach((n) => neighbors.add("p" + n));
+      }
+      return neighbors;
+    }
+
+    function selectNode(id) {
+      state.selected = state.selected === id ? null : id;
+      const neighbors = selectedNeighbors(state.selected);
+      document.querySelectorAll("[data-node]").forEach((el) => {
+        el.classList.toggle("selected", el.dataset.node === state.selected);
+        el.classList.toggle("dimmed", Boolean(state.selected) && !neighbors.has(el.dataset.node));
+      });
+      renderDetail(state.selected);
+      drawEdges();
+    }
+
+    function listItems(items, kind) {
+      if (!items || !items.length) return '<li>None.</li>';
+      return items.map((item) => {
+        if (kind === "upstream") {
+          const request = requestById.get(item);
+          return '<li><strong>' + request.repo + '</strong><br>' + request.title + '</li>';
+        }
+        return '<li><strong>' + planLabel(item) + '</strong></li>';
+      }).join("");
+    }
+
+    function renderDetail(id) {
+      if (!id) {
+        detailPanel.innerHTML =
+          '<p class="detail-kicker">How to read this</p><h2>Select a plan or request</h2>' +
+          '<p class="detail-copy">Solid lines are hard implementation dependencies. Dashed amber lines are preferred landing order. Dotted red lines are upstream gates. The small dot marks the portfolio critical path.</p>' +
+          '<div class="detail-section"><h3>Current recommendation</h3><ul class="dependency-list">' +
+          '<li><strong>Code:</strong> begin plan 36.</li><li><strong>Parallel design:</strong> begin plan 43.</li>' +
+          '<li><strong>Coordination:</strong> advance the seven open upstream requests; retain completed Kioku IR-1 as cohort evidence.</li></ul></div>';
+        return;
+      }
+      const plan = planById.get(id);
+      if (plan) {
+        const downstream = plans.filter((p) => (p.deps || []).includes(plan.n)).map((p) => p.n);
+        detailPanel.innerHTML =
+          '<p class="detail-kicker">Wave ' + plan.w + ' · MasterPlan ' + plan.mp + '</p>' +
+          '<h2>Plan ' + plan.n + ' · ' + plan.t + '</h2>' +
+          '<p class="detail-copy">' + plan.d + '</p>' +
+          '<div class="detail-section"><h3>Hard predecessors</h3><ul class="dependency-list">' + listItems(plan.deps, "hard") + '</ul></div>' +
+          '<div class="detail-section"><h3>Preferred order</h3><ul class="dependency-list">' + listItems(plan.soft, "soft") + '</ul></div>' +
+          '<div class="detail-section"><h3>Upstream gates</h3><ul class="dependency-list">' + listItems(plan.up, "upstream") + '</ul></div>' +
+          '<div class="detail-section"><h3>Direct consumers</h3><ul class="dependency-list">' + listItems(downstream, "hard") + '</ul></div>' +
+          '<a class="open-link" href="' + plan.path + '">Open ExecPlan</a> ' +
+          '<a class="open-link" href="' + masterPlans[plan.mp].path + '">Open MasterPlan</a>';
+      } else {
+        const request = requestById.get(id);
+        const consumers = request.state === "completed"
+          ? (request.former || [])
+          : plans.filter((p) => (p.up || []).includes(id)).map((p) => p.n);
+        const completed = request.state === "completed";
+        detailPanel.innerHTML =
+          '<p class="detail-kicker">' + request.repo + ' · ' + (request.state || "proposed") + '</p>' +
+          '<h2>' + request.title + '</h2>' +
+          '<p class="detail-copy">' + (completed
+            ? 'Completed by Kioku v0.2.0.0. This request is retained as dependency-cohort evidence and no longer blocks a plan.'
+            : 'This OKF request lives in the owning upstream repository. Its downstream plans retain startable local milestones where a stable stub or declaration seam exists.') + '</p>' +
+          '<div class="detail-section"><h3>Canonical reference</h3><code>' + request.uri + '</code></div>' +
+          '<div class="detail-section"><h3>' + (completed ? 'Formerly blocked consumers' : 'Blocked consumers') + '</h3><ul class="dependency-list">' + listItems(consumers, "hard") + '</ul></div>' +
+          '<a class="open-link" href="' + request.path + '">Open improvement request</a>';
+      }
+    }
+
+    function addPath(fromId, toId, kind, emphasized) {
+      const from = document.getElementById(fromId);
+      const to = document.getElementById(toId);
+      if (!from || !to || from.classList.contains("is-hidden") || to.classList.contains("is-hidden")) return;
+      const boardRect = board.getBoundingClientRect();
+      const a = from.getBoundingClientRect();
+      const b = to.getBoundingClientRect();
+      const x1 = a.right - boardRect.left;
+      const y1 = a.top + a.height / 2 - boardRect.top;
+      const x2 = b.left - boardRect.left;
+      const y2 = b.top + b.height / 2 - boardRect.top;
+      const bend = Math.max(28, Math.abs(x2 - x1) * .44);
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M " + x1 + " " + y1 + " C " + (x1 + bend) + " " + y1 + ", " + (x2 - bend) + " " + y2 + ", " + x2 + " " + y2);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", kind === "hard" ? "var(--hard)" : kind === "soft" ? "var(--soft)" : "var(--blocked)");
+      path.setAttribute("stroke-width", emphasized ? "2.8" : "1.35");
+      path.setAttribute("stroke-opacity", emphasized ? ".95" : ".46");
+      if (kind !== "hard") path.setAttribute("stroke-dasharray", kind === "soft" ? "7 6" : "2 6");
+      path.setAttribute("marker-end", "url(#arrow-" + kind + ")");
+      edgesSvg.appendChild(path);
+    }
+
+    function drawEdges() {
+      const width = board.scrollWidth;
+      const height = board.scrollHeight;
+      edgesSvg.setAttribute("width", width);
+      edgesSvg.setAttribute("height", height);
+      edgesSvg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      edgesSvg.innerHTML =
+        '<defs>' +
+          '<marker id="arrow-hard" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--hard)"/></marker>' +
+          '<marker id="arrow-soft" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--soft)"/></marker>' +
+          '<marker id="arrow-upstream" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--blocked)"/></marker>' +
+        '</defs>';
+
+      plans.forEach((plan) => {
+        (plan.deps || []).forEach((dep) => {
+          const source = plans.find((p) => p.n === dep);
+          if (!source) return;
+          const selectedEdge = state.selected === plan.id || state.selected === source.id;
+          const near = Math.abs(plan.w - source.w) <= 2;
+          if (selectedEdge || near || (plan.c && source.c)) addPath(source.id, plan.id, "hard", selectedEdge);
+        });
+        if (state.soft || state.selected === plan.id) {
+          (plan.soft || []).forEach((dep) => addPath("p" + dep, plan.id, "soft", state.selected === plan.id));
+        }
+        (plan.up || []).forEach((request) => addPath(request, plan.id, "upstream", state.selected === plan.id || state.selected === request));
+      });
+    }
+
+    function toggle(buttonId, key) {
+      const button = document.getElementById(buttonId);
+      button.addEventListener("click", () => {
+        state[key] = !state[key];
+        button.setAttribute("aria-pressed", String(state[key]));
+        applyFilters();
+      });
+    }
+
+    document.getElementById("search").addEventListener("input", (event) => {
+      state.query = event.target.value;
+      applyFilters();
+    });
+    document.getElementById("mp-filter").addEventListener("change", (event) => {
+      state.mp = event.target.value;
+      applyFilters();
+    });
+    toggle("ready-filter", "ready");
+    toggle("blocked-filter", "blocked");
+    toggle("critical-filter", "critical");
+    toggle("soft-toggle", "soft");
+
+    renderNodes();
+    applyFilters();
+    window.addEventListener("resize", () => requestAnimationFrame(drawEdges));
+    if ("ResizeObserver" in window) new ResizeObserver(() => requestAnimationFrame(drawEdges)).observe(board);
+  </script>
+</body>
+</html>

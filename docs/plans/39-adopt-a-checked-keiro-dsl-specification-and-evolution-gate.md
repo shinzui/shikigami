@@ -180,6 +180,14 @@ disposable generated output. Adopt one vertical at a time with compatibility re-
 the suite stays green. Persisted identifiers are never renamed as cleanup.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36 and 47. Target Keiro 0.4.0.1 and include its
+state-shape hash, structural/opaque declaration, codec comparison/golden, coverage, and opaque gates.
+Generated queue codec envelopes require the drain/transitional-decoder policy from plan 47; do not
+certify a schema that differs from the codec actually executed.
+
+
 ## Interfaces and Dependencies
 
 Use the public `keiro-dsl` CLI and generated runtime APIs from the coherent Keiro cohort.

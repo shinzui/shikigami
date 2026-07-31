@@ -411,6 +411,14 @@ path where appropriate. Never place raw
 tokens in repositories, process arguments, or example configuration files.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 19, 36, 37, and 47. It owns the only authenticated,
+header-capable HTTP layer. Credential values are opaque Settei composition-root values; sink
+configuration and journaled intents carry references only. Preserve plan 19's terminal/transient
+classification when translating HTTP responses.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 19, 36, and 37. Plan 19 supplies the additive permanent-failure

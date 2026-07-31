@@ -92,9 +92,10 @@ plan (33, MasterPlan 7) was rejected: silently ignored fields are a present-tens
 runtime lie, not a future schema concern, and the fix (honor or reject) requires no
 schema change.
 
-Plan 36 establishes the six-package shape, then plan 37 establishes Settei inside that
-shape. Plans 14 and 16 share only additive record fields, but their portfolio landing order is
-now plan 36 → plan 37 → plans 16/17/19 → plan 22 → plan 14: plan 22 wraps the settled sink clients with the
+Plan 36 establishes the six-package shape, plan 37 establishes Settei inside that shape,
+and plan 47 ports one coherent released dependency cohort. Plans 14 and 16 share only
+additive record fields, but their portfolio landing order is now plan 36 → plan 37 → plan
+47 → plans 16/17/19 → plan 22 → plan 14: plan 22 wraps the settled sink clients with the
 authenticated `SinkHttp` that approval notifications consume. Plan 15 is sequenced
 after 13 by soft dependency (same-file coordination, and the feature is only meaningful
 with a real model) but is not blocked by it.
@@ -106,17 +107,20 @@ with a real model) but is not blocked by it.
 |---|-------|------|-----------|-----------|--------|
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Not Started |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Not Started |
-| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F2 | None | Not Started |
-| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F2; cross-MP: plans 17 and 22 | EP-1 | Not Started |
-| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F1 | EP-1 | Not Started |
-| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F2 | None | Not Started |
+| F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Not Started; M0 complete |
+| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Not Started |
+| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
+| 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Not Started |
+| 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Not Started |
 
 
 ## Dependency Graph
 
 F1 is the first implementation step. F2 follows F1 because configuration ownership is
-expressed at executable and package boundaries. EP-1 and EP-4 then consume F2; EP-3
-consumes F1 and soft-depends on EP-1. EP-2 has two hard dependencies: F2 and
+expressed at executable and package boundaries. F3 follows F2 because the major library ports
+must land into the final package/configuration shape. Its former external release gate is
+satisfied by Kioku `v0.2.0.0`.
+EP-1, EP-3, and EP-4 then consume F3. EP-2 has two hard dependencies: F3 and
 `docs/plans/22-outbound-authentication-for-sink-clients.md`: approval asks are outbound
 danwa or kizashi calls and must use plan 22's authenticated `SinkHttp` rather than
 introduce a second, unauthenticated client path. EP-2 also soft-depends on EP-1 for the
@@ -149,11 +153,12 @@ adapters and merge work. The canonical landing order is expressed as waves; plan
 the same wave may proceed in parallel unless an intra-MasterPlan dependency says
 otherwise.
 
-Foundation wave: land plans 36 (package architecture), 37 (Settei configuration), 38
-(pg-migrate transition), and 39 (checked Keiro DSL). These four plans turn recurring
-fleet conventions into owned, testable prerequisites. No later plan may recreate a
-seventh top-level package, raw environment resolver, Codd migration path, or unchecked
-workflow topology.
+Foundation wave: land plan 36 (package architecture), plan 37 (Settei configuration), and
+plan 47 (the coherent released dependency cohort), in that order. Then land plan 38
+(pg-migrate transition) and plan 39 (checked Keiro DSL). These plans turn recurring fleet
+conventions into owned, testable prerequisites. No later plan may recreate a seventh
+top-level package, raw environment resolver, arbitrary pre-release dependency cohort, Codd
+migration path, or unchecked workflow topology.
 
 Core semantics wave: land plan 13 (model provider), plan 16 (honest sink behavior),
 plans 17 and 18 (worker failure taxonomy and transactional enqueue), plan 21 (grant
@@ -193,6 +198,7 @@ The exact edge ledger is:
 |---|---|---|
 | all deployed feature plans | plan 36 | Hard: package and executable ownership must be settled first |
 | every process/config plan | plan 37 | Hard: Settei is the sole process-configuration surface |
+| every plan that imports a co-developed runtime library | plan 47 | Hard: one released dependency cohort and its compatibility fixtures |
 | every database-evolution plan | plan 38 | Hard: pg-migrate owns components, manifests, CLI, and test support |
 | plans 24–27 and 35 | plan 39 | Hard: durable topology and identifiers pass the checked Keiro DSL gate |
 | plan 14 | plans 17 and 22 | Hard: approval asks import authenticated clients and preserve failure class through workflow retry/dead-letter semantics |
@@ -212,6 +218,43 @@ The exact edge ledger is:
 Plan 28 Milestone 3 also waits for plan 22, while its logging and metrics milestones can
 start immediately. Plan 34 starts after plan 33 so its scope semantics and bounded memory
 policy are the only types threaded through the lifecycle worker.
+
+
+### Authoritative portfolio order (2026-07-30)
+
+This table supersedes the earlier wave wording where it differs. It covers every unfinished
+MasterPlan (2–9), includes plan 47, and separates hard blockers from partial work that can land
+behind a stable seam.
+
+| Wave | Implement in this order | Gate / parallelism |
+|---:|---|---|
+| 0 | Advance the seven open upstream IRs; retain completed Kioku IR-1 as evidence; plan 43 contract design | Plan 43's types may be designed now; package implementation waits for plan 47 |
+| 1 | plan 36 | First code change: six-package ownership and composition roots |
+| 2 | plan 37 | Settei 0.2 is the sole process-config surface; no Kubernetes adapter |
+| 3 | plan 47 | Kioku `v0.2.0.0` satisfies the former release gate; after plan 37, port the entire released dependency cohort together |
+| 4 | plan 38; plan 39; plan 28 M1 | pg-migrate cutover, checked Keiro topology, and structured-log vocabulary can proceed in parallel after plan 47 where their file ownership permits |
+| 5 | plans 13, 16, 17, 18, 21, and 24 | Core provider, sink, retry/lease, atomic enqueue, grants, and versioning semantics; plan 24 follows plan 39 and plan 21 follows plan 38 |
+| 6 | plan 20; plan 19; plan 22; plan 15; plans 25 and 26; plans 30 and 33 | Respect 17+18→20, 16+28M1+Keiro IR-3→19→22, 13→15, 24→25/26, and 20→30/33; plan 26's indexed-session slice waits for Kioku IR-2 |
+| 7 | plans 14, 23, 27, 29, 32, 34, and 35; plan 12 runtime | Follow the exact registry edges; plan 29 waits for Shibuya IR-1, plan 34 M2/M3 waits for Kioku IR-2, and plan 12 M3–M5 waits for its three upstream requests |
+| 8 | plan 40 → plan 41 → plan 42 | Plan 40 follows plan 33; plan 42 also follows plan 35 |
+| 9 | plan 44 and plan 45 after plan 43, then plan 46 | Plan 44's stub seam can land before Kikan IR-5; live plan 44/46 conformance waits for it. Plan 45 also follows plan 25; plan 46 follows MasterPlan 8 and plans 16, 19, 25, and 35 |
+| 10 | plan 31 | Operations closure after health, auth, egress, migrations, and configuration have stabilized |
+
+Cross-repository blocker ledger:
+
+Kioku IR-1 is completed by `v0.2.0.0` at
+`5765f98add2a87a356c70793a6ba54375ef5feec`; it is retained in plan 47 and the
+visual map as completion evidence, not as an open blocker.
+
+| Downstream plan/milestone | Owning request | What remains startable |
+|---|---|---|
+| plans 26 and 34 bounded/indexed read milestones | `mori://shinzui/kioku/docs/improvement-requests/add-indexed-session-and-bounded-memory-read-models.md` (IR-2) | Other workflow/memory seams and fixtures |
+| plan 19 terminal rejection | `mori://shinzui/keiro/docs/improvement-requests/add-an-explicit-terminal-outbox-rejection-outcome.md` (IR-3) | Handler truth and delivery receipt schema |
+| plan 29 Shibuya probe | `mori://shinzui/shibuya/docs/improvement-requests/expose-a-public-worker-probe-contract.md` (IR-1) | Typed HTTP health API and local loop supervision |
+| plan 12 MCP client/auth | `mori://shinzui/baikai/docs/improvement-requests/ship-the-mcp-client-tool-and-authentication-contracts.md` (IR-2) | M1–M2 declaration and registry seam |
+| plan 12 MCP tool adapter | `mori://shinzui/shikumi/docs/improvement-requests/ship-the-mcp-to-tool-registry-adapter.md` (IR-1) | M1–M2 declaration and registry seam |
+| plan 12 per-action authorization | `mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3` | Inert schema only; no live connection/invocation |
+| plan 44 live evidence and plan 46 live conformance | `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` | Deterministic reader seam and stub fixtures |
 
 
 ## Integration Points
@@ -285,6 +328,10 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       tests from plan 36 are complete.
 - [ ] F2 M1–M4: every executable uses Settei with explicit bindings, diagnostics,
       secret redaction, and compatibility tests from plan 37.
+- [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
+      released Keiki 0.4 / Keiro 0.4 bounds and codec-compatibility evidence.
+- [ ] F3 M1–M5: verified dependency matrix, released API ports, wire/replay
+      fixtures, and full cohort build/test evidence from plan 47.
 - [ ] EP-1 M1: provider selection module + loud typed-config construction; stub default; worker
       and run-behavior wired; tests green.
 - [ ] EP-1 M2: `Options` threaded through the skill arm; Settei's opaque credential is
@@ -324,12 +371,31 @@ inside the plan-36 worker composition root so the merges stay mechanical.
   child-plan granularity. MP-5's versioning foundation and MP-6's observability work
   precede some work in numerically earlier MasterPlans, while MP-6's deployable stack
   remains the final closure step.
+- Upstream release update (2026-07-30): Kioku `v0.2.0.0` publishes all five
+  packages with Keiki 0.4 / Keiro 0.4 bounds. Plan 47's external release gate
+  is closed; its remaining hard predecessor is plan 37.
 
 
 ## Decision Log
 
-- Decision: Decompose the review into two foundation plans plus four feature plans:
-  architecture (36), configuration (37), model execution (13), human-in-the-loop (14),
+- Decision: Treat Kioku IR-1 as completed evidence and remove it from plan 47's
+  hard dependencies.
+  Rationale: `v0.2.0.0` is tagged at
+  `5765f98add2a87a356c70793a6ba54375ef5feec`; all five packages are published
+  on Hackage and the released bounds admit the selected Keiki/Keiro cohort.
+  Date: 2026-07-30
+
+- Decision: Insert plan 47 between Settei adoption and every feature that consumes a
+  co-developed runtime library, and use the wave table plus blocker ledger as the portfolio's
+  authoritative implementation order.
+  Rationale: current released libraries contain coordinated major API, solver, wire-codec,
+  and migration changes; independent bumps or numeric MasterPlan order would create invalid
+  intermediate states and duplicate adapters.
+  Date: 2026-07-30
+
+
+- Decision: Decompose the review into three foundation plans plus four feature plans:
+  architecture (36), configuration (37), dependency cohort (47), model execution (13), human-in-the-loop (14),
   context assembly (15), and sink truth (16), with
   the dependency matrix EP-1=plan 13, EP-2=plan 14, EP-3=plan 15, EP-4=plan 16;
   EP-3 soft-depends on EP-1. The 2026-07-22 revision adds plan 22 as EP-2's
@@ -397,6 +463,12 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-30: Recorded Kioku `v0.2.0.0` as completion of IR-1 and plan 47 M0,
+  removed the upstream release edge from F3, reduced the open blocker ledger
+  to seven requests, and made plan 37 the only remaining predecessor of plan 47.
+- 2026-07-30: Added plan 47, extended the child-plan DAG through MasterPlans 8–9, recorded
+  eight upstream OKF requests, and published the authoritative wave/blocker ledger.
 
 - 2026-07-22: Added the MP-2 through MP-7 child-plan execution waves, made plan 14's
   authenticated-client dependency explicit, removed the false approval-policy edge to

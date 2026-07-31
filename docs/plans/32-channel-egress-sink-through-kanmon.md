@@ -507,6 +507,13 @@ all before proceeding; there is no partial-wiring hazard because the M1 placehol
 from manifests; the schema alternative can remain (unused alternatives are inert).
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 19, 22, 36, 37, and 47. It consumes Keiro IR-3's terminal
+rejection outcome through plan 19 and extends plan 22's HTTP/auth records instead of creating a
+Kanmon-specific request stack. Plan 21 and plan 27 remain preferred landing predecessors.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 19, 22, 36, and 37. Plan 19 owns the receipt/failure taxonomy and

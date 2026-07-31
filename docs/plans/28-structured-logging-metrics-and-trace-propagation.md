@@ -514,6 +514,14 @@ breaks a sink client, the header addition is behind `postJSONWithHeaders` and re
 into the outbox (independently useful and safe — keiro treats it as opaque).
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. Target the hs-opentelemetry 1.0.0.0
+family and verify exact source through Mori. Settei owns application telemetry policy, while
+standard `OTEL_*` exporter variables remain SDK-owned. M1 logging may land early; HTTP trace
+propagation waits for plan 22's canonical helper.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 37. Plan 22 remains required for outbound trace-header

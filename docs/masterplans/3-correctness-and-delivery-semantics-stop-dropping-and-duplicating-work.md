@@ -34,8 +34,8 @@ Explicitly excluded: structured logging/metrics infrastructure (docs/plans/28), 
 The initiative has one database-evolution foundation and four independent hand-off
 boundaries. F1 replaces Codd with the fleet pg-migrate component/manifest/application-
 plan model before any child adds tables. The queue-to-workflow boundary (EP-1) is about
-what "retry" means once a job is in a handler, including PGMQ's one-based attempt
-number and shibuya's framework-owned acknowledgement. The stream-to-queue boundary
+what "retry" means once a job is in a handler, including the adapter's zero-based
+attempt and Shibuya's framework-owned acknowledgement. The stream-to-queue boundary
 (EP-2) is about transactional atomicity between Kafka offsets, the keiro inbox table,
 and pgmq. The workflow-to-downstream boundary (EP-3) is about truthful receipts and
 retry behavior. The trigger surface (EP-4) owns explicit routing, scheduler catch-up,
@@ -50,11 +50,11 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 and 37 | None | Not Started |
-| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 and 37 | None | Not Started |
-| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 and 37 | None | Not Started |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16 and 28 M1 | None | Not Started |
-| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plan 37 | None | Not Started |
+| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
+| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
+| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16, 28 M1, and 47; upstream Keiro IR-3 | None | Not Started |
+| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 and 47 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -94,7 +94,7 @@ canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 Worker handler and ack classification — server/worker modules assigned by plan 36.
 Involved: EP-1, EP-4. EP-1 keeps shibuya's `QueueProcessor` as the sole acknowledgement
-owner, carries its lease for heartbeat, normalizes PGMQ's first delivery to attempt 1,
+owner, carries its lease for heartbeat, consumes the adapter's first delivery as attempt 0,
 and derives retry delay with the shared `mkRetryPolicy` vocabulary. EP-4 consumes that
 taxonomy and routes from an explicit `triggerKind` discriminator; payload decodability
 is never used as the route selector.
@@ -134,7 +134,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
 - [ ] F1: Milestones 1–4 — pg-migrate component, exact manifest, complete plan, Codd ledger-only import, CLI/test/deployment cutover
-- [ ] EP-1: Milestone 2 — one-based PGMQ attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
+- [ ] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
 - [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
 - [ ] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
 - [ ] EP-2: Milestone 1 — transactional enqueue: inbox transaction and pgmq send commit atomically
@@ -156,18 +156,30 @@ Document cross-plan insights, dependency changes, scope adjustments, or unexpect
 interactions between child plans. Provide concise evidence.
 
 - Planning research (2026-07-08): keiro has no per-step retry policy or step options at all — the framework's documented contract (keiro `Keiro/Workflow.hs` module haddock and the `Step` handler, which journals only after the step body returns) is that transient failures should be thrown so the step re-runs on the next execution. This turned EP-1's design from "add a retry policy" into "stop journaling transient failures", which is a smaller and more idiomatic change.
-- Planning research (2026-07-08): the shibuya version shikigami pins (cabal.project tag `3f276ee` of shinzui/shibuya) already exposes `lease :: Maybe (Lease es)` on the `Ingested` value the handler receives, and the pinned pgmq adapter populates it. EP-1's heartbeat needs no dependency bump.
+- Dependency-cohort review (2026-07-30): Shibuya 0.8 exposes
+  `lease :: Maybe (Lease es)` on the public `Message es msg` a handler receives, while
+  shibuya-pgmq-adapter 0.12 converts PGMQ's one-based `read_count` to a zero-based
+  `Envelope.attempt`. EP-1 keeps the lease and consumes the attempt without another
+  normalization.
 - Planning research (2026-07-08): neither kizashi's create-signal endpoint nor danwa's start/join/post endpoints accept any client-supplied id or idempotency key, and danwa has no lookup-by-external-key. EP-3's downstream idempotency is therefore necessarily client-side (a delivery-receipt guard in shikigami's own database), with upstream API changes recorded as follow-ups.
 - Fleet conformance audit (2026-07-22): `pg-migrate` already supplies the component,
   manifest, complete application-plan, Codd ledger importer, CLI, and test support this
   initiative needs. Continuing to author Codd migrations would create a second schema
   authority and make delivery-receipt rollout unverifiable.
-- Runtime-pattern audit (2026-07-22): PGMQ attempts are one-based and shibuya owns
-  acknowledgement/commit. Retry and inbox plans were corrected to consume those facts
-  rather than layering zero-based math or a second ack loop over the framework.
+- Runtime-pattern audit (revised 2026-07-30): PGMQ `read_count` is one-based, but the
+  released adapter's handler-facing `Envelope.attempt` is zero-based. Shibuya owns
+  acknowledgement/commit. Retry and inbox plans consume those facts rather than layering
+  another normalization or a second ack loop over the framework.
 
 
 ## Decision Log
+
+- Decision: Make plan 47 a hard foundation and track Keiro IR-3 as the only upstream gate
+  on terminal outbox rejection.
+  Rationale: Shibuya/PGMQ attempt, handler, and migration APIs change in the released cohort,
+  while terminal rejection must remain Keiro-owned rather than a raw-table workaround.
+  Date: 2026-07-30
+
 
 Record every decomposition or coordination decision made while working on the master
 plan.
@@ -183,11 +195,12 @@ plan.
   implementations in EP-4. Serializing EP-4 behind EP-1/EP-2 removes that ambiguity;
   EP-3 remains independent of them and follows plan 28 Milestone 1.
   Date: 2026-07-22
-- Decision: Retry math uses PGMQ's one-based attempt count and the shared
-  `mkRetryPolicy`; shibuya remains the sole acknowledgement owner.
-  Rationale: preserving adapter/framework ownership prevents off-by-one retry ceilings,
-  duplicate acknowledgements, and process-specific retry dialects.
-  Date: 2026-07-22
+- Decision: Retry math uses the adapter's zero-based `Envelope.attempt` and the shared
+  `mkRetryPolicy`; Shibuya remains the sole acknowledgement owner.
+  Rationale: the adapter already converts PGMQ `read_count`; preserving adapter/framework
+  ownership prevents double normalization, duplicate acknowledgements, and process-specific
+  retry dialects.
+  Date: 2026-07-30
 - Decision: Every new Shikigami table is delivered through plan 38's pg-migrate
   component and complete application plan; the Codd transition imports history only.
   Rationale: one schema authority makes fresh installs, upgrades, verification, tests,
@@ -230,6 +243,9 @@ Compare the result against the original vision.
 
 
 ## Revision Notes
+
+- 2026-07-30: Added plan 47 to every child, corrected Shibuya/PGMQ attempt zero semantics,
+  and linked the terminal-rejection milestone to Keiro IR-3.
 
 - 2026-07-22: Converted EP-4's worker/enqueue prerequisites and EP-3's structured-logger
   prerequisite to hard dependencies, assigned canonical loader ownership to EP-4, and

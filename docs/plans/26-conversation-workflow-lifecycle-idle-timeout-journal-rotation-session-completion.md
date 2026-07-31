@@ -405,6 +405,15 @@ timeouts (a second `runWorkflowTimerWorker` with the conversation fire action) r
 combined action, and record it in the Decision Log.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 24, 39, and 47. Milestones that require indexed
+subject-reference session resolution are blocked on Kioku IR-2 at
+`mori://shinzui/kioku/docs/improvement-requests/add-indexed-session-and-bounded-memory-read-models.md`.
+Timer generation, queue codec, state-shape, and `continueAsNew` behavior must use Keiro 0.4's
+released APIs and plan 47's compatibility fixtures.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 39, and 24. Every timer, awakeable, patch, and continue-as-

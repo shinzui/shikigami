@@ -53,9 +53,9 @@ Boundaries minimize coupling but not to zero: plans 21, 22, and 23 all thread a 
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | cross-MP: plans 36, 37, and 38 | None | Not Started |
-| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | cross-MP: plans 19, 36, and 37 | cross-MP: plans 13, 16 (MasterPlan 2) | Not Started |
-| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 36, 37, 38, 30, and 33 | EP-1; cross-MP: plan 20 (MasterPlan 3) | Not Started |
+| EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | cross-MP: plans 36–38 and 47 | None | Not Started |
+| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | cross-MP: plans 19, 36, 37, and 47 | cross-MP: plans 13, 16 (MasterPlan 2) | Not Started |
+| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 30, 33, 36–38, and 47 | EP-1; cross-MP: plan 20 (MasterPlan 3) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -138,6 +138,13 @@ settings and resolves them at the composition root; raw token values never gain
 
 ## Decision Log
 
+- Decision: Require the coherent plan-47 cohort before grant, HTTP-auth, or lifecycle work,
+  while keeping the file-backed directory source as the non-blocked lifecycle first slice.
+  Rationale: these plans consume changed runtime/resource APIs, but do not need to wait for a
+  speculative live Meibo client to prove the fail-closed lifecycle contract.
+  Date: 2026-07-30
+
+
 - Decision: Decompose into exactly three plans along the three trust questions (authorization state / outbound credentials / identity & lifecycle), with EP-1 ∥ EP-2, EP-3 soft-depending on EP-1, and EP-3 hard-depending cross-MasterPlan on plans 30 and 33.
   Rationale: Each question has a distinct artifact and independent demonstration. Grants and
   credentials fail closed; lifecycle fails closed until its first valid snapshot and then
@@ -186,6 +193,9 @@ settings and resolves them at the composition root; raw token values never gain
 
 
 ## Revision Notes
+
+- 2026-07-30: Added the coherent dependency cohort to all children and confirmed that plan
+  23's file-backed directory seam remains startable without an additional upstream blocker.
 
 - 2026-07-08: Cross-plan consistency pass after initial authoring — added Integration Point 8 (the declared-identity field seam with MasterPlan 7's plan 33) and the matching touchpoint in plan 23. This initial revision allowed either landing order; the 2026-07-22 revision below supersedes that ordering and places plan 33 first to avoid a later identity-lookup rewrite.
 - 2026-07-22: Portfolio-order revision — made plans 30 and 33 prerequisites of plan

@@ -463,6 +463,14 @@ one-shot; re-running the CLI is safe and reports `false`. All code changes are a
 files. No migration is involved.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plan 47 in addition to plans 17, 22, 36, and 37. Approval
+notifications consume plan 22's single authenticated HTTP layer and Settei-resolved credential
+references. Keep all durable step names and wire values compatible with Keiro 0.4's checked
+workflow/state codec requirements.
+
+
 ## Interfaces and Dependencies
 
 New interfaces (module paths are repository-relative):

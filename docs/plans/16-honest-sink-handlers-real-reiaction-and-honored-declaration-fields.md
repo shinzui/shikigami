@@ -420,6 +420,14 @@ can dedup exactly as kawa's doorway does. `validate` is read-only. Re-running an
 or fixture-validation loop is safe.
 
 
+## Portfolio Reconciliation (2026-07-30)
+
+This plan hard-depends on plans 36, 37, and 47. It owns truthful handler results only; plan
+19 owns terminal/transient outbox accounting and Keiro IR-3 supplies the missing terminal
+rejection outcome. Preserve existing decoders until plan 47's SinkIntent and workflow fixtures
+prove compatibility.
+
+
 ## Interfaces and Dependencies
 
 New/changed interfaces (repository-relative paths):
