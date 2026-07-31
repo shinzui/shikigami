@@ -4,9 +4,9 @@ module Shikigami.Cli.Commands.Validate
 where
 
 import Data.Text qualified as Text
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Agent.Skill (validateSkill)
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..))
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 

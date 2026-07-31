@@ -10,7 +10,7 @@ where
 import Data.Aeson (Value (..), eitherDecode)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
-import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
 import Shikigami.Sink.Http (postJSON)

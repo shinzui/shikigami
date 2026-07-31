@@ -35,7 +35,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `Shikigami.Prelude` and `Shikigami.App.Config` ownership to core; document the six-package map and executable ownership.
+- [x] (2026-07-31T04:44:50Z) M1: add `Shikigami.Prelude` and `Shikigami.App.Config` ownership to core; document the six-package map and executable ownership.
+      Done: `Shikigami.Prelude` moved from `shikigami-api` to `shikigami-core`; the three
+      declared-agent domain modules moved with it and were renamed to concept names
+      (`Shikigami.Api.Agent` → `Shikigami.Agent.Decl`, `Shikigami.Api.Activity` →
+      `Shikigami.Activity`, `Shikigami.Api.RunJob` → `Shikigami.Agent.RunJob`);
+      `shikigami-core` no longer depends on `shikigami-api` and `shikigami-api` now depends
+      on `shikigami-core`; `Shikigami.App.Config` added as the process-configuration
+      ownership marker; `Shikigami.Api.Problem` added as the single RFC 7807 body;
+      `docs/architecture/packages.md` written; `shikigami-api-test` added, whose
+      `package boundary` case is the import proof. `cabal build all` and `cabal test all`
+      pass (49 core tests, 8 api tests).
 - [ ] M2: create `shikigami-server`, move WAI/Warp and public HTTP composition into it, and add server tests.
 - [ ] M3: create `shikigami-workers`, move queue, subscription, scheduler, outbox, timer, and resume composition into it, and add worker tests.
 - [ ] M4: create `shikigami-client`, derive the typed client from `shikigami-api`, redistribute existing CLI executables without adding a seventh package, and remove `shikigami-cli`.
@@ -47,7 +57,37 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-31, M1: every build and test command in this plan must run inside the Nix dev
+  shell. A bare `cabal build all` compiles every module and then fails at link time
+  because `librdkafka` is not on the linker path:
+
+  ```text
+  [44 of 44] Compiling Shikigami.Worker ( src/Shikigami/Worker.hs, ... )
+  ld: library not found for -lrdkafka
+  clang: error: linker command failed with exit code 1
+  Error: [Cabal-7125]
+  Failed to build shikigami-core-0.1.0.0
+  ```
+
+  The dev shell supplies it (`rdkafka-2.13.0-dev` on `PKG_CONFIG_PATH`). Use
+  `nix develop --command cabal build all` — or run inside `nix develop` — for every
+  command in this plan.
+
+- 2026-07-31, M1: the target dependency graph requires `shikigami-api` to depend on
+  `shikigami-core`, which is the reverse of the arrow that existed. Everything that made
+  the old arrow necessary — `AgentDecl`, `ActivityEnvelope`, `RunJob`, and the project
+  prelude — is domain, not HTTP contract, so the fix was to move those four modules into
+  core rather than to weaken the graph. Nothing in `shikigami-api` was left behind, so
+  the package was re-founded around the public HTTP contract it is named for.
+
+- 2026-07-31, M1: `servant-health 0.1.0.0` (Hackage, `shinzui/servant-health`) already
+  ships exactly the probe surface this plan's first route needs — `HealthApi`,
+  `ProbeStatus`, typed 200/503 `MultiVerb` responses, a check seam, path constants, and
+  a `testkit` sublibrary that proves a service's own wiring. It also pins the OpenAPI
+  cohort question: it depends on `openapi-hs >=5.0 && <5.1` and documents that the
+  upstream `openapi3`/`servant-openapi3` lineage has no `HasOpenApi` instance for
+  `MultiVerb` at all. That settles the cohort as `openapi-hs 5.0` /
+  `servant-openapi-hs 5.1` / `servant 0.20.3`.
 
 
 ## Decision Log
@@ -72,6 +112,67 @@ Record every decision made while working on the plan.
 - Decision: Make the new server boundary conform to the complete API standard from its first route.
   Rationale: Health is the first production HTTP surface. Defining it as a typed Servant API avoids creating a hand-written WAI route that would immediately need replacement.
   Date: 2026-07-22
+
+- Decision: Move the declared-agent domain types into `shikigami-core` and rename them to
+  concept-first module names: `Shikigami.Api.Agent` → `Shikigami.Agent.Decl`,
+  `Shikigami.Api.Activity` → `Shikigami.Activity`, `Shikigami.Api.RunJob` →
+  `Shikigami.Agent.RunJob`.
+  Rationale: the target graph has `shikigami-api` depending on `shikigami-core`, and core
+  imports all three types everywhere, so leaving them in the api package would be a cycle.
+  They are Dhall-decoded domain declarations and queue payloads, not HTTP DTOs, so core is
+  where they belong. The rename follows because `Api` is a layer name, and after this plan
+  `Shikigami.Api` is the umbrella route record — a `Shikigami.Api` in one package and a
+  `Shikigami.Api.Agent` in another would read as a single hierarchy that is not one.
+  The cost is that other plan documents cite the old paths; those citations are updated
+  when each plan is implemented, and this entry is the mapping they need.
+  Date: 2026-07-31
+
+- Decision: Read "a core-only test build must not link ... a queue adapter" as the
+  supervised consumer side — `shibuya-pgmq-adapter` and `pgmq-effectful` — and keep
+  `pgmq-hasql` in `shikigami-core`.
+  Rationale: `Shikigami.Trigger.Enqueue` is the domain contract for *producing* a run job,
+  and two packages that may not see each other legitimately produce them: the workers'
+  scheduler and the server-owned `enqueue-run` command. Core is the only place both may
+  reach. Moving it to workers would force `shikigami-server` to depend on
+  `shikigami-workers`, which the graph forbids; duplicating it would give the queue two
+  producers that could drift. The forbidden thing — a supervised processor draining a
+  queue inside core — remains forbidden and is asserted by the M5 invariant test.
+  Date: 2026-07-31
+
+- Decision: Extend the composition-module allowlist with `Shikigami.Server.Command`,
+  `Shikigami.Server.Command.*`, `Shikigami.Workers.Command`, and
+  `Shikigami.Workers.Command.*`.
+  Rationale: this plan requires a `--help` smoke test for every executable component. With
+  the option parsers buried in each executable's `app/` directory, a test could only shell
+  out to a built binary, which needs `build-tool-depends`, is slow, and proves less.
+  Exposing one parser module per package lets the tests drive `optparse-applicative`'s
+  `execParserPure` directly. The allowlist is recorded in `docs/architecture/packages.md`
+  so the extension is explicit rather than a quiet exception.
+  Date: 2026-07-31
+
+- Decision: Build the first route on `servant-health 0.1.0.0` rather than hand-rolling a
+  health route, and expose it as the Shikigami-owned name `Shikigami.Health.Api`.
+  Rationale: it is a released fleet package providing exactly the standard this plan
+  demands — two routes, `MultiVerb` 200/503 alternatives, a fixed probe body with a
+  non-orphan `ToSchema`, and a conformance testkit. Wrapping it in an owned module gives
+  `docs/plans/29-health-liveness-and-worker-loop-supervision.md` one module to extend.
+  Date: 2026-07-31
+
+- Decision: Error bodies carry a fixed per-code `detail` and never the parser's own
+  message.
+  Rationale: Servant's parse messages can echo the request body — which may contain a
+  secret the caller sent — and name internal types. The API standard forbids exposing
+  internal or security-sensitive detail. Operators get specifics from structured logging
+  (`docs/plans/28-structured-logging-metrics-and-trace-propagation.md`); callers get a
+  stable `code` to branch on.
+  Date: 2026-07-31
+
+- Decision: The problem catalog has one `invalid_url` code rather than separate
+  `invalid_path` and `invalid_query` codes.
+  Rationale: Servant routes both capture failures and query-parameter failures through a
+  single `urlParseErrorFormatter` with no reliable way to tell them apart, so two codes
+  would mean guessing, and a guessed code is worse than a coarser true one.
+  Date: 2026-07-31
 
 
 ## Outcomes & Retrospective

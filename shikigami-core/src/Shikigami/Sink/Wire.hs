@@ -15,8 +15,8 @@ module Shikigami.Sink.Wire
 where
 
 import Data.Aeson (Value, genericParseJSON, genericToJSON)
-import Shikigami.Api.Activity (Actor, ContextRef, Subject)
-import Shikigami.Api.Agent (Priority, SignalType)
+import Shikigami.Activity (Actor, ContextRef, Subject)
+import Shikigami.Agent.Decl (Priority, SignalType)
 import Shikigami.Prelude
 
 -- aeson options matching kawa's @apiAesonOptions = camelTo2 '_'@.

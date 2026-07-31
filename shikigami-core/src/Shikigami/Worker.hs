@@ -39,9 +39,9 @@ import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
+import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Api.Agent (AgentDecl (..), Trigger (..))
-import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Prelude

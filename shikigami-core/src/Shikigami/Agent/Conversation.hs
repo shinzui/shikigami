@@ -45,11 +45,11 @@ import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..), sessionInlineProj
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
-import Shikigami.Api.Agent (AgentDecl (..))
-import Shikigami.Api.Agent qualified as Agent
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Scope (agentScope)

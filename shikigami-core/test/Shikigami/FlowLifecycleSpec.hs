@@ -18,9 +18,9 @@ import Kioku.Id (SessionId, genSessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStorePool)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..))
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, lookupFlow)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
 import Shikigami.Flow.Capability

@@ -34,8 +34,8 @@ import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
-import Shikigami.Api.Activity (ActivityEnvelope (..), Subject (..))
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..))
+import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude

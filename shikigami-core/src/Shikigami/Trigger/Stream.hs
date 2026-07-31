@@ -10,8 +10,8 @@ module Shikigami.Trigger.Stream
   )
 where
 
-import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Api.Agent (StreamMatch (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Agent.Decl (StreamMatch (..))
 
 -- | Whether to include envelopes whose actor is itself an agent (opt-in; default off).
 data IncludeAgentActors = ExcludeAgentActors | IncludeAgentActors

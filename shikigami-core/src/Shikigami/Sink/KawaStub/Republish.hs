@@ -25,7 +25,7 @@ import Kafka.Producer
     brokersList,
   )
 import Kafka.Types (KafkaError, headersFromList)
-import Shikigami.Api.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Prelude
 import Shikigami.Sink.KawaClient (KawaError (..), renderKawaError)
 import Shikigami.Sink.Wire (IngestRequest (..))

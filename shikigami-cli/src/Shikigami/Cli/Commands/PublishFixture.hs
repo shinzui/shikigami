@@ -6,7 +6,7 @@ where
 import Data.Aeson qualified as Aeson
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Shikigami.Api.Activity (ActivityEnvelope)
+import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Trigger.Publish (publishEnvelope)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)

@@ -19,9 +19,9 @@ import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
 import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQueue, parseQueueName, sendMessage)
-import Shikigami.Api.Activity (ActivityEnvelope (..))
-import Shikigami.Api.Agent (AgentDecl (..))
-import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Activity (ActivityEnvelope (..))
+import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Prelude
 
 -- | The IP-7 queue name (shared with the worker).

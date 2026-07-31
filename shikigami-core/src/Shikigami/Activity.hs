@@ -1,4 +1,4 @@
-module Shikigami.Api.Activity
+module Shikigami.Activity
   ( ActivityEnvelope (..),
     Actor (..),
     Subject (..),

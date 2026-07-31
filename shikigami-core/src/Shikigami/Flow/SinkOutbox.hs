@@ -25,7 +25,7 @@ import Keiro.Workflow
   )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Api.Agent (Sink)
+import Shikigami.Agent.Decl (Sink)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaTarget, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))

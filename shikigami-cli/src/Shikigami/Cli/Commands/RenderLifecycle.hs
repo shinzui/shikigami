@@ -9,8 +9,8 @@ import Data.Text.IO qualified as TIO
 import Data.Time (secondsToNominalDiffTime)
 import Kioku.Id (genSessionId)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..))
 import Shikigami.Flow qualified as Flow
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)

@@ -9,8 +9,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Api.Agent (AgentDecl (..))
 import Shikigami.Trigger.Consumer (StreamConfig (..), subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Consumer qualified as Consumer
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, enqueueRunJob, runJobFromEnvelope)

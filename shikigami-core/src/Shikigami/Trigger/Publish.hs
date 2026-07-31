@@ -16,7 +16,7 @@ import Effectful.Error.Static (runError)
 import Kafka.Effectful (produceMessageSync, runKafkaProducer)
 import Kafka.Producer (BrokerAddress (..), ProducePartition (UnassignedPartition), ProducerRecord (..), TopicName (..), brokersList)
 import Kafka.Types (KafkaError, headersFromList)
-import Shikigami.Api.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Prelude
 
 -- | Publish one envelope to the topic on the broker. Returns a typed error on failure.

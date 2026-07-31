@@ -16,7 +16,7 @@ where
 
 import Data.Aeson (Value)
 import Data.Text qualified as Text
-import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (runDanwa)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)

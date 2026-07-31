@@ -10,7 +10,7 @@ import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
-import Shikigami.Api.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import Shikigami.Trigger.Schedule (CronSchedule, nextDue, parseCron)

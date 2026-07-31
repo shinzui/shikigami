@@ -9,8 +9,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
+import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Api.Agent (AgentDecl)
 import Shikigami.Behavior.Run (newBehaviorEnvWithTraceSink)
 import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Telemetry (withRunTracer)

@@ -19,8 +19,8 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.KindID (genKindID, toText)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
-import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KawaConfig (..))
 import Shikigami.Sink.Http (postJSON)

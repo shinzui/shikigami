@@ -32,10 +32,10 @@ import Kioku.Id (MemoryId, SessionId, genMemoryId)
 import Kioku.Memory qualified as MemoryStore
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kiroku.Store.Effect (Store)
+import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
-import Shikigami.Api.Activity (ActivityEnvelope)
-import Shikigami.Api.Agent (AgentDecl (..))
-import Shikigami.Api.Agent qualified as Agent
 import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink.Types (DanwaTarget, SinkResult)

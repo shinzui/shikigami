@@ -15,7 +15,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
-import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Permission (AgentIdentity (..))

@@ -1,7 +1,7 @@
 -- | The IP-7 trigger→run contract: a fired trigger becomes a 'RunJob' on the
 -- @shikigami_run_jobs@ pgmq queue, which the worker (EP-5) drains. Client-safe (no
 -- hasql/effectful deps) so the enqueuer and the worker share it.
-module Shikigami.Api.RunJob
+module Shikigami.Agent.RunJob
   ( TriggerKind (..),
     RunJob (..),
   )

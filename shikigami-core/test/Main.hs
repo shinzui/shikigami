@@ -11,9 +11,9 @@ import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
-import Shikigami.Api.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Api.Agent (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)

@@ -59,14 +59,14 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
+import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
+import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.Api.Activity qualified as Activity
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..), Sink, Trigger (..))
-import Shikigami.Api.RunJob (RunJob (..))
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability

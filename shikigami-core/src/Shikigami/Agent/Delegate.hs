@@ -20,8 +20,8 @@ import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowC
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.Api.RunJob (RunJob (..), TriggerKind (TriggeredByDelegation))
 import Shikigami.Prelude
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from

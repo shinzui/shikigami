@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Shikigami.Api.Agent
+module Shikigami.Agent.Decl
   ( AgentDecl (..),
     Behavior (..),
     Trigger (..),

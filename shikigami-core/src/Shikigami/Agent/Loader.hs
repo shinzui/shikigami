@@ -7,7 +7,7 @@ where
 import Control.Exception (SomeException, try)
 import Data.Text qualified as Text
 import Dhall (auto, inputFile)
-import Shikigami.Api.Agent (AgentDecl)
+import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Prelude
 
 -- | A typed loader error. The Text carries Dhall's own (already very precise)

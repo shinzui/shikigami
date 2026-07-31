@@ -8,7 +8,7 @@ where
 
 import Data.Aeson (Value)
 import Data.Text qualified as Text
-import Shikigami.Api.Agent (Sink (..))
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity (..))
 import System.IO (hPutStrLn, stderr)

@@ -22,7 +22,7 @@ import Data.Text qualified as Text
 import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
-import Shikigami.Api.Agent (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)

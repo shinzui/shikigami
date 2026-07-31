@@ -22,16 +22,20 @@ library
   import:          common
   hs-source-dirs:  src
   exposed-modules:
+    Shikigami.Activity
     Shikigami.Agent.Approval
     Shikigami.Agent.Conversation
+    Shikigami.Agent.Decl
     Shikigami.Agent.Delegate
     Shikigami.Agent.Delegate.Context
     Shikigami.Agent.Loader
     Shikigami.Agent.Run
+    Shikigami.Agent.RunJob
     Shikigami.Agent.Skill
     Shikigami.Agent.Workflow
     Shikigami.Agent.Workflow.Input
     Shikigami.Agent.Workflow.Name
+    Shikigami.App.Config
     Shikigami.Behavior.Error
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
@@ -45,6 +49,7 @@ library
     Shikigami.Flow.SinkOutbox
     Shikigami.Integration.Danwa
     Shikigami.Memory.Scope
+    Shikigami.Prelude
     Shikigami.Program.Registry
     Shikigami.Sink
     Shikigami.Sink.Config
@@ -82,6 +87,7 @@ library
     , directory                       >=1.3
     , effectful
     , filepath                        >=1.4
+    , generic-lens                    >=2.2
     , handan-core
     , hasql
     , hasql-pool
@@ -99,12 +105,12 @@ library
     , kioku-api
     , kioku-core
     , kiroku-store
+    , lens                            >=5.2
     , mmzk-typeid
     , pgmq-effectful
     , pgmq-hasql
     , shibuya-core
     , shibuya-pgmq-adapter
-    , shikigami-api
     , shikumi
     , text                            >=2.1
     , time                            >=1.12
@@ -142,7 +148,6 @@ test-suite shikigami-core-test
     , kioku-core
     , kiroku-store
     , pgmq-hasql
-    , shikigami-api
     , shikigami-core
     , shikigami-migrations:test-support
     , tasty
