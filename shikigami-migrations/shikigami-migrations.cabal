@@ -64,6 +64,24 @@ test-suite shikigami-migrations-test
     , tasty
     , tasty-hunit
 
+-- Separated from the pure composition tests because it stands up an ephemeral
+-- PostgreSQL: it is the slow suite, and it is the one that needs a server.
+test-suite shikigami-migrations-smoke
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Migrate.hs
+  hs-source-dirs: test
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base
+    , hasql                            >=1.10 && <1.11
+    , pg-migrate                       ^>=1.1.0.0
+    , shikigami-migrations
+    , shikigami-migrations:test-support
+    , tasty
+    , tasty-hunit
+    , text                             >=2.0  && <2.2
+
 library test-support
   import:          common
   visibility:      public

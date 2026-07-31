@@ -15,6 +15,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
+import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
@@ -35,6 +36,7 @@ import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
+import Shikigami.WireCompatSpec qualified as WireCompatSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -46,11 +48,13 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AppConfigSpec.tests,
+          BehaviorProviderSpec.tests,
           DelegateContextSpec.tests,
           PackageArchitectureSpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
-          SpikeWorkflowSpec.tests
+          SpikeWorkflowSpec.tests,
+          WireCompatSpec.tests
         ]
     )
 

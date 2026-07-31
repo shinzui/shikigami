@@ -103,7 +103,51 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 | Baikai 0.4 | `ThinkingLevel` gains `ThinkingXHigh`/`ThinkingMax` and `InteractiveLaunchRequest` gains a defaulted `effort`; exhaustive matches must account for the widened sum. |
 | Settei 0.2 | Unchanged by this plan; `docs/operations/configuration.md` remains the configuration contract. |
 
-## Resolved plan
+## Compatibility fixtures
 
-(Filled in by Milestone 5 with the exact `cabal build all --dry-run` output and
-the test transcript.)
+Three suites hold the cohort to the claims above. They are the reason a future
+bump cannot quietly change a persisted byte.
+
+| What it pins | Where |
+|---|---|
+| Pre-upgrade `RunJob` queue payloads, `SinkIntent` and `SinkResult` outbox JSON (including the deprecated `Stubbed` outcome), and PGMQ's zero-based attempt | `shikigami-core/test/Shikigami/WireCompatSpec.hs` |
+| A Baikai in-band provider failure is a failure, with its retryability preserved, rather than an empty successful reply | `shikigami-core/test/Shikigami/BehaviorProviderSpec.hs` |
+| A fresh database applies all four migration components and re-applying is a no-op | `shikigami-migrations/test/Migrate.hs` |
+
+The wire fixtures are **literals**, deliberately: a fixture built by calling the
+current encoder would pass no matter what the encoder did. They were captured
+from the encoders as they stand, and `git diff fef46f1..` over the modules
+defining those types is empty, so they are also what the pre-upgrade build
+produced. Keep them permanently — a change there is a wire-format change and
+needs a migration story, not a fixture edit.
+
+
+## Resolved evidence
+
+Toolchain: GHC 9.12.4 inside the Nix dev shell.
+
+```bash
+$ nix develop --command cabal build all --dry-run
+Build profile: -w ghc-9.12.4 -O1
+```
+
+The plan selects exactly the matrix above. The only `allow-newer` in
+`cabal.project` is `haxl:time`, a third-party bound that predates this cohort;
+no co-developed package needs one.
+
+```bash
+$ nix develop --command cabal test all -j1
+shikigami-api-test          PASS   15 tests
+shikigami-client-test       PASS    3 tests
+shikigami-core-test         PASS   93 tests
+shikigami-migrations-smoke  PASS    2 tests
+shikigami-migrations-test   PASS    3 tests
+shikigami-server-test       PASS   20 tests
+shikigami-workers-test      PASS   21 tests
+```
+
+157 tests across seven suites, and the same result on an immediate second run.
+
+Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
+an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
+intermittently while every suite passes serially.

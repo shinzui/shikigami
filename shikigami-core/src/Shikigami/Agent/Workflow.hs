@@ -7,6 +7,9 @@ module Shikigami.Agent.Workflow
     runAgentRunWorkflow,
     agentRunRegistry,
     PreparedSinkIntent,
+    -- | The outboxed wire type. Exported so
+    -- "Shikigami.WireCompatSpec" can pin its JSON encoding.
+    SinkIntent (..),
     enqueueSinkIntentStep,
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,

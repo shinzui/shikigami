@@ -11,36 +11,45 @@ create-database:
     fi
     just migrate
 
-# Apply the full schema via the shikigami-migrate executable (codd). One pass
-# installs BOTH the kiroku event-store schema (shikigami-migrate calls the kiroku
-# migration library in-process — no copied .sql files) AND shikigami's own
-# timestamped read-model migrations, in timestamp order, idempotently. codd
-# records applied migrations and skips already-applied ones.
+# Apply the full schema via the shikigami-migrate executable (pg-migrate). One
+# pass applies the kiroku, keiro, kioku, and shikigami migration components in
+# dependency order — no copied .sql files; each library embeds its own — and
+# then reconciles keiro's read-model registry. pg-migrate records what it applied
+# and skips it next time, so re-running is a no-op.
 #
-# The leading `touch` forces cabal to re-run the Template Haskell `embedDir`
-# splice that bakes sql-migrations/*.sql into the binary. GHC only tracks files
-# that existed at the last compile, so a BRAND-NEW migration file (just added by
-# `just new-migration`, a git pull, etc.) is otherwise silently NOT embedded and
-# would be skipped. Touching the .cabal triggers a reconfigure + recompile of
-# the (tiny) migrations module so the binary always embeds the current file set.
+# The leading `touch` forces cabal to re-run the Template Haskell splice that
+# embeds sql-migrations/*.sql into the binary. pg-migrate's recompile plugin
+# already tracks the manifest, but touching the .cabal also covers a stale
+# configure after a git pull, and costs one tiny recompile.
 #
-# codd's libpq connection-string parser requires a 'user' value; the trust-auth
+# libpq's connection-string parser needs a 'user' value; the trust-auth
 # superuser role is the current OS user (initdb default).
 migrate:
     #!/usr/bin/env bash
     set -euo pipefail
     touch shikigami-migrations/shikigami-migrations.cabal
-    CODD_CONNECTION="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
-    CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
-    CODD_EXPECTED_SCHEMA_DIR=unused-for-unverified-embedded-migrations \
-    CODD_SCHEMAS=kiroku \
-      cabal run shikigami-migrate
+    DATABASE_URL="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
+      cabal run shikigami-migrate -- up
 
-# Scaffold a new timestamped shikigami migration in the codd-required filename
-# format (YYYY-MM-DD-HH-MM-SS-<name>.sql). codd identifies/orders migrations by
-# this leading UTC timestamp, so names are always generated, never hand-written.
-# The file is embedded into the binary at compile time; `just migrate` forces
-# the re-embed, so just edit the generated file's body and run `just migrate`.
+# Show what the migration plan would do without touching the database.
+migrate-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DATABASE_URL="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
+      cabal run shikigami-migrate -- status
+
+# Scaffold a new shikigami migration and append it to the manifest.
+#
+# pg-migrate orders migrations by their position in
+# shikigami-migrations/sql-migrations/manifest, not by filename. The timestamped
+# filename convention is kept from the codd era because those names are the
+# durable migration identity of everything already applied; a new file follows it
+# for consistency, and appending puts it last, which is what an additive
+# migration wants.
+#
+# Both the manifest and every file it lists are compilation dependencies: a stray
+# .sql file or a missing manifest entry fails the build rather than silently
+# shipping an incomplete component.
 # Usage: just new-migration add-foo
 new-migration name="":
     #!/usr/bin/env bash
@@ -54,14 +63,14 @@ new-migration name="":
       exit 1
     fi
     ts="$(date -u '+%Y-%m-%d-%H-%M-%S')"
-    dest="shikigami-migrations/sql-migrations/${ts}-{{name}}.sql"
+    file="${ts}-{{name}}.sql"
+    dir="shikigami-migrations/sql-migrations"
+    dest="${dir}/${file}"
     if [ -e "$dest" ]; then
       echo "error: $dest already exists" >&2
       exit 1
     fi
     cat > "$dest" <<EOF
-    -- codd: in-txn
-
     -- Migration: {{name}}
     -- Created: ${ts} UTC
     -- Write idempotent DDL (CREATE ... IF NOT EXISTS) so re-application is safe.
@@ -72,4 +81,5 @@ new-migration name="":
     -- unqualified CREATEs land where the app resolves them.
     SET search_path TO kiroku, pg_catalog;
     EOF
-    echo "Created $dest"
+    printf '%s\n' "$file" >> "${dir}/manifest"
+    echo "Created $dest and appended it to ${dir}/manifest"

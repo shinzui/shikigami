@@ -116,16 +116,19 @@ test-suite shikigami-core-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.AppConfigSpec
+    Shikigami.BehaviorProviderSpec
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.WireCompatSpec
 
   hs-source-dirs: test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
+    , baikai
     , base
     , bytestring
     , containers
@@ -146,6 +149,7 @@ test-suite shikigami-core-test
     , settei-optparse-applicative
     , settei-yaml
     , shikigami-core
+    , shibuya-core
     , shikigami-migrations:test-support
     , tasty
     , tasty-hunit

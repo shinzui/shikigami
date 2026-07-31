@@ -18,7 +18,8 @@ import Baikai.Message (user)
 import Baikai.Model (Model)
 import Baikai.Options (Options, _Options)
 import Baikai.Provider.Registry (completeRequest)
-import Baikai.Response (Response, flattenAssistantBlocks)
+import Baikai.Error (BaikaiError (..), isRetryable)
+import Baikai.Response (Response, flattenAssistantBlocks, responseError)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Maybe (mapMaybe)
@@ -108,7 +109,23 @@ runSkillWith model dir payload complete = do
                 tools = V.empty
               }
       resp <- complete model ctx _Options
-      pure (Right (object ["reply" .= renderReply resp]))
+      -- baikai 0.4 reports provider failure in band: an error-shaped response
+      -- carries no assistant text, so reading the reply alone would turn an
+      -- outage into a successful empty answer.
+      pure case responseError resp of
+        Just err ->
+          Left (ProviderFailed (isRetryable err) (renderProviderError err))
+        Nothing ->
+          Right (object ["reply" .= renderReply resp])
+
+-- | A loggable one-line rendering of an in-band provider failure: its category,
+-- HTTP status when the call was HTTP, and the provider's own detail.
+renderProviderError :: BaikaiError -> Text
+renderProviderError BaikaiError {category, message, httpStatus} =
+  Text.pack (show category)
+    <> maybe "" (\status -> " (HTTP " <> Text.pack (show status) <> ")") httpStatus
+    <> ": "
+    <> message
 
 -- | Compact JSON encoding of the trigger payload, for the user message.
 renderPayload :: Value -> Text

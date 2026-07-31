@@ -14,8 +14,8 @@ $ shikigami-worker --describe-config
 
 If this document and that output ever disagree, the output is right.
 
-The one exception is `shikigami-migrate`, which keeps codd's own `CODD_*` environment
-contract. See [The two exceptions](#the-two-exceptions) below.
+The one exception is `shikigami-migrate`, which reads `DATABASE_URL` itself. See
+[The two exceptions](#the-two-exceptions) below.
 
 
 ## Where values come from
@@ -262,12 +262,14 @@ an operator already knows, and would not stop the SDK reading them anyway. See
 `shikigami-workers/src/Shikigami/Telemetry.hs`. A Shikigami-specific tracing *policy* would
 be an ordinary setting; the standard variables stay SDK-owned.
 
-**codd (`CODD_*`), for `shikigami-migrate` only.** This one is not a design preference. The
+**`DATABASE_URL`, for `shikigami-migrate` only.** This one is not a design preference. The
 `shikigami-core` test suite depends on `shikigami-migrations`' public `test-support`
 sublibrary, so adding `shikigami-core` to the migration executable makes the two packages
 mutually dependent, and cabal's solver rejects the project outright. Until that boundary is
-restructured, `shikigami-migrate` keeps codd's own contract; see the `migrate` recipe in
-`justfile` for the variables it needs. Unifying it belongs to
+restructured, `shikigami-migrate` reads one variable itself; see the `migrate` recipe in
+`Justfile`. It previously read codd's `CODD_*` contract — the July 2026 dependency cohort
+moved the whole stack to pg-migrate, so that contract no longer exists. Unifying this
+surface belongs to
 `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, which owns
 the migration CLI.
 
