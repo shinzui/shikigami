@@ -28,6 +28,29 @@ All builds and tests must run inside the Nix dev shell; a bare `cabal build all`
 compiles and then fails at link with `ld: library not found for -lrdkafka`.
 
 
+## Upstream projects
+
+The tag commits below live in these repositories. Use the canonical URI when
+referring to them from anywhere durable.
+
+| Family | Project |
+|---|---|
+| `keiki`, `keiki-codec-json` | `mori://shinzui/keiki` |
+| `keiro*` | `mori://shinzui/keiro` |
+| `kioku*` | `mori://shinzui/kioku` |
+| `shikumi*` | `mori://shinzui/shikumi` |
+| `baikai*` | `mori://shinzui/baikai` |
+| `shibuya-core`, `shibuya-metrics` | `mori://shinzui/shibuya` |
+| `shibuya-pgmq-adapter` | `mori://shinzui/shibuya-pgmq-adapter` |
+| `kiroku-store*`, `shibuya-kiroku-adapter` | `mori://shinzui/kiroku` |
+| `pgmq-*` | `mori://shinzui/pgmq-hs` |
+| `pg-migrate*` | `mori://shinzui/pg-migrate` |
+| `settei*` | `mori://shinzui/settei` |
+| `servant-health` | `mori://shinzui/servant-health` |
+| `ephemeral-pg` | `mori://shinzui/ephemeral-pg` |
+| `handan-core` | `mori://shinzui/handan` |
+
+
 ## Release matrix
 
 Every row below is resolved from Hackage. "Was" is the version selected by the

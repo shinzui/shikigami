@@ -107,7 +107,7 @@ with a real model) but is not blocked by it.
 |---|-------|------|-----------|-----------|--------|
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-07-31), except the migration executable — see Surprises |
-| F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Not Started; M0 complete |
+| F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Not Started |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Not Started |
@@ -356,8 +356,12 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       the migration CLI.
 - [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
       released Keiki 0.4 / Keiro 0.4 bounds and codec-compatibility evidence.
-- [ ] F3 M1–M5: verified dependency matrix, released API ports, wire/replay
-      fixtures, and full cohort build/test evidence from plan 47.
+- [x] (2026-07-31) F3 M1–M5: `cabal.project` selects the whole cohort from Hackage by
+      version with no co-developed `allow-newer`; every call site the cohort moved is
+      ported; `docs/dependency-cohort.md` records the matrix, tag commits, canonical
+      `mori://` project URIs, and compatibility evidence; wire, provider-failure, and
+      migration-idempotence fixtures are in place. 157 tests pass across seven suites
+      under `-j1`, twice.
 - [ ] EP-1 M1: provider selection module + loud typed-config construction; stub default; worker
       and run-behavior wired; tests green.
 - [ ] EP-1 M2: `Options` threaded through the skill arm; Settei's opaque credential is
@@ -383,6 +387,44 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Surprises & Discoveries
 
+- Plan 47 implementation (2026-07-31): **the codd migration path could not be deferred to
+  plan 38.** `kiokuMigrations` in Kioku 0.2 is a pg-migrate `MigrationComponent`, not a codd
+  migration list, so there was nothing left for `shikigami-migrations` to append to. The
+  whole migration API — library, executable, and `test-support` — moved to pg-migrate here,
+  and the codd / hasql-migration / hasql-notifications forks were removed. **Plan 38's scope
+  narrows to what actually needs a rollback story:** importing an existing codd ledger into
+  the native one, and the operational cutover. The migration filenames and their
+  `-- codd: in-txn` headers are preserved verbatim as that import's payload evidence. The
+  operator contract changed: `CODD_*` → `DATABASE_URL`, and `shikigami-migrate` now takes a
+  subcommand (`up`, `status`, `plan`, `verify`, `repair`, …).
+- Plan 47 implementation (2026-07-31): **Kioku 0.2 requires the host that applies the
+  migration plan to reconcile keiro's `keiro_read_models` registry.** Registration no longer
+  happens on first query and `registerReadModel` only inserts, so a stale row makes every
+  query for that model fail closed. `Shikigami.Migrations.reconcileShikigamiReadModels` runs
+  after a successful `up`. **Any plan that adds a Kioku read model inherits this** — it is a
+  live production concern, not an upgrade artifact.
+- Plan 47 implementation (2026-07-31): **the skill arm was rendering Baikai provider
+  failures as successful empty replies.** Baikai 0.4 reports failure in band, and
+  `runSkillWith` read only the assistant text, so a rate limit or a missing credential
+  produced `{"reply": ""}`, was recorded as a learning, and dispatched sinks. Now translated
+  to `RunError.ProviderFailed` carrying baikai's `isRetryable`. **This is EP-1 and plan 17
+  territory that landed early because the cohort exposed it**: plan 13 still owns provider
+  selection, plan 17 still owns what the worker does with the retryable flag.
+- Plan 47 implementation (2026-07-31): **the only dependency that actually blocked was the
+  unreleased commit-pinned one.** `handan-core` did not compile against shikumi 0.3 /
+  shikumi-trace 0.2, and its HEAD had the same code; it needed an upstream fix
+  (`mori://shinzui/handan` at `8e98b0a955f908f70657c04f384b6286e4967422`) before the pin
+  could move. Every released cohort member resolved and compiled without incident. Worth
+  carrying into the next bump.
+- Plan 47 implementation (2026-07-31): Shikigami's `shikigami_run_jobs` queue is **not**
+  scaffolded by `keiro-dsl`, so Keiro 0.4's versioned queue envelope does not reach it and
+  no drain gate was needed. **Plan 39 inherits this as a live constraint**: moving the queue
+  to the envelope is a wire change that needs a drain or a transitional decoder.
+- Plan 47 implementation (2026-07-31): Keiki 0.4's new `checkStateChangingEpsilon` fires on
+  every edge of the at-risk-customer lifecycle transducer. It is a rendered specification,
+  not an event source, so that one check is scoped off with the reasoning at the definition.
+  **Plan 39 owns giving the lifecycle a real emitted-event type** if it should be validated
+  under the full option set.
 - Fleet conformance audit (2026-07-22): the portfolio repeated package-placement and
   raw-environment conventions in nearly every child plan. Plans 36 and 37 now own those
   cross-cutting decisions once, and downstream plans depend on them.
@@ -535,6 +577,15 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-31: Marked F3 (plan 47) Complete. Shikigami now builds against one coherent set of
+  published releases selected by version rather than commit, with no `allow-newer` between
+  co-developed packages, and 157 tests pass across seven suites. Recorded the four findings
+  that change other plans' assumptions: plan 38's scope narrows to the ledger import because
+  the migration API port landed here; every plan touching Kioku read models must reconcile
+  the registry; plan 39 inherits both the un-enveloped run-job queue and the lifecycle
+  transducer's scoped validation; and plans 13/17 inherit an in-band provider failure that is
+  now visible instead of silent. EP-1 (plan 13) is the next implementable child.
 
 - 2026-07-30: Recorded Kioku `v0.2.0.0` as completion of IR-1 and plan 47 M0,
   removed the upstream release edge from F3, reduced the open blocker ledger

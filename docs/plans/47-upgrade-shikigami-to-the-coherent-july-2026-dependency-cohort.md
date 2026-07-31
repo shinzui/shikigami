@@ -36,20 +36,75 @@ of dependency pins.
       `5765f98add2a87a356c70793a6ba54375ef5feec`, and `kioku-api`,
       `kioku-core`, `kioku-migrations`, `kioku-cli`, and `kioku-migrate` are
       present on Hackage at `0.2.0.0`.
-- [ ] M1: Add `docs/dependency-cohort.md` with registry, upstream-tag, package-bound, and API
-      compatibility evidence for every upgraded package.
-- [ ] M2: Replace the copied dependency block in `cabal.project` with the verified release cohort;
-      remove obsolete Codd/hasql-migration pins only when plan 38's replacement is present.
-- [ ] M3: Port configuration, provider, worker, storage, queue, tracing, and migration composition
-      call sites to the released APIs.
-- [ ] M4: Add compatibility fixtures for Keiro workflow state and queue envelopes, Kioku session
-      access, SinkIntent JSON, and Shibuya/PGMQ attempt numbering.
-- [ ] M5: Run the full build, unit/integration suites, migration smoke, and clean re-run; record the
-      resolved versions and transcript.
+- [x] (2026-07-31) M1: `docs/dependency-cohort.md` records the released version, upstream
+      tag, tag commit, and canonical `mori://` project URI for every co-developed package,
+      plus the compatibility evidence behind each row and the packages that leave the plan.
+- [x] (2026-07-31) M2: `cabal.project` selects the cohort from Hackage with a
+      `constraints:` block. Only `handan-core`, `kafka-effectful`, and `danwa-*` remain
+      pinned by commit; none has a Hackage release. The codd, hasql-migration, and
+      hasql-notifications forks are gone — see Surprises for why waiting for plan 38 was
+      not an option.
+- [x] (2026-07-31) M3: Every call site the cohort moved is ported — Kioku's `AppEnv`,
+      Keiro's timer and outbox publisher, Shibuya 0.8's handler and `AppConfig`,
+      shibuya-pgmq-adapter 0.12's split environment, and the whole migration composition.
+- [x] (2026-07-31) M4: `Shikigami.WireCompatSpec` pins the queue and outbox JSON and PGMQ
+      attempt numbering; `Shikigami.BehaviorProviderSpec` pins in-band provider failure;
+      `shikigami-migrations:shikigami-migrations-smoke` pins fresh-apply and idempotence.
+- [x] (2026-07-31) M5: `cabal build all --dry-run` selects the documented matrix with no
+      co-developed `allow-newer`; 157 tests pass across seven suites under `-j1`, twice.
+      The transcript is in `docs/dependency-cohort.md`.
 
 
 ## Surprises & Discoveries
 
+- **The codd path could not be kept.** The plan said to leave the Codd pins until plan 38's
+  replacement was present. That turned out to be impossible: `kiokuMigrations` in Kioku 0.2
+  is a pg-migrate `MigrationComponent`, not a list of codd `AddedSqlMigration`s, so there is
+  no codd-shaped set left to append shikigami's own migrations to. `shikigami-migrations`,
+  its executable, and its `test-support` sublibrary all moved to pg-migrate, and nothing in
+  the repository can consume codd any more, so the codd / hasql-migration /
+  hasql-notifications forks were removed with it. What plan 38 still owns is the part that
+  actually needs a rollback story: importing an existing codd ledger into the native one so
+  a crossed-over database does not re-apply its history. The migration filenames and their
+  `-- codd: in-txn` headers are preserved verbatim as the payload evidence that import needs.
+  The operator contract changed with it: `CODD_*` → `DATABASE_URL`, and
+  `cabal run shikigami-migrate` → `... -- up`.
+- **`handan-core` did not compile against the cohort**, and its HEAD had the same code, so
+  bumping the pin alone would not have helped. shikumi 0.3 removed the OVERLAPPABLE blanket
+  `Validatable` instance, so every `predict` output type needs an explicit one, and
+  shikumi-trace 0.2 makes `replayIndex` fail closed with `Either Text (Map ...)`. Fixed
+  upstream in `mori://shinzui/handan` at `8e98b0a955f908f70657c04f384b6286e4967422` and
+  re-pinned. Worth noting for the next cohort bump: an unreleased commit-pinned dependency
+  is the thing that blocks, not the released ones.
+- **Kioku 0.2 stopped registering read models on first query**, and `registerReadModel` only
+  ever inserts, so a host that applies the composed plan directly must reconcile keiro's
+  `keiro_read_models` registry itself or every projection query fails
+  `ReadModelUnregistered`. `kioku-migrate` does this for its own users; Shikigami does not
+  use it. `Shikigami.Migrations.reconcileShikigamiReadModels` now runs after a successful
+  `up` and in the test database. This is a live production concern for any plan that adds a
+  Kioku read model, not just an upgrade artifact.
+- **Keiki 0.4's `checkStateChangingEpsilon` fires on the at-risk-customer lifecycle.** All
+  four of its edges are output-free and change vertex, which for a persisted transducer
+  would mean replay cannot reproduce the forward state. That transducer is not persisted —
+  its output type is `()` and it exists to render the Mermaid diagram, while the durable
+  state is Keiro's journal — so the single check is scoped off at the definition with the
+  reasoning recorded there. Giving the lifecycle a real emitted-event type belongs to plan
+  39.
+- **Baikai 0.4's in-band failure reporting was silently swallowed.** `runSkillWith` read the
+  assistant text and nothing else, so an error-shaped response — no content, `ErrorReason`,
+  a classified `BaikaiError` — became a successful reply of `""`, recorded as a learning and
+  followed by sink dispatch. Now translated to `RunError.ProviderFailed`, carrying baikai's
+  own `isRetryable`. Plan 13 owns which provider runs and plan 17 owns what the worker does
+  with the flag; this is only the part that stops a failure looking like an answer.
+- Shikigami's `shikigami_run_jobs` queue is **not** scaffolded by `keiro-dsl`, so Keiro 0.4's
+  versioned `keiroJobCodec` envelope does not reach it and no drain gate or transitional
+  decoder is required. `Shikigami.Trigger.Enqueue` sends a bare `toJSON job` and the worker
+  decodes the same. Plan 39 inherits this as a live constraint, not a settled one.
+- `keiro-pgmq`, `pgmq-migration`, and `kiroku-test-support` left the build plan entirely.
+  The first two because `kioku-migrations 0.2` composes through pg-migrate; the third had no
+  reverse dependency at all and had simply been pinned.
+- `cabal.project.local` used to add a sibling `../codd-extras` path package. It is untracked
+  local configuration and is now empty; nothing needs it.
 - Kioku `v0.2.0.0` resolves the cohort incompatibility recorded during the
   2026-07-30 audit. `kioku-core-0.2.0.0` bounds `keiki ^>=0.4.0.0`,
   `keiro ^>=0.4.0.1`, and `keiro-core ^>=0.4.0.1`;
@@ -101,9 +156,27 @@ of dependency pins.
 
 ## Outcomes & Retrospective
 
-The external release prerequisite is complete: Kioku `v0.2.0.0` is the
-reproducible cohort member, so implementation can proceed after plans 36 and 37.
-M1–M5 remain unimplemented.
+Complete (2026-07-31). Shikigami builds against one coherent set of published
+releases — keiki 0.4, keiro 0.4.0.1, kioku 0.2, shikumi 0.3.0.1, baikai 0.4.1.0,
+shibuya-core 0.8.0.1, shibuya-pgmq-adapter 0.12, pgmq 0.4.0.1, kiroku-store 0.3.1.0,
+pg-migrate 1.1 — selected by version rather than by commit, with no `allow-newer`
+between co-developed packages. 157 tests pass across seven suites, twice.
+
+Two things were larger than the plan expected, both recorded in Surprises. The codd
+path could not be kept behind plan 38 as written, because Kioku 0.2 removed the
+codd-shaped surface this repository was appending to; the migration API port landed
+here and only the ledger import remains plan 38's. And the one dependency that
+actually blocked was the unreleased commit-pinned one, `handan-core`, not any of the
+libraries the plan was worried about — a useful prior for the next cohort bump.
+
+The upgrade also surfaced two live correctness bugs that were not upgrade artifacts:
+Kioku's read-model registry needs reconciling by any host that applies the plan
+directly, and the skill arm was rendering Baikai provider failures as successful empty
+replies. Both are fixed here; both would have been true before the upgrade too.
+
+What deliberately did not land: retry taxonomy for the new `ProviderFailed`
+(plan 17), the codd ledger import (plan 38), the lifecycle's emitted-event type
+(plan 39), and provider selection (plan 13).
 
 
 ## Context and Orientation
@@ -313,6 +386,10 @@ Downstream consumers:
 
 ## Revision Notes
 
+- 2026-07-31: Implemented M1–M5. Recorded that the codd path could not be deferred to
+  plan 38, that `handan-core` needed an upstream fix, that Kioku 0.2 requires read-model
+  reconciliation by the applying host, and that the skill arm was swallowing Baikai's
+  in-band provider failures.
 - 2026-07-30: Recorded Kioku `v0.2.0.0`, completed M0, replaced the unresolved
   Kioku matrix row with its released bounds and tag commit, and removed Kioku
   IR-1 from the hard prerequisites. Plan 47 now follows only plans 36 and 37.
