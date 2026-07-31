@@ -63,7 +63,24 @@ This section must always reflect the actual current state of the work.
       Remaining, by design: administrative and test-stub commands still live in
       `shikigami-cli`, which now depends on `shikigami-server` for the moved modules; M4
       redistributes them and deletes that package.
-- [ ] M3: create `shikigami-workers`, move queue, subscription, scheduler, outbox, timer, and resume composition into it, and add worker tests.
+- [x] (2026-07-31T05:25:00Z) M3: create `shikigami-workers`, move queue, subscription, scheduler, outbox, timer, and resume composition into it, and add worker tests.
+      Done: `shikigami-workers` created. The old `Shikigami.Worker` — one 230-line module
+      holding four loops — was split into vertical modules
+      (`Shikigami.Agent.RunJob.Worker`, `Shikigami.Agent.Workflow.Resume`,
+      `Shikigami.Flow.SinkOutbox.Publisher`, `Shikigami.Trigger.Timer`) with
+      `Shikigami.Workers.Config` holding the shared `WorkerEnv` and each loop's derived
+      environment, and `Shikigami.Workers.Registry` doing nothing but starting them.
+      `Shikigami.Trigger.Consumer`, `Shikigami.Trigger.Scheduler`, and `Shikigami.Telemetry`
+      moved across unchanged; `SchedulerSpec` moved to the new
+      `shikigami-workers-test` suite, which provisions through
+      `shikigami-migrations:test-support`. Core's library now depends on none of `wai`,
+      `warp`, `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp`, `hw-kafka-client`,
+      `kafka-effectful`, `pgmq-effectful`, or `shibuya-pgmq-adapter`; it keeps
+      `shibuya-core` for the telemetry effect `Shikigami.Agent.Approval` uses, and
+      `pgmq-hasql` for the shared run-job producer. `rg 'shikigami-(api|server)'
+      shikigami-workers` prints nothing. Tests: api 15, server 12, core 45, workers 4.
+      Remaining, by design: `Shikigami.Workers.Subscription` and the worker executables
+      arrive in M4 with the commands they compose.
 - [ ] M4: create `shikigami-client`, derive the typed client from `shikigami-api`, redistribute existing CLI executables without adding a seventh package, and remove `shikigami-cli`.
 - [ ] M5: enforce package dependency and test-layout invariants; `cabal build all` and `cabal test all` pass.
 
@@ -181,6 +198,27 @@ Record every decision made while working on the plan.
   internal or security-sensitive detail. Operators get specifics from structured logging
   (`docs/plans/28-structured-logging-metrics-and-trace-propagation.md`); callers get a
   stable `code` to branch on.
+  Date: 2026-07-31
+
+- Decision: `Shikigami.Telemetry` — the OpenTelemetry provider and exporter bootstrap —
+  moves to `shikigami-workers` rather than staying in core or being duplicated.
+  Rationale: it constructs an SDK tracer provider and an OTLP exporter, which the
+  architecture puts at executable boundaries, and today only the worker executable calls
+  it. `shikigami-server` cannot import it (server may not depend on workers), and there is
+  no shared non-core home; when the server needs its own OTLP bootstrap it defines one
+  under `Shikigami.Server.Boot`. Plans 28 and 31 cite the old core path
+  (`shikigami-core/src/Shikigami/Telemetry.hs`) and update to the workers path when they
+  are implemented.
+  Date: 2026-07-31
+
+- Decision: Split the old `Shikigami.Worker` into one module per loop rather than moving
+  it across intact.
+  Rationale: the plan requires domain-first module paths in the workers package and a
+  `Shikigami.Workers.Registry` that composes processors without absorbing their behavior.
+  One module holding the queue processor, the resume worker, the outbox publisher, the
+  timer loop, and the environment plumbing is the opposite of that: every later plan that
+  touches one loop — 17 for retry semantics, 19 for delivery truth, 20 for routing — would
+  edit the same file. The split is behavior-preserving; only the module boundaries moved.
   Date: 2026-07-31
 
 - Decision: Core's test suite keeps its own minimal kawa doorway fixture

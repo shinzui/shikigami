@@ -14,7 +14,8 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Behavior.Run (newBehaviorEnvWithTraceSink)
 import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
-import Shikigami.Worker (WorkerEnv (..), runWorker)
+import Shikigami.Workers.Config (WorkerEnv (..))
+import Shikigami.Workers.Registry (runWorkers)
 import System.Directory (listDirectory)
 import System.Environment (getEnv)
 import System.FilePath ((</>))
@@ -40,7 +41,7 @@ runWorkerCmd agentsDir kawaUrl kizashiUrl danwaUrl danwaAgent = do
                 kawa = KawaConfig {baseUrl = kawaUrl, sourceSegment = "shinzui/shikigami"},
                 danwa = DanwaConfig {baseUrl = danwaUrl, agentParticipant = danwaAgent}
               }
-      runWorker env
+      runWorkers env
 
 loadAgents :: FilePath -> IO [AgentDecl]
 loadAgents dir = do

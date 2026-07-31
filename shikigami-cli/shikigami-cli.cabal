@@ -52,6 +52,7 @@ library
     , shikigami-api
     , shikigami-core
     , shikigami-server
+    , shikigami-workers
     , text                  >=2.1
     , time                  >=1.12
 

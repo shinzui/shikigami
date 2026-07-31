@@ -1,0 +1,87 @@
+cabal-version: 3.0
+name:          shikigami-workers
+version:       0.1.0.0
+synopsis:      Shikigami supervised background loops
+build-type:    Simple
+
+common common
+  default-language:   GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    OverloadedLabels
+    OverloadedStrings
+
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+library
+  import:          common
+  hs-source-dirs:  src
+  exposed-modules:
+    Shikigami.Agent.RunJob.Worker
+    Shikigami.Agent.Workflow.Resume
+    Shikigami.Flow.SinkOutbox.Publisher
+    Shikigami.Telemetry
+    Shikigami.Trigger.Consumer
+    Shikigami.Trigger.Scheduler
+    Shikigami.Trigger.Timer
+    Shikigami.Workers.Config
+    Shikigami.Workers.Registry
+
+  build-depends:
+    , aeson                           >=2.2
+    , async
+    , base                            >=4.21 && <5
+    , bytestring
+    , containers                      >=0.6
+    , effectful
+    , hasql
+    , hasql-pool
+    , hasql-transaction
+    , hs-opentelemetry-api
+    , hs-opentelemetry-exporter-otlp
+    , hs-opentelemetry-sdk
+    , hw-kafka-client
+    , kafka-effectful
+    , keiro
+    , keiro-core
+    , kioku-api
+    , kioku-core
+    , kiroku-store
+    , pgmq-effectful
+    , shibuya-core
+    , shibuya-pgmq-adapter
+    , shikigami-core
+    , text                            >=2.1
+    , time                            >=1.12
+    , uuid
+
+test-suite shikigami-workers-test
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test
+  other-modules:  Shikigami.SchedulerSpec
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , base
+    , containers
+    , hasql-pool
+    , keiro
+    , kioku-api
+    , kioku-core
+    , kiroku-store
+    , pgmq-hasql
+    , shikigami-core
+    , shikigami-migrations:test-support
+    , shikigami-workers
+    , tasty
+    , tasty-hunit
+    , text
+    , time
+    , vector
