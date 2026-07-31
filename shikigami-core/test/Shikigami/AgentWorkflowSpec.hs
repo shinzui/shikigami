@@ -38,7 +38,7 @@ import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRun
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
+import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -465,6 +465,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      rei = ReiConfig {baseUrl = Nothing},
       hooks,
       approval = defaultApprovalEnv,
       deadline = Nothing
@@ -483,6 +484,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      rei = ReiConfig {baseUrl = Nothing},
       hooks,
       approval,
       deadline

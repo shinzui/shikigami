@@ -123,6 +123,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
     Shikigami.PackageArchitectureSpec
+    Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec
 

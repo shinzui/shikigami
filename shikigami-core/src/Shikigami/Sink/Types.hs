@@ -11,7 +11,7 @@ where
 
 import Data.Text qualified as Text
 import Shikigami.Prelude
-import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig)
+import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
 
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
@@ -33,6 +33,7 @@ data SinkContext = SinkContext
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
+    rei :: !ReiConfig,
     danwaTarget :: !(Maybe DanwaTarget),
     occurredAt :: !(Maybe UTCTime)
   }
@@ -41,7 +42,18 @@ data SinkContext = SinkContext
 -- gate's @Denied@ newtype.
 data SinkOutcome
   = Delivered !Text -- a detail string (e.g. the returned id)
-  | Stubbed -- a thin stub handler ran (ReiAction/Danwa)
+  | -- | __Deprecated: never produced.__ A stub handler ran and the dispatch was
+    -- counted as a success, which is the lie
+    -- @docs\/plans\/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md@
+    -- removed: anything not 'Failed' is published forever by the outbox, so a
+    -- stubbed sink reported delivery of something that went nowhere.
+    --
+    -- The constructor stays because 'SinkResult' values are journaled and
+    -- replayed by 'Data.Aeson.FromJSON'; removing it would make historical
+    -- journals undecodable. Retiring it belongs to a journal-migration plan
+    -- under MasterPlan 5. Nothing in this repository constructs it — see
+    -- @Shikigami.WireCompatSpec@, which pins that it still /decodes/.
+    Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
   | Failed !Text -- the send errored (the worker decides retry)
   deriving stock (Eq, Show, Generic)

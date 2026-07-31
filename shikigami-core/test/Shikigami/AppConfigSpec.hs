@@ -85,7 +85,8 @@ surfaceTests =
                 "sinks.kawa.base_url",
                 "sinks.kawa.source_segment",
                 "sinks.kizashi.base_url",
-                "sinks.kizashi.default_recipient"
+                "sinks.kizashi.default_recipient",
+                "sinks.rei.base_url"
               ],
       -- Forcing the validated binding list here is the point: an invalid edit
       -- becomes a test failure instead of a failure in every deployed process.
@@ -110,7 +111,8 @@ surfaceTests =
               ("SHIKIGAMI_SINKS_KAWA_BASE_URL", "sinks.kawa.base_url"),
               ("SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT", "sinks.kawa.source_segment"),
               ("SHIKIGAMI_SINKS_KIZASHI_BASE_URL", "sinks.kizashi.base_url"),
-              ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient")
+              ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
+              ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url")
             ],
       testCase "every declared key can be set from the environment" $
         sort (fmap snd boundVariables) @?= sort (fmap renderKey declaredKeys),
@@ -130,6 +132,10 @@ surfaceTests =
         kizashiDefaultRecipient defaultAppConfig @?= "recipient:default"
         danwaBaseUrl defaultAppConfig @?= "http://localhost:8080"
         danwaAgentParticipant defaultAppConfig @?= "part_shikigami"
+        -- Deliberately absent rather than pointing somewhere: rei has no HTTP
+        -- surface, and a defaulted URL would turn "nowhere to send" into
+        -- "connection refused to a host nobody chose".
+        reiBaseUrl defaultAppConfig @?= Nothing
     ]
 
 boundVariables :: [(Text, Text)]

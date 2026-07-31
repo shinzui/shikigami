@@ -30,7 +30,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Prelude
-import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig)
+import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 
@@ -42,7 +42,8 @@ data WorkerEnv = WorkerEnv
     behaviorEnv :: !BehaviorEnv,
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
-    danwa :: !DanwaConfig
+    danwa :: !DanwaConfig,
+    rei :: !ReiConfig
   }
 
 -- | The agent-run workflow's dependencies.
@@ -55,6 +56,7 @@ agentRunDeps env =
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,
       AgentWorkflow.danwa = danwa env,
+      AgentWorkflow.rei = rei env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing

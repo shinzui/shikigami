@@ -77,7 +77,7 @@ import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
-import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
+import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 
 data AgentRunDeps = AgentRunDeps
@@ -87,6 +87,7 @@ data AgentRunDeps = AgentRunDeps
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
+    rei :: !ReiConfig,
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime)
@@ -564,7 +565,7 @@ deterministicOutboxIdForMessage messageId =
         Text.unpack ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -578,6 +579,7 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
                   kizashi = depsKizashi,
                   kawa = depsKawa,
                   danwa = depsDanwa,
+                  rei = depsRei,
                   danwaTarget = danwaTarget,
                   occurredAt = occurredAt
                 }

@@ -22,7 +22,7 @@ import Shikigami.Sink.Danwa (runDanwa)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
 import Shikigami.Sink.KizashiClient (buildSignalReq, postSignal)
 import Shikigami.Sink.Permission
-import Shikigami.Sink.ReiAction (runReiActionStub)
+import Shikigami.Sink.ReiAction (runReiAction)
 import Shikigami.Sink.Types
 import Shikigami.Sink.Wire (SignalResponse (..))
 import System.IO (hPutStrLn, stderr)
@@ -59,7 +59,9 @@ runSink ctx sink output = case sink of
       Right req -> do
         r <- postSignal (kizashi ctx) req
         pure (either Failed (Delivered . signalId) r)
-  ReiAction {} -> Stubbed <$ runReiActionStub (identity ctx) sink output
+  ReiAction {} -> do
+    r <- runReiAction (rei ctx) ctx sink output
+    pure (either Failed Delivered r)
   DanwaConversation {} -> do
     r <- runDanwa (danwa ctx) (identity ctx) (danwaTarget ctx) sink output
     pure (either Failed Delivered r)

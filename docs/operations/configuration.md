@@ -124,6 +124,7 @@ nested under `kafka`.
 | `sinks.kizashi.default_recipient` | `recipient:default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. |
 | `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
 | `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
+| `sinks.rei.base_url` | *(none)* | `SHIKIGAMI_SINKS_REI_BASE_URL` | Base URL of a rei ingestion endpoint. The one sink URL with no default, because rei has no HTTP surface yet; unset means `ReiAction` sinks fail visibly instead of silently. |
 | `behavior.provider` | `stub` | `SHIKIGAMI_BEHAVIOR_PROVIDER` | Which model runs a `Skill` behavior: `stub` calls no model, `anthropic` calls a real one. |
 | `behavior.model` | `claude-sonnet-4-6` | `SHIKIGAMI_BEHAVIOR_MODEL` | Anthropic model id. Only consulted when the provider is `anthropic`; decoded against baikai's catalog, so an unknown id is rejected here. |
 | `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |

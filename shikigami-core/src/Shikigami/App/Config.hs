@@ -91,6 +91,7 @@ module Shikigami.App.Config
     sinksKizashiDefaultRecipientKey,
     sinksDanwaBaseUrlKey,
     sinksDanwaAgentParticipantKey,
+    sinksReiBaseUrlKey,
     declaredKeys,
   )
 where
@@ -265,6 +266,12 @@ data AppConfig = AppConfig
     danwaBaseUrl :: !Text,
     -- | danwa participant id Shikigami authors messages as.
     danwaAgentParticipant :: !Text,
+    -- | Base URL of a rei ingestion endpoint, if one exists.
+    --
+    -- The only sink base URL with no default, because rei has no HTTP surface to
+    -- point one at. Absent means a @ReiAction@ sink fails visibly into the outbox
+    -- retry path rather than reporting a delivery that never happened.
+    reiBaseUrl :: !(Maybe Text),
     -- | Which model the @Skill@ behavior arm dispatches with.
     --
     -- The one field that is not named for a single key, because it is not
@@ -305,6 +312,7 @@ appConfig =
     <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient:default")
     <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
     <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" "part_shikigami")
+    <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
@@ -451,6 +459,15 @@ sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base 
 sinksDanwaAgentParticipantSetting :: Setting Text
 sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" textDecoder id
 
+-- | Deliberately without a default: there is no rei endpoint to default to.
+sinksReiBaseUrlSetting :: Setting Text
+sinksReiBaseUrlSetting =
+  publicSettingWithRenderer
+    sinksReiBaseUrlKey
+    "Base URL of a rei ingestion endpoint; unset means ReiAction sinks fail visibly rather than silently"
+    textDecoder
+    id
+
 behaviorProviderSetting :: Setting ProviderChoice
 behaviorProviderSetting =
   publicSettingWithRenderer
@@ -531,6 +548,9 @@ sinksDanwaBaseUrlKey = stableKey "sinks.danwa.base_url"
 sinksDanwaAgentParticipantKey :: Key
 sinksDanwaAgentParticipantKey = stableKey "sinks.danwa.agent_participant"
 
+sinksReiBaseUrlKey :: Key
+sinksReiBaseUrlKey = stableKey "sinks.rei.base_url"
+
 behaviorProviderKey :: Key
 behaviorProviderKey = stableKey "behavior.provider"
 
@@ -597,6 +617,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
+          binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey

@@ -11,6 +11,9 @@ module Shikigami.Sink.Wire
     -- * kizashi C4 signal
     CreateSignalReq (..),
     SignalResponse (..),
+
+    -- * rei agent action
+    ReiActionReq (..),
   )
 where
 
@@ -70,6 +73,26 @@ data CreateSignalReq = CreateSignalReq
 data SignalResponse = SignalResponse
   { signalId :: !Text,
     lifecycleState :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | The body a @ReiAction@ sink would POST: record this agent finding as an
+-- action against a rei intention.
+--
+-- Unlike its neighbours above, this record mirrors nothing — rei is a CLI
+-- application with no HTTP surface, so there is no upstream DTO to reproduce. It
+-- is defined anyway, and shaped after the two that are real, so that the day rei
+-- grows an ingestion endpoint the work is configuration and a URL path rather
+-- than designing a request under time pressure. 'sourceEventId' is the same
+-- deterministic dedup key the kawa doorway already relies on
+-- ('Shikigami.Sink.Types.mkSourceEventId'), so an outbox retry or a workflow
+-- replay re-POSTs an identical body.
+data ReiActionReq = ReiActionReq
+  { intentionId :: !Text,
+    note :: !Text,
+    output :: !Value,
+    sourceEventId :: !Text
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

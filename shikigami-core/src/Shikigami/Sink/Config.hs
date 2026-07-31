@@ -3,6 +3,7 @@ module Shikigami.Sink.Config
   ( KizashiConfig (..),
     KawaConfig (..),
     DanwaConfig (..),
+    ReiConfig (..),
   )
 where
 
@@ -29,3 +30,16 @@ data DanwaConfig = DanwaConfig
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Where to hand an agent finding to @shinzui/rei@, if anywhere.
+--
+-- The only sink config whose base URL is optional, and the reason is not a
+-- preference: rei is a CLI application with no HTTP server, so there is nothing
+-- to call today. 'Nothing' is therefore the honest default, and it makes a
+-- @ReiAction@ dispatch fail into the outbox's retry path rather than report a
+-- delivery that never happened. The day rei grows an endpoint, enabling this is
+-- configuration rather than code.
+newtype ReiConfig = ReiConfig
+  { baseUrl :: Maybe Text
+  }
+  deriving stock (Eq, Show)

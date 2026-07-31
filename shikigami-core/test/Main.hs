@@ -33,6 +33,7 @@ import Shikigami.Sink
   )
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
@@ -51,6 +52,7 @@ main =
           BehaviorProviderSpec.tests,
           DelegateContextSpec.tests,
           PackageArchitectureSpec.tests,
+          SinkHonestySpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests,
@@ -188,6 +190,7 @@ ctxFor ident kz kw =
       kizashi = kz,
       kawa = kw,
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      rei = Sink.ReiConfig {baseUrl = Nothing},
       danwaTarget = Nothing,
       occurredAt = Nothing
     }

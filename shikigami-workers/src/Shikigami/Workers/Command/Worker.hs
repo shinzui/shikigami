@@ -11,7 +11,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
-import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..))
+import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Workers.Config (WorkerEnv (..))
 import Shikigami.Workers.Registry (runWorkers)
@@ -59,6 +59,7 @@ runWorkerCmd config = do
                   DanwaConfig
                     { baseUrl = Config.danwaBaseUrl config,
                       agentParticipant = Config.danwaAgentParticipant config
-                    }
+                    },
+                rei = ReiConfig {baseUrl = Config.reiBaseUrl config}
               }
       runWorkers env

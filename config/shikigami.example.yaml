@@ -74,3 +74,10 @@ sinks:
   danwa:
     base_url: http://localhost:8080
     agent_participant: part_shikigami
+  # rei:
+  #   # No default, and commented out on purpose: rei is a CLI application with
+  #   # no HTTP server, so there is nothing to point this at yet. While it is
+  #   # unset, a ReiAction sink fails into the outbox retry path — visibly, on
+  #   # every publisher pass — rather than reporting a delivery that never
+  #   # happened. Set it when rei grows an endpoint and the backlog drains.
+  #   base_url: http://localhost:8090
