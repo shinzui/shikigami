@@ -19,12 +19,24 @@ Shikigami is a declared-agent runtime: agents are declared in Dhall manifests, t
 
 After this initiative, every hand-off is honest. A behavior failure caused by a flaky LLM or HTTP call is genuinely re-executed on retry instead of being replayed from the journal three times and archived. A run that takes longer than 30 seconds — that is, any real LLM call — is no longer redelivered mid-flight into a concurrent duplicate execution. A Kafka event whose processing hits a transient Postgres outage is retried instead of being permanently skipped by an unconditional offset commit; and once the inbox accepts an event, the corresponding run job is enqueued in the same database transaction, so a crash cannot strand an event in the "processed but never enqueued" state. A run record that says a sink was "Delivered" actually means the downstream HTTP call succeeded, not merely that a row was inserted into the outbox; retried sink publishes no longer duplicate kizashi signals or orphan danwa conversations. Routing of run jobs is decided by the job's declared trigger kind, the scheduler applies an explicit catch-up policy after downtime instead of firing every missed minute, and failures that today vanish (kioku session/memory write errors, unloadable agent manifests, unparseable crons) are loud.
 
-In scope: the pg-migrate transition that makes every new correctness table part of one
-complete component plan; retry/timeout/heartbeat semantics of the run-job worker;
+In scope: completing the pg-migrate transition so every new correctness table is part of
+one complete component plan; retry/timeout/heartbeat semantics of the run-job worker;
 atomicity of the Kafka consumer path; truthfulness of sink outcomes and client-side
 idempotency toward kawa, kizashi, and danwa; and explicit routing, scheduler catch-up,
-and loud failure reporting. Package placement follows plan 36 rather than the legacy
-`shikigami-cli` paths, and all process configuration follows plan 37.
+and loud failure reporting.
+
+Foundation status (2026-07-31). Plans 36, 37, and 47 are Complete, so this initiative's
+cross-MasterPlan prerequisites are satisfied and its file map has moved. The six-package
+split landed: the run-job handler is `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`,
+the Kafka consumers are `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`, the outbox
+publisher loop is `shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs`, and
+enqueue remains `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Nothing lives under
+`shikigami-cli` any more. Every process except `shikigami-migrate` resolves settings through
+Settei's `AppConfig`. The July 2026 cohort is in place, and it removed codd from the
+repository entirely — which shrinks F1 rather than removing it (see the Decomposition
+Strategy and the F1 note in Surprises & Discoveries). Any child plan text still naming
+`shikigami-cli/...` or `shikigami-core/src/Shikigami/Worker.hs` is stale and must be read
+against this map.
 
 Explicitly excluded: structured logging/metrics infrastructure (docs/plans/28), health/liveness and loop supervision (docs/plans/29), the operator CLI for inspecting runs and dead letters (docs/plans/30), per-agent lifecycle state recorded against meibo principals (docs/plans/23, MasterPlan 4 — this initiative only stops the silence around manifest load failures), consolidation of the duplicated sink-intent machinery (docs/plans/27, MasterPlan 5 — this initiative fixes the semantics of that machinery in place), and upstream API changes to kizashi or danwa to add server-side idempotency keys (documented as follow-ups inside EP-3; this initiative delivers client-side mitigations only).
 
@@ -32,8 +44,13 @@ Explicitly excluded: structured logging/metrics infrastructure (docs/plans/28), 
 ## Decomposition Strategy
 
 The initiative has one database-evolution foundation and four independent hand-off
-boundaries. F1 replaces Codd with the fleet pg-migrate component/manifest/application-
-plan model before any child adds tables. The queue-to-workflow boundary (EP-1) is about
+boundaries. F1 completes the move to the fleet pg-migrate component/manifest/application-
+plan model before any child adds tables. Plan 47 already delivered the component, the
+exact-byte manifest, the composed four-component application plan, the `pg-migrate-cli`
+executable, and the pg-migrate test support, and removed codd from the repository; F1's
+remaining work is the durable codd-ledger import for an already-deployed database and the
+package restructure that lets `shikigami-migrate` resolve through the shared `AppConfig`.
+The queue-to-workflow boundary (EP-1) is about
 what "retry" means once a job is in a handler, including the adapter's zero-based
 attempt and Shibuya's framework-owned acknowledgement. The stream-to-queue boundary
 (EP-2) is about transactional atomicity between Kafka offsets, the keiro inbox table,
@@ -50,25 +67,34 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
-| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
-| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36, 37, and 47 | None | Not Started |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16, 28 M1, and 47; upstream Keiro IR-3 | None | Not Started |
-| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 and 47 | None | Not Started |
+| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable; scope reduced) |
+| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
+| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16 ✅, 47 ✅, 28 M1 ⏳; upstream Keiro IR-3 ⏳ | None | Not Started (blocked on F1 and plan 28 M1) |
+| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 ✅, 47 ✅ | None | Not Started (blocked on EP-1, EP-2) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
+✅ marks a dependency verified Complete as of 2026-07-31; ⏳ marks one still outstanding.
+
+Child-plan staleness (2026-07-31). Every child ExecPlan's Context section was written before
+plans 36/37/47 landed and still names pre-split paths — `shikigami-cli/src/Shikigami/Cli/...`
+in plans 18 and 20, `shikigami-core/src/Shikigami/Worker.hs` in plans 17, 19, and 20 — and
+plan 38 still describes codd as present in the tree. The *defects* those plans describe were
+re-verified against the current tree on 2026-07-31 and all still hold; only the file map and
+F1's starting point moved. Each child must have its Context and Concrete Steps re-pointed at
+the map in Vision & Scope before implementation begins.
 
 
 ## Dependency Graph
 
-F1 follows plans 36 and 37 and gates every new Shikigami migration. EP-1 and EP-2 can
-then start independently. EP-3 starts after F1 and plan 28 Milestone 1 defines
-`Shikigami.Log`. EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
+F1 follows plans 36, 37, and 47 — all Complete — and gates every new Shikigami migration.
+EP-1, EP-2, and F1 are all startable now. EP-3 starts after F1 and plan 28 Milestone 1 defines
+`Shikigami.Log` (no `Shikigami/Log.hs` exists in the tree as of 2026-07-31). EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
 and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
 implementations. Three additional coordination edges exist.
 
-EP-1 precedes EP-4. Both edit the run-job handler in `shikigami-core/src/Shikigami/Worker.hs`: EP-1 defines the typed outcome-to-`AckDecision` classification, and EP-4 routes its malformed-payload errors through that taxonomy.
+EP-1 precedes EP-4. Both edit the run-job handler, now `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` after plan 36: EP-1 defines the typed outcome-to-`AckDecision` classification, and EP-4 routes its malformed-payload errors through that taxonomy. That module's haddock already names plan 17 as the owner of retry ceilings, lease durations, and the failure taxonomy, and plan 36 deliberately preserved today's behavior unchanged — so EP-1 edits a handler that was left in a known state for it.
 
 EP-2 precedes EP-4 on `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. EP-2 adds
 `enqueueRunJobTx` and `ensureRunQueue`; EP-4 hardens the IO-level helpers by consuming
@@ -92,32 +118,72 @@ canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 ## Integration Points
 
-Worker handler and ack classification — server/worker modules assigned by plan 36.
-Involved: EP-1, EP-4. EP-1 keeps shibuya's `QueueProcessor` as the sole acknowledgement
-owner, carries its lease for heartbeat, consumes the adapter's first delivery as attempt 0,
-and derives retry delay with the shared `mkRetryPolicy` vocabulary. EP-4 consumes that
-taxonomy and routes from an explicit `triggerKind` discriminator; payload decodability
-is never used as the route selector.
+Worker handler and ack classification — `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`
+(placement assigned by plan 36, now landed). Involved: EP-1, EP-4. EP-1 keeps shibuya's
+`QueueProcessor` as the sole acknowledgement owner, carries its lease for heartbeat, consumes
+the adapter's first delivery as attempt 0, and derives retry delay with the shared
+`mkRetryPolicy` vocabulary. EP-4 consumes that taxonomy and routes from an explicit
+`triggerKind` discriminator; payload decodability is never used as the route selector.
 
-Run-job enqueue module — core/worker modules assigned by plan 36. Involved: EP-2,
-EP-4. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` with no
+Two facts about that module were fixed by earlier work and both plans consume them rather
+than re-deriving them. First, the handler already emits Shibuya's `AckDecision` with typed
+`DeadLetterReason`s (`InvalidPayload`, `PoisonPill`), so EP-1's Milestone 2 is about making
+the mapping a pure attempt-aware function — every `AckRetry` today is a hard-coded
+`RetryDelay 1s` — not about introducing the vocabulary. Second, `Shikigami.Behavior.Error`
+already carries `ProviderFailed !Bool !Text`, whose `Bool` is baikai's own `isRetryable`,
+threaded from `Shikigami.Behavior.Skill`; plan 47 recorded that EP-1 owns what the worker
+does with that flag. EP-1's transient/permanent taxonomy must consume it rather than
+reclassify provider failures by string matching.
+
+Run-job enqueue module — `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`, with the Kafka
+consumers at `shikigami-workers/src/Shikigami/Trigger/Consumer.hs` and the `consume-stream`
+/ `consume-events` entry points under `shikigami-workers/app/`. Involved: EP-2,
+EP-4. The queue payload is a bare `toJSON job` on both sides: plan 47 verified that
+`shikigami_run_jobs` is not scaffolded by `keiro-dsl`, so Keiro 0.4's versioned
+`keiroJobCodec` envelope does not reach it and neither EP-2 nor EP-4 needs a drain gate or
+transitional decoder. Plan 39 inherits that as a live constraint. EP-2 defines `enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId` with no
 queue creation inside the transaction and a startup `ensureRunQueue`. Every inbox
 record reaches one explicit terminal disposition: enqueued, duplicate, permanent
 dead-letter, or transient failure with no offset commit. Kafka processing keeps
 durable dead-letter/halt behavior and uses shibuya's serial/framework-owned commit
 boundary rather than a parallel acknowledgement loop. EP-4 consumes that seam.
 
-Database evolution — plan 38 owns the `pg-migrate` component, exact-byte manifest,
-complete application plan, compatibility import, CLI, and test-support contract. EP-3
-adds delivery receipts only through that component; plans 21 and 23 do the same for
-their tables. No child creates timestamped Codd files or replays legacy DDL.
+Database evolution — the `pg-migrate` component, exact-byte manifest, complete application
+plan, CLI, and test-support contract now exist in the tree (`shikigami-migrations`, delivered
+by plan 47). Plan 38 owns what remains: the one-time codd-ledger import for an already-deployed
+database, and unifying the `shikigami-migrate` operator surface. EP-3 adds delivery receipts
+only by appending a file to `shikigami-migrations/sql-migrations/manifest` (via
+`just new-migration`, which is already pg-migrate-shaped); plans 21 and 23 do the same for
+their tables. No child creates a Codd runner or replays legacy DDL.
+
+One non-obvious obligation comes with that component. Applying the plan is only half the
+job: `Shikigami.Migrations.reconcileShikigamiReadModels` must run after a successful `up`,
+because Kioku 0.2 stopped registering read models on first query and `registerReadModel`
+only inserts. Any child of this MasterPlan that introduces a Kioku read model — EP-3's
+delivery receipts are the candidate — must confirm the reconciliation covers it, or every
+projection query for it fails `ReadModelUnregistered` in production while passing in a
+freshly-created test database.
 
 Journaled sink outcome values—`SinkOutcome` and the values journaled by `dispatch-sinks` and
 per-reply steps. Involved: EP-3 here; plans 22/32 for typed HTTP failures; plans 24/27 in
 MasterPlan 5. EP-3 owns additive `Enqueued` and `PermanentFailure` constructors, per-sink
 keys, and the released Keiro `PublishRejected` terminal mapping; old `Delivered`/`Failed`
-values remain decodable. Journaled step names are never renamed and value evolution stays
+values remain decodable. `Stubbed` survives in `Shikigami.Sink.Types` as a decodable
+constructor that plan 16 stopped producing; EP-3 must keep it decodable and must not start
+producing it again. Journaled step names are never renamed and value evolution stays
 backward-compatible. Plan 27 preserves these final semantics.
+
+Plan 16 added two hard constraints on how EP-3 may extend the outboxed record.
+`SinkIntent` is defined **twice** — in `Shikigami.Agent.Workflow` and in
+`Shikigami.Flow.SinkOutbox` — because the flow module cannot import the workflow module
+without a package cycle, while `publishSinkIntent` decodes rows enqueued by both using the
+workflow's copy. A field added to one and not the other is silently dropped in transit.
+`Shikigami.WireCompatSpec` now asserts the two encoders produce identical bytes, so EP-3's
+per-sink keys and receipt correlation must be added to both copies or the build fails.
+Second, additive fields on a journaled or outboxed record are encoded with
+`omitNothingFields`, so a record that resolved nothing stays byte-identical to one written
+before the field existed and the pinned pre-upgrade fixture in `WireCompatSpec` is never
+rewritten. EP-3 follows the same discipline. Consolidating the duplication remains plan 27's.
 
 Workflow result encoding — `agentRunWorkflow`'s return type `Either Text AgentRunResult` (journaled by keiro as the workflow completion value). Involved: EP-1. Decision recorded here so no plan trips over it: EP-1 does not change this type. Transient failures are expressed by throwing (never journaled), so a journaled `Left` comes to mean "permanent failure" without any encoding change to already-completed workflows.
 
@@ -126,6 +192,17 @@ loud/strict failure behavior. Plan 30 renders that report in `agents list`; plan
 enabled-agent selection; plan 23 persists the report and annotates the existing command with
 lifecycle state. EP-4 must not implement persistence, enabled filtering, or operator output.
 
+Plan 36 Milestone 4 already collapsed the four private copies of "list the directory, load
+every `*.dhall`, drop the ones that fail" into one `Shikigami.Agent.Loader.loadAgentsIn`
+(`shikigami-core/src/Shikigami/Agent/Loader.hs`). EP-4's Context still describes four
+call sites in `shikigami-cli`; there is now exactly one function to change, and
+`loadAgent :: FilePath -> IO (Either LoadError AgentDecl)` beside it already returns the
+error that `loadAgentsIn` discards. EP-4's strict mode must also expect **two** failing
+fixtures under `agents/`, not one: `agents/broken.dhall` is the deliberate load-failure
+fixture, and `agents/detectors/schema.dhall` is a retired tombstone that is a record *type*
+rather than a manifest and has always failed the Dhall annotation. Treating the second as a
+regression, or making strict mode fail the repository's own fixture set, is the trap here.
+
 
 ## Progress
 
@@ -133,7 +210,9 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
-- [ ] F1: Milestones 1–4 — pg-migrate component, exact manifest, complete plan, Codd ledger-only import, CLI/test/deployment cutover
+- [x] F1: Milestones 1, 2, and most of 4 — pg-migrate component, exact-byte manifest, complete four-component plan, `pg-migrate-cli` executable, pg-migrate test support, codd removed from the repository (delivered by plan 47, 2026-07-31)
+- [ ] F1: Milestone 3 — one-time codd ledger-only import proved on a clone of an existing codd-managed database
+- [ ] F1: Milestone 4 remainder — `shikigami-migrate` resolves `DATABASE_URL` through the shared `AppConfig` instead of reading it directly; the `shikigami-core` ↔ `shikigami-migrations` package cycle is broken
 - [ ] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
 - [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
 - [ ] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
@@ -166,6 +245,52 @@ interactions between child plans. Provide concise evidence.
   manifest, complete application-plan, Codd ledger importer, CLI, and test support this
   initiative needs. Continuing to author Codd migrations would create a second schema
   authority and make delivery-receipt rollout unverifiable.
+- Foundation landing (2026-07-31): **F1's scope shrank because plan 47 could not leave codd
+  in place.** Plan 47 intended to keep the codd pins until plan 38 replaced them, but
+  `kiokuMigrations` in Kioku 0.2 is a pg-migrate `MigrationComponent` rather than a list of
+  codd `AddedSqlMigration`s, so there was no codd-shaped set left to append shikigami's
+  migrations to. `shikigami-migrations`, its executable, and its `test-support` sublibrary
+  all moved to pg-migrate in one step and codd left the repository. Verified in the tree on
+  2026-07-31: `shikigami-migrations.cabal` depends on `pg-migrate`, `pg-migrate-embed`, and
+  `pg-migrate-cli`; `sql-migrations/manifest` exists with both SQL files; the operator
+  contract is `DATABASE_URL` and `cabal run shikigami-migrate -- up`. The migration filenames
+  and their `-- codd: in-txn` headers are preserved verbatim on purpose — they are the payload
+  evidence F1's ledger import needs, and must not be renamed or reformatted.
+- Foundation landing (2026-07-31): **F1 also inherits a package-cycle problem that plan 37
+  discovered and could not fix.** `shikigami-core`'s test suite depends on
+  `shikigami-migrations`' public `test-support` sublibrary, so adding `shikigami-core` to
+  `shikigami-migrate`'s `build-depends` makes the two packages mutually dependent, and Cabal
+  detects cycles at package rather than component granularity:
+
+  ```text
+  [_33] rejecting: shikigami-core:*test (cyclic dependencies; conflict set:
+        shikigami-core, shikigami-migrations)
+  ```
+
+  `shikigami-migrate` therefore reads `DATABASE_URL` with `lookupEnv` directly, documented at
+  its call site. This is the one remaining exception to plan 37's "Settei is the sole
+  process-configuration mechanism" rule, and F1 is the plan positioned to restructure the
+  package boundary while it works there.
+- Foundation landing (2026-07-31): **applying the migration plan is not sufficient on its
+  own.** Kioku 0.2 stopped registering read models on first query and `registerReadModel`
+  only inserts, so a host applying a composed plan directly must reconcile keiro's
+  `keiro_read_models` registry itself or every projection query fails `ReadModelUnregistered`.
+  `Shikigami.Migrations.reconcileShikigamiReadModels` now runs after a successful `up` and in
+  the test database. Any plan here that adds a Kioku read model — EP-3's delivery receipts —
+  inherits this as a live production concern, not an upgrade artifact.
+- Foundation landing (2026-07-31): **EP-1's retry taxonomy has a concrete upstream input it
+  did not have at planning time.** Baikai 0.4 reports provider failure in-band, and
+  `runSkillWith` previously read only the assistant text — so an error-shaped response became
+  a successful reply of `""`, recorded as a learning and followed by sink dispatch. Plan 47
+  translated that into `Shikigami.Behavior.Error.ProviderFailed !Bool !Text`, carrying
+  baikai's own `isRetryable`. EP-1 consumes that flag rather than inventing a classifier;
+  plan 13 owns which provider runs.
+- Foundation landing (2026-07-31): **EP-4's loader premise improved and its fixture premise
+  got harder.** Plan 36 M4 collapsed four identical private copies of the silent-skip loader
+  into one `Shikigami.Agent.Loader.loadAgentsIn`, so EP-4 now has a single edit site rather
+  than four. But plan 16 found that `agents/detectors/schema.dhall` also fails validation and
+  always did — it is a retired tombstone and a record type, not a manifest — so EP-4's strict
+  mode has two expected failures under `agents/`, not one.
 - Runtime-pattern audit (revised 2026-07-30): PGMQ `read_count` is one-based, but the
   released adapter's handler-facing `Envelope.attempt` is zero-based. Shibuya owns
   acknowledgement/commit. Retry and inbox plans consume those facts rather than layering
@@ -173,6 +298,25 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision: Keep F1 (plan 38) in the registry with reduced scope rather than cancelling it as
+  superseded by plan 47.
+  Rationale: plan 47 delivered the component, manifest, plan, CLI, and test support, but the
+  two parts that need their own rollback and deployment proof remain undone — the codd ledger
+  import for an already-deployed database, and the package restructure that unifies the
+  migration executable's operator surface. Cancelling F1 would drop both, and EP-3's receipts
+  table still needs a foundation plan that has been proved against real data.
+  Date: 2026-07-31
+
+- Decision: Treat the child ExecPlans' file paths as stale documentation to be re-pointed at
+  implementation time, not as evidence that their defects were fixed.
+  Rationale: plans 36/37/47 moved modules and packages without changing behavior — the run-job
+  handler's own haddock records that it "preserves today's behavior unchanged" and names plan
+  17 as the owner of the retry taxonomy. Every defect this MasterPlan targets was re-verified
+  against the current tree on 2026-07-31 and still holds. Rewriting the children now, before
+  anyone implements them, would spend effort on context that each implementer must re-derive
+  from the working tree anyway; recording the map in one place is enough.
+  Date: 2026-07-31
 
 - Decision: Make plan 47 a hard foundation and track Keiro IR-3 as the only upstream gate
   on terminal outbox rejection.
@@ -243,6 +387,20 @@ Compare the result against the original vision.
 
 
 ## Revision Notes
+
+- 2026-07-31: Reconciled the MasterPlan against six plans that landed since it was last
+  revised (36, 37, 47, 13, 15, 16). Every cross-MasterPlan hard dependency of F1, EP-1, and
+  EP-2 is now Complete, so all three are startable; EP-3 remains gated on F1 and plan 28 M1
+  (no `Shikigami/Log.hs` exists yet) and on Keiro IR-3; EP-4 remains gated on EP-1 and EP-2.
+  Reduced F1's scope to the codd ledger import and the `shikigami-migrate` config/package
+  restructure, since plan 47 delivered the component, manifest, plan, CLI, and test support
+  and removed codd from the tree. Recorded the post-split file map and flagged the children's
+  stale `shikigami-cli` / `Shikigami/Worker.hs` paths. Added four inherited constraints:
+  `reconcileShikigamiReadModels` after every `up`, the duplicated `SinkIntent` plus the
+  `omitNothingFields` discipline and byte-pinned `WireCompatSpec` for EP-3, the existing
+  `ProviderFailed`/`isRetryable` input for EP-1, and the single `loadAgentsIn` call site plus
+  the second expected fixture failure for EP-4. All child-plan defects re-verified as still
+  present in the current tree.
 
 - 2026-07-30: Added plan 47 to every child, corrected Shibuya/PGMQ attempt zero semantics,
   and linked the terminal-rejection milestone to Keiro IR-3.
