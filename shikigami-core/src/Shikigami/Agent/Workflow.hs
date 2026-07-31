@@ -206,7 +206,7 @@ runResolvedAgent deps job decl = do
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
     addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
-  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)))))
+  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)

@@ -48,7 +48,9 @@ contains what the first run learned.
       from `Behavior/Run.hs` — see Surprises); `runBehavior` takes it; both arms consume
       payload + recalled memories; all four call sites updated; capture-seam tests for
       skill context and program args, confirmed to fail against the code they replace.
-- [ ] Milestone 2: payload-aware `recallQuery`; callers updated; unit test.
+- [x] (2026-07-31) Milestone 2: payload-aware `recallQuery` (agent name, behavior kind,
+      the declaration's description, and the payload's string leaves one level deep,
+      capped at 512 characters); both callers pass the trigger payload; four unit cases.
 - [ ] Milestone 3: `classifyRisk` uses `prior`; flow-level test showing a
       verdict changed by a recalled memory; workflow-level round-trip test (record →
       re-run → behavior sees the learning).

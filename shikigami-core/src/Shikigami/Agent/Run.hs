@@ -19,6 +19,7 @@ where
 import Data.Aeson (Value (..))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Foldable (toList)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
@@ -75,7 +76,7 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
             startedAt = startedAt'
           }
   -- 2. recall what this agent already knows (empty on the first ever run)
-  prior <- recallPriorLearnings appEnv scope' (recallQuery decl focusTxt)
+  prior <- recallPriorLearnings appEnv scope' (recallQuery decl focusTxt payload)
   -- 3. run the behavior, on what triggered it and what it already knows
   behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
   case behaviorE of
@@ -223,6 +224,36 @@ recallActiveByScope appEnv scope' = do
     Right (Right ms) -> ms
     _ -> []
 
-recallQuery :: AgentDecl -> Text -> Text
-recallQuery AgentDecl {name = agentName'} focusTxt =
-  Text.unwords [agentName', focusTxt, "summary digest learning prior memory"]
+-- | The text a run recalls against: who is asking, what kind of behavior is
+-- running, what the agent is for, and what this particular event said.
+--
+-- It used to be @agentName focus "summary digest learning prior memory"@ — the
+-- same string on every run of an agent, so a hybrid vector/text recall could
+-- only rank memories by their similarity to a constant. Whatever came back was
+-- the same ten memories every time regardless of what triggered the run. Adding
+-- the declaration's description and the payload's own words makes retrieval
+-- about /this/ event: a payload of @{"text":"customer says cancel"}@ asks about
+-- cancellation.
+--
+-- Capped at 512 characters because the result feeds an embedding, not a prompt;
+-- a long payload should not push the agent's own description out of the query.
+recallQuery :: AgentDecl -> Text -> Value -> Text
+recallQuery AgentDecl {name = agentName', description = desc} focusTxt payload =
+  Text.take 512 (Text.unwords (agentName' : focusTxt : desc : payloadTerms payload))
+
+-- | The string leaves of a trigger payload: the top level and one level below
+-- it, in encounter order.
+--
+-- One level down is where the interesting words are — an activity envelope puts
+-- them under @payload@, a danwa turn under @content@ — and going deeper would
+-- spend the cap on structure rather than prose.
+payloadTerms :: Value -> [Text]
+payloadTerms = \case
+  Object o -> concatMap nestedTerms (KeyMap.elems o)
+  other -> nestedTerms other
+  where
+    nestedTerms = \case
+      String s -> [s]
+      Array vs -> [s | String s <- toList vs]
+      Object o -> [s | String s <- KeyMap.elems o]
+      _ -> []

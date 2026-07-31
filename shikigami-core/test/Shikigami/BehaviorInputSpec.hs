@@ -36,6 +36,7 @@ import Handan.Runtime (newRuntime)
 import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
+import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Run (newBehaviorEnv, programArgs, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
@@ -50,7 +51,36 @@ tests =
   testGroup
     "behavior input"
     [ skillContextTests,
-      programArgumentTests
+      programArgumentTests,
+      recallQueryTests
+    ]
+
+-- ── What a run recalls against ──────────────────────────────────────────────
+
+recallQueryTests :: TestTree
+recallQueryTests =
+  testGroup
+    "the recall query is about this event"
+    [ -- The query used to be the agent name, the behavior kind, and the fixed
+      -- words "summary digest learning prior memory" — identical on every run,
+      -- so a hybrid recall ranked memories against a constant.
+      testCase "the trigger payload's words are in the query" do
+        let query = recallQuery triageDecl "Skill" samplePayload
+        assertContains "the payload's text" "customer says cancel" query
+        assertContains "the agent's name" "triage-note" query
+        assertContains "the agent's description" "triage inbound tickets" query,
+      testCase "a nested payload contributes its words too" do
+        let nested = object ["payload" .= object ["text" .= ("refund requested" :: Text)]]
+        assertContains "the nested text" "refund requested" (recallQuery triageDecl "Skill" nested),
+      testCase "a payload with no strings leaves a query about the agent" do
+        let query = recallQuery triageDecl "Skill" (object ["count" .= (3 :: Int)])
+        assertContains "the agent's description" "triage inbound tickets" query,
+      -- The query feeds an embedding, not a prompt: a chatty payload must not
+      -- push the agent's own description out of it.
+      testCase "a long payload is capped" do
+        let long = object ["text" .= Text.replicate 400 "verbose "]
+            query = recallQuery triageDecl "Skill" long
+        Text.length query @?= 512
     ]
 
 -- ── What the skill arm sends ────────────────────────────────────────────────
@@ -208,6 +238,16 @@ priorLearning =
       tags = Set.empty,
       status = "active",
       createdAt = epoch
+    }
+
+triageDecl :: AgentDecl
+triageDecl =
+  AgentDecl
+    { name = "triage-note",
+      description = "triage inbound tickets into a short note",
+      trigger = Event {eventType = "ticket.received"},
+      behavior = Skill {path = "agents/skills/triage-note"},
+      sinks = []
     }
 
 heartbeatDecl :: AgentDecl
