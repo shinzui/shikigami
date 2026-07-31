@@ -6,19 +6,21 @@
 module Shikigami.Behavior.Run
   ( BehaviorEnv (..),
     RunError (..),
+    behaviorModelId,
     newBehaviorEnv,
     newBehaviorEnvWithTraceSink,
     runBehavior,
   )
 where
 
-import Baikai.Model (Model)
+import Baikai.Model (Model, modelId)
 import Baikai.Options (Options, emptyOptions)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
@@ -46,6 +48,19 @@ data BehaviorEnv = BehaviorEnv
     options :: !Options,
     traceSink :: !(Maybe TraceSink)
   }
+
+-- | The upstream id of the model this environment dispatches with — @stub-v1@
+-- under the stub, @claude-haiku-4-5@ and the like under a real provider.
+--
+-- This is what a completed run records on its kioku session as @modelUsed@,
+-- which is the durable half of the promise that a stub never passes for a model.
+-- The startup log says what /this/ process is running; the session row says what
+-- produced /that/ answer, and survives the process.
+--
+-- A plain field selector would be ambiguous at most call sites, because baikai's
+-- own 'Baikai.Response.Response' has a @model@ field too.
+behaviorModelId :: BehaviorEnv -> Text
+behaviorModelId BehaviorEnv {model} = modelId model
 
 -- | Build a deterministic stub environment: construct the handan 'Runtime' and
 -- register the stub baikai provider so the skill arm runs without a key.

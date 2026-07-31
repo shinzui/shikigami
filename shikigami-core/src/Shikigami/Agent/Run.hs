@@ -36,7 +36,7 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, behaviorModelId, runBehavior)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 
@@ -118,7 +118,9 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
             CompleteSessionData
               { sessionId = sid,
                 completedAt = completedAt',
-                modelUsed = Nothing,
+                -- Which model produced the output, so a stub run stays
+                -- distinguishable from a real one after the log has rotated.
+                modelUsed = Just (behaviorModelId behEnv),
                 summary = Just "agent-run completed"
               }
       pure

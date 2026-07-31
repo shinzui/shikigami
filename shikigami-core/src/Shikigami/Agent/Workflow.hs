@@ -71,7 +71,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, behaviorModelId, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Memory.Scope (agentScope)
@@ -609,6 +609,16 @@ recordLearning deps decl sid output = liftIO do
       & runKioku deps
   pure (Just mid)
 
+-- | Close the kioku session, recording which model produced its output.
+--
+-- @modelUsed@ is the durable answer to \"was this a real run?\". A stub run
+-- records @stub-v1@ and a real one records the upstream model id, so a session
+-- read back weeks later says what answered it — which the startup log, belonging
+-- to a process that has since restarted, cannot.
+--
+-- This changes what the @complete@ step body writes, not the journal: the step
+-- name and its recorded result shape are untouched, so a workflow parked before
+-- this change still replays.
 completeSession :: (IOE :> es) => AgentRunDeps -> SessionId -> Eff es ()
 completeSession deps sid = liftIO do
   completedAt' <- getCurrentTime
@@ -617,7 +627,7 @@ completeSession deps sid = liftIO do
       CompleteSessionData
         { sessionId = sid,
           completedAt = completedAt',
-          modelUsed = Nothing,
+          modelUsed = Just (behaviorModelId (behaviorEnv deps)),
           summary = Just "agent-run completed"
         }
       & runKioku deps

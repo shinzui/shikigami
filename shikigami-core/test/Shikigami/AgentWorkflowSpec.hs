@@ -155,7 +155,13 @@ tests =
 
             session <- runAppIO appEnv (Session.getById sid)
             case session of
-              Right (Right (Just SessionRow {status})) -> assertEqual "session completed after resume" "completed" status
+              Right (Right (Just SessionRow {status, modelUsed})) -> do
+                assertEqual "session completed after resume" "completed" status
+                -- The durable half of the promise that a stub never passes for
+                -- a model: whatever answered is named on the row, so a run made
+                -- without a model is identifiable long after the process that
+                -- logged its provider has gone.
+                assertEqual "the completed session names the model that answered" (Just "stub-v1") modelUsed
               other -> assertFailure ("session lookup should return completed row, got " <> show other),
       testCase "runs Flow behavior through the agent workflow" do
         withShikigamiMigratedDatabase \connStr ->
