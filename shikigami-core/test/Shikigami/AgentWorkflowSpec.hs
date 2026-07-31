@@ -11,7 +11,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
-import Keiro.Outbox (listOutbox)
+import Keiro.Integration.Event (decodeJsonIntegrationEvent)
+import Keiro.Outbox (OutboxRow (..), listOutbox)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -19,9 +20,11 @@ import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChildrenOfParent)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Kioku.Api.Types (Confidence (MediumConfidence), MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Kioku.Id (SessionId, genSessionId, idText)
+import Kioku.Id (SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
+import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.ReadModel (TurnRow (..))
@@ -34,9 +37,10 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -179,6 +183,51 @@ tests =
 
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "low-risk flow emits no sink outbox rows" (Right 0) (length <$> outboxRows),
+      -- The durable half of the memory proof. The pure rules live in
+      -- "Shikigami.BehaviorInputSpec"; this runs the whole
+      -- open-session → recall → flow → emit pipeline against a real database
+      -- and shows a decision changed by something the agent learned earlier.
+      --
+      -- The payload is the same calm text the low-risk case above uses, and the
+      -- flow reaches the opposite verdict — so it is memory, not the trigger,
+      -- that moved it. Recall works without a vector extension because
+      -- 'Shikigami.Agent.Run.recallPriorLearnings' falls back to
+      -- @getActiveByScope@, which makes this deterministic in CI.
+      testCase "a recalled escalation flips the flow's verdict on a calm payload" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [flowDecl]
+
+            recordPriorEscalation appEnv (idempotencyKey flowMemoryJob)
+
+            -- A high verdict emits its alert and then parks awaiting
+            -- acknowledgement; the low case above completes outright. Parking
+            -- is itself the branch evidence, and the emitted row carries the
+            -- verdict that caused it.
+            parked <- runAgentRunWorkflow deps flowMemoryJob
+            case parked of
+              Right Suspended -> pure ()
+              other -> assertEqual "high-risk flow parks awaiting acknowledgement" "Suspended" (show other)
+
+            outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+            case outboxRows of
+              Right [OutboxRow {event}] ->
+                case decodeJsonIntegrationEvent event of
+                  Right SinkIntent {output} ->
+                    assertEqual
+                      "the emitted signal carries a verdict the recalled memory forced"
+                      ( object
+                          [ "level" .= ("high" :: Text),
+                            "rationale" .= ("prior escalation on this subject: customer relationship at risk" :: Text),
+                            "ticketId" .= idempotencyKey flowMemoryJob
+                          ]
+                      )
+                      output
+                  Left err -> assertFailure ("the outbox row should decode as a sink intent, got " <> show err)
+              other -> assertFailure ("expected exactly one emitted signal, got " <> show (fmap length other)),
       testGroup
         "Conversation"
         [ testCase "parks and resumes a danwa conversation as one workflow session" do
@@ -695,6 +744,48 @@ flowJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing
     }
+
+-- | The same agent and the same calm text as 'flowJob', under a different run
+-- id so it gets its own workflow and its own subject.
+flowMemoryJob :: RunJob
+flowMemoryJob =
+  RunJob
+    { agentName = "at-risk-customer",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
+      idempotencyKey = "at-risk-customer:test-flow-memory-high",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+-- | Seed the at-risk-customer agent's memory with an escalation on this
+-- subject, the way an earlier run of the flow would have
+-- ('Shikigami.Flow.AtRiskCustomer.escalatedNote' is worded the same).
+recordPriorEscalation :: AppEnv -> Text -> IO ()
+recordPriorEscalation appEnv ticket = do
+  mid <- genMemoryId
+  recordedAt <- getCurrentTime
+  result <-
+    runAppIO appEnv $
+      Memory.record
+        RecordMemoryData
+          { memoryId = mid,
+            agentId = "at-risk-customer",
+            sessionId = Nothing,
+            scope = agentScope "at-risk-customer",
+            memoryType = MemoryPattern,
+            content = ticket <> " escalated after acknowledgement timeout",
+            priority = 100,
+            confidence = MediumConfidence,
+            tags = Set.fromList ["flow", "Flow"],
+            supersedes = Nothing,
+            recordedAt
+          }
+  case result of
+    Right (Right _) -> pure ()
+    other -> assertFailure ("seeding the prior escalation should succeed, got " <> show other)
 
 expectedFlowOutput :: Value
 expectedFlowOutput =

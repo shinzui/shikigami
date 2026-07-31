@@ -15,6 +15,7 @@ import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, (:>))
 import GHC.Generics (Generic)
 import Keiro.Workflow (StepName (..), Workflow, step)
+import Kioku.Api.Types (MemoryRecord (..))
 import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
@@ -59,23 +60,46 @@ atRiskCustomerFlow approval deadline payload = do
           _ <- remember (escalatedNote verdict)
           pure (escalatedValue verdict)
 
-classifyRisk :: ActivityEnvelope -> [a] -> Value -> RiskVerdict
-classifyRisk activity _prior input =
-  let textBlob = Text.toLower (Text.unwords (textFields input <> textFields (payload activity)))
+-- | Classify this activity's risk from what it says and what the agent already
+-- learned about the same subject.
+--
+-- The memory rule is deliberately simple and auditable: a recalled learning
+-- that names this subject and the word @escalated@ means this customer has been
+-- here before, so an otherwise unremarkable message is high risk. It is the
+-- teaching example's demonstration that memory changes a decision, and it has
+-- to be checkable without a model.
+--
+-- The prior rule is checked first because it is the more specific claim: when
+-- both fire, the rationale should say /why this subject in particular/ rather
+-- than repeating the generic one. The low rationale is byte-identical to what
+-- it was, so a fresh database still produces the verdict the workflow tests pin.
+classifyRisk :: ActivityEnvelope -> [MemoryRecord] -> Value -> RiskVerdict
+classifyRisk activity prior input =
+  let ticket = subjectId (subject activity)
+      textBlob = Text.toLower (Text.unwords (textFields input <> textFields (payload activity)))
       risks = riskFields input <> riskFields (payload activity)
       highByEnrichment =
         any (Text.isInfixOf "churn risk" . Text.toLower) risks
           && any (== "negative") (sentimentFields input <> sentimentFields (payload activity))
       highByText = any (`Text.isInfixOf` textBlob) ["cancel", "churn", "leaving", "lawsuit"]
-      high = highByEnrichment || highByText
+      highByMemory = any (mentionsPriorEscalation ticket) prior
    in RiskVerdict
-        { level = if high then "high" else "low",
+        { level = if highByMemory || highByEnrichment || highByText then "high" else "low",
           rationale =
-            if high
-              then "customer relationship at risk"
-              else "no high-risk signal detected",
-          ticketId = subjectId (subject activity)
+            if highByMemory
+              then "prior escalation on this subject: customer relationship at risk"
+              else
+                if highByEnrichment || highByText
+                  then "customer relationship at risk"
+                  else "no high-risk signal detected",
+          ticketId = ticket
         }
+
+-- | Whether a recalled memory says this subject has been escalated before.
+mentionsPriorEscalation :: Text -> MemoryRecord -> Bool
+mentionsPriorEscalation ticket MemoryRecord {content} =
+  let lowered = Text.toLower content
+   in Text.toLower ticket `Text.isInfixOf` lowered && "escalated" `Text.isInfixOf` lowered
 
 riskQuery :: ActivityEnvelope -> MemoryQuery
 riskQuery ActivityEnvelope {subject} =

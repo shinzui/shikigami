@@ -51,9 +51,11 @@ contains what the first run learned.
 - [x] (2026-07-31) Milestone 2: payload-aware `recallQuery` (agent name, behavior kind,
       the declaration's description, and the payload's string leaves one level deep,
       capped at 512 characters); both callers pass the trigger payload; four unit cases.
-- [ ] Milestone 3: `classifyRisk` uses `prior`; flow-level test showing a
-      verdict changed by a recalled memory; workflow-level round-trip test (record →
-      re-run → behavior sees the learning).
+- [x] (2026-07-31) Milestone 3: `classifyRisk` takes `[MemoryRecord]` and uses it; four
+      pure cases in `BehaviorInputSpec` (including the two ways the rule must /not/
+      fire); durable round-trip in `AgentWorkflowSpec` — a seeded escalation flips the
+      verdict on the same calm payload the low-risk case uses, asserted on the emitted
+      outbox row.
 
 
 ## Surprises & Discoveries
@@ -77,6 +79,19 @@ contains what the first run learned.
   it is a duplicated query, and Milestone 3's flow work goes through the capability, not
   through `BehaviorInput`. **Plan 27, which consolidates the duplicated run/flow paths,
   should take this too.**
+- Milestone 3 (2026-07-31): **the high-risk flow parks, so the durable proof reads the
+  emitted outbox row rather than a completed workflow.** A high verdict emits its
+  kizashi alert and then awaits acknowledgement, and `runAgentRunWorkflow` returns
+  `Suspended`; there is no completion value to assert on without driving the
+  acknowledgement deadline and a resume pass. The emitted row carries the verdict that
+  caused the branch, which is a stronger artifact anyway — it is what a downstream
+  system would actually receive. The parking itself is the branch evidence, since the
+  low-risk case on the identical payload completes with no rows at all.
+- Milestone 3 (2026-07-31): the memory rule is checked before the text and enrichment
+  rules so its rationale wins when several fire. A generic "customer relationship at
+  risk" on a message that is calm on its face would be actively misleading — the
+  operator needs to know the verdict came from history, not from the text in front of
+  them.
 - Milestone 1 (2026-07-31): `runProgramTask` is now exported from
   `Shikigami.Behavior.Run`. Testing that the argument map reaches handan's parse seam
   needs a task the registry does not contain, and adding a fixture task to
@@ -143,7 +158,57 @@ contains what the first run learned.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete (2026-07-31). An agent now uses what it remembers and what triggered it, in
+both executable arms, and the recall that produces those memories is about the event
+rather than about nothing in particular.
+
+What is true now that was not before:
+
+- `BehaviorInput { payload, recalled }` is what a behavior is given. The skill arm
+  renders a `Prior learnings (most relevant first):` section into the user message and
+  omits it entirely when there is nothing recalled, so a first run sends the request it
+  always sent. The program arm builds a real `ArgMap` — `payload` and `prior`, both as
+  compact JSON text — where it previously passed `Map.empty`, and `noop-summary` reads
+  the payload and echoes it, which is the observable de-stubbing of that arm:
+
+  ```text
+  $ cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall --payload '{"source":"demo"}'
+  [shikigami.behavior] model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model
+  {"input":{"source":"demo"},"summary":"noop-summary produced a fixed digest","verb":"heartbeat.tick"}
+  ```
+
+- `recallQuery` is built from the agent's name, the behavior kind, the declaration's
+  description, and the payload's string leaves one level deep, capped at 512 characters.
+  It was the same string on every run of an agent, so a hybrid vector/text recall ranked
+  memories against a constant.
+- The at-risk-customer flow's `classifyRisk` takes `[MemoryRecord]` and uses it: a
+  recalled learning naming this subject and the word `escalated` forces a high verdict
+  with its own rationale. Proven durably — the same calm payload that the low-risk
+  workflow case completes on with no sinks instead parks and emits a high-risk signal
+  when an escalation is in memory.
+
+What is not proven: nothing here required a model or a key, and nothing here asserts
+that a model /uses/ the injected context well — only that it is sent. The end-to-end
+"run a skill agent twice and watch the second reply reference the first run's learning"
+check in Validation and Acceptance still needs a credential, and inherits plan 13's open
+live-smoke item.
+
+Costs and judgment calls worth carrying forward:
+
+- The plan's placement of `BehaviorInput` in `Behavior/Run.hs` was not implementable
+  (import cycle); a separate `Shikigami.Behavior.Input` re-exported from `Run` keeps the
+  documented interface. A plan that gives an existing function a new parameter type
+  should check which module the function's *callees* live in, not only its callers.
+- The `Flow` arm still recalls for itself through the `Memory` capability and never sees
+  `BehaviorInput`, so a flow run now issues two recall queries. Left for plan 27, which
+  owns consolidating the duplicated run and flow paths.
+- Three call sites legitimately have no memory to offer. `triggerOnly` names that case
+  rather than leaving a bare `[]` that reads as an oversight.
+
+Validation: 206 tests across seven suites, twice under `-j1`. The new behavior-input
+cases were confirmed to fail against the code they replace (memory rendering and the
+argument map reverted: 3 of 7 failed, with the skill request stopping at
+`Trigger payload:` and the dispatched map empty).
 
 
 ## Context and Orientation
@@ -496,3 +561,9 @@ complies — only step *bodies* and pure functions change.
 
 - 2026-07-22: Added the six-package architecture prerequisite and made the direct strict
   record-field convention explicit for the new behavior boundary.
+- 2026-07-31: Implemented. All three milestones complete; Progress, Surprises &
+  Discoveries, and Outcomes & Retrospective filled in. The one deviation from the plan
+  as written is where `BehaviorInput` lives — a separate `Shikigami.Behavior.Input`
+  re-exported from `Shikigami.Behavior.Run`, because `Run` imports `Skill` and the plan
+  gave `Skill`'s functions the new parameter type. The documented interface is
+  unchanged for every consumer.

@@ -35,11 +35,13 @@ import Handan.Contract (Envelope (..), Kind (Effect), Status (Ok))
 import Handan.Runtime (newRuntime)
 import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
 import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Run (newBehaviorEnv, programArgs, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
+import Shikigami.Flow.AtRiskCustomer (RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -52,8 +54,58 @@ tests =
     "behavior input"
     [ skillContextTests,
       programArgumentTests,
-      recallQueryTests
+      recallQueryTests,
+      classificationTests
     ]
+
+-- ── Memory that changes a decision ──────────────────────────────────────────
+
+-- | The at-risk-customer flow is the repository's teaching example, and it
+-- recalled prior memories and then discarded them (@classifyRisk activity
+-- _prior input@). These are the pure half of the proof that it no longer does;
+-- the durable half is in "Shikigami.AgentWorkflowSpec".
+classificationTests :: TestTree
+classificationTests =
+  testGroup
+    "a recalled escalation changes the at-risk verdict"
+    [ testCase "a calm message about a previously escalated subject is high risk" do
+        let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_42"] calmPayload
+        level verdict @?= "high"
+        rationale verdict @?= "prior escalation on this subject: customer relationship at risk",
+      testCase "the same message with nothing recalled is unchanged" do
+        let verdict = classifyRisk (activityFor "tkt_42") [] calmPayload
+        level verdict @?= "low"
+        rationale verdict @?= "no high-risk signal detected",
+      -- Memory about a different customer is not evidence about this one.
+      testCase "an escalation on another subject does not carry over" do
+        let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_99"] calmPayload
+        level verdict @?= "low",
+      testCase "a memory that merely mentions the subject is not an escalation" do
+        let remembered = memoryWith "tkt_42 asked about invoicing"
+            verdict = classifyRisk (activityFor "tkt_42") [remembered] calmPayload
+        level verdict @?= "low"
+    ]
+
+calmPayload :: Value
+calmPayload = object ["text" .= ("customer says thanks, all good" :: Text)]
+
+activityFor :: Text -> ActivityEnvelope
+activityFor ticket =
+  ActivityEnvelope
+    { activityId = "act_" <> ticket,
+      occurredAt = "2026-07-15T12:00:00Z",
+      source = "shinzui/shikigami",
+      actor = Actor {kind = "human", id = "someone", session = Nothing},
+      subject = Subject {subjectType = "ticket", subjectId = ticket},
+      verb = "ticket.updated",
+      payload = object [],
+      contextRefs = [],
+      idempotencyKey = "act_" <> ticket
+    }
+
+escalationMemory :: Text -> MemoryRecord
+escalationMemory ticket =
+  memoryWith (ticket <> " escalated after acknowledgement timeout")
 
 -- ── What a run recalls against ──────────────────────────────────────────────
 
@@ -225,14 +277,21 @@ priorContent :: Text
 priorContent = "acme escalated after a billing complaint"
 
 priorLearning :: MemoryRecord
-priorLearning =
+priorLearning = memoryWith priorContent
+
+-- | A recalled memory carrying the given prose. Built by constructor rather
+-- than by record update on a shared value: @content@ is also a field of
+-- baikai's 'Baikai.Message.UserPayload', which this module pattern-matches on,
+-- and @DuplicateRecordFields@ rejects the ambiguous update.
+memoryWith :: Text -> MemoryRecord
+memoryWith prose =
   MemoryRecord
     { memoryId = priorMemoryId,
       agentId = "triage-note",
       sessionId = Nothing,
       scope = agentScope "triage-note",
       memoryType = "pattern",
-      content = priorContent,
+      content = prose,
       priority = 100,
       confidence = "medium",
       tags = Set.empty,
