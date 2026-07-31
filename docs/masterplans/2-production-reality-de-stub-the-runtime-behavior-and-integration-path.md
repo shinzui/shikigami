@@ -108,7 +108,7 @@ with a real model) but is not blocked by it.
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-07-31), except the migration executable — see Surprises |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
-| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Not Started |
+| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Not Started |
 | 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Not Started |
@@ -362,11 +362,20 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       `mori://` project URIs, and compatibility evidence; wire, provider-failure, and
       migration-idempotence fixtures are in place. 157 tests pass across seven suites
       under `-j1`, twice.
-- [ ] EP-1 M1: provider selection module + loud typed-config construction; stub default; worker
-      and run-behavior wired; tests green.
-- [ ] EP-1 M2: `Options` threaded through the skill arm; Settei's opaque credential is
-      lowered only at the Baikai boundary, with no library environment fallback; capture-seam test.
-- [ ] EP-1 M3: `modelUsed` recorded on sessions; live anthropic smoke transcript.
+- [x] (2026-07-31) EP-1 M1: `ProviderSelection` and its three keys are declared in the
+      shared `AppConfig`; `Shikigami.Behavior.Provider` owns `newBehaviorEnvFor`, which
+      cannot build an environment without announcing the provider; the worker,
+      `run-behavior`, and `agent-run` are wired; the stub remains the default. Asking for
+      anthropic without a credential, or with an unknown model, exits 4 before any resource
+      is opened — including under `--check-config`.
+- [x] (2026-07-31) EP-1 M2: `BehaviorEnv.options` threaded through the skill arm; the
+      resolved `SecretText` is lowered to `ApiKeyLiteral` at one boundary, with baikai's
+      environment fallback deliberately unused; capture-seam test confirmed to fail against
+      the code it replaces.
+- [x] (2026-07-31) EP-1 M3 (durable half): `modelUsed` recorded at both session-completing
+      seams; the crash-resume case asserts `Just "stub-v1"` on the completed row.
+- [ ] EP-1 M3 (live half): live anthropic smoke transcript. Not performed — no credential
+      available; recorded as unproven in plan 13 rather than assumed.
 - [ ] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
 - [ ] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration
@@ -387,6 +396,36 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Surprises & Discoveries
 
+- Plan 13 implementation (2026-07-31): **a cross-key requirement belongs in the Settei
+  declaration, not in a function beside it.** Plan 13 specified
+  `resolveProviderSelection :: AppConfig -> Either ConfigError ProviderSelection`. Settei's
+  `whenEq` expresses the same rule as a conditional branch, so
+  `credentials.providers.anthropic.api_key` is `required` only when
+  `behavior.provider=anthropic` — which makes `--check-config` catch it, makes
+  `--describe-config` print it as a condition row, and lets the resolved type carry the
+  invariant so no consumer re-checks it. **Every later plan with a "this key is required
+  when that one says X" rule should do this** rather than add a validation pass; plans 14,
+  16, 22, and 32 all have credentials shaped that way. The six-step recipe in
+  `docs/operations/configuration.md` now has a worked conditional example above it.
+- Plan 13 implementation (2026-07-31): **a setting whose valid values come from a library
+  catalog should decode against the catalog.** `behavior.model` decodes through
+  `enumDecoder` over `Baikai.Models.Generated.allModels`, so `AppConfig` holds a `Model`,
+  an unknown id is an exit-4 decode failure listing the real accepted set, and the list
+  cannot drift from baikai. The cost is that `Shikigami.App.Config` imports baikai. **Plans
+  12 and 34, which also select models, inherit both the pattern and the precedent that a
+  library type in `AppConfig` is acceptable when it is what makes validation real.**
+- Plan 13 implementation (2026-07-31): **`--describe-config` on `shikigami-run-behavior`
+  exits 2 instead of printing the schema**, because `--agent` is a required
+  `optparse-applicative` option and parsing fails before any diagnostic runs. This breaks
+  plan 37's promise that all five diagnostics answer anywhere. Pre-existing and confined to
+  that one binary; the fix is to make `--agent` optional and demand it after the diagnostic
+  branch, the way `requireDatabaseUrl` demands a connection string at the point of use.
+  **Unowned — the next plan touching that role's arguments should take it.**
+- Plan 13 implementation (2026-07-31): the live Anthropic smoke **was not performed** — no
+  credential exists in this environment. Everything checkable without a key was checked,
+  including that the resolved credential reaches the completion call; what remains unproven
+  is the round trip itself. Recorded as unproven in plan 13 rather than assumed, and it is
+  a single command to close.
 - Plan 47 implementation (2026-07-31): **the codd migration path could not be deferred to
   plan 38.** `kiokuMigrations` in Kioku 0.2 is a pg-migrate `MigrationComponent`, not a codd
   migration list, so there was nothing left for `shikigami-migrations` to append to. The
@@ -577,6 +616,18 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-07-31: Marked EP-1 (plan 13) Complete except the live smoke. The first of the four
+  runtime lies is closed: `behavior.provider` selects the provider, the stub is still the
+  default but can no longer run unannounced, the resolved credential travels to the model
+  call instead of the handler finding one in the environment, and every completed session
+  records which model answered it. Recorded three findings other plans depend on: a
+  cross-key requirement belongs in the Settei declaration rather than beside it (plans 14,
+  16, 22, 32 all have credentials shaped that way); a catalog-valued setting should decode
+  against the catalog (plans 12 and 34); and `--describe-config` on
+  `shikigami-run-behavior` is broken by a required `--agent`, which is unowned. EP-3 (plan
+  15) and EP-4 (plan 16) are both implementable now; the EP-1 → EP-3 landing order this
+  MasterPlan asked for is satisfied.
 
 - 2026-07-31: Marked F3 (plan 47) Complete. Shikigami now builds against one coherent set of
   published releases selected by version rather than commit, with no `allow-newer` between

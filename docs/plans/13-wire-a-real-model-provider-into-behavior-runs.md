@@ -44,27 +44,150 @@ value and never gains `Show`, JSON, or log rendering.
 
 ## Progress
 
-- [ ] Prerequisites: plans 36 and 37 complete; provider modules live in the six-package
-      boundary and consume the shared Settei application config.
-- [ ] Milestone 1: `Shikigami.Behavior.Provider` module with `ProviderSelection`,
-      provider `Setting`s/validation, and `newBehaviorEnvFor`; `baikai-claude` added to
-      `shikigami-core.cabal`; worker and `run-behavior` CLI resolve the selection and
-      log it loudly; stub remains the default; `cabal test all` green.
-- [ ] Milestone 2: `Options` threaded through the skill arm (`BehaviorEnv.options`,
-      `runSkill`/`runSkillWith` take `Options`); the already-resolved opaque credential is
-      lowered to Baikai only at the provider boundary; unit test proving the options reach
-      the completion call without an environment read.
-- [ ] Milestone 3: `modelUsed` recorded on session completion from the active
-      `BehaviorEnv` model; live smoke transcript with a real key captured in this plan.
+- [x] (2026-07-31) Prerequisites: plans 36, 37, and 47 complete; provider modules live in
+      the six-package boundary and consume the shared Settei application config.
+- [x] (2026-07-31) Milestone 1: `ProviderSelection` and its three settings are declared in
+      `shikigami-core/src/Shikigami/App/Config.hs`; `Shikigami.Behavior.Provider` owns
+      `newBehaviorEnvFor` and `describeProviderSelection`; `baikai-claude` is a dependency
+      of `shikigami-core` and pinned in `cabal.project`; the worker, `run-behavior`, and
+      `agent-run` build their environment from the selection and announce it; the stub
+      remains the default. Verified by transcript: an unconfigured run prints the STUB line
+      and the byte-identical stub reply; `--set behavior.provider=anthropic` with no
+      credential exits 4 naming the key; an unknown `behavior.model` exits 4 listing the
+      accepted ids; `--describe-config` prints the condition row.
+- [x] (2026-07-31) Milestone 2: `BehaviorEnv.options`; `runSkill`/`runSkillWith` take
+      `Options`; the resolved `SecretText` is lowered to `ApiKeyLiteral` at
+      `credentialOptions`, the single boundary, with no `ApiKeyEnv` and no library
+      environment fallback. Four cases in `BehaviorProviderSpec` resolve a real
+      configuration through Settei and read back the options the completion function
+      received; the first fails against the previous hardcoded record.
+- [x] (2026-07-31) Milestone 3 (durable half): `modelUsed` recorded from
+      `behaviorModelId` at both session-completing seams; `AgentWorkflowSpec` asserts the
+      completed row carries `Just "stub-v1"`.
+- [ ] Milestone 3 (live half): live anthropic smoke transcript. **Not performed** — no
+      Anthropic credential is available in this environment (see Surprises & Discoveries).
+      Everything it would prove that is checkable without a key has been checked; what
+      remains unproven is the round trip to `api.anthropic.com` itself.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Implementation (2026-07-31): **the credential requirement did not need a
+  post-resolution check at all.** The plan specified
+  `resolveProviderSelection :: AppConfig -> Either ConfigError ProviderSelection`, a
+  function every consumer would have to remember to call. Settei's `whenEq` expresses the
+  same rule inside the declaration, so `credentials.providers.anthropic.api_key` is
+  `required` only on the Anthropic path. That buys three things the check could not:
+  `--check-config` catches the misconfiguration, `--describe-config` prints the
+  relationship as a condition row, and — because `UseAnthropic` carries the `Model` and the
+  `SecretText` together — a half-configured provider is unrepresentable rather than
+  re-checked at each use. `resolveProviderSelection` therefore does not exist. See the
+  Decision Log.
+
+  ```text
+  $ shikigami-worker --describe-config
+  behavior.model [optional, conditional, public] ...
+  credentials.providers.anthropic.api_key [required, conditional, secret] ...
+  condition 1: behavior.provider -> behavior.model, credentials.providers.anthropic.api_key
+  ```
+
+- Implementation (2026-07-31): **`behavior.model` validates against baikai's catalog, so
+  the unknown-model case is a decode failure rather than plan-local code.**
+  `Baikai.Models.Generated.allModels` filtered to `api == AnthropicMessages` and
+  `provider == "anthropic"` is the accepted domain, and `enumDecoder` lists it in the
+  failure. This is strictly better than the three transcribed ids the plan asked for — the
+  catalog cannot drift from itself — at the cost of `Shikigami.App.Config` importing
+  baikai. **Any later plan adding a model-valued setting should decode the same way.**
+
+  ```text
+  $ shikigami-run-behavior --set behavior.provider=anthropic --set behavior.model=claude-sonnet-9 --agent agents/triage-note.dhall
+  behavior.model: expected one of claude-fable-5, claude-haiku-4-5, claude-opus-4-5,
+  claude-opus-4-6, claude-opus-4-7, claude-opus-4-8, claude-sonnet-4-5,
+  claude-sonnet-4-6, claude-sonnet-5 from command-line option --set behavior.model
+  occurrence 2, rejected "claude-sonnet-9"
+  $ echo $?
+  4
+  ```
+
+- Implementation (2026-07-31): the Milestone 2 capture test was **checked against the code
+  it replaces** rather than assumed to be load-bearing. Restoring the hardcoded
+  `_Options` and re-running produced:
+
+  ```text
+  the Anthropic branch dispatches with the resolved key, not an environment lookup: FAIL
+    expected: Just ApiKeyLiteral <redacted>
+     but got: Nothing
+  ```
+
+  Note the redaction in the failure output itself: baikai's `Show` and `ToJSON` for
+  `ApiKeySource` both render a literal as a marker, so even an assertion failure cannot
+  spill the key.
+
+- Implementation (2026-07-31): **`--describe-config` on `shikigami-run-behavior` requires
+  `--agent`, so it exits 2 instead of printing the schema.** `--agent` is a required
+  `optparse-applicative` option, and parsing fails before any diagnostic runs. This
+  contradicts plan 37's promise that the five diagnostics are answerable anywhere,
+  including in a container with nothing mounted. **Pre-existing, not introduced here**, and
+  it affects only this one binary. The fix belongs wherever the role's own arguments are
+  next revisited: make `--agent` optional and demand it after the diagnostic branch, the
+  way `requireDatabaseUrl` demands a connection string at the point of use.
+
+- Implementation (2026-07-31): **the live smoke was not performed.** No Anthropic
+  credential exists in this environment, and inventing a transcript would defeat the point
+  of a plan about honest reporting. What that step would have proven and what still stands
+  without it:
+
+  - Proven without a key: the selection resolves, the environment carries the resolved
+    credential in `ApiKeyLiteral` form to the completion call, the Claude handler is
+    registered for the `AnthropicMessages` tag, the chosen `Model` carries that tag and
+    `https://api.anthropic.com`, and an in-band provider failure becomes `ProviderFailed`
+    rather than an empty reply (`BehaviorProviderSpec`).
+  - Unproven: the round trip itself — that a real key against a real endpoint returns a
+    model-authored reply. Run the Milestone 3 command with a credential to close it.
 
 
 ## Decision Log
 
+- Decision: Express the credential requirement as a Settei condition in the declaration
+  (`whenEq`), and drop `resolveProviderSelection` entirely. `ProviderSelection` lives in
+  `Shikigami.App.Config` as the type of one `AppConfig` field, and
+  `Shikigami.Behavior.Provider` consumes it.
+  Rationale: a post-resolution `Either ConfigError` check is a rule every consumer has to
+  remember, is invisible to `--check-config`, and leaves the invalid state representable.
+  The declaration form is checked by the same machinery as every other key, appears in
+  `--describe-config` as a condition, and makes "Anthropic without a credential"
+  unconstructible. The cost is one field on `AppConfig` that spans three keys rather than
+  one, which the module's own reasoning for flatness allows: something does want "just the
+  provider settings" — `newBehaviorEnvFor` takes exactly them.
+  Date: 2026-07-31
+- Decision: Validate `behavior.model` against `Baikai.Models.Generated.allModels` at decode
+  time, so `AppConfig` holds a `Model` rather than a `Text`.
+  Rationale: the plan's alternative was a three-id lookup table transcribed into this
+  repository, which can drift from the catalog and cannot report the real accepted set. A
+  decoder over the catalog is the "bounded decoder" plan 37's recipe asks for, makes a
+  typo an exit-4 failure caught by `--check-config`, and lists the accepted ids in the
+  message. It costs `Shikigami.App.Config` an import of baikai, which `shikigami-core`
+  already depends on.
+  Date: 2026-07-31
+- Decision: Bind `SHIKIGAMI_BEHAVIOR_PROVIDER` and `SHIKIGAMI_BEHAVIOR_MODEL` rather than
+  the plan's `SHIKIGAMI_MODEL_PROVIDER` and `SHIKIGAMI_MODEL`; bind `ANTHROPIC_API_KEY`
+  unprefixed as written.
+  Rationale: the plan called the first two "legacy" names, but nothing ever read them —
+  before this plan no variable could select a provider at all — so there is no
+  compatibility to preserve, and plan 37's convention (`SHIKIGAMI_` plus the key) should
+  hold. `ANTHROPIC_API_KEY` is different in kind: the value genuinely exists under that
+  name in developer shells and secret stores, and binding it explicitly is what keeps it
+  inside Settei's precedence and redaction instead of being read behind Settei's back by
+  baikai's own fallback. It is the same argument that keeps `PG_CONNECTION_STRING`.
+  Date: 2026-07-31
+- Decision: Announce the provider from inside `newBehaviorEnvFor` rather than from each
+  caller, and leave `newBehaviorEnv`/`newBehaviorEnvWithTraceSink` silent.
+  Rationale: a caller-side log is a convention three future callers can forget, and the
+  whole point is that a stub cannot run unannounced. Keeping the test constructors silent
+  is not an exception to that: they are stub-only by construction and cannot be reached by
+  configuration, and a hundred provider lines in a test run would train everyone to ignore
+  the one line that matters.
+  Date: 2026-07-31
 - Decision: The real provider is baikai's Anthropic Messages handler (`baikai-claude`
   package, `Baikai.Provider.Claude.Api.register`), selected by Settei settings with
   explicit legacy environment bindings rather than direct environment reads or secret
@@ -109,7 +232,50 @@ value and never gains `Show`, JSON, or log rendering.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete as of 2026-07-31, except the live smoke (see Progress and Surprises).
+
+**What an operator can now do that they could not before.** Set `behavior.provider:
+anthropic` and a credential, and the same worker binary runs Skill behaviors against a
+real Claude model. Set nothing, and it runs the stub — as it always did, but never again
+without saying so. Three commits: `174291c` (selection and the loud line), `760febb` (the
+credential reaches the call), `08a86bd` (`modelUsed` on the session).
+
+**What was checked, and how.** In order of strength:
+
+1. The default is unchanged and loud. `cabal run shikigami-run-behavior -- --agent
+   agents/triage-note.dhall --payload '{}'` prints the STUB line to stderr and the
+   byte-identical `{"reply":"stub-skill: instructions acknowledged; no model was called"}`
+   to stdout.
+2. Misconfiguration cannot run. Anthropic without a credential exits 4 naming the key; an
+   unknown `behavior.model` exits 4 listing the accepted ids; both under `--check-config`
+   too, before any resource is opened.
+3. The resolved credential provably reaches the model call. `BehaviorProviderSpec`
+   resolves a real configuration through Settei, builds the environment a process builds,
+   and reads back the options the completion function received — and the assertion was
+   confirmed to fail against the code it replaces.
+4. Model identity is durable. The crash-resume case reads the completed kioku session row
+   and finds `modelUsed = Just "stub-v1"`.
+5. Nothing leaks. The planted credential is absent from the startup description and from
+   both renderings of the options carrying it; plan 37's existing planted-secret sweep
+   still passes across every source and diagnostic mode.
+6. 161 tests across seven suites, `-j1`.
+
+**The one thing not proven** is the round trip to `api.anthropic.com`, for want of a
+credential. It is a single command, recorded in Milestone 3.
+
+**What changed relative to the plan as written, and why it is worth carrying forward.**
+The plan assumed a validation function; Settei's conditional declaration turned out to
+express the same rule better, and the reflex worth keeping is to ask whether a check
+belongs in the declaration before writing it as code around the declaration. The plan
+assumed a transcribed model list; the catalog was already the authority. Both changes made
+the surface smaller, not larger.
+
+**What this leaves for the plans that follow.** Plan 15 extends the *input* side of the
+same two files and should rebase mechanically onto `BehaviorEnv.options` and the new
+`runSkill`/`runSkillWith` arity. Plan 17 inherits a `ProviderFailed` that now carries a
+real provider's retryability rather than only a constructed one. Plans 14, 16, 22, 28–32,
+and 34 extending `AppConfig` have a worked example of a conditional branch and a
+catalog-bounded decoder to copy.
 
 
 ## Context and Orientation
@@ -491,29 +657,37 @@ composition root.
 Hard dependencies: plans 36 and 37. Libraries: `settei`, `baikai` (already a dependency) and `baikai-claude` (added by this plan;
 already fetched by `cabal.project:126-128`). No new external services.
 
-Signatures that must exist at the end (all verified against the baikai sources at
-`/Users/shinzui/Keikaku/bokuno/baikai`):
+Signatures as implemented (2026-07-31). The differences from what this section originally
+specified are explained in the Decision Log; the shape below is what other plans should
+cite.
 
 ```haskell
--- shikigami-core/src/Shikigami/Behavior/Provider.hs (new)
+-- shikigami-core/src/Shikigami/App/Config.hs (extended)
 data ProviderSelection
   = UseStub
-  | UseAnthropic
-      { model :: !Baikai.Model.Model,
-        credential :: !Shikigami.App.Config.CredentialValue
-      }
-resolveProviderSelection :: Shikigami.App.Config.AppConfig -> Either ConfigError ProviderSelection
-describeProviderSelection :: ProviderSelection -> Data.Text.Text
+  | UseAnthropic !Baikai.Model.Model !SecretText
+--   ^ positional, not named fields: a sum-typed record would give partial
+--     selectors (-Wpartial-fields), and nothing selects through it.
+behaviorProvider :: AppConfig -> ProviderSelection   -- the field
+behaviorProviderKey, behaviorModelKey, anthropicApiKeyKey :: Settei.Key
+anthropicModels :: [Baikai.Model.Model]
 lookupAnthropicModel :: Data.Text.Text -> Maybe Baikai.Model.Model
+
+-- shikigami-core/src/Shikigami/Behavior/Provider.hs (new)
 newBehaviorEnvFor :: ProviderSelection -> Maybe Baikai.Trace.TraceSink -> IO Shikigami.Behavior.Run.BehaviorEnv
+describeProviderSelection :: ProviderSelection -> Data.Text.Text
+providerLogLine :: ProviderSelection -> Data.Text.Text
 
 -- shikigami-core/src/Shikigami/Behavior/Run.hs (extended)
 data BehaviorEnv = BehaviorEnv
   { runtime :: !Handan.Runtime.Runtime,
     model :: !Baikai.Model.Model,
     options :: !Baikai.Options.Options,
-    traces :: !(Maybe Baikai.Trace.TraceSink)
+    traceSink :: !(Maybe Baikai.Trace.TraceSink)
   }
+behaviorModelId :: BehaviorEnv -> Data.Text.Text
+--   ^ use this, not the `model` selector: Baikai.Response.Response also has a
+--     `model` field, so the plain selector is ambiguous at most call sites.
 
 -- shikigami-core/src/Shikigami/Behavior/Skill.hs (changed)
 runSkill :: Baikai.Model.Model -> Baikai.Options.Options -> SkillDir -> Data.Aeson.Value -> IO (Either RunError Data.Aeson.Value)
@@ -541,3 +715,18 @@ Downstream consumers to keep compiling: `Shikigami.Agent.Workflow.runBehaviorSte
 `Shikigami.Agent.Run.runAgentWithMemory`, `Shikigami.Agent.Conversation` (line 165),
 and the `run-behavior` command component in `shikigami-workers` — all call `runBehavior`, whose signature this
 plan does not change (plan 15 does).
+
+
+## Revision Notes
+
+- 2026-07-31: Implemented. Milestones 1–3 are complete except the live smoke, which was not
+  performed for want of a credential and is recorded as unproven rather than assumed. Three
+  substantive departures from the plan as written, each in the Decision Log: the credential
+  requirement is a Settei condition in the declaration rather than a
+  `resolveProviderSelection` check (so `--check-config` catches it and the half-configured
+  state is unrepresentable), `behavior.model` decodes against baikai's catalog rather than a
+  transcribed list, and the two behavior environment variables follow plan 37's
+  `SHIKIGAMI_` convention rather than the plan's "legacy" spellings, which nothing had ever
+  read. The Interfaces section now records the signatures that actually exist. Also recorded
+  a pre-existing defect found in passing: `--describe-config` on `shikigami-run-behavior`
+  exits 2 because `--agent` is a required option.
