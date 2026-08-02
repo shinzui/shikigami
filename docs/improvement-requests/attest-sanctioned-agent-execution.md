@@ -5,7 +5,7 @@ description: Resolve a versioned execution profile before a run, collect every c
 timestamp: "2026-08-02T18:29:04Z"
 requestId: IR-7
 status: proposed
-origin: mori://shinzui/kikan/okf/use-cases/concepts/UC-8
+origin: mori://shinzui/kikan
 ---
 
 # Improvement Request: attest sanctioned model execution for agent runs
