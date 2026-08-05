@@ -8,6 +8,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forM_, forever)
+import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -24,9 +25,9 @@ import Shikigami.Agent.Loader (loadAgentsIn)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import System.IO (hPutStrLn, stderr)
 
 -- | Arm every scheduled agent and drive keiro timer firing.
 --
@@ -35,31 +36,36 @@ import System.IO (hPutStrLn, stderr)
 -- @database.connection_string@.
 runSchedulerCmd :: AppConfig -> IO ()
 runSchedulerCmd config = do
+  logger <- Log.newStderrLogger Log.Info
   agents <- loadAgentsIn (Config.agentsDirectory config)
   schedules <- traverse parseScheduleAgent (filter isSchedule agents)
-  putStrLn ("[scheduler] loaded " <> show (length schedules) <> " scheduled agents")
+  Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
   StoreConnection.withStore settings \st -> do
     tracer <- noopTracer
     let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
         env = SchedulerEnv {pool = StoreConnection.pool st, schedules = Map.fromList schedules}
-    armAll appEnv schedules
+    armAll logger appEnv schedules
     forever do
       now <- getCurrentTime
       result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
       case result of
-        Left err -> hPutStrLn stderr ("[scheduler] timer worker store error: " <> show err)
+        Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
         Right _ -> pure ()
       threadDelay 1_000_000
 
-armAll :: AppEnv -> [(Text, CronSchedule)] -> IO ()
-armAll appEnv schedules =
+armAll :: Log.Logger -> AppEnv -> [(Text, CronSchedule)] -> IO ()
+armAll logger appEnv schedules =
   forM_ schedules \(agentName, cron) -> do
     now <- getCurrentTime
     result <- runStore appEnv (armNextRun cron agentName now)
     case result of
-      Left err -> hPutStrLn stderr ("[scheduler] failed to arm " <> Text.unpack agentName <> ": " <> show err)
+      Left err ->
+        Log.logError
+          logger
+          "scheduler.agent.arm_failed"
+          ["agent" Aeson..= agentName, "error" Aeson..= Text.pack (show err)]
       Right () -> pure ()
 
 parseScheduleAgent :: AgentDecl -> IO (Text, CronSchedule)

@@ -31,6 +31,7 @@
       --mp7: #8b612a;
       --mp8: #8a4e3c;
       --mp9: #516644;
+      --mp10: #7a5a8f;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -58,6 +59,7 @@
         --mp7: #c49051;
         --mp8: #c68169;
         --mp9: #829a72;
+        --mp10: #ab8cc4;
       }
     }
 
@@ -622,34 +624,36 @@
   <main class="page">
     <section class="hero" aria-labelledby="page-title">
       <div class="hero-copy">
-        <p class="eyebrow">Unfinished portfolio · reviewed 31 July 2026</p>
-        <h1 id="page-title">The foundation is in. Six fronts open.</h1>
+        <p class="eyebrow">Unfinished portfolio · reviewed 5 August 2026</p>
+        <h1 id="page-title">The foundation is in. Seven fronts open.</h1>
         <p class="lede">
           The narrow foundation chain is finished: package ownership, Settei configuration and
           the released library cohort all landed on 31 July, and MasterPlan 2's model-provider,
-          context-assembly and sink-honesty work went with them. Thirty-one plans remain, and
-          for the first time the front is wide rather than serial—six are startable today.
+          context-assembly and sink-honesty work went with them. Thirty-five plans remain—MasterPlan
+          10 added four on 5 August—and for the first time the front is wide rather than
+          serial: seven are startable today.
         </p>
       </div>
       <aside class="start-card" aria-label="Where to start">
         <div>
           <p class="eyebrow">Start here</p>
-          <h2>Six plans are startable now.</h2>
-          <p>Every hard predecessor of plans 17, 18, 28, 38, 39 and 43 is complete. Plans 12 and 29 can also begin, with upstream-gated milestones deferred.</p>
+          <h2>Seven plans are startable now.</h2>
+          <p>Every hard predecessor of plans 17, 18, 28, 38, 39, 43 and 49 is complete. Plans 12 and 29 can also begin, with upstream-gated milestones deferred.</p>
         </div>
         <div class="start-actions">
-          <div class="start-action"><span class="step-number">1</span><div><strong>Plans 38 &amp; 39</strong><p>Widest unblocking: 38 gates five plans, 39 gates five more.</p></div></div>
+          <div class="start-action"><span class="step-number">1</span><div><strong>Plans 38 &amp; 39</strong><p>Widest unblocking: 38 gates six plans, 39 gates seven.</p></div></div>
           <div class="start-action"><span class="step-number">2</span><div><strong>Plans 17 &amp; 18</strong><p>Together they release plan 20, and 17 is half of plan 14's gate.</p></div></div>
-          <div class="start-action"><span class="step-number">3</span><div><strong>Plan 28 M1</strong><p>The log vocabulary plan 19 hard-depends on; M3 still follows plan 22.</p></div></div>
+          <div class="start-action"><span class="step-number">3</span><div><strong>Plan 28 M1</strong><p>The log and correlation vocabulary plans 19 and 51 both hard-depend on.</p></div></div>
+          <div class="start-action"><span class="step-number">4</span><div><strong>Plans 43 &amp; 49</strong><p>Contract-only, no dependencies. Plan 49 lands the vocabulary nine other plans would each invent.</p></div></div>
         </div>
       </aside>
     </section>
 
     <section class="summary" aria-label="Portfolio summary">
-      <div class="metric"><strong>31</strong><span>unfinished ExecPlans</span></div>
-      <div class="metric"><strong>6</strong><span>startable today · 2 partially</span></div>
+      <div class="metric"><strong>35</strong><span>unfinished ExecPlans</span></div>
+      <div class="metric"><strong>7</strong><span>startable today · 2 partially</span></div>
       <div class="metric"><strong>6</strong><span>completed 31 July</span></div>
-      <div class="metric"><strong>7</strong><span>open upstream gates · 1 closed</span></div>
+      <div class="metric"><strong>9</strong><span>open upstream gates · 1 closed</span></div>
     </section>
 
     <section class="controls" aria-label="Graph controls">
@@ -665,6 +669,7 @@
         <option value="7">MP 7 · Platform completion</option>
         <option value="8">MP 8 · Router agents</option>
         <option value="9">MP 9 · Practice reviews</option>
+        <option value="10">MP 10 · Attestation</option>
       </select>
       <button class="filter-button" id="ready-filter" aria-pressed="false">Startable now</button>
       <button class="filter-button" id="blocked-filter" aria-pressed="false">Upstream-gated</button>
@@ -690,7 +695,7 @@
           <div class="board" id="board">
             <svg class="edges" id="edges" aria-hidden="true"></svg>
             <section class="upstream-lane" aria-labelledby="upstream-title">
-              <h3 class="lane-title" id="upstream-title">Upstream requests · 7 open · 1 completed</h3>
+              <h3 class="lane-title" id="upstream-title">Upstream requests · 9 open · 1 completed</h3>
               <div class="request-grid" id="request-grid"></div>
             </section>
             <div class="wave-track" id="wave-track"></div>
@@ -715,10 +720,10 @@
         <div class="detail-section">
           <h3>Current recommendation</h3>
           <ul class="dependency-list">
-            <li><strong>Widest unblocking:</strong> plans 38 and 39 — each releases five downstream plans.</li>
+            <li><strong>Widest unblocking:</strong> plans 38 and 39 — 38 releases six downstream plans, 39 releases seven.</li>
             <li><strong>Toward plan 14:</strong> plan 17, then the 38 → 19 → 22 chain.</li>
-            <li><strong>Startable in parallel:</strong> plans 18, 28 M1, 43; plans 12 M1–M2 and 29's local half.</li>
-            <li><strong>Coordination:</strong> all seven upstream requests are still <code>proposed</code>.</li>
+            <li><strong>Startable in parallel:</strong> plans 18, 28 M1, 43, 49; plans 12 M1–M2 and 29's local half.</li>
+            <li><strong>Coordination:</strong> all nine upstream requests are still <code>proposed</code>; Kikan IR-6 is the one that genuinely blocks plan 52.</li>
           </ul>
         </div>
       </aside>
@@ -730,24 +735,25 @@
         <table>
           <thead><tr><th>Wave</th><th>Work</th><th>Entry rule</th></tr></thead>
           <tbody>
-            <tr><td>0</td><td><strong>43</strong>; seven open upstream requests; completed Kioku IR-1 evidence</td><td><strong>Open.</strong> Plan 43 is now fully startable — plan 47 landed, so package implementation no longer waits.</td></tr>
+            <tr><td>0</td><td><strong>43</strong>, <strong>49</strong>; nine open upstream requests; completed Kioku IR-1 evidence</td><td><strong>Open.</strong> Both are contract-only with no hard dependencies. Plan 49 lands the attestation vocabulary nine other plans would otherwise each invent.</td></tr>
             <tr><td>1</td><td><s>36</s></td><td>Complete 31 July. Six packages, composition roots, asserted dependency arrows.</td></tr>
             <tr><td>2</td><td><s>37</s></td><td>Complete 31 July, except the migration executable's Settei unification — reassigned to plan 38.</td></tr>
             <tr><td>3</td><td><s>47</s></td><td>Complete 31 July. One released cohort selected by version; the codd stack was removed here.</td></tr>
             <tr><td>4</td><td><strong>38, 39, 28 M1</strong></td><td><strong>Open, all three startable in parallel.</strong> Plan 38's scope narrowed to the ledger import and cutover.</td></tr>
-            <tr><td>5</td><td><s>13</s>, <s>16</s>, <strong>17</strong>, <strong>18</strong>, 21, 24</td><td>13 and 16 complete (13 minus its live smoke). 17 and 18 startable now; 21 waits for 38, 24 for 39.</td></tr>
-            <tr><td>6</td><td>20, 19, 22, <s>15</s>, 25, 26, 30, 33</td><td>15 complete. Rest queued: 17+18→20; 16+28M1→19→22; 20→30/33; 24+39→25/26.</td></tr>
-            <tr><td>7</td><td>14, 23, 27, <strong>29</strong>, 32, 34, 35, <strong>12</strong> runtime</td><td>12 and 29 have startable local halves now; the rest follow the registry edges.</td></tr>
+            <tr><td>5</td><td><s>13</s>, <s>16</s>, <strong>17</strong>, <strong>18</strong>, 21, 24, 50</td><td>13 and 16 complete (13 minus its live smoke). 17 and 18 startable now; 21 waits for 38; 24 and 50 wait for 39.</td></tr>
+            <tr><td>6</td><td>20, 19, 22, <s>15</s>, 25, 26, 30, 33, 51</td><td>15 complete. Rest queued: 17+18→20; 16+28M1→19→22; 20→30/33; 24+39→25/26; 49+50+38+39+28M1→51.</td></tr>
+            <tr><td>7</td><td>14, 23, 27, <strong>29</strong>, 32, 34, 35, 52, <strong>12</strong> runtime</td><td>12 and 29 have startable local halves now; 52 waits for 51, 22 and 44. The rest follow the registry edges.</td></tr>
             <tr><td>8</td><td>40 → 41 → 42</td><td>Router declaration, catalog, then replay-safe execution. All wait on plan 33.</td></tr>
             <tr><td>9</td><td>44 and 45 → 46</td><td>Practice-review evidence/memory, then end-to-end orchestration. All wait on plan 43.</td></tr>
             <tr><td>10</td><td>31</td><td>Operations closure after the public configuration and health surfaces settle.</td></tr>
-            <tr><td>—</td><td>48</td><td><strong>Unregistered.</strong> Belongs to no MasterPlan; declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites.</td></tr>
+            <tr><td>—</td><td>48</td><td><strong>Unregistered.</strong> Belongs to no MasterPlan; declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites. Plans 7–11 are likewise in no registry (7, 9, 10, 11 complete; 8 complete in substance with two stale checkboxes).</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <noscript><p>This artifact requires JavaScript to lay out and filter the dependency graph. The wave table above remains available without it.</p></noscript>
+    <p style="margin:18px 0 0;color:var(--muted);font-size:.86rem">Narrative companion: <a href="implementation-order.md">implementation-order.md</a> — the same state as prose, including coverage gaps and the recommended order. Each MasterPlan's Exec-Plan Registry remains the authority for its own children's status.</p>
   </main>
 
   <script>
@@ -760,7 +766,8 @@
       6: {name: "Operations & observability", path: "../masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md"},
       7: {name: "Platform completion", path: "../masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md"},
       8: {name: "Declarative router agents", path: "../masterplans/8-declarative-router-agents.md"},
-      9: {name: "Architecture-practice review", path: "../masterplans/9-architecture-practice-review-flow.md"}
+      9: {name: "Architecture-practice review", path: "../masterplans/9-architecture-practice-review-flow.md"},
+      10: {name: "Sanctioned execution attestation", path: "../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md"}
     };
 
     const waves = [
@@ -785,11 +792,14 @@
       {id:"u-baikai-mcp", repo:"Baikai · IR-2", title:"MCP client, tool and auth contracts", uri:"mori://shinzui/baikai/docs/improvement-requests/ship-the-mcp-client-tool-and-authentication-contracts.md", path:"../../../baikai/docs/improvement-requests/ship-the-mcp-client-tool-and-authentication-contracts.md"},
       {id:"u-shikumi-mcp", repo:"Shikumi · IR-1", title:"MCP-to-ToolRegistry adapter", uri:"mori://shinzui/shikumi/docs/improvement-requests/ship-the-mcp-to-tool-registry-adapter.md", path:"../../../shikumi/docs/improvement-requests/ship-the-mcp-to-tool-registry-adapter.md"},
       {id:"u-kikan-en-auth", repo:"Kikan-En · IR-3", title:"Per-action agent authorization", uri:"mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3", path:"../../../kikan-project/kikan-en/docs/improvement-requests/authorize-agent-mcp-tool-invocation-per-action.md"},
-      {id:"u-kikan-content", repo:"Kikan · IR-5", title:"Pinned content plane and ToolEnv", uri:"mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5", path:"../../../kikan/docs/improvement-requests/ship-the-revision-pinned-content-plane-and-tool-environment.md"}
+      {id:"u-kikan-content", repo:"Kikan · IR-5", title:"Pinned content plane and ToolEnv", uri:"mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5", path:"../../../kikan/docs/improvement-requests/ship-the-revision-pinned-content-plane-and-tool-environment.md"},
+      {id:"u-baikai-evidence", repo:"Baikai · IR-3", title:"Verifiable model-call evidence", uri:"mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3", path:"../../../baikai/docs/improvement-requests/capture-verifiable-model-call-evidence.md"},
+      {id:"u-kikan-attest", repo:"Kikan · IR-6", title:"Sanctioned execution attestation contract", uri:"mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6", path:"../../../kikan/docs/improvement-requests/define-sanctioned-agent-execution-attestations.md"}
     ];
 
     const plans = [
       {n:43,w:0,mp:9,s:"ready",c:true,t:"Define architecture-practice review contracts",d:"Now fully startable: plan 47 landed, so package implementation no longer waits on the cohort.",deps:[],soft:[47]},
+      {n:49,w:0,mp:10,s:"ready",c:true,t:"Sanctioned execution profile and attestation contracts",d:"Contract-only, no dependencies. Lands the profile, AgentVersionRef, ReviewedArtifact and attestation vocabulary that nine other plans would otherwise each invent.",deps:[],soft:[43]},
       {n:36,w:1,mp:2,s:"done",c:true,t:"Align with the six-package deployed-service architecture",d:"Six packages, composition roots, a generated OpenAPI contract, and a test that fails the build on a forbidden sibling edge.",deps:[]},
       {n:37,w:2,mp:2,s:"done",c:true,t:"Adopt Settei configuration across binaries",d:"Nine of ten binaries resolve one typed AppConfig with fixed precedence, rejected unknown keys and redacted secrets.",deps:[36],x:"shikigami-migrate still resolves DATABASE_URL itself — a cabal package cycle; reassigned to plan 38."},
       {n:47,w:3,mp:2,s:"done",c:true,t:"Upgrade to the coherent July 2026 dependency cohort",d:"The whole cohort selected from Hackage by version, no allow-newer between co-developed packages. The codd stack was removed here.",deps:[37]},
@@ -825,7 +835,10 @@
       {n:45,w:9,mp:9,s:"queued",c:true,t:"Persist and adjudicate practice reviews",d:"Consumes labeled rememberWith and the plan 43 contracts.",deps:[25,43,47]},
       {n:46,w:9,mp:9,s:"queued",c:true,t:"Orchestrate review delivery and end-to-end conformance",d:"Joins routing, evidence, memory and honest sink delivery.",deps:[16,19,25,35,42,43,44,45,47],up:["u-kikan-content"]},
       {n:31,w:10,mp:6,s:"queued",c:true,t:"Deployable service stack",d:"Final process-compose/NixOS packaging and configuration reference.",deps:[36,37,38,47],soft:[13,22,28,29,32]},
-      {n:48,w:7,mp:0,s:"queued",c:false,t:"Portable one-off repository agent harness",d:"Belongs to no MasterPlan and appears in no registry. Declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites; 13, 15, 36, 37 and 47 are done.",deps:[12,13,15,31,36,37,47]}
+      {n:48,w:7,mp:0,s:"queued",c:false,t:"Portable one-off repository agent harness",d:"Belongs to no MasterPlan and appears in no registry. Declares plans 12, 13, 15, 31, 36, 37 and 47 as prerequisites; 13, 15, 36, 37 and 47 are done.",deps:[12,13,15,31,36,37,47]},
+      {n:50,w:5,mp:10,s:"queued",c:true,t:"Fail-closed profile resolution and run pinning",d:"Resolves a profile to an immutable digest before the behavior runs, journals it, and keeps an in-flight run pinned. Waits only for plan 39 — the journaled step is a new persisted contract.",deps:[39,49]},
+      {n:51,w:6,mp:10,s:"queued",c:true,t:"Run-evidence aggregate and compliance roll-up",d:"Durable lifecycle, complete call accounting across retries and delegated children, and a verdict enumerating every non-conforming reason. Real evidence waits for Baikai IR-3; a stub seam keeps every milestone startable.",deps:[28,38,39,49,50],soft:[24,35],up:["u-baikai-evidence"]},
+      {n:52,w:7,mp:10,s:"queued",c:false,t:"Signed attestation, read API and UC-8 conformance",d:"Signs outside agent authority, serves by run or review-request id, and verifies offline. Its canonical encoding cannot be frozen until Kikan IR-6 lands; its positive case needs plan 13's unperformed live smoke.",deps:[22,44,51],soft:[13,48],up:["u-kikan-attest","u-baikai-evidence"]}
     ].map((plan) => ({
       ...plan,
       id: "p" + plan.n,
@@ -866,7 +879,11 @@
         45:"45-persist-and-adjudicate-architecture-practice-reviews.md",
         46:"46-orchestrate-review-delivery-and-end-to-end-conformance.md",
         47:"47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md",
-        48:"48-add-a-portable-one-off-repository-agent-harness.md"
+        48:"48-add-a-portable-one-off-repository-agent-harness.md",
+        49:"49-sanctioned-execution-profile-and-attestation-contracts.md",
+        50:"50-fail-closed-profile-resolution-and-run-pinning.md",
+        51:"51-run-evidence-aggregate-and-compliance-roll-up.md",
+        52:"52-signed-attestation-read-api-and-uc-8-conformance.md"
       }[plan.n]
     }));
 
@@ -1022,8 +1039,8 @@
           '<p class="detail-kicker">How to read this</p><h2>Select a plan or request</h2>' +
           '<p class="detail-copy">Solid lines are hard implementation dependencies. Dashed amber lines are preferred landing order. Dotted red lines are upstream gates. The small dot marks the portfolio critical path.</p>' +
           '<div class="detail-section"><h3>Current recommendation</h3><ul class="dependency-list">' +
-          '<li><strong>Code:</strong> begin plan 36.</li><li><strong>Parallel design:</strong> begin plan 43.</li>' +
-          '<li><strong>Coordination:</strong> advance the seven open upstream requests; retain completed Kioku IR-1 as cohort evidence.</li></ul></div>';
+          '<li><strong>Code:</strong> begin plan 36.</li><li><strong>Parallel design:</strong> begin plans 43 and 49.</li>' +
+          '<li><strong>Coordination:</strong> advance the nine open upstream requests; retain completed Kioku IR-1 as cohort evidence.</li></ul></div>';
         return;
       }
       const plan = planById.get(id);

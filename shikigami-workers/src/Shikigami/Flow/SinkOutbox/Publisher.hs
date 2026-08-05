@@ -19,12 +19,14 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
+import Data.Aeson qualified as Aeson
+import Data.Text qualified as Text
 import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Outbox.Types (OutboxRow (..))
 import Kioku.App (runAppIO)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps)
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Log qualified as Log
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, envLogger)
 
 -- | Publish claimed outbox rows until the process stops.
 --
@@ -33,7 +35,7 @@ import System.IO (hPutStrLn, stderr)
 -- pending sink delivery behind one transient database failure.
 runOutboxPublisher :: WorkerEnv -> IO ()
 runOutboxPublisher env = do
-  hPutStrLn stderr "[shikigami.worker] starting sink outbox publisher"
+  Log.logInfo (envLogger env) "worker.outbox.started" []
   forever do
     let deps = agentRunDeps env
     -- Keiro 0.4 hands the publisher a whole claimed batch and expects one
@@ -45,6 +47,6 @@ runOutboxPublisher env = do
             rows
     result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
     case result of
-      Left err -> hPutStrLn stderr ("[shikigami.worker] outbox publisher store error: " <> show err)
+      Left err -> Log.logError (envLogger env) "worker.outbox.failed" ["error" Aeson..= Text.pack (show err)]
       Right _summary -> pure ()
     threadDelay 1_000_000

@@ -188,6 +188,24 @@ Generated queue codec envelopes require the drain/transitional-decoder policy fr
 certify a schema that differs from the codec actually executed.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+Milestone 4 gains two more consumers. Alongside plans 24–27 and 35, the specification and the
+evolution gate must also cover MasterPlan 10's durable contracts
+(`docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md`):
+
+- `docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md` adds a journaled workflow step,
+  `StepName "resolve-profile"`, returning `Maybe SanctionedExecutionProfileRef` — a new persisted
+  value inside the agent-run workflow, placed before `open-session`.
+- `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` adds a durable state machine —
+  requested, profile-resolved, running, evidence-sealed, attested, plus non-conforming, incomplete,
+  and failed — whose transitions and stored shape are exactly what this gate exists to certify.
+
+Both hard-depend on this plan for that reason: hand-authoring them and re-expressing them under the
+specification afterward is the largest avoidable rework in that initiative. This plan does not need
+to wait for either; it only needs to leave room for them in the M4 consumer list.
+
+
 ## Interfaces and Dependencies
 
 Use the public `keiro-dsl` CLI and generated runtime APIs from the coherent Keiro cohort.

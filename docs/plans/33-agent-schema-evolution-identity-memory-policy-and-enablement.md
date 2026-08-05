@@ -482,6 +482,26 @@ fields through the canonical loader, and update the checked Keiro/codec artifact
 values are affected.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+**This plan does not own agent declaration revision, artifact identity, or run pinning, and must not
+grow them.** Its scope is the three additive declaration fields `identity`, `memory`, and `enabled`,
+and the pattern they establish. An audit of the portfolio on 2026-08-05 confirmed that nothing in
+this repository provided an immutable agent version — the request that asks for it is
+`docs/improvement-requests/governed-agent-evolution.md` (declaration revision, behavior artifact
+identity, run pinning, baseline-to-candidate relation, rollout policy), and it has no ExecPlan and
+appears in no MasterPlan registry.
+
+That vocabulary is now defined by
+`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` as `AgentVersionRef`
+(logical agent id, immutable version, declaration digest) and `AgentArtifactSet` (the digest bundle
+covering declaration, behavior, skills, tool catalog, grounding, runtime, and policy), shaped so
+lineage can be added additively and byte-pinned so a record with no lineage encodes identically to
+one written before lineage existed. If `identity` work here needs to name an agent version, import
+plan 49's type. When a governed-evolution plan is eventually written, it extends those records; it
+must not introduce a second agent-version vocabulary.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 20. Public/declaration records use strict unprefixed
@@ -533,6 +553,14 @@ this plan and plan 30 before adding lifecycle state.
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note stating explicitly that this plan does not own
+  agent declaration revision, artifact identity, or run pinning, and must not grow them. An audit found
+  that vocabulary owned by nobody — the request asking for it,
+  `docs/improvement-requests/governed-agent-evolution.md`, has no ExecPlan — so
+  `docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` now defines
+  `AgentVersionRef` and `AgentArtifactSet`, shaped for additive extension. This plan's three declaration
+  fields are unchanged.
 
 - 2026-07-22: Replaced this plan's duplicate loader consolidation with a hard
   dependency on plan 20's `loadAgentsReport`, scoped this plan to enabled-agent

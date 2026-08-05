@@ -585,6 +585,28 @@ before adapting; do not restore a legacy stub, direct environment read, unbounde
 or second registry as a workaround.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+Two notes, neither of which changes this plan's scope.
+
+**Registration.** This plan belongs to no MasterPlan. That was true when it was written and is still
+true; it is recorded here so the omission reads as deliberate rather than lost. Its prerequisite list
+below remains authoritative.
+
+**One external constraint on the permission boundary.**
+`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` signs run attestations with a key
+that must be unreachable from the agent's behavior, its prompt, its tools, and its repository
+workspace — a requirement of both
+`docs/improvement-requests/attest-sanctioned-agent-execution.md` and the shared upstream contract
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`, whose reasoning is that a signature
+produced by the same unrestricted process that could fabricate the evidence offers weaker assurance.
+This plan owns the workspace, the command policy, and the `OneOffPermission` boundary that such a key
+must sit outside of. When implementing the permission model, treat "no path by which workspace-scoped
+code reaches a signing credential" as an explicit property to assert in a test, in the same spirit as
+the existing rule that a declaration is never authorization. Plan 52 asserts the exclusion against its
+own boundary; if this plan lands first, plan 52 asserts it against this one instead.
+
+
 ## Interfaces and Dependencies
 
 This is a standalone cross-cutting ExecPlan. Its hard prerequisites are:

@@ -22,6 +22,7 @@ import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.Sink
@@ -198,7 +199,8 @@ ctxFor ident kz kw =
       rei = Sink.ReiConfig {baseUrl = Nothing},
       danwaTarget = Nothing,
       recipientOverride = Nothing,
-      occurredAt = Nothing
+      occurredAt = Nothing,
+      logger = Log.silentLogger
     }
 
 dummyKawa :: KawaConfig

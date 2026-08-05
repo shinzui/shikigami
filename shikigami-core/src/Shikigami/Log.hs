@@ -34,8 +34,11 @@
 --   * @run_id@ — see "Shikigami.Log.Correlation"; re-exported here.
 --   * @call_id@ — likewise, for one call inside a run.
 --   * @workflow_id@ — the keiro workflow id, when it is not the run id.
---   * @sink_kind@ — @kawa_digest@, @kizashi_signal@, @rei_action@, or
---     @danwa_conversation@.
+--   * @sink_kind@ — as @Shikigami.Sink.Permission.sinkKindText@ renders it:
+--     @KawaDigest@, @KizashiSignal@, @ReiAction@, @DanwaConversation@, or
+--     @ChannelEgress@. That renderer already existed and already appears in
+--     denial reasons, so log lines reuse it rather than introducing a second
+--     spelling of the same five values.
 --   * @outcome@ — @delivered@, @denied@, @stubbed@, or @failed@.
 --   * @topic@ — the Kafka topic a consumer line is about.
 --   * @error@ — a rendered error, when the line reports a failure.

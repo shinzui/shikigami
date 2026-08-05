@@ -15,13 +15,15 @@ module Shikigami.Agent.Workflow.Resume
   )
 where
 
+import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as Text
 import Keiro.Workflow.Resume (WorkflowRegistry, runWorkflowResumeWorker)
 import Kioku.App (AppEffects, runAppIO)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv)
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Log qualified as Log
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
 
 -- | Every workflow this process knows how to resume.
 workflowRegistry :: WorkerEnv -> WorkflowRegistry AppEffects
@@ -32,8 +34,8 @@ workflowRegistry env =
 -- | Run the resume loop until the process stops.
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env = do
-  hPutStrLn stderr "[shikigami.worker] starting keiro workflow resume worker"
+  Log.logInfo (envLogger env) "worker.resume.started" []
   result <- runAppIO (appEnv env) (runWorkflowResumeWorker (workflowRegistry env))
   case result of
-    Left err -> hPutStrLn stderr ("[shikigami.worker] resume worker store error: " <> show err)
+    Left err -> Log.logError (envLogger env) "worker.resume.failed" ["error" Aeson..= Text.pack (show err)]
     Right () -> pure ()

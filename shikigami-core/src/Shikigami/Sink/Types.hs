@@ -10,6 +10,7 @@ module Shikigami.Sink.Types
 where
 
 import Data.Text qualified as Text
+import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
@@ -40,7 +41,12 @@ data SinkContext = SinkContext
     -- on the sink intent. 'Nothing' means either that the sink is not a signal
     -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
     recipientOverride :: !(Maybe Text),
-    occurredAt :: !(Maybe UTCTime)
+    occurredAt :: !(Maybe UTCTime),
+    -- | Where this dispatch's log lines go. Carried on the context rather than
+    -- reached for globally because a sink is dispatched from two different
+    -- processes — inline during a run, and later from the outbox publisher —
+    -- and each of them owns its own logger.
+    logger :: !Logger
   }
 
 -- | The outcome of one sink dispatch. @DeniedOutcome@ is distinct from the permission

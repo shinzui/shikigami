@@ -74,6 +74,7 @@ import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
+import Shikigami.Log qualified as Log
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
@@ -91,7 +92,11 @@ data AgentRunDeps = AgentRunDeps
     rei :: !ReiConfig,
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
-    deadline :: !(Maybe NominalDiffTime)
+    deadline :: !(Maybe NominalDiffTime),
+    -- | Where this run's log lines go. A workflow runs in whichever process
+    -- picked the job up, so the logger arrives with the dependencies rather
+    -- than being reached for globally.
+    logger :: !Log.Logger
   }
 
 data AgentRunHooks = AgentRunHooks
@@ -155,6 +160,12 @@ agentDeclName AgentDecl {name} = name
 
 jobIdempotencyKey :: RunJob -> Text
 jobIdempotencyKey RunJob {idempotencyKey} = idempotencyKey
+
+-- | Named rather than used as a bare selector because 'SinkContext' also has a
+-- @logger@ field, and @DuplicateRecordFields@ makes the unqualified use
+-- ambiguous wherever both records are in scope.
+depsLogger :: AgentRunDeps -> Log.Logger
+depsLogger AgentRunDeps {logger = l} = l
 
 runJobOccurredAt :: RunJob -> UTCTime
 runJobOccurredAt RunJob {occurredAt} = occurredAt
@@ -225,7 +236,7 @@ runResolvedAgent deps job decl = do
           addAttribute traceSpan "agent.name" (agentDeclName decl)
           addAttribute traceSpan "sink.count" (length approvedSinks)
           enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
-      liftIO (traverse_ (logSinkResult job) sinkResults)
+      liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
       _ <- runStep deps (StepName "complete") (completeSession deps sid)
       pure
@@ -612,7 +623,7 @@ deterministicOutboxIdForMessage messageId =
         Text.unpack ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = depsLogger} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -629,7 +640,8 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
                   rei = depsRei,
                   danwaTarget = danwaTarget,
                   recipientOverride = resolvedRecipient,
-                  occurredAt = occurredAt
+                  occurredAt = occurredAt,
+                  logger = depsLogger
                 }
               sink
               output
@@ -692,8 +704,47 @@ runKioku deps action =
         . runStoreResource
         $ action
 
-logSinkResult :: RunJob -> SinkResult -> IO ()
-logSinkResult _job _result = pure ()
+-- | Say what one sink actually did.
+--
+-- This was a no-op (@logSinkResult _job _result = pure ()@), which meant per-sink
+-- outcomes were recorded in the workflow journal and nowhere an operator could
+-- see them. Now every dispatched sink leaves one @sink.result@ line carrying the
+-- agent, the run, the sink kind, and the outcome.
+--
+-- A failure logs at 'Log.Error' and a denial at 'Log.Warn', because those are the
+-- two an operator wants to find without reading the successes.
+logSinkResult :: Log.Logger -> RunJob -> SinkResult -> IO ()
+logSinkResult logger job result =
+  Log.logEvent
+    logger
+    (levelFor (outcome result))
+    "sink.result"
+    ( [ "agent" Aeson..= agentName job,
+        Log.runIdKey Aeson..= jobIdempotencyKey job,
+        "sink_kind" Aeson..= sinkKindText (kind result),
+        "outcome" Aeson..= outcomeText (outcome result)
+      ]
+        <> detailField (outcome result)
+    )
+  where
+    levelFor = \case
+      Failed _ -> Log.Error
+      DeniedOutcome _ -> Log.Warn
+      _ -> Log.Info
+    outcomeText :: SinkOutcome -> Text
+    outcomeText = \case
+      Delivered _ -> "delivered"
+      Stubbed -> "stubbed"
+      DeniedOutcome _ -> "denied"
+      Failed _ -> "failed"
+    -- The detail rides under a key that says what kind of detail it is, so that
+    -- a query for failures can read @error@ without also matching the returned
+    -- id of a successful delivery.
+    detailField = \case
+      Delivered detail -> ["detail" Aeson..= detail]
+      Stubbed -> []
+      DeniedOutcome reason -> ["reason" Aeson..= reason]
+      Failed err -> ["error" Aeson..= err]
 
 triggerKindText :: Trigger -> Text
 triggerKindText = \case

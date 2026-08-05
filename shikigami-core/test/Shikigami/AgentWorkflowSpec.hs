@@ -40,6 +40,7 @@ import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.Log qualified as Log
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -517,7 +518,8 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       rei = ReiConfig {baseUrl = Nothing},
       hooks,
       approval = defaultApprovalEnv,
-      deadline = Nothing
+      deadline = Nothing,
+      logger = Log.silentLogger
     }
 
 testDepsWithApproval :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> AgentRunDeps
@@ -536,7 +538,8 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       rei = ReiConfig {baseUrl = Nothing},
       hooks,
       approval,
-      deadline
+      deadline,
+      logger = Log.silentLogger
     }
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> ApprovalEnv

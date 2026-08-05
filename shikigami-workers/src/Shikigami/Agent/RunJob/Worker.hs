@@ -42,9 +42,9 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Integration.Danwa (AddressedMessage)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv)
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
 
 -- | The shibuya handler: lift the orchestration into the worker's effect row.
 runJobHandler :: (IOE :> es) => WorkerEnv -> Handler es Value
@@ -61,7 +61,12 @@ handleRunJob :: WorkerEnv -> Value -> IO AckDecision
 handleRunJob env payloadV =
   case Aeson.fromJSON payloadV of
     Aeson.Error e -> do
-      hPutStrLn stderr ("[shikigami.worker] invalid run job (dead-letter): " <> e)
+      Log.logError
+        (envLogger env)
+        "worker.job.dead_lettered"
+        [ "reason" Aeson..= ("invalid_payload" :: Text),
+          "error" Aeson..= Text.pack e
+        ]
       pure (AckDeadLetter (InvalidPayload (Text.pack e)))
     Aeson.Success job ->
       case Aeson.fromJSON (triggerPayload job) of
@@ -77,7 +82,13 @@ runConversationAgent env job addressed =
       result <- Conversation.runConversationTurn (conversationEnv env) decl addressed
       case result of
         Left err -> do
-          hPutStrLn stderr ("[shikigami.worker] conversation turn failed (retry): " <> Text.unpack err)
+          Log.logError
+            (envLogger env)
+            "worker.conversation.retried"
+            [ "agent" Aeson..= agentName job,
+              Log.runIdKey Aeson..= idempotencyKey job,
+              "error" Aeson..= err
+            ]
           pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
         Right _ -> pure AckOk
 
@@ -94,22 +105,45 @@ runOneAgent env job =
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
         case resE of
           Left err -> do
-            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow store error (retry): " <> show err)
+            jobLog Log.Error "worker.job.retried" ["error" Aeson..= Text.pack (show err), "reason" Aeson..= ("store_error" :: Text)]
             pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
           Right (Completed (Right _result)) -> do
-            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow completed")
+            jobLog Log.Info "worker.job.completed" []
             pure AckOk
           Right (Completed (Left err)) -> do
-            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow failed (retry): " <> Text.unpack err)
             if "unknown agent " `Text.isPrefixOf` err
-              then pure (AckDeadLetter (PoisonPill err))
-              else pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+              then do
+                jobLog Log.Error "worker.job.dead_lettered" ["error" Aeson..= err, "reason" Aeson..= ("unknown_agent" :: Text)]
+                pure (AckDeadLetter (PoisonPill err))
+              else do
+                jobLog Log.Error "worker.job.retried" ["error" Aeson..= err, "reason" Aeson..= ("workflow_failed" :: Text)]
+                pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
           Right Suspended -> do
-            hPutStrLn stderr ("[shikigami.worker] agent=" <> Text.unpack (agentName job) <> " workflow suspended")
+            jobLog Log.Info "worker.job.suspended" []
             pure AckOk
-          Right Cancelled -> pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
-          Right Failed -> pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-          Right ContinuedAsNew -> pure AckOk
+          Right Cancelled -> do
+            jobLog Log.Warn "worker.job.dead_lettered" ["reason" Aeson..= ("workflow_cancelled" :: Text)]
+            pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
+          Right Failed -> do
+            jobLog Log.Error "worker.job.retried" ["reason" Aeson..= ("workflow_failed" :: Text)]
+            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right ContinuedAsNew -> do
+            jobLog Log.Info "worker.job.continued_as_new" []
+            pure AckOk
+  where
+    -- Every outcome line for one job carries the same identifying fields, so
+    -- they are written once here rather than repeated at each branch.
+    jobLog level event fields =
+      Log.logEvent
+        (envLogger env)
+        level
+        event
+        ( [ "agent" Aeson..= agentName job,
+            Log.runIdKey Aeson..= idempotencyKey job,
+            "trigger_kind" Aeson..= triggerKindText (triggerKind job)
+          ]
+            <> fields
+        )
 
 triggerKindText :: TriggerKind -> Text
 triggerKindText = \case

@@ -218,6 +218,24 @@ Kikan IR-5 at
 do not substitute ambient Git, host filesystem reads, or guessed ToolEnv APIs.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+The `EvidenceReader` seam and its vocabulary — `RepositoryId`, `Revision`, `RepoRef`, `PinnedDiff`,
+and especially `readDiff` — are **portfolio-shared, not private to MasterPlan 9**.
+`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` defines `ReviewedArtifact`
+(canonical repository identity, full base and head commits, reviewed diff digest, path scope) over
+these types, and `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` acquires those
+values through this reader when binding a signed attestation to the exact code change reviewed.
+
+Because plan 49 has no dependencies and lands first, it carries local placeholder definitions of
+`RepositoryId` and `Revision` with a note that they are deleted and imported from this plan once it
+exists; plan 52's Milestone 1 performs that swap. Keep the definitions general enough to serve a
+code-review binding — full commit hashes at both ends of a diff, with branch names and pull-request
+numbers explicitly insufficient — and do not narrow them to Mori-addressed architecture decision
+records. Also expect a second consumer of the live adapter once Kikan IR-5 lands: an attested code
+review needs the same revision-pinned read that an architecture-practice review does.
+
+
 ## Interfaces and Dependencies
 
 The implementation exposes this shape, adjusted only to match the final C16 client types:
@@ -257,6 +275,11 @@ version against the authoritative registry and upstream tags as required by `AGE
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note declaring the `EvidenceReader` seam and its
+  `RepositoryId`/`Revision`/`RepoRef`/`PinnedDiff` vocabulary portfolio-shared rather than private to
+  MasterPlan 9. MasterPlan 10's `ReviewedArtifact` is defined over them and carries placeholders only
+  until this plan lands. Keep them general enough for a code-review binding; no milestone scope changed.
 
 - 2026-07-30: Repointed the live content-plane/ToolEnv blocker to Kikan IR-5
   and its stable OKF concept URI. The deterministic reader and fixture work

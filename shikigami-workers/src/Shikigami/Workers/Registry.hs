@@ -24,6 +24,8 @@ module Shikigami.Workers.Registry
 where
 
 import Control.Concurrent.Async (concurrently_)
+import Data.Aeson qualified as Aeson
+import Data.Text qualified as Text
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Kioku.App (AppEnv (..))
@@ -35,16 +37,16 @@ import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.RunJob.Worker (runJobHandler)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (runQueueName)
 import Shikigami.Trigger.Timer (runTimerWorker)
-import Shikigami.Workers.Config (WorkerEnv (..))
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Workers.Config (WorkerEnv (..), envLogger)
 
 -- | Start every worker loop and run until the process is stopped.
 runWorkers :: WorkerEnv -> IO ()
 runWorkers env = do
-  hPutStrLn stderr "[shikigami.worker] starting; draining shikigami_run_jobs"
+  Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
   concurrently_
     (runQueueWorker env)
     (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
@@ -63,7 +65,7 @@ runQueueWorker env = do
       adapterResult <- pgmqAdapter (mkPgmqAdapterEnv (pool env)) (defaultConfig runQueueName)
       case adapterResult of
         Left cfgErr ->
-          liftIO (hPutStrLn stderr ("[shikigami.worker] pgmq adapter config error: " <> show cfgErr))
+          liftIO (Log.logError (envLogger env) "worker.queue.misconfigured" ["error" Aeson..= Text.pack (show cfgErr)])
         Right adapter -> do
           let processor = mkProcessor adapter (runJobHandler env)
           appResult <-
@@ -71,8 +73,8 @@ runQueueWorker env = do
               AppConfig {strategy = IgnoreFailures, inboxSize = 100}
               [(ProcessorId "shikigami_run_jobs", processor)]
           case appResult of
-            Left err -> liftIO (hPutStrLn stderr ("[shikigami.worker] app error: " <> show err))
+            Left err -> liftIO (Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)])
             Right h -> waitApp h
   case result of
-    Left perr -> hPutStrLn stderr ("[shikigami.worker] pgmq error: " <> show perr)
+    Left perr -> Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
     Right () -> pure ()

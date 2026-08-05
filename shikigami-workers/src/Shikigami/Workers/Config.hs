@@ -15,6 +15,7 @@
 -- module only says what the loops need, not where it comes from.
 module Shikigami.Workers.Config
   ( WorkerEnv (..),
+    envLogger,
     agentRunDeps,
     conversationEnv,
     schedulerEnv,
@@ -29,6 +30,7 @@ import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Trigger.Schedule (parseCron)
@@ -43,8 +45,18 @@ data WorkerEnv = WorkerEnv
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
-    rei :: !ReiConfig
+    rei :: !ReiConfig,
+    -- | Where every loop's log lines go. Built once by the command that boots
+    -- the process and shared by all four loops, so that one worker's output is
+    -- one stream of JSON objects rather than four.
+    logger :: !Log.Logger
   }
+
+-- | The process-wide logger. Named rather than used as a bare selector
+-- because several of the records below also carry a @logger@ field, which makes
+-- the unqualified use ambiguous under @DuplicateRecordFields@.
+envLogger :: WorkerEnv -> Log.Logger
+envLogger WorkerEnv {logger = l} = l
 
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
@@ -59,7 +71,8 @@ agentRunDeps env =
       AgentWorkflow.rei = rei env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
-      AgentWorkflow.deadline = Nothing
+      AgentWorkflow.deadline = Nothing,
+      AgentWorkflow.logger = envLogger env
     }
 
 -- | The conversation workflow's environment.

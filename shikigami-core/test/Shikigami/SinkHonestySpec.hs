@@ -37,6 +37,7 @@ import Shikigami.Agent.Decl
     Sink (..),
     Trigger (..),
   )
+import Shikigami.Log qualified as Log
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -328,7 +329,8 @@ ctxWith rei =
       rei,
       danwaTarget = Nothing,
       recipientOverride = Nothing,
-      occurredAt = Nothing
+      occurredAt = Nothing,
+      logger = Log.silentLogger
     }
   where
     -- Port 1 is not listening; a case that accidentally reaches another sink

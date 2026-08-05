@@ -471,6 +471,21 @@ references. Keep all durable step names and wire values compatible with Keiro 0.
 workflow/state codec requirements.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+This plan is the natural owner of a stable, typed **review-request identifier**. MasterPlan 10
+(`docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md`) binds every attested run
+to an approval or review request id plus an idempotency key, and
+`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` serves signed attestations
+*by* that id — so it becomes an external lookup key that a consumer in another repository depends
+on, not merely an internal token. Until this plan lands,
+`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` accepts it as an opaque typed value
+supplied by its caller. When implementing here, give it a distinct newtype rather than reusing bare
+`Text`, keep it stable across the park-and-resume cycle, and do not conflate it with the approval
+*token*: the token authorises a decision and may rotate, while the request id identifies the review
+forever. Nothing else about this plan changes.
+
+
 ## Interfaces and Dependencies
 
 New interfaces (module paths are repository-relative):
@@ -532,6 +547,10 @@ edits with plans 13, 15, and 16 in the plan-36 worker composition root.
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note assigning this plan ownership of a stable typed
+  review-request identifier, which MasterPlan 10 binds into signed run attestations and serves as an
+  external lookup key. No milestone scope changed.
 
 - 2026-07-22: Removed the nonexistent approval-policy dependency on plan 33 and made
   plan 22 a hard dependency. Approval notifications now consume authenticated

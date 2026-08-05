@@ -711,6 +711,20 @@ This note supersedes older dependency-version and placeholder-API wording in thi
   signatures earlier in this plan are not compatibility shims.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+The tool catalog this plan declares becomes audit evidence. `AgentArtifactSet` in
+`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` binds a run to a
+tool-catalog digest, and
+`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` judges a run against it, so a
+verifier outside this system will later prove that the agent's tools were exactly these. A digest
+is only meaningful over a **stable canonical encoding**: the same declared catalog must serialise
+to the same bytes across processes, library upgrades, and map-ordering changes. This plan owns that
+encoding — commit to one explicitly rather than relying on whatever `toJSON` happens to emit, and
+treat a change to it as a wire-format change with a schema-version bump, not an edit. Nothing else
+about this plan changes.
+
+
 ## Interfaces and Dependencies
 
 **Owned and defined by this plan (shikigami).**

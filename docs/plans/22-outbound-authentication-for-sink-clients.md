@@ -419,6 +419,21 @@ configuration and journaled intents carry references only. Preserve plan 19's te
 classification when translating HTTP responses.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` reuses this plan's credential
+resolution for a **second, stricter credential class**: the key that signs a run attestation. Keep
+the resolution machinery general enough to serve it, and keep the distinction visible in the code
+rather than only in prose. A sink credential authenticates this system to a downstream service, so a
+behavior that leaked one could impersonate the runtime. A signing key is worse: a behavior that could
+reach it could forge the very attestation meant to constrain that behavior. Both the local request
+`docs/improvement-requests/attest-sanctioned-agent-execution.md` and the shared upstream contract
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` require signing keys to be held outside
+agent-controlled behavior and mutable workspaces, and plan 52 asserts that non-visibility with a
+test rather than a comment. Nothing in this plan's own scope changes; do not add the signing class
+here.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 19, 36, and 37. Plan 19 supplies the additive permanent-failure
@@ -486,6 +501,11 @@ independent.
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note recording a second consumer of this plan's
+  credential resolution — MasterPlan 10's attestation signing key, a stricter class that must remain
+  unreachable from behavior, prompt, tools, and workspace. This plan's own scope is unchanged and does
+  not add that class.
 
 - 2026-07-22: Made plan 13 the configuration-convention predecessor and assigned this
   plan sole ownership of `postJSONWithHeaders`. Plans 14, 28, and 32 now consume this

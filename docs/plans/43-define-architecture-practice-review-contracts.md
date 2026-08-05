@@ -207,6 +207,30 @@ implementation/fixture build consumes plan 47's released cohort. Its wire types 
 `DuplicateRecordFields`.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+Two corrections, both found by a portfolio audit on 2026-08-05.
+
+**Package placement.** The Interfaces section below says these types belong to `shikigami-api` and
+names its existing `aeson`/`text`/`time`/`uuid` dependencies. That is stale. Plan 36 made
+`shikigami-api` the *public HTTP contract* package, which depends on `shikigami-core` and whose
+exposed modules are only `Shikigami.Api`, `Shikigami.Api.OpenApi`, `Shikigami.Api.Problem`, and
+`Shikigami.Health.Api` (`docs/architecture/packages.md:35-48`); `shikigami-workers` is forbidden from
+depending on it, and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` fails the build on
+that edge. Domain vocabulary a worker must reach therefore belongs in `shikigami-core`. Place these
+contracts there; only HTTP DTOs and route records belong in `shikigami-api`.
+
+**Shared, not private.** The revision-pinned repository vocabulary that this plan and
+`docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` introduce —
+`RepositoryId`, `Revision`, `RepoRef`, `PinnedDiff`, and the `EvidenceReader` seam — is
+portfolio-shared, not private to MasterPlan 9. MasterPlan 10's `ReviewedArtifact`
+(`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md`) binds canonical
+repository identity, full base and head commits, and a diff digest over exactly those types, and
+plan 49 carries placeholder definitions only until plan 44 lands. Keep them general enough to serve a
+code-review binding as well as an architecture-decision-record review, and do not narrow them to
+Mori-addressed documents.
+
+
 ## Interfaces and Dependencies
 
 The module must expose at least these domain concepts (field lists above are normative even

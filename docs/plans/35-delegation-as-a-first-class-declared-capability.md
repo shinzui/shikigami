@@ -517,6 +517,23 @@ fixtures. Router execution in plan 42 extends this mechanism rather than definin
 budget/lineage path.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+The run-job lineage fields this plan makes declarative are now **read by an audit path that must not
+lose a child**. `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` uses
+`parentSessionId`, `parentRunWorkflowId`, and `delegationDepth` on `RunJob`
+(`shikigami-core/src/Shikigami/Agent/RunJob.hs`), together with the `TriggeredByDelegation` trigger
+kind, to find a run's children — and a parent's evidence cannot seal while any relevant child is
+non-terminal. A delegated child that becomes invisible to that traversal makes the attestation
+*incomplete*, which the consuming gate rejects, so it is a correctness failure rather than a missing
+nicety.
+
+Preserve those three fields and that trigger kind when formalising delegation, or, if the declarative
+form supersedes them, update plan 51's traversal in the same change rather than leaving it reading
+fields that no longer carry the whole truth. Also note that the closure must include tool-mediated
+and retried calls made *inside* a child, not only the child's root call.
+
+
 ## Interfaces and Dependencies
 
 Owned and defined by this plan:
@@ -581,6 +598,12 @@ Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note recording that the run-job lineage fields
+  (`parentSessionId`, `parentRunWorkflowId`, `delegationDepth`, `TriggeredByDelegation`) are now read by
+  MasterPlan 10's complete-call-accounting closure, where a delegated child that becomes invisible makes
+  an attestation incomplete. Preserve them, or update plan 51's traversal in the same change. No
+  milestone scope changed.
 
 - 2026-07-22: Promoted plan 24 from a soft coordination note to a hard dependency.
   Delegation now begins only after the workflow-versioning discipline and patch plumbing

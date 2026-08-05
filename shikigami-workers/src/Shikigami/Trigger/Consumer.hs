@@ -15,7 +15,10 @@ module Shikigami.Trigger.Consumer
 where
 
 import Data.Aeson (Value)
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (Pair)
 import Data.ByteString (ByteString)
+import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runError)
@@ -43,9 +46,9 @@ import Keiro.Integration.Event (IntegrationEvent, decodeJsonIntegrationEvent)
 import Kioku.App (AppEnv, runAppIO)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), StreamMatch, Trigger (..))
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
-import System.IO (hPutStrLn, stderr)
 
 -- | Where to consume the activity stream.
 data StreamConfig = StreamConfig
@@ -74,8 +77,8 @@ data EventHit = EventHit
 -- | Subscribe to the activity stream and report each declared stream agent that
 -- matches an incoming envelope. Decodes via the keiro inbox; a re-delivery is logged
 -- and not re-fired. Runs forever.
-subscribeActivityStream :: AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} include agents onHit = do
+subscribeActivityStream :: Log.Logger -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} include agents onHit = do
   let props =
         brokersList [BrokerAddress streamBroker]
           <> groupId (ConsumerGroupId streamGroup)
@@ -83,7 +86,7 @@ subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = stre
       sub = topics [TopicName streamTopic] <> offsetReset Earliest
   result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
   case result of
-    Left err -> hPutStrLn stderr ("[stream] consumer error: " <> show err)
+    Left err -> Log.logError logger "stream.consumer.failed" ["topic" Aeson..= streamTopic, "error" Aeson..= Text.pack (show err)]
     Right () -> pure ()
   where
     loop :: (KafkaConsumer :> es, IOE :> es) => Eff es ()
@@ -92,7 +95,7 @@ subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = stre
       case mr of
         Nothing -> loop
         Just record -> do
-          liftIO (processRecord appEnv include agents onHit record)
+          liftIO (processRecord logger appEnv include agents onHit record)
           commitOffsetMessage OffsetCommit record
           loop
 
@@ -101,8 +104,8 @@ subscribeActivityStream appEnv StreamConfig {broker = streamBroker, topic = stre
 --
 -- This is the supported path for Danwa addressed-message events. It consumes
 -- the public topic Danwa publishes; it does not read Danwa's database.
-subscribeIntegrationEventStream :: AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} agents onHit = do
+subscribeIntegrationEventStream :: Log.Logger -> AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream logger appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} agents onHit = do
   let props =
         brokersList [BrokerAddress streamBroker]
           <> groupId (ConsumerGroupId streamGroup)
@@ -110,7 +113,7 @@ subscribeIntegrationEventStream appEnv StreamConfig {broker = streamBroker, topi
       sub = topics [TopicName streamTopic] <> offsetReset Earliest
   result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
   case result of
-    Left err -> hPutStrLn stderr ("[events] consumer error: " <> show err)
+    Left err -> Log.logError logger "events.consumer.failed" ["topic" Aeson..= streamTopic, "error" Aeson..= Text.pack (show err)]
     Right () -> pure ()
   where
     loop :: (KafkaConsumer :> es, IOE :> es) => Eff es ()
@@ -119,19 +122,20 @@ subscribeIntegrationEventStream appEnv StreamConfig {broker = streamBroker, topi
       case mr of
         Nothing -> loop
         Just record -> do
-          liftIO (processEventRecord appEnv agents onHit record)
+          liftIO (processEventRecord logger appEnv agents onHit record)
           commitOffsetMessage OffsetCommit record
           loop
 
 -- | Decode one record through the keiro inbox and fire the matching agents.
 processRecord ::
+  Log.Logger ->
   AppEnv ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
   IO ()
-processRecord appEnv include agents onHit record = do
+processRecord logger appEnv include agents onHit record = do
   now <- getCurrentTime
   let TopicName topicT = crTopic record
       PartitionId partI = crPartition record
@@ -147,25 +151,31 @@ processRecord appEnv include agents onHit record = do
             receivedAt = now
           }
   case integrationEventFromKafka kir of
-    Left err -> hPutStrLn stderr ("[stream] decode error (skipped + committed): " <> show err)
+    Left err -> recordLog Log.Error "stream.record.undecodable" ["error" Aeson..= Text.pack (show err)]
     Right (event, kref) -> do
       res <-
         runAppIO appEnv $
           runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref) (inboxHandler include agents)
       case res of
         Right (Right (InboxProcessed hits)) -> mapM_ onHit hits
-        Right (Right InboxDuplicate) -> hPutStrLn stderr "[stream] deduped (InboxDuplicate)"
-        Right (Right other) -> hPutStrLn stderr ("[stream] inbox result: " <> show other)
-        Right (Left ierr) -> hPutStrLn stderr ("[stream] inbox error: " <> show ierr)
-        Left serr -> hPutStrLn stderr ("[stream] store error: " <> show serr)
+        Right (Right InboxDuplicate) -> recordLog Log.Debug "stream.record.deduped" []
+        Right (Right other) -> recordLog Log.Info "stream.inbox.other" ["result" Aeson..= Text.pack (show other)]
+        Right (Left ierr) -> recordLog Log.Error "stream.inbox.failed" ["error" Aeson..= Text.pack (show ierr)]
+        Left serr -> recordLog Log.Error "stream.store.failed" ["error" Aeson..= Text.pack (show serr)]
+  where
+    -- Every line about one record names the topic and offset it came from, so a
+    -- report of a skipped record says which record was skipped.
+    recordLog level event fields =
+      Log.logEvent logger level event (recordFields record <> fields)
 
 processEventRecord ::
+  Log.Logger ->
   AppEnv ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
   ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
   IO ()
-processEventRecord appEnv agents onHit record = do
+processEventRecord logger appEnv agents onHit record = do
   now <- getCurrentTime
   let TopicName topicT = crTopic record
       PartitionId partI = crPartition record
@@ -181,17 +191,32 @@ processEventRecord appEnv agents onHit record = do
             receivedAt = now
           }
   case integrationEventFromKafka kir of
-    Left err -> hPutStrLn stderr ("[events] decode error (skipped + committed): " <> show err)
+    Left err -> recordLog Log.Error "events.record.undecodable" ["error" Aeson..= Text.pack (show err)]
     Right (event, kref) -> do
       res <-
         runAppIO appEnv $
           runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref) (eventInboxHandler agents)
       case res of
         Right (Right (InboxProcessed hits)) -> mapM_ onHit hits
-        Right (Right InboxDuplicate) -> hPutStrLn stderr "[events] deduped (InboxDuplicate)"
-        Right (Right other) -> hPutStrLn stderr ("[events] inbox result: " <> show other)
-        Right (Left ierr) -> hPutStrLn stderr ("[events] inbox error: " <> show ierr)
-        Left serr -> hPutStrLn stderr ("[events] store error: " <> show serr)
+        Right (Right InboxDuplicate) -> recordLog Log.Debug "events.record.deduped" []
+        Right (Right other) -> recordLog Log.Info "events.inbox.other" ["result" Aeson..= Text.pack (show other)]
+        Right (Left ierr) -> recordLog Log.Error "events.inbox.failed" ["error" Aeson..= Text.pack (show ierr)]
+        Left serr -> recordLog Log.Error "events.store.failed" ["error" Aeson..= Text.pack (show serr)]
+  where
+    recordLog level event fields =
+      Log.logEvent logger level event (recordFields record <> fields)
+
+-- | Which Kafka record a consumer line is about. Shared by both consumers so
+-- that @topic@, @partition@, and @offset@ are spelled the same way in each.
+recordFields :: ConsumerRecord (Maybe ByteString) (Maybe ByteString) -> [Pair]
+recordFields record =
+  let TopicName topicT = crTopic record
+      PartitionId partI = crPartition record
+      Offset offI = crOffset record
+   in [ "topic" Aeson..= topicT,
+        "partition" Aeson..= partI,
+        "offset" Aeson..= offI
+      ]
 
 -- | The inbox handler (runs in the inbox DB transaction): decode the envelope and
 -- collect the matching stream agents. Pure work wrapped in @pure@.

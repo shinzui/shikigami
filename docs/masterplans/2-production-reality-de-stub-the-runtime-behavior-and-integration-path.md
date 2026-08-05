@@ -389,7 +389,12 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - [x] (2026-07-31) EP-1 M3 (durable half): `modelUsed` recorded at both session-completing
       seams; the crash-resume case asserts `Just "stub-v1"` on the completed row.
 - [ ] EP-1 M3 (live half): live anthropic smoke transcript. Not performed — no credential
-      available; recorded as unproven in plan 13 rather than assumed.
+      available; recorded as unproven in plan 13 rather than assumed. **Reclassified 2026-08-05
+      from an accepted gap to a blocker for another initiative:**
+      `docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md` must prove that a
+      permitted run yields a `sanctioned` attestation, and a run that never reached a real provider
+      cannot demonstrate that. See that MasterPlan's Surprises & Discoveries and
+      `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` Milestone 5.
 - [ ] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
 - [ ] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration
@@ -685,6 +690,16 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Revision Notes
+
+- 2026-08-05: Reclassified EP-1 (plan 13) Milestone 3's unperformed live Anthropic smoke from an
+  accepted gap to a cross-MasterPlan blocker. `docs/improvement-requests/attest-sanctioned-agent-execution.md`
+  became `docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md`, whose acceptance
+  requires a permitted run to yield a `sanctioned` attestation — which a run that never reached a real
+  provider cannot demonstrate. Nothing about plan 13's landed work changed; only the consequence of the
+  deferred item did. That MasterPlan also records that plan 13's `modelUsed` field, the durable half of
+  the same milestone, is explicitly declared insufficient for a code-review gate — which is a statement
+  about the new requirement's bar, not a defect in plan 13, whose stated goal was distinguishing a stub
+  run from a configured real one.
 
 - 2026-07-31: Corrected the F2-remaining record, which had gone stale. Its Progress entry
   and the plan 37 Surprises entry both still said `shikigami-migrate` uses codd's `CODD_*`

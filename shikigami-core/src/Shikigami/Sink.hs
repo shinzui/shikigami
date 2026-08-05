@@ -15,9 +15,10 @@ module Shikigami.Sink
 where
 
 import Data.Aeson (Value)
+import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
-import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Log qualified as Log
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (runDanwa)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
@@ -27,7 +28,6 @@ import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (runReiAction)
 import Shikigami.Sink.Types
 import Shikigami.Sink.Wire (SignalResponse (..))
-import System.IO (hPutStrLn, stderr)
 
 -- | Map a sink to its permission kind.
 sinkKindOf :: Sink -> SinkKind
@@ -44,7 +44,14 @@ dispatch ctx sink output = do
   grant <- checkGrant (identity ctx) kind
   case grant of
     Left (Denied reason) -> do
-      hPutStrLn stderr ("[sink] skipped (denied): " <> Text.unpack reason)
+      Log.logWarn
+        (logger ctx)
+        "sink.denied"
+        [ "agent" Aeson..= agentName (identity ctx),
+          Log.runIdKey Aeson..= runId ctx,
+          "sink_kind" Aeson..= sinkKindText kind,
+          "reason" Aeson..= reason
+        ]
       pure (SinkResult kind (DeniedOutcome reason))
     Right () -> SinkResult kind <$> runSink ctx sink output
 
@@ -59,7 +66,16 @@ runSink ctx sink output = case sink of
     -- A strategy that was declared and could not be honored is said out loud;
     -- the alternative is a signal quietly reaching whoever the fallback names.
     traverse_
-      (hPutStrLn stderr . Text.unpack)
+      ( \warning ->
+          Log.logWarn
+            (logger ctx)
+            "sink.recipient.unresolved"
+            [ "agent" Aeson..= agentName (identity ctx),
+              Log.runIdKey Aeson..= runId ctx,
+              "sink_kind" Aeson..= sinkKindText SKizashiSignal,
+              "detail" Aeson..= warning
+            ]
+      )
       (unresolvableRecipientWarning sink (recipientOverride ctx))
     case buildSignalReq (kizashi ctx) (recipientOverride ctx) sink (identity ctx) output of
       Left e -> pure (Failed e)

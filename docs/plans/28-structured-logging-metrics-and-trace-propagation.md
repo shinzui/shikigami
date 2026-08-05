@@ -522,6 +522,23 @@ standard `OTEL_*` exporter variables remain SDK-owned. M1 logging may land early
 propagation waits for plan 22's canonical helper.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+Milestone 1 acquired a second consumer with a higher bar.
+`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` hard-depends on M1 and consumes
+**this plan's run and per-call correlation identifiers as durable audit evidence** — every model call
+an attested run makes carries the Shikigami run id plus a unique call id, and retry and
+parent/child relationships between calls are reconstructed from them. That plan is explicitly
+forbidden from minting a parallel scheme, because an operator disputing a compliance verdict must be
+able to join the audit record to the log line for the same call.
+
+Two consequences for M1. The identifiers must be stable and reproducible for the life of a run
+including across crash-and-resume, not merely unique within one process lifetime. And they are
+effectively a persisted contract once plan 51 stores them, so changing their shape later is a
+migration rather than a refactor — worth choosing deliberately now. `Shikigami.Log` did not exist in
+the tree as of 2026-08-05, so this remains the gate for both plan 19 and plan 51.
+
+
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36 and 37. Plan 22 remains required for outbound trace-header
@@ -571,6 +588,11 @@ its loop-supervision events (soft; this plan does not depend on it).
 
 
 ## Revision Notes
+
+- 2026-08-05: Added a Portfolio Reconciliation note recording that Milestone 1's run and per-call
+  correlation identifiers become durable audit evidence for MasterPlan 10, which raises their bar:
+  stable and reproducible across crash-and-resume, and a persisted contract once stored. No milestone
+  scope changed; M1 remains the gate for both plan 19 and plan 51.
 
 - 2026-07-22: Routed HTTP trace propagation through plan 22's authenticated
   `postJSONWithHeaders` helper. Milestones 1–2 remain independently implementable;

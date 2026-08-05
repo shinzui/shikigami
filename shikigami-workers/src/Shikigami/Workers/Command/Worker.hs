@@ -4,6 +4,7 @@ module Shikigami.Workers.Command.Worker
 where
 
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
+import Data.Aeson qualified as Aeson
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Loader (loadAgentsIn)
@@ -11,6 +12,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Workers.Config (WorkerEnv (..))
@@ -26,13 +28,13 @@ import Shikigami.Workers.Registry (runWorkers)
 -- @--kawa-url@, @--kizashi-url@, @--danwa-url@ and @--danwa-agent@ flags are
 -- command-line sources for exactly those keys.
 --
--- The provider line lands on standard error before the queue is drained, so the
--- log of a worker that is quietly running the stub says so on its first line
--- rather than nowhere.
+-- The logger is built first, before anything that could want to log, and every
+-- line this process writes goes through it as one JSON object per line.
 runWorkerCmd :: AppConfig -> IO ()
 runWorkerCmd config = do
+  logger <- Log.newStderrLogger Log.Info
   agents <- loadAgentsIn (Config.agentsDirectory config)
-  putStrLn ("[worker] loaded " <> show (length agents) <> " agents")
+  Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTracer \tr -> do
     behEnv <- newBehaviorEnvFor (Config.behaviorProvider config) (Just (otelSink tr))
@@ -60,6 +62,7 @@ runWorkerCmd config = do
                     { baseUrl = Config.danwaBaseUrl config,
                       agentParticipant = Config.danwaAgentParticipant config
                     },
-                rei = ReiConfig {baseUrl = Config.reiBaseUrl config}
+                rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
+                logger
               }
       runWorkers env

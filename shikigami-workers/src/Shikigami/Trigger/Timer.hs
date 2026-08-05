@@ -16,12 +16,14 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
+import Data.Aeson qualified as Aeson
+import Data.Text qualified as Text
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (runAppIO)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Scheduler qualified as Scheduler
-import Shikigami.Workers.Config (WorkerEnv (..), schedulerEnv)
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Workers.Config (WorkerEnv (..), envLogger, schedulerEnv)
 
 -- | Fire due timers until the process stops.
 --
@@ -29,11 +31,11 @@ import System.IO (hPutStrLn, stderr)
 -- the next pass picks them up.
 runTimerWorker :: WorkerEnv -> IO ()
 runTimerWorker env = do
-  hPutStrLn stderr "[shikigami.worker] starting keiro timer worker"
+  Log.logInfo (envLogger env) "worker.timer.started" []
   forever do
     now <- getCurrentTime
     result <- runAppIO (appEnv env) (runWorkflowTimerWorker Nothing now (Scheduler.shikigamiTimerFallback (schedulerEnv env)))
     case result of
-      Left err -> hPutStrLn stderr ("[shikigami.worker] timer worker store error: " <> show err)
+      Left err -> Log.logError (envLogger env) "worker.timer.failed" ["error" Aeson..= Text.pack (show err)]
       Right _row -> pure ()
     threadDelay 1_000_000
