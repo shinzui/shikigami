@@ -66,6 +66,7 @@ import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (describeProviderSelection, newBehaviorEnvFor)
 import Shikigami.Behavior.Run (BehaviorEnv (..), triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
+import Shikigami.Log qualified as Log
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -87,7 +88,7 @@ credentialTests =
     "the credential configuration resolved is the one the call carries"
     [ testCase "the Anthropic branch dispatches with the resolved key, not an environment lookup" do
         selection <- selectionFor [cliOverride behaviorProviderKey "anthropic", cliOverride anthropicApiKeyKey sentinelKey]
-        env <- newBehaviorEnvFor selection Nothing
+        env <- newBehaviorEnvFor Log.silentLogger selection Nothing
         envModelId env @?= "claude-sonnet-4-6"
         sent <- capturedOptions env
         -- ApiKeyLiteral, not ApiKeyEnv: baikai must not be left to find a
@@ -100,14 +101,14 @@ credentialTests =
               cliOverride behaviorModelKey "claude-haiku-4-5",
               cliOverride anthropicApiKeyKey sentinelKey
             ]
-        env <- newBehaviorEnvFor selection Nothing
+        env <- newBehaviorEnvFor Log.silentLogger selection Nothing
         envModelId env @?= "claude-haiku-4-5",
       testCase "the stub branch carries no credential at all" do
         selection <- selectionFor []
         case selection of
           UseStub -> pure ()
           UseAnthropic {} -> assertFailure "an unconfigured process must select the stub"
-        env <- newBehaviorEnvFor selection Nothing
+        env <- newBehaviorEnvFor Log.silentLogger selection Nothing
         sent <- capturedOptions env
         apiKey sent @?= Nothing,
       -- The description is what the process prints at startup, so it is the one
@@ -119,7 +120,7 @@ credentialTests =
           ("the description should name the model:\n" <> Text.unpack described)
           ("claude-sonnet-4-6" `Text.isInfixOf` described)
         assertAbsent "the provider description" described
-        env <- newBehaviorEnvFor selection Nothing
+        env <- newBehaviorEnvFor Log.silentLogger selection Nothing
         sent <- capturedOptions env
         assertAbsent "the options' Show rendering" (Text.pack (show sent))
         assertAbsent "the options' JSON rendering" (Text.pack (show (Aeson.encode sent)))

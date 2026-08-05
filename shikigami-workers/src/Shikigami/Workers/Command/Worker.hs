@@ -37,7 +37,7 @@ runWorkerCmd config = do
   Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTracer \tr -> do
-    behEnv <- newBehaviorEnvFor (Config.behaviorProvider config) (Just (otelSink tr))
+    behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}

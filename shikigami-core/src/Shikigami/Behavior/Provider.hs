@@ -14,8 +14,11 @@
 -- worker running the stub is therefore indistinguishable, from the outside, from
 -- a worker running a model, right up to the point somebody reads the reply. That
 -- is the failure this module exists to close: 'newBehaviorEnvFor' cannot build an
--- environment without writing one line to standard error naming the provider, so
--- a stub can be the default without ever being a silent default.
+-- environment without logging one line naming the provider, so a stub can be the
+-- default without ever being a silent default. The caller supplies the logger,
+-- which is why the announcement is a 'Shikigami.Log' event rather than a bare
+-- write: a worker's standard error is one stream of JSON objects, and this line
+-- is not allowed to be the exception that breaks parsing it.
 --
 -- The complementary half is durable rather than logged: the model id travels into
 -- the kioku session row as @modelUsed@ (see
@@ -32,7 +35,7 @@ module Shikigami.Behavior.Provider
 
     -- * Saying which one is active
     describeProviderSelection,
-    providerLogLine,
+    providerTag,
   )
 where
 
@@ -41,13 +44,13 @@ import Baikai.Model (modelId)
 import Baikai.Options (Options (..), emptyOptions)
 import Baikai.Provider.Claude.Api qualified as Claude
 import Baikai.Trace (TraceSink)
+import Data.Aeson qualified as Aeson
 import Data.Text (Text)
-import Data.Text.IO qualified as TextIO
 import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
-import System.IO qualified as IO
+import Shikigami.Log qualified as Log
 
 -- | Build the behavior environment an operator's configuration asked for, and
 -- announce it.
@@ -64,9 +67,14 @@ import System.IO qualified as IO
 -- build a stub environment. They stay silent, because a test suite that
 -- announced a provider a hundred times would train everyone to ignore the line
 -- that matters.
-newBehaviorEnvFor :: ProviderSelection -> Maybe TraceSink -> IO BehaviorEnv
-newBehaviorEnvFor selection traceSink = do
-  TextIO.hPutStrLn IO.stderr (providerLogLine selection)
+newBehaviorEnvFor :: Log.Logger -> ProviderSelection -> Maybe TraceSink -> IO BehaviorEnv
+newBehaviorEnvFor logger selection traceSink = do
+  Log.logInfo
+    logger
+    "behavior.provider.selected"
+    [ "provider" Aeson..= providerTag selection,
+      "detail" Aeson..= describeProviderSelection selection
+    ]
   runtime <- newRuntime
   registerStubProvider
   case selection of
@@ -93,10 +101,12 @@ credentialOptions :: SecretText -> Options
 credentialOptions credential =
   emptyOptions {apiKey = Just (ApiKeyLiteral (revealSecretText credential))}
 
--- | The one line 'newBehaviorEnvFor' writes to standard error, in the same
--- @[shikigami.\<component\>]@ shape as the worker's own startup lines.
-providerLogLine :: ProviderSelection -> Text
-providerLogLine selection = "[shikigami.behavior] " <> describeProviderSelection selection
+-- | The low-cardinality name of the selected provider, for the @provider@ field.
+-- The human sentence goes in @detail@; this is what an operator groups by.
+providerTag :: ProviderSelection -> Text
+providerTag = \case
+  UseStub -> "stub"
+  UseAnthropic {} -> "anthropic"
 
 -- | Render a selection for an operator.
 --

@@ -18,6 +18,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Log qualified as Log
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -29,6 +30,7 @@ import System.IO (hPutStrLn, stderr)
 -- development shell still supplies as @PG_CONNECTION_STRING@.
 runAgentRun :: String -> Maybe FilePath -> AppConfig -> IO ()
 runAgentRun agentArg mActivity config = do
+  logger <- Log.newStderrLogger Log.Info
   let path = resolvePath agentArg
   declE <- loadAgent path
   case declE of
@@ -37,7 +39,7 @@ runAgentRun agentArg mActivity config = do
       exitFailure
     Right decl -> do
       connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
-      behEnv <- newBehaviorEnvFor (Config.behaviorProvider config) Nothing
+      behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
       let settings = defaultConnectionSettings connStr
       withStore settings $ \_st -> do
         tr <- noopTracer
