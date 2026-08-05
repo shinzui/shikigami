@@ -54,7 +54,7 @@ milestone.
 | Plan | MasterPlan | Why it is worth starting |
 |---|---|---|
 | 38 (remainder) | 3 · Correctness | Now small: only the `shikigami-migrate` Settei unification, blocked by a Cabal package cycle. M1 and M2 were delivered by plan 47; M3, the codd import, was cancelled 2026-08-05. **No longer gates schema authoring** — plans 19, 21, 23, 35, and 51 may add migrations today. |
-| 19 | 3 · Correctness | Newly startable: both its gates cleared on 2026-08-05 (plan 28 M1 landed; plan 38's schema gate released). Only its terminal-delivery milestone waits on Keiro IR-3. |
+| 19 (partly) | 3 · Correctness | Its repository-side gates cleared on 2026-08-05 (plan 28 M1 landed; plan 38's schema gate released), so M2–M4 are startable. **M1 is not fully startable:** it requires a released Keiro `PublishRejected`, and `PublishOutcome` in `keiro/src/Keiro/Outbox.hs:264-269` is still only `PublishSucceeded \| PublishFailed`. Verified 2026-08-05. |
 | 39 | 5 · Durable evolution | **Now the widest:** gates plans 24, 25, 26, 27, 35, 50, and 51. Every new journaled value and durable state machine passes through it. |
 | 17 | 3 · Correctness | With plan 18, releases plan 20; also half of plan 14's gate. |
 | 21 | 3 · Correctness | Newly startable: its only gate was plan 38's schema-authoring path, which is proven. |
