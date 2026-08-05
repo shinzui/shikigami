@@ -51,6 +51,8 @@ library
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.SinkOutbox
     Shikigami.Integration.Danwa
+    Shikigami.Log
+    Shikigami.Log.Correlation
     Shikigami.Memory.Scope
     Shikigami.Prelude
     Shikigami.Program.Registry
@@ -126,6 +128,7 @@ test-suite shikigami-core-test
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
+    Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec
