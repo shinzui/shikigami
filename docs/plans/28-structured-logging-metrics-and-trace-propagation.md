@@ -86,12 +86,14 @@ the HTTP POST to the sink endpoint.
 
 ## Surprises & Discoveries
 
-**The plan's Context section named pre-split paths, and every one of them had moved.** This
+**Every path in the plan's Context section names a location the code is not in today.** This
 plan was written before
-`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` landed.
-It names `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` and
-`shikigami-core/src/Shikigami/Worker.hs`; there is no `shikigami-cli` package, and the worker
-now lives in `shikigami-workers`. The real 2026-08-05 locations are:
+`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` landed,
+and it points at two different absent layouts. `shikigami-core/src/Shikigami/Worker.hs` is the
+pre-split past: plan 36 moved that code into `shikigami-workers`. `shikigami-cli` is the
+opposite — a *planned* package that does not exist yet, so those references may become correct
+again when it lands, and should be re-pointed to today's locations rather than treated as
+errors to delete. The real 2026-08-05 locations are:
 
 | Plan said | Actually |
 |---|---|
@@ -101,10 +103,12 @@ now lives in `shikigami-workers`. The real 2026-08-05 locations are:
 | `shikigami-cli/.../Commands/ConsumeStream.hs` | `shikigami-workers/src/Shikigami/Workers/Subscription.hs` |
 | `shikigami-core/src/Shikigami/Telemetry.hs` | `shikigami-workers/src/Shikigami/Telemetry.hs` |
 
-This is the same stale-package-placement drift
-`docs/architecture/implementation-order.md` records for MasterPlan 3's children; MasterPlan 6's
-children have it too, and the board does not say so. Milestones 2 through 4 of this plan still
-quote the old paths and line numbers throughout, and must be re-pointed before they are started.
+`docs/architecture/implementation-order.md` records stale package placement for MasterPlan 3's
+children; MasterPlan 6's children have the same problem in both directions — behind the split
+for the worker, ahead of it for `shikigami-cli` — and the board does not say so. Milestones 2
+through 4 of this plan still quote those paths and line numbers throughout, and must be
+re-pointed before they are started. When `shikigami-cli` lands, the command-module references
+should be revisited rather than assumed wrong.
 
 **`Control.Lens` exports a `Level` type, so the plan's `data Level` was ambiguous on sight.**
 `Shikigami.Prelude` re-exports `module Control.Lens`, which brings
