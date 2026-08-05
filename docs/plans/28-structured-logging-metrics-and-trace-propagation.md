@@ -45,12 +45,26 @@ the HTTP POST to the sink endpoint.
 
 - [ ] Prerequisites: plans 36/37 complete; telemetry lifecycle is owned by process composition roots in server/workers packages.
 
-- [ ] M1: `Shikigami.Log` module written (JSON-lines logger, levels, event names, key-value
-      fields); vocabulary documented in the module header.
-- [ ] M1: every `hPutStrLn stderr` call site in `Shikigami.Worker`, `Shikigami.Sink`,
-      `Shikigami.Trigger.Consumer`, and the CLI command modules replaced with `Shikigami.Log`.
-- [ ] M1: `logSinkResult` (Workflow.hs:629) implemented: one structured line per sink result
-      with agent, run id, sink kind, and outcome.
+- [x] M1: `Shikigami.Log` module written (JSON-lines logger, levels, event names, key-value
+      fields); vocabulary documented in the module header. Done 2026-08-05, with a sibling
+      `Shikigami.Log.Correlation` carrying the run and call identifiers — see the Decision Log
+      for why they are a separate module.
+- [x] M1: every stderr write in the long-running processes replaced with `Shikigami.Log` —
+      the four worker loops (`Shikigami.Workers.Registry`, `Shikigami.Agent.RunJob.Worker`,
+      `Shikigami.Agent.Workflow.Resume`, `Shikigami.Trigger.Timer`,
+      `Shikigami.Flow.SinkOutbox.Publisher`), the scheduler, both Kafka consumers
+      (`Shikigami.Trigger.Consumer`, `Shikigami.Workers.Subscription`),
+      `Shikigami.Sink`, and `Shikigami.Behavior.Provider`. Done 2026-08-05.
+- [x] M1: `logSinkResult` implemented: one structured line per sink result with agent, run id,
+      sink kind, and outcome. Done 2026-08-05. Verified live — see Outcomes.
+- [x] M1: acceptance run performed 2026-08-05 against a fresh migrated database: worker
+      started, one run enqueued, `jq -r .event` parsed every application line with no errors,
+      and `sink.result` appeared with `outcome=delivered`. Transcript in Outcomes.
+- [ ] M1 (remaining): one-shot CLI commands still write human-readable text. This is a
+      deliberate scope decision, not an omission — see the Decision Log.
+- [ ] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
+      non-JSON output left on a worker's stderr, and it appears on abrupt termination. See
+      Surprises & Discoveries.
 - [ ] M2 (spike): a `Meter` built from the hs-opentelemetry SDK exports a test counter via
       OTLP; promotion criteria met (or fallback recorded in the Decision Log).
 - [ ] M2: `Shikigami.Telemetry.Metrics` written (`ShikigamiMetrics` record +
@@ -72,7 +86,102 @@ the HTTP POST to the sink endpoint.
 
 ## Surprises & Discoveries
 
-(None yet.)
+**The plan's Context section named pre-split paths, and every one of them had moved.** This
+plan was written before
+`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` landed.
+It names `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` and
+`shikigami-core/src/Shikigami/Worker.hs`; there is no `shikigami-cli` package, and the worker
+now lives in `shikigami-workers`. The real 2026-08-05 locations are:
+
+| Plan said | Actually |
+|---|---|
+| `shikigami-core/src/Shikigami/Worker.hs` | `shikigami-workers/src/Shikigami/Workers/Registry.hs` (loops) and `.../Shikigami/Agent/RunJob/Worker.hs` (job handling) |
+| `WorkerEnv` in `Worker.hs:55-63` | `shikigami-workers/src/Shikigami/Workers/Config.hs` |
+| `shikigami-cli/.../Commands/Worker.hs` | `shikigami-workers/src/Shikigami/Workers/Command/Worker.hs` |
+| `shikigami-cli/.../Commands/ConsumeStream.hs` | `shikigami-workers/src/Shikigami/Workers/Subscription.hs` |
+| `shikigami-core/src/Shikigami/Telemetry.hs` | `shikigami-workers/src/Shikigami/Telemetry.hs` |
+
+This is the same stale-package-placement drift
+`docs/architecture/implementation-order.md` records for MasterPlan 3's children; MasterPlan 6's
+children have it too, and the board does not say so. Milestones 2 through 4 of this plan still
+quote the old paths and line numbers throughout, and must be re-pointed before they are started.
+
+**`Control.Lens` exports a `Level` type, so the plan's `data Level` was ambiguous on sight.**
+`Shikigami.Prelude` re-exports `module Control.Lens`, which brings
+`Control.Lens.Internal.Level` into scope in every module that imports the prelude:
+
+```text
+src/Shikigami/Log.hs:146:38: error: [GHC-87543]
+    Ambiguous occurrence 'Level'.
+    It could refer to either 'Shikigami.Prelude.Level',
+        imported from 'Shikigami.Prelude' ...
+        (and originally defined in 'Control.Lens.Internal.Level'),
+      or 'Shikigami.Log.Level', defined at src/Shikigami/Log.hs:101:1.
+```
+
+Fixed by `import Shikigami.Prelude hiding (Level)` inside `Shikigami.Log`. Call sites name a
+constructor (`Log.Info`), not the type, so the collision stops at that one module. Any later
+plan adding a type to `Shikigami.Log` should check the lens namespace first.
+
+**`DuplicateRecordFields` makes a shared field name unusable as a bare selector.** Three records
+now carry a `logger` field — `WorkerEnv`, `AgentRunDeps`, `SinkContext` — and any module with
+two of them in scope cannot write `logger x`:
+
+```text
+src/Shikigami/Agent/Workflow.hs:233:41: error: [GHC-87543]
+    Ambiguous occurrence 'logger'.
+    It could refer to either the field 'logger' of record 'AgentRunDeps',
+      or the field 'logger' of record 'SinkContext', imported from 'Shikigami.Sink'
+```
+
+Resolved with named accessors (`depsLogger`, `envLogger`) that pattern-match on the
+constructor. Milestone 2 adds a `metrics` field to some of the same records and will hit this
+again; define the accessor with the field.
+
+**One stderr write hid from the obvious grep.** `Shikigami.Behavior.Provider` announced the
+selected model provider with `TextIO.hPutStrLn IO.stderr`, which a search for
+`hPutStrLn stderr` does not match. It was invisible until the first live worker run, where it
+was the single line that made `jq` fail on the whole stream. The grep that actually finds every
+one is:
+
+```bash
+grep -rnE "hPutStr(Ln)? *(IO\.)?stderr|hPrint *(IO\.)?stderr" --include='*.hs' \
+  shikigami-core/src shikigami-workers/src shikigami-server/src shikigami-client/src
+```
+
+**The last non-JSON line on a worker's stderr belongs to the GHC runtime, not to this plan.**
+On abrupt termination the worker prints the top-level uncaught-exception dump:
+
+```text
+shikigami-worker: Uncaught exception ghc-internal:GHC.Internal.IO.Exception.SomeAsyncException:
+ExceptionInLinkedThread (ThreadId 29) thread blocked indefinitely in an STM transaction
+HasCallStack backtrace:
+  throwIO, called at ./Control/Concurrent/Async/Internal.hs:755:24 in sync-2.2.6-...
+```
+
+No logging module can intercept that without installing a top-level handler, and the underlying
+complaint — a linked thread deadlocking in STM rather than shutting down — is a graceful-shutdown
+defect. Both belong to Milestone 4, which already owns "bracket tracer/meter/exporter providers
+through graceful shutdown". Recorded here so M4 knows it has a reproducer: start the worker,
+enqueue one run, terminate the process.
+
+**keiro writes its own unstructured lines, which this repository cannot convert.** A worker
+against a partially-migrated database produced:
+
+```text
+keiro resume worker: pass failed: UnexpectedServerError "42P01" "relation \"keiro.keiro_awakeables\" does not exist"
+```
+
+That line is printed by the keiro library, not by shikigami. A worker's stderr is therefore
+all-JSON only while keiro's own loops stay quiet, and an upstream request would be needed to
+close that gap properly. No milestone here depends on it.
+
+**One core test failed once and did not reproduce.** A `cabal test all` run reported
+`1 out of 157 tests failed` without my capturing which; two subsequent full runs of the same
+command were green (157/157 twice, plus all other suites). The suites provision ephemeral
+PostgreSQL clusters concurrently and a dev cluster was running at the same time, which is the
+most likely cause. Noted rather than resolved: it is not attributable to this plan's changes,
+and it should be watched for.
 
 
 ## Decision Log
@@ -93,6 +202,48 @@ the HTTP POST to the sink endpoint.
   telemetry setting is declared through plan 37's Settei config.
   Rationale: re-parsing the standard SDK surface creates divergent precedence/behavior.
   Date: 2026-07-22
+
+- Decision: Put the run and call correlation identifiers in a sibling module,
+  `Shikigami.Log.Correlation`, re-exported from `Shikigami.Log`.
+  Rationale: the 2026-08-05 Portfolio Reconciliation makes these identifiers durable audit
+  evidence for `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md`, which stores
+  them. A module that needs to *store* a correlation identifier should not have to depend on a
+  logging surface to name its type. Re-exporting keeps the single-import path for callers that
+  only log.
+  Date: 2026-08-05
+
+- Decision: A `CallCorrelationId` is derived from `(run id, journaled step name, ordinal)` and
+  renders as `<run id>/<step>/<ordinal>`; there is deliberately no constructor from a raw
+  `Text`.
+  Rationale: the reconciliation requires these to be stable and reproducible across
+  crash-and-resume, not merely unique within one process. Anything drawn from process-local
+  state — a counter, a fresh UUID, a clock reading — changes after a resume and breaks the join
+  between the log lines written before a crash and those written after. All three inputs are
+  values keiro's journal replays, so re-deriving in a different process yields the same string.
+  A readable path was chosen over a hash so an operator holding a log line can read the run and
+  step straight off the identifier. Because plan 51 persists it, the rendering is pinned
+  byte-for-byte in `Shikigami.LogSpec`; changing it later is a migration, not a refactor.
+  Date: 2026-08-05
+
+- Decision: Milestone 1 converts the long-running processes and leaves one-shot CLI commands
+  writing human-readable text.
+  Rationale: this plan's own acceptance is about a *worker's* stderr being machine-parseable.
+  The commands left alone — `validate`, `enqueue-run`, `render-lifecycle`, `agent-run`,
+  `run-behavior`, `publish-fixture`, `danwa-spike`, and the client checks — are user
+  interfaces, not log streams; `render-lifecycle` emits a mermaid diagram a human pipes to a
+  file, and wrapping `OK: 1 agent parsed.` in a JSON envelope would break the contract without
+  making anything filterable. This plan's Context section names exactly the three long-running
+  command modules, which confirms the original intent. `Shikigami.App.Config.Load`'s
+  configuration-error reporting is likewise left alone: it runs before a logger exists and is
+  what an operator sees when a process refuses to start.
+  Date: 2026-08-05
+
+- Decision: `sink_kind` values reuse `Shikigami.Sink.Permission.sinkKindText` (`KawaDigest`,
+  `KizashiSignal`, …) rather than a new snake_case spelling.
+  Rationale: that renderer already exists and already appears in permission-denial reasons.
+  A second spelling of the same five values would mean a log query and a denial reason
+  disagreeing about the name of the same thing.
+  Date: 2026-08-05
 
 - Decision: Build a minimal in-repo JSON-lines logger (`Shikigami.Log`) instead of adopting
   katip, co-log, or monad-logger.
@@ -167,7 +318,57 @@ the HTTP POST to the sink endpoint.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+### Milestone 1 — complete 2026-08-05
+
+`Shikigami.Log` and `Shikigami.Log.Correlation` exist in `shikigami-core`, every long-running
+process emits one JSON object per log line, and `logSinkResult` is no longer a no-op.
+
+The acceptance run used a fresh database rather than the repository's dev database, because the
+latter is in a half-applied migration state that is plan 38's to repair
+(`chk_streams_stream_name_length ... already exists`). Setup and run:
+
+```bash
+createdb -h "$PWD/db" shikigami_logproof
+DATABASE_URL="host=$PWD/db dbname=shikigami_logproof user=$(id -un)" \
+  cabal run shikigami-migrate -- up
+PG_CONNECTION_STRING="postgresql://<urlencoded $PWD/db>/shikigami_logproof" \
+  cabal list-bin shikigami-worker | xargs -I{} {} --agents agents 2>worker.log &
+cabal list-bin shikigami | xargs -I{} {} enqueue-run heartbeat
+```
+
+`jq -r '.event' < worker.log` over the eight application lines exits 0 and yields:
+
+```text
+worker.agents.loaded
+behavior.provider.selected
+worker.loop.started
+worker.resume.started
+worker.timer.started
+worker.outbox.started
+sink.result
+worker.job.completed
+```
+
+The two lines that carry the milestone's claims:
+
+```json
+{"event":"sink.result","agent":"heartbeat","run_id":"heartbeat:evt:2026-08-05T16:39:04.839229Z","outcome":"delivered","sink_kind":"KawaDigest"}
+{"event":"worker.job.completed","agent":"heartbeat","run_id":"heartbeat:evt:2026-08-05T16:39:04.839229Z"}
+```
+
+`sink.result` appearing at all is the proof that the no-op is gone, and the shared `run_id`
+across both lines is the join a later plan's audit record needs.
+
+Tests: `cabal test all` green — 157 in `shikigami-core-test` (15 of them new, in
+`Shikigami.LogSpec`), plus 21 workers, 20 server, 15 api, 3 client, 3+2 migrations.
+
+**What remains open, and why.** One-shot CLI commands still print human-readable text (a scope
+decision, below). The GHC runtime's crash dump on abrupt shutdown is still non-JSON, and belongs
+to Milestone 4. keiro's own log lines are not convertible from this repository.
+
+**Lesson for milestones 2 through 4.** Every path and line number in this plan's Context and
+Plan of Work sections predates the six-package split and is wrong; see Surprises & Discoveries
+for the corrected map. Re-point them before starting M2 rather than during it.
 
 
 ## Context and Orientation
@@ -588,6 +789,15 @@ its loop-supervision events (soft; this plan does not depend on it).
 
 
 ## Revision Notes
+
+- 2026-08-05: Milestone 1 implemented. Progress items checked off with the two remaining
+  M1-adjacent gaps stated explicitly (one-shot CLI commands by decision, the runtime's shutdown
+  crash dump by deferral to M4). Recorded five discoveries — the pre-split paths this plan still
+  names throughout, the `Control.Lens` `Level` collision, the `DuplicateRecordFields` selector
+  ambiguity that M2 will hit again, the stderr write that hid from the obvious grep, and keiro's
+  own unconvertible log lines — plus four decisions and the acceptance transcript. Milestones 2
+  through 4 still quote pre-split paths and line numbers and must be re-pointed before starting;
+  the corrected map is in Surprises & Discoveries.
 
 - 2026-08-05: Added a Portfolio Reconciliation note recording that Milestone 1's run and per-call
   correlation identifiers become durable audit evidence for MasterPlan 10, which raises their bar:
