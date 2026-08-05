@@ -1,14 +1,22 @@
 # Shikigami implementation order
 
-Reviewed 2026-08-05. This document is the narrative companion to
+Reviewed 2026-08-05 (revised later the same day: plan 28 M1 landed, and plan 38's codd import
+was cancelled). This document is the narrative companion to
 `docs/architecture/implementation-order.html`, which renders the same state as an interactive
 dependency board. Where the two disagree, the MasterPlan registries win — each MasterPlan's
 Exec-Plan Registry is the authority for its own children's status, and this document is a
 cross-MasterPlan reading of them.
 
 The portfolio is 52 ExecPlans across 10 MasterPlans. Sixteen are complete. The narrow foundation
-chain finished on 2026-07-31, so the remaining work is wide rather than serial: seven plans are
-startable today and nothing on the critical path is waiting on another repository.
+chain finished on 2026-07-31, so the remaining work is wide rather than serial: nothing on the
+critical path is waiting on another repository.
+
+Two changes on 2026-08-05 widened it further. Plan 28's Milestone 1 landed `Shikigami.Log` and
+the run/call correlation vocabulary. And plan 38's codd-ledger import was **cancelled** —
+shikigami has no users, so no database's history needs preserving, and codd was removed from
+the repository outright instead. Plan 38 was the portfolio's widest blocker; what it actually
+gated was a working pg-migrate authoring path, which exists and is proven, so that gate is
+released and only its configuration remainder is open.
 
 
 ## What is done
@@ -22,6 +30,8 @@ Six plans landed on 2026-07-31 and between them they closed the foundation:
   precedence, rejected unknown keys, and structurally redacted secrets.
 - Plan 47 selected the whole dependency cohort from Hackage by version with no `allow-newer`
   between co-developed packages, and removed the codd migration stack from the repository entirely.
+  Plan 38's remaining codd-ledger import was cancelled on 2026-08-05, so nothing in the tree
+  refers to codd as a live path any more.
 - Plans 13, 15, and 16 made the runtime honest: a real model provider that cannot run unannounced,
   behavior arms that receive the trigger payload and recalled memory, and sink handlers that really
   deliver or really fail.
@@ -38,15 +48,16 @@ performed because no credential was available.
 
 ## Startable today
 
-Every hard predecessor of these seven is complete, and none has an upstream gate on its first
+Every hard predecessor of these is complete, and none has an upstream gate on its first
 milestone.
 
 | Plan | MasterPlan | Why it is worth starting |
 |---|---|---|
-| 38 | 3 · Correctness | Widest unblocking: gates plans 19, 21, 23, 31, 35, and 51. Scope narrowed by plan 47 to the historical ledger import and the operational cutover. |
-| 39 | 5 · Durable evolution | Second widest: gates plans 24, 25, 26, 27, 35, 50, and 51. Every new journaled value and durable state machine passes through it. |
-| 28 M1 | 6 · Operations | Defines `Shikigami.Log` and the run/call correlation vocabulary that plans 19 and 51 both hard-depend on. No `Shikigami/Log.hs` exists yet. |
+| 38 (remainder) | 3 · Correctness | Now small: only the `shikigami-migrate` Settei unification, blocked by a Cabal package cycle. M1 and M2 were delivered by plan 47; M3, the codd import, was cancelled 2026-08-05. **No longer gates schema authoring** — plans 19, 21, 23, 35, and 51 may add migrations today. |
+| 19 | 3 · Correctness | Newly startable: both its gates cleared on 2026-08-05 (plan 28 M1 landed; plan 38's schema gate released). Only its terminal-delivery milestone waits on Keiro IR-3. |
+| 39 | 5 · Durable evolution | **Now the widest:** gates plans 24, 25, 26, 27, 35, 50, and 51. Every new journaled value and durable state machine passes through it. |
 | 17 | 3 · Correctness | With plan 18, releases plan 20; also half of plan 14's gate. |
+| 21 | 3 · Correctness | Newly startable: its only gate was plan 38's schema-authoring path, which is proven. |
 | 18 | 3 · Correctness | Atomic offsets, inbox, and enqueue in one boundary. Independent of 17. |
 | 43 | 9 · Practice reviews | Contract-only, no dependencies. Fully startable since plan 47 landed. |
 | 49 | 10 · Attestation | Contract-only, no dependencies. Lands the vocabulary nine other plans would otherwise each invent. |
@@ -66,9 +77,9 @@ Waves are entry rules, not schedules. A plan may start when its wave's rule is s
 | 1 | 36 | Complete 2026-07-31. |
 | 2 | 37 | Complete 2026-07-31, except the migration executable's Settei unification — reassigned to plan 38. |
 | 3 | 47 | Complete 2026-07-31. The codd stack was removed here. |
-| 4 | 38, 39, 28 M1 | Open, all three startable in parallel. This is the wave that unblocks the most. |
-| 5 | 13 ✅, 16 ✅, 17, 18, 21, 24, 50 | 17 and 18 startable now; 21 waits for 38; 24 and 50 wait for 39. |
-| 6 | 15 ✅, 19, 20, 22, 25, 26, 30, 33, 51 | 17+18 → 20; 16+28 M1+38 → 19 → 22; 20 → 30 and 33; 24+39 → 25 and 26; 49+50+38+39+28 M1 → 51. |
+| 4 | 38 (remainder), 39, 28 M1 ✅ | 28 M1 complete 2026-08-05. Plan 38's import is cancelled and its schema gate released, leaving only its configuration remainder. Plan 39 is now this wave's substance. |
+| 5 | 13 ✅, 16 ✅, 17, 18, 21, 24, 50 | 17, 18, and 21 startable now — 21's wait on 38 is released; 24 and 50 wait for 39. |
+| 6 | 15 ✅, 19, 20, 22, 25, 26, 30, 33, 51 | 19 is startable (16 ✅, 28 M1 ✅, 38's gate released) → 22; 17+18 → 20; 20 → 30 and 33; 24+39 → 25 and 26; 51 now needs 49+50+39 only. |
 | 7 | 12 (runtime), 14, 23, 27, 29, 32, 34, 35, 48, 52 | 12 and 29 have startable local halves now; 52 waits for 51, 22, and 44. |
 | 8 | 40 → 41 → 42 | Router declaration, then catalog, then replay-safe execution. All wait on plan 33. |
 | 9 | 44, 45 → 46 | Practice-review evidence and memory, then end-to-end orchestration. All wait on plan 43. |
@@ -164,11 +175,12 @@ re-pointed at it before implementation.
 
 ## Recommended order
 
-1. **Start now, in parallel:** 38, 39, and 28 M1 — these three unblock the most — plus 43 and 49,
-   which are contract-only and need nothing.
-2. **Next:** 17 and 18 together, which release 20. Then 19 once 38 and 28 M1 land, and 50 once 39
-   lands.
-3. **Then:** 21, 24, 51; then 22 → 52 as Kikan IR-6 and Baikai IR-3 mature.
+1. **Start now, in parallel:** 39 — now the widest single unblocker, gating 24, 25, 26, 27, 35,
+   50, and 51 — plus 43 and 49, which are contract-only and need nothing, plus 19 and 21, which
+   the 2026-08-05 changes released.
+2. **Next:** 17 and 18 together, which release 20. Then 50 once 39 lands, and 22 after 19.
+3. **Then:** 24, 51; then 52 as Kikan IR-6 and Baikai IR-3 mature. Plan 38's configuration
+   remainder can land whenever the package cycle is broken; only plan 31 waits on it.
 4. **Close the credential gap** on plan 13's live smoke. It was an accepted gap; it is now a
    precondition of plan 52's positive conformance case, because a run that never reached a real
    provider cannot demonstrate a `sanctioned` attestation.

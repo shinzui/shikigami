@@ -322,9 +322,7 @@ be an ordinary setting; the standard variables stay SDK-owned.
 sublibrary, so adding `shikigami-core` to the migration executable makes the two packages
 mutually dependent, and cabal's solver rejects the project outright. Until that boundary is
 restructured, `shikigami-migrate` reads one variable itself; see the `migrate` recipe in
-`Justfile`. It previously read codd's `CODD_*` contract — the July 2026 dependency cohort
-moved the whole stack to pg-migrate, so that contract no longer exists. Unifying this
-surface belongs to
+`Justfile`. Unifying this surface belongs to
 `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, which owns
 the migration CLI.
 

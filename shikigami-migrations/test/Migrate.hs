@@ -12,10 +12,9 @@
 -- appears as 'AppliedNow' twice would mean the ledger is not recording it, which
 -- is exactly the failure mode that makes a production deploy non-repeatable.
 --
--- Importing an existing codd ledger into the native one — so a database that
--- crossed over does not re-apply its whole history — is owned by
--- @docs\/plans\/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md@.
--- This module covers the fresh-database half.
+-- Every database this repository creates starts from an empty ledger, so a fresh
+-- apply is the only path there is; there is no prior migration tool to import
+-- history from.
 module Main (main) where
 
 import Data.List.NonEmpty qualified as NonEmpty

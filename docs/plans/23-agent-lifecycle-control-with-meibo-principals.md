@@ -93,8 +93,8 @@ The current repository begins with legacy `shikigami-core`, `shikigami-cli`,
 `shikigami-migrations`, and `shikigami-api` packages. Plans 36 and 38 run first and replace
 that ownership/migration model with the six-package service architecture and pg-migrate
 component, manifest, complete application plan, CLI, and test support. This plan places every
-new module in those assigned packages and uses the public pg-migrate test support; it does
-not create another Codd file or extend the legacy monolith. Everything builds inside
+new module in those assigned packages and uses the public pg-migrate test support; it adds a
+numbered manifest entry rather than extending an existing migration. Everything builds inside
 `nix develop` with `cabal build all` / `cabal test all`.
 
 Terms. A "principal" is a directory entry: an `agent_…` id plus a handle (the human name, which equals the Dhall `name` field for shikigami agents) plus a lifecycle. "Lifecycle" is one of `active`, `paused`, `deactivated`; paused/deactivated agents must neither fire nor deliver. A "trigger fire" is the moment shikigami decides to enqueue a run job for an agent; a "sink dispatch" is the moment a run's output is sent to an external service. The "directory view" is an in-memory snapshot mapping handle → principal record, refreshed in the background — never queried synchronously on the hot path.
@@ -201,8 +201,8 @@ CREATE INDEX IF NOT EXISTS shikigami.run_skips_agent_idx
   ON shikigami.run_skips (agent_name, occurred_at);
 ```
 
-(Plan 38's manifest/application plan defines exact order; no Codd timestamp ordering is
-consulted.)
+(Plan 38's manifest/application plan defines exact order; manifest position governs, not
+filename timestamps.)
 
 Load-state persistence: consume the `AgentLoadReport` returned by plan 20's
 `loadAgentsLoud`. Add `Shikigami.Directory.LoadStateStore` (or a section of

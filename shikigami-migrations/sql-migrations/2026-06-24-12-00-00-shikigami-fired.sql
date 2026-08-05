@@ -1,5 +1,3 @@
--- codd: in-txn
-
 -- Migration: shikigami-fired
 -- shikigami stores agent RUNS as kioku Sessions (kioku_sessions), so there is NO
 -- bespoke agent_runs table. The only shikigami-owned table is the detector

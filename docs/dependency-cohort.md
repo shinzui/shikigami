@@ -82,7 +82,7 @@ pre-upgrade commit-pinned `cabal.project`.
 | `kiroku-store` | 0.2.1.0 | **0.3.1.0** | `kiroku-store-v0.3.1.0` | `3009dda7238f7d05b1d0c97b04ec5d4c55031304` |
 | `kiroku-store-migrations` | 0.1.1.0 | **0.3.0.0** | `kiroku-store-migrations-v0.3.0.0` | `3009dda7238f7d05b1d0c97b04ec5d4c55031304` |
 | `pgmq-core` / `-hasql` / `-effectful` | 0.3.0.0 | **0.4.0.1** | `v0.4.0.1` | `f4a101843ea6f5c055277fd84859ece02865eff4` |
-| `pg-migrate` (+ `-cli`, `-embed`, `-import-codd`, `-test-support`) | — | **1.1.0.0** | `v1.1.0.0` | `f39d64e354818999667d345a1452f33eb4857fc1` |
+| `pg-migrate` (+ `-cli`, `-embed`, `-test-support`) | — | **1.1.0.0** | `v1.1.0.0` | `f39d64e354818999667d345a1452f33eb4857fc1` |
 | `ephemeral-pg` | 0.2.1.0 (fork pin) | **0.2.2.0** | Hackage | — |
 | `settei` (+ `-env`, `-yaml`, `-optparse-applicative`) | 0.2.0.0 | 0.2.0.0 | `v0.2.0.0` | `1bf62b0af110b4f42fe2528e9d459e0ccf12d626` |
 | `servant-health` | 0.1.0.0 | 0.1.0.0 | `v0.1.0.0` | `c70bffdd59e9336700dde304dac1328d3cb62f6a` |
@@ -94,7 +94,7 @@ migration path, and nothing else pulled them in.
 
 `kiroku-test-support` also leaves the plan. It was pinned but had no reverse
 dependency; the shikigami test suites use `shikigami-migrations:test-support`
-and `codd-extras:ephemeral` instead.
+instead.
 
 
 ## Packages still resolved from Git
@@ -104,10 +104,11 @@ and `codd-extras:ephemeral` instead.
 | `handan-core` | No Hackage release. Typed-program runtime behind `Shikigami.Behavior.Run` and `Shikigami.Program.Registry`. | Handan publishes. |
 | `kafka-effectful` | No Hackage release. `activity.v1` stream consumer. | It publishes. |
 | `danwa-core`, `danwa-api`, `danwa-client` | No Hackage release. Conversation substrate behind the `DanwaConversation` sink. | Danwa publishes. |
-| `codd`, `hasql-migration`, `hasql-notifications` | Forks carried for the current codd migration path. | `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md` completes the pg-migrate cutover. |
 
-`codd-extras` is a sibling path package added by `cabal.project.local`; it is not
-part of this cohort and retires with codd.
+Schema evolution is pg-migrate throughout. The `codd`, `hasql-migration`, and
+`hasql-notifications` forks this project once carried are gone, and so is the
+`pg-migrate-import-codd` path that would have imported an existing codd ledger — plan 38
+cancelled it on 2026-08-05 because no database needs its history preserved.
 
 
 ## Compatibility evidence

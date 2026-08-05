@@ -4,20 +4,21 @@
 -- | Shikigami's schema evolution, expressed as a @pg-migrate@ component and
 -- composed with the components the runtime libraries publish.
 --
--- The July 2026 cohort moved every library in the stack off codd:
--- @kioku-migrations 0.2@ publishes @kiokuMigrations@ as a
--- 'MigrationComponent' rather than a list of codd @AddedSqlMigration@s, so
--- there is no longer a codd-shaped set to append to. This module therefore
--- names the four components explicitly and lets @pg-migrate@ order them from
--- their declared dependencies, instead of relying on kioku to have
--- pre-concatenated kiroku and keiro.
+-- @kioku-migrations@ publishes @kiokuMigrations@ as a 'MigrationComponent'
+-- rather than a pre-concatenated list, so this module names the four components
+-- explicitly and lets @pg-migrate@ order them from their declared dependencies,
+-- instead of relying on kioku to have pre-concatenated kiroku and keiro.
 --
 -- The durable migration identity is @\<component\>\/\<migration-name\>@, and the
--- migration name is the SQL filename without its extension. The filenames here
--- keep their original codd-era timestamps and their @-- codd: in-txn@ header
--- comments on purpose: they are the payload evidence
--- @docs\/plans\/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md@
--- needs to import an existing codd ledger. Do not rename or reformat them.
+-- migration name is the SQL filename without its extension. Renaming a file
+-- therefore renames an applied migration, which a database that already ran it
+-- will reject — so treat the names as fixed once applied, and add rather than
+-- rename. @pg-migrate@ also fingerprints each migration's exact bytes, so
+-- editing applied SQL is a checksum mismatch for the same reason; corrections go
+-- in a new numbered manifest entry.
+--
+-- Transaction mode is declared in Haskell, on the component, not in a SQL header
+-- comment.
 module Shikigami.Migrations
   ( DefinitionError,
     MigrationComponent,

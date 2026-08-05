@@ -42,10 +42,11 @@ migrate-status:
 #
 # pg-migrate orders migrations by their position in
 # shikigami-migrations/sql-migrations/manifest, not by filename. The timestamped
-# filename convention is kept from the codd era because those names are the
-# durable migration identity of everything already applied; a new file follows it
-# for consistency, and appending puts it last, which is what an additive
-# migration wants.
+# filename convention is nonetheless load-bearing once a migration has been
+# applied: the durable migration identity is <component>/<filename without
+# extension>, so renaming an applied file renames an applied migration. A new
+# file follows the convention for consistency, and appending puts it last, which
+# is what an additive migration wants.
 #
 # Both the manifest and every file it lists are compilation dependencies: a stray
 # .sql file or a missing manifest entry fails the build rather than silently

@@ -71,12 +71,9 @@ source-repository-package
   tag: 301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9
   subdir: danwa-core danwa-api danwa-client
 
--- codd, its hasql-migration fork, and the hasql-notifications fork are gone.
--- kioku-migrations 0.2 publishes a pg-migrate MigrationComponent rather than a
--- codd migration list, so there is nothing left in this repository that can
--- consume codd; see docs/dependency-cohort.md. Importing an existing codd
--- ledger into the native one is plan 38's job and uses the released
--- pg-migrate-import-codd, not the fork.
+-- Schema evolution is pg-migrate throughout: every library in the stack
+-- publishes a MigrationComponent, and this repository composes them. See
+-- docs/dependency-cohort.md.
 
 package blake3
   flags: -avx512 -avx2 -sse41 -sse2

@@ -110,9 +110,9 @@ Downstream idempotency. kawa is safe: the doorway dedupes on `(source, source_ev
 
 Consumers of `Delivered` you must not break: `Shikigami.Agent.Conversation.sinkResultDetail` (`shikigami-core/src/Shikigami/Agent/Conversation.hs:446-448`) extracts the `Delivered` detail as the reply's message id (tests assert an `outbox:` prefix, `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:198-199`), and `Shikigami/Sink.hs:55-65` constructs real `Delivered` values from actual HTTP responses (those remain correct — they happen after HTTP).
 
-Infrastructure facts: plan 38 replaces the legacy Codd runner with one pg-migrate
-component, exact-byte manifest, complete application plan, CLI, and public test support.
-This plan adds its receipt change only through that component. `AgentRunDeps.appEnv`
+Infrastructure facts: one pg-migrate component, exact-byte manifest, complete application
+plan, CLI, and public test support already exist (see plan 38). This plan adds its receipt
+change only through that component. `AgentRunDeps.appEnv`
 gives `publishSinkIntent` access to the kiroku store pool.
 
 
@@ -260,7 +260,7 @@ before the upstream release.
 ## Interfaces and Dependencies
 
 Hard dependencies: plans 36, 37, 38, and plan 28 Milestone 1; preferred predecessor:
-plan 16. Schema work uses `pg-migrate`/`pg-migrate-test-support`, never Codd.
+plan 16. Schema work uses `pg-migrate`/`pg-migrate-test-support`.
 
 Libraries and why: keiro (`Keiro.Outbox` — `publishClaimedOutbox`, `defaultPublishOptions` (`maxAttempts = 10`, `ConstantBackoff 2`, `orderingPolicy = PerKeyHeadOfLine`, verified in keiro `src/Keiro/Outbox/Types.hs:221-230`), `OutboxRow (..)`, `PublishOutcome (..)`, `OutboxPublishSummary (..)`, `lookupOutbox`/`listOutbox` for inspection; outbox state in table `keiro.keiro_outbox`, status ∈ `pending|publishing|sent|failed|dead`), hasql/hasql-pool (the receipts table statements), warp/wai (test stubs, already test dependencies), aeson (backward-compatible constructor addition).
 

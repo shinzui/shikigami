@@ -75,7 +75,7 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
 
 ## Context and Orientation
 
-Repository layout: this is a Haskell cabal multi-package repo. `shikigami-core` holds the runtime library, `shikigami-cli` the `shikigami` executable (subcommand parser in `shikigami-cli/src/Shikigami/Cli.hs`, one module per subcommand under `shikigami-cli/src/Shikigami/Cli/Commands/`), `shikigami-migrations` the codd-managed SQL migrations plus a test-support sublibrary, and `shikigami-api` the shared wire types. All build and test commands run inside the nix dev shell: `nix develop` from the repo root, then `cabal build all` / `cabal test all`.
+Repository layout: this is a Haskell cabal multi-package repo. `shikigami-core` holds the runtime library, `shikigami-cli` the `shikigami` executable (subcommand parser in `shikigami-cli/src/Shikigami/Cli.hs`, one module per subcommand under `shikigami-cli/src/Shikigami/Cli/Commands/`), `shikigami-migrations` the pg-migrate SQL migrations plus a test-support sublibrary, and `shikigami-api` the shared wire types. All build and test commands run inside the nix dev shell: `nix develop` from the repo root, then `cabal build all` / `cabal test all`.
 
 Terms. A "sink" is one delivery target declared on an agent (the `Sink` type in `shikigami-api`, variants `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`). A "sink kind" is the coarse permission category for a sink — the `SinkKind` enum in `shikigami-core/src/Shikigami/Sink/Permission.hs:25-32` with five values: `SKawaDigest`, `SKizashiSignal`, `SReiAction`, `SDanwaConversation`, and `SChannelEgress` (line 30 — reserved for a future channel-egress sink; `docs/plans/32-channel-egress-sink-through-kanmon.md` will consume it, so the grant table must accept it from day one). `sinkKindText` (Permission.hs:43-49) renders the kinds as the exact strings `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, `ChannelEgress` — these strings become the `sink_kind` column values. A "grant" is the statement "agent X may use sink kind K".
 
@@ -89,10 +89,11 @@ Where the gate is called — there are four call sites, in two phases:
    - A near-duplicate `prepareSinkIntent` in `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs:101`, reached from the Flow behavior DSL via `enqueueSinkIntentStep` (SinkOutbox.hs:50-61, called from `Shikigami/Flow/Capability.hs:124`). (`docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` plans to merge these duplicates; do not merge them here, just thread the same source through both.)
 2. Publish time: `Shikigami.Sink.dispatch` (`shikigami-core/src/Shikigami/Sink.hs:39-47`) re-checks the grant (line 42) before routing to the per-sink handler; a denial logs `[sink] skipped (denied): …` to stderr (line 45) and returns `DeniedOutcome`. `dispatch` is invoked by the outbox publisher via `publishSinkIntent` (Workflow.hs:561-583), which maps any non-`Failed` outcome — including `DeniedOutcome` — to `PublishSucceeded` (lines 581-583), so a denied publish completes the outbox row without delivering. This denial-recording behavior must not change.
 
-Migrations. Plan 38 owns Shikigami's pg-migrate component, exact-byte manifest,
-complete application plan, CLI, legacy Codd-history import, and public test support.
-This plan contributes one forward-only grant change through that interface; it does not
-create timestamped Codd files or a second runner. Runtime SQL remains schema-qualified
+Migrations. Shikigami's pg-migrate component, exact-byte manifest, complete application
+plan, CLI, and public test support all exist today (delivered by plan 47; plan 38 records
+them). This plan contributes one forward-only grant change through that interface — a new
+numbered entry in `shikigami-migrations/sql-migrations/manifest` with its SQL file — and does
+not stand up a second runner. Runtime SQL remains schema-qualified
 as `shikigami.sink_grants`.
 
 Database access follows plan 36's package ownership. Runtime and CLI composition roots

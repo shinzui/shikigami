@@ -3,11 +3,9 @@
 -- | Ephemeral, fully-migrated databases for the repository's database-backed
 -- test suites.
 --
--- The July 2026 cohort replaced the codd apply path with @pg-migrate@, so this
--- module now drives 'Database.PostgreSQL.Migrate.Test.withMigratedDatabase'.
--- The exported signature is unchanged — callers still receive a connection
--- string — because that is what @shikigami-core@ and @shikigami-workers@ tests
--- hand to their pools.
+-- This module drives 'Database.PostgreSQL.Migrate.Test.withMigratedDatabase' and
+-- hands callers a connection string, because that is what @shikigami-core@ and
+-- @shikigami-workers@ tests give their pools.
 module Shikigami.Migrations.TestSupport
   ( withShikigamiMigratedDatabase,
   )

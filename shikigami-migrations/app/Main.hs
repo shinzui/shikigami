@@ -15,16 +15,14 @@
 -- So this binary reads @DATABASE_URL@ itself, in the same way
 -- @shikigami-workers\/src\/Shikigami\/Telemetry.hs@ keeps the OpenTelemetry SDK's
 -- @OTEL_*@ contract: nothing else in the process has a configuration surface to
--- share. It previously read codd's @CODD_*@ contract; the July 2026 cohort moved
--- the whole stack to @pg-migrate@, so that contract no longer exists.
+-- share.
 --
 -- Unifying this surface belongs to
 -- @docs\/plans\/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md@,
 -- which owns the migration components, manifests, CLI, and test support and can
--- restructure the package boundary while it does so. That plan also owns
--- importing an existing codd ledger into the native one; this executable
--- initializes a fresh ledger and will refuse to re-apply migrations it has
--- already recorded.
+-- restructure the package boundary while it does so. This executable initializes
+-- a fresh ledger and will refuse to re-apply migrations it has already
+-- recorded.
 module Main (main) where
 
 import Data.Aeson qualified as Aeson

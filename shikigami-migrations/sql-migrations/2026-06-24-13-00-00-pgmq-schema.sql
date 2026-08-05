@@ -1,11 +1,10 @@
--- codd: in-txn
-
 -- Migration: pgmq-schema
 -- The PGMQ schema (pgmq.create/send/read/...) for the shikigami_run_jobs queue.
--- Vendored from pgmq-hs (vendor/pgmq/pgmq-extension/sql/pgmq.sql) and applied via codd
--- instead of pgmq-migration, whose hasql-migration dep fails to build (crypton/memory
--- ByteArrayAccess (Digest MD5) incompatibility). pg_partman is only needed for
--- partitioned queues, which shikigami does not use.
+-- Vendored from pgmq-hs (vendor/pgmq/pgmq-extension/sql/pgmq.sql) and applied as part of
+-- this repository's own migration component instead of pgmq-migration, whose
+-- hasql-migration dep fails to build (crypton/memory ByteArrayAccess (Digest MD5)
+-- incompatibility). pg_partman is only needed for partitioned queues, which shikigami
+-- does not use.
 
 ------------------------------------------------------------
 -- Schema, tables, records, privileges, indexes, etc

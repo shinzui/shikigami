@@ -174,7 +174,7 @@ lines) defines exactly three processes: `postgres` (socket-only: started with
 processes, even though `docs/initial-spec.md:545-548` and `:728` intended "postgres + a
 Redpanda/Kafka broker".
 
-Plan 38 replaces the legacy Justfile/Codd path. `shikigami-migrate` exposes the canonical
+`shikigami-migrate` exposes the canonical
 component manifest and complete application plan with `plan`, `list`, `check`, `status`,
 `verify`, `up`, `repair`, and `new`; deployment uses the same CLI and test support as CI.
 
@@ -336,8 +336,7 @@ including the new check.
 Scope: write `docs/operations/configuration.md`, structured by process. For each runtime
 process plus stubs and `shikigami-migrate`, document every stable Settei key, type/default,
 validation, secret classification, source precedence, explicit legacy binding, and NixOS/
-process-compose incarnation. Document the pg-migrate component/manifest/plan/CLI rather
-than any `CODD_*` variables. Include the actual model-provider configuration from plan
+process-compose incarnation. Document the pg-migrate component/manifest/plan/CLI. Include the actual model-provider configuration from plan
 13, sink and kanmon credentials from plans 22/32, observability settings from plan 28, and
 health ports from plan 29. Cite each owning implementation; do not retain a reserved section.
 
@@ -587,7 +586,7 @@ whole stack tears down with `process-compose down`. If the Kafka data directory 
 (broker crash-loops with a storage error in the TUI), recovery is
 `rm -rf .dev/kafka && just dev` — nothing durable lives in Kafka (durable state is Postgres);
 the fixture topic is re-created on demand. If schema application fails, plan 38's
-`status|verify|repair|up` workflow determines the safe recovery; no Codd ledger is used. The nix changes
+`status|verify|repair|up` workflow determines the safe recovery. The nix changes
 are additive files (`flake.module.nix`, `nix/nixos-module.nix`, `nix/kafka-server.properties`);
 rollback is deleting them plus `git checkout -- process-compose.yaml Justfile`.
 

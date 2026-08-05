@@ -22,8 +22,14 @@ and Shikigami plan, and exposes the fleet migration CLI and public ephemeral-dat
 support.
 
 An operator can inspect, verify, apply, and repair the same embedded plan that production
-uses. An existing Codd-managed database is cut over by importing durable history into the
-pg-migrate ledger without replaying DDL. Running `up` twice is visibly idempotent.
+uses. Running `up` twice is visibly idempotent.
+
+**Scope change, 2026-08-05: the Codd history import is cancelled.** Nobody is running
+shikigami yet, so there is no database whose history must be preserved. Every database this
+repository creates — developer, CI, and any future deployment — starts from an empty ledger
+and receives the whole plan by a fresh `up`. Codd support is removed outright rather than
+migrated away from. What that leaves of this plan is recorded in Progress below; the
+reasoning is in the Decision Log.
 
 
 ## Progress
@@ -32,10 +38,27 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: inventory Codd files, ledgers, framework components, and exact payload mappings; create the Shikigami manifest and component.
-- [ ] M2: compose and test one complete Kiroku → Keiro → Kioku → PGMQ → Shikigami migration plan and standard CLI.
-- [ ] M3: implement and prove the one-time Codd history import on an existing-data database clone; strict verification passes before new SQL runs.
-- [ ] M4: replace test support, Justfile, deployment, and child-plan instructions; remove Codd dependencies and variables.
+- [x] M1: the Shikigami manifest and component exist —
+      `shikigami-migrations/sql-migrations/manifest` and `Shikigami.Migrations`. Delivered by
+      `docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md`, not
+      here. The Codd-file/ledger inventory half is void with M3.
+- [x] M2: one complete Kiroku → Keiro → Kioku → PGMQ → Shikigami plan is composed, applied by
+      the `shikigami-migrate` executable, and covered by
+      `shikigami-migrations-test` (pure composition) and `shikigami-migrations-smoke`
+      (ephemeral database, fresh apply, idempotent second `up`). `shikigami-migrations:test-support`
+      is published and consumed by the core and workers suites. Delivered by plan 47.
+      Verified 2026-08-05: 40 migrations apply from empty, a second `up` reports 40
+      `already_applied`, and `migrate-status` reports `issues=0`.
+- [x] ~~M3: the one-time Codd history import.~~ **Cancelled 2026-08-05** — no database needs
+      it. See the Decision Log.
+- [x] M4 (part): Codd is removed from the repository. No package depends on it, no SQL file
+      carries a `-- codd:` directive, and no comment, `Justfile` recipe, or build-config note
+      describes a Codd path. Done 2026-08-05.
+- [ ] M4 (remaining): unify `shikigami-migrate` on plan 37's Settei surface. It still resolves
+      `DATABASE_URL` itself, blocked by the Cabal package cycle described in plan 37 and
+      reassigned here. This is now the only implementation work this plan has left.
+- [ ] M4 (remaining): `just migrate` still invokes the executable with a `DATABASE_URL`
+      environment variable rather than `--config`; it follows the Settei item above.
 
 
 ## Surprises & Discoveries
@@ -50,9 +73,23 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
-- Decision: Import Codd history ledger-only; never replay already-applied DDL.
-  Rationale: Existing databases may contain production data and schema state. Re-executing historical actions is unsafe and does not prove equivalence.
-  Date: 2026-07-22
+- Decision: Cancel the Codd history import and remove Codd support outright.
+  Rationale: the import exists to protect data in a database that crossed over from Codd.
+  Shikigami has no users and no such database — the only one that existed was the developer
+  cluster in `db/`, which was recreated from empty on 2026-08-05. Carrying an import path,
+  the `pg-migrate-import-codd` dependency, and the constraints it imposed (do not rename or
+  reformat any applied SQL file, because those bytes are import evidence) would be paying a
+  migration cost for a migration nobody needs to make. Removing it also frees the SQL files:
+  their `-- codd: in-txn` headers were inert under pg-migrate, which takes transaction mode
+  from the Haskell component, and they are now gone.
+  Consequence: if shikigami is ever pointed at a Codd-managed database, the answer is to
+  recreate it, not to import it. That is acceptable precisely while there is nothing to lose,
+  and this decision should be revisited the moment a database holds data anyone wants.
+  Date: 2026-08-05
+
+- Superseded decision (2026-07-22): Import Codd history ledger-only; never replay
+  already-applied DDL. Rationale at the time: existing databases may contain production data
+  and schema state. Superseded by the cancellation above — there are no such databases.
 - Decision: Shikigami owns one component and the application executable owns one complete plan.
   Rationale: Library components declare their migrations and dependencies; only the deployed application knows the total runtime composition order.
   Date: 2026-07-22
@@ -124,21 +161,31 @@ verification. Publish `shikigami-migrations:test-support` using
 database and installs the same complete plan used by production. Core, server, and worker
 tests consume this sublibrary; no production library does.
 
-Milestone 3 implements the cutover. Use the public Codd history importer to map each legacy
-filename to its native component/migration identity and evidence. On a restored clone of a
-Codd-managed database containing representative rows, quiesce writers, import history,
-run strict `verify`, then apply only genuinely pending native migrations. Assert that the
-import does not execute target SQL and that row counts and important data checksums remain
-unchanged. Record the exact runbook and JSON reports. Do not improvise the import directly
-against a live database; production execution requires a backup and tested restore.
+Milestone 3 is cancelled; see the Decision Log. A database that cannot be recreated is the
+only thing that would bring it back.
 
-Milestone 4 updates `Justfile`, process-compose, NixOS packaging, and
-`docs/operations/migrations.md`. `just migrate` invokes `shikigami-migrate --config
-config/migrations-dev.yaml up`; authoring
-uses `shikigami-migrate new <description>` and updates the manifest. Remove Codd packages,
-`CODD_*` variables, re-embedding touches, and filesystem directory discovery. Rewrite
-plans 19, 21, and 23 to add pg-migrate manifest entries and plan-aware tests. Rewrite plan
-31 to deploy an explicit `plan`/`status`/`verify`/`up`/`verify` job.
+Milestone 4 is what remains. Codd itself is already gone from the repository — no package
+depends on it, and no file describes a Codd path. Two things are still open, and both are
+about configuration rather than schema:
+
+`shikigami-migrate` resolves `DATABASE_URL` itself instead of taking plan 37's Settei
+surface, because `shikigami-migrations` cannot depend on `shikigami-core` (which owns
+`AppConfig`) without the two becoming mutually dependent and the solver rejecting the
+project. Breaking that cycle — most likely by moving the configuration types into a package
+both can depend on — is this plan's remaining implementation work, reassigned here from plan
+37. Once it lands, `just migrate` invokes `shikigami-migrate --config
+config/migrations-dev.yaml up` rather than exporting an environment variable, and
+`docs/operations/configuration.md` loses its exception.
+
+Authoring stays as it is: add a numbered entry to
+`shikigami-migrations/sql-migrations/manifest` with its SQL file. Note that the durable
+migration identity is `<component>/<filename without extension>` and pg-migrate fingerprints
+each migration's exact bytes, so an applied file can be neither renamed nor edited — a
+correction is a new entry. `just new-migration` scaffolds this.
+
+Plans 19, 21, 23, and 31 were already rewritten on 2026-07-22 to add pg-migrate manifest
+entries, plan-aware tests, and an explicit deployment job; their remaining Codd mentions are
+guardrails and revision history, not instructions.
 
 
 ## Concrete Steps
@@ -169,26 +216,30 @@ cabal test all
 rg -n 'codd|CODD_' shikigami-migrations Justfile process-compose.yaml docs/plans docs/operations
 ```
 
-The final search may mention the historical import runbook, but no active runtime or
-authoring instruction uses Codd.
+That search must come back empty for `shikigami-migrations`, `Justfile`,
+`process-compose.yaml`, and `docs/operations`. Matches under `docs/plans` and
+`docs/masterplans` are the historical record of completed work and are expected.
 
 
 ## Validation and Acceptance
 
 Acceptance requires pure plan construction, manifest checks, and all database tests to pass.
-A fresh database receives every framework and service schema through one executable. A
-clone with legacy Codd history imports without replaying SQL, verifies as an applied prefix,
-and preserves representative data. A second `up` makes no changes. Plans 19, 21, and 23
-name pg-migrate files, manifests, and test support rather than Codd scaffolding.
+A fresh database receives every framework and service schema through one executable, and a
+second `up` makes no changes. Plans 19, 21, and 23 name pg-migrate files, manifests, and test
+support rather than Codd scaffolding.
+
+All of the above was verified on 2026-08-05 and is recorded in Progress. What remains
+unaccepted is the Settei unification only.
 
 
 ## Idempotence and Recovery
 
 Manifest checking and plan construction are read-only. `up` is idempotent for applied
-transactional migrations. History import is one-time and forward-only; rehearse it on a
-restored clone and retain its audit report. Back up and verify restore before production,
-quiesce legacy writers, and never edit either ledger manually. Recover an ambiguous
-nontransactional migration only through a reviewed `repair` request with evidence.
+transactional migrations. There is no history import to recover from. Never edit the ledger manually; recover an
+ambiguous nontransactional migration only through a reviewed `repair` request with evidence.
+While shikigami has no users, the sanctioned recovery from any ledger confusion is to drop
+and recreate the database — which is exactly what was done on 2026-08-05 when the developer
+cluster was found carrying both a `codd.sql_migrations` and a `pgmigrate.migrations` ledger.
 
 
 ## Portfolio Reconciliation (2026-07-30)
@@ -199,15 +250,41 @@ complete application manifest, operational cutover, and rollback proof. The two 
 changes must be integration-tested together, but Codd is removed only here.
 
 
+## Portfolio Reconciliation (2026-08-05)
+
+Plan 47 turned out to deliver M1 and M2 in full, and the 2026-08-05 cancellation removes M3.
+This plan is therefore no longer a migration at all: it is one configuration change, the
+Settei unification of `shikigami-migrate`.
+
+That matters to the portfolio because
+`docs/architecture/implementation-order.md` records this plan as the widest unblocker, gating
+plans 19, 21, 23, 31, 35, and 51. Those plans depend on it for *a working pg-migrate authoring
+path* — a manifest to add an entry to, and public test support to write a plan-aware test
+against. Both exist and are proven today. **The schema-authoring gate is therefore released:
+19, 21, 23, 35, and 51 may add migrations now.** What still genuinely waits on this plan is
+only work that needs the migration executable to read its configuration through Settei, which
+in practice is plan 31's deployment job.
+
+
 ## Interfaces and Dependencies
 
-Use the released coherent `pg-migrate`, `pg-migrate-embed`, `pg-migrate-cli`,
-`pg-migrate-import-codd`, and test-only `pg-migrate-test-support` packages. Owned modules
-are `Shikigami.Migrations.Component`, `Shikigami.Migrations.Plan`, and
-`Shikigami.Migrations.TestSupport`. This plan hard-precedes the new database migrations in
+Use the released coherent `pg-migrate`, `pg-migrate-embed`, `pg-migrate-cli`, and test-only
+`pg-migrate-test-support` packages. `pg-migrate-import-codd` is **not** used — see the
+Decision Log. The owned modules are `Shikigami.Migrations` and
+`Shikigami.Migrations.TestSupport`; the separate `Shikigami.Migrations.Component` and
+`Shikigami.Migrations.Plan` modules this plan once specified were never created, because plan
+47 implemented the component and the plan in one module. This plan hard-precedes the new database migrations in
 plans 19, 21, and 23 and the deployment work in plan 31. The migration package depends on
 no Shikigami sibling production package.
 
+
+Revision note (2026-08-05): Cancelled Milestone 3, the Codd history import, because nobody is
+using shikigami and no database needs its history preserved; Codd support was removed from the
+repository outright instead. Marked M1 and M2 complete — plan 47 delivered them — and recorded
+that this plan's only remaining implementation work is the Settei unification of
+`shikigami-migrate`. Added a Portfolio Reconciliation noting that the schema-authoring gate on
+plans 19, 21, 23, 35, and 51 is released, and corrected the module names, which never matched
+what was built.
 
 Revision note (2026-07-22): Created from the portfolio conformance review to replace the
 active Codd plan with the fleet pg-migrate component, plan, CLI, transition, and test model.

@@ -21,9 +21,9 @@ main = defaultMain (testGroup "shikigami-migrations" [compositionTests])
 -- composition mistake, so these cases fail on it immediately, without a
 -- database.
 --
--- Under the July 2026 cohort, @kiokuMigrations@ is a single @pg-migrate@
--- component rather than a pre-concatenated codd list, and ordering comes from
--- declared component dependencies rather than from filename timestamps. The
+-- @kiokuMigrations@ is a single @pg-migrate@ component rather than a
+-- pre-concatenated list, and ordering comes from declared component
+-- dependencies rather than from filename timestamps. The
 -- hazard is therefore no longer "duplicate timestamps" but "a component missing
 -- from the plan" or "shikigami ordered before the schema it builds on".
 --
@@ -62,8 +62,9 @@ compositionTests =
     indexOf haystack needle =
       length (takeWhile (not . (needle `isPrefixOf`)) (suffixes haystack))
 
-    suffixes xs = xs : case xs of
-      [] -> []
-      _ : rest -> suffixes rest
+    suffixes xs =
+      xs : case xs of
+        [] -> []
+        _ : rest -> suffixes rest
 
     ascending xs = and (zipWith (<) xs (drop 1 xs))

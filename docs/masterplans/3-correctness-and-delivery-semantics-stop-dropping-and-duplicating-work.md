@@ -33,8 +33,9 @@ publisher loop is `shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs`
 enqueue remains `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Nothing lives under
 `shikigami-cli` any more. Every process except `shikigami-migrate` resolves settings through
 Settei's `AppConfig`. The July 2026 cohort is in place, and it removed codd from the
-repository entirely — which shrinks F1 rather than removing it (see the Decomposition
-Strategy and the F1 note in Surprises & Discoveries). Any child plan text still naming
+repository entirely; the 2026-08-05 decision to cancel the codd-ledger import shrank F1
+again, down to one configuration change (see the Decomposition Strategy and the F1 notes in
+Surprises & Discoveries). Any child plan text still naming
 `shikigami-cli/...` or `shikigami-core/src/Shikigami/Worker.hs` is stale and must be read
 against this map.
 
@@ -47,9 +48,12 @@ The initiative has one database-evolution foundation and four independent hand-o
 boundaries. F1 completes the move to the fleet pg-migrate component/manifest/application-
 plan model before any child adds tables. Plan 47 already delivered the component, the
 exact-byte manifest, the composed four-component application plan, the `pg-migrate-cli`
-executable, and the pg-migrate test support, and removed codd from the repository; F1's
-remaining work is the durable codd-ledger import for an already-deployed database and the
-package restructure that lets `shikigami-migrate` resolve through the shared `AppConfig`.
+executable, and the pg-migrate test support, and removed codd from the repository. The
+codd-ledger import was cancelled on 2026-08-05 — shikigami has no users and no database whose
+history needs preserving — so F1's remaining work is only the package restructure that lets
+`shikigami-migrate` resolve through the shared `AppConfig`. **The schema-authoring gate is
+released:** the manifest, the composed plan, and the public test support all exist and are
+proven, so a child may add a migration today.
 The queue-to-workflow boundary (EP-1) is about
 what "retry" means once a job is in a handler, including the adapter's zero-based
 attempt and Shibuya's framework-owned acknowledgement. The stream-to-queue boundary
@@ -67,10 +71,10 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable; scope reduced) |
+| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Mostly Complete (M1, M2, M3 cancelled, M4 part; remaining: `shikigami-migrate` Settei unification. No longer gates schema authoring) |
 | 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
 | 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | F1; cross-MP: plans 16 ✅, 47 ✅, 28 M1 ⏳; upstream Keiro IR-3 ⏳ | None | Not Started (blocked on F1 and plan 28 M1) |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plans 16 ✅, 47 ✅, 28 M1 ✅; upstream Keiro IR-3 ⏳ | None | Not Started (**startable** — F1's schema gate released and plan 28 M1 landed 2026-08-05; only the terminal-delivery milestone waits on Keiro IR-3) |
 | 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 ✅, 47 ✅ | None | Not Started (blocked on EP-1, EP-2) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -80,7 +84,7 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 Child-plan staleness (2026-07-31). Every child ExecPlan's Context section was written before
 plans 36/37/47 landed and still names pre-split paths — `shikigami-cli/src/Shikigami/Cli/...`
 in plans 18 and 20, `shikigami-core/src/Shikigami/Worker.hs` in plans 17, 19, and 20 — and
-plan 38 still describes codd as present in the tree. The *defects* those plans describe were
+plan 38 described codd as present in the tree (corrected 2026-08-05). The *defects* those plans describe were
 re-verified against the current tree on 2026-07-31 and all still hold; only the file map and
 F1's starting point moved. Each child must have its Context and Concrete Steps re-pointed at
 the map in Vision & Scope before implementation begins.
@@ -88,9 +92,11 @@ the map in Vision & Scope before implementation begins.
 
 ## Dependency Graph
 
-F1 follows plans 36, 37, and 47 — all Complete — and gates every new Shikigami migration.
-EP-1, EP-2, and F1 are all startable now. EP-3 starts after F1 and plan 28 Milestone 1 defines
-`Shikigami.Log` (no `Shikigami/Log.hs` exists in the tree as of 2026-07-31). EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
+F1 follows plans 36, 37, and 47 — all Complete. It no longer gates new Shikigami migrations:
+the manifest, composed plan, and test support exist, so a child may add one today. EP-1, EP-2,
+and F1's remainder are all startable now. EP-3 is startable too as of 2026-08-05 — plan 28
+Milestone 1 landed `Shikigami.Log` and `Shikigami.Log.Correlation`, and F1's schema gate is
+released. EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
 and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
 implementations. Three additional coordination edges exist.
 
@@ -111,8 +117,8 @@ follows plan 16, which makes each sink handler truthful. EP-3 then records deliv
 using the final sink outcomes and structured logger; plan 27 lands afterward and consolidates
 the settled semantics. The sink chain is plan 16 plus plan 28 M1 → EP-3 → plan 27.
 
-EP-1 and EP-2 can proceed in parallel while F1 and plan 28 M1 land; EP-3 follows those
-milestone, and EP-4 starts after EP-1 and EP-2. This is the MasterPlan-3 slice of the
+EP-1, EP-2, EP-3, and F1's remainder can all proceed in parallel as of 2026-08-05; EP-4
+starts after EP-1 and EP-2. This is the MasterPlan-3 slice of the
 canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
@@ -150,11 +156,13 @@ boundary rather than a parallel acknowledgement loop. EP-4 consumes that seam.
 
 Database evolution — the `pg-migrate` component, exact-byte manifest, complete application
 plan, CLI, and test-support contract now exist in the tree (`shikigami-migrations`, delivered
-by plan 47). Plan 38 owns what remains: the one-time codd-ledger import for an already-deployed
-database, and unifying the `shikigami-migrate` operator surface. EP-3 adds delivery receipts
+by plan 47). Plan 38 owns what remains: unifying the `shikigami-migrate` operator surface.
+The codd-ledger import it also owned was cancelled on 2026-08-05. EP-3 adds delivery receipts
 only by appending a file to `shikigami-migrations/sql-migrations/manifest` (via
 `just new-migration`, which is already pg-migrate-shaped); plans 21 and 23 do the same for
-their tables. No child creates a Codd runner or replays legacy DDL.
+their tables. Note that a migration's durable identity is `<component>/<filename without
+extension>` and pg-migrate fingerprints its exact bytes, so an applied file can be neither
+renamed nor edited — corrections are new entries.
 
 One non-obvious obligation comes with that component. Applying the plan is only half the
 job: `Shikigami.Migrations.reconcileShikigamiReadModels` must run after a successful `up`,
@@ -211,7 +219,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
 - [x] F1: Milestones 1, 2, and most of 4 — pg-migrate component, exact-byte manifest, complete four-component plan, `pg-migrate-cli` executable, pg-migrate test support, codd removed from the repository (delivered by plan 47, 2026-07-31)
-- [ ] F1: Milestone 3 — one-time codd ledger-only import proved on a clone of an existing codd-managed database
+- [x] F1: Milestone 3 — **cancelled 2026-08-05.** No database needs its codd history preserved; codd support was removed outright instead
 - [ ] F1: Milestone 4 remainder — `shikigami-migrate` resolves `DATABASE_URL` through the shared `AppConfig` instead of reading it directly; the `shikigami-core` ↔ `shikigami-migrations` package cycle is broken
 - [ ] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
 - [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
@@ -254,8 +262,12 @@ interactions between child plans. Provide concise evidence.
   2026-07-31: `shikigami-migrations.cabal` depends on `pg-migrate`, `pg-migrate-embed`, and
   `pg-migrate-cli`; `sql-migrations/manifest` exists with both SQL files; the operator
   contract is `DATABASE_URL` and `cabal run shikigami-migrate -- up`. The migration filenames
-  and their `-- codd: in-txn` headers are preserved verbatim on purpose — they are the payload
-  evidence F1's ledger import needs, and must not be renamed or reformatted.
+  and their `-- codd: in-txn` headers were preserved verbatim as payload evidence for F1's
+  ledger import. **Void as of 2026-08-05:** the import is cancelled and the headers are
+  removed. They were inert anyway — pg-migrate takes transaction mode from the Haskell
+  component, not from a SQL comment. The filenames stay, but for a different reason: an
+  applied migration's durable identity is its filename, so renaming one breaks any database
+  that ran it.
 - Foundation landing (2026-07-31): **F1 also inherits a package-cycle problem that plan 37
   discovered and could not fix.** `shikigami-core`'s test suite depends on
   `shikigami-migrations`' public `test-support` sublibrary, so adding `shikigami-core` to
@@ -299,13 +311,37 @@ interactions between child plans. Provide concise evidence.
 
 ## Decision Log
 
-- Decision: Keep F1 (plan 38) in the registry with reduced scope rather than cancelling it as
+- Decision: Cancel F1's codd-ledger import (plan 38 Milestone 3) and remove codd support
+  outright, rather than carrying an import path for a migration nobody needs to make.
+  Rationale: the import exists to protect data in a database that crossed over from codd.
+  Shikigami has no users, and the only such database — the developer cluster in `db/` — was
+  found on 2026-08-05 carrying both a `codd.sql_migrations` and a `pgmigrate.migrations`
+  ledger, which made `just migrate` fail on objects codd had already created. It was dropped
+  and recreated from empty in seconds. Keeping the import would have meant keeping the
+  `pg-migrate-import-codd` dependency and, more expensively, the constraint that no applied
+  SQL file may be renamed or reformatted because its bytes are import evidence.
+  Consequence: if shikigami is ever pointed at a codd-managed database, the answer is to
+  recreate it, not import it. Revisit this the moment a database holds data anyone wants.
+  Date: 2026-08-05
+
+- Decision: F1 no longer gates schema authoring for EP-3, plans 21, 23, 35, or 51.
+  Rationale: what those plans need from F1 is a working pg-migrate authoring path — a manifest
+  to append to and public test support to write a plan-aware test against. Both exist and were
+  proven on 2026-08-05 (40 migrations apply from empty, a second `up` is a no-op,
+  `migrate-status` reports `issues=0`). F1's remainder is the migration executable's
+  *configuration* surface, which no schema author touches. Holding five plans behind it would
+  be sequencing on a shared plan number rather than on a real dependency.
+  Date: 2026-08-05
+
+- Superseded decision (2026-07-31): Keep F1 (plan 38) in the registry with reduced scope rather than cancelling it as
   superseded by plan 47.
   Rationale: plan 47 delivered the component, manifest, plan, CLI, and test support, but the
   two parts that need their own rollback and deployment proof remain undone — the codd ledger
   import for an already-deployed database, and the package restructure that unifies the
   migration executable's operator surface. Cancelling F1 would drop both, and EP-3's receipts
   table still needs a foundation plan that has been proved against real data.
+  Partly superseded 2026-08-05: the ledger import is cancelled, so only the package
+  restructure justifies keeping F1 open, and EP-3 no longer waits on it.
   Date: 2026-07-31
 
 - Decision: Treat the child ExecPlans' file paths as stale documentation to be re-pointed at
@@ -387,6 +423,15 @@ Compare the result against the original vision.
 
 
 ## Revision Notes
+
+- 2026-08-05: Cancelled F1's Milestone 3 (the codd-ledger import) after the decision that
+  shikigami has no users and no database whose history needs preserving; codd was removed from
+  the repository outright. F1 is now Mostly Complete with one configuration change left, and it
+  no longer gates schema authoring. EP-3 (plan 19) moves to startable: plan 28 Milestone 1
+  landed the same day, and F1's schema gate is released — only its terminal-delivery milestone
+  still waits on Keiro IR-3. Voided the inherited constraint that applied SQL files keep their
+  `-- codd: in-txn` headers, which were inert under pg-migrate; recorded the real reason their
+  filenames must not change (durable migration identity).
 
 - 2026-07-31: Reconciled the MasterPlan against six plans that landed since it was last
   revised (36, 37, 47, 13, 15, 16). Every cross-MasterPlan hard dependency of F1, EP-1, and

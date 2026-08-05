@@ -48,7 +48,7 @@ runJobFromEnvelope decl env =
     epoch = UTCTime (fromGregorian 1970 1 1) 0
 
 -- | Enqueue a run job: ensure the queue exists (idempotent), then send. The pgmq
--- schema itself is installed by the @pgmq-schema@ codd migration (shikigami-migrations).
+-- schema itself is installed by the @pgmq-schema@ migration (shikigami-migrations).
 enqueueRunJob :: Pool -> RunJob -> IO (Either UsageError MessageId)
 enqueueRunJob pool job =
   Pool.use pool $ do
