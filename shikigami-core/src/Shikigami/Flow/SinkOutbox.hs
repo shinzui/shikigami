@@ -34,7 +34,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (Sink)
 import Shikigami.Prelude
-import Shikigami.Sink (DanwaTarget, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
+import Shikigami.Sink (DanwaTarget, GrantSource, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))
 
 -- | The flow path's copy of "Shikigami.Agent.Workflow"'s @SinkIntent@.
@@ -73,6 +73,7 @@ data PreparedSinkIntent = PreparedSinkIntent
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  GrantSource ->
   StepName ->
   Text ->
   Text ->
@@ -83,11 +84,11 @@ enqueueSinkIntentStep ::
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
+enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
+  prepared <- liftIO (prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -106,6 +107,7 @@ enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTar
     Left err -> liftIO (ioError (userError (Text.unpack err)))
 
 prepareSinkIntent ::
+  GrantSource ->
   WorkflowId ->
   StepName ->
   Text ->
@@ -118,13 +120,13 @@ prepareSinkIntent ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
-  checkGrant (AgentIdentity agentName') kind <&> \case
+  checkGrant grantSource (AgentIdentity agentName') kind <&> \case
     Left (Denied reason) ->
       PreparedSinkIntent
         { sinkResult = deniedResult reason,

@@ -41,7 +41,8 @@ import Shikigami.Flow.Lifecycle.AtRiskCustomer
     atRiskCustomerValidationWarnings,
   )
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink.Permission (SinkKind (SKizashiSignal))
+import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
+import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (Delivered, DeniedOutcome), SinkResult (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -263,7 +264,8 @@ runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
           danwaTarget = Nothing,
           -- The same activity the flow's own capability sees, so a signal
           -- emitted from inside it resolves recipientFrom the way production does.
-          activity = Just sampleActivity
+          activity = Just sampleActivity,
+          grants = StaticGrants defaultGrantTable
         }
     body =
       runActivity sampleActivity

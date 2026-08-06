@@ -43,6 +43,7 @@ import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEvent
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Permission (SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
@@ -242,7 +243,8 @@ tests =
                         { Conversation.appEnv = appEnv,
                           Conversation.behaviorEnv = behaviorEnv,
                           Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
-                          Conversation.agents = [conversationDecl]
+                          Conversation.agents = [conversationDecl],
+                          Conversation.grants = StaticGrants defaultGrantTable
                         }
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -519,7 +521,8 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       hooks,
       approval = defaultApprovalEnv,
       deadline = Nothing,
-      logger = Log.silentLogger
+      logger = Log.silentLogger,
+      grants = StaticGrants defaultGrantTable
     }
 
 testDepsWithApproval :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> AgentRunDeps
@@ -539,7 +542,8 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       hooks,
       approval,
       deadline,
-      logger = Log.silentLogger
+      logger = Log.silentLogger,
+      grants = StaticGrants defaultGrantTable
     }
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> ApprovalEnv

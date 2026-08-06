@@ -13,6 +13,7 @@ import Data.Text qualified as Text
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
 
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
@@ -42,6 +43,10 @@ data SinkContext = SinkContext
     -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
     recipientOverride :: !(Maybe Text),
     occurredAt :: !(Maybe UTCTime),
+    -- | Which grant source the publish-time C11 check consults. Carried on the
+    -- context because a sink is dispatched from two different processes — inline
+    -- during a run, and later from the outbox publisher — and each builds its own.
+    grants :: !GrantSource,
     -- | Where this dispatch's log lines go. Carried on the context rather than
     -- reached for globally because a sink is dispatched from two different
     -- processes — inline during a run, and later from the outbox publisher —

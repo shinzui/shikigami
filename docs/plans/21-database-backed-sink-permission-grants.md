@@ -42,7 +42,10 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
       41/41 `already_applied` on re-run, `migrate-status` `issues=0`, and
       `shikigami-migrations-smoke` green (it applies the whole plan to a fresh ephemeral
       database, so the change is proved from empty as well as incrementally).
-- [ ] Milestone 2: `GrantSource` introduced; all four gate call sites read it; worker boots a DB-backed source; existing tests pass with the static source.
+- [x] Milestone 2: `GrantSource` introduced; all four gate call sites read it; the worker boots
+      `DbGrants` over the store pool; existing tests pass with the static source. Done
+      2026-08-06 — `cabal build all --enable-tests` and `cabal test all` green (157 core + 64
+      across the other suites), and no `checkGrant` call remains without a source.
 - [ ] Milestone 3: `shikigami grants list|grant|revoke` CLI implemented and manually verified.
 - [ ] Milestone 4: real-Postgres tests for the DB gate, seed data, and revocation-between-enqueue-and-publish; full `cabal test all` green.
 
@@ -62,6 +65,24 @@ Note it takes a **positional** argument; `just new-migration name=sink-grants` f
 own slug validation. The recipe writes the timestamped file and appends it to
 `shikigami-migrations/sql-migrations/manifest` in one step, so there is no separate "add its
 identity to the manifest" action to perform.
+
+**`GrantSource` cannot live in `Shikigami.Sink.Permission`.** The plan's Interfaces section puts
+it there, but `checkGrant`'s database arm needs `Shikigami.Sink.GrantStore`, and `GrantStore`
+needs `SinkKind` and `sinkKindText` from `Permission` — a module cycle GHC rejects. Resolved by
+splitting on the IO boundary instead: `Permission` keeps the pure vocabulary (`SinkKind`,
+`AgentIdentity`, `Denied`, `sinkKindText`, `defaultGrantTable`, `checkGrantStatic`) and knows
+nothing about a database; `GrantStore` owns `GrantSource`, `checkGrant`, and all SQL. That is a
+better layering than the plan described — the pure decision stays callable without a pool — and
+it is recorded as a decision below.
+
+**Re-exporting the whole store from `Shikigami.Sink` does not compile.** `GrantRow` and
+`GrantCursor` both have an `agentName` field, which is ambiguous against `AgentIdentity`'s in
+every module importing `Shikigami.Sink`. Only `GrantSource(..)` and `checkGrant` are
+re-exported; the row and paging types are imported directly by the CLI and tests.
+
+**`SinkEnv` had to lose its `Eq`/`Show` instances.** `Shikigami.Flow.Capability.SinkEnv` derived
+both, and `GrantSource` carries a `Hasql.Pool.Pool`, which has neither. Nothing in the tree used
+those instances (checked), so they were dropped rather than hand-written around the new field.
 
 **The scaffold's default header is wrong for this migration.** `just new-migration` seeds every
 new file with `SET search_path TO kiroku, pg_catalog;` and a comment about kizashi read-model
@@ -87,6 +108,14 @@ replaced rather than kept.
 - Decision: Model the injectable seam as a small sum type `GrantSource = StaticGrants (Map Text (Set SinkKind)) | DbGrants Pool` with `checkGrant :: GrantSource -> AgentIdentity -> SinkKind -> IO (Either Denied ())`, rather than threading a bare function value.
   Rationale: There are four gate call sites (see Context) plus several construction sites for the dependency records; a named sum keeps construction at process boot obvious, keeps the pure decision logic (`checkGrantStatic`) available for unit tests exactly as the current stub is, and is trivially replaceable later. The existing tests in `shikigami-core/test/Main.hs` (the "denied: skipped and recorded" cases) keep working by injecting `StaticGrants defaultGrantTable`.
   Date: 2026-07-08
+
+- Decision: Put `GrantSource` and `checkGrant` in `Shikigami.Sink.GrantStore`, not in
+  `Shikigami.Sink.Permission` as the Interfaces section says.
+  Rationale: a module cycle, and a better boundary. `Permission` is now pure vocabulary with no
+  database dependency at all, so `checkGrantStatic` remains a plain function tests call without
+  a pool; `GrantStore` owns every effectful thing. `Shikigami.Sink` re-exports `GrantSource` and
+  `checkGrant` so the four gate call sites need one import and nothing downstream changed.
+  Date: 2026-08-06
 
 - Decision: Seed the migration with exactly the five agents from `defaultGrantTable` and nothing more. Grant the proof agents (e.g. `digest-watcher`) at runtime via the new CLI.
   Rationale: The migration should be behavior-preserving; granting `digest-watcher` interactively is itself the demonstration that runtime grants work (see Validation).

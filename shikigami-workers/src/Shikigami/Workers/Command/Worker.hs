@@ -13,7 +13,7 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Log qualified as Log
-import Shikigami.Sink (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Workers.Config (WorkerEnv (..))
 import Shikigami.Workers.Registry (runWorkers)
@@ -63,6 +63,10 @@ runWorkerCmd config = do
                       agentParticipant = Config.danwaAgentParticipant config
                     },
                 rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
-                logger
+                logger,
+                -- The C11 gate reads shikigami.sink_grants over the same pool
+                -- the rest of the process uses, so a grant change is visible on
+                -- the next dispatch without a restart.
+                grants = DbGrants (StoreConnection.pool st)
               }
       runWorkers env

@@ -41,12 +41,14 @@ import Shikigami.Log qualified as Log
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
+    GrantSource (StaticGrants),
     KawaConfig (..),
     KizashiConfig (..),
     ReiConfig (..),
     SinkContext (..),
     SinkOutcome (..),
     SinkResult (..),
+    defaultGrantTable,
     dispatch,
   )
 import Shikigami.Sink.KizashiClient (buildSignalReq)
@@ -330,7 +332,8 @@ ctxWith rei =
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
-      logger = Log.silentLogger
+      logger = Log.silentLogger,
+      grants = StaticGrants defaultGrantTable
     }
   where
     -- Port 1 is not listening; a case that accidentally reaches another sink

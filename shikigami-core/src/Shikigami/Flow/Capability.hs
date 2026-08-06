@@ -38,6 +38,7 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
 import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Sink (GrantSource)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 import Shikigami.Sink.Types (DanwaTarget, SinkResult)
 
@@ -59,9 +60,11 @@ data SinkEnv = SinkEnv
     -- emitted from inside it can resolve @recipientFrom = Actor@ the same way
     -- the plain agent path does. A flow with no triggering activity simply
     -- resolves nothing and falls back to the declaration's default.
-    activity :: !(Maybe ActivityEnvelope)
+    activity :: !(Maybe ActivityEnvelope),
+    -- | Which grant source the enqueue-time C11 check consults for sinks emitted
+    -- from inside a flow.
+    grants :: !GrantSource
   }
-  deriving stock (Eq, Show)
 
 data Memory :: Effect where
   Recall :: MemoryQuery -> Memory m [MemoryRecord]
@@ -120,14 +123,14 @@ runMemory MemoryEnv {appEnv, agent = decl, sessionId} =
         Left err -> ioError (userError ("failed to record flow memory: " <> show err))
 
 runSink :: (Workflow :> es, Store :> es, IOE :> es) => SinkEnv -> Eff (Sink : es) a -> Eff es a
-runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity} action = do
+runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants} action = do
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
     ( \_ -> \case
         EmitSignal sink output -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
           let stepName = StepName ("emit-signal:" <> Text.pack (show ordinal))
-          enqueueSinkIntentStep stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
+          enqueueSinkIntentStep grants stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
     )
     action
 

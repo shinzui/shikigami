@@ -16,6 +16,7 @@
 module Shikigami.Workers.Config
   ( WorkerEnv (..),
     envLogger,
+    envGrants,
     agentRunDeps,
     conversationEnv,
     schedulerEnv,
@@ -32,7 +33,7 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Sink (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 
@@ -46,6 +47,10 @@ data WorkerEnv = WorkerEnv
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
+    -- | Which grant source every C11 check in this process consults. Built once
+    -- at boot as 'DbGrants' over the store pool, so a grant or revocation takes
+    -- effect on the next dispatch with no restart.
+    grants :: !GrantSource,
     -- | Where every loop's log lines go. Built once by the command that boots
     -- the process and shared by all four loops, so that one worker's output is
     -- one stream of JSON objects rather than four.
@@ -57,6 +62,11 @@ data WorkerEnv = WorkerEnv
 -- the unqualified use ambiguous under @DuplicateRecordFields@.
 envLogger :: WorkerEnv -> Log.Logger
 envLogger WorkerEnv {logger = l} = l
+
+-- | Named for the same reason as 'envLogger': several of the records below also
+-- carry a @grants@ field.
+envGrants :: WorkerEnv -> GrantSource
+envGrants WorkerEnv {grants = g} = g
 
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
@@ -72,7 +82,8 @@ agentRunDeps env =
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing,
-      AgentWorkflow.logger = envLogger env
+      AgentWorkflow.logger = envLogger env,
+      AgentWorkflow.grants = envGrants env
     }
 
 -- | The conversation workflow's environment.
@@ -82,7 +93,8 @@ conversationEnv env =
     { Conversation.appEnv = appEnv env,
       Conversation.behaviorEnv = behaviorEnv env,
       Conversation.danwa = danwa env,
-      Conversation.agents = agents env
+      Conversation.agents = agents env,
+      Conversation.grants = envGrants env
     }
 
 -- | The scheduler's view: the pool plus every agent whose trigger is a parseable

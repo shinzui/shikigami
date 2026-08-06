@@ -59,6 +59,7 @@ library
     Shikigami.Sink
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
+    Shikigami.Sink.GrantStore
     Shikigami.Sink.Http
     Shikigami.Sink.KawaClient
     Shikigami.Sink.KizashiClient

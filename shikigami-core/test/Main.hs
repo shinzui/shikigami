@@ -29,11 +29,13 @@ import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
     DanwaTarget (..),
+    GrantSource (StaticGrants),
     KawaConfig (..),
     KizashiConfig (..),
     SinkContext (..),
     SinkOutcome (..),
     SinkResult (..),
+    defaultGrantTable,
   )
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
@@ -200,7 +202,8 @@ ctxFor ident kz kw =
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
-      logger = Log.silentLogger
+      logger = Log.silentLogger,
+      grants = StaticGrants defaultGrantTable
     }
 
 dummyKawa :: KawaConfig

@@ -56,13 +56,16 @@ import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
+import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered), SinkResult (..))
 
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
     danwa :: !DanwaConfig,
-    agents :: ![AgentDecl]
+    agents :: ![AgentDecl],
+    -- | Which grant source the conversation reply's C11 check consults.
+    grants :: !GrantSource
   }
 
 data ConversationTurnResult = ConversationTurnResult
@@ -174,7 +177,7 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
     step (assistantReplyStepName msgMessageId) do
       turns <- liftIO (loadTurns env sid)
       let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-      assistantAndReplyE <- recordAssistantTurnAndEnqueueReply decl sid msg replyText userTurnIndex turns
+      assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (grants env) decl sid msg replyText userTurnIndex turns
       either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
   let replyMessageId = sinkResultDetail sinkResult
       RecordedTurn {turnId = recordedUserTurnId} = userTurn
@@ -333,6 +336,7 @@ recordTurnOnce env sid turnId desiredIndex role content turns =
 
 recordAssistantTurnAndEnqueueReply ::
   (IOE :> es, Store :> es, KirokuStoreResource :> es, Error StoreError :> es) =>
+  GrantSource ->
   AgentDecl ->
   SessionId ->
   AddressedMessage ->
@@ -340,15 +344,15 @@ recordAssistantTurnAndEnqueueReply ::
   Int ->
   [TurnRow] ->
   Eff es (Either Text (RecordedTurn, SinkResult))
-recordAssistantTurnAndEnqueueReply decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
+recordAssistantTurnAndEnqueueReply grantSource decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
   case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
     Just TurnRow {turnIndex = existingTurnIndex} -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent grantSource decl sid msg replyText now)
       pure (Right (RecordedTurn {turnId, turnIndex = existingTurnIndex}, AgentWorkflow.preparedSinkResult prepared))
     Nothing -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent grantSource decl sid msg replyText now)
       existing <- Session.getById sid
       case existing of
         Left err -> pure (Left (Text.pack (show err)))
@@ -395,14 +399,16 @@ recordAssistantTurnAndEnqueueReply decl sid msg@AddressedMessage {messageId = ms
         projections
 
 prepareConversationReplySinkIntent ::
+  GrantSource ->
   AgentDecl ->
   SessionId ->
   AddressedMessage ->
   Text ->
   UTCTime ->
   IO AgentWorkflow.PreparedSinkIntent
-prepareConversationReplySinkIntent decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
+prepareConversationReplySinkIntent grantSource decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
   AgentWorkflow.prepareSinkIntent
+    grantSource
     (conversationWorkflowId msg)
     (replySinkStepName msgMessageId)
     (name decl)

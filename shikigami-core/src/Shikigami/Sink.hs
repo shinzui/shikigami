@@ -8,6 +8,15 @@ module Shikigami.Sink
     module Shikigami.Sink.Permission,
     module Shikigami.Sink.Config,
 
+    -- * The gate
+
+    -- | Re-exported from "Shikigami.Sink.GrantStore" so the four gate call sites
+    -- need one import. The row and paging types are deliberately /not/ re-exported:
+    -- their @agentName@ field would collide with 'AgentIdentity''s in every module
+    -- that imports this one. The CLI and tests import the store directly.
+    GrantSource (..),
+    checkGrant,
+
     -- * Dispatch
     sinkKindOf,
     dispatch,
@@ -21,6 +30,7 @@ import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (runDanwa)
+import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
 import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
 import Shikigami.Sink.KizashiClient (buildSignalReq, postSignal)
 import Shikigami.Sink.Permission
@@ -41,7 +51,7 @@ sinkKindOf = \case
 dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
 dispatch ctx sink output = do
   let kind = sinkKindOf sink
-  grant <- checkGrant (identity ctx) kind
+  grant <- checkGrant (grants ctx) (identity ctx) kind
   case grant of
     Left (Denied reason) -> do
       Log.logWarn

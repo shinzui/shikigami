@@ -78,7 +78,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
-import Shikigami.Sink (DanwaConfig, DanwaTarget, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
+import Shikigami.Sink (DanwaConfig, DanwaTarget, GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 
@@ -93,6 +93,9 @@ data AgentRunDeps = AgentRunDeps
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime),
+    -- | Which grant source the enqueue-time C11 check consults, and the one
+    -- handed to every 'SinkContext' this run builds.
+    grants :: !GrantSource,
     -- | Where this run's log lines go. A workflow runs in whichever process
     -- picked the job up, so the logger arrives with the dependencies rather
     -- than being reached for globally.
@@ -167,6 +170,11 @@ jobIdempotencyKey RunJob {idempotencyKey} = idempotencyKey
 depsLogger :: AgentRunDeps -> Log.Logger
 depsLogger AgentRunDeps {logger = l} = l
 
+-- | Named for the same reason as 'depsLogger': 'SinkContext' and
+-- 'FlowCapability.SinkEnv' also carry a @grants@ field.
+depsGrants :: AgentRunDeps -> GrantSource
+depsGrants AgentRunDeps {grants = g} = g
+
 runJobOccurredAt :: RunJob -> UTCTime
 runJobOccurredAt RunJob {occurredAt} = occurredAt
 
@@ -235,7 +243,7 @@ runResolvedAgent deps job decl = do
         withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
           addAttribute traceSpan "agent.name" (agentDeclName decl)
           addAttribute traceSpan "sink.count" (length approvedSinks)
-          enqueueSinkIntents job (decl {sinks = approvedSinks}) sid output
+          enqueueSinkIntents (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
       _ <- runStep deps (StepName "complete") (completeSession deps sid)
@@ -376,7 +384,8 @@ runFlowBehavior deps sid decl job flowName =
           FlowCapability.runId = idText sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,
-          FlowCapability.activity = Just (activityFromJob job)
+          FlowCapability.activity = Just (activityFromJob job),
+          FlowCapability.grants = depsGrants deps
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope
@@ -443,12 +452,13 @@ failSession deps sid err = liftIO do
 
 enqueueSinkIntents ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  GrantSource ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   Value ->
   Eff es [SinkResult]
-enqueueSinkIntents job decl sid output = do
+enqueueSinkIntents grantSource job decl sid output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
@@ -478,7 +488,7 @@ enqueueSinkIntents job decl sid output = do
     buildSinkIntent workflowId (ordinal, sink) = do
       let RunJob {occurredAt = jobOccurredAt} = job
       let kind = sinkKindOf sink
-      checkGrant (AgentIdentity (agentName job)) kind <&> \case
+      checkGrant grantSource (AgentIdentity (agentName job)) kind <&> \case
         Left (Denied reason) ->
           (SinkResult kind (DeniedOutcome reason), Nothing)
         Right () ->
@@ -502,6 +512,7 @@ enqueueSinkIntents job decl sid output = do
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  GrantSource ->
   StepName ->
   Text ->
   Text ->
@@ -512,11 +523,11 @@ enqueueSinkIntentStep ::
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
+enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
+  prepared <- liftIO (prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -535,6 +546,7 @@ enqueueSinkIntentStep stepName agentName' runIdText ordinal occurredAt' danwaTar
     Left err -> liftIO (ioError (userError (Text.unpack err)))
 
 prepareSinkIntent ::
+  GrantSource ->
   WorkflowId ->
   StepName ->
   Text ->
@@ -547,13 +559,13 @@ prepareSinkIntent ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
-  checkGrant (AgentIdentity agentName') kind <&> \case
+  checkGrant grantSource (AgentIdentity agentName') kind <&> \case
     Left (Denied reason) ->
       PreparedSinkIntent
         { sinkResult = deniedResult reason,
@@ -623,7 +635,7 @@ deterministicOutboxIdForMessage messageId =
         Text.unpack ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -641,6 +653,7 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
                   danwaTarget = danwaTarget,
                   recipientOverride = resolvedRecipient,
                   occurredAt = occurredAt,
+                  grants = intentGrants,
                   logger = intentLogger
                 }
               sink
