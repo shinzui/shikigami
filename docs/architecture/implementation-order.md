@@ -7,7 +7,7 @@ dependency board. Where the two disagree, the MasterPlan registries win — each
 Exec-Plan Registry is the authority for its own children's status, and this document is a
 cross-MasterPlan reading of them.
 
-The portfolio is 52 ExecPlans across 10 MasterPlans. Sixteen are complete. The narrow foundation
+The portfolio is 53 ExecPlans across 10 MasterPlans. Sixteen are complete. The narrow foundation
 chain finished on 2026-07-31, so the remaining work is wide rather than serial: nothing on the
 critical path is waiting on another repository.
 
@@ -55,7 +55,8 @@ milestone.
 |---|---|---|
 | 38 (remainder) | 3 · Correctness | Now small: only the `shikigami-migrate` Settei unification, blocked by a Cabal package cycle. M1 and M2 were delivered by plan 47; M3, the codd import, was cancelled 2026-08-05. **No longer gates schema authoring** — plans 19, 21, 23, 35, and 51 may add migrations today. |
 | 19 (partly) | 3 · Correctness | Its repository-side gates cleared on 2026-08-05 (plan 28 M1 landed; plan 38's schema gate released), so M2–M4 are startable. **M1 is not fully startable:** it requires a released Keiro `PublishRejected`, and `PublishOutcome` in `keiro/src/Keiro/Outbox.hs:264-269` is still only `PublishSucceeded \| PublishFailed`. Verified 2026-08-05. |
-| 39 | 5 · Durable evolution | **Now the widest:** gates plans 24, 25, 26, 27, 35, 50, and 51. Every new journaled value and durable state machine passes through it. |
+| 53 | 5 · Durable evolution | The keiro 0.11 / keiki 0.9 upgrade, and now plan 39's prerequisite. **Blocked** on a published `kioku` admitting the new majors — `kioku-core 0.2.0.0` caps at `keiro ^>=0.4.0.1` / `keiki ^>=0.4.0.0`. Kioku is being updated; nothing else in the cohort depends on keiro or keiki. |
+| 39 (after 53) | 5 · Durable evolution | **The widest once unblocked:** gates plans 24, 25, 26, 27, 35, 50, and 51. Every new journaled value and durable state machine passes through it. |
 | 17 | 3 · Correctness | With plan 18, releases plan 20; also half of plan 14's gate. |
 | 21 | 3 · Correctness | Newly startable: its only gate was plan 38's schema-authoring path, which is proven. |
 | 18 | 3 · Correctness | Atomic offsets, inbox, and enqueue in one boundary. Independent of 17. |
@@ -83,6 +84,7 @@ Waves are entry rules, not schedules. A plan may start when its wave's rule is s
 | 7 | 12 (runtime), 14, 23, 27, 29, 32, 34, 35, 48, 52 | 12 and 29 have startable local halves now; 52 waits for 51, 22, and 44. |
 | 8 | 40 → 41 → 42 | Router declaration, then catalog, then replay-safe execution. All wait on plan 33. |
 | 9 | 44, 45 → 46 | Practice-review evidence and memory, then end-to-end orchestration. All wait on plan 43. |
+| — | 53 → 39 | New 2026-08-05. The keiro 0.11 / keiki 0.9 upgrade precedes DSL adoption; 53 waits on a kioku release. |
 | 10 | 31 | Operations closure, after the public configuration and health surfaces settle. |
 
 
@@ -175,9 +177,11 @@ re-pointed at it before implementation.
 
 ## Recommended order
 
-1. **Start now, in parallel:** 39 — now the widest single unblocker, gating 24, 25, 26, 27, 35,
-   50, and 51 — plus 43 and 49, which are contract-only and need nothing, plus 19 and 21, which
-   the 2026-08-05 changes released.
+1. **Start now, in parallel:** 21, which the plan-38 change released and which has no upstream
+   gate, plus 43 and 49, which are contract-only and need nothing. Plan 39 — still the widest
+   unblocker, gating 24, 25, 26, 27, 35, 50, and 51 — now waits on plan 53, the keiro 0.11 /
+   keiki 0.9 upgrade, so that the specification is authored against keiro-dsl 0.11 language 4
+   instead of being migrated onto it afterwards. Plan 53 is itself blocked on kioku.
 2. **Next:** 17 and 18 together, which release 20. Then 50 once 39 lands, and 22 after 19.
 3. **Then:** 24, 51; then 52 as Kikan IR-6 and Baikai IR-3 mature. Plan 38's configuration
    remainder can land whenever the package cycle is broken; only plan 31 waits on it.

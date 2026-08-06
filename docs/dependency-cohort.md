@@ -88,6 +88,19 @@ pre-upgrade commit-pinned `cabal.project`.
 | `servant-health` | 0.1.0.0 | 0.1.0.0 | `v0.1.0.0` | `c70bffdd59e9336700dde304dac1328d3cb62f6a` |
 | `hs-opentelemetry-*` | 1.0.0.0 | 1.0.0.0 | Hackage (third party) | — |
 
+### Pending: the keiro 0.11 / keiki 0.9 cohort
+
+Recorded 2026-08-05, **not yet applied**. `keiro` (with `-core`, `-migrations`, `-pgmq`,
+`-dsl`) is published at `0.11.0.0` and `keiki` / `keiki-codec-json` at `0.9.0.0`, against the
+`0.4.0.1` / `0.4.0.0` pinned here. The upgrade is owned by
+`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` and is blocked on
+one thing: `kioku-core 0.2.0.0` declares `keiro ^>=0.4.0.1` and `keiki ^>=0.4.0.0`, both capped
+below the next major, and no published kioku admits the new majors. Kioku is being updated.
+
+No other pinned co-developed package is affected — `kiroku-store 0.3.1.0`,
+`shibuya-core 0.8.0.1`, `shibuya-kiroku-adapter 0.4.0.0`, and `pgmq-hasql 0.4.0.1` declare no
+dependency on keiro or keiki (checked against their Hackage `.cabal` files on 2026-08-05).
+
 `keiro-pgmq` and `pgmq-migration` leave the build plan: `kioku-migrations 0.2.0.0`
 composes its migrations through `pg-migrate` rather than the legacy PGMQ
 migration path, and nothing else pulled them in.

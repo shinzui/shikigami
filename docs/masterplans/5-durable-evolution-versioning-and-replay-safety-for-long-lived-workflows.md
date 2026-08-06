@@ -119,7 +119,8 @@ consolidation reviewable against it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | cross-MP: plans 36 and 47 | None | Not Started |
+| F0 | Upgrade Shikigami to the keiro 0.11 and keiki 0.9 cohort | docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md | cross-MP: plans 36 ✅, 47 ✅ | None | Not Started (blocked: no published `kioku` admits keiro 0.11 / keiki 0.9; kioku is being updated) |
+| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | F0; cross-MP: plans 36 ✅, 47 ✅ | None | Not Started (author against keiro-dsl 0.11 language 4, so F0 first) |
 | 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Not Started |
 | 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1; cross-MP: plan 47 | None | Not Started |
 | 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1; cross-MP: plan 47; upstream Kioku IR-2 | None | Not Started |
