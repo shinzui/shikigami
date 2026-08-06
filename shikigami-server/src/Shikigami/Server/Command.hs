@@ -50,6 +50,7 @@ import Shikigami.App.Config.Load
   )
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
+import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
@@ -101,8 +102,60 @@ adminSubcommands =
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
-    ("danwa-spike", command "danwa-spike" danwaSpikeInfo)
+    ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
+    ("grants", command "grants" grantsInfo)
   ]
+
+-- | @grants@ is a group rather than a flat command: list, grant, and revoke
+-- share the table but take different arguments, and a flat @grant-sink@ /
+-- @revoke-sink@ pair would scatter the C11 surface across the top-level help.
+grantsInfo :: ParserInfo AdminAction
+grantsInfo =
+  info
+    (subparser (foldMap snd grantsSubcommands) <**> helper)
+    (progDesc "Inspect and change per-agent sink permission grants (C11)")
+
+grantsSubcommands :: [(String, Mod CommandFields AdminAction)]
+grantsSubcommands =
+  [ ("list", command "list" grantsListInfo),
+    ("grant", command "grant" grantsGrantInfo),
+    ("revoke", command "revoke" grantsRevokeInfo)
+  ]
+
+grantsListInfo :: ParserInfo AdminAction
+grantsListInfo =
+  info
+    (parser <**> helper)
+    (progDesc "List sink grants, most-significant page first")
+  where
+    parser =
+      (\limit after -> (runGrantsList limit after, []))
+        <$> optional (option auto (long "limit" <> metavar "N" <> help "rows per page (1-200, default 50)"))
+        <*> optional (strOption (long "after" <> metavar "AGENT:KIND" <> help "resume after this row"))
+
+grantsGrantInfo :: ParserInfo AdminAction
+grantsGrantInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Grant an agent a sink kind")
+  where
+    parser =
+      (\agent kind by -> (runGrantsGrant agent kind by, []))
+        <$> argument str (metavar "AGENT")
+        <*> argument str (metavar "KIND")
+        <*> optional (strOption (long "by" <> metavar "WHO" <> help "recorded in granted_by"))
+
+grantsRevokeInfo :: ParserInfo AdminAction
+grantsRevokeInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Revoke an agent's sink kind")
+  where
+    parser =
+      (\agent kind by -> (runGrantsRevoke agent kind by, []))
+        <$> argument str (metavar "AGENT")
+        <*> argument str (metavar "KIND")
+        <*> optional (strOption (long "by" <> metavar "WHO" <> help "recorded in revoked_by"))
 
 -- | A subcommand that reads no configuration at all.
 offline :: IO () -> AdminAction

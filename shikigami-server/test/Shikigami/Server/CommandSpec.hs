@@ -21,14 +21,15 @@ tests :: TestTree
 tests =
   testGroup
     "administrative command line"
-    [ testCase "the six administrative commands are present" $
+    [ testCase "the seven administrative commands are present" $
         fmap fst adminSubcommands
           @?= [ "validate",
                 "render-lifecycle",
                 "enqueue-run",
                 "publish-fixture",
                 "stub-kawa",
-                "danwa-spike"
+                "danwa-spike",
+                "grants"
               ],
       testCase "shikigami --help lists every command" do
         let rendered = helpTextOf ["--help"]

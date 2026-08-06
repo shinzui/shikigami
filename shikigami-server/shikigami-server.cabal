@@ -28,6 +28,7 @@ library
     Shikigami.Server.Command
     Shikigami.Server.Command.DanwaSpike
     Shikigami.Server.Command.EnqueueRun
+    Shikigami.Server.Command.Grants
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.RenderLifecycle
     Shikigami.Server.Command.StubKawa

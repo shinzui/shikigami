@@ -46,7 +46,11 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
       `DbGrants` over the store pool; existing tests pass with the static source. Done
       2026-08-06 — `cabal build all --enable-tests` and `cabal test all` green (157 core + 64
       across the other suites), and no `checkGrant` call remains without a source.
-- [ ] Milestone 3: `shikigami grants list|grant|revoke` CLI implemented and manually verified.
+- [x] Milestone 3: `shikigami grants list|grant|revoke` implemented in `shikigami-server` and
+      manually verified against the dev database. Done 2026-08-06 — transcript in Outcomes.
+      Note the command takes configuration the same way its siblings do, so the plan's
+      `--config config/operator-dev.yaml` is optional rather than required; the dev shell
+      already supplies `database.connection_string`.
 - [ ] Milestone 4: real-Postgres tests for the DB gate, seed data, and revocation-between-enqueue-and-publish; full `cabal test all` green.
 
 
@@ -83,6 +87,12 @@ re-exported; the row and paging types are imported directly by the CLI and tests
 **`SinkEnv` had to lose its `Eq`/`Show` instances.** `Shikigami.Flow.Capability.SinkEnv` derived
 both, and `GrantSource` carries a `Hasql.Pool.Pool`, which has neither. Nothing in the tree used
 those instances (checked), so they were dropped rather than hand-written around the new field.
+
+**`grants` is a subcommand group, not three top-level commands.** The plan says "register
+`grants list|grant|revoke` in the server-owned dispatcher" without saying which shape. A nested
+`subparser` was chosen so the C11 surface stays one entry in `shikigami --help` rather than three
+scattered ones. This changed `Shikigami.Server.CommandSpec`'s "the six administrative commands
+are present" assertion to seven.
 
 **The scaffold's default header is wrong for this migration.** `just new-migration` seeds every
 new file with `SET search_path TO kiroku, pg_catalog;` and a comment about kizashi read-model
