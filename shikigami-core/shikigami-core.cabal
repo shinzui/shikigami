@@ -129,6 +129,7 @@ test-suite shikigami-core-test
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
+    Shikigami.GrantStoreSpec
     Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.SinkHonestySpec

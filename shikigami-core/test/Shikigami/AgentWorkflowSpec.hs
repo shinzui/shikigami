@@ -5,6 +5,7 @@ import Control.Monad (when)
 import Data.Aeson (Value, object, (.=))
 import Data.Bifunctor (first)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -12,7 +13,7 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
-import Keiro.Outbox (OutboxRow (..), listOutbox)
+import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -28,7 +29,8 @@ import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.ReadModel (TurnRow (..))
-import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
@@ -37,14 +39,16 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
+import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
+import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.GrantStore (revokeGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -70,6 +74,41 @@ tests =
                 assertEqual "open-session replayed the original session id" firstSessionId secondSessionId
                 assertEqual "dispatch-sinks enqueued one stable outbox row" (Right 1) (length <$> outboxRows)
               other -> assertEqual "both workflow runs complete successfully" "completed twice" (show other),
+      -- The two-phase gate, and the reason both phases exist: the enqueue-time
+      -- check decides whether an outbox row is written at all, and the
+      -- publish-time check revalidates before delivery. A revocation landing
+      -- between them must stop the delivery even though the row is already
+      -- queued and its journaled SinkResult already says Delivered.
+      testCase "a revocation between enqueue and publish delivers nothing" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            received <- newIORef (Map.empty :: Map (Text, Text) Text)
+            testWithApplication (pure (kawaDoorwayApplication received)) \port -> do
+              tracer <- noopTracer
+              behaviorEnv <- newBehaviorEnv
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                  pool' = pool kirokuStore
+                  deps =
+                    (testDeps appEnv behaviorEnv defaultAgentRunHooks)
+                      { grants = DbGrants pool',
+                        kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}
+                      }
+
+              -- heartbeat/KawaDigest is seeded granted, so the run enqueues.
+              runResult <- runAgentRunWorkflow deps job
+              outboxBefore <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+              assertEqual "the granted run enqueued one outbox row" (Right 1) (length <$> outboxBefore)
+
+              -- Now revoke, and drive the publisher exactly as the worker does.
+              _ <- revokeGrant pool' "heartbeat" SKawaDigest (Just "test") >>= either (assertFailure . show) pure
+              let publishBatch rows =
+                    traverse (\row -> (outboxId row,) <$> publishSinkIntent deps row) rows
+              published <- runAppIO appEnv (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
+
+              delivered <- readIORef received
+              assertEqual "the kawa stub received nothing" 0 (Map.size delivered)
+              assertBool ("the publish pass itself succeeded: " <> show published) (isRight' published)
+              assertBool ("the run completed: " <> show runResult) (isCompleted runResult),
       testCase "resumes after a crash without rerunning journaled step bodies" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -638,6 +677,13 @@ expectedLifecycleSteps =
       "record",
       "complete"
     ]
+
+isRight' :: Either a b -> Bool
+isRight' = either (const False) (const True)
+
+isCompleted :: Either a (WorkflowOutcome (Either Text b)) -> Bool
+isCompleted (Right (Completed (Right _))) = True
+isCompleted _ = False
 
 decl :: AgentDecl
 decl =

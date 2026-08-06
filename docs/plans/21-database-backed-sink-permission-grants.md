@@ -51,7 +51,10 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
       Note the command takes configuration the same way its siblings do, so the plan's
       `--config config/operator-dev.yaml` is optional rather than required; the dev shell
       already supplies `database.connection_string`.
-- [ ] Milestone 4: real-Postgres tests for the DB gate, seed data, and revocation-between-enqueue-and-publish; full `cabal test all` green.
+- [x] Milestone 4: real-Postgres tests for the DB gate, seed data, paging, and
+      revocation-between-enqueue-and-publish. Done 2026-08-06 — `Shikigami.GrantStoreSpec`
+      (11 cases) plus one case in `Shikigami.AgentWorkflowSpec`; `cabal test all` green with
+      169 core tests, up from 157.
 
 
 ## Surprises & Discoveries
@@ -134,7 +137,52 @@ replaced rather than kept.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+### Complete 2026-08-06
+
+The C11 gate reads `shikigami.sink_grants`. A grant or revocation takes effect on the running
+worker's next dispatch, with no rebuild and no restart, which is the whole point of the plan.
+
+The end-to-end demonstration, against the dev database:
+
+```text
+$ shikigami grants list | grep digest-watcher
+(no row — denied)
+$ shikigami grants grant digest-watcher KawaDigest --by nadeem
+granted digest-watcher KawaDigest
+$ shikigami grants list --limit 200 | grep digest-watcher
+granted  digest-watcher  KawaDigest  by=nadeem at=2026-08-06T04:25:51.668404Z
+$ shikigami grants revoke digest-watcher KawaDigest --by nadeem
+revoked digest-watcher KawaDigest
+$ shikigami grants list --limit 200 | grep digest-watcher
+revoked  digest-watcher  KawaDigest  by=nadeem at=2026-08-06T04:25:51.775325Z
+```
+
+Tests: `cabal test all` green — 169 in `shikigami-core-test` (up from 157), plus 21 workers,
+20 server, 15 api, 3 client, 3+2 migrations.
+
+**The test worth naming** is `a revocation between enqueue and publish delivers nothing`, which
+proves the two-phase gate the Decision Log argued for: the run enqueues an outbox row while the
+grant holds, the grant is revoked, the publisher runs, and the kawa stub receives nothing. It was
+checked for vacuity — removing the revocation and asserting the stub receives **one** delivery
+also passes, so the zero-delivery assertion is measuring the revocation and not an inert fixture.
+
+**What changed from the plan.** Three structural deviations, each recorded in Surprises &
+Discoveries and the Decision Log: `GrantSource`/`checkGrant` live in `Shikigami.Sink.GrantStore`
+rather than `Permission` (the plan's placement is a module cycle); only those two names are
+re-exported from `Shikigami.Sink` (the row types' `agentName` field collides with
+`AgentIdentity`'s); and `grants` is a subcommand group rather than three top-level commands.
+`SinkEnv` also lost unused `Eq`/`Show` instances it could no longer derive.
+
+**What this plan did not do.** The journaled `SinkResult` for a late-denied sink still reads
+`Delivered "outbox:…"` — the enqueue-time verdict — as the Decision Log said it would. Making
+the journal reflect late denials would mean rewriting journaled step results, which is out of
+scope here and belongs with the delivery-truth work in
+`docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md`.
+
+**Lesson.** The plan's Interfaces section specified module placement that could not compile.
+That is not a criticism of the plan so much as a note for the next one: a plan can name a
+signature confidently, but where a type lives is constrained by the import graph, and the graph
+is only visible from inside the build.
 
 
 ## Context and Orientation

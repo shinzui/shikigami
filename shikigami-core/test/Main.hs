@@ -21,6 +21,7 @@ import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
+import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
@@ -58,6 +59,7 @@ main =
           BehaviorInputSpec.tests,
           BehaviorProviderSpec.tests,
           DelegateContextSpec.tests,
+          GrantStoreSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
           SinkHonestySpec.tests,
