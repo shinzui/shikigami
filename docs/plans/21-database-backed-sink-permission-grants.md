@@ -33,8 +33,15 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
 
 ## Progress
 
-- [ ] Prerequisites: plans 36/37/38 complete.
-- [ ] Milestone 1: `shikigami.sink_grants` pg-migrate change added to the exact manifest and complete application plan, applied, verified, and seeded with the five current defaults.
+- [x] Prerequisites: plans 36/37 complete; plan 38's schema-authoring path complete and proven
+      (its remaining Settei work does not gate schema authoring — see plan 38's 2026-08-05
+      Portfolio Reconciliation). Confirmed 2026-08-06.
+- [x] Milestone 1: `shikigami.sink_grants` pg-migrate change added to the manifest, applied,
+      verified, and seeded with the five current defaults. Done 2026-08-06 —
+      `shikigami-migrations/sql-migrations/2026-08-06-04-02-23-sink-grants.sql`, nine seed rows,
+      41/41 `already_applied` on re-run, `migrate-status` `issues=0`, and
+      `shikigami-migrations-smoke` green (it applies the whole plan to a fresh ephemeral
+      database, so the change is proved from empty as well as incrementally).
 - [ ] Milestone 2: `GrantSource` introduced; all four gate call sites read it; worker boots a DB-backed source; existing tests pass with the static source.
 - [ ] Milestone 3: `shikigami grants list|grant|revoke` CLI implemented and manually verified.
 - [ ] Milestone 4: real-Postgres tests for the DB gate, seed data, and revocation-between-enqueue-and-publish; full `cabal test all` green.
@@ -42,7 +49,25 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
 
 ## Surprises & Discoveries
 
-(None yet.)
+**The authoring command in this plan does not exist.** Milestone 1 and Concrete Steps say
+`cabal run shikigami-migrate -- new sink-grants`. The `shikigami-migrate` executable exposes the
+`pg-migrate-cli` verbs (`plan`, `list`, `check`, `status`, `verify`, `up`, `repair`), but
+scaffolding a new migration in this repository is a `Justfile` recipe:
+
+```bash
+nix develop -c just new-migration sink-grants
+```
+
+Note it takes a **positional** argument; `just new-migration name=sink-grants` fails the recipe's
+own slug validation. The recipe writes the timestamped file and appends it to
+`shikigami-migrations/sql-migrations/manifest` in one step, so there is no separate "add its
+identity to the manifest" action to perform.
+
+**The scaffold's default header is wrong for this migration.** `just new-migration` seeds every
+new file with `SET search_path TO kiroku, pg_catalog;` and a comment about kizashi read-model
+tables. That is right for a table the runtime reads unqualified, and wrong here: `sink_grants`
+lives in its own `shikigami` schema and every statement is schema-qualified. The header was
+replaced rather than kept.
 
 
 ## Decision Log
