@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-08-07
+
+* **Addition**: IR-8 requests an addressed agent-run vertical on the public HTTP API so
+  `mori://shinzui/mori` can fire agents from matched repository events across the service
+  boundary, instead of writing into the shared run-job queue.
+
 ## 2026-08-02
 
 * **Addition**: IR-7 requests sanctioned execution profiles, complete call roll-ups, artifact
