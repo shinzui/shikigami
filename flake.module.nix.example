@@ -29,6 +29,19 @@
     #   packages.my-tool = pkgs.hello;
     #   apps.seed = { type = "app"; program = "${pkgs.writeShellScript "seed" "..."}"; };
 
+    # Define your OWN default package build here. nix/haskell.nix emits
+    # `packages.default = callCabal2nix ...` only when nix.builtin-package is
+    # true; set that var False (e.g. when you need a haskell-nix overlay for
+    # patched private deps) and define packages.default below — otherwise the two
+    # definitions collide and flake-parts fails to evaluate:
+    #
+    #   packages.default = (pkgs.haskell.packages.ghc9124.override { ... }).my-package;
+
+    # Override formatter details without editing the managed nix/treefmt.nix
+    # (flake-parts merges treefmt.* options across modules):
+    #
+    #   treefmt.programs.fourmolu.package = pkgs.haskell.packages.ghc9124.fourmolu;
+
     # Extra dev shells compose freely (use a new name to avoid clashing with the
     # generated devShells.default):
     #
