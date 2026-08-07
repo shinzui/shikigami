@@ -104,6 +104,7 @@ const skeleton = `# ${title}
 
 This MasterPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
+If durable project context changes, update or create ADRs in docs/adr/ in the same change.
 
 
 ## Vision & Scope
@@ -118,7 +119,10 @@ boundary: what is included and what is explicitly excluded.
 Explain how and why the initiative was decomposed into these specific work streams.
 Describe the principles that guided the decomposition (functional concerns, dependency
 minimization, independent verifiability). State alternatives considered and why they
-were rejected.
+were rejected. Follow the exec-plan skill's ADR.md workflow: scan local filenames and
+headings, read only ADRs relevant to this initiative, and cite them by repository-relative
+path. Cite a cross-repository ADR only with the exact canonical handle returned by Mori.
+If no relevant ADR exists, say so.
 
 
 ## Exec-Plan Registry
@@ -144,7 +148,9 @@ require? Identify which plans can proceed in parallel and under what conditions.
 For each shared artifact (type, module, configuration, database table) that multiple
 child plans touch, document: which plans are involved, what the shared artifact is,
 which plan is responsible for defining it, and how later plans should consume or extend
-it.
+it. Identify any cross-plan decisions that should become ADRs, especially architecture
+boundaries, durable integration constraints, shared interface ownership, decomposition
+rationale that will matter later, and deliberate exclusions.
 
 (None identified, or list each integration point.)
 
@@ -180,7 +186,9 @@ plan.
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original vision.
+Compare the result against the original vision. Before marking the MasterPlan complete,
+distill durable project context from this MasterPlan and its child ExecPlans into
+docs/adr/. Keep task-local execution and coordination details here.
 
 (To be filled during and after implementation.)
 `;

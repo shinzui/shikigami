@@ -14,6 +14,15 @@ When discussing an ExecPlan, record decisions in the Decision Log section for po
 When researching a design with challenging requirements or significant unknowns, use milestones to implement proof of concepts, "toy implementations", etc., that allow validating whether the user's proposal is feasible. Read the source code of libraries by finding or acquiring them, research deeply, and include prototypes to guide a fuller implementation.
 
 
+## Relationship to ADRs
+
+Architecture Decision Records (ADRs) are durable project memory: architectural decisions, rejected alternatives, cross-cutting constraints, and lessons that remain useful after one plan is complete. The shared operational contract is in `ADR.md` beside this specification.
+
+An ExecPlan is active execution memory. It must contain enough context to restart and finish the work, including relevant ADR context, but it should not become the long-term home for durable project judgment. During plan creation, follow `ADR.md`: inspect the local corpus when it exists, scan filenames and headings, and read only ADRs relevant to the work. In Context and Orientation, cite local ADRs by repository-relative path and cross-repository ADRs by Mori's exact project-and-bundle-scoped handle, or state that no relevant ADR was found.
+
+During implementation, update or create ADRs whenever the work changes durable project context. Honor the repository's existing ADR convention; when `docs/adr/` is a profile-governed OKF bundle, preserve or allocate its stable handle and run strict profile enforcement as specified in `ADR.md`. At completion, distill the plan: review Decision Log, Surprises & Discoveries, and Outcomes & Retrospective, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient details in the plan.
+
+
 ## Non-Negotiable Requirements
 
 Every ExecPlan must be fully self-contained. Self-contained means that in its current form it contains all knowledge and instructions needed for a novice to succeed.
@@ -51,6 +60,8 @@ Anchor the plan with observable outcomes. State what the user can do after imple
 
 Specify repository context explicitly. Name files with full repository-relative paths, name functions and modules precisely, and describe where new files should be created. If touching multiple areas, include a short orientation paragraph that explains how those parts fit together so a novice can navigate confidently. When running commands, show the working directory and exact command line. When outcomes depend on environment, state the assumptions and provide alternatives when reasonable.
 
+If relevant local ADRs exist under `docs/adr/`, summarize the parts that matter and link each by repository-relative path. Cite cross-repository ADRs with an exact canonical Mori handle discovered through the registry. If no relevant ADR exists, say so. Do not require the implementer to read unrelated ADRs to understand the plan.
+
 Be idempotent and safe. Write the steps so they can be run multiple times without causing damage or drift. If a step can fail halfway, include how to retry or adapt. If a migration or destructive operation is necessary, spell out backups or safe fallbacks. Prefer additive, testable changes that can be validated as you go.
 
 Validation is not optional. Include instructions to run tests, to start the system if applicable, and to observe it doing something useful. Describe comprehensive testing for any new features or capabilities. Include expected outputs and error messages so a novice can tell success from failure. Where possible, show how to prove that the change is effective beyond compilation (for example, through a small end-to-end scenario, a CLI invocation, or an HTTP request/response transcript). State the exact test commands appropriate to the project's toolchain and how to interpret their results.
@@ -75,6 +86,8 @@ If you change course mid-implementation, document why in the Decision Log and re
 
 At completion of a major task or the full plan, write an Outcomes & Retrospective entry summarizing what was achieved, what remains, and lessons learned.
 
+Before marking the full plan complete, perform the ADR distillation pass: promote durable project context from the Decision Log, Surprises & Discoveries, and Outcomes & Retrospective into `docs/adr/`, updating existing ADRs when they already cover the topic and creating a new ADR when the topic is new.
+
 
 ## Prototyping and Parallel Implementations
 
@@ -85,4 +98,4 @@ Prefer additive code changes followed by subtractions that keep tests passing. P
 
 ## Revision Protocol
 
-When you revise a plan, you must ensure your changes are comprehensively reflected across all sections, including the living document sections, and you must write a note at the bottom of the plan describing the change and the reason why. ExecPlans must describe not just the what but the why for almost everything.
+When you revise a plan, you must ensure your changes are comprehensively reflected across all sections, including the living document sections, and you must write a note at the bottom of the plan describing the change and the reason why. ExecPlans must describe not just the what but the why for almost everything. If a revision changes durable project context, update the relevant ADR in `docs/adr/` in the same change.

@@ -23,6 +23,17 @@ Every MasterPlan must produce child ExecPlans that each conform to the ExecPlan 
 Every child ExecPlan must be independently implementable. A contributor should be able to pick up any child plan whose dependencies are satisfied and implement it without reading the other child plans. The MasterPlan itself provides the coordination context, but a child plan must stand alone for implementation purposes.
 
 
+## Relationship to ADRs
+
+Architecture Decision Records (ADRs) are durable project memory: architectural decisions, rejected alternatives, cross-cutting constraints, and lessons that remain useful after one plan is complete. The shared operational contract is in `agents/skills/exec-plan/ADR.md`.
+
+A MasterPlan is active coordination memory. It should include enough ADR context to explain why the initiative is decomposed and coordinated the way it is, but durable project judgment belongs in ADRs. During MasterPlan creation, follow the shared ADR guide, scan local filenames and headings, search Mori when cross-repository decisions may apply, and read only relevant records. Summarize local ADRs by repository-relative path and cross-repository ADRs by Mori's exact project-and-bundle-scoped handle, or state that no relevant ADR exists.
+
+MasterPlans should identify cross-plan decisions that deserve ADR records: architecture boundaries, decomposition rationale that will matter later, shared interface ownership, durable integration constraints, and deliberate exclusions. During implementation and update, revise or create ADRs whenever those durable decisions change. When the repository has a profile-governed ADR bundle, preserve or allocate its stable handle and run strict profile enforcement through the shared guide.
+
+At completion, distill durable context from the MasterPlan and child ExecPlans. Review Decision Logs, Surprises & Discoveries, and Outcomes & Retrospectives, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient coordination details in the plans.
+
+
 ## Decomposition Principles
 
 Break the initiative into work streams by functional concern, not by file or module. Each work stream should produce a demonstrable, independently verifiable behavior. Prefer fewer well-scoped plans (two to seven) over many granular ones. If you find yourself creating more than seven child plans, introduce phases to group related plans into implementation waves.
@@ -53,6 +64,8 @@ Integration points prevent silent conflicts where two plans make incompatible as
 The MasterPlan must maintain and keep current the following sections: a Progress section (aggregate checklist tracking milestone-level progress across all child plans), a Surprises & Discoveries section (cross-plan insights, dependency changes, scope adjustments), a Decision Log (every decomposition or coordination decision with rationale and date), and an Outcomes & Retrospective section (filled during and after the initiative).
 
 When a child plan's implementation reveals that the decomposition was wrong (a plan should be split, merged, reordered, or cancelled), update the MasterPlan first, then cascade the changes to affected child plans. Record the change in the Decision Log with rationale.
+
+When a living-document entry captures durable project context, update `docs/adr/` in the same change. This is especially important for cross-plan discoveries that alter shared interfaces, architectural boundaries, integration constraints, or deliberate exclusions.
 
 
 ## Writing Style and Formatting
