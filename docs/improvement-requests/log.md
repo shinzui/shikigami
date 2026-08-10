@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-10
+
+* **Addition**: IR-9 requests Meibo-principal keying for durable agent memory, grants,
+  lineage, and outbound authorship, including migration from name-keyed history.
+
 ## 2026-08-07
 
 * **Addition**: IR-8 requests an addressed agent-run vertical on the public HTTP API so
