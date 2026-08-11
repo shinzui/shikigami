@@ -27,8 +27,19 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: additive `Enqueued` and `PermanentFailure` constructors in `SinkOutcome`; enqueue sites tell the truth; released Keiro `PublishRejected` terminal outcome is available; logging/tests updated.
-- [ ] Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete.
+- [ ] Milestone 1 (startable half): additive `Enqueued` and `PermanentFailure` constructors in
+      `SinkOutcome`; enqueue sites tell the truth; logging/tests updated.
+- [ ] Milestone 1 (blocked half): consume a released Keiro `PublishRejected` terminal outcome.
+      **Still blocked as of 2026-08-10.** `PublishOutcome` in `keiro/src/Keiro/Outbox.hs:266-271`
+      remains `PublishSucceeded | PublishFailed`, and the implementing plan
+      `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has
+      none of its four milestones done. Re-verified on 2026-08-10 against the `keiro-0.11.0.0`
+      tree; the keiro 0.11 upgrade does **not** move this, and neither will the pending 0.12,
+      whose `Unreleased` notes say nothing about it. Split out so the rest of this plan can
+      proceed — see Surprises & Discoveries.
+- [ ] Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete. Plan 28 M1 landed
+      2026-08-05 and plan 38's schema gate is released, so the repository-side prerequisites are
+      met; only the Keiro gate above remains, and it constrains one half of one milestone.
 - [ ] Milestone 2: pg-migrate-managed `sink_deliveries` change; `publishSinkIntent` records explicit pending/attempting/delivered/failed/dead/unknown states and skips only proven delivered messages.
 - [ ] Milestone 2: tests — receipt row recorded with downstream id; second publish of a delivered message does not re-POST.
 - [ ] Milestone 3: danwa fresh-conversation retry reuses the recorded conversation id.
@@ -42,6 +53,34 @@ This section must always reflect the actual current state of the work.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+**The Keiro gate is real, narrow, and has not moved in a month (re-verified 2026-08-10).**
+Milestone 1 wants a terminal `PublishRejected` outcome so a permanently rejected outbox
+publication stops being retried. It does not exist. `PublishOutcome` at
+`keiro/src/Keiro/Outbox.hs:266-271` is still exactly:
+
+```haskell
+data PublishOutcome
+  = PublishSucceeded
+  | PublishFailed !Text
+```
+
+Three things are worth recording so nobody re-derives them. First, this is unchanged in the
+`keiro-0.11.0.0` tree, so `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`
+does not unblock it — plan 53 says so itself. Second, keiro's `Unreleased` section, which is
+substantial and describes a 0.12 release, does not mention `PublishRejected` either, so the
+pending upgrade will not deliver it by accident. Third, keiro's own implementing plan
+`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has zero of
+four milestones complete, which is the honest calibration for how soon to expect it.
+
+The response is to split Milestone 1 rather than hold the plan. Everything else here — the
+additive `SinkOutcome` constructors, honest enqueue sites, the `sink_deliveries` receipt states,
+danwa conversation-id reuse on retry, and per-sink outbox keys — needs nothing from keiro. Ship
+those, and treat the `PublishRejected` consumption as a follow-on that lands when upstream does.
+Do **not** work around it by inventing a local terminal-rejection notion inside
+`publishSinkIntent`: the whole point of the upstream request is that the outbox, not its caller,
+must know a publication is terminally rejected, and a local approximation would have to be
+deleted when the real one arrives.
 
 - Planning research (2026-07-08): neither kizashi nor danwa accepts any client-supplied id or idempotency key. kizashi's `CreateSignalReq` (kizashi repo, `kizashi-api/src/Kizashi/Api/Signal.hs:102-117`) has no dedupe field and its handler mints a fresh `SignalId` per call (`kizashi-core/src/Kizashi/Signal/Http.hs:205-222`); danwa's `StartConversationRequest`/`PostMessageRequest` (danwa repo, `danwa-api/src/Danwa/Conversation/Api.hs:139-148`, `danwa-api/src/Danwa/Message/Api.hs:42-47`) mint server-side TypeIDs, and danwa has no lookup-by-external-key (conversations are listable by status only). Downstream idempotency in this plan is therefore entirely client-side; upstream API additions are recorded as follow-ups in the Decision Log.
 
@@ -309,3 +348,29 @@ Mori. If absent, this plan owns the upstream addition/release before Shikigami c
 - 2026-07-22: Added an additive permanent-failure path backed by Keiro-owned
   `PublishRejected`, so stable 4xx failures dead-letter once without raw table mutation or
   repeated HTTP calls.
+
+
+## Revision Notes
+
+- 2026-08-10: Split Milestone 1 into a startable half and an upstream-blocked half, and recorded
+  the evidence for the block so it is not re-derived.
+
+  Milestone 1 bundled two independent things: shikigami's own additive `SinkOutcome` constructors
+  and honest enqueue sites, which need nothing external, and consumption of a released Keiro
+  `PublishRejected` terminal outcome, which does not exist. Bundling them made the whole milestone
+  look blocked when only part of it is.
+
+  The block was re-verified rather than inherited. `PublishOutcome` in
+  `keiro/src/Keiro/Outbox.hs:266-271` is still `PublishSucceeded | PublishFailed` in the
+  `keiro-0.11.0.0` tree; keiro's `Unreleased` section, which describes a substantial 0.12, does not
+  mention `PublishRejected`; and keiro's implementing plan
+  `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has none of
+  its four milestones done. So neither the keiro 0.11 upgrade nor the pending 0.12 will deliver it.
+
+  Surprises & Discoveries also records the workaround that must not be taken: inventing a local
+  terminal-rejection notion inside `publishSinkIntent`. The upstream request exists precisely
+  because the outbox rather than its caller has to know a publication is terminally rejected, so a
+  local approximation would be deleted when the real outcome lands.
+
+  The prerequisites line was updated to reflect that plan 28 M1 landed on 2026-08-05 and plan 38's
+  schema gate is released, so every repository-side prerequisite is now met.

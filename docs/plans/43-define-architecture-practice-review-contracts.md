@@ -86,6 +86,20 @@ Compare the result against the original purpose.
 
 ## Context and Orientation
 
+**Path correction, verified 2026-08-10 — the two exemplar files named in this paragraph no longer
+exist where it says.** Plan 36 moved the domain out of `shikigami-api`, which now contains only
+`Shikigami.Api`, `Shikigami.Api.OpenApi`, `Shikigami.Api.Problem`, and `Shikigami.Health.Api`.
+`ls shikigami-api/src/Shikigami/Api/` returns `OpenApi.hs` and `Problem.hs` and nothing else.
+
+Read the paragraph below with these substitutions. The client-safe style exemplar is now
+`shikigami-core/src/Shikigami/Agent/Decl.hs` — strict records, explicit JSON instances, snake-case
+wire options where required, unprefixed fields under `DuplicateRecordFields`. The trigger-payload
+carrier is now `shikigami-core/src/Shikigami/Agent/RunJob.hs`. And the module this plan adds is
+`Shikigami.PracticeReview` in `shikigami-core`, not `Shikigami.Api.PracticeReview` in
+`shikigami-api` — which is what the Portfolio Reconciliation of 2026-08-05 below already decided
+on package-architecture grounds, and this note simply makes the file paths agree with it. The
+style guidance and the "leaves trigger transport unchanged" commitment are both unaffected.
+
 `shikigami-api/src/Shikigami/Api/Activity.hs` demonstrates the current client-safe API style:
 strict records, explicit JSON instances, and snake-case wire options where required.
 `shikigami-api/src/Shikigami/Api/RunJob.hs` carries the untyped trigger payload into a durable
@@ -262,3 +276,23 @@ and shared Aeson options. Dependencies are the existing `aeson`, `text`, `time`,
 packages in `shikigami-api`; `mmzk-typeid` is not required unless the implementation chooses a
 portfolio TypeID after verifying its source with Mori. This plan introduces no dependency on
 Kioku, Keiro, Mori client code, or a model provider.
+
+
+## Revision Notes
+
+- 2026-08-10: Corrected the two exemplar file paths in Context and Orientation, which named
+  modules that plan 36 had already moved.
+
+  The Portfolio Reconciliation of 2026-08-05 had already decided the placement question on
+  package-architecture grounds — these contracts belong in `shikigami-core`, because
+  `shikigami-workers` may not depend on `shikigami-api` and `PackageArchitectureSpec` fails the
+  build on that edge. What it did not do was update the Context section, which still pointed an
+  implementer at `shikigami-api/src/Shikigami/Api/Activity.hs` and
+  `shikigami-api/src/Shikigami/Api/RunJob.hs` as style exemplars. Verified 2026-08-10: neither
+  exists; `shikigami-api/src/Shikigami/Api/` holds only `OpenApi.hs` and `Problem.hs`.
+
+  The substitutions are now stated inline: the style exemplar is
+  `shikigami-core/src/Shikigami/Agent/Decl.hs`, the trigger-payload carrier is
+  `shikigami-core/src/Shikigami/Agent/RunJob.hs`, and the module this plan adds is
+  `Shikigami.PracticeReview` rather than `Shikigami.Api.PracticeReview`. No decision changed —
+  the file paths were made to agree with a decision already recorded.

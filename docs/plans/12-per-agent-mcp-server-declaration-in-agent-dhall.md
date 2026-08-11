@@ -72,6 +72,16 @@ This section must always reflect the actual current state of the work.
   per-action authorization seam tracked by Kikan-En IR-3 are released and
   verified through Mori plus authoritative registry/tags. Baikai C3 is
   additionally required for non-`None` authentication.
+- [ ] **Re-verified 2026-08-10: all three upstream contracts are still absent.** Baikai has no
+  `Baikai.Mcp.*` module as of `baikai 0.5.0.0` — that release added `Baikai.Agent` and
+  `Baikai.Evidence`, not MCP. The shikumi package set (`shikumi`, `-cache`, `-cache-postgres`,
+  `-cache-redis`, `-cli`, `-compile`, `-eval`, `-jitsurei`, `-okf`, `-optimize`, `-tools`,
+  `-trace`, all at the 2026-08-07 tags) contains no MCP adapter. Kikan-En IR-3 remains
+  `proposed`. **Re-check all three before scheduling M3–M5 rather than trusting this line** —
+  it is a snapshot, and the whole point of recording the date is that it goes stale.
+- [ ] M1–M2 are startable now and do not depend on any of the above: the schema field, its
+  mirror, the loader proof, the example agents, and the `ToolRegistry` seam on `BehaviorEnv` are
+  all local. Only the live connect/invoke path in M3–M5 is gated.
 - [ ] M3 — Run lifecycle: add `withAgentMcpTools` (connect + register + bracket-close) in
   `Shikigami/Agent/Run.hs`; wrap the `runBehavior` call in `runAgentWithMemory` with it.
 - [ ] M4 — Skill loop: replace the single-completion `runSkill` with a bounded tool loop that
@@ -265,14 +275,28 @@ a baikai `Context`'s `tools` field expects — this is how MCP tools become visi
 in the Skill arm. The ReAct agent loop is in `Shikumi.Agent.ReAct` (`react`,
 `reactWithTrajectory`, `ReActConfig`).
 
-**Important build fact.** shikigami's `cabal.project` currently pins shikumi with
-`subdir: shikumi shikumi-trace` — it does **not** include `shikumi-tools`, and
-`shikigami-core.cabal` depends on `shikumi` but not `shikumi-tools`. To use `ToolRegistry`
-this plan must add `shikumi-tools` to both. Likewise `cabal.project` pins `baikai` at commit
-`a219ace81af9fd8202e1805a16e9ed21356ad214` (subdir `baikai baikai-claude baikai-effectful`),
-which predates the `Baikai.Mcp.*` modules. Replace this only with a coherent published
-release/bound verified against the authoritative registry and upstream tags once C1/C2 (and
-C3 for authenticated servers) have landed; do not guess a newer commit hash.
+**Important build fact — restated 2026-08-10, because the shape of it changed.** This paragraph
+previously described shikumi and baikai as `source-repository-package` commit pins. That is no
+longer true: `docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md`
+moved the whole co-developed cohort onto Hackage versions selected by a `constraints:` block, and
+`docs/dependency-cohort.md` is now the contract. So the instruction "do not guess a newer commit
+hash" has become "do not add a `source-repository-package` stanza at all" — a co-developed
+dependency is selected by released version, and a stanza is admissible only for a package with no
+release.
+
+What remains true is the gap itself. `shikigami-core.cabal` depends on `shikumi` but not
+`shikumi-tools`, and the constraints block names `shikumi` but not `shikumi-tools`, so this plan
+must add the package to both and give it a version bound consistent with the rest of the cohort.
+As of 2026-08-10 the shikumi family is released at the 2026-08-07 tags (`shikumi 0.3.0.2`,
+`shikumi-tools 0.3.0.2`), and `kioku-core 0.3.0.0` requires `shikumi ^>=0.3.0.1`, so a
+`shikumi-tools` bound in that line is coherent.
+
+The baikai half of the gap is unchanged in substance and worse in specificity than it looks:
+there is no `Baikai.Mcp.*` module in any released baikai, including `0.5.0.0`. That release added
+`Baikai.Agent` and `Baikai.Evidence` — neither is MCP. So there is no version to bump *to*, and
+this is a missing contract rather than a stale pin. Wait for baikai C1/C2 (and C3 for
+authenticated servers) and select the release that carries them, verified against the registry and
+upstream tags, exactly as `docs/dependency-cohort.md` requires.
 
 **The cross-repo surfaces this wires together** (full signatures in Interfaces and
 Dependencies):
@@ -831,3 +855,23 @@ authoritative registries/tags. Added plans 36/37 package and configuration prere
 Revision note (2026-07-30): Repointed the live authorization prerequisite to
 Kikan-En IR-3, the current OKF-profile request for per-action MCP connection
 and exact tool invocation. M1–M2 remain startable; M3–M5 remain blocked.
+
+Revision note (2026-08-10): Re-verified the three upstream gates and corrected a build fact that
+had gone stale.
+
+All three gates are still closed, and the check is recorded with its date so the next reader
+re-checks rather than trusts it. Baikai has no `Baikai.Mcp.*` module in any released version
+including `0.5.0.0` — that release added `Baikai.Agent` and `Baikai.Evidence`, neither of which is
+MCP — so this is a missing contract, not a stale pin, and there is no version to bump to. The
+shikumi package set at its 2026-08-07 tags contains no MCP adapter. Kikan-En IR-3 remains
+`proposed`. M1–M2 stay startable and are now called out as such explicitly, since nothing local
+depends on any of the three.
+
+The build fact was rewritten because the repository changed underneath it. It described shikumi
+and baikai as `source-repository-package` commit pins and told the implementer not to guess a
+newer commit hash. Plan 47 moved the entire co-developed cohort onto Hackage versions selected by
+a `constraints:` block, with `docs/dependency-cohort.md` as the contract, so the correct
+instruction is now not to add a `source-repository-package` stanza at all. The underlying gap is
+unchanged: `shikumi-tools` is in neither the constraints block nor `shikigami-core.cabal`, and
+this plan must add it — at a bound coherent with the released family, which as of 2026-08-10 is
+`0.3.0.2` and satisfies `kioku-core 0.3.0.0`'s `shikumi ^>=0.3.0.1`.

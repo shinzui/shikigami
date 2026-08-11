@@ -482,6 +482,43 @@ fields through the canonical loader, and update the checked Keiro/codec artifact
 values are affected.
 
 
+## Portfolio Reconciliation (2026-08-10) — the module this plan edits does not exist
+
+**Every reference in this plan to `shikigami-api/src/Shikigami/Api/Agent.hs` or to the module
+`Shikigami.Api.Agent` is stale and will send an implementer to a file that is not there.**
+Verified on 2026-08-10: `shikigami-api/src/Shikigami/Api/` contains exactly `OpenApi.hs` and
+`Problem.hs`. There is no `Agent.hs`.
+
+Plan 36 made `shikigami-api` the public HTTP contract package and moved the domain into
+`shikigami-core`. The agent declaration now lives at
+`shikigami-core/src/Shikigami/Agent/Decl.hs`, and the run job at
+`shikigami-core/src/Shikigami/Agent/RunJob.hs`. The reason this matters beyond a path fix is the
+package-architecture rule plan 36 also introduced: `shikigami-workers` is forbidden from depending
+on `shikigami-api`, and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` fails the build
+on that edge. So mirroring declaration types into `shikigami-api` would not merely be misplaced —
+it would put the declaration somewhere the worker cannot reach, and the build would say so.
+
+Read every occurrence with this substitution: `shikigami-api/src/Shikigami/Api/Agent.hs` becomes
+`shikigami-core/src/Shikigami/Agent/Decl.hs`, and the module `Shikigami.Api.Agent` becomes
+`Shikigami.Agent.Decl`. That covers the Purpose section's "mirrored in `Shikigami.Api.Agent`,
+proven by validate" discipline, Milestone 2's mirror step, the Context orientation, the
+new-field instructions, and the Interfaces list including `Shikigami.Api.Agent.RecallLimit`.
+The discipline itself is unchanged and still correct — a Dhall field, a `default` entry, a Haskell
+mirror, and a `validate` proof — only the file it lands in has moved.
+
+Confirm before editing rather than trusting this note, since it is a snapshot:
+
+```bash
+ls shikigami-api/src/Shikigami/Api/
+ls shikigami-core/src/Shikigami/Agent/
+```
+
+The same substitution applies to the sibling plans that inherit this plan's additive-field
+pattern: 12 (`mcpServers`), 32 (the channel-egress sink variant), 35 (`delegates`), and 40
+(`expertise` and `routing`). This plan establishes the pattern, so getting the path right here is
+what keeps four later plans from repeating the error.
+
+
 ## Portfolio Reconciliation (2026-08-05)
 
 **This plan does not own agent declaration revision, artifact identity, or run pinning, and must not
@@ -567,3 +604,24 @@ this plan and plan 30 before adding lifecycle state.
   selection, and removed the stale sink-field warning that would contradict plan 16.
 - 2026-07-22: Added plan 36 and bounded `Natural` validation; recall limits now become a
   1–1000 domain type before any `Int`, query, or allocation use.
+
+
+## Revision Notes
+
+- 2026-08-10: Added a Portfolio Reconciliation correcting every reference to
+  `shikigami-api/src/Shikigami/Api/Agent.hs`, which does not exist.
+
+  The 2026-08-05 audit corrected this plan's *scope* — recording that it does not own governed
+  agent evolution — but left its *paths* pointing at a module plan 36 had already moved. Verified
+  2026-08-10: `shikigami-api/src/Shikigami/Api/` contains only `OpenApi.hs` and `Problem.hs`; the
+  declaration is `shikigami-core/src/Shikigami/Agent/Decl.hs`.
+
+  This is worth more than a path fix because of the package-architecture rule plan 36 introduced
+  alongside the move: `shikigami-workers` may not depend on `shikigami-api`, and
+  `PackageArchitectureSpec` fails the build on that edge. An implementer who followed this plan
+  literally would mirror the declaration types into a package the worker cannot reach and would
+  discover it as a build failure rather than as a design error.
+
+  The note gives the substitution to apply throughout, and extends it to the four sibling plans —
+  12, 32, 35, and 40 — that inherit this plan's additive-field pattern, since this plan is where
+  the pattern is established.
