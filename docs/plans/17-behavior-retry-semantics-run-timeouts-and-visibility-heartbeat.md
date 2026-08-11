@@ -27,11 +27,22 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
+- [ ] **M0 (gate, added 2026-08-10): `shibuya-core 0.9.0.0` is in the cohort.** This plan should
+      not start before it. 0.9 ships the application-defined dead-letter code vocabulary that
+      Milestone 2 would otherwise hand-roll and then delete. It is currently excluded by
+      `keiro 0.11`'s `shibuya-core >=0.8.0.1 && <0.9`, so the gate is really `keiro 0.12` →
+      cohort bump → this plan. See Surprises & Discoveries and
+      `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`.
 - [ ] Milestone 1: add `FailureClass`/`classifyRunError`/`TransientBehaviorFailure` to `Shikigami.Behavior.Error`; throw transients in `runBehaviorStep`.
 - [ ] Milestone 1: tests — transient failure re-executes on second run; permanent failure replays without re-execution.
 - [ ] Prerequisites: plans 36/37 complete; worker ownership and Settei configuration are settled.
 - [ ] Milestone 2: extract pure `classifyOutcome`; preserve Shibuya as sole ack owner; consume the adapter's zero-based attempt and use the shared `mkRetryPolicy`; configure a real dead-letter queue.
-- [ ] Milestone 2: tests — classification table test; dead-letter queue receives permanent failures.
+- [ ] Milestone 2: validate shikigami's finite dead-letter code set **once at worker startup**
+      with `mkDeadLetterCode`, hold the results in `WorkerEnv`, and classify permanent failures
+      as `ApplicationFailure` rather than `PoisonPill`. Do not validate per message.
+- [ ] Milestone 2: tests — classification table test asserting `deadLetterReasonCode` for each
+      case; dead-letter queue receives permanent failures with populated
+      `dead_letter_reason_code` and `dead_letter_reason_detail` fields.
 - [ ] Milestone 3: thread the shibuya lease into `handleRunJob`; periodic heartbeat around the workflow execution.
 - [ ] Milestone 3: test — pgmq visibility-extension primitive prevents redelivery.
 - [ ] Milestone 4: wall-clock run timeout (`runTimeout`) and configurable approval `deadline` in `WorkerEnv`; Settei wiring.
@@ -44,7 +55,51 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+**Shibuya shipped this plan's dead-letter vocabulary on 2026-08-10 (discovered same day).**
+`shibuya-core 0.9.0.0` extends `DeadLetterReason` with a fourth constructor:
+
+```haskell
+data DeadLetterReason
+  = PoisonPill !Text
+  | InvalidPayload !Text
+  | MaxRetriesExceeded
+  | ApplicationFailure !DeadLetterCode !Text
+```
+
+`DeadLetterCode` is an opaque newtype whose constructor is private; values come from
+`mkDeadLetterCode :: Text -> Either Text DeadLetterCode`, which accepts at most 128 ASCII
+characters in at least two dot-separated segments, each segment matching `[a-z][a-z0-9_]*`, with
+the first segment `shibuya` reserved for framework codes. Alongside it, 0.9 adds the total
+projections `deadLetterReasonCode :: DeadLetterReason -> DeadLetterCode` and
+`deadLetterReasonDetail :: DeadLetterReason -> Maybe Text`, the canonical renderer
+`renderDeadLetterReason`, and the built-in codes `poisonPillCode`, `invalidPayloadCode`, and
+`maxRetriesExceededCode`. Processing spans now carry the stable code as
+`shibuya.dead_letter.reason.code`, keeping human detail out of attributes and metrics.
+`shibuya-pgmq-adapter 0.14.0.0` carries it into the DLQ payload: every message keeps the
+compatibility field `dead_letter_reason` and gains `dead_letter_reason_code` plus an
+always-present `dead_letter_reason_detail`.
+
+**Why this matters more than a version bump.** As written, Milestone 2 classifies every permanent
+failure as `AckDeadLetter (PoisonPill err)` — one bucket, with the actual reason smuggled into a
+free-text string that operators would have to grep. Milestone 2 also intends a table-driven
+classification test, which is a taxonomy in all but name. Building that taxonomy privately on
+0.8 and then meeting 0.9 means writing a code type, a renderer, and a projection and deleting all
+three. The upstream `DeadLetterCode` is also stricter than a hand-rolled string would have been —
+private constructor, validated shape, reserved namespace, validate-at-startup discipline — and
+that strictness is the point.
+
+**The gate is indirect, which is easy to miss.** `shibuya-core 0.9.0.0` is published, but
+`keiro 0.11.0.0` declares `shibuya-core >=0.8.0.1 && <0.9` in `keiro/keiro.cabal`, so the cohort
+cannot take it yet. The release that lifts the cap is `keiro 0.12`, already staged in keiro's
+`Unreleased` section. `shibuya-pgmq-adapter 0.14.0.0` follows shibuya-core 0.9 and is excluded
+the same way, which is why plan 53 takes `0.13.0.0`. So the real chain is: keiro 0.12 publishes →
+a cohort bump takes shibuya-core 0.9 and adapter 0.14 → this plan starts.
+
+**If the gate does not clear in a reasonable time**, implement Milestone 2 against 0.8 but keep
+every permanent-failure classification behind one module that returns a shikigami-owned code
+type, with `PoisonPill (renderMyCode c <> ": " <> detail)` as the only place the two are flattened
+together. The 0.9 swap is then deleting that flattening and changing one constructor. Do not
+scatter `PoisonPill` construction across `classifyOutcome`'s arms.
 
 
 ## Decision Log
@@ -56,8 +111,42 @@ Record every decision made while working on the plan.
   Date: 2026-07-08
 
 - Decision: Keep `agentRunWorkflow`'s result type `Either Text AgentRunResult` unchanged; after this plan a journaled `Left` means "permanent failure" by construction, and the worker dead-letters all `Completed (Left _)` outcomes.
-  Rationale: keiro journals the workflow completion value; changing the type would change the JSON encoding of already-completed workflows. Keeping it also deletes the `"unknown agent "` string-prefix hack for free: unknown-agent is just another permanent `Left`.
-  Date: 2026-07-08
+  Rationale: Keeping it deletes the `"unknown agent "` string-prefix hack for free: unknown-agent is just another permanent `Left`. (The original rationale also cited the JSON encoding of already-completed workflows, which no longer applies — shikigami has no users and no completed workflow is stored anywhere. The decision stands on the simplification alone.)
+  Date: 2026-07-08, rationale narrowed 2026-08-10
+
+- Decision: Classify permanent failures as `ApplicationFailure` with a validated, shikigami-owned
+  `DeadLetterCode`, not as `PoisonPill` carrying free text.
+  Rationale: this plan was already going to build a permanent-failure taxonomy — Milestone 2's
+  table-driven classification test is that taxonomy — and `shibuya-core 0.9.0.0` ships the typed
+  vocabulary for it, with a validated code shape, a reserved framework namespace, total
+  projections, and transport of the code through the adapter into the DLQ payload as a
+  machine-queryable `dead_letter_reason_code`. `PoisonPill` flattens every permanent failure into
+  one bucket whose reason survives only as prose, which makes the DLQ greppable rather than
+  queryable. Building the taxonomy privately and meeting 0.9 later means writing a code type, a
+  renderer, and a projection and then deleting all three.
+  Date: 2026-08-10
+
+- Decision: Validate the dead-letter code set once at worker startup and hold the values in
+  `WorkerEnv`, rather than calling `mkDeadLetterCode` per message.
+  Rationale: `mkDeadLetterCode` returns `Either Text DeadLetterCode`, and shibuya's own haddock
+  directs callers to validate a finite set during application startup and reuse the results.
+  Per-message validation would put a partial function on the hot path and force every
+  classification site to handle a failure that is really a programming error. A malformed code
+  should stop the worker from starting, not degrade one message.
+  Date: 2026-08-10
+
+- Decision: Use the code set `shikigami.unknown_agent`, `shikigami.unsupported_behavior`,
+  `shikigami.skill_load_failed`, `shikigami.behavior_failed`, and `shikigami.run_cancelled`.
+  Rationale: each satisfies `mkDeadLetterCode`'s shape (two segments, `[a-z][a-z0-9_]*`, first
+  segment not `shibuya`), and the set is the permanent half of the `RunError` classification this
+  plan already decided on — `UnknownTask`, `UnsupportedBehavior`, and `SkillLoadFailed` map one
+  to one, `behavior_failed` covers a permanent `Left` from any other source, and `run_cancelled`
+  replaces the `PoisonPill` currently produced for `Cancelled` at `Worker.hs:190`. Keeping the set
+  finite and startup-validated is what makes it a taxonomy rather than a string convention. Detail
+  text is transported verbatim to operators, so it must stay bounded and must not carry secrets,
+  raw payloads, raw SQL, or unrestricted backend errors — shibuya's haddock is explicit about
+  this and it is now shikigami's obligation.
+  Date: 2026-08-10
 
 - Decision: Keep the PGMQ visibility timeout at 30 seconds and add a lease heartbeat, rather than raising the visibility timeout to cover the longest imaginable run.
   Rationale: A large static timeout delays redelivery after a genuine worker crash by the full window; a heartbeat keeps crash-recovery latency at about 30 seconds while protecting arbitrarily long healthy runs. Shibuya 0.8 exposes `lease :: Maybe (Lease es)` on the handler's public `Message es msg`, and shibuya-pgmq-adapter 0.12 implements it with PGMQ `set_vt`.
@@ -151,7 +240,16 @@ classifyOutcome ::
   AckDecision
 ```
 
-with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (PoisonPill err)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (PoisonPill …)` as today (Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`. Treat `Envelope.attempt = Just (Attempt 0)` as the first delivery and `Nothing` as zero for adapters without attempt metadata. Derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` Shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
+with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (ApplicationFailure code detail)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (ApplicationFailure shikigamiRunCancelled …)` (replacing the `PoisonPill` at Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`.
+
+The `code` in the permanent case comes from the startup-validated set held in `WorkerEnv`, chosen
+from the `FailureClass` Milestone 1 attaches to the failure rather than re-derived from the error
+text: `UnknownTask` → `shikigami.unknown_agent`, `UnsupportedBehavior` →
+`shikigami.unsupported_behavior`, `SkillLoadFailed` → `shikigami.skill_load_failed`, and anything
+else permanent → `shikigami.behavior_failed`. `classifyOutcome` stays pure by taking the
+validated codes as an argument rather than reaching for a global. `detail` is the existing error
+text, bounded — shibuya transports it verbatim to operators, so it must not carry secrets, raw
+payloads, raw SQL, or unrestricted backend error text. Treat `Envelope.attempt = Just (Attempt 0)` as the first delivery and `Nothing` as zero for adapters without attempt metadata. Derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` Shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
 
 Configure the adapter with a DLQ: in `runQueueWorker` (Worker.hs:76), replace `defaultConfig runQueueName` with
 
@@ -247,7 +345,7 @@ Acceptance is behavioral, verified by tests that fail before the change and pass
 
 Transient re-execution (fails before): build `AgentRunDeps` whose hooks' `beforeStepBody` throws `TransientBehaviorFailure "simulated 503"` on the first entry into `"run-behavior"` (IORef-latched, as in AgentWorkflowSpec.hs:73-82). Call `runAgentRunWorkflow deps job`; assert it throws. Call it again with the same job (same `WorkflowId`); assert `Right (Completed (Right _))` and that the step-body counter for `"run-behavior"` is 2 — the body re-ran. Before this plan the equivalent scenario (a behavior returning `Left`) yields `Completed (Left _)` on both calls with the body having run once. Also drive the real classification path: an agent whose behavior is `ShikumiProgram { task = "nonexistent" }` produces `UnknownTask` → `Permanent` → journaled `Left`; assert two consecutive runs return the same `Completed (Left _)` and the body ran once (replay, correct for permanent).
 
-Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the zero-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization.
+Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the zero-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization. Each dead-letter row additionally asserts the expected code through `deadLetterReasonCode`, so the taxonomy is pinned by test rather than by convention — this is the assertion that makes the code set a contract. A separate test asserts that every code in the startup set survives `mkDeadLetterCode`, which turns a typo into a failing test rather than a worker that will not boot.
 
 Heartbeat primitive: against the migrated database's pgmq schema, create a queue, send a message, read it with a 2-second visibility timeout, extend visibility by 30 seconds (the same `set_vt`-based operation the adapter's lease uses — `Pgmq` session API from `pgmq-hasql`), sleep 3 seconds, and assert a second read returns no message (it would be redelivered without the extension — that variant is the fails-before half of the pair).
 
@@ -261,7 +359,7 @@ Beyond tests, observe end-to-end: start the stack (`process-compose.yaml` provid
 Every edit is additive or a local rewrite; re-running builds and tests is safe. The new DLQ queue creation is idempotent (pgmq `create` is create-if-not-exists). Rollback of any milestone is a revert of its commits — no migrations and no journal-format changes are involved, so already-journaled workflows are unaffected in both directions. The one behavioral ratchet to be aware of when reverting Milestone 1: runs journaled after the change contain no `run-behavior` entry for attempts that failed transiently (nothing was journaled), which replays identically under old code. If a test database gets into a confusing state, `withShikigamiMigratedDatabase` provisions a fresh database per test, so there is no shared state to clean.
 
 
-## Portfolio Reconciliation (2026-07-30)
+## Portfolio Reconciliation (2026-07-30, amended 2026-08-10)
 
 This plan hard-depends on plans 36, 37, and 47. Shibuya 0.8 handlers receive public
 `Message es msg` values containing `envelope` and optional `lease` and return one
@@ -269,6 +367,16 @@ This plan hard-depends on plans 36, 37, and 47. Shibuya 0.8 handlers receive pub
 already maps one-based `read_count` to zero-based `Envelope.attempt`, so attempt zero is
 first delivery and Shikigami must not subtract again. Use `AppConfig` and `OrderingPolicy`
 from the released Shibuya surface.
+
+Amended 2026-08-10: this plan now also depends on
+`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` and on the cohort
+bump that follows `keiro 0.12`, because Milestone 2's dead-letter taxonomy should be built on
+`shibuya-core 0.9.0.0`'s `ApplicationFailure`/`DeadLetterCode` rather than hand-rolled on 0.8.
+Plan 53 deliberately holds `shibuya-core` at `0.8.0.1` and `shibuya-pgmq-adapter` at `0.13.0.0`
+because keiro 0.11 caps them; it also records the request for `keiro 0.12` that lifts the cap.
+Everything above about the 0.8 handler shape and zero-based attempts remains true at 0.9 — that
+release adds a `DeadLetterReason` constructor and total projections and changes nothing else this
+plan touches.
 
 
 ## Interfaces and Dependencies
@@ -299,7 +407,25 @@ Shikigami.Worker.handleRunJob :: WorkerEnv -> Maybe Attempt -> Value -> IO AckDe
 Shikigami.Trigger.Enqueue.runDeadLetterQueueName :: QueueName
 ```
 
-Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); Shibuya 0.8 `type Shibuya.Handler.Handler es msg = Message es msg -> Eff es AckDecision` with `Message { envelope :: Envelope msg, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; shibuya-pgmq-adapter 0.12 exposes zero-based attempts and implements `AckRetry (RetryDelay delay)` as a relative `set_vt`, with auto-dead-letter after the configured retry ceiling. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
+Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); Shibuya 0.8 `type Shibuya.Handler.Handler es msg = Message es msg -> Eff es AckDecision` with `Message { envelope :: Envelope msg, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; shibuya-pgmq-adapter 0.12 exposes zero-based attempts and implements `AckRetry (RetryDelay delay)` as a relative `set_vt`, with auto-dead-letter after the configured retry ceiling.
+
+Added by shibuya-core `0.9.0.0`, and required by this plan's Milestone 2 (verified against
+`shibuya-core/src/Shibuya/Core/Ack.hs` at tag `v0.9.0.0` on 2026-08-10):
+`DeadLetterReason` gains `ApplicationFailure !DeadLetterCode !Text`;
+`mkDeadLetterCode :: Text -> Either Text DeadLetterCode` is the only way to make a code;
+`deadLetterCodeText :: DeadLetterCode -> Text`,
+`deadLetterReasonCode :: DeadLetterReason -> DeadLetterCode`,
+`deadLetterReasonDetail :: DeadLetterReason -> Maybe Text`, and
+`renderDeadLetterReason :: DeadLetterReason -> Text` are total; `poisonPillCode`,
+`invalidPayloadCode`, and `maxRetriesExceededCode` name the built-ins. `shibuya-metrics 0.9.0.0`
+releases in lockstep with an updated bound and no API change. `shibuya-pgmq-adapter 0.14.0.0`
+requires `shibuya-core ^>=0.9.0.0` and writes `dead_letter_reason_code` and
+`dead_letter_reason_detail` into the DLQ payload alongside the retained `dead_letter_reason`.
+
+Because `DeadLetterReason` gains a constructor, any exhaustive match over it must be extended.
+In this repository that is one import site today —
+`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:35` imports `DeadLetterReason (..)` — and
+the total projections exist precisely so downstream code can avoid matching exhaustively at all. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
 
 
 ## Revision Notes
@@ -309,3 +435,39 @@ Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflo
 - 2026-07-30: Corrected the released adapter contract: `Message` replaces handler-facing
   `Ingested`, acknowledgement remains framework-owned, and `Envelope.attempt` is already
   zero-based after the adapter converts PGMQ `read_count`.
+- 2026-08-10: Re-pointed Milestone 2's dead-letter handling at `shibuya-core 0.9.0.0`, and added
+  a gate so this plan does not start before that release is in the cohort.
+
+  The reason is rework, and it is the largest instance of it in the portfolio. Milestone 2 was
+  going to classify every permanent failure as `AckDeadLetter (PoisonPill err)` — one bucket with
+  the real reason as prose — while also building a table-driven classification test, which is a
+  permanent-failure taxonomy in all but name. Shibuya 0.9 ships exactly that taxonomy as typed
+  vocabulary: `ApplicationFailure !DeadLetterCode !Text`, an opaque code validated by
+  `mkDeadLetterCode`, total `deadLetterReasonCode`/`deadLetterReasonDetail` projections, a
+  canonical renderer, a reserved `shibuya` namespace, and adapter transport of the code into the
+  DLQ payload as a queryable `dead_letter_reason_code`. Implementing on 0.8 first means writing a
+  code type, a renderer, and a projection and then deleting all three.
+
+  Concretely: Progress gained an M0 gate and two Milestone 2 items (startup validation, and
+  code-asserting tests); Surprises & Discoveries records the 0.9 API with its validation rules and
+  explains that the gate is indirect — `keiro 0.11` caps `shibuya-core <0.9`, so the chain is
+  keiro 0.12 → cohort bump → this plan; the Decision Log gained three entries covering the
+  constructor choice, startup-only validation, and the concrete five-code set
+  (`shikigami.unknown_agent`, `shikigami.unsupported_behavior`, `shikigami.skill_load_failed`,
+  `shikigami.behavior_failed`, `shikigami.run_cancelled`); the Milestone 2 mapping now names
+  `ApplicationFailure` and says how the code is chosen from Milestone 1's `FailureClass` rather
+  than re-derived from error text; Validation asserts codes through `deadLetterReasonCode` and
+  proves the whole set passes `mkDeadLetterCode`; and Interfaces records the exact 0.9 surface
+  with the note that `DeadLetterReason` gaining a constructor breaks exhaustive matches, of which
+  this repository has one.
+
+  Surprises & Discoveries also records the fallback if the gate does not clear soon: implement on
+  0.8, but keep every permanent classification behind one module returning a shikigami-owned code
+  type, flattened to `PoisonPill` in exactly one place, so the 0.9 swap is a one-constructor
+  change.
+
+  One older rationale was narrowed rather than removed. The decision to keep
+  `agentRunWorkflow`'s `Either Text AgentRunResult` result type cited the JSON encoding of
+  already-completed workflows; shikigami has no users and no stored completed workflow, so that
+  argument is void. The decision stands on its other ground — it deletes the `"unknown agent "`
+  string-prefix hack.
