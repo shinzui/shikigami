@@ -513,3 +513,23 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.h
 - 2026-07-22: Added the checked Keiro DSL as a hard prerequisite and made labeled memory
   steps part of the specification/scaffold/harness/diff acceptance gate.
 - [ ] Prerequisites: plans 36, 39, and 24 complete; update `domain/shikigami.keiro` for every new labeled durable step.
+
+
+## Revision Notes
+
+- 2026-08-10: Scope note — shikigami has no users, so no in-flight flow will encounter this
+  plan's step insertion in production.
+
+  Nothing here changes. This plan's central design point is that converting flow `remember` and
+  `recall` into journaled keiro steps is a *purely additive* step insertion, so an in-flight flow
+  resumed under the new code finds no conflicting journal entry and needs no patch guard. That
+  argument is unaffected by whether instances exist: it is a claim about journal structure, and it
+  is what makes this plan cheap.
+
+  Two consequences worth stating so a later reader does not re-derive them. The additivity claim
+  still needs its test — construct a flow, suspend it before the insertion point, resume it under
+  the new code — because the claim is the deliverable and a constructed instance proves it as well
+  as a real one would. And the reference to plan 47's old-state fixtures no longer carries a
+  compatibility obligation; old state does not exist. What must still hold is plan 39's topology
+  gate, which is about the checked specification agreeing with the code and has nothing to do with
+  users.

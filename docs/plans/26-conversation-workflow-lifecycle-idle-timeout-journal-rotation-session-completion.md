@@ -93,6 +93,16 @@ Record every decision made while working on the plan.
   instances (parked conversations), so per `docs/workflow-versioning.md` (plan 24) it must
   ship behind a patch so existing parked conversations keep their old loop shape.
   Date: 2026-07-08
+  Amended 2026-08-10: there are no live parked conversations — shikigami has no users — so the
+  patch guard protects nothing that exists today. Ship it anyway, and prove it with a
+  constructed instance: park a conversation under the old loop shape in a test, swap in the new
+  shape, and assert it resumes on the old branch while a fresh conversation takes the new one.
+  Two reasons to keep it rather than simplify it away. The restructuring is the single largest
+  step-ordering change in the longest-lived workflow in the system, and it is much cheaper to
+  land it correctly guarded now than to add the guard once conversations are real. And plan 24
+  builds the patch machinery specifically so its six consumers use it; this is the consumer that
+  exercises it hardest, so a version of this plan that skips the guard also removes the main
+  proof that plan 24's mechanism works.
 - Decision: Add a subjectRef-indexed session read model to kioku rather than a
   shikigami-side lookup table.
   Rationale: kioku owns session read models (`kioku-core/src/Kioku/Session/ReadModel.hs`)
@@ -462,3 +472,20 @@ reply path keeps using the single shared module.
 - 2026-07-22: Added plan 39's checked topology gate and corrected idle timeout handling
   to cancel/version superseded timers and ignore stale completions across turns and
   continue-as-new generations.
+
+
+## Revision Notes
+
+- 2026-08-10: Amended the `continueAsNew` decision to record that shikigami has no users, so there
+  are no live parked conversations for the patch guard to protect.
+
+  The guard stays, and the amendment says why rather than leaving it as inherited caution. This
+  plan makes the largest step-ordering change in the longest-lived workflow in the system, and
+  landing it correctly guarded now is far cheaper than retrofitting a guard once conversations are
+  real. Separately, plan 24 builds the patch machinery precisely so its consumers use it, and this
+  is the consumer that exercises it hardest — a version of this plan that skipped the guard would
+  also remove the main evidence that plan 24's mechanism works.
+
+  What changes is the evidence, not the mechanism: prove the guard with a constructed instance.
+  Park a conversation under the old loop shape in a test, swap in the new shape, assert it resumes
+  on the old branch while a fresh conversation takes the new one.

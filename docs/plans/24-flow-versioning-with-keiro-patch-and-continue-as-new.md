@@ -16,6 +16,29 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
+**Scope note added 2026-08-10, and it changes what this plan must prove without changing what it
+must build.** Shikigami has no users. There is no deployed instance, no parked conversation, and
+no suspended workflow anywhere. So every acceptance criterion below phrased as "an instance that
+was already in flight when the change shipped keeps working" currently has no subject, and cannot
+be demonstrated against real data.
+
+That does not make this plan optional or premature — it makes it cheap, and it is the reason to
+do it now rather than later. What this plan actually delivers is a *discipline* and its
+*machinery*: the written rule for which code changes are safe, the `Shikigami.Workflow.Versioning`
+module with its process-wide `activePatches` set and run options threaded through every workflow
+and the resume worker, and the caller-supplied-label convention for capability step names. Six
+later plans (25, 26, 27, 35, 50, 51) each add a journaled value or restructure a durable state
+machine, and each is required to pass through this discipline. Building it before them is what
+makes those plans cheap; building it after would mean retrofitting six of them.
+
+Concretely, this means: build every mechanism, and prove it with **constructed** instances rather
+than real ones. A test that starts a workflow under old-shape code, suspends it, swaps in
+new-shape code, and resumes it is entirely achievable and is the right acceptance — it just has
+to manufacture the in-flight instance rather than find one. Where a milestone below asks for
+evidence about "existing parked conversations", read it as asking for a test that creates one.
+Do not weaken a mechanism on the grounds that nothing depends on it yet; the mechanism is the
+deliverable.
+
 Shikigami executes agent runs and danwa conversations as durable keiro workflows: each step
 of a run is journaled (recorded to Postgres under a step name), and a resumed run replays
 journaled steps instead of re-running their side effects. That machinery is correct only as
@@ -598,3 +621,23 @@ discipline and patch plumbing, matching the cross-MasterPlan execution order.
 - 2026-07-22: Added plan 39 as a hard checked-DSL predecessor and made the DSL/checker/
   scaffold/harness/diff gate part of purpose, acceptance, and interfaces.
 - [ ] Prerequisite: plans 36 and 39 complete; update the checked Keiro DSL before changing durable code.
+
+
+## Revision Notes
+
+- 2026-08-10: Added a scope note to Purpose recording that shikigami has no users, and what that
+  does and does not change here.
+
+  It does not change the deliverable. This plan's product is a discipline plus the
+  `Shikigami.Workflow.Versioning` machinery — `activePatches`, the run and resume options threaded
+  through every workflow, and the caller-supplied-label convention that fixes `emitSignal`'s
+  counter-derived step names. Plans 25, 26, 27, 35, 50, and 51 each add a journaled value or
+  restructure a durable state machine and are required to pass through it, so building it first is
+  what keeps those six cheap.
+
+  It does change the evidence. Acceptance criteria phrased as "an instance already in flight when
+  this shipped keeps working" have no subject today, so they must be proven with constructed
+  instances: start a workflow under old-shape code, suspend it, swap in new-shape code, resume it.
+  That is achievable and is the right test — it just manufactures the in-flight instance instead of
+  finding one. The note states explicitly that no mechanism should be weakened on the grounds that
+  nothing depends on it yet.

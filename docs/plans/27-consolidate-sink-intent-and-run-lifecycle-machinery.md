@@ -241,8 +241,21 @@ Acceptance: `cabal build all` succeeds; `rg "data SinkIntent" shikigami-core/src
 exactly one generated definition and no hand-written definition; deterministic scaffold and
 domain-harness checks pass; the FlowLifecycleSpec sink tests
 (`FlowLifecycleSpec.hs:83-97`) and AgentWorkflowSpec outbox assertions still pass unchanged
-(same outbox message ids, same delivered details) — proving the wire format and
-deterministic ids are byte-for-byte preserved; the new golden test passes.
+(same outbox message ids, same delivered details); the new golden test passes.
+
+A note on why byte-for-byte preservation is still the acceptance here (added 2026-08-10).
+Shikigami has no users, so there is no stored outbox row and no external consumer whose
+compatibility is at stake — the usual reason for this criterion does not apply. It is still the
+right criterion, for a different reason: this milestone's entire claim is that it is *code
+motion*. Two definitions become one and nothing else changes. Byte-identical outbox ids and
+delivered details are the only evidence that the consolidation did not quietly pick one copy's
+behavior over the other's, which is exactly the failure a de-duplication of two independently
+drifted definitions invites. So do not relax this to "equivalent" or update a golden to match new
+output — if the bytes move, the two copies had drifted and that divergence needs a decision of
+its own, recorded in the Decision Log, before consolidation proceeds. What *does* relax is the
+consequence of a deliberate change: if a drift is found and the better shape is the other copy's,
+this plan may adopt it and move the golden, in its own commit, with the reason written down. That
+would not have been available while real consumers existed.
 
 Milestone 2 — one run lifecycle. Retire the divergent copy. Preferred path: change
 the `agent-run` command component assigned to `shikigami-workers` by plan 36 so the non-activity branch (currently line 54 in the legacy module,
@@ -456,3 +469,22 @@ Integration Points (cross-plan):
 - 2026-07-22: Added plan 39 as a hard predecessor and made topology/scaffold diff
   stability an explicit consolidation acceptance criterion.
 - [ ] Prerequisites: plans 36 and 39 complete; plans 19 and 28 land before final consolidation.
+
+
+## Revision Notes
+
+- 2026-08-10: Re-grounded Milestone 1's byte-for-byte acceptance now that shikigami has no users.
+
+  The criterion is unchanged; its justification is different, and the difference matters because
+  the old justification is void. Preserving outbox message ids and delivered details byte for byte
+  was inherited from a compatibility argument — stored rows and downstream consumers — and neither
+  exists. It survives because this milestone's whole claim is that it is code motion: two
+  independently maintained `SinkIntent` definitions become one and nothing else changes.
+  Byte-identity is the only evidence that consolidation did not silently adopt one copy's behavior
+  over the other's, which is the characteristic failure of de-duplicating two definitions that may
+  have drifted.
+
+  One thing genuinely does relax. If the two copies have drifted and the better shape is the one
+  being retired, this plan may now adopt it and move the golden — in its own commit, with the
+  reason in the Decision Log. That option did not exist while real consumers did. What remains
+  forbidden is updating a golden to match new output without establishing why it moved.
