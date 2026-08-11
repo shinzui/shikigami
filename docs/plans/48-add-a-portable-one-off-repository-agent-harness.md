@@ -57,8 +57,21 @@ This section must always reflect the actual current state of the work.
 
 - [ ] Prerequisites: plans 12, 13, 15, 31, 36, 37, and 47 are complete, including all
       hard upstream dependencies recorded by those plans.
-- [ ] M1: define canonical workspace, task, permission, command-policy, result, and error
-      types; implement Git-worktree and agent-root resolution with escape tests.
+- [ ] **M0 (added 2026-08-10): rewrite Milestone 1 against `Baikai.Agent`.** `baikai 0.5.0.0`
+      publishes the permission, capability, safety, command, result, and error vocabulary this
+      plan was going to invent, plus an operator policy ceiling. Do not start M1 before reading
+      Surprises & Discoveries; roughly half of M1 as written is now an import.
+- [ ] M0 (gate): `baikai 0.5.0.0` in the cohort, currently excluded by `kioku-core 0.3.0.0`'s
+      `baikai ^>=0.4.1.0`. `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`
+      owns requesting the kioku release that lifts it.
+- [ ] M1: define the canonical workspace, task, and result types **that baikai does not already
+      provide**, and implement Git-worktree and agent-root resolution with escape tests. Import
+      `AgentRunRequest`, `AgentRunResult`, `AgentCapability`, `AgentSafety`, `AgentOutputMode`,
+      `AgentCapturedOutput`, `AgentCommand`, `AgentRenderError`, and `AgentRunFailure` rather
+      than declaring equivalents.
+- [ ] M1: map the `--permission` flag onto baikai's `AgentCapability` (`read-only`,
+      `edit-workspace`, `full-access`) and enforce the operator ceiling with `applyAgentCeiling`,
+      which reports every violation rather than clamping an over-broad request.
 - [ ] M2: register bounded read/search/status/diff tools and stale-write-safe
       edit/create/delete tools in the plan-12 `ToolRegistry`; enforce read-only mode,
       instruction discovery, path containment, symlink protection, and output limits.
@@ -78,6 +91,55 @@ This section must always reflect the actual current state of the work.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+**Baikai published this plan's core vocabulary on 2026-08-05 (discovered 2026-08-10).**
+`baikai 0.5.0.0` added the exposed module `Baikai.Agent`, described by its own changelog as "the
+provider-neutral vocabulary for an **unattended coding-agent run** — a run with no terminal and no
+human, which owns its own tool loop, may change files inside directories the caller authorized,
+and returns a process result rather than a `Response`". That is this plan's subject, stated by
+somebody who had not read this plan.
+
+What it defines, against what Milestone 1 was going to invent:
+
+`AgentRunRequest`, with a **required** `workingDir` — the workspace type. `AgentRunResult` — the
+result type. The `AgentCapability` profile with exactly three levels, `read-only`,
+`edit-workspace`, and `full-access` — the permission type, and note that this plan's `--permission
+workspace-write` should become `edit-workspace` to match rather than introducing a fourth name for
+the same idea. `AgentSafety`. `AgentOutputMode` and `AgentCapturedOutput` — the output discipline,
+which Milestone 3's output limits should be expressed in terms of. The `AgentCommand`
+renderer/runner boundary with an explicit prompt transport — the command-policy seam Milestone 3
+builds on. And the `AgentRenderError` / `AgentRunFailure` taxonomies — the error types.
+
+There is also `AgentCeiling`, `defaultAgentCeiling`, `CeilingViolation`, and the pure
+`applyAgentCeiling`, which is an operator policy ceiling this plan did not think to ask for and
+should adopt directly. Its behavior is the right one and is worth stating explicitly because it is
+easy to get wrong: it returns a request unchanged when the request is within the ceiling, and
+reports **every** violation when it is not — it never silently clamps an over-broad request down
+to the permitted value. The default ceiling permits read-only and edit-workspace authority and
+refuses full access and raw provider arguments, which matches this plan's stated default of
+`read-only` with writes requiring an explicit policy.
+
+Two boundaries to respect. `Baikai.Agent` is deliberately vocabulary and pure policy algebra only:
+it spawns no process and renders no command-line flags. Those live in the vendor packages and in
+the separate `baikai-agent` package, so Milestone 3's actual process execution is still this
+plan's work — what changes is that its types are not. And the module is deliberately **not**
+re-exported from the umbrella `Baikai` module, because its field accessors collide with
+`Baikai.Interactive`; import `Baikai.Agent` explicitly, and expect `import Baikai` to keep
+compiling unchanged.
+
+**Effect on this plan's size.** Milestone 1 shrinks to workspace and agent-root *resolution* —
+the Git-worktree discovery, the escape tests, the separation of workspace root from agent-resource
+root — which is the genuinely shikigami-specific part and is unaffected. The type-definition half
+of M1 becomes an import list. Milestones 2, 3, and 5 keep their substance: bounded workspace
+tools in plan 12's `ToolRegistry`, path containment and symlink protection, the no-shell
+execution policy and platform sandbox, the flake app, and the fixture-repository proof are all
+still this plan's work.
+
+**Gate.** `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the cohort cannot take 0.5 yet. This
+is the same gate as plans 51 and 52, and plan 53 owns requesting the kioku release that lifts it.
+Do not work around it by defining the vocabulary locally "for now" — that is precisely the
+duplicate this discovery exists to prevent. If the harness is urgently wanted before the gate
+clears, build Milestone 1's resolution logic, which needs none of these types.
 
 - The current `run-behavior` command already accepts an arbitrary manifest path and works
   when invoked outside this checkout, but `Shikigami.Behavior.Skill` interprets the
@@ -724,3 +786,46 @@ Every implementation commit includes:
 ExecPlan: docs/plans/48-add-a-portable-one-off-repository-agent-harness.md
 Intention: intention_01kyv7saq6ew2a2k5vw230pw1f
 ```
+
+
+## Revision Notes
+
+- 2026-08-10: Re-pointed Milestone 1 at `Baikai.Agent`, and added a gate so the plan is not
+  implemented against a vocabulary it should be importing.
+
+  `baikai 0.5.0.0`, released 2026-08-05, added `Baikai.Agent` — its changelog calls it "the
+  provider-neutral vocabulary for an unattended coding-agent run", which is this plan's subject
+  described by somebody who had not read this plan. It publishes `AgentRunRequest` (with a
+  required `workingDir`), `AgentRunResult`, the three-level `AgentCapability` profile,
+  `AgentSafety`, `AgentOutputMode` and `AgentCapturedOutput`, the `AgentCommand` renderer/runner
+  boundary, and the `AgentRenderError` / `AgentRunFailure` taxonomies. Milestone 1 was going to
+  define workspace, task, permission, command-policy, result, and error types; most of that list
+  now has a published counterpart, and defining local equivalents would leave shikigami
+  translating between two vocabularies for one concept.
+
+  One adoption is a genuine addition rather than a substitution: `AgentCeiling` /
+  `applyAgentCeiling`, an operator policy ceiling this plan did not think to ask for. Its
+  behavior is the part worth having — it returns a request unchanged when within the ceiling and
+  reports every violation when not, never silently clamping an over-broad request to the permitted
+  value — and its default matches this plan's stated posture of read-only by default with writes
+  requiring explicit policy.
+
+  One naming change follows: `--permission workspace-write` should become `edit-workspace`, to
+  match `AgentCapability` rather than introduce a fourth name for the same idea.
+
+  What did not shrink is worth stating, because the plan is not mostly obsolete. `Baikai.Agent` is
+  vocabulary and pure policy algebra only — it spawns no process and renders no flags, which live
+  in the vendor packages and the separate `baikai-agent` package. So Milestone 1's Git-worktree
+  discovery, escape tests, and the separation of workspace root from agent-resource root are
+  untouched, and Milestones 2, 3, and 5 keep their substance: bounded workspace tools in plan 12's
+  `ToolRegistry`, path containment and symlink protection, no-shell execution with a fail-closed
+  platform sandbox, the flake app, and the external-fixture proof.
+
+  One import caution recorded in Surprises & Discoveries: `Baikai.Agent` is deliberately not
+  re-exported from the umbrella `Baikai` module because its field accessors collide with
+  `Baikai.Interactive`. Import it explicitly.
+
+  Gate: `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the cohort cannot take 0.5 yet — the
+  same gate as plans 51 and 52, owned by plan 53. The plan explicitly rejects working around it by
+  defining the vocabulary locally "for now", since that produces exactly the duplicate this
+  revision exists to prevent.

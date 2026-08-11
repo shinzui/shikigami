@@ -41,10 +41,15 @@ was.
 Two things this plan deliberately does not do. It does not sign anything and it does not serve
 anything — `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` owns the signature,
 the read API, and the offline verifier. And it does not capture per-call observations inside a
-provider adapter; that is upstream work in the baikai library, requested at
-`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` and still in the `proposed` state
-as of 2026-08-05. This plan builds behind a seam so that everything above can be proven before
-that request lands.
+provider adapter; that is upstream work in the baikai library.
+
+**That upstream work has landed. Do not define `ModelCallEvidence` in this repository.**
+`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` was `proposed` when this plan was
+written on 2026-08-05; `baikai 0.5.0.0` shipped it on the same day as the module
+`Baikai.Evidence`. The seam described below is still the right structure — production satisfies
+it with a live source, tests with fixtures — but the *type* crossing that seam is now baikai's,
+not shikigami's. See Surprises & Discoveries for what `Baikai.Evidence` provides and for the one
+remaining obstacle, which is a bound rather than a missing contract.
 
 
 ## Progress
@@ -54,8 +59,15 @@ that request lands.
       non-conforming, incomplete, and failed terminal states.
 - [ ] M1: illegal transitions are rejected — a run cannot seal from `requested`, and an
       `attested` record cannot be reopened.
-- [ ] M2: `ModelCallEvidence` collected through a deterministic seam; a stub evidence source with
-      fixtures, pending baikai IR-3.
+- [ ] M2: `Baikai.Evidence.ModelCallEvidence` collected through a deterministic seam, with a
+      fixture source in tests. **Import the type from baikai; do not define a local one.**
+- [ ] M2 (gate): `baikai 0.5.0.0` is in the cohort. Blocked as of 2026-08-10 by
+      `kioku-core 0.3.0.0`'s `baikai ^>=0.4.1.0` — see Surprises & Discoveries. Until it clears,
+      M1, M3, M4, and M5 proceed unchanged and M2 uses fixtures shaped to baikai's published
+      record rather than to an invented one.
+- [ ] M2: every call opts in by setting `Options.evidence` to an `EvidenceRequest` carrying the
+      run identifier, retry provenance, and required `EvidenceStrength`. A call that does not opt
+      in behaves exactly as before, so this is additive to plan 13's provider path.
 - [ ] M2: every call receives the run id and a unique call id, taken from the correlation
       vocabulary rather than minted here.
 - [ ] M3: complete accounting — the two-call, retry, and delegated-child fixtures each produce one
@@ -71,7 +83,54 @@ that request lands.
 
 ## Surprises & Discoveries
 
-(None yet.)
+**Baikai IR-3 landed the same day this plan was written, and nobody noticed for five days
+(discovered 2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, adds the exposed module
+`Baikai.Evidence` — "the vocabulary for verifiable model-call evidence — a record of what actually
+crossed the boundary to a provider, as opposed to what the process was configured to ask for".
+That sentence is this plan's Milestone 2 restated by its author.
+
+What it provides, and what each thing replaces here:
+
+`ModelCallEvidence` itself, with `evidenceSchemaVersion` as the string consumers pin against.
+This replaces the local record sketched in Interfaces and Dependencies. `Observed` is a
+deliberate non-`Maybe` for a value the provider either did or did not report, with no function
+that supplies a default — which is a stricter and better answer than a `Maybe` field for the
+plan's "the transport used could not report this" case. `ThinkingTranslation`, with `ThinkingMode`
+and `ThinkingAdjustment`, describes what a requested reasoning-effort level actually became on the
+wire and every clamp, collapse, or drop applied on the way; the non-conformance taxonomy in
+Milestone 4 should be built on that rather than on a locally invented notion of "the provider did
+something other than what we asked". `EndpointIdentity`, `TransportKind`, `CallStatus`, and the
+ascending `EvidenceStrength` scale round it out — `EvidenceStrength` in particular is what lets a
+roll-up say *how well* a call is evidenced instead of only whether a record exists.
+
+`Options` gains an `evidence` field carrying an optional `EvidenceRequest` with the caller's run
+identifier, retry provenance, and required strictness. A call whose `evidence` is `Nothing` — that
+is, every call that does not opt in — behaves exactly as it did before. So wiring this into
+shikigami's provider path is additive and cannot regress plan 13's behavior.
+
+Baikai's changelog is explicit that "nothing constructs a `ModelCallEvidence` from a real call
+yet". The vocabulary and the opt-in field exist; the provider-side population does not. That is
+the correct reading of the seam's status: the *type* is settled and must be adopted, the *live
+source* is still pending, and the fixture source in tests remains the right way to prove
+Milestones 3 and 4.
+
+**The remaining obstacle is a bound, not a missing contract.** `kioku-core 0.3.0.0` declares
+`baikai ^>=0.4.1.0`, which caps below 0.5, so the cohort cannot take `baikai 0.5.0.0` today. The
+release that lifts it is a kioku version admitting `baikai ^>=0.5`, requested by
+`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`. This blocks Milestone
+2 only. Milestones 1, 3, 4, and 5 — the aggregate lifecycle, complete accounting, the
+non-conformance taxonomy, and the tables — never needed a real provider observation and still do
+not.
+
+**Also relevant to Milestone 4, and to plan 52.** `Baikai.Evidence` ships the canonical hashing
+core: `canonicalEncode` gives a JSON value exactly one byte representation, `commitmentDigest`
+hashes a full request envelope, and `configurationDigest` hashes an allow-list projection
+(`configurationProjection`) that keeps configuration and replaces content with structural
+summaries. The two digests are separate on purpose: the first binds a record to a particular
+request, the second is safe to compare across runs that legitimately differ in content. That
+distinction is directly useful here — a compliance roll-up comparing "did these calls ask the same
+way" wants `configurationDigest`, not a content hash — and it is the reason plan 52 no longer
+needs to author its own encoder.
 
 
 ## Decision Log
@@ -86,6 +145,31 @@ that request lands.
   a live client in production. It keeps a `proposed` upstream request off the critical path of
   three milestones.
   Date: 2026-08-05
+
+- Decision: Keep the seam, but import `ModelCallEvidence` and its companions from
+  `Baikai.Evidence` instead of defining them here.
+  Rationale: baikai IR-3 landed as `baikai 0.5.0.0` on 2026-08-05, the same day this plan was
+  written. The seam was always the right structure and stays; what changes is that the type
+  crossing it is now published upstream. Defining a local lookalike would mean two vocabularies
+  for one concept, a translation layer between them, and — worst — a shikigami-owned record that
+  silently disagrees with what the provider adapter will eventually populate. Baikai's version is
+  also better than the sketch it replaces: `Observed` is a deliberate non-`Maybe` with no
+  defaulting function, `ThinkingTranslation` records what a requested reasoning effort actually
+  became on the wire including every clamp and drop, and `EvidenceStrength` is an ascending scale
+  rather than a boolean. Milestone 4's non-conformance taxonomy should be expressed against those
+  rather than against locally invented equivalents.
+  Date: 2026-08-10
+
+- Decision: Do not treat the missing live evidence source as a reason to delay Milestones 1, 3, 4,
+  or 5, and do not treat the `baikai ^>=0.4.1.0` cap as a reason to delay Milestone 2's design.
+  Rationale: baikai's changelog states plainly that "nothing constructs a `ModelCallEvidence` from
+  a real call yet" — the vocabulary and the `Options.evidence` opt-in exist, the provider-side
+  population does not. So the fixture source remains the way to prove complete accounting and the
+  non-conformance taxonomy, exactly as before. Separately, `kioku-core 0.3.0.0` caps `baikai`
+  below 0.5, so the cohort cannot take the module yet. Neither fact changes what this plan should
+  build; both change only when the import can be written. Shape the fixtures to baikai's published
+  record now so that adopting it later is an import change rather than a redesign.
+  Date: 2026-08-10
 
 - Decision: A deterministic step records `NotApplicable`, never a synthesised model call.
   Rationale: the request is explicit that deterministic steps are not-applicable rather than
@@ -455,8 +539,21 @@ to judge against), `docs/plans/38-migrate-shikigami-database-evolution-from-codd
 `docs/plans/28-structured-logging-metrics-and-trace-propagation.md` (the run and call correlation
 identifiers).
 
-Upstream gate: `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3`, `proposed` as of
-2026-08-05. Worked around by the `EvidenceSource` seam; no milestone in this plan waits for it.
+Upstream: `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` was `proposed` as of
+2026-08-05 and **delivered on 2026-08-05** as `Baikai.Evidence` in `baikai 0.5.0.0`. Import
+`ModelCallEvidence`, `evidenceSchemaVersion`, `Observed`, `ThinkingTranslation` (with
+`ThinkingMode` and `ThinkingAdjustment`), `EndpointIdentity`, `TransportKind`, `CallStatus`, and
+`EvidenceStrength` from there. `Options` gains an `evidence :: Maybe EvidenceRequest` field
+carrying the run identifier, retry provenance, and required strictness; a call that leaves it
+`Nothing` behaves exactly as before, so adopting this cannot regress plan 13's provider path.
+
+Remaining gate, and it is a bound rather than a contract: `kioku-core 0.3.0.0` declares
+`baikai ^>=0.4.1.0`, which excludes 0.5, so the cohort cannot take the module yet. A kioku release
+admitting `baikai ^>=0.5` lifts it, and
+`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` owns requesting it.
+This blocks Milestone 2's import only. Note also that baikai's changelog states nothing
+constructs a `ModelCallEvidence` from a real call yet, so the live source is still pending even
+after the bound clears — the fixture source remains how Milestones 3 and 4 are proven.
 
 Coordination, not blocking: `docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md`
 sets the additive-only discipline every journaled or persisted value here follows, and
@@ -487,17 +584,23 @@ data TransitionError = IllegalTransition !EvidencePhase !EvidencePhase
 newtype CallId = CallId {value :: Text}
 data CallRelationship = RootCall | RetryOf !CallId | FallbackFrom !CallId | ChildOf !CallId
 
-data ModelCallEvidence = ModelCallEvidence
-  { runId :: !Text,
-    callId :: !CallId,
-    relationship :: !CallRelationship,
-    requestedModel :: !Text,
-    resolvedModel :: !Text,
-    observedModel :: !(Maybe Text),   -- Nothing means unobserved, never a copy of the request
-    strength :: !EvidenceStrength
-    -- plus provider, API, endpoint, thinking translation, timestamps, status,
-    -- token usage, latency, and the redacted request/response digests
-  }
+-- ModelCallEvidence is NOT defined here. Import it, and the vocabulary around it, from
+-- Baikai.Evidence (baikai 0.5.0.0):
+--
+--   import Baikai.Evidence
+--     ( ModelCallEvidence (..), evidenceSchemaVersion, Observed (..)
+--     , ThinkingTranslation (..), ThinkingMode (..), ThinkingAdjustment (..)
+--     , EndpointIdentity (..), TransportKind (..), CallStatus (..), EvidenceStrength (..)
+--     )
+--
+-- The earlier draft of this plan sketched a local record with a `Maybe Text` observed model and
+-- a comment promising "plus provider, API, endpoint, thinking translation, ...". Baikai ships
+-- all of that, and answers the Maybe question better: `Observed` is a deliberate non-Maybe for a
+-- value the provider either did or did not report, with no function that supplies a default, so
+-- an unobserved model cannot silently become a copy of the requested one.
+--
+-- What this repository still owns is the correlation of calls to a run, which baikai has no
+-- opinion about:
 
 data EvidenceSource = EvidenceSource
   { terminalCallsFor :: !(Text -> IO [ModelCallEvidence]),
@@ -526,6 +629,51 @@ data ComplianceRollUp = ComplianceRollUp
 evaluateCompliance :: SanctionedExecutionProfile -> RunEvidence -> ComplianceRollUp
 ```
 
-`AgentVersionRef`, `AgentArtifactSet`, `ReviewedArtifact`, `SanctionedExecutionProfileRef`,
-`EvidenceStrength`, and `NonConformingReason` all come from plan 49 and are imported, never
-redefined. `runId` and `CallId` values come from plan 28's correlation vocabulary.
+`AgentVersionRef`, `AgentArtifactSet`, `ReviewedArtifact`, `SanctionedExecutionProfileRef`, and
+`NonConformingReason` all come from plan 49 and are imported, never redefined. `runId` and
+`CallId` values come from plan 28's correlation vocabulary. `ModelCallEvidence` and
+`EvidenceStrength` come from `Baikai.Evidence` — note that `EvidenceStrength` moved out of plan
+49's ownership when baikai published it, and plan 49 records that it now cites rather than
+defines it.
+
+Milestone 4's non-conformance taxonomy should be expressed against baikai's vocabulary wherever
+one fits, rather than against locally invented equivalents. In particular, a run whose requested
+reasoning effort was clamped, collapsed, or dropped on the wire is described exactly by
+`ThinkingTranslation`'s `ThinkingAdjustment`, and "how well is this call evidenced" is
+`EvidenceStrength` rather than a boolean. Reasons that have no baikai counterpart — a missing
+delegated child, an artifact digest mismatch, a call that no roll-up accounted for — stay
+shikigami's own.
+
+
+## Revision Notes
+
+- 2026-08-10: Adopted `Baikai.Evidence` instead of defining a local evidence vocabulary.
+
+  Baikai IR-3 was recorded here as `proposed` and worked around with a stub seam. It was in fact
+  delivered on the same day this plan was written, 2026-08-05, as the `Baikai.Evidence` module in
+  `baikai 0.5.0.0`, and went unnoticed for five days. The seam itself was never the problem and
+  is unchanged — production satisfies it with a live source, tests with fixtures. What changed is
+  that the type crossing the seam is baikai's, so the local `ModelCallEvidence` sketch in
+  Interfaces and Dependencies is deleted and replaced with the import list, and `EvidenceStrength`
+  moves from plan 49's ownership to a citation of baikai's.
+
+  Baikai's record is also better than the sketch it replaces, in ways that reach the design:
+  `Observed` is a deliberate non-`Maybe` with no defaulting function, so an unobserved model
+  cannot silently become a copy of the requested one — which was precisely the hazard the sketch's
+  inline comment warned about. `ThinkingTranslation` records what a requested reasoning effort
+  actually became on the wire including every clamp, collapse, and drop, which Milestone 4's
+  non-conformance taxonomy should be built on rather than reinventing. `EvidenceStrength` is an
+  ascending scale, so a roll-up can report how well a call is evidenced rather than only whether a
+  record exists.
+
+  Two limits are now stated explicitly rather than left implied. Baikai's changelog says nothing
+  constructs a `ModelCallEvidence` from a real call yet — the vocabulary and the `Options.evidence`
+  opt-in exist, provider-side population does not — so the fixture source remains how Milestones 3
+  and 4 are proven, exactly as before. And `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the
+  cohort cannot take 0.5 yet; that gate belongs to plan 53, blocks only Milestone 2's import, and
+  changes nothing about what this plan should build. Fixtures should be shaped to baikai's
+  published record now so adoption is an import change rather than a redesign.
+
+  Milestone 2 also gained the `Options.evidence` opt-in as an explicit step, with the note that a
+  call leaving it `Nothing` behaves exactly as before — this is additive to plan 13's provider
+  path and cannot regress it.

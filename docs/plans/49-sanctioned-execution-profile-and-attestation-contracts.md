@@ -66,7 +66,10 @@ under Integration Points.
 - [ ] M2: byte-stability test — a record carrying no optional values encodes identically to the
       pinned fixture, proving a later plan can add lineage fields without rewriting history.
 - [ ] M3: `Shikigami.Attestation.Reviewed` — `ReviewedArtifact` over the revision-pinned
-      repository vocabulary, plus `NonConformingReason` and `EvidenceStrength`.
+      repository vocabulary, plus `NonConformingReason`. **`EvidenceStrength` is no longer
+      defined here** — `baikai 0.5.0.0`'s `Baikai.Evidence` publishes it. Re-export baikai's if a
+      local name is convenient; do not declare a second four-constructor sum. See Surprises &
+      Discoveries.
 - [ ] M3: tests proving a branch name or pull-request number alone cannot construct a
       `ReviewedArtifact`.
 - [ ] M4: `Shikigami.Attestation.Envelope` — the versioned `AgentRunAttestation` mirror, its
@@ -79,7 +82,38 @@ under Integration Points.
 
 ## Surprises & Discoveries
 
-(None yet.)
+**Two things this plan defines were published upstream on the day it was written (discovered
+2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, added the `Baikai.Evidence` module. Its
+scope overlaps this plan in two places, and the right response differs between them.
+
+`EvidenceStrength` is baikai's now. It ships an ascending `EvidenceStrength` scale as part of the
+verifiable model-call evidence vocabulary. This plan's Milestone 3 was going to declare a
+four-constructor sum with a deliberate `Ord` instance for exactly the same purpose — checking that
+a call meets a minimum strength. Two identical scales in one process, one owned here and one
+arriving on every `ModelCallEvidence`, is a translation layer nobody wants and a silent
+disagreement waiting to happen. Import baikai's, and re-export it from
+`Shikigami.Attestation.Reviewed` if a local name reads better at use sites.
+
+The haddock warning this plan wanted to write is still worth writing on the re-export: ordering
+exists to *check* a minimum, never to promote a weaker claim to a stronger one. That caution is
+shikigami's, not baikai's, and it should not be lost in the move.
+
+**The canonical encoding is a different case, and the answer is the opposite.** Baikai also ships
+`canonicalEncode`, `commitmentDigest`, and `configurationDigest` — the canonical hashing core, with
+number normalisation and a hand-written string escaper so an aeson upgrade cannot silently change
+a recorded digest. That is exactly what Milestone 4's `canonicalPayloadBytes` needs, and
+`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` has adopted it. But this plan
+should still define `canonicalPayloadBytes` as a *named function of its own*, implemented in terms
+of `canonicalEncode` — because what this plan owns is which fields the payload contains and in
+what shape, and that is the part kikan IR-6 ratifies. The encoder is borrowed; the payload
+definition is not.
+
+**A note on the gate.** `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the cohort cannot take
+baikai 0.5 yet, and this plan is otherwise contract-only with no dependencies. Do not let that
+gate delay Milestones 1, 2, and 4. For Milestone 3, if the import is not yet available, declare
+`EvidenceStrength` locally *with a haddock note naming baikai as its future home* and delete it
+when the bound lifts — the same pattern this plan already uses for `RepositoryId` and `Revision`
+pending plan 44. What must not happen is a locally owned scale that outlives the gate silently.
 
 
 ## Decision Log
@@ -360,10 +394,22 @@ haddock note saying that when plan 44 lands, these two definitions are deleted a
 from it instead, and that `ReviewedArtifact` itself does not change. Record the same note in
 this plan's Decision Log (already recorded above) so the follow-up is not lost.
 
-`EvidenceStrength` is a four-constructor sum: declared, runtime-observed, runtime-attested,
-provider-attested, in that order, exactly as kikan IR-6's table defines them. Derive `Ord`
-deliberately so a minimum-strength requirement is a comparison, and write the haddock warning
-that ordering exists to *check* a minimum, never to promote a weaker claim to a stronger one.
+`EvidenceStrength` is **not defined here.** `baikai 0.5.0.0`'s `Baikai.Evidence` publishes an
+ascending `EvidenceStrength` scale as part of the model-call evidence vocabulary, and it arrives
+on every `ModelCallEvidence` that `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md`
+collects. Declaring a second identical scale here would mean translating between two orderings for
+one concept. Import baikai's, and re-export it from this module if a local name reads better at
+use sites.
+
+Keep the haddock warning on the re-export, because it is shikigami's caution and not baikai's:
+the ordering exists to *check* a minimum, never to promote a weaker claim to a stronger one.
+
+If the cohort has not yet taken baikai 0.5 when this milestone runs — `kioku-core 0.3.0.0` caps
+`baikai ^>=0.4.1.0`, so it may not have — declare the four-constructor sum locally (declared,
+runtime-observed, runtime-attested, provider-attested, in that order, with a deliberate `Ord`
+instance, exactly as kikan IR-6's table defines them) *and* write a haddock note naming baikai as
+its future home, in the same style as the `RepositoryId` and `Revision` note above. Delete it when
+the bound lifts. A local definition that outlives the gate without that note is the failure mode.
 
 `NonConformingReason` is the taxonomy, and it should be generous rather than clever, because a
 roll-up that records every reason is worth far more than one that reduces partial evidence to a
@@ -412,7 +458,19 @@ different repository, possibly in a different language. Write
 `canonicalPayloadBytes :: AttestationPayload -> ByteString` that produces keys in sorted order
 with no insignificant whitespace, and document in the haddock that this function's output is a
 wire format: changing it changes every digest, so it needs a schema-version bump and a
-migration story, not an edit. Then define
+migration story, not an edit.
+
+Implement that function in terms of `Baikai.Evidence.canonicalEncode` rather than writing the
+encoder by hand. Baikai 0.5 already normalises numbers (so `1`, `1.0`, `1.00`, and `1e0` agree)
+and uses a hand-written string escaper precisely so an aeson upgrade cannot silently invalidate a
+recorded digest — two properties a fresh implementation would plausibly miss and discover later as
+a cross-repository digest mismatch, which is the one failure this design exists to prevent. Keep
+`canonicalPayloadBytes` as a named function of this plan's own anyway: what this plan owns is
+which fields the payload contains and in what shape, which is the part kikan IR-6 ratifies. The
+encoder is borrowed; the payload definition is not. If the cohort has not yet taken baikai 0.5,
+write the encoder locally with a haddock note pointing at `canonicalEncode` as its replacement.
+
+Then define
 `attestationPayloadDigest :: AttestationPayload -> PayloadDigest` as a `newtype` wrapper whose
 *computation* is deliberately left to plan 52 — this milestone provides the canonical bytes and
 the type, and plan 52 adds the hash function together with the hashing dependency it needs.
@@ -695,3 +753,32 @@ duplicating it, and note the change in Surprises & Discoveries.
 The signature and key fields on `AgentRunAttestation` are `Maybe` in this plan because nothing
 signs yet; `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` owns making a
 served attestation always carry them, and owns the hash function behind `PayloadDigest`.
+
+
+## Revision Notes
+
+- 2026-08-10: Reconciled with `baikai 0.5.0.0`, which published two things this plan defines. The
+  two overlaps have opposite resolutions, which is the point worth remembering.
+
+  `EvidenceStrength` leaves this plan. Baikai's `Baikai.Evidence` ships an ascending
+  `EvidenceStrength` scale as part of the model-call evidence vocabulary, and it arrives on every
+  `ModelCallEvidence` that plan 51 collects. A second identical scale owned here would mean
+  translating between two orderings for one concept, with a silent disagreement available whenever
+  they drift. Milestone 3 now imports baikai's and may re-export it. The haddock warning stays and
+  moves with the re-export, because it is shikigami's caution rather than baikai's: the ordering
+  exists to check a minimum, never to promote a weaker claim to a stronger one.
+
+  The canonical encoding stays. Baikai also ships `canonicalEncode`, and Milestone 4 should
+  implement `canonicalPayloadBytes` in terms of it — the upstream encoder normalises numbers and
+  hand-writes its string escaper so an aeson upgrade cannot silently change a digest, both of which
+  a fresh implementation would plausibly miss and only discover as a cross-repository mismatch. But
+  `canonicalPayloadBytes` remains a named function of this plan's own, because what this plan owns
+  is which fields the payload contains and in what shape, and that is the part kikan IR-6 ratifies.
+  The encoder is borrowed; the payload definition is not.
+
+  Both changes carry a fallback, because `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0` and the
+  cohort cannot take baikai 0.5 yet. Where the import is unavailable, define locally *with a
+  haddock note naming baikai as the future home* — the same pattern this plan already uses for
+  `RepositoryId` and `Revision` pending plan 44 — and delete it when the bound lifts. A local
+  definition that outlives the gate without that note is the failure this records against. Nothing
+  about the gate should delay Milestones 1, 2, or 4; this plan remains contract-only and startable.

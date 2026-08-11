@@ -51,8 +51,15 @@ repository.
 
 ## Progress
 
-- [ ] M1: canonical encoding and hashing of the attestation payload, byte-matched against the
-      golden payload published upstream.
+- [ ] M1: canonical encoding and hashing of the attestation payload built on
+      `Baikai.Evidence.canonicalEncode` and `commitmentDigest` — **adopted, not authored** — and
+      byte-matched against the golden payload published upstream.
+- [ ] M1 (gate): `baikai 0.5.0.0` in the cohort, currently excluded by `kioku-core 0.3.0.0`'s
+      `baikai ^>=0.4.1.0`. Shared with `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md`;
+      `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` owns requesting
+      the kioku release that lifts it.
+- [ ] M1: `evidenceSchemaVersion` recorded alongside the digest algorithm, so a verifier can tell
+      which evidence vocabulary the covered records used.
 - [ ] M2: signing by a workload identity, with a test proving the key is unreachable from the
       behavior, the prompt, the tools, and the workspace.
 - [ ] M2: pg-migrate-managed attestation table; read models reconciled.
@@ -69,7 +76,31 @@ repository.
 
 ## Surprises & Discoveries
 
-(None yet.)
+**The canonical encoder this plan was going to write already exists upstream (discovered
+2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, added `Baikai.Evidence`, which includes the
+canonical hashing core: `canonicalEncode` (object keys sorted, no insignificant whitespace,
+numbers normalised so `1`, `1.0`, `1.00`, and `1e0` all encode as `1`, and a hand-written string
+escaper so an aeson upgrade cannot silently invalidate a recorded digest), `commitmentDigest` over
+a full request envelope, and `configurationDigest` over an allow-list projection.
+
+The two properties worth dwelling on are number normalisation and the hand-written escaper. Both
+are the kind of thing a first implementation gets almost right, and both fail in the same way:
+silently, and only when compared against another implementation in another repository — which is
+precisely the cross-repository byte match this plan's Milestone 1 exists to achieve. Adopting the
+upstream encoder removes that risk and has the additional property that the evidence records and
+the attestation covering them are canonicalised by the same code, so they cannot disagree.
+
+**This shrinks what Kikan IR-6 has to ratify.** The upstream request was carrying two jobs: agree
+the attestation *envelope* — which fields the signature covers, in what shape, with what redaction
+— and agree the *encoding* that turns that envelope into bytes. The encoding half is now answered
+by a published library that both sides can depend on. IR-6 still genuinely binds on the envelope
+and on the golden payloads this plan must match byte-for-byte; it no longer needs to specify a
+canonicalisation algorithm in prose. Worth saying in the request, because it makes the request
+smaller and easier to accept.
+
+**The gate is shared with plan 51 and is a bound, not a contract.** `kioku-core 0.3.0.0` declares
+`baikai ^>=0.4.1.0`, which excludes 0.5, so the cohort cannot take `Baikai.Evidence` yet. A kioku
+release admitting `baikai ^>=0.5` lifts it for both plans at once.
 
 
 ## Decision Log
@@ -90,6 +121,32 @@ repository.
   the encoding explicit turns a future library upgrade from a silent digest change into a compile
   or test event.
   Date: 2026-08-05
+
+- Decision: Use `Baikai.Evidence.canonicalEncode` as that named function rather than writing one
+  here, and build `attestationPayloadDigest` on `commitmentDigest`.
+  Rationale: the requirement above is exactly right and `baikai 0.5.0.0` now satisfies it, so the
+  only question left is who owns the implementation. Baikai's `canonicalEncode` "gives a JSON
+  value exactly one byte representation (object keys sorted, no insignificant whitespace, numbers
+  normalised so `1`, `1.0`, `1.00`, and `1e0` all encode as `1`, and a hand-written string escaper
+  so an aeson upgrade cannot silently invalidate a recorded digest)". The number normalisation and
+  the hand-written escaper are both things a from-scratch implementation here would plausibly have
+  missed on the first pass and discovered as a digest mismatch against another implementation
+  later — which is the single failure this decision exists to prevent. Sharing the encoder with
+  the library that produces the call evidence also removes a whole class of disagreement: the
+  evidence records and the attestation that covers them are canonicalised by the same code.
+  Date: 2026-08-10
+
+- Decision: Keep `commitmentDigest` and `configurationDigest` distinct rather than collapsing to
+  one hash.
+  Rationale: baikai separates them deliberately — `commitmentDigest` hashes a full request
+  envelope and binds a record to one particular request, while `configurationDigest` hashes an
+  allow-list projection (`configurationProjection`) that keeps configuration and replaces content
+  with structural summaries, so two calls that ask the same model the same way about different
+  subjects agree. The attestation signature must cover the first: an auditor's question is "is
+  this attestation about this exact run". A compliance comparison across runs that legitimately
+  differ in content wants the second. Collapsing them would make one of those two questions
+  unanswerable.
+  Date: 2026-08-10
 
 - Decision: The read API is one field on the existing umbrella route record, not a separate
   service.
@@ -197,16 +254,36 @@ nix fmt
 
 ### Milestone 1 — canonical bytes and the payload digest
 
-Finish what plan 49 started. In `shikigami-core/src/Shikigami/Attestation/Envelope.hs`, implement
-`attestationPayloadDigest` over `canonicalPayloadBytes`, using the hashing dependency (added here
-or already added by plan 50 — check first). Record the algorithm in the attestation itself, because
-the upstream invariant requires an unknown algorithm to fail closed, which is impossible if the
-algorithm is implicit.
+Finish what plan 49 started, and do it by adopting an encoder rather than writing one.
+
+`baikai 0.5.0.0`'s `Baikai.Evidence` module ships the canonical hashing core this milestone was
+going to build: `canonicalEncode` gives a JSON value exactly one byte representation, and
+`commitmentDigest` hashes a full request envelope. Implement `canonicalPayloadBytes` as
+`canonicalEncode` applied to the payload's JSON, and `attestationPayloadDigest` as
+`commitmentDigest` over it. Do not add a separate hashing dependency for this — baikai already
+pulls `cryptohash-sha256` and `base16-bytestring` for exactly this purpose. Check
+`shikigami-core/src/Shikigami/Attestation/Envelope.hs` and plan 50's Surprises & Discoveries first
+in case plan 50 already added one for the profile digest; if it did, prefer converging on baikai's
+core so one canonicalisation serves both.
+
+Two properties of baikai's encoder are worth knowing, because they are the ones a from-scratch
+implementation would most plausibly have gotten wrong and discovered later as a cross-repository
+digest mismatch. Numbers are normalised, so `1`, `1.0`, `1.00`, and `1e0` all encode as `1`. And
+the string escaper is hand-written specifically so that an aeson upgrade cannot silently
+invalidate a recorded digest — which is the same hazard this plan's Decision Log identified from
+the other direction.
+
+Record the algorithm in the attestation itself, because the upstream invariant requires an unknown
+algorithm to fail closed, which is impossible if the algorithm is implicit. Also record
+`Baikai.Evidence.evidenceSchemaVersion` alongside it, so a verifier can tell which vocabulary
+version the covered evidence used.
 
 Then make the encoding's stability a test rather than a hope. Encode a fixed payload, assert the
 exact bytes as a literal, and assert that the digest of those bytes is a literal too. Follow the
 convention documented at the top of `shikigami-core/test/Shikigami/WireCompatSpec.hs`: a fixture
-generated by calling the current encoder proves nothing about the encoder.
+generated by calling the current encoder proves nothing about the encoder. This test matters more
+now, not less — it is what would catch a future baikai release changing the canonical form under
+you, and it is cheap insurance for having delegated the encoder.
 
 Now the conformance half. Locate kikan's golden payload; if it exists, assert byte equality against
 it and you have a two-sided test. If it does not, keep the local pinned fixture, add a haddock
@@ -514,3 +591,45 @@ data ShikigamiApi mode = ShikigamiApi
 
 `AttestationPayload`, `AgentRunAttestation`, `PayloadDigest`, and `canonicalPayloadBytes` come from
 plan 49. `RunEvidence` and `ComplianceRollUp` come from plan 51. None are redefined here.
+`canonicalEncode`, `commitmentDigest`, `configurationDigest`, and `evidenceSchemaVersion` come from
+`Baikai.Evidence` in `baikai 0.5.0.0`; `canonicalPayloadBytes` is implemented in terms of the first
+of those rather than being an independent encoder.
+
+
+## Revision Notes
+
+- 2026-08-10: Adopted `Baikai.Evidence`'s canonical hashing core instead of authoring one, and
+  recorded the consequences for Kikan IR-6.
+
+  Milestone 1 was going to implement a canonical encoder and a payload digest from scratch, and the
+  Decision Log of 2026-08-05 had already identified the right requirement — a named function with
+  sorted keys and no insignificant whitespace, not `encode`, because the digest must match a hash
+  computed in another repository and possibly another language. `baikai 0.5.0.0` shipped exactly
+  that on 2026-08-05: `canonicalEncode`, `commitmentDigest`, and `configurationDigest`. The
+  original decision stands; what changed is who implements it.
+
+  The reason to prefer the upstream version over a local one is specific rather than general.
+  Baikai's encoder normalises numbers so `1`, `1.0`, `1.00`, and `1e0` agree, and uses a
+  hand-written string escaper so an aeson upgrade cannot silently change a recorded digest. Both
+  are failure modes that a first local implementation plausibly misses and that surface only as a
+  cross-repository mismatch — the exact failure this milestone exists to prevent. Sharing the
+  encoder with the library producing the call evidence also means the evidence and the attestation
+  covering it cannot disagree about canonical form.
+
+  A second decision was added rather than inherited: keep `commitmentDigest` and
+  `configurationDigest` distinct. The signature must cover the first, because an auditor's question
+  is whether an attestation is about this exact run; comparing runs that legitimately differ in
+  content wants the second. Collapsing them makes one of those questions unanswerable.
+
+  Milestone 1 also now records `evidenceSchemaVersion` beside the digest algorithm, so a verifier
+  can tell which evidence vocabulary the covered records used, and the byte-pinning test is
+  described as more important rather than less — it is what would catch a future baikai release
+  changing the canonical form, which is the cost of having delegated the encoder.
+
+  Finally, Surprises & Discoveries records that this shrinks Kikan IR-6. That request was carrying
+  both the attestation envelope and its encoding; the encoding half is now answered by a published
+  library both sides can depend on. IR-6 still binds on the envelope and the golden payloads, and
+  saying so should make the request easier to accept.
+
+  Gate: `baikai 0.5.0.0` is excluded by `kioku-core 0.3.0.0`'s `baikai ^>=0.4.1.0`. Shared with
+  plan 51; plan 53 owns requesting the kioku release that lifts it.
