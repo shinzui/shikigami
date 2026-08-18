@@ -3,6 +3,9 @@ type: Improvement Request
 title: Expose addressed agent runs over the public HTTP API
 description: Add an agent-run vertical to ShikigamiApi so an external service can request a run for a named agent across the service boundary, with server-owned idempotency on a caller-supplied key, instead of writing into the shared run-job queue.
 timestamp: "2026-08-07T00:00:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-08-07T00:00:00Z"
 requestId: IR-8
 status: proposed
 origin: mori://shinzui/mori

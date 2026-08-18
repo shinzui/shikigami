@@ -3,6 +3,9 @@ type: Improvement Request
 title: Add declarative router agents
 description: Declare specialist expertise and route work through durable, typed delegation.
 timestamp: "2026-07-30T00:42:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:42:00Z"
 requestId: IR-3
 status: proposed
 origin: mori://shinzui/kikan

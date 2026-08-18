@@ -3,6 +3,9 @@ type: Improvement Request
 title: Add governed, versioned agent evolution to Shikigami
 description: Control candidate agent artifacts from evaluation through approval, rollout, rollback, and audit.
 timestamp: "2026-07-30T00:44:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:44:00Z"
 requestId: IR-5
 status: proposed
 origin: mori://shinzui/kikan

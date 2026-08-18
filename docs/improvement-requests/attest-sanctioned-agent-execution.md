@@ -3,6 +3,9 @@ type: Improvement Request
 title: Attest sanctioned model execution for agent runs
 description: Resolve a versioned execution profile before a run, collect every correlated model call, bind the result to the exact reviewed artifact and agent version, and issue a signed tamper-evident run attestation.
 timestamp: "2026-08-02T18:29:04Z"
+generated:
+  by: human:nadeem
+  at: "2026-08-02T18:29:04Z"
 requestId: IR-7
 status: proposed
 origin: mori://shinzui/kikan

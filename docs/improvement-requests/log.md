@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-08-17
+
+* **Migration**: Move the bundle to OKF v0.2, adding `generated` provenance to every request
+  and declaring `okf_version` in the bundle root.
+* **Update**: Repin the profile descriptor to `okf-profiles` v0.10.0.
+
 ## 2026-08-10
 
 * **Addition**: IR-9 requests Meibo-principal keying for durable agent memory, grants,

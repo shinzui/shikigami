@@ -3,6 +3,9 @@ type: Improvement Request
 title: Add the architecture-practice review flow
 description: Orchestrate advisory architecture review against revision-pinned practice evidence.
 timestamp: "2026-07-30T00:43:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:43:00Z"
 requestId: IR-4
 status: proposed
 origin: mori://shinzui/kikan

@@ -3,6 +3,9 @@ type: Improvement Request
 title: Add authorized cross-cluster diagnostic tools to Shikigami
 description: Add durable broker, probe, authorization, and typed telemetry-tool paths without exposing production credentials.
 timestamp: "2026-07-30T00:41:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:41:00Z"
 requestId: IR-2
 status: proposed
 origin: mori://shinzui/kikan

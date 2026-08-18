@@ -6,6 +6,9 @@ description: >-
   run lineage, and outbound authorship while preserving name-based history
   through an explicit migration and compatibility boundary.
 timestamp: "2026-08-10T13:20:17Z"
+generated:
+  by: human:nadeem
+  at: "2026-08-10T13:20:17Z"
 requestId: IR-9
 status: proposed
 origin: mori://shinzui/kikan

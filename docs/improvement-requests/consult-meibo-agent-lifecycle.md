@@ -3,6 +3,9 @@ type: Improvement Request
 title: Consult the Meibo directory for agent lifecycle and fleet identity
 description: Gate agent execution on canonical Meibo lifecycle state and fleet identity.
 timestamp: "2026-07-30T00:40:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:40:00Z"
 requestId: IR-1
 status: proposed
 origin: mori://shinzui/kikan
