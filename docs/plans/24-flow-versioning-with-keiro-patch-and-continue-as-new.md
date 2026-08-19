@@ -107,8 +107,16 @@ This section must always reflect the actual current state of the work.
       against `agents/detectors`. Two tests added to `FlowLifecycleSpec`.
       NOTE: the flow names are **not** declared in `domain/shikigami.keiro-workspace`; see the
       Decision Log for why that part of M4 as written is not achievable.
-- [ ] M5: Add `shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs` deploy-simulation
-      tests; wire into `shikigami-core/test/Main.hs`; full suite green.
+- [x] M5 (2026-08-19): Added `shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs` with both
+      deploy-simulation cases, registered in `shikigami-core/test/Main.hs` and in the
+      test-suite's `other-modules`. `cabal test all` green: shikigami-core-test 180,
+      shikigami-workers-test 19, shikigami-agent-test 6, shikigami-migrations-smoke 2;
+      `keiro-shikigami-conformance` 12.
+- [x] M5 (2026-08-19): Proved both cases are load-bearing by mutation rather than assuming it.
+      Forcing `useLabels = True` in `runSink` fails Test B on "the pre-deploy alert journaled
+      under the ordinal scheme"; dropping the patch set from the test's post-deploy options
+      (the M2 plumbing reverted) fails Test A on "the fresh instance completes on the NEW
+      branch". Both mutations were reverted.
 
 
 ## Surprises & Discoveries

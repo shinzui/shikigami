@@ -46,6 +46,7 @@ import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
+import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -68,7 +69,8 @@ main =
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests,
-          WireCompatSpec.tests
+          WireCompatSpec.tests,
+          WorkflowVersioningSpec.tests
         ]
     )
 
