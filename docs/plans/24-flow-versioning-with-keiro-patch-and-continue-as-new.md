@@ -96,7 +96,7 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
-- Decision: `domain/shikigami.keiro` is the authoritative durable-topology inventory;
+- Decision: `domain/shikigami.keiro-workspace` is the authoritative durable-topology inventory;
   this plan's discipline and active patches must agree with its checker/scaffold/harness.
   Rationale: stable names are persisted compatibility identifiers and need a machine-
   checked declaration/code drift gate, not prose alone.
@@ -379,7 +379,7 @@ Acceptance: FlowLifecycle tests pass with the new label-based outbox detail, and
 deploy-simulation test (below) proves the old-branch behavior.
 
 Milestone 4 — load-time flow validation. Add the flow names and their stable workflow
-relationships to plan 39's checked `domain/shikigami.keiro` specification, regenerate, and
+relationships to plan 39's checked `domain/shikigami.keiro-workspace` specification, regenerate, and
 export the generated runtime-free name list so callers can validate without constructing
 approval environments:
 
@@ -549,7 +549,7 @@ sites exist yet (i.e., revert M3 first, then M2).
 This plan hard-depends on plans 39 and 47. Implement against Keiro 0.4.0.1, including
 explicit state-shape hashes, checked structural/opaque declarations, codec comparison/goldens, and
 the released atomic `continueAsNew` behavior. Every topology change updates
-`domain/shikigami.keiro` and passes the plan-39 coverage/opaque gates.
+`domain/shikigami.keiro-workspace` and passes the plan-39 coverage/opaque gates.
 
 
 ## Interfaces and Dependencies
@@ -641,3 +641,74 @@ discipline and patch plumbing, matching the cross-MasterPlan execution order.
   That is achievable and is the right test — it just manufactures the in-flight instance instead of
   finding one. The note states explicitly that no mechanism should be weakened on the grounds that
   nothing depends on it yet.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan
+
+The versioning discipline this plan owns now has a second, mechanical half. A Keiro `patch` id and
+a `continueAsNew` seed are both declared surfaces: `patch <id> { ... }` inside a workflow body and
+`continueAsNew <SeedType>` as its final top-level item. Declare them in the owning member and run
+`just keiro-diff <merge-base>` **in addition to** exercising the runtime `patch`, because the two
+check different things — the runtime keeps an in-flight instance coherent across a deploy, and the
+diff refuses a change that would strand it in the first place. Neither substitutes for the other.
+
+Concretely, `AgentRun.patches` and `DanwaConversation.patches` are both `[]` today, and both are
+asserted by the generated conformance target against
+`shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`.
+Adding the first patch id changes that fact, so this plan must review and commit the
+`Expectations` change deliberately — it is create-once hand-owned code and keiro-dsl will never
+rewrite it.
+
+This plan also inherits the run-job queue decision. If it moves `shikigami_run_jobs` onto the
+declared `workqueue` surface, that is a codec change on both the producer
+(`Shikigami.Trigger.Enqueue`) and the consumer (`Shikigami.Agent.RunJob.Worker`), and it must
+retire the live assertion at `shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81` that the
+payload is bare — in its own commit, with its own Decision Log entry and its own fixture.

@@ -559,3 +559,38 @@ edits with plans 13, 15, and 16 in the plan-36 worker composition root.
   `lookupEnv` resolver with Settei settings and validation.
 - 2026-07-22: Preserved plan 22's typed HTTP failure class through the approval notify step;
   permanent 4xx errors dead-letter while transient failures remain replayable under plan 17.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed. The
+service is now specified by `domain/shikigami.keiro-workspace`, and two of its findings land on
+this plan.
+
+**The approval awaits cannot be declared, and renaming them would not help.** keiro-dsl parses a
+workflow label with the wire-word production `[A-Za-z0-9][A-Za-z0-9_-]*`, so neither
+`approval:<SinkKind>:<ordinal>` (`Shikigami/Agent/Workflow.hs:299-300`) nor the derived
+`<label>:notify` step (`Shikigami/Agent/Approval.hs:156-157`) is expressible — the colon is
+rejected outright, and the suffix is a runtime value in any case. Only the at-risk flow's
+`await-ack` is static, and it *is* declared, as `await await-ack -> ApprovalDecision` in
+`domain/shikigami-agent-run.keiro`. If this plan wants the approval awaits gated by
+`keiro-dsl diff` it must first make their labels static, which is a modelling decision this plan
+owns.
+
+**The signal operation is this plan's to add.** Plan 39 deliberately declared `run` operations
+only, because `Shikigami.Agent.Approval.resolveApproval` and
+`Shikigami.Agent.Workflow.Input.deliverInput` are exported but have **no caller anywhere in this
+repository**, and `resolveApproval` is keyed by `AwakeableId` rather than by a workflow key —
+which is not what a DSL `signal` operation declares. When this plan adds the entry point, declare
+it alongside:
+
+```text
+operation SignalAcknowledgement
+  signal await-ack of AgentRun
+    key from idempotencyKey via idText
+    value ApprovalDecision
+```
+
+`check` then verifies that the label exists on the workflow and that the value type matches the
+await's, which is the failure that otherwise leaves a workflow waiting forever. Run
+`just keiro-gate` before merging.

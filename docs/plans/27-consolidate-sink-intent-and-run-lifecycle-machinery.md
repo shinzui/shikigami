@@ -49,9 +49,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: encode the existing sink-intent contract in `domain/shikigami.keiro`, regenerate its
-      structural type/codec, consolidate hand-owned prepare/enqueue/id behavior in
-      `Shikigami.Sink.Intent`, delete both former copies, and add golden wire tests.
+- [ ] M1: consolidate the two `SinkIntent` copies into one hand-owned `Shikigami.Sink.Intent`
+      module, together with prepare/enqueue/id behavior, delete both former copies, and keep
+      `WireCompatSpec`'s byte-identity fixtures green. **Revised 2026-08-19: this is a Haskell
+      consolidation, not a regeneration** — the specification cannot own the type's codec until a
+      declared node consumes it. See the reconciliation section at the end of this plan.
 - [ ] M2: Unify the run lifecycle — `agent-run` CLI drives the durable workflow (or shares
       lifecycle functions); retire `runAgentWithMemory`'s divergent copy.
 - [ ] M3: keiki lifecycle conformance test for the at-risk flow (or documented as
@@ -81,6 +83,13 @@ Record every decision made while working on the plan.
 - Decision: Plan 39's generated module owns the `SinkIntent` structural wire type and codec;
   a hand-owned `Shikigami.Sink.Intent` module under the existing `Shikigami.Sink.*` namespace
   re-exports it and owns preparation, deterministic identity, enqueue, and publish behavior.
+  **Half superseded 2026-08-19 — there is no generated module, and there will not be one until a
+  declared node consumes the type.** Plan 39 landed and found that an unconsumed `mapped
+  structural` declaration generates a shape, a binding skeleton, projections, and conformance
+  assertions but *no codec*, so declaring `SinkIntent` would certify a JSON policy nothing
+  executes. The `Shikigami.Sink.Intent` half of this decision stands and is now the whole of it:
+  that module owns a single hand-written `SinkIntent` with its existing `genericToJSON`
+  `omitNothingFields` encoding. See the reconciliation section at the end of this plan.
   Re-export the names the two call sites need so
   their import surface barely changes.
   Rationale: the machinery is sink-domain, not flow- or agent-workflow-specific; both
@@ -200,7 +209,7 @@ non-test caller (`rg sharedScope` finds only its definition and export); it is d
 ## Plan of Work
 
 Milestone 1 — one sink intent contract and module. First update
-`domain/shikigami.keiro` with the exact deployed event type, schema version, fields, JSON
+`domain/shikigami.keiro-workspace` with the exact deployed event type, schema version, fields, JSON
 names, and outbox relationship, run `check`/`diff`, and regenerate through plan 39. The
 generated module owns `SinkIntent` and its codec; do not edit it. Create the hand-owned
 `shikigami-core/src/Shikigami/Sink/Intent.hs` vertical by moving the shared behavior there:
@@ -488,3 +497,81 @@ Integration Points (cross-plan):
   being retired, this plan may now adopt it and move the golden — in its own commit, with the
   reason in the Decision Log. That option did not exist while real consumers did. What remains
   forbidden is updating a golden to match new output without establishing why it moved.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan — including one premise that is now wrong
+
+**This plan's Decision Log entry "Plan 39's generated module owns the `SinkIntent` structural wire
+type and codec" is superseded and must not be followed.** Plan 39 tried to give `SinkIntent` an
+owning workspace member and found it cannot, at keiro-dsl 0.13, without certifying a codec nothing
+executes.
+
+The evidence is the tool's own. A `mapped structural record SinkIntent` checks clean, but no
+declared node consumes it — shikigami has no aggregate, no declared queue payload, and no read
+model — so `check --explain-bindings` reports the obligation as "structural type SinkIntent (not
+currently used by an aggregate root)" and the coverage report lists zero mapped roots on every
+surface. The scaffold then emits a shape module, a create-once binding skeleton, projections, and
+conformance assertions, and **no encoder or decoder**. The declaration would state a JSON policy
+that the outbox does not use, and it would cost three mapped declarations (`SinkIntent`,
+`DanwaTarget`, and the four-constructor `Sink` union) plus three hand-owned binding modules to say
+it.
+
+So Milestone 1 of this plan is a **Haskell consolidation, not a regeneration**. Merge
+`Shikigami.Agent.Workflow`'s `SinkIntent` (`Agent/Workflow.hs:125-138`) and
+`Shikigami.Flow.SinkOutbox`'s copy (`Flow/SinkOutbox.hs:49-58`) into one hand-owned
+`Shikigami.Sink.Intent` module — the module cycle that forced the duplication disappears once the
+record lives in a leaf — keep `genericToJSON` with `omitNothingFields` so not one byte moves, and
+keep `WireCompatSpec` as the guard. The generated modules named in this plan for that purpose do
+not exist and will not until a declared node consumes the type; the sink outbox becomes a declared
+`emit`/`publisher` only when it publishes to a contract topic rather than calling HTTP sinks.
+
+What survives unchanged: consolidation must not move a golden, and the generated layer is
+regenerated rather than edited.

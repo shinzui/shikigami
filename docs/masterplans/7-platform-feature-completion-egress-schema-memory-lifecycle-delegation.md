@@ -232,7 +232,7 @@ loading. EP-2 adds enabled-agent selection over that report. Plan 30 consumes th
 the `agents` operator command; plan 23 later persists and annotates it with lifecycle state.
 
 IP-8 — checked delegation topology and global budget. Plan 39 owns
-`domain/shikigami.keiro`; EP-4 adds stable delegation steps/children there in the same
+`domain/shikigami.keiro-workspace`; EP-4 adds stable delegation steps/children there in the same
 change as runtime code. The remaining child/time/depth budget is persisted in `RunJob`
 lineage and consumed atomically across the entire descendant tree, not reset per parent
 or process. Cycle and allow-list checks happen before child creation; replay observes the

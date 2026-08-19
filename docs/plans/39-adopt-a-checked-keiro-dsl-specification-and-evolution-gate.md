@@ -119,7 +119,23 @@ This section must always reflect the actual current state of the work.
       stable glob `optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal`
       to `cabal.project`. `cabal test keiro-shikigami-conformance` passes twelve workflow facts.
       The create-once `KeiroConformance.Expectations` module is reviewed and committed.
-- [ ] M4: make plans 24–27, 35, 50, and 51 consume the specification and require the evolution gate for every persisted contract or workflow-shape change.
+- [x] (2026-08-19) M4: repointed **31 stale `domain/shikigami.keiro` references** across nine
+      plans and two MasterPlans onto `domain/shikigami.keiro-workspace`. Two of them were
+      startability checks (`ls domain/shikigami.keiro` in plans 50 and 51) that would have told an
+      implementer this plan was not done against a repository where it is.
+- [x] (2026-08-19) M4: added a "Reconciliation with the delivered plan 39" section to plans 24,
+      25, 26, 27, 35, 50, and 51, each carrying the shared corrections (workspace not one file, no
+      `module` clause, no aggregate, the three deliberately undeclared surfaces, `just
+      keiro-gate`, the wire-word label rule) plus what changes for that plan specifically.
+- [x] (2026-08-19) M4: corrected plan 27's Decision Log **in place**. Its entry "Plan 39's
+      generated module owns the `SinkIntent` structural wire type and codec" is marked half
+      superseded, and its Milestone 1 now says "a Haskell consolidation, not a regeneration".
+      Leaving that uncorrected would have sent an implementer looking for a generated module that
+      does not exist.
+- [x] (2026-08-19) M4: added reconciliation notes to plans 14 and 16, which this plan's inventory
+      names as the owners of the undeclarable `approval:<kind>:<ordinal>`, `<label>:notify`, and
+      `emit-signal:<ordinal>` label families. Plan 14 also inherits the `signal` operation this
+      plan deliberately did not declare.
 
 
 ## Surprises & Discoveries

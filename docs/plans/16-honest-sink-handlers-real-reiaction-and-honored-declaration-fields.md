@@ -637,3 +637,24 @@ policy for failed publishes — this plan only makes the failure real.
   settled handler outcomes.
 - 2026-07-22: Replaced the plan-local `--rei-url` configuration path with the shared
   Settei application config and made plans 36/37 explicit prerequisites.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed. The
+service is now specified by `domain/shikigami.keiro-workspace`, and one finding lands on this
+plan.
+
+The flow path's sink steps are journaled as `emit-signal:<ordinal>`
+(`Shikigami/Flow/Capability.hs:136`), and that label **cannot be declared**: keiro-dsl parses a
+workflow label with the wire-word production `[A-Za-z0-9][A-Za-z0-9_-]*`, which admits neither the
+colon nor a runtime-computed suffix. So the flow's sink emissions are outside the checked
+specification and are not gated by `keiro-dsl diff`. If this plan makes those labels static, add
+them to `domain/shikigami-agent-run.keiro`'s `body` and run `just keiro-gate`; if it does not, say
+so, because the specification's silence is currently a limitation rather than a claim that the
+labels do not exist.
+
+The sink outbox itself is also deliberately undeclared. A keiro-dsl `emit`/`publisher` pair models
+publishing contract events to a Kafka topic, and this outbox's publisher calls HTTP sinks — so
+declaring one would certify a publication that does not happen. The rule plan 39 works under is
+binding here too: do not certify a schema that differs from the codec actually executed.

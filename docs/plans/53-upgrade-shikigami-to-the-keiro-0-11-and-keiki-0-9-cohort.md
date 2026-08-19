@@ -261,7 +261,7 @@ Record every decision made while working on the plan.
   Date: 2026-08-05
 
 - Decision: Do this upgrade *before* plan 39 rather than after.
-  Rationale: plan 39 encodes shikigami's durable identities in `domain/shikigami.keiro` and
+  Rationale: plan 39 encodes shikigami's durable identities in `domain/shikigami.keiro-workspace` and
   scaffolds generated modules from them. keiro-dsl 0.11 changes the generated naming edition
   (compound module paths move, for example `Service_oncall` → `ServiceOncall`), renames every
   scaffold sidecar file, and adds a released language 4 whose acceptance differs from earlier
@@ -685,7 +685,7 @@ Also confirm the durable identities listed in Context still appear verbatim in t
 is sufficient and worth doing explicitly. The reason is weaker than it was — with no deployed
 instances there is no parked workflow to fail to resume — but these names are about to become
 the input to plan 39's checked specification, and it is much cheaper to notice a drifted step
-name now than to discover it as a diff against a freshly authored `domain/shikigami.keiro`.
+name now than to discover it as a diff against a freshly authored `domain/shikigami.keiro-workspace`.
 
 Finally, start the worker once. Kioku 0.3's changelog warns that keiki 0.9 moved
 `mkEventStreamOrThrow`'s failure from compile time to runtime, so a green test suite is not by

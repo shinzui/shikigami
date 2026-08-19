@@ -48,7 +48,7 @@ This section must always reflect the actual current state of the work.
 
 - [ ] M1: Indexed session resolution (kioku `getBySubjectRef`); generation-aware input
       delivery and result loading (stop hard-coding generation 0).
-- [ ] Prerequisites: plans 36, 39, and 24 complete; stable timer/awakeable/rotation ids are checked in `domain/shikigami.keiro`.
+- [ ] Prerequisites: plans 36, 39, and 24 complete; stable timer/awakeable/rotation ids are checked in `domain/shikigami.keiro-workspace`.
 - [ ] M2: Idle-timeout durable timer per turn; on fire, complete the kioku session and end
       the workflow; a subsequent message opens a new epoch reusing the session lineage.
 - [ ] M2: cancel or generation/version every superseded idle timer; stale completions are harmless before and after continue-as-new.
@@ -254,7 +254,7 @@ selected).
 
 Milestone 2 — idle timeout and session completion. First add the idle timer, awakeable,
 payload discriminator, router relationship, and terminal step identity to
-`domain/shikigami.keiro`; run plan 39's checker, compatibility diff, scaffold, and generated
+`domain/shikigami.keiro-workspace`; run plan 39's checker, compatibility diff, scaffold, and generated
 harness, then fill only hand-owned behavior holes. Add a versioned idle-timeout awakeable alongside
 the next-message awakeable in the loop. Model it on approvals: define a timeout payload and
 a fire action (a conversation-scoped analog of `approvalTimeoutFireAction`,
@@ -489,3 +489,80 @@ reply path keeps using the single shared module.
   What changes is the evidence, not the mechanism: prove the guard with a constructed instance.
   Park a conversation under the old loop shape in a test, swap in the new shape, assert it resumes
   on the old branch while a fresh conversation takes the new one.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan
+
+This plan now owns making the conversation journal declarable, and that is a larger job than it
+looks. Only three of `shikigami.danwa-conversation`'s labels are static and declared —
+`ingest-start`, `lookup-agent`, `resolve-session`. Every other label it writes is keyed by Danwa
+message id or turn ordinal and carries a colon:
+
+| Label | Kind | Defined at |
+|---|---|---|
+| `record-user:<messageId>` | step | `Shikigami/Agent/Conversation.hs:163` |
+| `run-behavior:<messageId>` | step | `Conversation.hs:168` |
+| `record-assistant-and-reply:<messageId>` | step | `Conversation.hs:178,256-258` |
+| `turn-result:<messageId>` | step | `Conversation.hs:193,252-254` |
+| `danwa-reply:<messageId>` | step | `Conversation.hs:260-262,419` |
+| `next-message:<ordinal>` | await | `Conversation.hs:151,248-250` |
+
+None can be declared, because a keiro-dsl label is a compile-time wire word. Renaming the
+separator does not help: the suffix is a runtime value. The journal-rotation work this plan owns
+is the natural place to fix that — a rotated generation with a bounded, statically-labelled turn
+body is declarable, an unbounded loop keyed by message id is not. Decide that deliberately rather
+than leaving the conversation workflow permanently under-declared, and record which labels become
+static.
+
+The idle timeout this plan adds is a `Keiro.Timer` row, and shikigami's timers are fired by one
+hand-written loop rather than by a declared `process` node, because a `process` requires a saga
+aggregate and a target aggregate that do not exist. Declaring the timer is not available yet; say
+so rather than implying the specification covers it.

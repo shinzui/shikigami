@@ -41,7 +41,7 @@ generation (`keiro/src/Keiro/Workflow.hs`, in the keiro checkout at
 
 After this initiative, an operator can redeploy shikigami while agent runs, flows, and danwa
 conversations are suspended mid-flight, and those instances resume correctly under the new
-code. Before implementation, a checked `domain/shikigami.keiro` specification inventories
+code. Before implementation, a checked `domain/shikigami.keiro-workspace` specification inventories
 workflow names, stable steps, patches, timers, awakeables, and continue-as-new boundaries;
 CI rejects drift between that specification and the harness/scaffold. In-flight
 instances take the old code path where the shape changed (guarded by keiro
@@ -74,7 +74,7 @@ registry module with load-time validation.
 The initiative decomposes into a checked-DSL foundation plus four functional concerns,
 each independently deliverable and verifiable:
 
-First, plan 39 inventories the durable topology in `domain/shikigami.keiro`, checks and
+First, plan 39 inventories the durable topology in `domain/shikigami.keiro-workspace`, checks and
 scaffolds it, wires generated artifacts behind a firewall with typed implementation
 holes, and adds a CI diff gate. It does not generate business logic.
 
@@ -133,7 +133,7 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 ## Dependency Graph
 
 F1 follows the package architecture in plan 36 and is the first durable-workflow gate.
-Every EP must keep `domain/shikigami.keiro`, the generated scaffold, the typed holes,
+Every EP must keep `domain/shikigami.keiro-workspace`, the generated scaffold, the typed holes,
 and the handwritten harness in sync. EP-1 then delivers three artifacts the others
 consume: the versioning discipline document (`docs/workflow-versioning.md`), the
 `Shikigami.Workflow.Versioning` module (the process-wide `activePatches` set and the
@@ -176,7 +176,7 @@ the MasterPlan-5 slice of the canonical MP-2 through MP-7 waves in MasterPlan 2.
 
 ## Integration Points
 
-Checked durable topology (`domain/shikigami.keiro`): plan 39 owns the authoritative
+Checked durable topology (`domain/shikigami.keiro-workspace`): plan 39 owns the authoritative
 inventory, checker/scaffolder invocation, generated-artifact firewall, typed holes,
 harness, and CI diff gate. Plans 24–27 update the DSL and its stable identifiers in the
 same change as any handwritten workflow change. Generated code may call typed holes;
@@ -319,7 +319,7 @@ plan.
   delegation must change a durable workflow only after patch plumbing and the step-name
   inventory exist.
   Date: 2026-07-22
-- Decision: Every durable-topology change updates `domain/shikigami.keiro` and passes
+- Decision: Every durable-topology change updates `domain/shikigami.keiro-workspace` and passes
   checker, scaffold, harness, and generated-diff gates before merge.
   Rationale: stable workflow identifiers are an externally persisted compatibility
   surface; review must compare declared intent with executable wiring.

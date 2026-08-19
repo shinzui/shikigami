@@ -236,7 +236,7 @@ the failing-run transcript).
 
 Milestone 2 — journal the Memory capability. Before editing runtime code, add every stable
 `recall:<label>` and `remember:<label>` identity and its workflow relationship to
-`domain/shikigami.keiro`; run plan 39's check, compatibility diff, scaffold, and generated
+`domain/shikigami.keiro-workspace`; run plan 39's check, compatibility diff, scaffold, and generated
 harness. Reference generated identity facts where the scaffold exposes them and keep the
 effect/interpreter in hand-owned holes. Then edit
 `shikigami-core/src/Shikigami/Flow/Capability.hs`:
@@ -512,7 +512,7 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.h
 
 - 2026-07-22: Added the checked Keiro DSL as a hard prerequisite and made labeled memory
   steps part of the specification/scaffold/harness/diff acceptance gate.
-- [ ] Prerequisites: plans 36, 39, and 24 complete; update `domain/shikigami.keiro` for every new labeled durable step.
+- [ ] Prerequisites: plans 36, 39, and 24 complete; update `domain/shikigami.keiro-workspace` for every new labeled durable step.
 
 
 ## Revision Notes
@@ -533,3 +533,69 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.h
   compatibility obligation; old state does not exist. What must still hold is plan 39's topology
   gate, which is about the checked specification agreeing with the code and has nothing to do with
   users.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan
+
+The labeled memory steps this plan adds are declared in `domain/shikigami-agent-run.keiro`'s
+`body`, and the eleven labels already there are the inventory to extend:
+`ingest-job`, `lookup-agent`, `open-session`, `recall`, `run-behavior`, `classify`, `await-ack`,
+`dispatch-sinks`, `fail-session`, `record`, `complete`, plus the `delegate` child.
+
+Two constraints follow from what plan 39 found. First, a new label must be a wire word — no
+colons, no runtime-computed suffix — so a per-scope or per-key memory step needs a static label,
+not `recall:<scope>`. Second, the body is a label *inventory* rather than a control-flow program;
+`run-behavior` and the flow path's `classify`/`await-ack` are already alternatives, so adding a
+conditional step is a matter of declaring its label, not of expressing its condition.
+
+There is no `BehaviorHoles` module to fill and no behavior obligation to witness:
+`behavior-obligations` reports `required: 0` because there is no aggregate. If this plan
+introduces one, that changes.

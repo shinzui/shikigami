@@ -254,7 +254,7 @@ inserts. If this plan adds a read model — and Milestone 5 does — confirm the
 it, or every projection query fails `ReadModelUnregistered` in production while passing in a
 freshly created test database.
 
-**The checked specification.** `domain/shikigami.keiro`, introduced by
+**The checked specification.** `domain/shikigami.keiro-workspace`, introduced by
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`, declares this
 repository's durable contracts and gates changes to them in CI. The run-evidence aggregate is a
 durable state machine and therefore belongs in that specification. Declaring it there first and
@@ -282,7 +282,7 @@ provider at all; the fifth makes the state durable and queryable.
 
 ### Milestone 1 — the aggregate and its lifecycle
 
-Declare the run-evidence aggregate in `domain/shikigami.keiro` first, then implement it in
+Declare the run-evidence aggregate in `domain/shikigami.keiro-workspace` first, then implement it in
 `shikigami-core/src/Shikigami/Attestation/Evidence.hs`.
 
 The lifecycle is a state machine with five ordinary phases and three terminal failures:
@@ -424,13 +424,13 @@ mori path mori://shinzui/baikai
 Confirm the hard dependencies have landed before starting:
 
 ```bash
-ls domain/shikigami.keiro                                  # plan 39
+ls domain/shikigami.keiro-workspace                                  # plan 39
 ls shikigami-core/src/Shikigami/Log.hs                     # plan 28 M1
 grep -rn "resolve-profile" shikigami-core/src              # plan 50
 grep -c . shikigami-migrations/sql-migrations/manifest     # plan 38's cutover
 ```
 
-If `domain/shikigami.keiro` or `Shikigami/Log.hs` is missing, this plan is not startable yet — say
+If `domain/shikigami.keiro-workspace` or `Shikigami/Log.hs` is missing, this plan is not startable yet — say
 so in Progress and stop rather than working around it, because both workarounds are exactly the
 rework this decomposition exists to avoid.
 
@@ -677,3 +677,83 @@ shikigami's own.
   Milestone 2 also gained the `Options.evidence` opt-in as an explicit step, with the note that a
   call leaving it `Nothing` behaves exactly as before — this is additive to plan 13's provider
   path and cannot regress it.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan
+
+This plan introduces **shikigami's first event-sourced aggregate**, and plan 39's census makes
+that concrete rather than incidental: there is no aggregate, no read model, no projection, no
+router, and no process manager today, so this plan is what turns most of keiro-dsl's checked
+surface on for this service. Expect the following to start applying only when it lands:
+
+* `behavior-obligations` currently reports `required: 0`. With an aggregate it enumerates every
+  live transition, reachable rejection cell, and replay-only transition that a create-once
+  `BehaviorHoles` module must witness. A `Pending` row is a conformance failure, not a default.
+* Every warning code in plan 39's Context table belongs to an aggregate, process, router, queue,
+  intake, or read-model surface, which is why `--deny-warnings` currently passes with nothing to
+  justify. This plan is the first that can trip it.
+* Golden payloads are aggregate-keyed. Consolidate them under one workspace root
+  (`shikigami-core/test/golden-payloads`) and pass `--goldens` to `scaffold`; an ownership move
+  must never relocate an aggregate's historical fixtures.
+* Shikigami's two timer families are fired by one hand-written loop precisely because a declared
+  `process` node needs a saga aggregate and a target aggregate. This plan is the first that could
+  declare one; whether it should is this plan's call.
+
+The startability check must look for `domain/shikigami.keiro-workspace`, not
+`domain/shikigami.keiro`.
+
+**Give the run-evidence aggregate its own member.** A new aggregate is a new review boundary,
+which is the house criterion at
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-service-workspaces`, and an aggregate is never
+split across members. Add `spec shikigami-run-evidence.keiro` to the manifest, beginning with
+`language keiro-dsl 5` and `context shikigami`, and put any declaration a second member needs into
+a new `shikigami-shared.keiro` with exactly one owner — plan 39 created no shared member because
+neither workflow declares an id, an enum, a rule, or a mapped type.

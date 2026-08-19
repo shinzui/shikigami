@@ -122,7 +122,7 @@ the minimum; selection count is within `maxSelections`; no-match has no executab
 ambiguous alternatives are advisory and spawn nothing. Reject undeclared, unavailable, low
 confidence, duplicate, oversized, and stale-catalog decisions with distinct errors.
 
-Milestone 2 updates the `domain/shikigami.keiro` artifact owned by
+Milestone 2 updates the `domain/shikigami.keiro-workspace` artifact owned by
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` with additive, stable workflow steps
 `route-catalog:<label>` and `route-decision:<label>` and passes parse, check, scaffold,
 harness, and evolution diff. Add a `Routing` effect to
@@ -170,9 +170,9 @@ sed -n '1,260p' shikigami-core/src/Shikigami/Flow/Capability.hs
 Check the durable topology before compiling runtime changes:
 
 ```bash
-nix develop -c cabal run keiro-dsl -- parse domain/shikigami.keiro
-nix develop -c cabal run keiro-dsl -- check domain/shikigami.keiro --emit
-nix develop -c cabal run keiro-dsl -- diff domain/shikigami.keiro --since HEAD^
+nix develop -c cabal run keiro-dsl -- parse domain/shikigami.keiro-workspace
+nix develop -c cabal run keiro-dsl -- check domain/shikigami.keiro-workspace --emit
+nix develop -c cabal run keiro-dsl -- diff domain/shikigami.keiro-workspace --since HEAD^
 ```
 
 Format and validate the implementation:

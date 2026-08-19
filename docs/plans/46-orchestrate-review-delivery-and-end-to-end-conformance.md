@@ -143,7 +143,7 @@ from `docs/plans/40-declare-specialist-expertise-and-router-policy.md`, with del
 OpenTelemetry reviewer for the first slice, and
 no write-capable sinks. Give the specialist `opentelemetry` expertise and a Flow behavior.
 Register `architecture-practice-router` and `opentelemetry-practice-review` in the final Flow
-registry. Add every stable review operation to `domain/shikigami.keiro` before runtime code:
+registry. Add every stable review operation to `domain/shikigami.keiro-workspace` before runtime code:
 router catalog/decision/delegate/await plus specialist target/reference/upstream acquisition,
 prior recall, verdict, activity, provisional memory, attention, and resolution. Use stable
 labels derived from validated review/resolution ids where repeated per-review operations need
@@ -221,8 +221,8 @@ mori registry show shinzui/kizashi --full
 Check topology and migration manifests before the full suite:
 
 ```bash
-nix develop -c cabal run keiro-dsl -- check domain/shikigami.keiro --emit
-nix develop -c cabal run keiro-dsl -- diff domain/shikigami.keiro --since HEAD^
+nix develop -c cabal run keiro-dsl -- check domain/shikigami.keiro-workspace --emit
+nix develop -c cabal run keiro-dsl -- diff domain/shikigami.keiro-workspace --since HEAD^
 nix develop -c cabal build all
 nix develop -c cabal test all --test-show-details=direct
 ```

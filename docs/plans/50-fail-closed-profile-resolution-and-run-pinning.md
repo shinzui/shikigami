@@ -160,7 +160,7 @@ because tests are green.
 
 **The checked specification.**
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` introduces
-`domain/shikigami.keiro`, a checked declaration of this repository's durable contracts —
+`domain/shikigami.keiro-workspace`, a checked declaration of this repository's durable contracts —
 aggregates, workflows, timers, queues, inbox and outbox contracts, and read models — together
 with an evolution gate that fails CI when a persisted contract or workflow shape changes without
 passing through the specification. Plan 39 is a hard dependency of this plan precisely because
@@ -243,7 +243,7 @@ that this is what you are doing.
 ### Milestone 2 — resolve before the behavior, and stay pinned
 
 Add the step to `shikigami-core/src/Shikigami/Agent/Workflow.hs`. Declare it through
-`domain/shikigami.keiro` first, per plan 39, then implement.
+`domain/shikigami.keiro-workspace` first, per plan 39, then implement.
 
 Add a field to `AgentRunDeps` — a resolver function rather than a database handle, so tests can
 supply a deterministic one without a database, matching how `approval` is already a function field
@@ -320,7 +320,7 @@ cat shikigami-migrations/sql-migrations/manifest
 Confirm plan 39 has landed before starting Milestone 2 — the specification file must exist:
 
 ```bash
-ls domain/shikigami.keiro
+ls domain/shikigami.keiro-workspace
 ```
 
 If it does not exist, plan 39 is not done and this plan's Milestone 2 must wait. Milestone 1 is
@@ -483,3 +483,74 @@ newBehaviorEnvForProfile ::
 The journaled step is `StepName "resolve-profile"`, returning `Maybe SanctionedExecutionProfileRef`,
 encoded with `omitNothingFields`. That name and that encoding are permanent; changes to the value
 are additive only.
+
+
+## Reconciliation with the delivered plan 39 (2026-08-19)
+
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed, and
+three of its assumptions turned out to be wrong. Anything this plan says that contradicts the
+following is superseded.
+
+**The specification is a workspace, not one file.** The service input is
+`domain/shikigami.keiro-workspace`, a manifest naming `service shikigami`,
+`runtime-package shikigami-core`, and `layout collocated`, plus two members —
+`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`. Every file-taking
+`keiro-dsl` command takes the manifest and validates the composed service. Every reference to
+`domain/shikigami.keiro` in this plan has been repointed; a startability check that looks for the
+old path would fail against a repository where plan 39 *is* done.
+
+The manifest declares **no `module` clause**: `context shikigami` already supplies the
+`Shikigami` prefix, and adding `module Shikigami` scaffolds `Shikigami.Shikigami.*`. Do not add
+one, and do not pass `--module-root` or `--collocate`.
+
+**Shikigami has no aggregate, no read model, no projection, no router, and no process manager.**
+Plan 39's Milestone 1 census, with evidence in
+`docs/architecture/shikigami-domain-inventory.md`, found that the only Keiro command runner in the
+repository targets *kioku's* session stream, and that
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The declared surface today is exactly two durable workflows and
+their `run` operations.
+
+**Three surfaces are deliberately undeclared, and the reason is binding on this plan too:** do not
+certify a schema that differs from the codec actually executed. The `shikigami_run_jobs` queue
+keeps its bare `RunJob` payload rather than acquiring Keiro's `{v,t,data}` envelope; the Kafka
+inbox and the Danwa contract stay hand-written because a generated contract codec writes a
+discriminator into a body that has none; and the sink outbox stays hand-written because its
+publisher calls HTTP sinks rather than publishing to Kafka. Declaring any of them is a wire change
+that needs its own commit, its own decision, and its own fixture.
+
+**The gate is `just keiro-gate`.** It runs `keiro-check` (with `--min-language 5`,
+`--deny-warnings`, and `--fail-on-opaque`), `keiro-inspect` (asserting every member declares its
+language at effective version 5), `keiro-scaffold` (regenerate, then `git diff --exit-code`),
+`keiro-diff <ref>` (the six-surface evolution classification), and `cabal test
+keiro-shikigami-conformance`. Run it before merging any change to `domain/`, to the generated
+layer under `shikigami-core/src/Shikigami/*/Generated/`, or to a durable identity. A `BREAKING`
+finding exits non-zero and is a deployment gate, not an advisory.
+
+**A workflow label is a wire word.** keiro-dsl parses a `step`, `await`, `sleep`, or `child` label
+with `[A-Za-z0-9][A-Za-z0-9_-]*`. A label containing a colon or a value computed at run time
+cannot be declared at all. Shikigami's `approval:<SinkKind>:<ordinal>`, `<label>:notify`,
+`emit-signal:<ordinal>`, and every per-message conversation label are therefore outside the
+specification until the plan that owns them makes them static.
+
+### What changes for this plan
+
+The startability check in this plan looked for `domain/shikigami.keiro` and told the implementer
+that plan 39 was not done if it was absent. That check would now fail against a repository where
+plan 39 *is* done. The path is `domain/shikigami.keiro-workspace`, and the check is:
+
+```bash
+ls domain/shikigami.keiro-workspace domain/shikigami-agent-run.keiro
+```
+
+Declaring `StepName "resolve-profile"` is a two-line change to
+`domain/shikigami-agent-run.keiro`'s `body`, placed before `open-session`:
+
+```text
+    step resolve-profile -> SanctionedExecutionProfileRef
+```
+
+`resolve-profile` is already a valid wire word, so no rename is needed. Adding it changes
+`AgentRun.body`, which the generated conformance target asserts against the create-once
+`KeiroConformance.Expectations` module — so this plan must review and commit that change
+deliberately, and run `just keiro-diff <merge-base>` to see the finding classified before merging.
