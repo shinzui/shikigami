@@ -136,6 +136,13 @@ This section must always reflect the actual current state of the work.
       names as the owners of the undeclarable `approval:<kind>:<ordinal>`, `<label>:notify`, and
       `emit-signal:<ordinal>` label families. Plan 14 also inherits the `signal` operation this
       plan deliberately did not declare.
+- [x] (2026-08-19) ADR distillation: created `docs/adr/` — the repository had none, and
+      `mori.dhall` declares no OKF bundle for it, so per the skill's ADR contract it is plain
+      Markdown with a `README.md` stating the convention and no OKF frontmatter or `docId`. Two
+      records: `0001-declare-only-what-the-runtime-executes.md` (the rule that shaped four
+      separate decisions in this plan and binds every future declaration) and
+      `0002-generated-code-is-not-formatted.md` (a repository constraint a future contributor
+      will trip over independently of this plan).
 
 
 ## Surprises & Discoveries
@@ -631,6 +638,14 @@ repository means deciding who owns the bytes, in the same change.
 
 
 ## Context and Orientation
+
+**ADRs.** This repository had no `docs/adr/` when the plan started, so Context originally recorded
+that no relevant ADR existed. The plan's completion created the corpus, and two records now hold
+its durable context: [ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) — declare
+only what the runtime executes — and
+[ADR 0002](../adr/0002-generated-code-is-not-formatted.md) — generated keiro-dsl output is
+excluded from the formatter. `mori.dhall` declares no OKF bundle for `docs/adr`, so the corpus is
+plain Markdown; see `docs/adr/README.md`.
 
 Current durable behavior lives in `shikigami-core/src/Shikigami/Agent/Workflow.hs`,
 `Agent/Conversation.hs`, `Agent/Approval.hs`, `Agent/Delegate.hs`,
