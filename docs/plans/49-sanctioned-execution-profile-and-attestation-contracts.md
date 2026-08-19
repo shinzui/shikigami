@@ -78,12 +78,14 @@ under Integration Points.
       `ReviewedArtifact` — a short hash, an empty string, `main`, `release/2026-08`, a PR number,
       and a 41-character near-miss are all rejected, on the decode path as well as by
       `mkFullCommit`. (2026-08-19)
-- [ ] M4: `Shikigami.Attestation.Envelope` — the versioned `AgentRunAttestation` mirror, its
-      canonical encoding, and `attestationPayloadDigest`.
-- [ ] M4: conformance test comparing the canonical encoding against the golden payload
-      published by `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`.
-- [ ] M4: all four modules exposed from `shikigami-core`, registered in the test suite, full
-      suite green.
+- [x] M4: `Shikigami.Attestation.Envelope` — the versioned `AgentRunAttestation` mirror, its
+      canonical encoding, and `attestationPayloadDigest`. The digest is *computed*, not deferred:
+      baikai 0.5's `commitmentDigest` made it free of any new dependency. (2026-08-19)
+- [x] M4: conformance test comparing the canonical encoding against a pinned payload. **kikan has
+      published no golden payload**, so the test is one-sided — see Surprises & Discoveries.
+      (2026-08-19)
+- [x] M4: all five modules exposed from `shikigami-core`, spec registered in the test suite, full
+      suite green — 287 tests across eight suites. (2026-08-19)
 
 
 ## Surprises & Discoveries
@@ -167,6 +169,39 @@ its seven fields are `Maybe`, and `declarationOnlyArtifacts` encodes to a litera
 That is the mechanism working where it can be observed today. The spec pins both: the
 `AgentVersionRef` literal for the historical record, and the sparse artifact set for the mechanism.
 
+**kikan's golden payload does not exist, so the conformance test is one-sided (checked
+2026-08-19).** Milestone 4's acceptance rests on comparing `canonicalPayloadBytes` against the
+fixtures kikan IR-6's "Conformance fixtures" section promises. Those fixtures are not published.
+Searching the kikan working tree at `/Users/shinzui/Keikaku/bokuno/kikan`, the string
+`AgentRunAttestation` appears in exactly one file — the IR-6 request document itself — and the
+conformance fixture directories that do exist
+(`docs/architecture/evolution/conformance/shikigami/fixtures/`) hold only `agent-digest.json` and
+`intention-declared.json`. IR-6 is still `proposed`, so this is expected rather than a
+regression.
+
+The test is therefore written against *our own* pinned bytes and says so in its name and its
+comment. It proves this repository's encoding has not drifted; it proves nothing about agreement
+with anybody else. When kikan publishes its golden payload, replace the literal with kikan's
+bytes — a difference at that moment is the test doing its job and naming the field that moved.
+Do not let the green tick read as cross-repository conformance until then.
+
+**baikai's `ModelCallEvidence` is encode-only, which decided how the payload holds evidence
+(discovered 2026-08-19).** `Baikai.Evidence.ModelCallEvidence` derives `ToJSON` but has no
+`FromJSON` instance. A payload typed in terms of it could be written and never read back, and an
+attestation that cannot be decoded is useless to the verifier it exists for. `CallEvidenceSet`
+therefore holds already-encoded records (`[Value]`) or a Merkle root, which also preserves them
+exactly as the producer emitted them — which is what the digest covers anyway. If baikai later adds
+`FromJSON`, tightening this is a one-type change that does not move the payload's shape.
+
+**The digest computation turned out to be free, so it was not deferred (2026-08-19).** Milestone 4
+planned to define `attestationPayloadDigest` as a type with its computation left to plan 52, on the
+stated grounds that hashing needs a dependency plan 52 would add. It does not: baikai 0.5 already
+exports `commitmentDigest`, which is precisely `sha256` over `canonicalEncode`, and baikai is
+already a direct dependency. So the function is implemented for real and the plan's "no new package
+dependencies" constraint still holds. A stub returning a placeholder would have been the worst of
+the three options — a downstream caller in plan 50 or 51 could store it believing it was a digest.
+Plan 52 still owns *signing*, which is untouched here.
+
 **Baikai also publishes `ThinkingLevel`, and here reuse *is* right (discovered 2026-08-19).**
 `Baikai.ThinkingLevel.ThinkingLevel` is `ThinkingMinimal | ThinkingLow | ThinkingMedium |
 ThinkingHigh | ThinkingXHigh | ThinkingMax`, a provider-neutral reasoning-effort scale. This plan's
@@ -223,6 +258,22 @@ really are the same concept, so `Shikigami.Attestation.Profile` imports and re-e
   revision note was reaching for.
   Date: 2026-08-19
 
+- Decision: Compute `attestationPayloadDigest` now, in terms of baikai's `commitmentDigest`,
+  instead of deferring it to plan 52 as the Plan of Work says.
+  Rationale: the deferral's stated reason was the hashing dependency, and that reason evaporated —
+  baikai 0.5 is already a direct dependency and exports exactly `sha256` over `canonicalEncode`,
+  so the plan's "no new package dependencies" constraint is untouched. The alternative was a stub
+  that returns a non-digest, which a caller in plan 50 or 51 could store believing it was real.
+  Plan 52 still owns signing and the key.
+  Date: 2026-08-19
+
+- Decision: `CallEvidenceSet` holds encoded evidence records rather than baikai's
+  `ModelCallEvidence`.
+  Rationale: `ModelCallEvidence` derives `ToJSON` but not `FromJSON`, so a payload typed in terms
+  of it could never be decoded, and an attestation exists to be read by a verifier. Holding the
+  encoded records preserves the producer's exact bytes, which is what the payload digest covers.
+  Date: 2026-08-19
+
 - Decision: Express the profile's cost ceiling as `maxCostMicroUsd :: Maybe Integer` rather than a
   fractional type.
   Rationale: `ProfileLimits` is covered by a digest another repository — possibly in another
@@ -243,7 +294,132 @@ really are the same concept, so `Shikigami.Attestation.Profile` imports and re-e
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-08-19. Five modules, not four: `Shikigami.Attestation.Profile`, `.Agent`,
+`.Reviewed`, `.Strength`, and `.Envelope`, with 39 tests in
+`shikigami-core/test/Shikigami/AttestationContractsSpec.hs`. `nix develop -c cabal test all`
+reports 287 passing tests across eight suites, up from 248 before this work.
+
+**On the test-count baseline.** Validation and Acceptance says to expect 157 tests across seven
+suites and to investigate anything lower. The tree now has eight suites and 248 tests before this
+plan's additions, so the 2026-07-31 figure is simply stale — several plans landed in between. The
+check still did its job in the direction that matters: nothing regressed.
+
+**What is genuinely observable.** Three encodings, which is what the acceptance criteria asked to
+be able to read without reading any Haskell. A profile:
+
+```json
+{
+  "allowedCalls": [
+    {
+      "api": "messages",
+      "endpointClass": "https",
+      "modelId": "claude-opus-5-20260401",
+      "provider": "anthropic",
+      "thinking": "ThinkingHigh"
+    }
+  ],
+  "issuer": "shinzui/kikan",
+  "lifecycle": "active",
+  "limits": {},
+  "minimumEvidenceStrength": "model_observed",
+  "profileId": "sanctioned-review",
+  "prohibitions": {
+    "aliasesAllowed": false,
+    "cliTransportsAllowed": false,
+    "defaultedThinkingAllowed": false,
+    "effortClampingAllowed": false,
+    "modelFallbackAllowed": false,
+    "providerFallbackAllowed": false
+  },
+  "requiredCorrelationFields": ["request-id"],
+  "signerRequirements": {"allowedKeyIds": []},
+  "validFrom": "2026-08-05T00:00:00Z",
+  "version": "1"
+}
+```
+
+That reads as: one permitted way to make a call, everything else prohibited, no ceilings set, every
+call must come back with a `request-id` and must have been observed at least well enough for the
+provider to have named the model it ran.
+
+An agent version reference:
+
+```json
+{
+  "agentVersion": "2026-08-05.1",
+  "declarationDigest": "sha256:11111111111111111111111111111111",
+  "logicalAgentId": "architecture-reviewer"
+}
+```
+
+And an attestation payload — the thing a signature will cover:
+
+```json
+{
+  "agentArtifacts": {"declarationDigest": "sha256:decl"},
+  "agentVersion": {
+    "agentVersion": "2026-08-05.1",
+    "declarationDigest": "sha256:11111111111111111111111111111111",
+    "logicalAgentId": "architecture-reviewer"
+  },
+  "callEvidence": {"merkleRoot": "sha256:merkle", "type": "call_evidence_merkle_root"},
+  "completeness": {"type": "evidence_complete"},
+  "issuedAt": "2026-08-05T00:00:00Z",
+  "issuer": "shinzui/shikigami",
+  "profile": {
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "profileId": "sanctioned-review",
+    "version": "1"
+  },
+  "reviewClass": "architecture-practice",
+  "reviewResultDigest": "sha256:result",
+  "reviewed": {
+    "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "diffDigest": "sha256:diff",
+    "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "pathScope": ["shikigami-core/src"],
+    "repository": "mori://shinzui/shikigami"
+  },
+  "runId": "run-1",
+  "sanctioned": {"type": "sanctioned"},
+  "schemaVersion": "shikigami.agent-run-attestation/1",
+  "strength": "runtime-attested"
+}
+```
+
+Its canonical encoding digests to
+`sha256:3a00e20cdb4d53408be548e6ccaaf613ef6f07e446167b1547fbfbde31dec02e`, and both the bytes and
+that digest are pinned as literals in the spec.
+
+**What went differently from the plan, and why it matters.** Three things, all in the same
+direction — the plan's picture of what upstream published was out of date, and checking rather than
+trusting it changed the design twice.
+
+The plan's 2026-08-10 revision note concluded that baikai now owns `EvidenceStrength` and this plan
+should stop defining it. Reading both definitions side by side shows the two scales share a name
+and an ascending order and nothing else: baikai grades how completely a provider corroborated one
+call, kikan grades who vouches for a claim, and all four of baikai's levels sit inside kikan's
+single `runtime-observed` tier. Adopting the revision note as written would have deleted the
+vocabulary IR-6 actually ratifies and made its acceptance criterion 6 unstatable. Both scales now
+exist under distinct names. The irony worth recording: the note was written to prevent exactly this
+class of error — two vocabularies for one concept — and following it literally would have created
+the mirror error, one vocabulary for two concepts.
+
+In the same breath the plan *missed* a real duplication. `ThinkingLevel` is listed as something
+this plan defines, but baikai publishes it and it arrives on every piece of call evidence. That one
+was imported.
+
+The plan's gate caveat — "kioku-core 0.3.0.0 caps baikai ^>=0.4.1.0" — is obsolete; the cohort
+pins `baikai ==0.5.0.0` with `kioku-core ==0.4.1.0`. Every local-fallback branch the plan describes
+went unused. The lesson generalises past this plan: a plan that records an upstream constraint
+should have that constraint re-checked at implementation time rather than treated as current, and
+three of this plan's four milestones had their shape decided by facts that had changed since it was
+written.
+
+**What is deliberately still missing.** Nothing signs, so `signature` and `keyId` are `Maybe`
+and every attestation this build can produce is unsigned. The `RepositoryId` and `Revision`
+newtypes are placeholders that plan 44 deletes. The conformance test is one-sided. None of these
+is a defect; each is named in a haddock comment pointing at the plan that closes it.
 
 
 ## Context and Orientation
@@ -263,6 +439,14 @@ shell. There are six packages, listed in `cabal.project` and documented in
 `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` is a test that fails the build if a
 package takes a forbidden dependency. You will not trip it if you stay inside
 `shikigami-core`.
+
+**Architecture Decision Records.** No ADR relevant to this plan existed when it was written;
+`docs/adr/` held records 0001–0004, none touching attestation, evidence, or cross-repository
+vocabulary. Two were created by this plan and are now the durable statement of its two
+load-bearing decisions:
+[ADR-0005](../adr/0005-two-evidence-strength-scales-named-apart.md) and
+[ADR-0006](../adr/0006-the-attestation-payload-encoding-is-a-wire-format.md). Read them before
+changing anything in `Shikigami.Attestation.*`.
 
 **Building and testing.** All commands run from the repository root,
 `/Users/shinzui/Keikaku/bokuno/shikigami`. The project builds inside a Nix shell:
@@ -833,12 +1017,37 @@ data AgentRunAttestation = AgentRunAttestation
 canonicalPayloadBytes :: AttestationPayload -> ByteString
 ```
 
-`ThinkingLevel`, `ProfileLimits`, and `SignerRequirements` are defined in
-`Shikigami.Attestation.Profile` alongside the records that use them.
-`EvidenceStrength` is defined in `Shikigami.Attestation.Reviewed` and imported by
-`Shikigami.Attestation.Profile`; if that import direction causes an awkward cycle when you get
-there, move `EvidenceStrength` into a small `Shikigami.Attestation.Strength` module rather than
-duplicating it, and note the change in Surprises & Discoveries.
+`ProfileLimits` and `SignerRequirements` are defined in `Shikigami.Attestation.Profile`
+alongside the records that use them.
+
+**As built, the two strength/thinking lines above are wrong and were corrected during
+implementation** — see Surprises & Discoveries and
+[ADR-0005](../adr/0005-two-evidence-strength-scales-named-apart.md):
+
+- `ThinkingLevel` is **not** defined here. `Shikigami.Attestation.Profile` imports and re-exports
+  `Baikai.ThinkingLevel.ThinkingLevel`, because a call's evidence reports the requested level in
+  that type.
+- `EvidenceStrength` is **not** defined here either, and is not kikan's scale. `Profile` imports
+  `Baikai.Evidence.EvidenceStrength` directly for the per-call floor — which also dissolves the
+  import cycle this paragraph anticipated. `Shikigami.Attestation.Reviewed` re-exports it.
+- kikan IR-6's four trust tiers are a *different* scale and are declared as `AttestationStrength`
+  in the small `Shikigami.Attestation.Strength` module this paragraph authorised, carried on
+  `AttestationPayload.strength`.
+
+So the module list is five, not four. Signatures as built:
+
+```haskell
+-- shikigami-core/src/Shikigami/Attestation/Strength.hs
+data AttestationStrength = Declared | RuntimeObserved | RuntimeAttested | ProviderAttested
+renderAttestationStrength :: AttestationStrength -> Text
+parseAttestationStrength :: Text -> Either Text AttestationStrength
+
+-- shikigami-core/src/Shikigami/Attestation/Envelope.hs (additions)
+data CallEvidenceSet = CallEvidenceRecords ![Value] | CallEvidenceMerkleRoot !Text
+data CompletenessVerdict = EvidenceComplete | EvidenceIncomplete ![NonConformingReason]
+data SanctionedVerdict = Sanctioned | NonConforming ![NonConformingReason] | Indeterminate ![NonConformingReason]
+attestationPayloadDigest :: AttestationPayload -> PayloadDigest   -- implemented, not deferred
+```
 
 The signature and key fields on `AgentRunAttestation` are `Maybe` in this plan because nothing
 signs yet; `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` owns making a
@@ -872,3 +1081,27 @@ served attestation always carry them, and owns the hash function behind `Payload
   `RepositoryId` and `Revision` pending plan 44 — and delete it when the bound lifts. A local
   definition that outlives the gate without that note is the failure this records against. Nothing
   about the gate should delay Milestones 1, 2, or 4; this plan remains contract-only and startable.
+
+- 2026-08-19: Implemented. Three of the plan's assumptions about upstream had gone stale and were
+  corrected against the working tree rather than followed; each correction is recorded in Surprises
+  & Discoveries with the evidence that forced it.
+
+  The dependency gate is gone — `cabal.project` pins `baikai ==0.5.0.0` with `kioku-core
+  ==0.4.1.0`, so every "declare it locally until the bound lifts" fallback went unused.
+
+  The 2026-08-10 revision note was reversed in part. baikai's `EvidenceStrength` is not the same
+  scale as kikan IR-6's and cannot substitute for it: baikai grades how completely a provider
+  corroborated one call, IR-6 grades who vouches for a claim, and all four baikai levels sit inside
+  IR-6's single `runtime-observed` tier. Both now exist under distinct names. In the same pass the
+  plan's *actual* duplication was found and removed — `ThinkingLevel` is baikai's and is imported.
+  [ADR-0005](../adr/0005-two-evidence-strength-scales-named-apart.md) records this so it is not
+  re-litigated.
+
+  `attestationPayloadDigest` is implemented rather than deferred, because the dependency that
+  justified deferring it was already present.
+  [ADR-0006](../adr/0006-the-attestation-payload-encoding-is-a-wire-format.md) records the
+  canonical-encoding contract, including that its output is a wire format and that the conformance
+  fixture is one-sided until kikan publishes a golden payload.
+
+  Sections updated: Progress, Surprises & Discoveries, Decision Log, Outcomes & Retrospective,
+  Context and Orientation, and Interfaces and Dependencies.

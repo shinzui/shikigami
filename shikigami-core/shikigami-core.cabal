@@ -39,6 +39,7 @@ library
     Shikigami.App.Config.Load
     Shikigami.App.Role
     Shikigami.Attestation.Agent
+    Shikigami.Attestation.Envelope
     Shikigami.Attestation.Profile
     Shikigami.Attestation.Reviewed
     Shikigami.Attestation.Strength

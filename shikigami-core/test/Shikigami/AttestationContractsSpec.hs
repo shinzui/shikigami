@@ -13,6 +13,7 @@ module Shikigami.AttestationContractsSpec (tests) where
 
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, toJSON)
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy (ByteString)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -32,6 +33,18 @@ import Shikigami.Attestation.Agent
     SkillsDigest (..),
     ToolCatalogDigest (..),
     declarationOnlyArtifacts,
+  )
+import Shikigami.Attestation.Envelope
+  ( AgentRunAttestation (..),
+    AttestationPayload (..),
+    CallEvidenceSet (..),
+    CompletenessVerdict (..),
+    PayloadDigest (..),
+    SanctionedVerdict (..),
+    SchemaVersion (..),
+    attestationPayloadDigest,
+    canonicalPayloadBytes,
+    currentAttestationSchemaVersion,
   )
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
@@ -55,6 +68,7 @@ import Shikigami.Attestation.Reviewed
   ( DiffDigest (..),
     NonConformingReason (..),
     RepositoryId (..),
+    ResultDigest (..),
     ReviewedArtifact (..),
     fullCommitText,
     mkFullCommit,
@@ -74,7 +88,8 @@ tests =
     [ profileTests,
       agentTests,
       reviewedTests,
-      strengthTests
+      strengthTests,
+      envelopeTests
     ]
 
 -- ---------------------------------------------------------------------------
@@ -488,6 +503,140 @@ strengthTests =
     ]
 
 -- ---------------------------------------------------------------------------
+-- Milestone 4 -- the attestation envelope and its canonical encoding
+-- ---------------------------------------------------------------------------
+
+envelopeTests :: TestTree
+envelopeTests =
+  testGroup
+    "attestation envelope"
+    [ testCase "an attestation payload round-trips" do
+        roundTrips "payload" samplePayload,
+      testCase "a full attestation round-trips" do
+        roundTrips "attestation" sampleAttestation,
+      -- IR-6 invariant 7 requires an unknown schema to fail closed, which is
+      -- impossible if the version can be absent. A verifier can only refuse
+      -- what it can see.
+      testCase "the schema version is required, not optional" do
+        withoutVersion <- case toJSON samplePayload of
+          Object fields -> pure (Object (KeyMap.delete "schemaVersion" fields))
+          other -> fail ("a payload must encode to an object, got " <> show other)
+        case fromJSON @AttestationPayload withoutVersion of
+          Success _ -> assertBool "a payload without a schema version must not decode" False
+          Error _ -> pure ()
+        assertEqual
+          "the current version names its producer"
+          (SchemaVersion "shikigami.agent-run-attestation/1")
+          currentAttestationSchemaVersion,
+      -- Canonical means one logical value has exactly one byte encoding.
+      testCase "canonical bytes are stable across repeated calls" do
+        assertEqual
+          "same payload, same bytes"
+          (canonicalPayloadBytes samplePayload)
+          (canonicalPayloadBytes samplePayload),
+      -- The property that makes a cross-repository digest possible at all:
+      -- object keys come out sorted, so two encoders agree without having to
+      -- agree about field declaration order.
+      testCase "canonical bytes sort object keys" do
+        let bytes = canonicalPayloadBytes samplePayload
+        assertBool
+          "schemaVersion sorts after runId"
+          (indexOf "\"runId\"" bytes < indexOf "\"schemaVersion\"" bytes)
+        assertBool
+          "agentArtifacts sorts first among the top-level keys"
+          (indexOf "\"agentArtifacts\"" bytes < indexOf "\"agentVersion\"" bytes)
+        assertBool
+          "no insignificant whitespace"
+          (not (ByteString.isInfixOf "\", \"" bytes)),
+      -- The conformance test. kikan IR-6's "Conformance fixtures" section
+      -- promises golden payloads that Baikai, Shikigami, and Kotei all consume,
+      -- but IR-6 is still in the proposed state and publishes none: as of
+      -- 2026-08-19, AgentRunAttestation appears nowhere in the kikan repository
+      -- except in the request document itself.
+      --
+      -- So this fixture is OURS, and the conformance claim is one-sided. It
+      -- proves this repository's encoding has not drifted; it does not prove
+      -- agreement with anybody. When kikan publishes its golden payload, replace
+      -- this literal with kikan's bytes -- a difference at that point is the
+      -- test doing its job, and tells you exactly which field moved.
+      testCase "canonical payload bytes match the pinned fixture" do
+        assertEqual
+          "canonical payload bytes (one-sided: kikan has published no golden payload)"
+          pinnedCanonicalPayload
+          (canonicalPayloadBytes samplePayload),
+      -- Pinned as a literal for the same reason the canonical bytes are: a
+      -- digest recomputed inside the test would agree with the implementation
+      -- no matter what the implementation did. Together these two literals pin
+      -- the whole relationship -- these exact bytes hash to this exact digest.
+      testCase "the payload digest matches its pinned value" do
+        assertEqual
+          "payload digest"
+          pinnedPayloadDigest
+          (attestationPayloadDigest samplePayload),
+      -- A signature covers a payload and cannot cover itself. The split types
+      -- make hashing the signature inexpressible; this checks the consequence.
+      testCase "the digest ignores the signature and key" do
+        let signed = sampleAttestation {signature = Just "sig", keyId = Just "key-1"}
+        assertEqual
+          "signing does not change the payload digest"
+          (attestationPayloadDigest (payload sampleAttestation))
+          (attestationPayloadDigest (payload signed)),
+      -- Changing any covered field must change the digest, or the binding is
+      -- worthless.
+      testCase "changing a covered field changes the digest" do
+        let tampered = samplePayload {reviewClass = "something-else"}
+        assertBool
+          "a different payload digests differently"
+          (attestationPayloadDigest samplePayload /= attestationPayloadDigest tampered),
+      testCase "every verdict shape round-trips" do
+        mapM_ (roundTrips "completeness") [EvidenceComplete, EvidenceIncomplete {missing = [MissingCallEvidence {callId = "call-1"}]}]
+        mapM_
+          (roundTrips "sanctioned verdict")
+          [ Sanctioned,
+            NonConforming {reasons = [ProhibitedDefaultThinking {callId = "call-1"}]},
+            Indeterminate {reasons = [MissingCallEvidence {callId = "call-2"}]}
+          ]
+        mapM_ (roundTrips "evidence set") [CallEvidenceMerkleRoot {merkleRoot = "sha256:merkle"}, CallEvidenceRecords {records = []}]
+    ]
+
+samplePayload :: AttestationPayload
+samplePayload =
+  AttestationPayload
+    { schemaVersion = currentAttestationSchemaVersion,
+      issuer = Issuer "shinzui/shikigami",
+      issuedAt = UTCTime (fromGregorian 2026 8 5) 0,
+      expiresAt = Nothing,
+      runId = "run-1",
+      sessionId = Nothing,
+      reviewClass = "architecture-practice",
+      profile = sampleProfileRef,
+      reviewed = sampleReviewedArtifact,
+      agentVersion = sampleAgentVersionRef,
+      agentArtifacts = declarationOnlyArtifacts (DeclarationDigest "sha256:decl"),
+      callEvidence = CallEvidenceMerkleRoot {merkleRoot = "sha256:merkle"},
+      reviewResultDigest = ResultDigest "sha256:result",
+      completeness = EvidenceComplete,
+      sanctioned = Sanctioned,
+      strength = RuntimeAttested
+    }
+
+sampleAttestation :: AgentRunAttestation
+sampleAttestation =
+  AgentRunAttestation
+    { payload = samplePayload,
+      payloadDigest = attestationPayloadDigest samplePayload,
+      signature = Nothing,
+      keyId = Nothing
+    }
+
+pinnedCanonicalPayload :: ByteString.ByteString
+pinnedCanonicalPayload =
+  "{\"agentArtifacts\":{\"declarationDigest\":\"sha256:decl\"},\"agentVersion\":{\"agentVersion\":\"2026-08-05.1\",\"declarationDigest\":\"sha256:11111111111111111111111111111111\",\"logicalAgentId\":\"architecture-reviewer\"},\"callEvidence\":{\"merkleRoot\":\"sha256:merkle\",\"type\":\"call_evidence_merkle_root\"},\"completeness\":{\"type\":\"evidence_complete\"},\"issuedAt\":\"2026-08-05T00:00:00Z\",\"issuer\":\"shinzui/shikigami\",\"profile\":{\"digest\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"profileId\":\"sanctioned-review\",\"version\":\"1\"},\"reviewClass\":\"architecture-practice\",\"reviewResultDigest\":\"sha256:result\",\"reviewed\":{\"baseCommit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"diffDigest\":\"sha256:diff\",\"headCommit\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"pathScope\":[\"shikigami-core/src\"],\"repository\":\"mori://shinzui/shikigami\"},\"runId\":\"run-1\",\"sanctioned\":{\"type\":\"sanctioned\"},\"schemaVersion\":\"shikigami.agent-run-attestation/1\",\"strength\":\"runtime-attested\"}"
+
+pinnedPayloadDigest :: PayloadDigest
+pinnedPayloadDigest = PayloadDigest "sha256:3a00e20cdb4d53408be548e6ccaaf613ef6f07e446167b1547fbfbde31dec02e"
+
+-- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
 
@@ -497,6 +646,14 @@ roundTrips label value =
   case fromJSON (toJSON value) of
     Error err -> assertBool (label <> " failed to decode: " <> err) False
     Success decoded -> assertEqual (label <> " round-trips") value decoded
+
+-- | Byte offset of a needle, or -1.
+indexOf :: ByteString.ByteString -> ByteString.ByteString -> Int
+indexOf needle haystack =
+  case ByteString.breakSubstring needle haystack of
+    (before, rest)
+      | ByteString.null rest -> -1
+      | otherwise -> ByteString.length before
 
 -- | The @type@ discriminator a reason encodes under.
 reasonTag :: NonConformingReason -> Maybe Text
