@@ -1,0 +1,37 @@
+# The durable Danwa conversation workflow: one addressed message becomes one
+# conversation turn, and the workflow stays alive awaiting the next message.
+#
+# The hand-owned runtime is Shikigami.Agent.Conversation in shikigami-core.
+#
+# Only three of this workflow's labels are declarable. Every per-message label
+# it writes — `record-user:<messageId>`, `run-behavior:<messageId>`,
+# `record-assistant-and-reply:<messageId>`, `turn-result:<messageId>`,
+# `danwa-reply:<messageId>` — and its per-turn await `next-message:<ordinal>`
+# are computed at run time and carry a colon, and a workflow label is a
+# compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*). Making this journal
+# declarable is
+# docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md.
+language keiro-dsl 5
+context shikigami
+layout collocated
+
+workflow DanwaConversation
+  name "shikigami.danwa-conversation"
+  # Shikigami.Agent.Conversation.ConversationStart.
+  in ConversationStart {
+    agentName:Text
+  }
+  out ConversationTurnResult
+  # WorkflowId is "danwa-conversation:" <> the initial message's conversationId
+  # (Shikigami.Agent.Conversation.conversationWorkflowId), so it derives from
+  # the whole input rather than from one declared field.
+  id from input via conversationWorkflowId
+  body
+    step ingest-start -> ConversationStart
+    step lookup-agent -> AgentDecl
+    step resolve-session -> SessionId
+
+operation RunDanwaConversation
+  run DanwaConversation
+    input ConversationStart
+    outcome -> ConversationTurnResult

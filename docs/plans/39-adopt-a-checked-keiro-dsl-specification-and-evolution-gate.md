@@ -51,24 +51,32 @@ This section must always reflect the actual current state of the work.
       `extra-packages` rationale in `docs/dependency-cohort.md`. `cabal run keiro-dsl -- --help`
       reports the full 0.13 command surface: `parse`, `pretty`, `check`, `inspect`,
       `behavior-obligations`, `scaffold`, `diff`, `new`.
-- [ ] M1: inventory current aggregates, workflows, timers/process managers, queues, integrations, inbox/outbox contracts, routers, and read models; encode their stable identities across the workspace members.
-- [ ] M1: author `domain/shikigami.keiro-workspace` and derive its member split **from the
-      completed inventory**, not before it. The manifest carries `service shikigami`,
-      `runtime-package shikigami-core`, `module Shikigami`, `layout collocated`, and one `spec`
-      line per member. See Context for the rule and the starting proposal.
-- [ ] M1: `Shikigami.Flow.SinkOutbox`'s hand-maintained copy of `Agent/Workflow.hs`'s
-      `SinkIntent` is retired in favour of one owning member. Today the duplication is enforced by
-      a comment (`Flow/SinkOutbox.hs:40,65` — "must match ... exactly"); under a workspace it is
-      enforced by `WorkspaceDuplicateDeclaration`. Record the owning member.
-- [ ] M1: the source's first non-comment line is exactly `language keiro-dsl 5`. Language 4 is a
-      published *compatibility-only* contract at 0.13 and shikigami has no Language-4 source to
-      preserve, so authoring at 4 would deliberately adopt a compatibility contract for a
-      greenfield specification. See Context.
-- [ ] M1: for each identity transcribed, an explicit keep-or-rename call recorded — this is the
-      last window in which any of them is free to change. See Context.
-- [ ] M1: decide and record whether `shikigami_run_jobs` is described as a scaffolded `workqueue`
-      node. Under Language 5 that imposes Keiro's schema-version-1 `{v,t,data}` envelope on the
-      payload, which today is a bare `RunJob` JSON body. See Context.
+- [x] (2026-08-19) M1: inventoried every node family from source. The census is
+      `docs/architecture/shikigami-domain-inventory.md`, and it is mostly negative: shikigami has
+      **no aggregate, no read model, no projection, no router, and no process manager** of its
+      own. It has two durable workflows, one PGMQ queue, a Kafka inbox, and a Keiro outbox. See
+      Surprises.
+- [x] (2026-08-19) M1: authored `domain/shikigami.keiro-workspace` with two members —
+      `shikigami-agent-run.keiro` and `shikigami-conversation.keiro` — derived from that
+      inventory. The manifest carries `service shikigami`, `runtime-package shikigami-core`, and
+      `layout collocated`. It deliberately does **not** carry `module Shikigami`: `context
+      shikigami` already supplies that prefix, and adding the clause emits
+      `Shikigami.Shikigami.*`. See Surprises.
+- [x] (2026-08-19) M1: `SinkIntent` **cannot** be given an owning member at keiro-dsl 0.13, and
+      the tool says so. An unconsumed `mapped structural` declaration generates a shape, a
+      binding, projections, and conformance — but no wire codec — so declaring it would certify a
+      JSON policy nothing executes. Recorded in the Decision Log and handed to plan 27, whose own
+      premise this corrects.
+- [x] (2026-08-19) M1: both members' first non-comment line is exactly `language keiro-dsl 5`;
+      `inspect --format=json` reports both `"sourceForm": "declared"`, effective version 5,
+      `"languageSupport": "stable"`.
+- [x] (2026-08-19) M1: keep-or-rename call recorded for every identity, in the inventory's
+      final section. **Every name was kept**, so every existing golden stays byte-identical.
+- [x] (2026-08-19) M1: `shikigami_run_jobs` is **not** described as a scaffolded `workqueue`
+      (the plan's option 2). Evidence in the inventory: the generated codec is `keiroJobCodec`,
+      the generated `Queue` module defines its own `RunJob`, and
+      `shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81` asserts as a live case that the
+      payload is bare.
 - [ ] M2: run the checked scaffold into `shikigami-core/src`, reconcile generated modules with hand-owned holes, and enforce the generated-code firewall.
 - [ ] M2: fill the create-once behavior evidence. `keiro-dsl behavior-obligations
       domain/shikigami.keiro-workspace --format=text` enumerates every live transition, rejection cell, and
@@ -103,6 +111,79 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
+**Shikigami has no aggregate at all — not one, as this plan assumed** (found 2026-08-19 during
+the Milestone 1 census). `Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki `SymTransducer`
+whose output type is `()` and whose own module comment says "this transducer is not an event
+source. It is a rendered specification of the at-risk-customer lifecycle: it produces the Mermaid
+diagram and nothing else." The single `runCommandWithSqlEvents` call in the repository
+(`shikigami-core/src/Shikigami/Agent/Conversation.hs:373`) runs against *kioku's*
+`sessionEventStream`, and the inline projections beside it (`Conversation.hs:393`) are kioku's.
+Zero aggregates means zero read models, zero projections, zero routers, and zero process
+managers of shikigami's own — a `process` node requires a saga aggregate and a target aggregate,
+which is why shikigami's two timer families cannot be declared either. This is the finding that
+reshaped the member split; see the Decision Log.
+
+**A workflow label cannot contain a colon, and most of shikigami's cannot be declared at all**
+(found 2026-08-19). keiro-dsl parses a workflow label with the `wireWord` production —
+`[A-Za-z0-9][A-Za-z0-9_-]*` (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs:282-286`):
+
+```text
+domain/probe.keiro:13:19:
+   |
+13 |     step await-ack:notify -> ParkedApproval
+   |                   ^^
+unexpected ":n"
+expecting "->", '-', or '_'
+```
+
+Renaming would not rescue them, because the part after the colon is a runtime value: an approval
+await is `approval:<SinkKind>:<ordinal>`, a conversation turn writes `record-user:<messageId>`
+and four siblings, and the conversation loop awaits `next-message:<ordinal>`. Eleven agent-run
+labels and three conversation labels are static and are declared; the rest are inventoried with
+their owning downstream plan.
+
+**`module Shikigami` in the manifest would double the module prefix.** This plan's Context
+asserted that "`context shikigami` already supplies `Shikigami` as the default Haskell module
+root; the `module` clause is stated anyway so placement is explicit rather than derived". It is
+not idempotent — the clause is a *prefix*, applied on top of the context:
+
+```text
+$ keiro-dsl scaffold probe.keiro --out out          # with `module Shikigami`
+  generated  Shikigami.Shikigami.AgentRun.Generated.WorkflowFacts
+
+$ keiro-dsl scaffold probe.keiro --out out2         # without it
+  generated  Shikigami.AgentRun.Generated.WorkflowFacts
+```
+
+The manifest therefore declares `service`, `runtime-package`, and `layout` only.
+
+**An unconsumed `mapped structural` declaration owns no wire codec, and keiro says so.**
+Declaring `mapped structural record SinkIntent` checks clean, but the tool reports it as
+unconsumed and generates no codec:
+
+```text
+$ keiro-dsl check probe.keiro --explain-bindings --coverage-report cov.json
+  queue-payloads: 0 mapped roots (0 structural, 0 opaque, 0 Json boundaries)
+binding obligations for context shikigami
+  Shikigami.Sink.Intent.Bindings (package shikigami-core)
+    sinkIntentBinding :: StructuralBinding Shikigami.Sink.Intent.SinkIntent SinkIntentShape
+      reason: binding — structural type SinkIntent (not currently used by an aggregate root)
+```
+
+The scaffold emits `Structural.Shape.SinkIntent`, `StructuralProjections`,
+`StructuralConformance`, and a create-once binding hole — and no encoder or decoder. So the
+declaration would state a JSON policy that nothing executes, which is precisely what the
+Portfolio Reconciliation of 2026-07-30 forbids.
+
+**`RunJob` has three optional fields, not four**, and at 0.13 a `workqueue` payload field cannot
+be optional by presence at all. The parser accepts the `required` keyword and discards it:
+"Every payload field is required: generated decoders use `o .:` for all of them. The keyword
+stays accepted so existing sources still parse, but it selects nothing"
+(`keiro-dsl/src/Keiro/Dsl/Parser/Queue.hs:100-102`). Optionality is expressible only in the
+*type* — `Optional Text` — which is a different claim about the wire than `omitNothingFields`.
+This does not change the queue decision, which rests on the envelope, but it does correct this
+plan's Surprises entry of 2026-08-18.
+
 **Language 4 cannot describe `shikigami_run_jobs` at all** (found 2026-08-18 while re-baselining
 onto 0.13, before implementation began). A Language-4 `workqueue` payload closes its type
 vocabulary to `text`, `int`, and `bool`, and every payload field is required. `RunJob`
@@ -124,6 +205,88 @@ would now be reimplementing a generated artifact by hand.
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19): **Two members — `shikigami-agent-run.keiro` and
+  `shikigami-conversation.keiro` — and no shared member.**
+  Rationale: the Milestone 1 census found zero aggregates, so none of the three house triggers
+  for a workspace (`mori://shinzui/keiro-runtime-patterns/docs/keiro-service-workspaces`:
+  complete aggregates needing separate review ownership, one-aggregate-per-file already, several
+  same-context specs scaffolding into one tree) is met by today's tree. The workspace is kept
+  anyway because this plan's decision of 2026-08-18b — author as a workspace from the first
+  commit so the `WorkspaceAdoption` path is never run — still stands, the manifest is four
+  lines, and the same standard explicitly blesses the shape ("To adopt one existing
+  multi-aggregate file, create a one-member manifest and scaffold it"). The member *count* comes
+  from the inventory: the six-member proposal in Context assumed an aggregate, a router, an
+  intake, a publisher, and read models that do not exist, so five of its six members would have
+  been empty. What remains is two complete durable workflows with genuinely different downstream
+  editors — plans 24, 27, 35, and 50 edit agent-run; plans 25 and 26 edit conversation. There is
+  no shared member because there is nothing shared to own: neither workflow declares an id, an
+  enum, a rule, or a mapped type. Splitting further later is an advisory `OwnershipMoved` and a
+  rescaffold, not wire evolution.
+
+- Decision (2026-08-19): **Do not declare `module Shikigami` in the manifest.** Rationale: the
+  clause is a prefix applied on top of the context, so `context shikigami` plus `module
+  Shikigami` scaffolds `Shikigami.Shikigami.AgentRun.Generated.*`. Verified both ways; see
+  Surprises. This reverses one sentence of this plan's Context, which claimed the clause was a
+  redundant restatement of the context default.
+
+- Decision (2026-08-19): **`shikigami_run_jobs` stays out of the scaffolded surface** — the
+  plan's option 2. Rationale: all three costs of option 1 are load-bearing rather than
+  theoretical. The generated codec is `keiroJobCodec runJobsPayloadCodec`, whose own generated
+  comment warns against adopting it on a bare-payload queue; the generated `Queue` module defines
+  its own `RunJob` record that would replace `Shikigami.Agent.RunJob.RunJob` on both the producer
+  (`Trigger/Enqueue.hs:51-58`) and the consumer (`Agent/RunJob/Worker.hs:62`); and
+  `WireCompatSpec.hs:76-81` asserts as a live case, against a captured literal, that "the payload
+  is a bare run job, not a versioned envelope", with `docs/dependency-cohort.md` recording that
+  fixture as permanent. Moving the queue is a wire change that needs its own commit, decision,
+  and fixture, and plans 24 and 27 are where it belongs. The identity is recorded in
+  `docs/architecture/shikigami-domain-inventory.md` instead.
+
+- Decision (2026-08-19): **The specification does not own `SinkIntent`, and plan 27's premise is
+  corrected rather than satisfied.** Rationale: this plan's Milestone 1 intended
+  `WorkspaceDuplicateDeclaration` to mechanize the "must match ... exactly" comment at
+  `Flow/SinkOutbox.hs:40,65`. That mechanism applies to DSL declarations, and at 0.13 a
+  `SinkIntent` declaration cannot be one that the runtime executes: an unconsumed `mapped
+  structural` type generates no codec, and keiro's own `--explain-bindings` output labels it "not
+  currently used by an aggregate root" with zero roots on every coverage surface. Declaring it
+  would state a wire policy nothing runs — the failure the Portfolio Reconciliation of
+  2026-07-30 forbids — and would cost three mapped declarations (`SinkIntent`, `DanwaTarget`, and
+  the four-constructor `Sink` union) plus three hand-owned binding modules to do it. The
+  duplication stays guarded by `WireCompatSpec.hs:147-148` until
+  `docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` merges the two records
+  into one hand-owned module; Milestone 4 corrects plan 27's Decision Log entry, which currently
+  says "Plan 39's generated module owns the `SinkIntent` structural wire type and codec".
+
+- Decision (2026-08-19): **Declare `run` operations only, not `signal` operations.** Rationale:
+  `runAgentRunWorkflow` and `runConversationWorkflow` are real, called entry points. The signal
+  side is not: `Shikigami.Agent.Approval.resolveApproval` and
+  `Shikigami.Agent.Workflow.Input.deliverInput` are exported but have no caller anywhere in the
+  repository, `resolveApproval` is keyed by `AwakeableId` rather than by a workflow key (which is
+  what a DSL `signal` declares), and the awaits an external signal would target
+  (`approval:<kind>:<ordinal>`, `next-message:<n>`) are not declarable labels. The house standard
+  is explicit that a declaration a reader expects to have an effect and which has none should be
+  deleted rather than gated. `docs/plans/14-approval-and-human-in-the-loop-end-to-end.md` adds
+  the entry point and the signal operation together.
+
+- Decision (2026-08-19): **Declare the agent-run body as the full label inventory including its
+  mutually exclusive branches.** Rationale: keiro's reference is explicit that "the body is
+  ordered, but replay matches journal records by label", so the body is a label inventory rather
+  than a control-flow program. `run-behavior` and the flow path's `classify`/`await-ack` are
+  alternatives, and `fail-session` excludes `record`/`complete`; declaring all of them states
+  every label the workflow may journal, which is exactly the set the evolution gate must guard.
+  Declaring only the common prefix would leave four durable labels ungated. The exclusions are
+  written into the member as comments so a reader does not mistake the order for a program.
+
+- Decision (2026-08-19): **Keep every durable identity; no renames.** Rationale: Milestone 1 was
+  the last free window and it was spent deliberately — the keep-or-rename call for each name is
+  in the final section of `docs/architecture/shikigami-domain-inventory.md`. Two names were
+  argued about and still kept: `classify` and `await-ack` are at-risk-flow labels journaled into
+  the general agent-run workflow, which a rename would not fix (moving them out of the shared
+  workflow would, and that is a modelling change for whichever plan gives the flow its own
+  aggregate); and `record`/`complete` are generic, but they are the deployed names and the
+  workspace now turns a future collision into a `check` failure. Because nothing was renamed,
+  every existing golden stays byte-identical, which is the evidence that adoption changed no
+  behavior.
 
 - Decision (2026-08-19): **Declare `keiro-dsl` with `extra-packages:` in `cabal.project`, not
   only with a `constraints:` row.**

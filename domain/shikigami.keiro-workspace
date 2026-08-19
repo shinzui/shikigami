@@ -1,0 +1,5 @@
+service shikigami
+runtime-package shikigami-core
+layout collocated
+spec shikigami-agent-run.keiro
+spec shikigami-conversation.keiro

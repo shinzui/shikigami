@@ -1,0 +1,61 @@
+# The durable agent-run workflow: one fired trigger becomes one agent run.
+#
+# The hand-owned runtime is Shikigami.Agent.Workflow in shikigami-core. This
+# member owns the workflow's stable identity and the journal labels it writes,
+# because those are the values a later change must not move silently.
+#
+# Not declared here, and why:
+#
+#   * The shikigami_run_jobs pgmq queue that feeds this workflow. Declaring it
+#     as a `workqueue` would put Keiro's schema-version-1 {v,t,data} envelope on
+#     a payload that Shikigami.Trigger.Enqueue sends bare, which is a codec
+#     change disguised as a documentation change. See
+#     docs/architecture/shikigami-domain-inventory.md.
+#   * The per-approval awaits `approval:<SinkKind>:<ordinal>` and their
+#     `:notify` steps, and the flow path's `emit-signal:<ordinal>` steps. A
+#     workflow label is a compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*);
+#     it can carry neither a colon nor a runtime-computed suffix.
+language keiro-dsl 5
+context shikigami
+layout collocated
+
+workflow AgentRun
+  name "shikigami.agent-run"
+  # Shikigami.Agent.RunJob.RunJob. Only the fields this specification refers to
+  # are inventoried; the rest of the record is hand-owned until a declared node
+  # consumes it.
+  in RunJob {
+    agentName:Text
+    idempotencyKey:Id
+    occurredAt:Time
+  }
+  out AgentRunResult
+  # WorkflowId is the job's idempotency key verbatim
+  # (Shikigami.Agent.Workflow.runAgentRunWorkflow).
+  id from input.idempotencyKey via idText
+  body
+    # The body is ordered for reading; replay matches journal records by label,
+    # so this is the label inventory of every path through the workflow, not a
+    # control-flow program. `run-behavior` and the flow path's `classify` /
+    # `await-ack` are alternatives, and `fail-session` is exclusive with
+    # `record` / `complete`.
+    step ingest-job -> RunJob
+    step lookup-agent -> AgentDecl
+    step open-session -> SessionId
+    step recall -> RecalledLearnings
+    step run-behavior -> BehaviorOutput
+    step classify -> RiskVerdict
+    await await-ack -> ApprovalDecision
+    step dispatch-sinks -> SinkResults
+    step fail-session -> FailedSession
+    step record -> RecordedLearning
+    step complete -> CompletedSession
+    # Shikigami.Agent.Delegate.delegate spawns a child of this same workflow;
+    # the child id comes from the parent workflow id, the child agent name, and
+    # a fresh per-run ordinal.
+    child delegate id input via delegatedWorkflowId -> AgentRunResult
+
+operation RunAgentRun
+  run AgentRun
+    input RunJob
+    outcome -> AgentRunResult
