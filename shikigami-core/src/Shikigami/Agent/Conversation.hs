@@ -52,6 +52,7 @@ import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, triggerOnly)
+import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -92,8 +93,12 @@ data RecordedTurn = RecordedTurn
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- | The literal lives in @domain\/shikigami-conversation.keiro@ and reaches
+-- Haskell through the generated
+-- "Shikigami.DanwaConversation.Generated.WorkflowRuntime", so a rename has
+-- exactly one place to happen and is gated by @keiro-dsl diff@.
 conversationWorkflowName :: WorkflowName
-conversationWorkflowName = WorkflowName "shikigami.danwa-conversation"
+conversationWorkflowName = ConversationGenerated.workflowName
 
 conversationWorkflowId :: AddressedMessage -> WorkflowId
 conversationWorkflowId AddressedMessage {conversationId} =

@@ -77,11 +77,21 @@ This section must always reflect the actual current state of the work.
       the generated `Queue` module defines its own `RunJob`, and
       `shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81` asserts as a live case that the
       payload is bare.
-- [ ] M2: run the checked scaffold into `shikigami-core/src`, reconcile generated modules with hand-owned holes, and enforce the generated-code firewall.
-- [ ] M2: fill the create-once behavior evidence. `keiro-dsl behavior-obligations
-      domain/shikigami.keiro-workspace --format=text` enumerates every live transition, rejection cell, and
-      replay-only transition that `BehaviorHoles` must witness; a `Pending` row is a conformance
-      failure, not a default.
+- [x] (2026-08-19) M2: scaffolded into `shikigami-core/src`. Five generated modules land —
+      `Shikigami.{AgentRun,DanwaConversation}.Generated.{WorkflowFacts,WorkflowRuntime}` and the
+      context-level `Shikigami.Generated.Conformance` — plus the generated conformance package.
+      `firewall: OK (5 generated modules scanned, 0 forbidden operators)`. Reconciled by pointing
+      `Shikigami.Agent.Workflow.Name.agentRunWorkflowName` and
+      `Shikigami.Agent.Conversation.conversationWorkflowName` at the generated
+      `WorkflowRuntime.workflowName`, so the specification is now the single source of both
+      durable workflow names. There are no holes to fill: with no aggregate there is no
+      `Holes`, `BehaviorHoles`, `ReadModel`, or binding module.
+- [x] (2026-08-19) M2: excluded the generated layer from `treefmt`. fourmolu rewrote all four
+      generated `.hs` files and `cabal-fmt` rewrote the generated conformance `.cabal`, which
+      breaks both the firewall and determinism. See Surprises and the Decision Log.
+- [x] (2026-08-19) M2: `behavior-obligations --format=text` reports `required: 0` — there is no
+      aggregate, so there is no live transition, rejection cell, or replay-only transition to
+      witness. Nothing is `Pending`.
 - [ ] M3: add the CI gates. On keiro-dsl 0.13 this is concrete: `keiro-dsl check
       domain/shikigami.keiro-workspace --min-language 5 --deny-warnings`, plus
       `--report-out <path>` for a machine-readable record and `--coverage-report <path>
@@ -97,12 +107,10 @@ This section must always reflect the actual current state of the work.
       `sourceForm: "declared"`** at effective version 5. A member that loses its preamble silently
       falls back to legacy version 1, and composition would then fail on version mismatch rather
       than on the real cause.
-- [ ] M3: declare `runtime-package shikigami-core` in the manifest so keiro-dsl generates the
-      runnable conformance package, and add its stable glob to `cabal.project`. This **replaces**
-      the hand-written domain-harness executable earlier drafts of this plan called for; the driver
-      and its test stanza are now generated. Member count does not change package count — one
-      service gets one package, at
-      `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/`. See Plan of Work.
+- [x] (2026-08-19) M3: declared `runtime-package shikigami-core` in the manifest and added the
+      stable glob `optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal`
+      to `cabal.project`. `cabal test keiro-shikigami-conformance` passes twelve workflow facts.
+      The create-once `KeiroConformance.Expectations` module is reviewed and committed.
 - [ ] M4: make plans 24–27, 35, 50, and 51 consume the specification and require the evolution gate for every persisted contract or workflow-shape change.
 
 
@@ -110,6 +118,43 @@ This section must always reflect the actual current state of the work.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+**This repository's formatter rewrites generated modules, which breaks the firewall and
+determinism together** (found 2026-08-19, Milestone 2). `nix fmt` runs fourmolu over every
+`.hs` file and cabal-fmt over every `.cabal`, including keiro-dsl output:
+
+```text
+$ nix fmt -- --fail-on-change --no-cache
+ERRO file has changed path=shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs
+ERRO file has changed path=shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs
+ERRO file has changed path=shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/Main.hs
+formatted 12 files (5 changed)
+```
+
+Both consequences are real. A formatter editing a `-- @generated` file is an edit, which the
+firewall forbids; and once the committed bytes are formatter output, the next `scaffold` reports
+`overwritten` rather than `unchanged`, so the committed bytes would alternate between generator
+output and formatter output forever. This plan's Validation section requires the opposite. The
+fix is a `treefmt.settings.global.excludes` list in `flake.module.nix`; after it,
+`formatted 139 files (0 changed)` and a repeat scaffold reports every module `unchanged`.
+
+**`keiro-dsl-migration-report.workspace.shikigami.txt` did appear, and its appearance is
+benign.** This plan's Idempotence section says the file "should never appear" and that if it
+does, "a standalone scaffold happened somewhere and must be understood before proceeding". The
+real trigger is narrower: the workspace-adoption path runs whenever `--out` already contains
+Haskell under the target namespace, which `shikigami-core/src` obviously does. It claimed
+nothing and touched nothing:
+
+```text
+migration: adopting pre-workspace scaffold output into workspace shikigami
+  legacy record: (none for this context)
+  claimed: nothing was attributable to this workspace
+  unclaimed: 51 file(s) this workspace does not own; left untouched:
+```
+
+The report is written once — a second scaffold does not re-run the migration path and leaves the
+file byte-identical — so it is committed as the record of what the workspace did and did not
+claim.
 
 **Shikigami has no aggregate at all — not one, as this plan assumed** (found 2026-08-19 during
 the Milestone 1 census). `Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki `SymTransducer`
@@ -205,6 +250,37 @@ would now be reimplementing a generated artifact by hand.
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19): **Exclude the generated keiro-dsl layer from `treefmt`, and only the
+  generated layer.** Rationale: see Surprises — formatting generated bytes breaks the firewall
+  and the determinism property this plan's Validation section demands. The excludes live in
+  `flake.module.nix`, which is the repository's unmanaged extension point, because
+  `nix/treefmt.nix` is seihou-managed and would lose the change on a template upgrade. The
+  create-once `KeiroConformance.Expectations` module inside the generated conformance package is
+  deliberately **not** excluded: keiro-dsl never overwrites it, it is application-owned code that
+  a human edits to accept a conformance change, and it should be formatted like any other module.
+  The alternative — letting the formatter win and dropping the determinism check — would have
+  removed the one mechanical guarantee that a generated file on disk is what the current
+  specification produces.
+
+- Decision (2026-08-19): **Gitignore the Cabal fragment; commit both ledgers and the migration
+  report.** Rationale: the fleet standard at
+  `mori://shinzui/keiro-runtime-patterns/docs/architecture-spec-and-scaffolding` says of the
+  fragment "Gitignore it" — it is an instruction to paste into the consuming stanza, and the
+  build reads `shikigami-core.cabal`, not the fragment, so a committed copy is a second source of
+  truth that can silently disagree. `keiro-dsl-ledger.workspace.shikigami.txt` and
+  `keiro-dsl-conformance-ledger.txt` are machine-owned history the next scaffold reads to report
+  stale paths, so they are committed unedited. The one-time migration report is committed as
+  evidence of what the workspace adoption claimed.
+
+- Decision (2026-08-19): **Point the two hand-written workflow-name constants at the generated
+  `WorkflowRuntime.workflowName` rather than leaving the literals in Haskell.** Rationale: this
+  is what makes the specification load-bearing instead of decorative. Before this change
+  `WorkflowName "shikigami.agent-run"` existed in `Agent/Workflow/Name.hs` and again in
+  `domain/shikigami-agent-run.keiro`, and nothing connected them; a rename in one would not
+  reach the other and `keiro-dsl diff` would gate a change the runtime never saw. Now there is
+  one literal, in the specification, and the diff gate is over the value the runtime actually
+  uses. The strings are unchanged, so no golden moves.
 
 - Decision (2026-08-19): **Two members — `shikigami-agent-run.keiro` and
   `shikigami-conversation.keiro` — and no shared member.**

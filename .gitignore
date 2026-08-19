@@ -13,3 +13,10 @@ db/
 result
 result-*
 .pre-commit-config.yaml
+
+# keiro-dsl writes a paste-ready Cabal fragment beside the generated layer on
+# every scaffold. It is an instruction to a human, not a build input: its blocks
+# are pasted into shikigami-core.cabal, which is what the build reads. The
+# scaffold ledger and the conformance ledger beside it ARE committed -- they are
+# the machine-owned history the next scaffold reads to report stale paths.
+shikigami-core/src/keiro-dsl-cabal-fragment.workspace.*.txt

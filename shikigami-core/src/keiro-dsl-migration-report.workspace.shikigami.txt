@@ -1,0 +1,57 @@
+migration: adopting pre-workspace scaffold output into workspace shikigami
+  legacy record: (none for this context)
+  claimed: nothing was attributable to this workspace
+  unclaimed: 51 file(s) this workspace does not own; left untouched:
+    Shikigami/Activity.hs
+    Shikigami/Agent/Approval.hs
+    Shikigami/Agent/Conversation.hs
+    Shikigami/Agent/Decl.hs
+    Shikigami/Agent/Delegate.hs
+    Shikigami/Agent/Delegate/Context.hs
+    Shikigami/Agent/Loader.hs
+    Shikigami/Agent/Run.hs
+    Shikigami/Agent/RunJob.hs
+    Shikigami/Agent/Skill.hs
+    Shikigami/Agent/Workflow.hs
+    Shikigami/Agent/Workflow/Input.hs
+    Shikigami/Agent/Workflow/Name.hs
+    Shikigami/App/Config.hs
+    Shikigami/App/Config/Load.hs
+    Shikigami/Behavior/Error.hs
+    Shikigami/Behavior/Input.hs
+    Shikigami/Behavior/Provider.hs
+    Shikigami/Behavior/Run.hs
+    Shikigami/Behavior/Skill.hs
+    Shikigami/Behavior/StubProvider.hs
+    Shikigami/Core.hs
+    Shikigami/Flow.hs
+    Shikigami/Flow/Acknowledgement.hs
+    Shikigami/Flow/AtRiskCustomer.hs
+    Shikigami/Flow/Capability.hs
+    Shikigami/Flow/Lifecycle/AtRiskCustomer.hs
+    Shikigami/Flow/SinkOutbox.hs
+    Shikigami/Integration/Danwa.hs
+    Shikigami/Log.hs
+    Shikigami/Log/Correlation.hs
+    Shikigami/Memory/Access.hs
+    Shikigami/Memory/Scope.hs
+    Shikigami/Prelude.hs
+    Shikigami/Program/Registry.hs
+    Shikigami/Sink.hs
+    Shikigami/Sink/Config.hs
+    Shikigami/Sink/Danwa.hs
+    Shikigami/Sink/GrantStore.hs
+    Shikigami/Sink/Http.hs
+    Shikigami/Sink/KawaClient.hs
+    Shikigami/Sink/KizashiClient.hs
+    Shikigami/Sink/Permission.hs
+    Shikigami/Sink/Recipient.hs
+    Shikigami/Sink/ReiAction.hs
+    Shikigami/Sink/Types.hs
+    Shikigami/Sink/Validate.hs
+    Shikigami/Sink/Wire.hs
+    Shikigami/Trigger/Enqueue.hs
+    Shikigami/Trigger/Schedule.hs
+    Shikigami/Trigger/Stream.hs
+note: keiro-dsl never deletes files. The legacy record was marked superseded, not removed.
+note: the full report is kept at keiro-dsl-migration-report.workspace.shikigami.txt

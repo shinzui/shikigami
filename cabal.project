@@ -13,6 +13,14 @@ packages:
 -- without depending on PATH or on a separate keiro checkout.
 extra-packages: keiro-dsl
 
+-- The conformance runner keiro-dsl generates for the shikigami service. The
+-- glob is named after the service rather than a node, so it stays stable as
+-- workspace members and nodes are added and `cabal test
+-- keiro-shikigami-conformance` never has to change. The package, its .cabal,
+-- and its Main.hs are generated; only KeiroConformance.Expectations inside it
+-- is hand-owned.
+optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
+
 with-compiler: ghc-9.12.4
 
 -- The co-developed dependency cohort is selected from published Hackage
