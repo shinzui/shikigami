@@ -30,7 +30,7 @@ import Keiro.Workflow
     WorkflowOutcome (..),
     awakeableAllocStepPrefix,
     loadStepIndex,
-    runWorkflow,
+    runWorkflowWith,
     step,
   )
 import Keiro.Workflow.Awakeable (AwakeableId, signalAwakeable)
@@ -60,6 +60,7 @@ import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered), SinkResult (..))
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
@@ -209,7 +210,8 @@ runConversationWorkflow env mStart msg =
         . runErrorNoCallStack
         . withKirokuStore connectionSettings
         . runStoreResource
-        $ runWorkflow
+        $ runWorkflowWith
+          shikigamiWorkflowRunOptions
           conversationWorkflowName
           (conversationWorkflowId msg)
           (conversationWorkflow env mStart)

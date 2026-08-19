@@ -18,12 +18,13 @@ where
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
-import Keiro.Workflow.Resume (WorkflowRegistry, runWorkflowResumeWorker)
+import Keiro.Workflow.Resume (WorkflowRegistry, runWorkflowResumeWorkerWith)
 import Kioku.App (AppEffects, runAppIO)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
 
 -- | Every workflow this process knows how to resume.
 workflowRegistry :: WorkerEnv -> WorkflowRegistry AppEffects
@@ -35,7 +36,7 @@ workflowRegistry env =
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env = do
   Log.logInfo (envLogger env) "worker.resume.started" []
-  result <- runAppIO (appEnv env) (runWorkflowResumeWorker (workflowRegistry env))
+  result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith shikigamiWorkflowResumeOptions (workflowRegistry env))
   case result of
     Left err -> Log.logError (envLogger env) "worker.resume.failed" ["error" Aeson..= Text.pack (show err)]
     Right () -> pure ()

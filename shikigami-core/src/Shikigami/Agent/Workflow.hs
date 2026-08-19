@@ -46,7 +46,7 @@ import Keiro.Workflow
     currentRunGeneration,
     currentWorkflow,
     prepareJournalAppend,
-    runWorkflow,
+    runWorkflowWith,
     step,
   )
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
@@ -82,6 +82,7 @@ import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTas
 import Shikigami.Sink (DanwaConfig, DanwaTarget, GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
@@ -201,7 +202,8 @@ runAgentRunWorkflow deps job =
         . runErrorNoCallStack
         . withKirokuStore (connectionSettings env)
         . runStoreResource
-        $ runWorkflow
+        $ runWorkflowWith
+          shikigamiWorkflowRunOptions
           agentRunWorkflowName
           (WorkflowId (jobIdempotencyKey job))
           (agentRunWorkflow deps (Just job))

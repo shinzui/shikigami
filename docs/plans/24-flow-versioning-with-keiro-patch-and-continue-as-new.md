@@ -73,10 +73,17 @@ This section must always reflect the actual current state of the work.
       rules, the one-construction-site rule, how a patch id is declared and gated, the
       `emitSignal` worked example, the full step-name inventory with file:line citations, and
       the undeclarable-label families. Added the pointer section to `AGENTS.md`.
-- [ ] M2: Add `shikigami-core/src/Shikigami/Workflow/Versioning.hs` with
-      `shikigamiActivePatches`, `shikigamiWorkflowRunOptions`, `shikigamiWorkflowResumeOptions`.
-- [ ] M2: Rewire `runAgentRunWorkflow`, `runConversationWorkflow`, and
-      `Shikigami.Agent.Workflow.Resume.runResumeWorker` through the shared options.
+- [x] M2 (2026-08-19): Added `shikigami-core/src/Shikigami/Workflow/Versioning.hs` with
+      `shikigamiActivePatches` (union of the generated per-workflow `declaredPatches`),
+      `shikigamiWorkflowRunOptions`, and `shikigamiWorkflowResumeOptions`; registered it in
+      `shikigami-core/shikigami-core.cabal`.
+- [x] M2 (2026-08-19): Rewired `runAgentRunWorkflow` and `runConversationWorkflow` to
+      `runWorkflowWith shikigamiWorkflowRunOptions`, and
+      `Shikigami.Agent.Workflow.Resume.runResumeWorker` to
+      `runWorkflowResumeWorkerWith shikigamiWorkflowResumeOptions`. `rg` finds no remaining
+      default-options call site in `shikigami-core/src`, `shikigami-workers/src`,
+      `shikigami-server/src`, or `shikigami-agent/src`; `cabal test shikigami-core-test`
+      is green at 176 tests, unchanged.
 - [ ] M3: Change the `Sink` capability so `emitSignal` takes a stable label; add the
       `shikigami.emit-signal-labels-v1` patch guard in `runSink`; update
       `atRiskCustomerFlow` call sites and existing tests.
