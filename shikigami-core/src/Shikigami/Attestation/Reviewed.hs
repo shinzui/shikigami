@@ -13,7 +13,9 @@
 module Shikigami.Attestation.Reviewed
   ( -- * Repository vocabulary
     RepositoryId (..),
-    Revision (..),
+    Revision,
+    mkRevision,
+    revisionText,
     DiffDigest (..),
     ResultDigest (..),
 
@@ -41,40 +43,16 @@ import Data.Aeson (Value (String), withText)
 import Data.Char (isHexDigit)
 import Data.Text qualified as Text
 import Shikigami.Prelude
+import Shikigami.Repository (RepositoryId (..), Revision, mkRevision, revisionText)
 
 -- ---------------------------------------------------------------------------
 -- Repository vocabulary
 -- ---------------------------------------------------------------------------
 
--- | The canonical identity of a repository, e.g. a @mori:\/\/@ URI.
---
--- __Temporary home.__ Repository identity and revisions are shared vocabulary
--- that @docs\/plans\/44-acquire-revision-pinned-architecture-practice-evidence.md@
--- owns: it introduces an @EvidenceReader@ whose @readDiff@ takes a repository
--- identity and two revisions and returns a pinned diff. Plan 44 has not started,
--- and gating this plan — the one plan in the initiative with no dependencies —
--- on it would be backwards. So the minimum is defined here, and when plan 44
--- lands this definition and 'Revision' are __deleted and imported from it
--- instead__. 'ReviewedArtifact' itself does not change when that happens; the
--- reconciliation is an import edit, not a redesign. Two revision vocabularies in
--- one repository is the exact failure this plan exists to prevent.
-newtype RepositoryId = RepositoryId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
-
--- | An /unpinned/ way of naming a point in a repository — a branch, a tag, a
--- short hash, @HEAD@. Exactly the kind of thing that can move.
---
--- Deliberately __not__ a field of 'ReviewedArtifact': what was reviewed is
--- recorded as a 'FullCommit', and admitting a 'Revision' there would reintroduce
--- the ambiguity this module exists to remove. It is defined here because it is
--- half of the shared vocabulary described on 'RepositoryId', and because the
--- reader plan 44 introduces takes revisions as /inputs/ and resolves them to
--- commits. Same temporary-home note as 'RepositoryId': it moves to plan 44's
--- module when that lands.
-newtype Revision = Revision {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+-- 'RepositoryId' and the strict Mori content-plane 'Revision' now live in
+-- "Shikigami.Repository". They remain re-exported here so code written against
+-- the temporary plan-49 home keeps compiling while review and evidence code use
+-- the neutral shared module directly.
 
 -- | Digest of the reviewed diff, or of the reviewed tree.
 newtype DiffDigest = DiffDigest {value :: Text}

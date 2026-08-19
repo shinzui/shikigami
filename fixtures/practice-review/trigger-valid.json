@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "triggerKind": "target-change",
+  "idempotencyKey": "mori:practice-review:target:repo_target:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target": {
+    "name": "shinzui/example-service",
+    "repository": "repo_target"
+  },
+  "targetRange": {
+    "changeKind": "modified",
+    "before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "changedDecisionPaths": [
+    "docs/adr/0008-adopt-opentelemetry.md"
+  ],
+  "adoptions": [
+    {
+      "practice": "opentelemetry",
+      "references": [
+        {
+          "project": {
+            "name": "shinzui/haskell-jitsurei",
+            "repository": "repo_practice"
+          },
+          "provenance": {
+            "repository": "repo_practice",
+            "revision": "cccccccccccccccccccccccccccccccccccccccc"
+          },
+          "documentIds": [
+            "api-opentelemetry-integration"
+          ]
+        }
+      ],
+      "claimedApplicability": {
+        "projects": [
+          {
+            "name": "shinzui/example-service",
+            "repository": "repo_target"
+          }
+        ],
+        "paths": [
+          "docs/adr"
+        ],
+        "dependencies": [
+          "hs-opentelemetry-api"
+        ],
+        "practices": [
+          "opentelemetry"
+        ]
+      },
+      "mode": "advisory",
+      "owners": {
+        "targetOwner": "team-example-service",
+        "practiceOwner": "team-haskell-platform",
+        "triageOwner": "architecture-council"
+      },
+      "upstreamProjects": [
+        {
+          "project": {
+            "name": "iand675/hs-opentelemetry",
+            "repository": "repo_upstream"
+          },
+          "dependency": "hs-opentelemetry-api"
+        }
+      ]
+    }
+  ]
+}

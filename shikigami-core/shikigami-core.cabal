@@ -63,8 +63,10 @@ library
     Shikigami.Log.Correlation
     Shikigami.Memory.Access
     Shikigami.Memory.Scope
+    Shikigami.PracticeReview
     Shikigami.Prelude
     Shikigami.Program.Registry
+    Shikigami.Repository
     Shikigami.Sink
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
@@ -156,6 +158,7 @@ test-suite shikigami-core-test
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
+    Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec

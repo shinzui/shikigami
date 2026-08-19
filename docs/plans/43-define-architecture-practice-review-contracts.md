@@ -35,7 +35,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-19T21:43:33Z) Preflight: reconcile this July plan with the current seven-package tree, shared attestation vocabulary, ADR corpus, core test layout, and released `uuid` dependency.
-- [ ] M1: define and round-trip shared repository identity plus version-1 trigger, revision-range, adoption, owner, and provenance types.
+- [x] (2026-08-19T21:52:41Z) M1: define and round-trip shared repository identity plus version-1 trigger, revision-range, adoption, owner, and provenance types.
 - [ ] M2: define the closed verdict, claim, confidence, applicability, lineage, and re-review types.
 - [ ] M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
 - [ ] M3: add deterministic `ReviewId` derivation and semantic validators.
@@ -81,6 +81,11 @@ implementation. Provide concise evidence.
   `docs/adr` OKF bundle. No existing ADR governs this practice-review wire contract. ADR
   0003 explains the current package split, while ADRs 0005 and 0006 are adjacent attestation
   decisions rather than authority for this contract.
+
+- Aeson's generic options do not encode a one-constructor nullary type as a string unless
+  `tagSingleConstructors = True`, even when `allNullaryToStringTag = True`. The first fixture
+  run rejected `"advisory"` with `expected Array`; enabling single-constructor tagging made
+  `ReviewMode` use the same closed-string wire shape as the other enums.
 
 
 ## Decision Log
@@ -141,7 +146,12 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Milestone 1 (2026-08-19): `Shikigami.Repository` now owns strict 40-hex revisions,
+  normalized safe relative paths, repository identity, and `RepoRef`.
+  `Shikigami.Attestation.Reviewed` imports and re-exports the moved identity names without
+  changing its existing JSON. `Shikigami.PracticeReview` now decodes the complete version-1
+  trigger/adoption vocabulary and rejects producer-selected specialists. Six focused tests
+  and all 39 attestation-contract tests pass; no workflow or runtime code changed.
 
 
 ## Context and Orientation
