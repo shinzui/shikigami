@@ -230,11 +230,15 @@ Shikigami's answer to both new questions lives in one module,
 
 - the space is `legacyMemorySpaceId`, the space kioku's migration `0011` backfills existing
   rows into. Shikigami is a single-space deployment, so this is the space, not a placeholder;
-- the recorded actor is `LegacyPrincipal` carrying the agent's declared name. Shikigami has
-  no principal directory yet, and kioku's `KnownPrincipal` means a directory issued and
-  vouched for the principal. Minting one from a free-text agent name would invent exactly
-  that vouching, which kioku's ADR "historical attribution is marked, never invented" exists
-  to prevent;
+- the recorded actor is `KnownPrincipal` over a ref this service mints,
+  `shikigami.agent.<name>`. This started as `LegacyPrincipal`, on the reasoning that
+  `KnownPrincipal` claims a *directory* vouched and Shikigami has none. Kioku settled it in
+  ADR-5 (revised 2026-08-18) and the premise was wrong twice: `KnownPrincipal` asserts a
+  principal was *vouched for*, with `assumeAuthorizedMemoryContext` making the host itself
+  accountable for the ref; and `LegacyPrincipal` is decode-side only, so stamping it on a new
+  event asserts the event predates memory spaces, which is false. Self-assertion belongs in the
+  ref's kind prefix — `PrincipalRef` names what a principal *is*, `RecordedPrincipal` names how
+  much history *knows*;
 - reads go through `assumeAuthorizedMemoryContext` under a service principal. A context is a
   decision rather than a document — kioku deliberately gives it no `FromJSON` instance — and
   no read path persists its actor, so naming the service there records nothing.

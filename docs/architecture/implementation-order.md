@@ -128,17 +128,19 @@ safest it will ever be to implement.
 - **New, and it reaches several later plans — `kioku 0.4` made memory spaces and principals
   mandatory.** Every session/memory command record carries `memorySpaceId` and `actorPrincipal`;
   every read takes a leading `MemorySpaceId`. Shikigami answers both in one module,
-  `shikigami-core/src/Shikigami/Memory/Access.hs`, currently with `legacyMemorySpaceId` and a
-  `LegacyPrincipal` built from the agent's declared name. **Plans 23, 34, 50, and 51 should treat
+  `shikigami-core/src/Shikigami/Memory/Access.hs`, with `legacyMemorySpaceId` and a
+  `KnownPrincipal` over a self-asserted `shikigami.agent.<name>` ref. **Plans 23, 34, 50, and 51 should treat
   that module as the seam they change, not as settled.** It is also the retirement point for
   IR-9 (`key-agent-continuity-by-meibo-principal`) — when agents resolve to real Meibo principals,
-  `agentActor` returns `KnownPrincipal` and no call site moves.
+  `agentActor` takes its ref from Meibo instead of minting one, and no call site moves.
 - **Related debt with an announced expiry.** Shikigami calls kioku's deprecated legacy write
   surface (`Session.start`, `complete`, `failSession`, `recordTurn`, `Memory.record`,
   `Recall.legacyRecall`) — about 24 `-Wdeprecations` warnings. The `*WithContext` replacements
-  require a real `PrincipalRef`, so clearing this debt *is* plan 23 / IR-9 work. Do not attempt it
-  separately; minting principals from free-text agent names is what kioku's
-  "historical attribution is marked, never invented" ADR forbids.
+  require a real `PrincipalRef` *and* a context, which is a larger change than the value swap
+  already made. Kioku confirmed on 2026-08-18 that **no removal is scheduled** — no plan, no
+  version in the pragmas, and ADR-8 gates deletion on every dependent Mori report compiling
+  against `RecallTarget`. So this is unforced debt, best cleared alongside plan 23 / IR-9 when the
+  write path moves to `*WithContext` anyway.
 - **`keiro-dsl` is now at Language 5, which reverses this document's previous advice.** The
   2026-08-10 review told plan 39 to pin `--min-language 4` and explicitly not chase candidate
   language 5. keiro 0.13 **publishes Language 5 as the sole stable and default authoring
@@ -293,8 +295,8 @@ Retired. Delivered by commit `9991032`.
 ### Stage E — Feature completion · after D
 
 - **Plan 23** — agent lifecycle with Meibo principals. After 30 + 33, preferably 21. **Now also
-  owns** retiring `Shikigami.Memory.Access`'s `LegacyPrincipal` and kioku's deprecated write
-  surface; see IR-9.
+  owns** repointing `Shikigami.Memory.Access` at Meibo-resolved refs and moving the write path to
+  kioku's `*WithContext` surface, which retires the deprecation debt; see IR-9.
 - **Plan 27** — consolidate sink intent and run lifecycle. After 19 + 24 + 28. Consolidate freely.
 - **Plan 14** — approval and human-in-the-loop. After 17 + 22.
 - **Plan 32** — channel egress through Kanmon. After 19 + 22, preferably 21 + 27.
@@ -358,7 +360,7 @@ half-built.
 | Kikan-En IR-3 | plan 12 | ❌ Proposed. |
 | Kikan IR-5 | plans 44, 46, 52 | ❌ Proposed. |
 | Kikan IR-6 | plan 52 | ❌ Proposed. Scope shrinks: it ratifies the envelope, not the encoder. |
-| Shikigami IR-9 | plans 23, 34, 50, 51 | ⏳ **Now load-bearing.** Until agents resolve to Meibo principals, `Shikigami.Memory.Access` records `LegacyPrincipal` and the kioku deprecation debt stands. |
+| Shikigami IR-9 | plans 23, 34, 50, 51 | ⏳ Real but **not urgent**. Until agents resolve to Meibo principals, `Shikigami.Memory.Access` mints its own self-asserted refs and the kioku deprecation debt stands. Kioku confirmed 2026-08-18 that no wrapper removal is scheduled. |
 
 The pattern to keep using where a contract is pending: define a reader or source record of function
 fields, satisfy it with a stub plus fixtures in tests, and let the live client replace the stub.
@@ -386,11 +388,19 @@ them additively. IR-6's upstream counterpart
 unplanned request here the most awkward of the three. **These three need a decision before v1 is
 declared feature-complete** — either plans, or an explicit post-v1 deferral.
 
-**IR-9 has no plan of its own, and now has consequences in the tree.** It is nominally covered by
-plan 23, but plan 23 is scheduled in stage E and IR-9 is what retires `Shikigami.Memory.Access`'s
-`LegacyPrincipal` plus ~24 deprecation warnings on a surface kioku says will be removed. If kioku
-removes the legacy wrappers before stage E, this becomes urgent rather than tidy. Worth confirming
-kioku's removal timeline.
+**IR-9 has no plan of its own, though the deadline scare it caused has been resolved.** It is
+nominally covered by plan 23 in stage E. On 2026-08-18 it looked urgent — the working assumption
+was that kioku's deprecated wrappers were about to be removed, which would have forced principal
+resolution ahead of schedule. Kioku confirmed the opposite: no removal is planned, the pragmas
+name no version, and ADR-8 gates deletion on every dependent Mori report compiling against
+`RecallTarget`, which is not close to satisfied — kioku also found a **second consumer, `rei`**,
+still on kioku 0.1.0.0 and missing from Mori's dependent list entirely.
+
+What did come out of that exchange is a correction already applied: `Shikigami.Memory.Access` now
+records `KnownPrincipal` over a self-asserted ref rather than `LegacyPrincipal`, because the
+latter is decode-side only and asserted falsely that new events predate memory spaces. So IR-9 is
+back to being tidy rather than urgent — but it still has no plan of its own, and stage E is a long
+way out for something that owns both principal resolution and the `*WithContext` migration.
 
 **Five plans belong to no MasterPlan.** Plans 7, 9, 10, 11 (complete) and plan 48 (open,
 unregistered). Register 48 under MasterPlan 7 or as its own initiative now that it is being
