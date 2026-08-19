@@ -56,6 +56,7 @@ Boundaries minimize coupling but not to zero: plans 21, 22, and 23 all thread a 
 | EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | cross-MP: plans 36–38 and 47 | None | Not Started |
 | EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | cross-MP: plans 19, 36, 37, and 47 | cross-MP: plans 13, 16 (MasterPlan 2) | Not Started |
 | EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 30, 33, 36–38, and 47 | EP-1; cross-MP: plan 20 (MasterPlan 3) | Not Started |
+| EP-4 | Key durable agent state by Meibo principal | docs/plans/54-key-durable-agent-state-by-meibo-principal.md | EP-3 | EP-1 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -70,10 +71,19 @@ the final provider/sink-client shapes, but Settei—not plan 13—owns configura
 
 EP-3 soft-depends on EP-1. The dependency is soft because only the `agents sync` grant backfill consumes EP-1's nullable `principal_id` column. EP-3 has two cross-MasterPlan hard dependencies. Plan 30 must first establish the `agents` operator command group, which EP-3 extends with principal/lifecycle columns and `sync`; plan 33 must first define the optional `identity.principal` declaration, which EP-3 treats as authoritative instead of shipping a temporary name-only join. Plan 20 is a soft/transitive ordering preference: it defines the shared load-report seam consumed by both hard dependencies.
 
+EP-4 hard-depends on EP-3 and cannot start before it. EP-3 builds the Meibo-backed directory
+view and the declaration-to-principal join; EP-4 consumes that join to re-key every durable
+per-agent namespace — memory scopes, grant subjects, run lineage, and outbound authorship — onto
+the principal. The split follows the two improvement requests: EP-3 implements `IR-1`, which
+deliberately leaves Kioku memory scopes keyed by declaration name, and EP-4 implements `IR-9`,
+which closes exactly that gap. EP-4 soft-depends on EP-1 because it moves the `sink_grants`
+primary key that EP-1 creates; if EP-1 has not landed, EP-4's grant milestone creates the table
+in its principal-keyed shape instead.
+
 Therefore EP-1 and EP-2 start after the applicable foundation plans, while EP-3 starts
-after plans 30 and 33 and the pg-migrate foundation. At portfolio level the preferred
-chain is plans 36/37 → plan 13/16 → plan 22 → plans 14/28/32 for outbound HTTP, and
-plans 38/20 → plans 30/33 → plan 23 for lifecycle persistence.
+after plans 30 and 33 and the pg-migrate foundation, and EP-4 follows EP-3. At portfolio level the
+preferred chain is plans 36/37 → plan 13/16 → plan 22 → plans 14/28/32 for outbound HTTP, and
+plans 38/20 → plans 30/33 → plan 23 → plan 54 for lifecycle persistence and identity continuity.
 
 
 ## Integration Points
