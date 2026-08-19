@@ -50,11 +50,12 @@ anything. Recording and judging belong to
 
 ## Progress
 
-- [ ] M1: profile store and `resolveProfile`, with the five fail-closed refusals — unknown,
-      expired, withdrawn, ambiguous, mutable — each carrying a typed reason.
-- [ ] M1: `just new-migration` for the profile table; `reconcileShikigamiReadModels` confirmed
-      to cover any read model added.
-- [ ] M1: tests for all five refusals plus the success case, against a real ephemeral Postgres.
+- [x] M1: profile store and `resolveProfile`, with the five fail-closed refusals — unknown,
+      expired, withdrawn, ambiguous, mutable — each carrying a typed reason. (2026-08-19)
+- [x] M1: `just new-migration` for the profile table; `reconcileShikigamiReadModels` confirmed
+      to cover any read model added. No read model was added. (2026-08-19)
+- [x] M1: tests for all five refusals plus the success case, against a real ephemeral Postgres.
+      The focused group reports all 6 tests passed. (2026-08-19)
 - [ ] M2: a `resolve-profile` journaled step in the agent-run workflow, placed before
       `open-session`, declared through the checked specification.
 - [ ] M2: pinning test — resolve, crash mid-run, mutate the stored profile, resume, assert the
@@ -67,7 +68,24 @@ anything. Recording and judging belong to
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Plan 49 already implemented `attestationPayloadDigest` with baikai 0.5.0.0's
+  `commitmentDigest`, and baikai is already a direct pinned dependency. Milestone 1 therefore
+  added `profileDigest` beside that function and introduced no new hashing package. Evidence:
+  `cabal.project` pins `baikai ==0.5.0.0`, the upstream checkout has the
+  `baikai-0.5.0.0` tag, and the focused profile group passed against the existing dependency.
+  Plan 52 needs no dependency reconciliation for this hash because Plan 49 had already moved the
+  shared hashing seam earlier. (2026-08-19)
+
+- The current Just recipe takes the migration slug positionally. The plan's literal
+  `just new-migration name=sanctioned-execution-profiles` passes the text beginning `name=` to
+  the slug validator and fails; the working command is
+  `just new-migration sanctioned-execution-profiles`. (2026-08-19)
+
+- A reference-only `resolve-profile` journal value is insufficient for Milestone 3. If the row is
+  changed after a crash, replay has the original digest but not the original allowed tuple set,
+  so it cannot enforce the policy it claims to be pinned to. The step must journal the resolved
+  content together with its reference; this is recorded as a decision below and will be declared
+  honestly in the checked specification. (2026-08-19)
 
 
 ## Decision Log
@@ -98,6 +116,15 @@ anything. Recording and judging belong to
   additive declaration fields. It also means this plan can land before any agent is actually
   gated, so the machinery is proven before it is depended on.
   Date: 2026-08-05
+
+- Decision: The `resolve-profile` step journals `ResolvedProfile` content together with its
+  digest-bearing reference, rather than only `Maybe SanctionedExecutionProfileRef`.
+  Rationale: the digest proves which bytes were resolved but cannot reconstruct the allowed call
+  tuples after the store changes. Journaling both lets a replay enforce the exact original policy
+  without re-reading mutable state. An agent with no requirement journals `Nothing`, and the
+  checked Keiro specification names the actual persisted result rather than certifying a codec the
+  runtime does not execute.
+  Date: 2026-08-19
 
 
 ## Context and Orientation

@@ -28,6 +28,7 @@ import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
+import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -67,6 +68,7 @@ main =
           KeiroSpecificationSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
+          ProfileResolutionSpec.tests,
           SinkHonestySpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,

@@ -76,9 +76,11 @@ newtype ProfileVersion = ProfileVersion {value :: Text}
 
 -- | The digest of a profile's canonical content.
 --
--- This plan does not compute it — no hashing dependency is added here. The
--- computation belongs to
--- @docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md@.
+-- 'Shikigami.Attestation.Envelope.profileDigest' computes it with the same
+-- canonical SHA-256 seam as attestation payloads. Resolution and pinning added
+-- that computation in
+-- @docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md@; signing
+-- still belongs to plan 52.
 newtype ProfileDigest = ProfileDigest {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (ToJSON, FromJSON)

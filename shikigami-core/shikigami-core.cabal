@@ -41,6 +41,7 @@ library
     Shikigami.Attestation.Agent
     Shikigami.Attestation.Envelope
     Shikigami.Attestation.Profile
+    Shikigami.Attestation.Resolve
     Shikigami.Attestation.Reviewed
     Shikigami.Attestation.Strength
     Shikigami.Behavior.Error
@@ -155,6 +156,7 @@ test-suite shikigami-core-test
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
+    Shikigami.ProfileResolutionSpec
     Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec

@@ -27,6 +27,7 @@ module Shikigami.Attestation.Envelope
     -- * Canonical encoding
     canonicalPayloadBytes,
     attestationPayloadDigest,
+    profileDigest,
 
     -- * Encoding
     envelopeAesonOptions,
@@ -37,7 +38,7 @@ import Baikai.Evidence (canonicalEncode, commitmentDigest)
 import Data.Aeson (Value)
 import Data.ByteString (ByteString)
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
-import Shikigami.Attestation.Profile (Issuer, SanctionedExecutionProfileRef)
+import Shikigami.Attestation.Profile (Issuer, ProfileDigest (..), SanctionedExecutionProfile, SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Reviewed (NonConformingReason, ResultDigest, ReviewedArtifact)
 import Shikigami.Attestation.Strength (AttestationStrength)
 import Shikigami.Prelude
@@ -253,6 +254,15 @@ canonicalPayloadBytes = canonicalEncode . toJSON
 -- signature over this digest and the key that produces it.
 attestationPayloadDigest :: AttestationPayload -> PayloadDigest
 attestationPayloadDigest = PayloadDigest . commitmentDigest . toJSON
+
+-- | SHA-256 over the sanctioned profile's canonical JSON content.
+--
+-- A profile reference is deliberately not part of this input: its digest points
+-- at the content and therefore cannot be one of the fields being hashed. This
+-- uses the same canonical encoder as 'attestationPayloadDigest', so profile and
+-- attestation commitments cannot drift onto subtly different JSON rules.
+profileDigest :: SanctionedExecutionProfile -> ProfileDigest
+profileDigest = ProfileDigest . commitmentDigest . toJSON
 
 -- ---------------------------------------------------------------------------
 -- Encoding
