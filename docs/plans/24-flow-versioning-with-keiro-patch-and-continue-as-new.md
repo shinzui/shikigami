@@ -124,6 +124,35 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
+- Discovery (2026-08-19): **A `patch` call resolves against the set recorded in the journal, not
+  against the options the running process was handed.** The handler looks the decision up under
+  `patch:<id>` and, on a miss, reads `__workflow_patches__` out of the *journal* to decide
+  (`keiro/src/Keiro/Workflow.hs:789-795`). `activePatches` is consulted only by
+  `recordPatchSetIfFresh`, which writes that record when a generation starts fresh — and only
+  when the set is non-empty (`keiro/src/Keiro/Workflow.hs:657-660`).
+
+  Two things follow that this plan assumed otherwise. Threading identical options through the
+  resume worker is correctness hygiene, not the thing that makes `patch` work: a resume
+  configured differently cannot change an instance's answer. And the pre-existing
+  `AgentWorkflowSpec` tests that resume with `resumeWorkflowsOnce defaultWorkflowResumeOptions`
+  keep working unchanged after M3, because those instances recorded their patch set on their
+  first run. Both are now stated in `docs/workflow-versioning.md` and in
+  `docs/adr/0004-one-options-value-and-a-checked-patch-set.md`, because the natural assumption
+  — that the live options decide — would lead someone to "fix" a patch by editing options.
+
+- Discovery (2026-08-19): **`just keiro-diff` classifies the patch addition exactly as the
+  discipline claims it should**, which is the machine-checked half of this plan's argument:
+
+  ```text
+  ADDITIVE: AgentRun workflow-patch shikigami-emit-signal-labels-v1: new patch guard
+    contains the entire body change, so in-flight generations retain their journaled branch
+  replay-neutral: stored-data replay is unchanged by this diff
+  ```
+
+  The same renaming of every `emit-signal` step *without* the guard is what the runtime test
+  proves would strand a parked flow. The two checks are independent and neither substitutes for
+  the other, as this plan's reconciliation section says.
+
 - Discovery (2026-08-19): **A keiro-dsl patch id may not contain a dot, so this plan's chosen
   id `shikigami.emit-signal-labels-v1` is unparseable.** The grammar is `patchIdWord`
   (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs:290-294`): an ASCII alphanumeric followed by
@@ -309,7 +338,73 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-08-19. All five milestones delivered; one milestone was delivered differently
+from how it was written, and that difference is recorded rather than papered over.**
+
+The purpose stated three things would be true and demonstrable. All three are.
+
+*A written discipline exists.* `docs/workflow-versioning.md` explains keiro's journal semantics
+from scratch, states nine rules, inventories every step name shikigami journals with a file:line
+for each, works the `emitSignal` change end to end, and names the label families the checked
+specification cannot hold. `AGENTS.md` points to it, so a contributor changing a workflow body
+meets the rule without having to know it exists.
+
+*`patch` works end to end.* `Shikigami.Workflow.Versioning` is the single construction site for
+`WorkflowRunOptions`, and the agent-run workflow, the conversation workflow, and the resume
+worker all go through it — `rg` finds no remaining default-options call site in any production
+package. `WorkflowVersioningSpec` Test A proves the property with a constructed in-flight
+instance: the same body under the same options completes `"v1:answered"` for the instance that
+started before the patch and `"v2:answered"` for one started after, with `collect` replayed
+rather than re-executed and the inserted `enrich` step absent from the older journal.
+
+*`emitSignal` names are stable.* The label is caller-supplied, the scheme is pinned per instance
+by `shikigami-emit-signal-labels-v1`, and Test B proves both populations: a flow parked
+pre-deploy escalates onto `emit-signal:1` and leaves the outbox at two rows, while a flow started
+post-deploy journals `emit-signal:alert`. An agent naming an unregistered flow is now refused by
+`shikigami validate` (exit 1, naming the registered flows) and by worker boot (exit 1, logging
+`worker.agents.undeployable` per offender) instead of failing once per trigger forever.
+
+**What was delivered differently, and why.** M4 asked for the flow names to be added to the
+checked `domain/shikigami.keiro-workspace` specification and read back from a generated module.
+keiro-dsl has no node kind that could hold them — a shikigami flow is a Haskell function running
+inside the agent-run workflow, not a durable node — so the generated artifact would have been
+one no runtime path consumes, which `docs/adr/0001-declare-only-what-the-runtime-executes.md`
+forbids. The *intent* was met structurally: `flowRegistry` and `registeredFlowNames` are two
+projections of one unexported `flowRegistrations` list, so a flow cannot be runnable but
+unlisted, or listed but unrunnable. The Decision Log carries the full reasoning.
+
+Two smaller corrections to the plan as written: the patch id is
+`shikigami-emit-signal-labels-v1`, not `shikigami.emit-signal-labels-v1`, because keiro-dsl
+cannot parse a dot in a patch id; and `shikigamiActivePatches` reads the generated
+`declaredPatches` rather than a Haskell literal, because plan 39 shipped that generated value
+after this plan was written and a literal beside it could drift from the gated one.
+
+**Lessons worth carrying.**
+
+The most valuable half-hour was spent probing keiro-dsl with a scratch copy of `domain/` before
+writing any Haskell. It caught the patch-id grammar and revealed that the generated layer already
+provided `declaredPatches`, `declaredPatchStepNames`, and `withDeclaredPatches` — plumbing this
+plan had budgeted to hand-write. A plan written against one version of a fast-moving toolchain
+should be probed, not trusted, even when its citations were refreshed a day earlier.
+
+Both new tests were checked by mutation rather than assumed correct, and it mattered: it is what
+turns "the tests pass" into evidence that the guard is load-bearing. Forcing `useLabels = True`
+fails Test B; dropping the patch set from the post-deploy options fails Test A.
+
+The one genuinely counter-intuitive runtime fact — that a `patch` decision reads the *journaled*
+set, not the live options — was discovered by reading the handler while checking whether the
+existing `resumeWorkflowsOnce defaultWorkflowResumeOptions` tests would break. They do not. That
+fact is now in the discipline document and the ADR, because the natural wrong assumption would
+lead someone to try to "fix" a patch by editing options.
+
+**Gaps left open, deliberately.** Two ordinal-derived names survive and are governed by rule 5
+without being fixed here: `approval:<SinkKind>:<ordinal>` and the conversation's
+`next-message:<ordinal>`, plus `delegate`'s `freshOrdinal`-derived child id, which has the same
+shape without being a step name. Each is named in the discipline document with its owning plan
+(16, 26, and 35). `continueAsNew` is documented and tested for by nobody in production yet; plan
+26 is its first consumer. And `emit-signal:<label>` is now stable but still carries a colon, so
+it remains outside the keiro-dsl grammar and `just keiro-diff` will not gate a later rename of
+it — the plan's own Decision Log of 2026-08-19 says so, and plan 16 owns that family.
 
 
 ## Context and Orientation
@@ -944,3 +1039,23 @@ becomes the single construction site — which is where plan 17 M3's lease heart
 the two plans do not end up with disagreeing options values. And M3's stable `emit-signal:<label>`
 step names remain outside the keiro-dsl grammar because they still carry a colon; the plan now
 states that instead of leaving a reader to assume the specification will gate them.
+
+## Revision Notes
+
+
+- 2026-08-19 (implementation): Delivered all five milestones. Progress, Surprises & Discoveries,
+  Decision Log, and Outcomes & Retrospective are filled in from the work rather than from the
+  plan's predictions, and where the two differ the difference is stated.
+
+  Three things the plan specified turned out to be unavailable as written, each recorded with a
+  Decision Log entry: the patch id could not contain a dot (keiro-dsl's `patchIdWord` rejects
+  it), `shikigamiActivePatches` should read plan 39's generated `declaredPatches` rather than a
+  Haskell literal, and M4's flow names have no keiro-dsl declaration form, so the
+  single-source-of-truth intent was met structurally inside `Shikigami.Flow` instead. None
+  changes the deliverable; the first two make it stricter.
+
+  Durable context was distilled into
+  `docs/adr/0004-one-options-value-and-a-checked-patch-set.md`: the one-construction-site rule
+  for `WorkflowRunOptions` (binding on plan 17), the checked-specification origin of the patch
+  set, why the set is unioned across workflows, the patch-id spelling constraint, the
+  journaled-not-live resolution of a patch decision, and the retirement and rollback ordering.

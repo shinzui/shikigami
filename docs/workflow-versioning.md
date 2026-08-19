@@ -110,6 +110,24 @@ uses `defaultWorkflowRunOptions`, whose `activePatches` is empty
 `runWorkflow` directly for a durable workflow; see
 [the single construction site](#one-construction-site-for-run-options).
 
+One consequence is worth stating plainly, because it is not what most people
+assume. A `patch` call resolves against the set **recorded in the journal**, not
+against the options the current run was handed
+(`keiro/src/Keiro/Workflow.hs:790-792`). So `activePatches` matters at exactly
+one moment: when a generation starts fresh and records it. After that the
+instance's answer is fixed, and re-invoking it with different options — a resume
+worker configured differently, a one-off `runWorkflowWith`, a rolled-back binary
+— cannot change it. Two things follow. Handing the resume worker the same options
+as the first run is correctness hygiene rather than the thing that makes `patch`
+work. And an instance that started before the patch existed has *no* recorded set
+at all, so its decision is `False` however the resuming process is configured —
+which is precisely the guarantee the mechanism is for.
+
+Note also that keiro records `__workflow_patches__` only when the active set is
+non-empty (`keiro/src/Keiro/Workflow.hs:657-660`). A deployment with no patches
+writes no such record, so adopting the first patch id is the change that makes
+that reserved step name start appearing in fresh journals.
+
 ### `continueAsNew` — rotate a journal that would otherwise grow forever
 
 ```haskell
@@ -385,6 +403,11 @@ flow capabilities  (run inside the agent-run workflow)
   <step>:notify                    Shikigami/Agent/Approval.hs:157
   emit-signal:<label>              Shikigami/Flow/Capability.hs   -- post-patch
   emit-signal:<ordinal>            (pre-patch; in-flight instances only)
+
+written by keiro on this service's behalf, as of the first patch
+  __workflow_patches__             every fresh agent-run and conversation journal
+  patch:shikigami-emit-signal-labels-v1
+                                   every agent-run that interprets a flow's sinks
 
 reserved by keiro  (keiro/src/Keiro/Workflow/Types.hs)
   __workflow_completed__           :318
