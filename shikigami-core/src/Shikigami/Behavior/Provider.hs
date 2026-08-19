@@ -36,6 +36,7 @@ module Shikigami.Behavior.Provider
     renderProfileViolation,
     constrainBehaviorEnv,
     newBehaviorEnvForProfile,
+    newBehaviorEnvForProfileWithLogger,
 
     -- * Building an environment for it
     newBehaviorEnvFor,
@@ -123,6 +124,16 @@ newBehaviorEnvForProfile ::
   IO (Either ProfileViolation BehaviorEnv)
 newBehaviorEnvForProfile resolvedProfile selection traceSink = do
   logger <- Log.newStderrLogger Log.Info
+  newBehaviorEnvForProfileWithLogger logger resolvedProfile selection traceSink
+
+-- | The logged form used when a process already owns its structured logger.
+newBehaviorEnvForProfileWithLogger ::
+  Log.Logger ->
+  ResolvedProfile ->
+  ProviderSelection ->
+  Maybe TraceSink ->
+  IO (Either ProfileViolation BehaviorEnv)
+newBehaviorEnvForProfileWithLogger logger resolvedProfile selection traceSink =
   constrainBehaviorEnv resolvedProfile <$> newBehaviorEnvFor logger selection traceSink
 
 renderProfileViolation :: ProfileViolation -> Text

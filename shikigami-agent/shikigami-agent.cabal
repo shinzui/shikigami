@@ -42,6 +42,7 @@ library
     , optparse-applicative  >=0.19 && <0.20
     , shikigami-core
     , text                  >=2.1
+    , time
 
 executable shikigami-run-behavior
   import:         common
@@ -74,3 +75,4 @@ test-suite shikigami-agent-test
     , shikigami-core
     , tasty
     , tasty-hunit
+    , text

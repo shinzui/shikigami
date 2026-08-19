@@ -1,5 +1,3 @@
-{-# LANGUAGE MultilineStrings #-}
-
 -- | Fail-closed resolution of sanctioned execution profiles.
 --
 -- A 'ProfileStore' is a function seam rather than a database handle. Production

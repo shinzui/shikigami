@@ -30,12 +30,12 @@ profile — one whose stored content does not hash to the digest it claims — a
 profile is mutable and therefore untrustworthy. In every case the run does not open a session,
 does not call a model, and does not dispatch a sink. It fails closed.
 
-The second half is subtler and matters just as much. Once resolved, the digest is journaled
-inside the durable workflow before the behavior executes, so a run that crashes and resumes
-hours later is still held to the profile it started under, not to whatever the profile store
-says now. You demonstrate this by resolving a profile, killing the process mid-run, changing the
-stored profile, restarting, and observing that the resumed run still reports the original
-digest.
+The second half is subtler and matters just as much. Once resolved, the complete profile content
+and its digest-bearing reference are journaled inside the durable workflow before the behavior
+executes, so a run that crashes and resumes hours later is still held to the profile it started
+under, not to whatever the profile store says now. You demonstrate this by resolving a profile,
+killing the process mid-run, changing the stored profile, restarting, and observing that the
+resumed run still reports the original content and digest.
 
 The third piece is the connection to the provider seam. A resolved profile constrains what may
 be dispatched: a behavior asking for a model or thinking level outside the pinned tuple set
@@ -100,6 +100,13 @@ anything. Recording and judging belong to
   ThinkingLevel`. The constraint can therefore inspect the value that will actually dispatch
   without duplicating provider configuration. `Nothing` is observable and refused unless the
   profile explicitly permits defaulted thinking. (2026-08-19)
+
+- The deployed workflow was not the only provider entry point. `shikigami-agent-run` executes the
+  lower-level memory runner directly, and `shikigami-run-behavior` deliberately opens no database.
+  The former now resolves and constrains a declared profile through the same store before opening
+  a session; the latter refuses a profiled declaration before constructing a provider environment
+  and directs the caller to `shikigami-agent-run`. Two command tests pin the database-free refusal
+  and the unchanged profileless path. (2026-08-19)
 
 
 ## Decision Log
@@ -167,6 +174,15 @@ anything. Recording and judging belong to
   and makes a newly added Baikai constructor a compile-time review point.
   Date: 2026-08-19
 
+- Decision: Every shipped model-dispatch entry point must either resolve the profile or fail
+  closed. The durable worker and `shikigami-agent-run` resolve against PostgreSQL;
+  `shikigami-run-behavior`, whose contract intentionally excludes database access, refuses any
+  declaration with `sanctionedProfile` set.
+  Rationale: a developer convenience command that bypasses the provider constraint would make the
+  declaration a property of one execution path rather than of the agent. Refusal preserves the
+  lightweight command for unprofiled agents without inventing an unpinned profile source.
+  Date: 2026-08-19
+
 
 ## Context and Orientation
 
@@ -211,7 +227,7 @@ months later.
 plus `cabal run shikigami-migrate -- up`. Create a new migration with:
 
 ```bash
-just new-migration name=sanctioned-execution-profiles
+just new-migration sanctioned-execution-profiles
 ```
 
 That recipe timestamps the filename and appends it to the manifest for you. Never hand-edit the
@@ -277,9 +293,10 @@ for error-message quality: check existence, then ambiguity, then integrity, then
 tampered expired profile reports tampering, which is the more urgent fact.
 
 The digest computation needs a hash function, and
-`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` deliberately left
-hashing to `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md`. This plan needs it
-sooner. Add the hashing dependency here, and when you do, verify the released version against the
+`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` originally left
+hashing to `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md`. The delivered Plan
+49 moved it earlier through baikai's existing `commitmentDigest`, so this plan reuses that seam.
+Before changing any dependency bound, verify the released version against the
 authoritative package registry and the upstream release tags rather than taking a version from a
 local corpus — this repository's `AGENTS.md` requires that. Put the hash function next to the
 canonical encoding it consumes, in `Shikigami.Attestation.Envelope`, and record in this plan's
@@ -292,7 +309,7 @@ canonical JSON of the content, and the digest, with a uniqueness constraint on
 document that the constructor exists for the resolution *path*, which will later also serve
 profiles fetched by id alone with no version pinned.
 
-Create the migration with `just new-migration name=sanctioned-execution-profiles`. Write the
+Create the migration with `just new-migration sanctioned-execution-profiles`. Write the
 table, then apply and check:
 
 ```bash
@@ -317,11 +334,14 @@ Add a field to `AgentRunDeps` — a resolver function rather than a database han
 supply a deterministic one without a database, matching how `approval` is already a function field
 on that record. In `runResolvedAgent`, add `runStep deps (StepName "resolve-profile") ...`
 immediately before the existing `open-session` step. The step returns the resolved
-`SanctionedExecutionProfileRef` for an agent that requires a profile, and a value meaning "not
-required" for one that does not. Model that as a `Maybe`, and be careful with the encoding: this
-is a journaled value, so it follows the additive-only versioning discipline that
-`docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md` establishes, and it
-encodes with `omitNothingFields` so an agent that requires nothing journals nothing new.
+`ResolvedProfile` content and reference for an agent that requires a profile, and a value meaning
+"not required" for one that does not. The persisted result is
+`Either ProfileResolutionError (Maybe ResolvedProfile)`: the `Either` makes a permanent refusal
+replayable, and the `Maybe` preserves the opt-in declaration. This is a journaled value, so it
+follows the additive-only versioning discipline that
+`docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md` establishes. A fresh
+unprofiled run journals `Right Nothing`; an older generation on the patch's old branch has no
+`resolve-profile` row.
 
 When resolution fails, return `Left` from the workflow with a message naming the refusal, and do
 not proceed to `open-session`. Note the existing convention you are joining: the workflow's result
@@ -472,7 +492,8 @@ declaration field broke no existing manifest.
 
 `resolveProfile` is a pure read plus a hash; calling it repeatedly is free and has no effect. The
 journaled step is idempotent by construction — that is what journaling means here: a resumed
-workflow replays the recorded digest rather than resolving again.
+workflow replays the recorded policy content and digest-bearing reference rather than resolving
+again.
 
 The migration is additive: it creates one table and adds no column to an existing one. Applying it
 twice is a no-op because `shikigami-migrate` tracks what it has applied. Rolling the code back
@@ -505,10 +526,11 @@ library cohort and the pg-migrate component), and
 `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` (the provider seam this plan
 constrains).
 
-Libraries: `hasql` and `hasql-transaction` for the profile table, both already in
-`shikigami-core/shikigami-core.cabal`; `keiro` for the journaled step, already there; and one new
-hashing dependency, whose released version must be verified against the authoritative registry and
-upstream tags before bounds are chosen.
+Libraries: `mori://hasql/hasql/packages/hasql` and
+`mori://hasql/hasql/packages/hasql-transaction` for the profile table, both already in
+`shikigami-core/shikigami-core.cabal`; `mori://shinzui/keiro/packages/keiro` for the journaled
+step, already there; and `mori://shinzui/baikai/packages/baikai` for canonical SHA-256 and the
+provider-call vocabulary, already pinned at 0.5.0.0. No new hashing dependency or bound was needed.
 
 Signatures that must exist at the end:
 
@@ -553,6 +575,43 @@ The journaled step is `StepName "resolve-profile"`, returning
 profile content and its digest-bearing reference, so replay can enforce the exact tuple set without
 re-reading the store. The step name and encoding are permanent; changes to the value are additive
 only.
+
+
+## Outcomes & Retrospective
+
+The plan delivered the complete fail-closed path on 2026-08-19.
+
+* PostgreSQL now stores immutable, versioned sanctioned profiles. Resolution checks exact
+  cardinality, canonical content digest, lifecycle, and validity window, and returns one of the
+  five typed refusals when the profile cannot be trusted. The focused database group has six
+  passing cases.
+* Agent declarations gained the optional `sanctionedProfile` requirement without changing old
+  JSON bytes or Dhall manifests. Repository-wide validation accepts 11 manifests and rejects only
+  the two intentional fixtures, `agents/broken.dhall` and `agents/detectors/schema.dhall`.
+* Fresh agent-run generations execute `resolve-profile` under
+  `shikigami-resolve-profile-v1` before `open-session`. The checked Keiro diff classifies the
+  change `ADDITIVE` and replay-neutral, scaffold regeneration is a no-op, and conformance passes.
+* The journal holds the complete `ResolvedProfile`, not only its reference. The crash/resume proof
+  replaces the stored row after resolution, then observes one resolver call and the unchanged
+  original content and digest after completion.
+* Skill dispatch checks the actual Baikai model/options tuple before any provider request or
+  session. Violations are typed, name the attempted tuple and pinned digest, and flow through the
+  workflow's permanent `Left Text` result. The database-free `run-behavior` command also refuses a
+  profiled agent instead of bypassing the constraint.
+* `nix develop -c cabal build all` succeeds. The final `nix develop -c cabal test all` run reports
+  314 individual checks across nine suites, all passing. Migration status is `applied=57`,
+  `pending=0`, `unknown=0`, `issues=0`; `nix fmt` and `just keiro-gate HEAD~2` pass.
+
+Three planned assumptions changed during implementation. The migration recipe takes a positional
+slug; canonical hashing was already present through baikai 0.5.0.0, so no hashing dependency was
+added; and a reference-only journal could not enforce the original policy after store mutation, so
+the durable value became the full resolved snapshot. The Keiro evolution classifier also required
+the new step to be wholly patch-guarded. These are deliberate corrections, not remaining gaps.
+
+The durable architecture decision is recorded in
+`docs/adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md`. Plans 51 and 52 can now treat
+the journaled snapshot as the one policy identity for evidence, compliance, signing, and serving;
+they must not resolve a second copy from the store.
 
 
 ## Reconciliation with the delivered plan 39 (2026-08-19)
@@ -613,14 +672,27 @@ plan 39 *is* done. The path is `domain/shikigami.keiro-workspace`, and the check
 ls domain/shikigami.keiro-workspace domain/shikigami-agent-run.keiro
 ```
 
-Declaring `StepName "resolve-profile"` is a two-line change to
-`domain/shikigami-agent-run.keiro`'s `body`, placed before `open-session`:
+Declaring `StepName "resolve-profile"` changes
+`domain/shikigami-agent-run.keiro`'s `body`, placed before `open-session` and wholly contained by
+the new rollout guard:
 
 ```text
-    step resolve-profile -> SanctionedExecutionProfileRef
+    patch shikigami-resolve-profile-v1 {
+      step resolve-profile -> ProfileResolution
+    }
 ```
 
 `resolve-profile` is already a valid wire word, so no rename is needed. Adding it changes
 `AgentRun.body`, which the generated conformance target asserts against the create-once
 `KeiroConformance.Expectations` module — so this plan must review and commit that change
 deliberately, and run `just keiro-diff <merge-base>` to see the finding classified before merging.
+
+
+## Revision Note
+
+2026-08-19: Updated during and after implementation to record the actual positional migration
+command, the already-available canonical digest dependency, the full `ResolvedProfile` journal
+contract, the `shikigami-resolve-profile-v1` rollout guard required by the checked Keiro diff, the
+provider API normalization, one-off command behavior, final validation evidence, and ADR-0007.
+These revisions replace assumptions that would either have failed current repository tooling or
+made replay enforce a different policy from the digest it reported.

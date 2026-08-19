@@ -16,6 +16,7 @@
 module Shikigami.Agent.CommandSpec (tests) where
 
 import Data.List (isInfixOf)
+import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command
   ( RoleInfo (..),
@@ -23,6 +24,9 @@ import Shikigami.Agent.Command
     agentRunRoleInfo,
     runBehaviorRoleInfo,
   )
+import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
+import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..))
+import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.App.Config (Role (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -62,8 +66,34 @@ tests =
       testCase "run-behavior keeps its agent and payload options" $
         assertHasAll runBehaviorRoleInfo ["--agent", "--payload"],
       testCase "agent-run keeps its agent and activity options" $
-        assertHasAll agentRunRoleInfo ["--agent", "--from-activity"]
+        assertHasAll agentRunRoleInfo ["--agent", "--from-activity"],
+      testCase "run-behavior accepts a declaration with no profile" $
+        profileRequirementRefusal (testDecl Nothing) @?= Nothing,
+      testCase "run-behavior refuses a profile it cannot resolve before dispatch" $
+        case profileRequirementRefusal (testDecl (Just requiredProfile)) of
+          Nothing -> assertBool "a required profile must be refused" False
+          Just refusal -> do
+            assertBool "the refusal names the profile" ("sanctioned-review" `Text.isInfixOf` refusal)
+            assertBool "the refusal directs the caller to the resolving command" ("shikigami-agent-run" `Text.isInfixOf` refusal)
     ]
+
+testDecl :: Maybe ProfileRequirement -> AgentDecl
+testDecl sanctionedProfile =
+  AgentDecl
+    { name = "profile-command-test",
+      description = "profile command test",
+      trigger = Event {eventType = "test"},
+      behavior = Agent.Skill {path = "agents/skills/triage-note"},
+      sinks = [],
+      sanctionedProfile
+    }
+
+requiredProfile :: ProfileRequirement
+requiredProfile =
+  ProfileRequirement
+    { profileId = "sanctioned-review",
+      version = Just "1"
+    }
 
 assertHasAll :: RoleInfo -> [String] -> IO ()
 assertHasAll info flags =

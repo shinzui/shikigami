@@ -49,7 +49,8 @@ packageBoundaryTests =
                   description = "proves shikigami-api may import shikigami-core",
                   trigger = Schedule {cron = "* * * * *"},
                   behavior = Skill {path = "skills/none"},
-                  sinks = []
+                  sinks = [],
+                  sanctionedProfile = Nothing
                 }
         let AgentDecl {name = declaredName} = decl
         declaredName @?= ("boundary-probe" :: Text)

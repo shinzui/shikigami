@@ -1,13 +1,16 @@
 module Shikigami.Agent.Command.RunBehavior
   ( runRunBehavior,
+    profileRequirementRefusal,
   )
 where
 
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
+import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
@@ -42,13 +45,33 @@ runRunBehavior path mpayload config = do
     Left err -> do
       hPutStrLn stderr ("run-behavior: load error in " <> path <> ": " <> show err)
       exitFailure
-    Right decl -> do
-      env <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
-      -- No recalled memories: recall needs a database and this command opens
-      -- none, so the behavior runs on the trigger payload alone.
-      resultE <- runBehavior env decl (triggerOnly payload)
-      case resultE of
-        Left runErr -> do
-          hPutStrLn stderr ("run-behavior: " <> show runErr)
+    Right decl ->
+      case profileRequirementRefusal decl of
+        Just refusal -> do
+          hPutStrLn stderr ("run-behavior: " <> Text.unpack refusal)
           exitFailure
-        Right v -> TLIO.putStrLn (encodeToLazyText v)
+        Nothing -> do
+          env <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
+          -- No recalled memories: recall needs a database and this command opens
+          -- none, so the behavior runs on the trigger payload alone.
+          resultE <- runBehavior env decl (triggerOnly payload)
+          case resultE of
+            Left runErr -> do
+              hPutStrLn stderr ("run-behavior: " <> show runErr)
+              exitFailure
+            Right v -> TLIO.putStrLn (encodeToLazyText v)
+
+-- | This command deliberately opens no database, so it cannot honestly run an
+-- agent whose policy must first be resolved. Refuse before constructing the
+-- behavior environment (and therefore before provider dispatch) and direct the
+-- caller to the one-off command that does have the required store boundary.
+profileRequirementRefusal :: AgentDecl -> Maybe Text
+profileRequirementRefusal AgentDecl {sanctionedProfile} =
+  case sanctionedProfile of
+    Nothing -> Nothing
+    Just ProfileRequirement {profileId} ->
+      Just
+        ( "agent requires sanctioned profile "
+            <> profileId
+            <> "; use shikigami-agent-run so it can resolve the profile before dispatch"
+        )

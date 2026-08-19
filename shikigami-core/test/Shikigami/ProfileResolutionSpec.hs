@@ -1,5 +1,3 @@
-{-# LANGUAGE MultilineStrings #-}
-
 module Shikigami.ProfileResolutionSpec (tests) where
 
 import Data.Aeson (Value, toJSON)
