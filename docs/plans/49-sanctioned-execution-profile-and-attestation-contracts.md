@@ -69,13 +69,15 @@ under Integration Points.
       Two tests: `AgentVersionRef` bytes are pinned as a literal, and a declaration-only
       `AgentArtifactSet` is shown encoding to a one-key object with six optional digests absent
       rather than null. (2026-08-19)
-- [ ] M3: `Shikigami.Attestation.Reviewed` — `ReviewedArtifact` over the revision-pinned
-      repository vocabulary, plus `NonConformingReason`. **`EvidenceStrength` is no longer
-      defined here** — `baikai 0.5.0.0`'s `Baikai.Evidence` publishes it. Re-export baikai's if a
-      local name is convenient; do not declare a second four-constructor sum. See Surprises &
-      Discoveries.
-- [ ] M3: tests proving a branch name or pull-request number alone cannot construct a
-      `ReviewedArtifact`.
+- [x] M3: `Shikigami.Attestation.Reviewed` — `ReviewedArtifact` over the revision-pinned
+      repository vocabulary, plus `NonConformingReason`. baikai's `EvidenceStrength` is imported
+      and re-exported for the per-call floor, as revised. kikan IR-6's four trust tiers turned out
+      to be a *different* scale and are declared separately as `AttestationStrength` in
+      `Shikigami.Attestation.Strength` — see Surprises & Discoveries. (2026-08-19)
+- [x] M3: tests proving a branch name or pull-request number alone cannot construct a
+      `ReviewedArtifact` — a short hash, an empty string, `main`, `release/2026-08`, a PR number,
+      and a 41-character near-miss are all rejected, on the decode path as well as by
+      `mkFullCommit`. (2026-08-19)
 - [ ] M4: `Shikigami.Attestation.Envelope` — the versioned `AgentRunAttestation` mirror, its
       canonical encoding, and `attestationPayloadDigest`.
 - [ ] M4: conformance test comparing the canonical encoding against the golden payload

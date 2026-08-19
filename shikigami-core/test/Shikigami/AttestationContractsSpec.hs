@@ -15,6 +15,8 @@ import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, 
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy (ByteString)
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as Vector
 import Shikigami.Attestation.Agent
@@ -49,6 +51,19 @@ import Shikigami.Attestation.Profile
     noSignerRequirements,
     unlimitedProfileLimits,
   )
+import Shikigami.Attestation.Reviewed
+  ( DiffDigest (..),
+    NonConformingReason (..),
+    RepositoryId (..),
+    ReviewedArtifact (..),
+    fullCommitText,
+    mkFullCommit,
+  )
+import Shikigami.Attestation.Strength
+  ( AttestationStrength (..),
+    parseAttestationStrength,
+    renderAttestationStrength,
+  )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
@@ -57,7 +72,9 @@ tests =
   testGroup
     "attestation contracts"
     [ profileTests,
-      agentTests
+      agentTests,
+      reviewedTests,
+      strengthTests
     ]
 
 -- ---------------------------------------------------------------------------
@@ -279,6 +296,198 @@ pinnedDeclarationOnlyBytes =
   "{\"declarationDigest\":\"sha256:decl\"}"
 
 -- ---------------------------------------------------------------------------
+-- Milestone 3 -- reviewed artifact, non-conformance, and strength
+-- ---------------------------------------------------------------------------
+
+-- | A 64-character SHA-256 commit hash.
+baseHash :: Text
+baseHash = Text.replicate 64 "a"
+
+headHash :: Text
+headHash = Text.replicate 40 "b"
+
+reviewedTests :: TestTree
+reviewedTests =
+  testGroup
+    "reviewed artifact"
+    [ -- The rule both upstream documents insist on: a moving reference cannot
+      -- identify a review. These cases are what makes it enforcement rather
+      -- than documentation.
+      testCase "a short hash is rejected" do
+        assertLeft "abc123" (mkFullCommit "abc123"),
+      testCase "an empty hash is rejected" do
+        assertLeft "empty" (mkFullCommit ""),
+      testCase "a branch name is rejected" do
+        assertLeft "main" (mkFullCommit "main")
+        assertLeft "release branch" (mkFullCommit "release/2026-08"),
+      testCase "a pull-request number is rejected" do
+        assertLeft "PR number" (mkFullCommit "4173"),
+      testCase "a 41-character near-miss is rejected" do
+        assertLeft "41 chars" (mkFullCommit (Text.replicate 41 "a")),
+      testCase "full 40- and 64-character hashes are accepted" do
+        assertRight "sha-1 length" (mkFullCommit headHash)
+        assertRight "sha-256 length" (mkFullCommit baseHash),
+      -- Case is meaningless in a hex digest but not to a byte-level canonical
+      -- encoding: two attestations of the same commit differing only in case
+      -- would digest differently, and a verifier would report a mismatch it
+      -- could not tell from tampering.
+      testCase "an uppercase hash normalises to lowercase" do
+        case mkFullCommit (Text.toUpper baseHash) of
+          Left err -> assertBool ("expected acceptance, got " <> show err) False
+          Right commit -> assertEqual "normalised" baseHash (fullCommitText commit),
+      -- The constructor is unexported, so the decode path is the other way a
+      -- FullCommit could be forged -- and attestations arrive as JSON from
+      -- elsewhere, so this is the path that actually matters in production.
+      testCase "a short hash in JSON fails to decode rather than becoming a value" do
+        case fromJSON @ReviewedArtifact (toJSON shortHeadArtifactJson) of
+          Success _ -> assertBool "a short head commit must not decode" False
+          Error _ -> pure (),
+      testCase "a reviewed artifact round-trips" do
+        roundTrips "reviewed artifact" sampleReviewedArtifact,
+      -- A pull request is decoration. Setting one changes nothing about the
+      -- commits, which is the point: it can never be what a verdict rests on.
+      testCase "a pull-request identity does not substitute for the commits" do
+        let withPr = sampleReviewedArtifact {pullRequest = Just "4173"}
+        assertEqual "base is unchanged" (baseCommit sampleReviewedArtifact) (baseCommit withPr)
+        assertEqual "head is unchanged" (headCommit sampleReviewedArtifact) (headCommit withPr)
+        roundTrips "artifact with a pull request" withPr,
+      testCase "an absent pull request leaves no null behind" do
+        assertBool
+          "no null in the encoding"
+          (not (hasNull (toJSON sampleReviewedArtifact))),
+      -- A roll-up records every reason it found, so every reason has to survive
+      -- storage with its specifics intact.
+      testCase "every non-conforming reason round-trips with its specifics" do
+        mapM_ (roundTrips "reason") everyReason,
+      -- A deterministic step is accounted for honestly rather than left as a
+      -- gap or filled with a fabricated call, so this marker must never be
+      -- confusable with a failure.
+      testCase "NotApplicable is distinguishable from every failure reason" do
+        let notApplicable = NotApplicable {step = "render-summary"}
+            failures = filter (/= notApplicable) everyReason
+        -- It must be one of the reasons, and the only one of its kind.
+        assertEqual
+          "exactly one NotApplicable in the taxonomy"
+          1
+          (length everyReason - length failures)
+        -- Distinctness has to survive encoding, since that is how a consumer
+        -- sees it: a completeness annotation must not arrive wearing the same
+        -- tag as a failure. Comparing the encoded discriminator is what proves
+        -- it, rather than comparing the values we just partitioned by equality.
+        assertBool
+          "no failure reason encodes under the not_applicable tag"
+          (notElem (reasonTag notApplicable) (map reasonTag failures))
+        assertEqual "the tag is the snake-cased constructor" (Just "not_applicable") (reasonTag notApplicable)
+        assertEqual
+          "every reason has a distinct tag from at least the marker"
+          (length failures)
+          (length (filter (/= Just "not_applicable") (map reasonTag failures)))
+    ]
+
+sampleReviewedArtifact :: ReviewedArtifact
+sampleReviewedArtifact =
+  ReviewedArtifact
+    { repository = RepositoryId "mori://shinzui/shikigami",
+      baseCommit = either (error . Text.unpack) id (mkFullCommit baseHash),
+      headCommit = either (error . Text.unpack) id (mkFullCommit headHash),
+      diffDigest = DiffDigest "sha256:diff",
+      pathScope = ["shikigami-core/src"],
+      pullRequest = Nothing
+    }
+
+-- | The same object with an abbreviated head commit, as it would arrive on the
+-- wire from a party that did not respect the rule.
+shortHeadArtifactJson :: Value
+shortHeadArtifactJson =
+  Object
+    ( KeyMap.fromList
+        [ ("repository", String "mori://shinzui/shikigami"),
+          ("baseCommit", String baseHash),
+          ("headCommit", String "bbbbbbb"),
+          ("diffDigest", String "sha256:diff"),
+          ("pathScope", Array (Vector.fromList [String "shikigami-core/src"]))
+        ]
+    )
+
+-- | One value of every constructor, each carrying specifics.
+everyReason :: [NonConformingReason]
+everyReason =
+  [ ModelNotPermitted {callId = "call-1", modelId = "claude-sonnet-5"},
+    ThinkingTranslationNotPermitted
+      { callId = "call-2",
+        requestedThinking = "high",
+        effectiveThinking = "medium"
+      },
+    ProhibitedDefaultThinking {callId = "call-3"},
+    ProhibitedAlias
+      { callId = "call-4",
+        alias = "claude-latest",
+        resolvedModelId = "claude-opus-5-20260401"
+      },
+    ProhibitedProviderFallback {callId = "call-5", fromProvider = "anthropic", toProvider = "stub"},
+    ProhibitedModelFallback {callId = "call-6", fromModelId = "opus", toModelId = "haiku"},
+    ProhibitedEffortClamping {callId = "call-7", requestedThinking = "max", clampedTo = "high"},
+    ProhibitedTransport {callId = "call-8", transport = "cli"},
+    ProhibitedEndpoint {callId = "call-9", endpointClass = "batch"},
+    MissingCallEvidence {callId = "call-10"},
+    MissingRetryEvidence {callId = "call-11", attempt = 2},
+    MissingContinuationEvidence {callId = "call-12"},
+    MissingDelegatedChildEvidence {childRunId = "run-child-1"},
+    MissingCorrelationField {callId = "call-13", correlationField = "request-id"},
+    ReviewedArtifactMismatch {expectedDigest = "sha256:aaa", actualDigest = "sha256:bbb"},
+    ReviewResultDigestMismatch {expectedDigest = "sha256:ccc", actualDigest = "sha256:ddd"},
+    EvidenceBelowRequiredStrength
+      { callId = "call-14",
+        requiredStrength = EvidenceFullyObserved,
+        observedStrength = EvidenceRequestedOnly
+      },
+    LimitExceeded {limitName = "maxCalls", limitValue = "20", observedValue = "21"},
+    NotApplicable {step = "render-summary"}
+  ]
+
+strengthTests :: TestTree
+strengthTests =
+  testGroup
+    "attestation strength"
+    [ -- The ordering is the semantics, so it gets a test of its own. It exists
+      -- to CHECK a minimum -- ask observed >= required -- and never to promote a
+      -- weaker claim to a stronger one.
+      testCase "the four tiers ascend in kikan IR-6's order" do
+        assertBool
+          "declared < runtime-observed < runtime-attested < provider-attested"
+          (Declared < RuntimeObserved && RuntimeObserved < RuntimeAttested && RuntimeAttested < ProviderAttested),
+      -- Checking a minimum is the only sanctioned use, shown working.
+      testCase "a declaration-only record does not satisfy a runtime-attested policy" do
+        assertBool "declared is insufficient" (not (Declared >= RuntimeAttested))
+        assertBool "runtime-observed is insufficient" (not (RuntimeObserved >= RuntimeAttested))
+        assertBool "runtime-attested suffices" (RuntimeAttested >= RuntimeAttested)
+        assertBool "provider-attested suffices" (ProviderAttested >= RuntimeAttested),
+      -- These exact strings are published in kikan IR-6 and read by verifiers
+      -- elsewhere, so they are the shared contract rather than a local style
+      -- choice -- note the hyphens, which eventAesonOptions would not produce.
+      testCase "the wire spelling is kikan's hyphenated vocabulary" do
+        assertEqual
+          "canonical spellings"
+          ["declared", "runtime-observed", "runtime-attested", "provider-attested"]
+          (map renderAttestationStrength [Declared, RuntimeObserved, RuntimeAttested, ProviderAttested])
+        assertEqual
+          "encoded"
+          ["\"declared\"", "\"runtime-observed\"", "\"runtime-attested\"", "\"provider-attested\""]
+          (map (encode . toJSON) [Declared, RuntimeObserved, RuntimeAttested, ProviderAttested]),
+      testCase "every tier round-trips" do
+        mapM_ (roundTrips "strength") [Declared, RuntimeObserved, RuntimeAttested, ProviderAttested],
+      -- IR-6 invariant 7: an unknown strength fails closed. Defaulting an
+      -- unrecognised name to Declared would be a silent demotion, just as wrong
+      -- as a promotion.
+      testCase "an unknown strength is rejected rather than defaulted" do
+        assertLeft "unknown name" (parseAttestationStrength "mostly-observed")
+        assertLeft "underscored spelling" (parseAttestationStrength "runtime_observed")
+        case fromJSON @AttestationStrength (String "mostly-observed") of
+          Success _ -> assertBool "an unknown strength must not decode" False
+          Error _ -> pure ()
+    ]
+
+-- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
 
@@ -288,6 +497,26 @@ roundTrips label value =
   case fromJSON (toJSON value) of
     Error err -> assertBool (label <> " failed to decode: " <> err) False
     Success decoded -> assertEqual (label <> " round-trips") value decoded
+
+-- | The @type@ discriminator a reason encodes under.
+reasonTag :: NonConformingReason -> Maybe Text
+reasonTag reason = case toJSON reason of
+  Object o -> case KeyMap.lookup "type" o of
+    Just (String tag) -> Just tag
+    _ -> Nothing
+  _ -> Nothing
+
+-- | Assert a validating constructor refused its input.
+assertLeft :: (Show a) => String -> Either e a -> IO ()
+assertLeft label = \case
+  Left _ -> pure ()
+  Right ok -> assertBool (label <> " should have been rejected, got " <> show ok) False
+
+-- | Assert a validating constructor accepted its input.
+assertRight :: (Show e) => String -> Either e a -> IO ()
+assertRight label = \case
+  Right _ -> pure ()
+  Left err -> assertBool (label <> " should have been accepted, got " <> show err) False
 
 -- | Does a 'Null' appear anywhere in this value, at any depth?
 hasNull :: Value -> Bool
