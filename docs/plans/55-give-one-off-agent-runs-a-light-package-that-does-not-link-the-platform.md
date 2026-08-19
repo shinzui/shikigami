@@ -5,6 +5,7 @@ title: "Give one-off agent runs a light package that does not link the platform"
 kind: exec-plan
 created_at: 2026-08-19T16:37:01Z
 intention: "intention_01kyv7saq6ew2a2k5vw230pw1f"
+master_plan: "docs/masterplans/2-production-reality-de-stub-the-runtime-behavior-and-integration-path.md"
 ---
 
 # Give one-off agent runs a light package that does not link the platform

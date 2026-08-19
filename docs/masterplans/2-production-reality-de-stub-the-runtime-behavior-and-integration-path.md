@@ -108,6 +108,7 @@ with a real model) but is not blocked by it.
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-07-31), except the migration executable — see Surprises |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
+| F4 | Give one-off agent runs a light package that does not link the platform | docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md | F1 | plan 48 | Not Started |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Complete (2026-07-31) |
@@ -118,7 +119,19 @@ with a real model) but is not blocked by it.
 
 F1 is the first implementation step. F2 follows F1 because configuration ownership is
 expressed at executable and package boundaries. F3 follows F2 because the major library ports
-must land into the final package/configuration shape. Its former external release gate is
+must land into the final package/configuration shape.
+
+F4 (added 2026-08-19) corrects F1 rather than extending it. F1 deleted `shikigami-cli` as an
+umbrella dispatcher — correctly, because it depended on `shikigami-api`, `-core`, `-server`,
+and `-workers` at once — without knowing that the package also carried a product intent: a
+one-off agent runner for consumers who are not running the Kikan platform, which Kikan itself
+does not use. That intent was recorded nowhere, so F1 read the package as pure architecture.
+The capability survived but now links Kafka, PGMQ, Shibuya, and the OTel exporter, because both
+one-off commands sit in `shikigami-workers` and every executable there depends on the whole
+library. F4 adds a seventh package depending only on `shikigami-core`, moves the two commands
+into it, and makes the boundary a test rather than a convention. It should land before
+`docs/plans/48-add-a-portable-one-off-repository-agent-harness.md`, whose portable harness would
+otherwise be built inside the package F4 exists to move it out of. Its former external release gate is
 satisfied by Kioku `v0.2.0.0`.
 EP-1, EP-3, and EP-4 then consume F3. EP-2 has two hard dependencies: F3 and
 `docs/plans/22-outbound-authentication-for-sink-clients.md`: approval asks are outbound
