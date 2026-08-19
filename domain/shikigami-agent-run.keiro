@@ -12,9 +12,12 @@
 #     change disguised as a documentation change. See
 #     docs/architecture/shikigami-domain-inventory.md.
 #   * The per-approval awaits `approval:<SinkKind>:<ordinal>` and their
-#     `:notify` steps, and the flow path's `emit-signal:<ordinal>` steps. A
+#     `:notify` steps, and the flow path's `emit-signal:<label>` steps. A
 #     workflow label is a compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*);
-#     it can carry neither a colon nor a runtime-computed suffix.
+#     it can carry neither a colon nor a runtime-computed suffix. The
+#     emit-signal labels are stable as of the patch declared below, but a
+#     colon still keeps them out of this specification; the family's owner is
+#     docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md.
 language keiro-dsl 5
 context shikigami
 layout collocated
@@ -46,6 +49,15 @@ workflow AgentRun
     step run-behavior -> BehaviorOutput
     step classify -> RiskVerdict
     await await-ack -> ApprovalDecision
+    # Shikigami.Flow.Capability.runSink decides once per interpreted flow run
+    # whether a sink emission's journal label is the caller's stable token
+    # (`emit-signal:alert`) or the old per-run ordinal (`emit-signal:0`). The
+    # guard is required because switching schemes renames every emission at
+    # once, which would orphan a parked flow's alert record and enqueue it a
+    # second time. The block is empty because every label it guards carries a
+    # colon and so cannot be declared; see docs/workflow-versioning.md.
+    patch shikigami-emit-signal-labels-v1 {
+    }
     step dispatch-sinks -> SinkResults
     step fail-session -> FailedSession
     step record -> RecordedLearning

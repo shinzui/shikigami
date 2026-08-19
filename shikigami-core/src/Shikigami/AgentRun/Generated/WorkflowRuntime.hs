@@ -40,7 +40,7 @@ awaitLabels :: [Text]
 awaitLabels = ["await-ack"]
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList []
+declaredPatches = Set.fromList [PatchId "shikigami-emit-signal-labels-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

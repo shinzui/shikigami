@@ -84,9 +84,17 @@ This section must always reflect the actual current state of the work.
       default-options call site in `shikigami-core/src`, `shikigami-workers/src`,
       `shikigami-server/src`, or `shikigami-agent/src`; `cabal test shikigami-core-test`
       is green at 176 tests, unchanged.
-- [ ] M3: Change the `Sink` capability so `emitSignal` takes a stable label; add the
-      `shikigami.emit-signal-labels-v1` patch guard in `runSink`; update
-      `atRiskCustomerFlow` call sites and existing tests.
+- [x] M3 (2026-08-19): Declared `patch shikigami-emit-signal-labels-v1 { }` in
+      `domain/shikigami-agent-run.keiro`, regenerated with `just keiro-scaffold`, and accepted
+      the change in the hand-owned
+      `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`
+      (both the `patches` and the `body` fact moved). `EmitSignal` now carries a `Text` label,
+      `runSink` decides the naming scheme once per run under the patch, and
+      `atRiskCustomerFlow` passes `"alert"` and `"escalate"`. `FlowLifecycleSpec` runs through
+      `shikigamiWorkflowRunOptions` and expects `outbox:flow-sink-spike:emit-signal:alert`;
+      `AgentWorkflowSpec.loadLifecycleStepKeys` now also filters `patchSetStepName`.
+      `cabal test shikigami-core-test` green at 176; `cabal test keiro-shikigami-conformance`
+      green at 12.
 - [ ] M4: Expose `registeredFlowNames`; make `shikigami validate` and worker boot fail on
       unknown `Flow{name}`.
 - [ ] M5: Add `shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs` deploy-simulation

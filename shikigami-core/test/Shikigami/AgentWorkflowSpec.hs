@@ -14,7 +14,7 @@ import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getC
 import Effectful (Eff)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
@@ -661,10 +661,19 @@ fireDueApprovalTimer appEnv = do
   fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) approvalTimeoutFireAction)
   assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
 
+-- | The lifecycle step names one agent run journaled, with Keiro's reserved
+-- bookkeeping removed so the assertion is about this workflow's own steps.
+--
+-- @__workflow_patches__@ is filtered alongside @__workflow_completed__@ because
+-- a fresh generation records the deployment's active patch set under it whenever
+-- that set is non-empty (@recordPatchSetIfFresh@ in @Keiro.Workflow@). Shikigami's
+-- set became non-empty when @Shikigami.Flow.Capability.runSink@ took its
+-- @shikigami-emit-signal-labels-v1@ guard, so every agent-run journal carries the
+-- record now. It is additive bookkeeping, not a lifecycle step.
 loadLifecycleStepKeys :: AppEnv -> RunJob -> IO (Either String (Set.Set Text))
 loadLifecycleStepKeys appEnv runJob = do
   result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
-  pure (first show (Set.delete completedStepName . Map.keysSet <$> result))
+  pure (first show (Set.delete patchSetStepName . Set.delete completedStepName . Map.keysSet <$> result))
 
 expectedLifecycleSteps :: Set.Set Text
 expectedLifecycleSteps =

@@ -8,7 +8,7 @@ import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secon
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflow, step)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
@@ -44,6 +44,7 @@ import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (Delivered, DeniedOutcome), SinkResult (..))
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -70,10 +71,10 @@ tests =
         case lookupFlow runtime "unknown-flow" of
           Nothing -> pure ()
           Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
-      testCase "trivial flow completes through keiro runWorkflow" do
+      testCase "trivial flow completes through keiro runWorkflowWith" do
         outcome <- runFlowWorkflow completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
-      testCase "sleeping flow suspends through keiro runWorkflow" do
+      testCase "sleeping flow suspends through keiro runWorkflowWith" do
         outcome <- runFlowWorkflow sleepingFlow (WorkflowId "flow-sleeping-spike")
         assertEqual "sleeping flow suspends" (Right Suspended) outcome,
       testCase "currentActivity exposes the triggering activity envelope" do
@@ -86,7 +87,7 @@ tests =
         (outcome, count) <- runFlowWorkflowWithAgent "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
-          (Right (Completed (toJSON (SinkResult SKizashiSignal (Delivered "outbox:flow-sink-spike:emit-signal:0")))))
+          (Right (Completed (toJSON (SinkResult SKizashiSignal (Delivered "outbox:flow-sink-spike:emit-signal:alert")))))
           outcome
         assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do
@@ -193,7 +194,7 @@ sinkFlow =
   FlowDef
     { name = "sink-spike",
       lifecycle = atRiskCustomerLifecycleDiagram,
-      run = \_payload -> toJSON <$> emitSignal sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
+      run = \_payload -> toJSON <$> emitSignal "alert" sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
     }
 
 twoStepFlow :: (FlowEffects es) => Value -> Eff es Value
@@ -250,7 +251,8 @@ runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
     . runErrorNoCallStack
     . withKirokuStore (connectionSettings appEnv)
     . runStoreResource
-    $ runWorkflow
+    $ runWorkflowWith
+      shikigamiWorkflowRunOptions
       (WorkflowName "shikigami.flow.spike")
       workflowId
       body

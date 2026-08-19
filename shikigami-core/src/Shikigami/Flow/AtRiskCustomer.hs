@@ -46,7 +46,7 @@ atRiskCustomerFlow approval deadline payload = do
   if level verdict /= "high"
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (alertFor verdict activity) (toJSON verdict)
+      _ <- emitSignal "alert" (alertFor verdict activity) (toJSON verdict)
       ack <- awaitAcknowledgement approval (StepName "await-ack") (ackRequest verdict activity) deadline
       case ack of
         Acknowledged answer -> do
@@ -56,7 +56,7 @@ atRiskCustomerFlow approval deadline payload = do
           _ <- remember (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal (escalationFor verdict activity) (toJSON verdict)
+          _ <- emitSignal "escalate" (escalationFor verdict activity) (toJSON verdict)
           _ <- remember (escalatedNote verdict)
           pure (escalatedValue verdict)
 
