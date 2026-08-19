@@ -1,0 +1,55 @@
+[
+  {
+    "schemaVersion": 1,
+    "resolutionId": "resolution-accepted",
+    "idempotencyKey": "resolution-command-accepted",
+    "reviewId": "review-target-suspect",
+    "outcome": "accepted",
+    "resolver": "architecture-council",
+    "reason": "The cited contradiction is confirmed.",
+    "resolvedAt": "2026-08-19T20:00:00Z",
+    "resultingApplicability": {
+      "projects": [{"name": "shinzui/example-service", "repository": "repo_target"}],
+      "paths": ["docs/adr/0009-disable-propagation.md"],
+      "dependencies": [],
+      "practices": ["opentelemetry"]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "resolutionId": "resolution-rejected",
+    "idempotencyKey": "resolution-command-rejected",
+    "reviewId": "review-reference-suspect",
+    "outcome": "rejected",
+    "resolver": "architecture-council",
+    "reason": "The upstream excerpt did not apply to the target configuration.",
+    "resolvedAt": "2026-08-19T20:01:00Z"
+  },
+  {
+    "schemaVersion": 1,
+    "resolutionId": "resolution-narrowed",
+    "idempotencyKey": "resolution-command-narrowed",
+    "reviewId": "review-legitimate-exception",
+    "outcome": "narrowed",
+    "resolver": "architecture-council",
+    "reason": "The exception applies only to the regulated adapter.",
+    "resolvedAt": "2026-08-19T20:02:00Z",
+    "resultingApplicability": {
+      "projects": [{"name": "shinzui/example-service", "repository": "repo_target"}],
+      "paths": ["src/Regulated/Adapter.hs"],
+      "dependencies": [],
+      "practices": ["opentelemetry"]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "resolutionId": "resolution-superseded",
+    "idempotencyKey": "resolution-command-superseded",
+    "reviewId": "review-unresolved",
+    "outcome": "superseded",
+    "resolver": "architecture-council",
+    "reason": "A newer revision produced a complete review.",
+    "resolvedAt": "2026-08-19T20:03:00Z",
+    "supersedingReviewId": "review-consistent"
+  }
+]

@@ -36,8 +36,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-19T21:43:33Z) Preflight: reconcile this July plan with the current seven-package tree, shared attestation vocabulary, ADR corpus, core test layout, and released `uuid` dependency.
 - [x] (2026-08-19T21:52:41Z) M1: define and round-trip shared repository identity plus version-1 trigger, revision-range, adoption, owner, and provenance types.
-- [ ] M2: define the closed verdict, claim, confidence, applicability, lineage, and re-review types.
-- [ ] M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
+- [x] (2026-08-19T21:57:24Z) M2: define the closed verdict, claim, confidence, applicability, lineage, and re-review types.
+- [x] (2026-08-19T21:57:24Z) M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
 - [ ] M3: add deterministic `ReviewId` derivation and semantic validators.
 - [ ] M3: add valid/invalid golden fixtures and export the contract from `shikigami-core`.
 - [ ] Final: focused core tests, package-architecture tests, and `cabal test all` pass with no runtime/database dependency.
@@ -152,6 +152,13 @@ Compare the result against the original purpose.
   changing its existing JSON. `Shikigami.PracticeReview` now decodes the complete version-1
   trigger/adoption vocabulary and rejects producer-selected specialists. Six focused tests
   and all 39 attestation-contract tests pass; no workflow or runtime code changed.
+
+- Milestone 2 (2026-08-19): the same public module now provides the five-way verdict,
+  pinned content/evidence identities, fact/inference claims, execution lineage, bounded
+  applicability, semantic owner routing, exception approval, re-review condition, and four
+  explicit resolution outcomes. Checked-in fixture arrays prove all five classifications and
+  all four resolution outcomes decode and round-trip. The focused suite now passes eight
+  tests without adding a runtime dependency.
 
 
 ## Context and Orientation

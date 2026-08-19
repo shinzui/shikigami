@@ -20,6 +20,25 @@ module Shikigami.PracticeReview
     PracticeReviewTriggerKind (..),
     ChangedReference (..),
     PracticeReviewTrigger (..),
+    ResolutionId (..),
+    EvidenceId (..),
+    ClaimId (..),
+    ContentHash (..),
+    Confidence (..),
+    ClaimKind (..),
+    EvidenceRole (..),
+    ContentReference (..),
+    EvidenceItem (..),
+    PracticeReviewClaim (..),
+    ReviewLineage (..),
+    RecommendedOwnerRole (..),
+    RecommendedOwner (..),
+    ExceptionApproval (..),
+    ReReviewCondition (..),
+    PracticeReviewClassification (..),
+    PracticeReviewVerdict (..),
+    ResolutionOutcome (..),
+    PracticeReviewResolution (..),
   )
 where
 
@@ -203,6 +222,212 @@ instance FromJSON PracticeReviewTrigger where
     | KeyMap.member "candidates" object = fail "PracticeReviewTrigger must not name specialist candidates"
     | otherwise = genericParseJSON practiceReviewAesonOptions value
   parseJSON value = genericParseJSON practiceReviewAesonOptions value
+
+-- | Stable identity of one explicit human resolution command.
+newtype ResolutionId = ResolutionId {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | Identity of one pinned evidence item within a verdict.
+newtype EvidenceId = EvidenceId {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | Identity of one claim within a verdict.
+newtype ClaimId = ClaimId {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | Digest supplied by the revision-pinned content plane.
+newtype ContentHash = ContentHash {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | Integer confidence percentage. Validation accepts values from 0 through
+-- 100 inclusive.
+newtype Confidence = Confidence {value :: Int}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | Whether cited content states a claim directly or supports a conclusion.
+data ClaimKind = Fact | Inference
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ClaimKind where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON ClaimKind where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | Which bounded evidence collection an item belongs to.
+data EvidenceRole = TargetEvidence | ReferenceEvidence | UpstreamEvidence
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON EvidenceRole where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON EvidenceRole where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | One immutable repository path and its content digest.
+data ContentReference = ContentReference
+  { project :: !ProjectRef,
+    provenance :: !RepoRef,
+    path :: !RelativePath,
+    contentHash :: !ContentHash
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ContentReference where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON ContentReference where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | A pinned content identity that claims can cite by 'EvidenceId'.
+data EvidenceItem = EvidenceItem
+  { evidenceId :: !EvidenceId,
+    role :: !EvidenceRole,
+    content :: !ContentReference
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON EvidenceItem where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON EvidenceItem where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | One material or contextual statement in a verdict.
+data PracticeReviewClaim = PracticeReviewClaim
+  { claimId :: !ClaimId,
+    kind :: !ClaimKind,
+    statement :: !Text,
+    material :: !Bool,
+    evidenceIds :: ![EvidenceId]
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON PracticeReviewClaim where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON PracticeReviewClaim where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | Parent router and child specialist execution lineage.
+data ReviewLineage = ReviewLineage
+  { parentSessionId :: !Text,
+    childSessionId :: !Text,
+    parentWorkflowId :: !Text,
+    childWorkflowId :: !Text,
+    priorReviewId :: !(Maybe ReviewId)
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ReviewLineage where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON ReviewLineage where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | Closed semantic role selected for attention routing.
+data RecommendedOwnerRole
+  = TargetOwner
+  | PracticeOwner
+  | TriageOwner
+  | JointOwners
+  | ExceptionApprover
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON RecommendedOwnerRole where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON RecommendedOwnerRole where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | A semantic owner role plus the already-resolved principals it denotes.
+data RecommendedOwner = RecommendedOwner
+  { role :: !RecommendedOwnerRole,
+    principals :: ![OwnerPrincipal]
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON RecommendedOwner where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON RecommendedOwner where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | Whether a legitimate exception still needs explicit approval.
+data ExceptionApproval = NoApproval | ApprovalRequired
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ExceptionApproval where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON ExceptionApproval where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | What material change should cause this conclusion to be reviewed again.
+data ReReviewCondition = ReReviewCondition
+  { condition :: !Text,
+    watches :: ![RepoRef]
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ReReviewCondition where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON ReReviewCondition where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | The complete semantic result vocabulary. Runtime and delivery failures are
+-- deliberately not constructors here.
+data PracticeReviewClassification
+  = Consistent
+  | TargetSuspect
+  | ReferenceSuspect
+  | LegitimateException
+  | Unresolved
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON PracticeReviewClassification where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON PracticeReviewClassification where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | A provisional, evidence-bearing specialist verdict.
+data PracticeReviewVerdict = PracticeReviewVerdict
+  { schemaVersion :: !Int,
+    reviewId :: !ReviewId,
+    triggerIdempotencyKey :: !Text,
+    practice :: !PracticeKey,
+    specialist :: !Text,
+    lineage :: !ReviewLineage,
+    targetEvidence :: ![EvidenceItem],
+    referenceEvidence :: ![EvidenceItem],
+    upstreamEvidence :: ![EvidenceItem],
+    claims :: ![PracticeReviewClaim],
+    confidence :: !Confidence,
+    routingRationale :: !Text,
+    classification :: !PracticeReviewClassification,
+    recommendedOwner :: !(Maybe RecommendedOwner),
+    recommendedAction :: !Text,
+    exceptionApproval :: !ExceptionApproval,
+    reReviewCondition :: !ReReviewCondition,
+    applicability :: !Applicability
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON PracticeReviewVerdict where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON PracticeReviewVerdict where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | The only outcomes an explicit resolver can record.
+data ResolutionOutcome = Accepted | Rejected | Narrowed | Superseded
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON ResolutionOutcome where toJSON = genericToJSON practiceReviewEnumAesonOptions
+
+instance FromJSON ResolutionOutcome where parseJSON = genericParseJSON practiceReviewEnumAesonOptions
+
+-- | An authorized command that adjudicates one provisional review.
+data PracticeReviewResolution = PracticeReviewResolution
+  { schemaVersion :: !Int,
+    resolutionId :: !ResolutionId,
+    idempotencyKey :: !Text,
+    reviewId :: !ReviewId,
+    outcome :: !ResolutionOutcome,
+    resolver :: !OwnerPrincipal,
+    reason :: !Text,
+    resolvedAt :: !UTCTime,
+    resultingApplicability :: !(Maybe Applicability),
+    supersedingReviewId :: !(Maybe ReviewId)
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON PracticeReviewResolution where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON PracticeReviewResolution where parseJSON = genericParseJSON practiceReviewAesonOptions
 
 practiceReviewAesonOptions :: Options
 practiceReviewAesonOptions = defaultOptions {omitNothingFields = True}

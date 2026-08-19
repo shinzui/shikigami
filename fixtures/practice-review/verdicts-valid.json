@@ -1,0 +1,279 @@
+[
+  {
+    "schemaVersion": 1,
+    "reviewId": "review-consistent",
+    "triggerIdempotencyKey": "trigger-consistent",
+    "practice": "opentelemetry",
+    "specialist": "opentelemetry-practice-reviewer",
+    "lineage": {
+      "parentSessionId": "session-router-consistent",
+      "childSessionId": "session-specialist-consistent",
+      "parentWorkflowId": "workflow-router-consistent",
+      "childWorkflowId": "workflow-specialist-consistent"
+    },
+    "targetEvidence": [
+      {
+        "evidenceId": "target-adr-consistent",
+        "role": "target-evidence",
+        "content": {
+          "project": {"name": "shinzui/example-service", "repository": "repo_target"},
+          "provenance": {"repository": "repo_target", "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+          "path": "docs/adr/0008-adopt-opentelemetry.md",
+          "contentHash": "sha256:target-consistent"
+        }
+      }
+    ],
+    "referenceEvidence": [
+      {
+        "evidenceId": "practice-consistent",
+        "role": "reference-evidence",
+        "content": {
+          "project": {"name": "shinzui/haskell-jitsurei", "repository": "repo_practice"},
+          "provenance": {"repository": "repo_practice", "revision": "cccccccccccccccccccccccccccccccccccccccc"},
+          "path": "patterns/api/opentelemetry-integration.md",
+          "contentHash": "sha256:practice-consistent"
+        }
+      }
+    ],
+    "upstreamEvidence": [],
+    "claims": [
+      {
+        "claimId": "claim-consistent",
+        "kind": "fact",
+        "statement": "The target uses the registered propagation boundary.",
+        "material": true,
+        "evidenceIds": ["target-adr-consistent", "practice-consistent"]
+      }
+    ],
+    "confidence": 94,
+    "routingRationale": "The cited target and practice describe the same boundary.",
+    "classification": "consistent",
+    "recommendedAction": "Record the review without attention.",
+    "exceptionApproval": "no-approval",
+    "reReviewCondition": {
+      "condition": "Target or practice revision changes.",
+      "watches": [
+        {"repository": "repo_target", "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+        {"repository": "repo_practice", "revision": "cccccccccccccccccccccccccccccccccccccccc"}
+      ]
+    },
+    "applicability": {"projects": [], "paths": [], "dependencies": [], "practices": []}
+  },
+  {
+    "schemaVersion": 1,
+    "reviewId": "review-target-suspect",
+    "triggerIdempotencyKey": "trigger-target-suspect",
+    "practice": "opentelemetry",
+    "specialist": "opentelemetry-practice-reviewer",
+    "lineage": {
+      "parentSessionId": "session-router-target",
+      "childSessionId": "session-specialist-target",
+      "parentWorkflowId": "workflow-router-target",
+      "childWorkflowId": "workflow-specialist-target"
+    },
+    "targetEvidence": [
+      {
+        "evidenceId": "target-adr-suspect",
+        "role": "target-evidence",
+        "content": {
+          "project": {"name": "shinzui/example-service", "repository": "repo_target"},
+          "provenance": {"repository": "repo_target", "revision": "dddddddddddddddddddddddddddddddddddddddd"},
+          "path": "docs/adr/0009-disable-propagation.md",
+          "contentHash": "sha256:target-suspect"
+        }
+      }
+    ],
+    "referenceEvidence": [
+      {
+        "evidenceId": "practice-target-suspect",
+        "role": "reference-evidence",
+        "content": {
+          "project": {"name": "shinzui/haskell-jitsurei", "repository": "repo_practice"},
+          "provenance": {"repository": "repo_practice", "revision": "cccccccccccccccccccccccccccccccccccccccc"},
+          "path": "patterns/api/opentelemetry-integration.md",
+          "contentHash": "sha256:practice-target-suspect"
+        }
+      }
+    ],
+    "upstreamEvidence": [],
+    "claims": [
+      {
+        "claimId": "claim-target-suspect",
+        "kind": "fact",
+        "statement": "The target disables propagation at the service boundary.",
+        "material": true,
+        "evidenceIds": ["target-adr-suspect", "practice-target-suspect"]
+      }
+    ],
+    "confidence": 88,
+    "routingRationale": "Pinned target content contradicts the adopted practice.",
+    "classification": "target-suspect",
+    "recommendedOwner": {"role": "target-owner", "principals": ["team-example-service"]},
+    "recommendedAction": "Ask the target owner to reconcile the decision.",
+    "exceptionApproval": "no-approval",
+    "reReviewCondition": {"condition": "Target revision changes.", "watches": [{"repository": "repo_target", "revision": "dddddddddddddddddddddddddddddddddddddddd"}]},
+    "applicability": {"projects": [], "paths": [], "dependencies": [], "practices": []}
+  },
+  {
+    "schemaVersion": 1,
+    "reviewId": "review-reference-suspect",
+    "triggerIdempotencyKey": "trigger-reference-suspect",
+    "practice": "opentelemetry",
+    "specialist": "opentelemetry-practice-reviewer",
+    "lineage": {
+      "parentSessionId": "session-router-reference",
+      "childSessionId": "session-specialist-reference",
+      "parentWorkflowId": "workflow-router-reference",
+      "childWorkflowId": "workflow-specialist-reference"
+    },
+    "targetEvidence": [
+      {
+        "evidenceId": "target-dependency-pin",
+        "role": "target-evidence",
+        "content": {
+          "project": {"name": "shinzui/example-service", "repository": "repo_target"},
+          "provenance": {"repository": "repo_target", "revision": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+          "path": "cabal.project",
+          "contentHash": "sha256:target-pin"
+        }
+      }
+    ],
+    "referenceEvidence": [
+      {
+        "evidenceId": "practice-stale-excerpt",
+        "role": "reference-evidence",
+        "content": {
+          "project": {"name": "shinzui/haskell-jitsurei", "repository": "repo_practice"},
+          "provenance": {"repository": "repo_practice", "revision": "ffffffffffffffffffffffffffffffffffffffff"},
+          "path": "patterns/api/opentelemetry-integration.md",
+          "contentHash": "sha256:practice-stale"
+        }
+      }
+    ],
+    "upstreamEvidence": [
+      {
+        "evidenceId": "upstream-compatible-api",
+        "role": "upstream-evidence",
+        "content": {
+          "project": {"name": "iand675/hs-opentelemetry", "repository": "repo_upstream"},
+          "provenance": {"repository": "repo_upstream", "revision": "1111111111111111111111111111111111111111"},
+          "path": "api/src/OpenTelemetry/Trace.hs",
+          "contentHash": "sha256:upstream-compatible"
+        }
+      }
+    ],
+    "claims": [
+      {
+        "claimId": "claim-reference-suspect",
+        "kind": "inference",
+        "statement": "The registered practice is stale for the dependency version pinned by the target.",
+        "material": true,
+        "evidenceIds": ["target-dependency-pin", "practice-stale-excerpt", "upstream-compatible-api"]
+      }
+    ],
+    "confidence": 82,
+    "routingRationale": "The target follows the compatible upstream API while the practice names the retired API.",
+    "classification": "reference-suspect",
+    "recommendedOwner": {"role": "practice-owner", "principals": ["team-haskell-platform"]},
+    "recommendedAction": "Ask the practice owner to update or narrow the guidance.",
+    "exceptionApproval": "no-approval",
+    "reReviewCondition": {"condition": "Practice or upstream revision changes.", "watches": [{"repository": "repo_practice", "revision": "ffffffffffffffffffffffffffffffffffffffff"}, {"repository": "repo_upstream", "revision": "1111111111111111111111111111111111111111"}]},
+    "applicability": {"projects": [], "paths": [], "dependencies": [], "practices": []}
+  },
+  {
+    "schemaVersion": 1,
+    "reviewId": "review-legitimate-exception",
+    "triggerIdempotencyKey": "trigger-legitimate-exception",
+    "practice": "opentelemetry",
+    "specialist": "opentelemetry-practice-reviewer",
+    "lineage": {
+      "parentSessionId": "session-router-exception",
+      "childSessionId": "session-specialist-exception",
+      "parentWorkflowId": "workflow-router-exception",
+      "childWorkflowId": "workflow-specialist-exception"
+    },
+    "targetEvidence": [
+      {
+        "evidenceId": "target-exception",
+        "role": "target-evidence",
+        "content": {
+          "project": {"name": "shinzui/example-service", "repository": "repo_target"},
+          "provenance": {"repository": "repo_target", "revision": "2222222222222222222222222222222222222222"},
+          "path": "docs/adr/0010-bounded-exception.md",
+          "contentHash": "sha256:target-exception"
+        }
+      }
+    ],
+    "referenceEvidence": [
+      {
+        "evidenceId": "practice-exception",
+        "role": "reference-evidence",
+        "content": {
+          "project": {"name": "shinzui/haskell-jitsurei", "repository": "repo_practice"},
+          "provenance": {"repository": "repo_practice", "revision": "cccccccccccccccccccccccccccccccccccccccc"},
+          "path": "patterns/api/opentelemetry-integration.md",
+          "contentHash": "sha256:practice-exception"
+        }
+      }
+    ],
+    "upstreamEvidence": [],
+    "claims": [
+      {
+        "claimId": "claim-exception",
+        "kind": "fact",
+        "statement": "The local boundary excludes payload capture for regulated records.",
+        "material": true,
+        "evidenceIds": ["target-exception", "practice-exception"]
+      }
+    ],
+    "confidence": 91,
+    "routingRationale": "A documented local constraint supports a bounded exception.",
+    "classification": "legitimate-exception",
+    "recommendedOwner": {"role": "exception-approver", "principals": ["architecture-council"]},
+    "recommendedAction": "Approve the bounded exception.",
+    "exceptionApproval": "approval-required",
+    "reReviewCondition": {"condition": "The regulated path or policy changes.", "watches": [{"repository": "repo_target", "revision": "2222222222222222222222222222222222222222"}]},
+    "applicability": {
+      "projects": [{"name": "shinzui/example-service", "repository": "repo_target"}],
+      "paths": ["src/Regulated"],
+      "dependencies": [],
+      "practices": ["opentelemetry"]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "reviewId": "review-unresolved",
+    "triggerIdempotencyKey": "trigger-unresolved",
+    "practice": "opentelemetry",
+    "specialist": "opentelemetry-practice-reviewer",
+    "lineage": {
+      "parentSessionId": "session-router-unresolved",
+      "childSessionId": "session-specialist-unresolved",
+      "parentWorkflowId": "workflow-router-unresolved",
+      "childWorkflowId": "workflow-specialist-unresolved"
+    },
+    "targetEvidence": [
+      {
+        "evidenceId": "target-unresolved",
+        "role": "target-evidence",
+        "content": {
+          "project": {"name": "shinzui/example-service", "repository": "repo_target"},
+          "provenance": {"repository": "repo_target", "revision": "3333333333333333333333333333333333333333"},
+          "path": "docs/adr/0011-unresolved.md",
+          "contentHash": "sha256:target-unresolved"
+        }
+      }
+    ],
+    "referenceEvidence": [],
+    "upstreamEvidence": [],
+    "claims": [],
+    "confidence": 20,
+    "routingRationale": "The required registered practice revision was unavailable.",
+    "classification": "unresolved",
+    "recommendedOwner": {"role": "triage-owner", "principals": ["architecture-council"]},
+    "recommendedAction": "Ask triage to acquire or waive the missing evidence.",
+    "exceptionApproval": "no-approval",
+    "reReviewCondition": {"condition": "Required evidence becomes available.", "watches": [{"repository": "repo_target", "revision": "3333333333333333333333333333333333333333"}]},
+    "applicability": {"projects": [], "paths": [], "dependencies": [], "practices": []}
+  }
+]

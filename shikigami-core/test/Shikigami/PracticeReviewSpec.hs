@@ -4,7 +4,13 @@ import Data.Aeson (FromJSON, Value (Object, String), eitherDecode, eitherDecodeS
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
-import Shikigami.PracticeReview (PracticeReviewTrigger)
+import Shikigami.PracticeReview
+  ( PracticeReviewClassification (..),
+    PracticeReviewResolution (..),
+    PracticeReviewTrigger,
+    PracticeReviewVerdict (..),
+    ResolutionOutcome (..),
+  )
 import Shikigami.Repository
   ( mkRelativePath,
     mkRevision,
@@ -21,7 +27,9 @@ tests =
   testGroup
     "practice review"
     [ repositoryContractTests,
-      triggerContractTests
+      triggerContractTests,
+      verdictContractTests,
+      resolutionContractTests
     ]
 
 repositoryContractTests :: TestTree
@@ -64,6 +72,37 @@ triggerContractTests =
               Right _ -> assertFailure "trigger decoder accepted a specialist field"
           _ -> assertFailure "trigger fixture is not a JSON object"
     ]
+
+verdictContractTests :: TestTree
+verdictContractTests =
+  testGroup
+    "verdict contract"
+    [ testCase "round-trips fixtures for exactly the five classifications" do
+        bytes <- readFixture "verdicts-valid.json"
+        verdicts <- decodeStrictOrFail @[PracticeReviewVerdict] bytes
+        fmap verdictClassification verdicts
+          @?= [Consistent, TargetSuspect, ReferenceSuspect, LegitimateException, Unresolved]
+        decodedAgain <- decodeLazyOrFail @[PracticeReviewVerdict] (encode verdicts)
+        decodedAgain @?= verdicts
+    ]
+
+resolutionContractTests :: TestTree
+resolutionContractTests =
+  testGroup
+    "resolution contract"
+    [ testCase "round-trips fixtures for exactly the four outcomes" do
+        bytes <- readFixture "resolutions-valid.json"
+        resolutions <- decodeStrictOrFail @[PracticeReviewResolution] bytes
+        fmap resolutionOutcome resolutions @?= [Accepted, Rejected, Narrowed, Superseded]
+        decodedAgain <- decodeLazyOrFail @[PracticeReviewResolution] (encode resolutions)
+        decodedAgain @?= resolutions
+    ]
+
+verdictClassification :: PracticeReviewVerdict -> PracticeReviewClassification
+verdictClassification PracticeReviewVerdict {classification} = classification
+
+resolutionOutcome :: PracticeReviewResolution -> ResolutionOutcome
+resolutionOutcome PracticeReviewResolution {outcome} = outcome
 
 readFixture :: FilePath -> IO ByteString.ByteString
 readFixture name = do
