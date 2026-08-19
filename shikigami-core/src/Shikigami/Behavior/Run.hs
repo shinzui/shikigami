@@ -12,6 +12,10 @@ module Shikigami.Behavior.Run
     newBehaviorEnvWithTraceSink,
     programArgs,
     runBehavior,
+    runBehaviorAttempt,
+    -- | Exported for "Shikigami.BehaviorRetrySpec", which supplies a slow or
+    -- retryable action without registering a process-global model provider.
+    runBehaviorAttemptWith,
     -- | Exported for "Shikigami.BehaviorInputSpec", which runs a locally
     -- constructed task to observe the argument map a real dispatch builds.
     runProgramTask,
@@ -23,6 +27,7 @@ import Baikai.Model (Model, modelId)
 import Baikai.Options (Options, emptyOptions)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
+import Control.Exception (throwIO)
 import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
@@ -31,15 +36,24 @@ import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
+import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
-import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Error
+  ( FailureClass (..),
+    RunError (..),
+    TransientBehaviorFailure (..),
+    boundedBehaviorDetail,
+    classifyRunError,
+    renderRunError,
+  )
 import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Program.Registry (lookupTask)
+import System.Timeout (timeout)
 
 -- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once),
 -- the model the skill arm dispatches with, and the per-call options that model is
@@ -108,12 +122,47 @@ runBehavior env decl input =
       -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
       pure (Left (UnsupportedBehavior "Deterministic"))
 
+-- | Bound one synchronous behavior call. Retryable failures and timeouts throw
+-- before a workflow step can append them; permanent failures remain a bounded
+-- journal value.
+runBehaviorAttempt :: NominalDiffTime -> BehaviorEnv -> AgentDecl -> BehaviorInput -> IO (Either Text Value)
+runBehaviorAttempt attemptTimeout env decl input =
+  runBehaviorAttemptWith attemptTimeout (runBehavior env decl input)
+
+runBehaviorAttemptWith :: NominalDiffTime -> IO (Either RunError Value) -> IO (Either Text Value)
+runBehaviorAttemptWith attemptTimeout action = do
+  attempted <- timeout (timeoutMicroseconds attemptTimeout) action
+  case attempted of
+    Nothing ->
+      throwIO
+        ( TransientBehaviorFailure
+            ( boundedBehaviorDetail
+                ("behavior attempt timed out after " <> Text.pack (show attemptTimeout))
+            )
+        )
+    Just (Left err) ->
+      case classifyRunError err of
+        Transient -> throwIO (TransientBehaviorFailure (renderRunError err))
+        Permanent -> pure (Left (renderRunError err))
+    Just (Right value) -> pure (Right value)
+
+timeoutMicroseconds :: NominalDiffTime -> Int
+timeoutMicroseconds duration =
+  fromInteger
+    ( max
+        1
+        ( min
+            (toInteger (maxBound :: Int))
+            (ceiling (nominalDiffTimeToSeconds duration * 1000000))
+        )
+    )
+
 -- | Run a program task: parse its input from the argument map, run it, and
 -- extract the @Envelope@'s verdict as the output value.
 runProgramTask :: Runtime -> Task -> BehaviorInput -> IO (Either RunError Value)
 runProgramTask rt (Task {taskParse = parse, taskRun = run}) input =
   case parse (programArgs input) of
-    Left err -> pure (Left (ProgramFailed err))
+    Left err -> pure (Left (ProgramInputFailed err))
     Right parsed -> envelopeToResult <$> run rt parsed
 
 -- | The behavior's input as handan's argument map — the program arm's equivalent
@@ -140,7 +189,7 @@ compactJson = TL.toStrict . encodeToLazyText
 envelopeToResult :: Envelope -> Either RunError Value
 envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
   case st of
-    ErrorS -> Left (ProgramFailed msg)
+    ErrorS -> Left (ProgramRuntimeFailed msg)
     _ -> Right (maybe Aeson.Null id v)
 
 runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> SkillDir -> BehaviorInput -> IO (Either RunError Value)

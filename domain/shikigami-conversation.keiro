@@ -30,6 +30,11 @@ workflow DanwaConversation
     step ingest-start -> ConversationStart
     step lookup-agent -> AgentDecl
     step resolve-session -> SessionId
+    # The guarded labels are run-behavior-v2:<messageId>. They are stable per
+    # message but undeclarable because the suffix is computed and contains a
+    # colon, so this checked patch block is intentionally empty.
+    patch shikigami-behavior-retry-v1 {
+    }
 
 operation RunDanwaConversation
   run DanwaConversation

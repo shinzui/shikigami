@@ -1,5 +1,7 @@
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
+    AgentRunFailure (..),
+    agentRunFailureDetail,
     AgentRunHooks (..),
     defaultAgentRunHooks,
     agentRunWorkflowName,
@@ -76,7 +78,7 @@ import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
-import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
+import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttempt)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Log qualified as Log
@@ -100,6 +102,7 @@ data AgentRunDeps = AgentRunDeps
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime),
+    runTimeout :: !NominalDiffTime,
     -- | Which grant source the enqueue-time C11 check consults, and the one
     -- handed to every 'SinkContext' this run builds.
     grants :: !GrantSource,
@@ -113,6 +116,20 @@ data AgentRunDeps = AgentRunDeps
     resolveRunProfile ::
       !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile))
   }
+
+-- | Why an agent run completed without a result. This value is returned by the
+-- workflow but is not stored as a step value, so it may distinguish the legacy
+-- retry path from a permanent v2 failure without changing any journal decoder.
+data AgentRunFailure
+  = LegacyBehaviorFailure !Text
+  | PermanentAgentRunFailure !Text
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+agentRunFailureDetail :: AgentRunFailure -> Text
+agentRunFailureDetail = \case
+  LegacyBehaviorFailure detail -> detail
+  PermanentAgentRunFailure detail -> detail
 
 data AgentRunHooks = AgentRunHooks
   { beforeStepBody :: !(StepName -> IO ()),
@@ -187,24 +204,27 @@ depsLogger AgentRunDeps {logger = l} = l
 depsGrants :: AgentRunDeps -> GrantSource
 depsGrants AgentRunDeps {grants = g} = g
 
+depsRunTimeout :: AgentRunDeps -> NominalDiffTime
+depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
+
 runJobOccurredAt :: RunJob -> UTCTime
 runJobOccurredAt RunJob {occurredAt} = occurredAt
 
 agentRunWorkflow ::
   AgentRunDeps ->
   Maybe RunJob ->
-  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps (StepName "ingest-job") (ingestJob mJob)
   mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . agentDeclName) (agents deps)))
   case mDecl of
-    Nothing -> pure (Left ("unknown agent " <> agentName job))
+    Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> agentName job)))
     Just decl -> runResolvedAgent deps job decl
 
 runAgentRunWorkflow ::
   AgentRunDeps ->
   RunJob ->
-  IO (Either StoreError (WorkflowOutcome (Either Text AgentRunResult)))
+  IO (Either StoreError (WorkflowOutcome (Either AgentRunFailure AgentRunResult)))
 runAgentRunWorkflow deps job =
   let env = appEnv deps
    in runEff
@@ -231,7 +251,7 @@ runResolvedAgent ::
   AgentRunDeps ->
   RunJob ->
   AgentDecl ->
-  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runResolvedAgent deps job decl = do
   resolveProfileForRun <- patch profileResolutionPatch
   profileResolution <-
@@ -243,7 +263,7 @@ runResolvedAgent deps job decl = do
           (liftIO (resolveRequiredProfile deps decl))
       else pure (Right Nothing)
   case profileResolution of
-    Left refusal -> pure (Left (renderProfileResolutionError refusal))
+    Left refusal -> pure (Left (PermanentAgentRunFailure (renderProfileResolutionError refusal)))
     Right resolvedProfile -> runProfiledAgent deps job decl resolvedProfile
 
 profileResolutionPatch :: PatchId
@@ -254,10 +274,10 @@ runProfiledAgent ::
   RunJob ->
   AgentDecl ->
   Maybe ResolvedProfile ->
-  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runProfiledAgent deps job decl resolvedProfile =
   case behaviorEnvForProfile decl resolvedProfile (behaviorEnv deps) of
-    Left violation -> pure (Left (renderProfileViolation violation))
+    Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
     Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv job decl
 
 behaviorEnvForProfile ::
@@ -274,7 +294,7 @@ runProfiledAgentWith ::
   BehaviorEnv ->
   RunJob ->
   AgentDecl ->
-  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runProfiledAgentWith deps activeBehaviorEnv job decl = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
@@ -282,16 +302,36 @@ runProfiledAgentWith deps activeBehaviorEnv job decl = do
     addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
+  useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
-        Flow {} -> runBehaviorStep deps activeBehaviorEnv sid decl job prior
-        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv sid decl job prior)
+        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
+        ShikumiProgram {task}
+          | task == researchSupervisorTaskName ->
+              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
+        _
+          | useRetrySemantics ->
+              first PermanentAgentRunFailure
+                <$> runStep
+                  deps
+                  (StepName "run-behavior-v2")
+                  ( liftIO
+                      ( runBehaviorAttempt
+                          (depsRunTimeout deps)
+                          activeBehaviorEnv
+                          decl
+                          BehaviorInput {payload = triggerPayload job, recalled = prior}
+                      )
+                  )
+          | otherwise ->
+              first LegacyBehaviorFailure
+                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv sid decl job prior)
   case behaviorE of
     Left err -> do
-      _ <- runStep deps (StepName "fail-session") (failSession deps decl sid err)
+      _ <- runStep deps (StepName "fail-session") (failSession deps decl sid (agentRunFailureDetail err))
       pure (Left err)
     Right output -> do
       approvedSinks <- approveSinks deps sid job decl output
@@ -312,6 +352,9 @@ runProfiledAgentWith deps activeBehaviorEnv job decl = do
                 recordedMemId = mem
               }
         )
+
+behaviorRetryPatch :: PatchId
+behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
 
 resolveRequiredProfile ::
   AgentRunDeps ->

@@ -1,6 +1,6 @@
 module Shikigami.AgentWorkflowSpec (tests) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (when)
 import Data.Aeson (Result (..), Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
@@ -22,7 +22,7 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
@@ -47,7 +47,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
@@ -66,6 +66,7 @@ import Shikigami.Attestation.Profile
     unlimitedProfileLimits,
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
+import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
@@ -84,7 +85,84 @@ tests :: TestTree
 tests =
   testGroup
     "AgentWorkflow"
-    [ testCase "replays completed lifecycle steps for the same run id" do
+    [ testCase "behavior retry patch preserves old journals and uses only v2 when fresh" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
+                oldJob = retryVersioningJob "heartbeat:test-retry-old"
+                freshJob = retryVersioningJob "heartbeat:test-retry-fresh"
+
+            oldOutcome <-
+              runAppIO appEnv $
+                runWorkflowWith
+                  defaultWorkflowRunOptions
+                  agentRunWorkflowName
+                  (WorkflowId (idempotencyKey oldJob))
+                  (agentRunWorkflow deps (Just oldJob))
+            assertBool ("pre-patch agent run decodes and completes: " <> show oldOutcome) (isCompleted oldOutcome)
+            oldIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey oldJob)) 0)
+            assertEqual "pre-patch journal keeps the old behavior label" (Right True) (Map.member "run-behavior" <$> oldIndex)
+            assertEqual "pre-patch journal never writes v2" (Right False) (Map.member "run-behavior-v2" <$> oldIndex)
+
+            freshOutcome <- runAgentRunWorkflow deps freshJob
+            assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
+            freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey freshJob)) 0)
+            assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
+            assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex),
+      testCase "transient v2 failure leaves no value and a later advance succeeds" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            attempts <- newIORef (0 :: Int)
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                hooks =
+                  defaultAgentRunHooks
+                    { beforeStepBody = \stepName ->
+                        when (unStepName stepName == "run-behavior-v2") do
+                          attempt <- atomicModifyIORef' attempts \count -> (count + 1, count)
+                          when (attempt == 0) (throwIO (TransientBehaviorFailure "simulated transient provider failure"))
+                    }
+                deps = testDeps appEnv behaviorEnv hooks
+
+            firstAttempt <- try @SomeException (runAgentRunWorkflow deps transientRetryJob)
+            case firstAttempt of
+              Left _ -> pure ()
+              Right outcome -> assertFailure ("first transient attempt should escape, got " <> show outcome)
+            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey transientRetryJob)) 0)
+            assertEqual "failed attempt appended no v2 value" (Right False) (Map.member "run-behavior-v2" <$> afterFailure)
+
+            retried <- runAgentRunWorkflow deps transientRetryJob
+            assertBool ("retry completes: " <> show retried) (isCompleted retried)
+            assertEqual "the behavior body ran twice" 2 =<< readIORef attempts
+            afterSuccess <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey transientRetryJob)) 0)
+            assertEqual "successful retry appended the v2 value" (Right True) (Map.member "run-behavior-v2" <$> afterSuccess),
+      testCase "permanent v2 failure is journaled once and replayed" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            attempts <- newIORef (0 :: Int)
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                hooks =
+                  defaultAgentRunHooks
+                    { beforeStepBody = \stepName ->
+                        when (unStepName stepName == "run-behavior-v2") (modifyIORef' attempts (+ 1))
+                    }
+                deps = testDepsWithAgents appEnv behaviorEnv hooks [missingTaskDecl]
+
+            firstAttempt <- runAgentRunWorkflow deps permanentFailureJob
+            replayed <- runAgentRunWorkflow deps permanentFailureJob
+            let isPermanent = \case
+                  Right (Completed (Left (PermanentAgentRunFailure detail))) -> "unknown task" `Text.isInfixOf` detail
+                  _ -> False
+            assertBool ("first attempt is permanent: " <> show firstAttempt) (isPermanent firstAttempt)
+            assertBool ("replay keeps the permanent value: " <> show replayed) (isPermanent replayed)
+            assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts,
+      testCase "replays completed lifecycle steps for the same run id" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
@@ -148,7 +226,7 @@ tests =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName -> do
                         modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
-                        when (unStepName stepName == "run-behavior") do
+                        when (unStepName stepName == "run-behavior-v2") do
                           crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
                           when crashNow (ioError (userError "simulated crash in run-behavior"))
                     }
@@ -165,7 +243,7 @@ tests =
             assertEqual "resolve-profile ran once before the crash" (Just 1) (Map.lookup "resolve-profile" afterCrash)
             assertEqual "open-session ran once before the crash" (Just 1) (Map.lookup "open-session" afterCrash)
             assertEqual "recall ran once before the crash" (Just 1) (Map.lookup "recall" afterCrash)
-            assertEqual "run-behavior was attempted once before the crash" (Just 1) (Map.lookup "run-behavior" afterCrash)
+            assertEqual "run-behavior-v2 was attempted once before the crash" (Just 1) (Map.lookup "run-behavior-v2" afterCrash)
 
             second <- runAgentRunWorkflow deps crashJob
             case second of
@@ -178,7 +256,7 @@ tests =
             assertEqual "resolve-profile replayed without rerunning" (Just 1) (Map.lookup "resolve-profile" finalCounts)
             assertEqual "open-session replayed without rerunning" (Just 1) (Map.lookup "open-session" finalCounts)
             assertEqual "recall replayed without rerunning" (Just 1) (Map.lookup "recall" finalCounts)
-            assertEqual "run-behavior reran after its failed attempt" (Just 2) (Map.lookup "run-behavior" finalCounts)
+            assertEqual "run-behavior-v2 reran after its failed attempt" (Just 2) (Map.lookup "run-behavior-v2" finalCounts)
             assertEqual "record ran once after recovery" (Just 1) (Map.lookup "record" finalCounts)
             assertEqual "complete ran once after recovery" (Just 1) (Map.lookup "complete" finalCounts)
 
@@ -197,7 +275,7 @@ tests =
             result <- runAgentRunWorkflow deps profileRefusalJob
             case result of
               Right (Completed (Left err)) ->
-                assertBool ("failure should name the profile: " <> show err) ("sanctioned-review" `Text.isInfixOf` err)
+                assertBool ("failure should name the profile: " <> show err) ("sanctioned-review" `Text.isInfixOf` agentRunFailureDetail err)
               other -> assertFailure ("expected a permanent profile refusal, got " <> show other)
 
             sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
@@ -225,7 +303,7 @@ tests =
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName ->
-                        when (unStepName stepName == "run-behavior") do
+                        when (unStepName stepName == "run-behavior-v2") do
                           crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
                           when crashNow (ioError (userError "simulated crash after resolve-profile"))
                     }
@@ -278,8 +356,9 @@ tests =
             result <- runAgentRunWorkflow deps profileViolationJob
             case result of
               Right (Completed (Left err)) -> do
-                assertBool ("violation should name the attempted model: " <> Text.unpack err) ("stub-v1" `Text.isInfixOf` err)
-                assertBool ("violation should name the pinned digest: " <> Text.unpack err) (profileDigestText digest `Text.isInfixOf` err)
+                let detail = agentRunFailureDetail err
+                assertBool ("violation should name the attempted model: " <> Text.unpack detail) ("stub-v1" `Text.isInfixOf` detail)
+                assertBool ("violation should name the pinned digest: " <> Text.unpack detail) (profileDigestText digest `Text.isInfixOf` detail)
               other -> assertFailure ("expected a permanent provider-profile refusal, got " <> show other)
 
             sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "profiled-skill"))
@@ -410,6 +489,7 @@ tests =
                       Conversation.ConversationEnv
                         { Conversation.appEnv = appEnv,
                           Conversation.behaviorEnv = behaviorEnv,
+                          Conversation.runTimeout = secondsToNominalDiffTime 300,
                           Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
                           Conversation.agents = [conversationDecl],
                           Conversation.grants = StaticGrants defaultGrantTable
@@ -450,7 +530,32 @@ tests =
                         assertBool "second reply is not journaled as a separate sink step" (not (Map.member "danwa-reply:msg_human_2" keys))
                         assertBool "first park allocated an input awakeable" (any (Text.isPrefixOf "awkid:next-message:1") (Map.keys keys))
                       Left err -> assertFailure ("loadStepIndex failed: " <> show err)
-                  other -> assertFailure ("conversation turns should succeed, got " <> show other)
+                  other -> assertFailure ("conversation turns should succeed, got " <> show other),
+          testCase "conversation permanent v2 failure completes as a replayable typed failure" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env =
+                      Conversation.ConversationEnv
+                        { Conversation.appEnv = appEnv,
+                          Conversation.behaviorEnv = behaviorEnv,
+                          Conversation.runTimeout = secondsToNominalDiffTime 300,
+                          Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+                          Conversation.agents = [missingTaskDecl],
+                          Conversation.grants = StaticGrants defaultGrantTable
+                        }
+
+                firstFailure <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
+                replayed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
+                assertBool
+                  ("first turn returns the permanent detail: " <> show firstFailure)
+                  (either (Text.isInfixOf "unknown task" . Conversation.conversationTurnFailureDetail) (const False) firstFailure)
+                assertEqual "replay returns the same typed failure" firstFailure replayed
+                stepIndex <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId permanentConversationMessage) 0)
+                assertEqual "conversation journals the dynamic v2 label" (Right True) (Map.member "run-behavior-v2:msg_permanent" <$> stepIndex)
+                assertEqual "conversation never journals the legacy label" (Right False) (Map.member "run-behavior:msg_permanent" <$> stepIndex)
         ],
       testGroup
         "Delegate"
@@ -689,6 +794,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       hooks,
       approval = defaultApprovalEnv,
       deadline = Nothing,
+      runTimeout = secondsToNominalDiffTime 300,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
@@ -711,6 +817,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       hooks,
       approval,
       deadline,
+      runTimeout = secondsToNominalDiffTime 300,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
@@ -756,7 +863,7 @@ loadProofAgents = do
     Right loaded -> pure loaded
     Left err -> assertFailure ("proof agents should load: " <> show err)
 
-assertChildCompleted :: String -> Either err (WorkflowOutcome (Either Text AgentRunResult)) -> IO ()
+assertChildCompleted :: String -> Either err (WorkflowOutcome (Either AgentRunFailure AgentRunResult)) -> IO ()
 assertChildCompleted label = \case
   Right (Completed (Right _)) -> pure ()
   other -> assertFailure (label <> ", got " <> show (first (const ("store-error" :: String)) other))
@@ -825,7 +932,8 @@ expectedLifecycleSteps =
       "resolve-profile",
       "open-session",
       "recall",
-      "run-behavior",
+      "patch:shikigami-behavior-retry-v1",
+      "run-behavior-v2",
       "dispatch-sinks",
       "record",
       "complete"
@@ -834,7 +942,7 @@ expectedLifecycleSteps =
 isRight' :: Either a b -> Bool
 isRight' = either (const False) (const True)
 
-isCompleted :: Either a (WorkflowOutcome (Either Text b)) -> Bool
+isCompleted :: Either a (WorkflowOutcome (Either failure b)) -> Bool
 isCompleted (Right (Completed (Right _))) = True
 isCompleted _ = False
 
@@ -852,6 +960,23 @@ decl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      sanctionedProfile = Nothing
+    }
+
+missingTaskDecl :: AgentDecl
+missingTaskDecl =
+  AgentDecl
+    { name = "missing-task-agent",
+      description = "workflow test agent with a permanent program-input failure",
+      trigger = Event {eventType = "test"},
+      behavior =
+        ShikumiProgram
+          { task = "missing-task",
+            preferEnrichment = False,
+            grounding = Nothing,
+            enabledBy = Nothing
+          },
+      sinks = [],
       sanctionedProfile = Nothing
     }
 
@@ -939,6 +1064,20 @@ secondAddressedMessage =
       occurredAt = UTCTime (fromGregorian 2026 6 27) 1
     }
 
+permanentConversationMessage :: AddressedMessage
+permanentConversationMessage =
+  AddressedMessage
+    { conversationId = "conv_permanent",
+      messageId = "msg_permanent",
+      parentMessageId = Nothing,
+      author = "part_human_test",
+      content = "exercise permanent failure",
+      agentParticipantId = "part_agent_test",
+      embellishmentId = "emb_permanent",
+      mentionedBy = "part_human_test",
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0
+    }
+
 job :: RunJob
 job =
   RunJob
@@ -947,6 +1086,35 @@ job =
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-workflow-replay",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+retryVersioningJob :: Text -> RunJob
+retryVersioningJob key =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = key,
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+transientRetryJob :: RunJob
+transientRetryJob = retryVersioningJob "heartbeat:test-transient-retry"
+
+permanentFailureJob :: RunJob
+permanentFailureJob =
+  RunJob
+    { agentName = "missing-task-agent",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "missing-task-agent:test-permanent-failure",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing

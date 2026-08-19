@@ -24,6 +24,7 @@ module Shikigami.Workers.Config
 where
 
 import Data.Map.Strict qualified as Map
+import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
 import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
@@ -44,6 +45,8 @@ data WorkerEnv = WorkerEnv
     appEnv :: !AppEnv,
     agents :: ![AgentDecl],
     behaviorEnv :: !BehaviorEnv,
+    runTimeout :: !NominalDiffTime,
+    approvalDeadline :: !NominalDiffTime,
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
@@ -69,6 +72,12 @@ envLogger WorkerEnv {logger = l} = l
 envGrants :: WorkerEnv -> GrantSource
 envGrants WorkerEnv {grants = g} = g
 
+envRunTimeout :: WorkerEnv -> NominalDiffTime
+envRunTimeout WorkerEnv {runTimeout = timeout} = timeout
+
+envApprovalDeadline :: WorkerEnv -> NominalDiffTime
+envApprovalDeadline WorkerEnv {approvalDeadline = deadline} = deadline
+
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
@@ -82,7 +91,8 @@ agentRunDeps env =
       AgentWorkflow.rei = rei env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
-      AgentWorkflow.deadline = Nothing,
+      AgentWorkflow.deadline = Just (envApprovalDeadline env),
+      AgentWorkflow.runTimeout = envRunTimeout env,
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.resolveRunProfile = \profileId version -> do
@@ -99,6 +109,7 @@ conversationEnv env =
   Conversation.ConversationEnv
     { Conversation.appEnv = appEnv env,
       Conversation.behaviorEnv = behaviorEnv env,
+      Conversation.runTimeout = envRunTimeout env,
       Conversation.danwa = danwa env,
       Conversation.agents = agents env,
       Conversation.grants = envGrants env

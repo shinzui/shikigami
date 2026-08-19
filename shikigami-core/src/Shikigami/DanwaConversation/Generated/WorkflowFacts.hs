@@ -20,9 +20,9 @@ workflowFacts =
     { workflowFactName = "shikigami.danwa-conversation"
     , workflowFactIdVia = "conversationWorkflowId"
     , workflowFactIdField = "input"
-    , workflowFactBody = ["step:ingest-start", "step:lookup-agent", "step:resolve-session"]
+    , workflowFactBody = ["step:ingest-start", "step:lookup-agent", "step:resolve-session", "patch:shikigami-behavior-retry-v1()"]
     , workflowFactAwaitLabels = []
-    , workflowFactPatchIds = []
+    , workflowFactPatchIds = ["shikigami-behavior-retry-v1"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.

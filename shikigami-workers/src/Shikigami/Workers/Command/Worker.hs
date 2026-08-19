@@ -6,6 +6,7 @@ where
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
+import Data.Time (secondsToNominalDiffTime)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -52,6 +53,8 @@ runWorkerCmd config = do
                 appEnv,
                 agents,
                 behaviorEnv = behEnv,
+                runTimeout = secondsToNominalDiffTime 300,
+                approvalDeadline = secondsToNominalDiffTime 900,
                 kizashi =
                   KizashiConfig
                     { baseUrl = Config.kizashiBaseUrl config,

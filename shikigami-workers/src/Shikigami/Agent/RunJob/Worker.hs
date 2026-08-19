@@ -81,7 +81,7 @@ runConversationAgent env job addressed =
     Just decl -> do
       result <- Conversation.runConversationTurn (conversationEnv env) decl addressed
       case result of
-        Left err -> do
+        Left (Conversation.ConversationTransientFailure err) -> do
           Log.logError
             (envLogger env)
             "worker.conversation.retried"
@@ -90,6 +90,16 @@ runConversationAgent env job addressed =
               "error" Aeson..= err
             ]
           pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+        Left failure -> do
+          let err = Conversation.conversationTurnFailureDetail failure
+          Log.logError
+            (envLogger env)
+            "worker.conversation.dead_lettered"
+            [ "agent" Aeson..= agentName job,
+              Log.runIdKey Aeson..= idempotencyKey job,
+              "error" Aeson..= err
+            ]
+          pure (AckDeadLetter (PoisonPill err))
         Right _ -> pure AckOk
 
 -- | Run a resolved agent through the durable agent-run workflow and dispatch its sinks.
@@ -110,14 +120,13 @@ runOneAgent env job =
           Right (Completed (Right _result)) -> do
             jobLog Log.Info "worker.job.completed" []
             pure AckOk
-          Right (Completed (Left err)) -> do
-            if "unknown agent " `Text.isPrefixOf` err
-              then do
-                jobLog Log.Error "worker.job.dead_lettered" ["error" Aeson..= err, "reason" Aeson..= ("unknown_agent" :: Text)]
-                pure (AckDeadLetter (PoisonPill err))
-              else do
-                jobLog Log.Error "worker.job.retried" ["error" Aeson..= err, "reason" Aeson..= ("workflow_failed" :: Text)]
-                pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure err))) -> do
+            jobLog Log.Error "worker.job.retried" ["error" Aeson..= err, "reason" Aeson..= ("legacy_behavior_failure" :: Text)]
+            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+          Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
+            let err = AgentWorkflow.agentRunFailureDetail failure
+            jobLog Log.Error "worker.job.dead_lettered" ["error" Aeson..= err, "reason" Aeson..= ("permanent_workflow_failure" :: Text)]
+            pure (AckDeadLetter (PoisonPill err))
           Right Suspended -> do
             jobLog Log.Info "worker.job.suspended" []
             pure AckOk

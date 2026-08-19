@@ -1,5 +1,7 @@
 module Shikigami.Agent.Conversation
   ( ConversationEnv (..),
+    ConversationTurnFailure (..),
+    conversationTurnFailureDetail,
     ConversationTurnResult (..),
     conversationRegistry,
     conversationWorkflowId,
@@ -18,18 +20,21 @@ import Data.Foldable (traverse_)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Projection (InlineProjection (InlineProjection, apply))
 import Keiro.Workflow
-  ( StepName (..),
+  ( PatchId (..),
+    StepName (..),
     Workflow,
     WorkflowId (..),
     WorkflowName (..),
     WorkflowOutcome (..),
     awakeableAllocStepPrefix,
     loadStepIndex,
+    patch,
     runWorkflowWith,
     step,
   )
@@ -51,7 +56,7 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, triggerOnly)
+import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, runBehaviorAttempt, triggerOnly)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -65,11 +70,15 @@ import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
+    runTimeout :: !NominalDiffTime,
     danwa :: !DanwaConfig,
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
     grants :: !GrantSource
   }
+
+conversationRunTimeout :: ConversationEnv -> NominalDiffTime
+conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout
 
 data ConversationTurnResult = ConversationTurnResult
   { sessionId :: !SessionId,
@@ -79,6 +88,18 @@ data ConversationTurnResult = ConversationTurnResult
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+data ConversationTurnFailure
+  = ConversationPermanentFailure !Text
+  | ConversationTransientFailure !Text
+  | ConversationTerminalFailure !Text
+  deriving stock (Eq, Show)
+
+conversationTurnFailureDetail :: ConversationTurnFailure -> Text
+conversationTurnFailureDetail = \case
+  ConversationPermanentFailure detail -> detail
+  ConversationTransientFailure detail -> detail
+  ConversationTerminalFailure detail -> detail
 
 data ConversationStart = ConversationStart
   { agentName :: !Text,
@@ -105,21 +126,21 @@ conversationWorkflowId :: AddressedMessage -> WorkflowId
 conversationWorkflowId AddressedMessage {conversationId} =
   WorkflowId ("danwa-conversation:" <> conversationId)
 
-runConversationTurn :: ConversationEnv -> AgentDecl -> AddressedMessage -> IO (Either Text ConversationTurnResult)
+runConversationTurn :: ConversationEnv -> AgentDecl -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
 runConversationTurn env decl msg = do
   delivered <- deliverConversationInput env msg
   outcomeE <- runConversationWorkflow env (if delivered then Nothing else Just (ConversationStart (name decl) msg)) msg
   case outcomeE of
-    Left err -> pure (Left (Text.pack (show err)))
-    Right Failed -> pure (Left "conversation workflow failed")
-    Right Cancelled -> pure (Left "conversation workflow cancelled")
-    Right ContinuedAsNew -> pure (Left "conversation workflow continued as new unexpectedly")
-    Right (Completed result) -> pure (Right result)
+    Left err -> pure (Left (ConversationTransientFailure (Text.pack (show err))))
+    Right Failed -> pure (Left (ConversationTerminalFailure "conversation workflow failed"))
+    Right Cancelled -> pure (Left (ConversationTerminalFailure "conversation workflow cancelled"))
+    Right ContinuedAsNew -> pure (Left (ConversationTerminalFailure "conversation workflow continued as new unexpectedly"))
+    Right (Completed result) -> pure (first ConversationPermanentFailure result)
     Right Suspended -> do
       loaded <- loadConversationResult env (conversationWorkflowId msg) (messageId msg)
       pure case loaded of
         Just result -> Right result
-        Nothing -> Left ("conversation workflow suspended before recording turn result for " <> messageId msg)
+        Nothing -> Left (ConversationTransientFailure ("conversation workflow suspended before recording turn result for " <> messageId msg))
 
 conversationRegistry :: ConversationEnv -> WorkflowRegistry AppEffects
 conversationRegistry env =
@@ -128,12 +149,14 @@ conversationRegistry env =
 conversationWorkflow ::
   ConversationEnv ->
   Maybe ConversationStart ->
-  Eff (Workflow : AppEffects) ConversationTurnResult
+  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 conversationWorkflow env mStart = do
   start <- step (StepName "ingest-start") (ingestStart mStart)
   decl <- resolveDeclStep env start
   firstResult <- processTurn env decl (initialMessage start)
-  loop env decl 1 firstResult
+  case firstResult of
+    Left err -> pure (Left err)
+    Right result -> loop env decl 1 result
 
 ingestStart :: (IOE :> es) => Maybe ConversationStart -> Eff es ConversationStart
 ingestStart = \case
@@ -152,17 +175,19 @@ loop ::
   AgentDecl ->
   Int ->
   ConversationTurnResult ->
-  Eff (Workflow : AppEffects) ConversationTurnResult
+  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 loop env decl nextOrdinal _previous = do
   nextMessage <- awaitInput (nextMessageStepName nextOrdinal)
   result <- processTurn env decl nextMessage
-  loop env decl (nextOrdinal + 1) result
+  case result of
+    Left err -> pure (Left err)
+    Right completed -> loop env decl (nextOrdinal + 1) completed
 
 processTurn ::
   ConversationEnv ->
   AgentDecl ->
   AddressedMessage ->
-  Eff (Workflow : AppEffects) ConversationTurnResult
+  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
   sid <- step (StepName "resolve-session") (liftIO (requireRight =<< resolveSession env decl msgConversationId))
   userTurn <-
@@ -170,39 +195,56 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
       liftIO do
         turns <- loadTurns env sid
         recordTurnOnce env decl sid ("danwa:user:" <> msgMessageId) Nothing "user" msgContent turns
+  useRetrySemantics <- patch behaviorRetryPatch
   outputE <-
-    step (StepName ("run-behavior:" <> msgMessageId)) do
-      prior <- liftIO (loadTurns env sid)
-      -- No recalled memories: a conversation turn's context is the turn history,
-      -- and that already travels inside the payload ('behaviorPayload'). Giving
-      -- this path kioku recall as well is a question about how conversational
-      -- and durable memory relate, which this seam does not answer.
-      liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (triggerOnly (behaviorPayload msg prior)))
-  output <- either (liftIO . ioError . userError . Text.unpack) pure outputE
-  let replyText = renderLearning output
-  (asstTurn, sinkResult) <-
-    step (assistantReplyStepName msgMessageId) do
-      turns <- liftIO (loadTurns env sid)
-      let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-      assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (grants env) decl sid msg replyText userTurnIndex turns
-      either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
-  let replyMessageId = sinkResultDetail sinkResult
-      RecordedTurn {turnId = recordedUserTurnId} = userTurn
-      RecordedTurn {turnId = recordedAsstTurnId} = asstTurn
-      result =
-        ConversationTurnResult
-          { sessionId = sid,
-            userTurnId = recordedUserTurnId,
-            asstTurnId = recordedAsstTurnId,
-            replyMessageId
-          }
-  step (turnResultStepName msgMessageId) (pure result)
+    if useRetrySemantics
+      then step (StepName ("run-behavior-v2:" <> msgMessageId)) do
+        prior <- liftIO (loadTurns env sid)
+        liftIO
+          ( runBehaviorAttempt
+              (conversationRunTimeout env)
+              (behaviorEnv env)
+              decl
+              (triggerOnly (behaviorPayload msg prior))
+          )
+      else do
+        legacy <-
+          step (StepName ("run-behavior:" <> msgMessageId)) do
+            prior <- liftIO (loadTurns env sid)
+            -- No recalled memories: a conversation turn's context is the turn
+            -- history, and that already travels inside the payload.
+            liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (triggerOnly (behaviorPayload msg prior)))
+        Right <$> either (liftIO . ioError . userError . Text.unpack) pure legacy
+  case outputE of
+    Left err -> pure (Left err)
+    Right output -> do
+      let replyText = renderLearning output
+      (asstTurn, sinkResult) <-
+        step (assistantReplyStepName msgMessageId) do
+          turns <- liftIO (loadTurns env sid)
+          let RecordedTurn {turnIndex = userTurnIndex} = userTurn
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (grants env) decl sid msg replyText userTurnIndex turns
+          either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
+      let replyMessageId = sinkResultDetail sinkResult
+          RecordedTurn {turnId = recordedUserTurnId} = userTurn
+          RecordedTurn {turnId = recordedAsstTurnId} = asstTurn
+          result =
+            ConversationTurnResult
+              { sessionId = sid,
+                userTurnId = recordedUserTurnId,
+                asstTurnId = recordedAsstTurnId,
+                replyMessageId
+              }
+      Right <$> step (turnResultStepName msgMessageId) (pure result)
+
+behaviorRetryPatch :: PatchId
+behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
 
 runConversationWorkflow ::
   ConversationEnv ->
   Maybe ConversationStart ->
   AddressedMessage ->
-  IO (Either StoreError (WorkflowOutcome ConversationTurnResult))
+  IO (Either StoreError (WorkflowOutcome (Either Text ConversationTurnResult)))
 runConversationWorkflow env mStart msg =
   let AppEnv {connectionSettings, tracer} = appEnv env
    in runEff

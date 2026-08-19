@@ -151,6 +151,7 @@ test-suite shikigami-core-test
     Shikigami.AttestationContractsSpec
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
+    Shikigami.BehaviorRetrySpec
     Shikigami.DelegateContextSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec

@@ -55,10 +55,15 @@ workflow failure budget instead of becoming a permanent step result.
       existing raw JSON wire shape. `nix develop --command cabal build
       shikigami-workers --dry-run` resolved the Hackage release and selected
       `keiro-pgmq-0.13.0.0`.
-- [ ] Milestone 1: add retryability classification, attempt-scoped timeouts, and the
-      versioned `run-behavior-v2` path for agent runs and conversations.
-- [ ] Milestone 1: declare `shikigami-behavior-retry-v1` in both workflow specifications,
-      scaffold, update conformance expectations, and pass `just keiro-gate`.
+- [x] (2026-08-19) Milestone 1: added retryability classification,
+      attempt-scoped timeouts, bounded/redacted failure details, and the versioned
+      `run-behavior-v2` path for agent runs and conversations. `RetrySemantics`
+      passed 5 focused cases, and the focused `v2` selection passed 4 workflow cases.
+- [x] (2026-08-19) Milestone 1: declared `shikigami-behavior-retry-v1` in both
+      workflow specifications, scaffolded the generated facts/runtime modules, updated
+      conformance expectations, and passed all 12 conformance facts plus the 3-case
+      `WorkflowVersioning` deploy simulation. The final merge-base `just keiro-gate`
+      remains part of completion validation.
 - [ ] Milestone 2: replace the raw run-job consumer construction with a typed
       `Job RunJob`; reconcile the main queue and DLQ at worker startup; map every workflow
       result to a deliberate `JobOutcome`.
@@ -155,6 +160,12 @@ workflow failure budget instead of becoming a permanent step result.
   journal-append crash window, and a direct run is intentionally lease-free. Step effects
   must remain idempotent, and the runtime's instance and step arbitration remain the
   authority for concurrent resume races.
+
+- The Concrete Steps named `just check-adr`, but this checkout's `justfile` has no
+  such recipe. `mori show --full` confirms `docs/adr/` is not a profile-governed OKF
+  bundle, so ADR validation follows the repository's existing plain-filesystem
+  convention. Evidence: `just check-adr` returned `justfile does not contain recipe
+  check-adr`.
 
 
 ## Decision Log
@@ -254,6 +265,15 @@ workflow failure budget instead of becoming a permanent step result.
   Rationale: A detached `withAsync` child can fail silently while the main action continues.
   The heartbeat and work are one failure domain: successful work cancels the infinite
   heartbeat; a failed heartbeat prevents an unsafe acknowledgement.
+  Date: 2026-08-19
+
+- Decision: Represent non-journaled workflow dispositions with
+  `AgentRunFailure` and `ConversationTurnFailure` rather than returning undifferentiated
+  `Text` to the queue worker.
+  Rationale: the worker can now distinguish legacy retry, transient store/resume
+  failure, permanent v2 failure, and terminal workflow failure without parsing rendered
+  constructor text. Journaled behavior step values remain `Either Text Value` under
+  their respective old or v2 labels.
   Date: 2026-08-19
 
 
@@ -694,3 +714,6 @@ patch is a journaled compatibility decision declared through the Keiro specifica
   package and is not codec-only internally. Kept `aesonJobCodec` for a wire-compatible
   typed migration and documented the dual-read rollout required before adopting
   `keiroJobCodec`.
+- 2026-08-19: Implemented milestones 0 and 1. Added the released `keiro-pgmq`
+  dependency, introduced classified attempt failures and bounded synchronous timeouts,
+  scaffolded the shared retry patch, and added retry/replay and deploy-simulation tests.

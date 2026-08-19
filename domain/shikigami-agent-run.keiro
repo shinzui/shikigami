@@ -53,6 +53,12 @@ workflow AgentRun
     step open-session -> SessionId
     step recall -> RecalledLearnings
     step run-behavior -> BehaviorOutput
+    # Fresh instances use the v2 label so transient failures can escape before
+    # any result is appended. Pre-patch instances retain run-behavior and its
+    # original Either Text Value decoder.
+    patch shikigami-behavior-retry-v1 {
+      step run-behavior-v2 -> BehaviorOutput
+    }
     step classify -> RiskVerdict
     await await-ack -> ApprovalDecision
     # Shikigami.Flow.Capability.runSink decides once per interpreted flow run

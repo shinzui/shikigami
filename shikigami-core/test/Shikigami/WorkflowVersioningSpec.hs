@@ -17,11 +17,13 @@ module Shikigami.WorkflowVersioningSpec (tests) where
 
 import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
+import Data.Foldable (traverse_)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff, IOE, liftIO, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -67,6 +69,7 @@ tests =
   testGroup
     "WorkflowVersioning"
     [ testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
+      testCase "behavior retry patch pins agent and conversation labels per deploy" behaviorRetryLabelsArePinned,
       testCase "emitSignal ordinals preserved in flight, labels when fresh" emitSignalSchemeIsPinnedPerInstance
     ]
 
@@ -211,6 +214,62 @@ countCollect :: (IOE :> es) => IORef Int -> Eff es Text
 countCollect ref = do
   _ <- liftIO (atomicModifyIORef' ref \n -> (n + 1, n))
   pure "v1"
+
+-- | The production retry patch keeps the old behavior label decodable for an
+-- instance started before deployment and selects only the v2 label for a fresh
+-- instance. Conversation labels carry a message id, but the patch decision is
+-- the same stable journal value.
+behaviorRetryLabelsArePinned :: IO ()
+behaviorRetryLabelsArePinned =
+  withShikigamiMigratedDatabase \connStr ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+      tracer <- noopTracer
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      traverse_ (exerciseLabelFamily appEnv) labelFamilies
+      assertBool
+        "the deployed patch set contains the behavior retry id"
+        (Set.member behaviorRetryPatch shikigamiActivePatches)
+  where
+    labelFamilies =
+      [ (WorkflowName "shikigami.agent-run", "run-behavior", "run-behavior-v2"),
+        (WorkflowName "shikigami.danwa-conversation", "run-behavior:msg-versioning", "run-behavior-v2:msg-versioning")
+      ]
+
+behaviorRetryPatch :: PatchId
+behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
+
+exerciseLabelFamily :: AppEnv -> (WorkflowName, Text, Text) -> IO ()
+exerciseLabelFamily appEnv (workflowName, oldLabel, newLabel) = do
+  let suffix = oldLabel
+      oldId = WorkflowId ("retry-old:" <> suffix)
+      freshId' = WorkflowId ("retry-fresh:" <> suffix)
+      postRetryOptions = defaultWorkflowRunOptions {activePatches = Set.singleton behaviorRetryPatch}
+
+  parked <- runAppIO appEnv (runWorkflowWith defaultWorkflowRunOptions workflowName oldId (oldRetryShape oldLabel))
+  assertEqual (Text.unpack oldLabel <> " pre-deploy shape parks") (Right Suspended) parked
+  resumed <- runAppIO appEnv (runWorkflowWith postRetryOptions workflowName oldId (newRetryShape oldLabel newLabel))
+  assertEqual (Text.unpack oldLabel <> " old journal decodes") (Right (Completed (Right Aeson.Null))) resumed
+  oldIndex <- loadStepIndexFor appEnv workflowName oldId
+  assertEqual (Text.unpack oldLabel <> " remains present") (Right True) (Map.member oldLabel <$> oldIndex)
+  assertEqual (Text.unpack newLabel <> " is absent from the old journal") (Right False) (Map.member newLabel <$> oldIndex)
+
+  fresh <- runAppIO appEnv (runWorkflowWith postRetryOptions workflowName freshId' (newRetryShape oldLabel newLabel))
+  assertEqual (Text.unpack newLabel <> " fresh shape completes") (Right (Completed (Right Aeson.Null))) fresh
+  freshIndex <- loadStepIndexFor appEnv workflowName freshId'
+  assertEqual (Text.unpack newLabel <> " is present in the fresh journal") (Right True) (Map.member newLabel <$> freshIndex)
+  assertEqual (Text.unpack oldLabel <> " is absent from the fresh journal") (Right False) (Map.member oldLabel <$> freshIndex)
+
+oldRetryShape :: Text -> Eff (Workflow : AppEffects) Value
+oldRetryShape label = do
+  _ <- step (StepName label) (pure (Right Aeson.Null :: Either Text Value))
+  awaitInput (StepName ("retry-park:" <> label))
+
+newRetryShape :: Text -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
+newRetryShape oldLabel newLabel = do
+  useRetrySemantics <- patch behaviorRetryPatch
+  step
+    (StepName (if useRetrySemantics then newLabel else oldLabel))
+    (pure (Right Aeson.Null))
 
 -- ── Test B: the emit-signal scheme is pinned per instance ───────────────────
 
