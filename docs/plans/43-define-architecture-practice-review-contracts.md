@@ -40,7 +40,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19T21:57:24Z) M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
 - [x] (2026-08-19T22:10:25Z) M3: add deterministic `ReviewId` derivation and semantic validators.
 - [x] (2026-08-19T22:10:25Z) M3: add valid/invalid golden fixtures and export the contract from `shikigami-core`.
-- [ ] Final: focused core tests, package-architecture tests, and `cabal test all` pass with no runtime/database dependency.
+- [x] (2026-08-19T22:14:41Z) Final: focused core tests, attestation compatibility tests, package-architecture tests, and all nine workspace test suites pass with no runtime/database dependency; ADR 0008 records the shared repository-vocabulary decision.
 
 
 ## Surprises & Discoveries
@@ -86,6 +86,12 @@ implementation. Provide concise evidence.
   `tagSingleConstructors = True`, even when `allNullaryToStringTag = True`. The first fixture
   run rejected `"advisory"` with `expected Array`; enabling single-constructor tagging made
   `ReviewMode` use the same closed-string wire shape as the other enums.
+
+- This repository has no `check-adr` Just recipe or ADR profile to execute. Evidence:
+  `just check-adr` reports `Justfile does not contain recipe check-adr`, `just --list` has no
+  ADR command, and `docs/adr/README.md` specifies a plain-Markdown corpus. ADR 0008 was
+  therefore checked against that README, the sequential filename/header convention, and
+  `git diff --check`.
 
 
 ## Decision Log
@@ -175,6 +181,17 @@ Compare the result against the original purpose.
   and resolution branches, and reject fourteen named malformed or inconsistent fixture
   cases. The focused suite passes twelve tests.
 
+- Completion (2026-08-19): the requested version-1 contract is exported from
+  `shikigami-core`, with one neutral repository-provenance vocabulary and no API, database,
+  model-provider, or workflow coupling. The practice-review focus passes 12 tests, the moved
+  attestation vocabulary passes all 39 compatibility tests, the package-architecture focus
+  passes all 6 tests, and `cabal test all` passes all nine workspace test suites. The durable
+  module-ownership and revision-invariant decision is recorded in
+  [ADR 0008](../adr/0008-repository-provenance-is-shared-domain-vocabulary.md). The main
+  implementation lesson was to validate semantic branches after JSON decoding and return an
+  opaque validated wrapper: wire-shape success alone cannot make a verdict safe for later
+  memory or notification plans.
+
 
 ## Context and Orientation
 
@@ -225,8 +242,8 @@ human or approved artifact workflow. Kizashi acknowledgement alone is attention 
 not a truth-producing resolution. This contract contains no Keiro workflow body, database
 operation, model provider, sink call, or runtime dependency. No current ADR directly governs
 the wire shape; the package boundary is current architecture documentation, and the shared
-repository-module ownership decision will be distilled into a new filesystem ADR before
-completion.
+repository-module ownership and revision invariant are recorded in
+[ADR 0008](../adr/0008-repository-provenance-is-shared-domain-vocabulary.md).
 
 
 ## Plan of Work
@@ -448,6 +465,14 @@ Kioku, Keiro, Mori client code, `mmzk-typeid`, a database, or a model provider.
 
 
 ## Revision Notes
+
+- 2026-08-19: Completed the reconciled plan. Added the shared repository and practice-review
+  contracts, deterministic UUIDv5 identities, semantic validation, complete valid and invalid
+  fixture coverage, focused tests, and
+  [ADR 0008](../adr/0008-repository-provenance-is-shared-domain-vocabulary.md). Recorded final
+  evidence from the 12-test practice-review focus, 39-test attestation compatibility focus,
+  6-test package-architecture focus, and all nine workspace test suites. No Keiro workflow
+  body or runtime integration changed.
 
 - 2026-08-19: Reconciled the entire plan before implementation. Replaced the stale API
   package/test paths with `shikigami-core`, incorporated the already-landed package and
