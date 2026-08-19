@@ -40,12 +40,14 @@ import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context (Context)
 import Baikai.Error (BaikaiError, authError, rateLimited)
 import Baikai.Message (AssistantPayload (..))
-import Baikai.Model (Model, emptyModel, modelId)
+import Baikai.Model (Model, emptyModel)
+import Baikai.Model qualified as Model
 import Baikai.Options (Options (..), emptyOptions)
 import Baikai.Response (Response (..), emptyResponse, errorResponse)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
@@ -62,9 +64,12 @@ import Shikigami.App.Config
     environmentBindings,
   )
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
+import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.Profile qualified as Profile
+import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Error (RunError (..))
-import Shikigami.Behavior.Provider (describeProviderSelection, newBehaviorEnvFor)
-import Shikigami.Behavior.Run (BehaviorEnv (..), triggerOnly)
+import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, renderProfileViolation)
+import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
 import System.Directory (doesFileExist)
@@ -73,7 +78,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tests :: TestTree
-tests = testGroup "behavior provider" [credentialTests, failureTests]
+tests = testGroup "behavior provider" [credentialTests, profileConstraintTests, failureTests]
 
 -- ── Which credential reaches the model call ─────────────────────────────────
 
@@ -163,7 +168,7 @@ capturedOptions BehaviorEnv {model = envModel, options = envOptions} = do
 -- | The model an environment dispatches with. A plain selector would be
 -- ambiguous: 'Baikai.Response.Response' has a @model@ field too.
 envModelId :: BehaviorEnv -> Text
-envModelId BehaviorEnv {model = envModel} = modelId envModel
+envModelId BehaviorEnv {model = envModel} = Model.modelId envModel
 
 runSkillWithFixture ::
   Model ->
@@ -179,6 +184,110 @@ assertAbsent label rendered =
   assertBool
     (label <> " leaked the planted credential:\n" <> Text.unpack rendered)
     (not ("s3cr3t-planted-token-42" `Text.isInfixOf` rendered))
+
+-- ── Pinned profile constraint ───────────────────────────────────────────────
+
+profileConstraintTests :: TestTree
+profileConstraintTests =
+  testGroup
+    "a pinned profile is checked before provider dispatch"
+    [ testCase "the complete provider tuple is accepted exactly" do
+        env <- newBehaviorEnv
+        let constrained = envWithThinking Profile.ThinkingHigh env
+        case constrainBehaviorEnv (stubProfile "stub-v1" Profile.defaultProhibitions) constrained of
+          Right _ -> pure ()
+          Left violation -> assertFailure ("the exact tuple should be allowed, got " <> show violation),
+      testCase "a defaulted thinking level is refused when the profile keeps that prohibition" do
+        env <- newBehaviorEnv
+        let resolved = stubProfile "stub-v1" Profile.defaultProhibitions
+        case constrainBehaviorEnv resolved env of
+          Left violation@(DefaultedThinkingForbidden (ProviderCall _ _ _ attemptedModel attemptedThinking) _) -> do
+            attemptedModel @?= "stub-v1"
+            attemptedThinking @?= Nothing
+            assertProfileViolationNamesDigest resolved violation
+          Left other -> assertFailure ("expected DefaultedThinkingForbidden, got " <> show other)
+          Right _ -> assertFailure "expected DefaultedThinkingForbidden, got an allowed environment",
+      testCase "an explicitly permitted SDK thinking default may dispatch" do
+        env <- newBehaviorEnv
+        case constrainBehaviorEnv (stubProfile "stub-v1" defaultThinkingProhibitions) env of
+          Right _ -> pure ()
+          Left violation -> assertFailure ("the explicit default permission should be honored, got " <> show violation),
+      testCase "a model outside the pinned tuple is refused with the attempted model and digest" do
+        env <- newBehaviorEnv
+        let resolved = stubProfile "different-model" Profile.defaultProhibitions
+            constrained = envWithThinking Profile.ThinkingHigh env
+        case constrainBehaviorEnv resolved constrained of
+          Left violation@(ForbiddenCall (ProviderCall _ _ _ attemptedModel _) _) -> do
+            attemptedModel @?= "stub-v1"
+            assertProfileViolationNamesDigest resolved violation
+          Left other -> assertFailure ("expected ForbiddenCall, got " <> show other)
+          Right _ -> assertFailure "expected ForbiddenCall, got an allowed environment"
+    ]
+
+envWithThinking :: Profile.ThinkingLevel -> BehaviorEnv -> BehaviorEnv
+envWithThinking level BehaviorEnv {runtime, model, options, traceSink} =
+  BehaviorEnv
+    { runtime,
+      model,
+      options = options {thinking = Just level},
+      traceSink
+    }
+
+stubProfile :: Text -> Profile.Prohibitions -> ResolvedProfile
+stubProfile allowedModel prohibitions =
+  let content =
+        Profile.SanctionedExecutionProfile
+          { Profile.profileId = stubProfileId,
+            Profile.version = stubProfileVersion,
+            Profile.issuer = Profile.Issuer "shinzui/kikan",
+            Profile.lifecycle = Profile.Active,
+            Profile.validFrom = epoch,
+            Profile.validUntil = Nothing,
+            Profile.allowedCalls =
+              NonEmpty.singleton
+                Profile.AllowedCall
+                  { Profile.provider = "stub",
+                    Profile.api = "stub",
+                    Profile.endpointClass = "in-process",
+                    Profile.modelId = allowedModel,
+                    Profile.thinking = Profile.ThinkingHigh
+                  },
+            Profile.prohibitions,
+            Profile.limits = Profile.unlimitedProfileLimits,
+            Profile.minimumEvidenceStrength = Profile.EvidenceModelObserved,
+            Profile.requiredCorrelationFields = [],
+            Profile.signerRequirements = Profile.noSignerRequirements
+          }
+      digest = profileDigest content
+   in ResolvedProfile
+        { profile = content,
+          ref = Profile.SanctionedExecutionProfileRef stubProfileId stubProfileVersion digest
+        }
+
+defaultThinkingProhibitions :: Profile.Prohibitions
+defaultThinkingProhibitions =
+  Profile.Prohibitions
+    { Profile.aliasesAllowed = False,
+      Profile.defaultedThinkingAllowed = True,
+      Profile.providerFallbackAllowed = False,
+      Profile.modelFallbackAllowed = False,
+      Profile.effortClampingAllowed = False,
+      Profile.cliTransportsAllowed = False
+    }
+
+stubProfileId :: Profile.ProfileId
+stubProfileId = Profile.ProfileId "stub-profile"
+
+stubProfileVersion :: Profile.ProfileVersion
+stubProfileVersion = Profile.ProfileVersion "1"
+
+assertProfileViolationNamesDigest :: ResolvedProfile -> ProfileViolation -> IO ()
+assertProfileViolationNamesDigest ResolvedProfile {ref = Profile.SanctionedExecutionProfileRef _ _ (Profile.ProfileDigest digest)} violation = do
+  let rendered = renderProfileViolation violation
+  assertBool
+    ("violation should name the attempted tuple: " <> Text.unpack rendered)
+    ("(provider=stub, api=stub, endpointClass=in-process, model=stub-v1, thinking=" `Text.isInfixOf` rendered)
+  assertBool ("violation should name the profile digest: " <> Text.unpack rendered) (digest `Text.isInfixOf` rendered)
 
 -- ── Provider failure ────────────────────────────────────────────────────────
 

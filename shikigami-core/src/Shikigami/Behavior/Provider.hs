@@ -30,6 +30,13 @@ module Shikigami.Behavior.Provider
     ProviderSelection (..),
     lookupAnthropicModel,
 
+    -- * The profile boundary
+    ProviderCall (..),
+    ProfileViolation (..),
+    renderProfileViolation,
+    constrainBehaviorEnv,
+    newBehaviorEnvForProfile,
+
     -- * Building an environment for it
     newBehaviorEnvFor,
 
@@ -39,18 +46,99 @@ module Shikigami.Behavior.Provider
   )
 where
 
+import Baikai.Api (Api (..))
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
-import Baikai.Model (modelId)
-import Baikai.Options (Options (..), emptyOptions)
+import Baikai.Model qualified as Model
+import Baikai.Options (Options, emptyOptions)
+import Baikai.Options qualified as Options
 import Baikai.Provider.Claude.Api qualified as Claude
+import Baikai.ThinkingLevel (ThinkingLevel, renderThinkingLevel)
 import Baikai.Trace (TraceSink)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
+import Shikigami.Attestation.Profile qualified as Profile
+import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Log qualified as Log
+
+-- | The exact model-call tuple a 'BehaviorEnv' would put on the provider seam.
+-- Thinking is optional because leaving it to the SDK is itself a policy fact,
+-- not an invisible default.
+data ProviderCall = ProviderCall
+  { provider :: !Text,
+    api :: !Text,
+    endpointClass :: !Text,
+    modelId :: !Text,
+    thinking :: !(Maybe ThinkingLevel)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | Permanent pre-dispatch refusals. Every constructor carries the offending
+-- tuple and the immutable profile reference so an audit record can say both
+-- what was attempted and which policy rejected it.
+data ProfileViolation
+  = ForbiddenCall !ProviderCall !Profile.SanctionedExecutionProfileRef
+  | DefaultedThinkingForbidden !ProviderCall !Profile.SanctionedExecutionProfileRef
+  | CliTransportForbidden !ProviderCall !Profile.SanctionedExecutionProfileRef
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | Refuse a behavior environment before it can build or dispatch a provider
+-- request unless its whole tuple is permitted by the pinned profile.
+--
+-- Selected model ids come from Baikai's catalog, not a free-text fallback. An
+-- id different from the profile's exact id therefore misses the tuple rather
+-- than being guessed to be an alias. Likewise, Baikai has no provider/model
+-- fallback in this construction path; those prohibitions remain closed by the
+-- absence of such machinery.
+constrainBehaviorEnv :: ResolvedProfile -> BehaviorEnv -> Either ProfileViolation BehaviorEnv
+constrainBehaviorEnv ResolvedProfile {profile, ref} env =
+  let call = providerCall env
+      restrictions = Profile.prohibitions profile
+      permitted = any (matchesCall restrictions call) (Profile.allowedCalls profile)
+   in if endpointClass call == "cli" && not (Profile.cliTransportsAllowed restrictions)
+        then Left (CliTransportForbidden call ref)
+        else case thinking call of
+          Nothing
+            | not (Profile.defaultedThinkingAllowed restrictions) ->
+                Left (DefaultedThinkingForbidden call ref)
+          _
+            | permitted -> Right env
+            | otherwise -> Left (ForbiddenCall call ref)
+
+-- | Build and constrain a selected provider with the same unconditional
+-- announcement as 'newBehaviorEnvFor'. The workflow normally constrains its
+-- already-built process environment with 'constrainBehaviorEnv'; this
+-- constructor is useful for one-off callers that have the selection itself.
+newBehaviorEnvForProfile ::
+  ResolvedProfile ->
+  ProviderSelection ->
+  Maybe TraceSink ->
+  IO (Either ProfileViolation BehaviorEnv)
+newBehaviorEnvForProfile resolvedProfile selection traceSink = do
+  logger <- Log.newStderrLogger Log.Info
+  constrainBehaviorEnv resolvedProfile <$> newBehaviorEnvFor logger selection traceSink
+
+renderProfileViolation :: ProfileViolation -> Text
+renderProfileViolation = \case
+  ForbiddenCall call ref ->
+    "sanctioned execution profile " <> renderProfileRef ref <> " forbids call " <> renderProviderCall call
+  DefaultedThinkingForbidden call ref ->
+    "sanctioned execution profile "
+      <> renderProfileRef ref
+      <> " forbids defaulted thinking for call "
+      <> renderProviderCall call
+  CliTransportForbidden call ref ->
+    "sanctioned execution profile "
+      <> renderProfileRef ref
+      <> " forbids CLI transport for call "
+      <> renderProviderCall call
 
 -- | Build the behavior environment an operator's configuration asked for, and
 -- announce it.
@@ -99,7 +187,68 @@ newBehaviorEnvFor logger selection traceSink = do
 -- its content, so an accidental trace of this value cannot spill the key.
 credentialOptions :: SecretText -> Options
 credentialOptions credential =
-  emptyOptions {apiKey = Just (ApiKeyLiteral (revealSecretText credential))}
+  emptyOptions {Options.apiKey = Just (ApiKeyLiteral (revealSecretText credential))}
+
+providerCall :: BehaviorEnv -> ProviderCall
+providerCall BehaviorEnv {model, options} =
+  let (api, endpointClass) = callSurface (Model.api model)
+   in ProviderCall
+        { provider = Model.provider model,
+          api,
+          endpointClass,
+          modelId = Model.modelId model,
+          thinking = Options.thinking options
+        }
+
+callSurface :: Api -> (Text, Text)
+callSurface = \case
+  AnthropicMessages -> ("messages", "https")
+  OpenAIChatCompletions -> ("chat-completions", "https")
+  AnthropicMessagesCli -> ("messages", "cli")
+  OpenAICompletionsCli -> ("completions", "cli")
+  Custom "stub" -> ("stub", "in-process")
+  Custom customApi -> (customApi, "custom")
+
+matchesCall :: Profile.Prohibitions -> ProviderCall -> Profile.AllowedCall -> Bool
+matchesCall restrictions call allowed =
+  provider call == Profile.provider allowed
+    && api call == Profile.api allowed
+    && endpointClass call == Profile.endpointClass allowed
+    && modelId call == Profile.modelId allowed
+    && case thinking call of
+      Just requested -> requested == Profile.thinking allowed
+      Nothing -> Profile.defaultedThinkingAllowed restrictions
+
+renderProviderCall :: ProviderCall -> Text
+renderProviderCall call =
+  "(provider="
+    <> provider call
+    <> ", api="
+    <> api call
+    <> ", endpointClass="
+    <> endpointClass call
+    <> ", model="
+    <> modelId call
+    <> ", thinking="
+    <> maybe "defaulted" renderThinkingLevel (thinking call)
+    <> ")"
+
+renderProfileRef :: Profile.SanctionedExecutionProfileRef -> Text
+renderProfileRef (Profile.SanctionedExecutionProfileRef profileId version digest) =
+  profileIdText profileId
+    <> " version "
+    <> profileVersionText version
+    <> " digest "
+    <> profileDigestText digest
+
+profileIdText :: Profile.ProfileId -> Text
+profileIdText (Profile.ProfileId value) = value
+
+profileVersionText :: Profile.ProfileVersion -> Text
+profileVersionText (Profile.ProfileVersion value) = value
+
+profileDigestText :: Profile.ProfileDigest -> Text
+profileDigestText (Profile.ProfileDigest value) = value
 
 -- | The low-cardinality name of the selected provider, for the @provider@ field.
 -- The human sentence goes in @detail@; this is what an operator groups by.
@@ -118,4 +267,4 @@ describeProviderSelection = \case
   UseStub ->
     "model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model"
   UseAnthropic model _credential ->
-    "model provider: anthropic model=" <> modelId model <> " credential=present"
+    "model provider: anthropic model=" <> Model.modelId model <> " credential=present"

@@ -61,10 +61,11 @@ anything. Recording and judging belong to
       `shikigami-resolve-profile-v1`. (2026-08-19)
 - [x] M2: pinning test — resolve, crash mid-run, mutate the stored profile, resume, assert the
       original content and digest survive without another resolver call. (2026-08-19)
-- [ ] M3: the resolved profile constrains the provider seam; a call outside the pinned tuple set
-      is refused before dispatch, with a typed error naming the offending tuple.
-- [ ] M3: an agent declared without a profile requirement behaves exactly as it does today —
-      proven by the existing suite still passing unchanged.
+- [x] M3: the resolved profile constrains the provider seam; a call outside the pinned tuple set
+      is refused before dispatch, with a typed error naming the offending tuple and profile
+      digest. Four focused constraint cases and the workflow refusal case pass. (2026-08-19)
+- [x] M3: an agent declared without a profile requirement behaves exactly as it does today —
+      the complete `shikigami-core-test` suite reports all 232 tests passed. (2026-08-19)
 
 
 ## Surprises & Discoveries
@@ -93,6 +94,12 @@ anything. Recording and judging belong to
   runtime could execute an unseen additive step during replay, the checked rollout contract is
   stricter because an instance may straddle the insertion point. Declaring
   `shikigami-resolve-profile-v1` changed the finding to `ADDITIVE` and replay-neutral. (2026-08-19)
+
+- Baikai 0.5.0.0 exposes the dispatch decision as `Model` plus per-call `Options`: the model owns
+  provider, API tag, and exact catalog model id, while `Options.thinking` is `Maybe
+  ThinkingLevel`. The constraint can therefore inspect the value that will actually dispatch
+  without duplicating provider configuration. `Nothing` is observable and refused unless the
+  profile explicitly permits defaulted thinking. (2026-08-19)
 
 
 ## Decision Log
@@ -140,6 +147,24 @@ anything. Recording and judging belong to
   existed. Fresh generations record the active patch and must resolve any declared requirement
   before opening a session. This satisfies the repository's checked Keiro rollout gate without
   weakening fail-closed behavior for any run that can actually declare a profile.
+  Date: 2026-08-19
+
+- Decision: Apply the pinned call constraint only to `Skill` behaviors, immediately after profile
+  replay and before `open-session`; non-model behaviors still resolve and pin their declared
+  profile but have no provider call to constrain.
+  Rationale: `Skill` is the only `runBehavior` arm that reaches Baikai. Constraining a
+  `ShikumiProgram`, deterministic rule, or Flow against a process-wide provider it never calls
+  would create false refusals. Passing the accepted `BehaviorEnv` through execution and session
+  completion ensures the checked model is exactly the model used and recorded.
+  Date: 2026-08-19
+
+- Decision: Normalize Baikai API tags into the profile vocabulary at one boundary:
+  `AnthropicMessages` is `(messages, https)`, `OpenAIChatCompletions` is
+  `(chat-completions, https)`, their CLI variants use endpoint class `cli`, and the deterministic
+  stub is `(stub, in-process)`.
+  Rationale: profiles sanction API family and transport separately, while Baikai combines them in
+  one constructor. A single exhaustive conversion avoids comparing ad-hoc strings at call sites
+  and makes a newly added Baikai constructor a compile-time review point.
   Date: 2026-08-19
 
 

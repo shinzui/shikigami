@@ -75,6 +75,7 @@ import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
+import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
@@ -254,7 +255,27 @@ runProfiledAgent ::
   AgentDecl ->
   Maybe ResolvedProfile ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
-runProfiledAgent deps job decl _resolvedProfile = do
+runProfiledAgent deps job decl resolvedProfile =
+  case behaviorEnvForProfile decl resolvedProfile (behaviorEnv deps) of
+    Left violation -> pure (Left (renderProfileViolation violation))
+    Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv job decl
+
+behaviorEnvForProfile ::
+  AgentDecl ->
+  Maybe ResolvedProfile ->
+  BehaviorEnv ->
+  Either ProfileViolation BehaviorEnv
+behaviorEnvForProfile AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
+  constrainBehaviorEnv resolvedProfile
+behaviorEnvForProfile _decl _resolvedProfile = Right
+
+runProfiledAgentWith ::
+  AgentRunDeps ->
+  BehaviorEnv ->
+  RunJob ->
+  AgentDecl ->
+  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+runProfiledAgentWith deps activeBehaviorEnv job decl = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
@@ -266,8 +287,8 @@ runProfiledAgent deps job decl _resolvedProfile = do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
-        Flow {} -> runBehaviorStep deps sid decl job prior
-        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job prior)
+        Flow {} -> runBehaviorStep deps activeBehaviorEnv sid decl job prior
+        _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv sid decl job prior)
   case behaviorE of
     Left err -> do
       _ <- runStep deps (StepName "fail-session") (failSession deps decl sid err)
@@ -281,7 +302,7 @@ runProfiledAgent deps job decl _resolvedProfile = do
           enqueueSinkIntents (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
-      _ <- runStep deps (StepName "complete") (completeSession deps decl sid)
+      _ <- runStep deps (StepName "complete") (completeSession deps activeBehaviorEnv decl sid)
       pure
         ( Right
             AgentRunResult
@@ -389,12 +410,13 @@ openSession deps job decl = liftIO do
 runBehaviorStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
+  BehaviorEnv ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   [MemoryRecord] ->
   Eff es (Either Text Value)
-runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
+runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
     ShikumiProgram {task}
@@ -402,7 +424,7 @@ runBehaviorStep deps sid decl@AgentDecl {behavior = currentBehavior} job@RunJob 
     _ ->
       liftIO
         ( first (Text.pack . show)
-            <$> runBehavior (behaviorEnv deps) decl BehaviorInput {payload = triggerPayload, recalled = prior}
+            <$> runBehavior activeBehaviorEnv decl BehaviorInput {payload = triggerPayload, recalled = prior}
         )
 
 runFlowBehavior ::
@@ -751,8 +773,8 @@ recordLearning deps decl sid output = liftIO do
 -- This changes what the @complete@ step body writes, not the journal: the step
 -- name and its recorded result shape are untouched, so a workflow parked before
 -- this change still replays.
-completeSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Eff es ()
-completeSession deps decl sid = liftIO do
+completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> AgentDecl -> SessionId -> Eff es ()
+completeSession deps activeBehaviorEnv decl sid = liftIO do
   completedAt' <- getCurrentTime
   void $
     Session.complete
@@ -761,7 +783,7 @@ completeSession deps decl sid = liftIO do
           memorySpaceId = shikigamiMemorySpace,
           actorPrincipal = agentActor (agentDeclName decl),
           completedAt = completedAt',
-          modelUsed = Just (behaviorModelId (behaviorEnv deps)),
+          modelUsed = Just (behaviorModelId activeBehaviorEnv),
           summary = Just "agent-run completed"
         }
       & runKioku deps

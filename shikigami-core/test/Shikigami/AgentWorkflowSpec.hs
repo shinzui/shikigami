@@ -57,6 +57,7 @@ import Shikigami.Attestation.Profile
     ProfileId (..),
     ProfileLifecycle (Active),
     ProfileVersion (..),
+    Prohibitions (..),
     SanctionedExecutionProfile (..),
     SanctionedExecutionProfileRef (..),
     ThinkingLevel (ThinkingHigh),
@@ -260,6 +261,31 @@ tests =
             assertEqual "resolution executed only on the first attempt" 1 calls
             pinnedAfter <- loadProfileResolution appEnv profilePinningJob
             assertEqual "replay kept the original profile rather than the replacement" pinnedBefore pinnedAfter,
+      testCase "a pinned tuple mismatch refuses before the provider or session boundary" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                content = workflowProfileWith defaultThinkingProhibitions (ProfileVersion "1")
+                digest = profileDigest content
+                resolved = resolvedWorkflowProfile content digest
+                deps =
+                  (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [profiledSkillDecl])
+                    { resolveRunProfile = \_profileId _version -> pure (Right resolved)
+                    }
+
+            result <- runAgentRunWorkflow deps profileViolationJob
+            case result of
+              Right (Completed (Left err)) -> do
+                assertBool ("violation should name the attempted model: " <> Text.unpack err) ("stub-v1" `Text.isInfixOf` err)
+                assertBool ("violation should name the pinned digest: " <> Text.unpack err) (profileDigestText digest `Text.isInfixOf` err)
+              other -> assertFailure ("expected a permanent provider-profile refusal, got " <> show other)
+
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "profiled-skill"))
+            case sessions of
+              Right (Right rows) -> assertEqual "the provider seam was refused before session creation" 0 (length rows)
+              other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
       testCase "resumes after a crash between record and complete without duplicating memory" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -851,6 +877,22 @@ profiledDecl =
             }
     }
 
+profiledSkillDecl :: AgentDecl
+profiledSkillDecl =
+  AgentDecl
+    { name = "profiled-skill",
+      description = "workflow test skill with a sanctioned profile",
+      trigger = Event {eventType = "test"},
+      behavior = Skill {path = "agents/skills/triage-note"},
+      sinks = [],
+      sanctionedProfile =
+        Just
+          ProfileRequirement
+            { profileId = "sanctioned-review",
+              version = Just "1"
+            }
+    }
+
 flowDecl :: AgentDecl
 flowDecl =
   AgentDecl
@@ -949,11 +991,27 @@ profilePinningJob =
       delegationDepth = Nothing
     }
 
+profileViolationJob :: RunJob
+profileViolationJob =
+  RunJob
+    { agentName = "profiled-skill",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "profiled-skill:test-profile-violation",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
 sampleWorkflowProfileId :: ProfileId
 sampleWorkflowProfileId = ProfileId "sanctioned-review"
 
 workflowProfile :: ProfileVersion -> SanctionedExecutionProfile
-workflowProfile version =
+workflowProfile = workflowProfileWith defaultProhibitions
+
+workflowProfileWith :: Prohibitions -> ProfileVersion -> SanctionedExecutionProfile
+workflowProfileWith prohibitions version =
   SanctionedExecutionProfile
     { profileId = sampleWorkflowProfileId,
       version,
@@ -970,11 +1028,22 @@ workflowProfile version =
               modelId = "claude-sonnet-4-6",
               thinking = ThinkingHigh
             },
-      prohibitions = defaultProhibitions,
+      prohibitions,
       limits = unlimitedProfileLimits,
       minimumEvidenceStrength = EvidenceModelObserved,
       requiredCorrelationFields = ["request-id"],
       signerRequirements = noSignerRequirements
+    }
+
+defaultThinkingProhibitions :: Prohibitions
+defaultThinkingProhibitions =
+  Prohibitions
+    { aliasesAllowed = False,
+      defaultedThinkingAllowed = True,
+      providerFallbackAllowed = False,
+      modelFallbackAllowed = False,
+      effortClampingAllowed = False,
+      cliTransportsAllowed = False
     }
 
 resolvedWorkflowProfile :: SanctionedExecutionProfile -> ProfileDigest -> ResolvedProfile
