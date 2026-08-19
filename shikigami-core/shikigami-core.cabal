@@ -37,6 +37,7 @@ library
     Shikigami.Agent.Workflow.Name
     Shikigami.App.Config
     Shikigami.App.Config.Load
+    Shikigami.App.Role
     Shikigami.Behavior.Error
     Shikigami.Behavior.Input
     Shikigami.Behavior.Provider

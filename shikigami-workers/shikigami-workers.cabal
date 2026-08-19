@@ -30,8 +30,6 @@ library
     Shikigami.Trigger.Scheduler
     Shikigami.Trigger.Timer
     Shikigami.Workers.Command
-    Shikigami.Workers.Command.AgentRun
-    Shikigami.Workers.Command.RunBehavior
     Shikigami.Workers.Command.Scheduler
     Shikigami.Workers.Command.Worker
     Shikigami.Workers.Config
@@ -106,26 +104,6 @@ executable shikigami-consume-events
   import:         common
   main-is:        Main.hs
   hs-source-dirs: app/consume-events
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
-
-executable shikigami-run-behavior
-  import:         common
-  main-is:        Main.hs
-  hs-source-dirs: app/run-behavior
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
-
-executable shikigami-agent-run
-  import:         common
-  main-is:        Main.hs
-  hs-source-dirs: app/agent-run
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , base

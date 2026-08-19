@@ -31,10 +31,11 @@ import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
--- | The six packages, in dependency order.
+-- | The seven packages, in dependency order.
 expectedPackages :: [Text]
 expectedPackages =
-  [ "shikigami-api",
+  [ "shikigami-agent",
+    "shikigami-api",
     "shikigami-client",
     "shikigami-core",
     "shikigami-migrations",
@@ -44,12 +45,13 @@ expectedPackages =
 
 -- | Which siblings each package's /production library/ may depend on.
 --
--- Read as the arrows in @docs\/architecture\/packages.md@: api and workers see
--- core; server sees core and api; client sees api; core and migrations see no
--- sibling at all.
+-- Read as the arrows in @docs\/architecture\/packages.md@: api, workers, and
+-- agent see core; server sees core and api; client sees api; core and
+-- migrations see no sibling at all.
 allowedLibraryEdges :: [(Text, [Text])]
 allowedLibraryEdges =
   [ ("shikigami-core", []),
+    ("shikigami-agent", ["shikigami-core"]),
     ("shikigami-api", ["shikigami-core"]),
     ("shikigami-server", ["shikigami-core", "shikigami-api"]),
     ("shikigami-workers", ["shikigami-core"]),
@@ -57,12 +59,22 @@ allowedLibraryEdges =
     ("shikigami-client", ["shikigami-api"])
   ]
 
--- | Packages whose runtime role core must never absorb.
+-- | The packages that must stay light, and what "light" means.
+--
+-- @shikigami-core@ is the domain library every other package builds on.
+-- @shikigami-agent@ exists so a consumer who is not running the Kikan platform
+-- can run one declared agent without acquiring the platform's messaging,
+-- queueing, and telemetry-export stack; see
+-- @docs\/architecture\/packages.md@.
+lightPackages :: [Text]
+lightPackages = ["shikigami-core", "shikigami-agent"]
+
+-- | Runtime roles a light package must never absorb.
 --
 -- Each entry names what linking it would mean: a listener, an exporter, a
 -- supervised queue adapter, or a stream client.
-forbiddenInCore :: [(Text, Text)]
-forbiddenInCore =
+forbiddenInLightPackages :: [(Text, Text)]
+forbiddenInLightPackages =
   [ ("wai", "an HTTP application interface belongs to shikigami-server"),
     ("warp", "an HTTP server belongs to shikigami-server"),
     ("servant-server", "HTTP route execution belongs to shikigami-server"),
@@ -78,7 +90,7 @@ tests :: TestTree
 tests =
   testGroup
     "package architecture"
-    [ testCase "the repository has exactly the six declared packages" do
+    [ testCase "the repository has exactly the seven declared packages" do
         root <- repositoryRoot
         found <- mapM (\name -> (name,) <$> doesFileExist (cabalPathIn root name)) expectedPackages
         mapM_
@@ -103,16 +115,49 @@ tests =
                 (null illegal)
           )
           allowedLibraryEdges,
-      testCase "shikigami-core links no listener, exporter, queue adapter, or stream client" do
+      testCase "no light package links a listener, exporter, queue adapter, or stream client" do
         stanzas <- allStanzas
-        coreDeps <- productionLibraryDeps "shikigami-core" stanzas
         mapM_
-          ( \(dependency, why) ->
-              assertBool
-                ("shikigami-core's library depends on " <> Text.unpack dependency <> ": " <> Text.unpack why)
-                (dependency `notElem` coreDeps)
+          ( \package -> do
+              deps <- productionLibraryDeps package stanzas
+              mapM_
+                ( \(dependency, why) ->
+                    assertBool
+                      (Text.unpack package <> "'s library depends on " <> Text.unpack dependency <> ": " <> Text.unpack why)
+                      (dependency `notElem` deps)
+                )
+                forbiddenInLightPackages
           )
-          forbiddenInCore,
+          lightPackages,
+      -- The check that would have caught the regression plan 55 exists to fix.
+      --
+      -- The sibling-edge case above looks at what a *library* declares. It
+      -- cannot see an executable that links a sibling heavier than its own role,
+      -- which is exactly how shikigami-run-behavior — documented as needing no
+      -- database and no key — ended up linking Kafka, PGMQ, and an OTLP
+      -- exporter: it lived in shikigami-workers and depended on that whole
+      -- library.
+      --
+      -- The rule is deliberately absolute rather than a weight budget: an
+      -- executable belongs to a package and links that package's library. An
+      -- executable that needs two siblings is an umbrella dispatcher, which is
+      -- what plan 36 deleted shikigami-cli for.
+      testCase "every executable links only its own package's library" do
+        stanzas <- allStanzas
+        let offenders =
+              [ (package, stanzaName stanza, foreign')
+              | (package, packageStanzas) <- stanzas,
+                stanza <- packageStanzas,
+                stanzaKind stanza == "executable",
+                let siblings = filter (`elem` expectedPackages) (fmap dropSublibrary (stanzaDeps stanza)),
+                let foreign' = filter (/= package) siblings,
+                not (null foreign')
+              ]
+        assertBool
+          ( "an executable may depend only on its own package's library; found "
+              <> show offenders
+          )
+          (null offenders),
       testCase "only test suites depend on the migrations test-support sublibrary" do
         stanzas <- allStanzas
         let offenders =

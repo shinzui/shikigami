@@ -26,11 +26,9 @@ import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
 import Shikigami.Workers.Command
-  ( WorkerRoleInfo (..),
-    agentRunRoleInfo,
+  ( RoleInfo (..),
     consumeEventsRoleInfo,
     consumeStreamRoleInfo,
-    runBehaviorRoleInfo,
     schedulerRoleInfo,
     workerRoleInfo,
     workerRoles,
@@ -63,23 +61,22 @@ tests =
                 ("Usage:" `isInfixOf` rendered)
           )
           workerRoles,
-      testCase "the six worker roles are named exactly once each" $
+      -- The one-off roles moved to shikigami-agent; see
+      -- "Shikigami.Agent.CommandSpec". Their absence here is the assertion that
+      -- they did not stay behind and quietly keep linking Kafka and PGMQ.
+      testCase "the four worker roles are named exactly once each" $
         fmap binaryName workerRoles
           @?= [ "shikigami-worker",
                 "shikigami-scheduler",
                 "shikigami-consume-stream",
-                "shikigami-consume-events",
-                "shikigami-run-behavior",
-                "shikigami-agent-run"
+                "shikigami-consume-events"
               ],
       testCase "each binary is wired to the role whose requirements it must meet" $
         fmap role workerRoles
           @?= [ WorkerRole,
                 SchedulerRole,
                 StreamConsumerRole,
-                EventConsumerRole,
-                RunBehaviorRole,
-                AgentRunRole
+                EventConsumerRole
               ],
       testCase "every worker executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) workerRoles,
@@ -97,10 +94,6 @@ tests =
         assertHasAll
           consumeEventsRoleInfo
           ["--agents", "--broker", "--topic", "--group"],
-      testCase "run-behavior keeps its agent and payload options" $
-        assertHasAll runBehaviorRoleInfo ["--agent", "--payload"],
-      testCase "agent-run keeps its agent and activity options" $
-        assertHasAll agentRunRoleInfo ["--agent", "--from-activity"],
       testCase "each downstream flag names the configuration key it sets" do
         let rendered = helpTextOf workerRoleInfo
         mapM_
@@ -199,7 +192,7 @@ resolutionTests =
 -- do not depend on the developer's shell. It supplies only a connection string,
 -- because every worker role but @run-behavior@ refuses to start without one and
 -- these cases are about where the /other/ values come from.
-resolveArgs :: WorkerRoleInfo -> [String] -> IO AppConfig
+resolveArgs :: RoleInfo -> [String] -> IO AppConfig
 resolveArgs info args =
   case execParserPure defaultPrefs (parserInfo info) args of
     Success (_, options) ->
@@ -224,7 +217,7 @@ resolveArgs info args =
     CompletionInvoked _ -> assertFailure "unexpected completion invocation"
 
 -- | Assert the rendered help mentions every flag the command is documented to take.
-assertHasAll :: WorkerRoleInfo -> [String] -> IO ()
+assertHasAll :: RoleInfo -> [String] -> IO ()
 assertHasAll info flags =
   mapM_
     ( \flag ->
@@ -241,7 +234,7 @@ assertHasAll info flags =
 -- @--help@ always ends in a parser 'Failure'; the help text is the failure's
 -- rendering. A 'Success' would mean the parser did not understand @--help@ at
 -- all, which is itself the bug these tests look for.
-helpTextOf :: WorkerRoleInfo -> String
+helpTextOf :: RoleInfo -> String
 helpTextOf info =
   case execParserPure defaultPrefs (parserInfo info) ["--help"] of
     Failure failure -> let (message, _) = renderFailure failure (binaryName info) in message

@@ -1,11 +1,17 @@
 -- | Command-line surfaces of the worker-role executables.
 --
 -- Each worker role is its own binary — @shikigami-worker@,
--- @shikigami-scheduler@, @shikigami-consume-stream@, @shikigami-consume-events@,
--- @shikigami-run-behavior@, @shikigami-agent-run@ — because an operator scales,
--- restarts, and rolls them out independently, and because a single umbrella
--- process could not honestly import both server and worker implementations
--- without violating the package dependency graph.
+-- @shikigami-scheduler@, @shikigami-consume-stream@, @shikigami-consume-events@
+-- — because an operator scales, restarts, and rolls them out independently, and
+-- because a single umbrella process could not honestly import both server and
+-- worker implementations without violating the package dependency graph.
+--
+-- The two one-off commands that used to live here, @shikigami-run-behavior@ and
+-- @shikigami-agent-run@, moved to @shikigami-agent@. They never needed anything
+-- this package links — Kafka, PGMQ, Shibuya, the OTLP exporter — but every
+-- executable here depends on the whole library, so they linked all of it. Adding
+-- a one-off command to this module puts that back; add it to
+-- "Shikigami.Agent.Command" instead.
 --
 -- == How configuration reaches a role
 --
@@ -26,10 +32,10 @@
 --
 -- Every parser has the same result type, which is exactly why a dropped or
 -- misrouted flag is invisible to the type checker; 'workerRoles' exists so a
--- test can drive all six parsers without listing them a second time.
+-- test can drive all four parsers without listing them a second time.
 module Shikigami.Workers.Command
   ( -- * Roles
-    WorkerRoleInfo (..),
+    RoleInfo (..),
     workerRoles,
     runRole,
 
@@ -38,8 +44,6 @@ module Shikigami.Workers.Command
     schedulerRoleInfo,
     consumeStreamRoleInfo,
     consumeEventsRoleInfo,
-    runBehaviorRoleInfo,
-    agentRunRoleInfo,
   )
 where
 
@@ -48,8 +52,7 @@ import Options.Applicative
 import Settei.Optparse (cliOverride, cliSources, namedOption)
 import Settei.Source (Source)
 import Shikigami.App.Config
-  ( AppConfig,
-    Role (..),
+  ( Role (..),
     agentsDirectoryKey,
     kafkaActivityTopicKey,
     kafkaBrokerKey,
@@ -62,53 +65,30 @@ import Shikigami.App.Config
     sinksKawaBaseUrlKey,
     sinksKizashiBaseUrlKey,
   )
-import Shikigami.App.Config.Load
-  ( ConfigOptions,
-    runAppConfig,
-    withConfigOptions,
-  )
-import Shikigami.Workers.Command.AgentRun (runAgentRun)
-import Shikigami.Workers.Command.RunBehavior (runRunBehavior)
+import Shikigami.App.Config.Load (withConfigOptions)
+import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
-
--- | One worker executable: what it is installed as, which role it plays for the
--- purpose of required-key checking, and how its command line parses.
-data WorkerRoleInfo = WorkerRoleInfo
-  { binaryName :: !String,
-    role :: !Role,
-    parserInfo :: !(ParserInfo (AppConfig -> IO (), ConfigOptions))
-  }
 
 -- | Every worker executable, in the order they are documented.
 --
 -- Exists so a test can assert that each one's @--help@ works and keeps its
 -- flags, and so adding a role forces a decision about its name.
-workerRoles :: [WorkerRoleInfo]
+workerRoles :: [RoleInfo]
 workerRoles =
   [ workerRoleInfo,
     schedulerRoleInfo,
     consumeStreamRoleInfo,
-    consumeEventsRoleInfo,
-    runBehaviorRoleInfo,
-    agentRunRoleInfo
+    consumeEventsRoleInfo
   ]
-
--- | A worker executable's @main@: parse the command line, resolve configuration,
--- then act.
-runRole :: WorkerRoleInfo -> IO ()
-runRole info = do
-  (action, options) <- execParser (parserInfo info)
-  config <- runAppConfig (role info) options
-  action config
 
 -- ── The roles ───────────────────────────────────────────────────────────────
 
 -- | @shikigami-worker@: drain the run-job queue and run agents end to end.
-workerRoleInfo :: WorkerRoleInfo
+workerRoleInfo :: RoleInfo
 workerRoleInfo =
-  WorkerRoleInfo
+  RoleInfo
     { binaryName = "shikigami-worker",
       role = WorkerRole,
       parserInfo =
@@ -126,9 +106,9 @@ workerRoleInfo =
     }
 
 -- | @shikigami-scheduler@: arm Schedule triggers and drive timer firing.
-schedulerRoleInfo :: WorkerRoleInfo
+schedulerRoleInfo :: RoleInfo
 schedulerRoleInfo =
-  WorkerRoleInfo
+  RoleInfo
     { binaryName = "shikigami-scheduler",
       role = SchedulerRole,
       parserInfo =
@@ -139,9 +119,9 @@ schedulerRoleInfo =
     }
 
 -- | @shikigami-consume-stream@: match declared stream agents against @activity.v1@.
-consumeStreamRoleInfo :: WorkerRoleInfo
+consumeStreamRoleInfo :: RoleInfo
 consumeStreamRoleInfo =
-  WorkerRoleInfo
+  RoleInfo
     { binaryName = "shikigami-consume-stream",
       role = StreamConsumerRole,
       parserInfo =
@@ -152,9 +132,9 @@ consumeStreamRoleInfo =
     }
 
 -- | @shikigami-consume-events@: match declared event agents against a public topic.
-consumeEventsRoleInfo :: WorkerRoleInfo
+consumeEventsRoleInfo :: RoleInfo
 consumeEventsRoleInfo =
-  WorkerRoleInfo
+  RoleInfo
     { binaryName = "shikigami-consume-events",
       role = EventConsumerRole,
       parserInfo =
@@ -168,43 +148,6 @@ consumeEventsRoleInfo =
                 eventsGroupOption
               ]
           )
-    }
-
--- | @shikigami-run-behavior@: run one agent's behavior, with no database.
---
--- The manifest path and the payload are per-invocation arguments; the only
--- configuration it reads is which model provider to run. That makes it both the
--- offline default (stubs, no key, no database) and the cheapest live check of a
--- real provider, depending on nothing but @behavior.provider@.
-runBehaviorRoleInfo :: WorkerRoleInfo
-runBehaviorRoleInfo =
-  WorkerRoleInfo
-    { binaryName = "shikigami-run-behavior",
-      role = RunBehaviorRole,
-      parserInfo =
-        withConfigOptions
-          "Run an agent's behavior once, with no database and no recalled memory"
-          ( runRunBehavior
-              <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
-              <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
-          )
-          (pure [])
-    }
-
--- | @shikigami-agent-run@: run one agent through the kioku session lifecycle.
-agentRunRoleInfo :: WorkerRoleInfo
-agentRunRoleInfo =
-  WorkerRoleInfo
-    { binaryName = "shikigami-agent-run",
-      role = AgentRunRole,
-      parserInfo =
-        withConfigOptions
-          "Run an agent with the kioku session/memory lifecycle"
-          ( runAgentRun
-              <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
-              <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
-          )
-          (pure [])
     }
 
 -- ── Command-line configuration sources ──────────────────────────────────────

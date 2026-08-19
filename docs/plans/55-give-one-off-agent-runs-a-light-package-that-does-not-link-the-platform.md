@@ -62,20 +62,23 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: create `shikigami-agent/` with a library depending only on `shikigami-core`, move
-      `Shikigami.Workers.Command.RunBehavior` and `Shikigami.Workers.Command.AgentRun` into it
-      as `Shikigami.Agent.Command.RunBehavior` and `Shikigami.Agent.Command.AgentRun`, add
-      `Shikigami.Agent.Command` as the package's option-parser composition module, and move the
-      `shikigami-run-behavior` and `shikigami-agent-run` executables. Add the package to
-      `cabal.project`.
-- [ ] M1: prove the dependency win — `cabal build shikigami-agent --dry-run` names none of the
-      eight workers-only packages, and `cabal build all` plus `cabal test all -j1` stay green.
-- [ ] M2: extend `Shikigami.PackageArchitectureSpec` so the boundary is enforced rather than
-      documented: seven expected packages, `shikigami-agent -> shikigami-core` as the only
-      legal sibling edge, the `forbiddenInCore` list applied to `shikigami-agent` as well, and
-      a new case asserting that **no executable stanza in any package depends on a library
-      heavier than its role** — which is the check that would have caught this in the first
-      place.
+- [x] (2026-08-19) M1: created `shikigami-agent/` with a library depending only on
+      `shikigami-core`, moved both command modules into it as `Shikigami.Agent.Command.*`, added
+      `Shikigami.Agent.Command` as the composition module, moved both executables, and added the
+      package to `cabal.project`. `git` recorded all four moves as renames.
+- [x] (2026-08-19) M1: `RoleInfo` and `runRole` moved to a new `Shikigami.App.Role` in
+      `shikigami-core` rather than being duplicated — see the Decision Log. `shikigami-workers`
+      now imports them, and `WorkerRoleInfo` is gone.
+- [x] (2026-08-19) M1: the dependency win is proven. `cabal build shikigami-agent --dry-run`
+      names none of `hw-kafka-client`, `kafka-effectful`, `pgmq-effectful`,
+      `shibuya-pgmq-adapter`, `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp`,
+      `baikai-trace-otel`, or `shikigami-workers`. `cabal build all` and `cabal test all -j1`
+      are green: nine suites, including the new `shikigami-agent-test`.
+- [x] (2026-08-19) M2: extended `Shikigami.PackageArchitectureSpec` — seven expected packages,
+      `shikigami-agent -> shikigami-core`, `forbiddenInCore` generalised to
+      `forbiddenInLightPackages` over a `lightPackages` list, and a new case: **every executable
+      links only its own package's library**. All three were mutation-tested and each fails on
+      its own fault.
 - [ ] M3: update `docs/architecture/packages.md` (the six-package table, the executable
       ownership table, the module placement rules, and the "no umbrella dispatcher" paragraph).
       It is owned by plan 36, so revise plan 36 in the same change.

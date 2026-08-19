@@ -1,4 +1,5 @@
 packages:
+  shikigami-agent
   shikigami-api
   shikigami-core
   shikigami-client
