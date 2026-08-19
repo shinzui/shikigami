@@ -2,9 +2,11 @@ module Shikigami.AgentWorkflowSpec (tests) where
 
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
-import Data.Aeson (Value, object, (.=))
+import Data.Aeson (Result (..), Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
+import Data.Functor.Contravariant ((>$<))
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -12,6 +14,12 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Pool (Pool)
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as HasqlSession
+import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow)
@@ -33,13 +41,30 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), ProfileRequirement (..), Sink (..), Trigger (..))
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunHooks (..), SinkIntent (..), agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.Profile
+  ( AllowedCall (..),
+    EvidenceStrength (EvidenceModelObserved),
+    Issuer (..),
+    ProfileDigest (..),
+    ProfileId (..),
+    ProfileLifecycle (Active),
+    ProfileVersion (..),
+    SanctionedExecutionProfile (..),
+    SanctionedExecutionProfileRef (..),
+    ThinkingLevel (ThinkingHigh),
+    defaultProhibitions,
+    noSignerRequirements,
+    unlimitedProfileLimits,
+  )
+import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
@@ -136,6 +161,7 @@ tests =
             afterCrash <- readIORef counts
             assertEqual "journaled pre-behavior steps ran once before the crash" (Just 1) (Map.lookup "ingest-job" afterCrash)
             assertEqual "lookup-agent ran once before the crash" (Just 1) (Map.lookup "lookup-agent" afterCrash)
+            assertEqual "resolve-profile ran once before the crash" (Just 1) (Map.lookup "resolve-profile" afterCrash)
             assertEqual "open-session ran once before the crash" (Just 1) (Map.lookup "open-session" afterCrash)
             assertEqual "recall ran once before the crash" (Just 1) (Map.lookup "recall" afterCrash)
             assertEqual "run-behavior was attempted once before the crash" (Just 1) (Map.lookup "run-behavior" afterCrash)
@@ -148,6 +174,7 @@ tests =
             finalCounts <- readIORef counts
             assertEqual "ingest-job replayed without rerunning" (Just 1) (Map.lookup "ingest-job" finalCounts)
             assertEqual "lookup-agent replayed without rerunning" (Just 1) (Map.lookup "lookup-agent" finalCounts)
+            assertEqual "resolve-profile replayed without rerunning" (Just 1) (Map.lookup "resolve-profile" finalCounts)
             assertEqual "open-session replayed without rerunning" (Just 1) (Map.lookup "open-session" finalCounts)
             assertEqual "recall replayed without rerunning" (Just 1) (Map.lookup "recall" finalCounts)
             assertEqual "run-behavior reran after its failed attempt" (Just 2) (Map.lookup "run-behavior" finalCounts)
@@ -158,6 +185,81 @@ tests =
             assertEqual "one row per completed lifecycle step" (Right expectedLifecycleSteps) stepKeys
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "recovered run enqueued one stable outbox row" (Right 1) (length <$> outboxRows),
+      testCase "an unknown required profile refuses before opening a session" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [profiledDecl]
+
+            result <- runAgentRunWorkflow deps profileRefusalJob
+            case result of
+              Right (Completed (Left err)) ->
+                assertBool ("failure should name the profile: " <> show err) ("sanctioned-review" `Text.isInfixOf` err)
+              other -> assertFailure ("expected a permanent profile refusal, got " <> show other)
+
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+            case sessions of
+              Right (Right rows) -> assertEqual "no session was opened" 0 (length rows)
+              other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other))
+            outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+            assertEqual "no sink intent was enqueued" (Right 0) (length <$> outboxRows),
+      testCase "a resumed run keeps the profile content and digest it originally resolved" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            resolverCalls <- newIORef (0 :: Int)
+            shouldCrash <- newIORef True
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                profileStore = postgresProfileStore (pool kirokuStore)
+                originalContent = workflowProfile (ProfileVersion "1")
+                originalDigest = profileDigest originalContent
+                originalResolved = resolvedWorkflowProfile originalContent originalDigest
+                resolver profileId version = do
+                  modifyIORef' resolverCalls (+ 1)
+                  now <- getCurrentTime
+                  resolveProfile profileStore now profileId version
+                hooks =
+                  defaultAgentRunHooks
+                    { beforeStepBody = \stepName ->
+                        when (unStepName stepName == "run-behavior") do
+                          crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
+                          when crashNow (ioError (userError "simulated crash after resolve-profile"))
+                    }
+                deps =
+                  (testDepsWithAgents appEnv behaviorEnv hooks [profiledDecl])
+                    { resolveRunProfile = resolver
+                    }
+
+            insertWorkflowProfile (pool kirokuStore) originalContent originalDigest
+            crashed <- try (runAgentRunWorkflow deps profilePinningJob)
+            case crashed of
+              Left (_ :: SomeException) -> pure ()
+              Right other -> assertFailure ("first run should crash after profile resolution, got " <> show other)
+
+            pinnedBefore <- loadProfileResolution appEnv profilePinningJob
+            assertEqual "the original content and digest were journaled" (Right (Just originalResolved)) pinnedBefore
+
+            let replacementContent = workflowProfile (ProfileVersion "2")
+                replacementDigest = profileDigest replacementContent
+            replaceWorkflowProfile
+              (pool kirokuStore)
+              sampleWorkflowProfileId
+              (ProfileVersion "1")
+              replacementContent
+              replacementDigest
+
+            resumed <- runAgentRunWorkflow deps profilePinningJob
+            case resumed of
+              Right (Completed (Right _)) -> pure ()
+              other -> assertFailure ("resumed run should complete, got " <> show other)
+
+            calls <- readIORef resolverCalls
+            assertEqual "resolution executed only on the first attempt" 1 calls
+            pinnedAfter <- loadProfileResolution appEnv profilePinningJob
+            assertEqual "replay kept the original profile rather than the replacement" pinnedBefore pinnedAfter,
       testCase "resumes after a crash between record and complete without duplicating memory" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -562,7 +664,8 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       approval = defaultApprovalEnv,
       deadline = Nothing,
       logger = Log.silentLogger,
-      grants = StaticGrants defaultGrantTable
+      grants = StaticGrants defaultGrantTable,
+      resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
 
 testDepsWithApproval :: AppEnv -> BehaviorEnv -> AgentRunHooks -> (SessionId -> ApprovalEnv) -> AgentRunDeps
@@ -583,7 +686,8 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       approval,
       deadline,
       logger = Log.silentLogger,
-      grants = StaticGrants defaultGrantTable
+      grants = StaticGrants defaultGrantTable,
+      resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> ApprovalEnv
@@ -675,11 +779,24 @@ loadLifecycleStepKeys appEnv runJob = do
   result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
   pure (first show (Set.delete patchSetStepName . Set.delete completedStepName . Map.keysSet <$> result))
 
+loadProfileResolution :: AppEnv -> RunJob -> IO (Either String (Maybe ResolvedProfile))
+loadProfileResolution appEnv runJob = do
+  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+  pure do
+    journal <- first show result
+    encoded <- maybe (Left "resolve-profile was not journaled") Right (Map.lookup "resolve-profile" journal)
+    resolution <- case fromJSON encoded :: Result (Either ProfileResolutionError (Maybe ResolvedProfile)) of
+      Success value -> Right value
+      Error err -> Left ("cannot decode resolve-profile: " <> err)
+    first show resolution
+
 expectedLifecycleSteps :: Set.Set Text
 expectedLifecycleSteps =
   Set.fromList
     [ "ingest-job",
       "lookup-agent",
+      "patch:shikigami-resolve-profile-v1",
+      "resolve-profile",
       "open-session",
       "recall",
       "run-behavior",
@@ -708,7 +825,30 @@ decl =
             grounding = Nothing,
             enabledBy = Nothing
           },
-      sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}]
+      sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      sanctionedProfile = Nothing
+    }
+
+profiledDecl :: AgentDecl
+profiledDecl =
+  AgentDecl
+    { name = "heartbeat",
+      description = "workflow test agent with a sanctioned profile",
+      trigger = Event {eventType = "test"},
+      behavior =
+        ShikumiProgram
+          { task = "noop-summary",
+            preferEnrichment = False,
+            grounding = Nothing,
+            enabledBy = Nothing
+          },
+      sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      sanctionedProfile =
+        Just
+          ProfileRequirement
+            { profileId = "sanctioned-review",
+              version = Just "1"
+            }
     }
 
 flowDecl :: AgentDecl
@@ -718,7 +858,8 @@ flowDecl =
       description = "workflow flow test agent",
       trigger = Event {eventType = "test"},
       behavior = Flow {name = "at-risk-customer"},
-      sinks = []
+      sinks = [],
+      sanctionedProfile = Nothing
     }
 
 conversationDecl :: AgentDecl
@@ -781,6 +922,144 @@ crashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing
     }
+
+profileRefusalJob :: RunJob
+profileRefusalJob =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "heartbeat:test-profile-refusal",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+profilePinningJob :: RunJob
+profilePinningJob =
+  RunJob
+    { agentName = "heartbeat",
+      triggerKind = TriggeredByEvent,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = "heartbeat:test-profile-pinning",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing
+    }
+
+sampleWorkflowProfileId :: ProfileId
+sampleWorkflowProfileId = ProfileId "sanctioned-review"
+
+workflowProfile :: ProfileVersion -> SanctionedExecutionProfile
+workflowProfile version =
+  SanctionedExecutionProfile
+    { profileId = sampleWorkflowProfileId,
+      version,
+      issuer = Issuer "shinzui/kikan",
+      lifecycle = Active,
+      validFrom = UTCTime (fromGregorian 2026 8 1) 0,
+      validUntil = Nothing,
+      allowedCalls =
+        NonEmpty.singleton
+          AllowedCall
+            { provider = "anthropic",
+              api = "messages",
+              endpointClass = "https",
+              modelId = "claude-sonnet-4-6",
+              thinking = ThinkingHigh
+            },
+      prohibitions = defaultProhibitions,
+      limits = unlimitedProfileLimits,
+      minimumEvidenceStrength = EvidenceModelObserved,
+      requiredCorrelationFields = ["request-id"],
+      signerRequirements = noSignerRequirements
+    }
+
+resolvedWorkflowProfile :: SanctionedExecutionProfile -> ProfileDigest -> ResolvedProfile
+resolvedWorkflowProfile content digest =
+  let SanctionedExecutionProfile {profileId, version} = content
+   in ResolvedProfile
+        { profile = content,
+          ref = SanctionedExecutionProfileRef {profileId, version, digest}
+        }
+
+insertWorkflowProfile :: Pool -> SanctionedExecutionProfile -> ProfileDigest -> IO ()
+insertWorkflowProfile pool content claimedDigest = do
+  let SanctionedExecutionProfile {profileId, version, issuer, validFrom, validUntil} = content
+      params =
+        ( profileIdText profileId,
+          profileVersionText version,
+          issuerText issuer,
+          "active",
+          validFrom,
+          validUntil,
+          toJSON content,
+          profileDigestText claimedDigest
+        )
+  result <- Pool.use pool (HasqlSession.statement params insertWorkflowProfileStatement)
+  either (assertFailure . show) pure result
+
+insertWorkflowProfileStatement :: Statement (Text, Text, Text, Text, UTCTime, Maybe UTCTime, Value, Text) ()
+insertWorkflowProfileStatement =
+  preparable
+    """
+    INSERT INTO shikigami.sanctioned_execution_profiles
+      (profile_id, version, issuer, lifecycle, valid_from, valid_until, profile_content, profile_digest)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    """
+    ( ((\(a, _, _, _, _, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, b, _, _, _, _, _, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, c, _, _, _, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, _, d, _, _, _, _) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, _, _, e, _, _, _) -> e) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+        <> ((\(_, _, _, _, _, f, _, _) -> f) >$< Encoders.param (Encoders.nullable Encoders.timestamptz))
+        <> ((\(_, _, _, _, _, _, g, _) -> g) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
+        <> ((\(_, _, _, _, _, _, _, h) -> h) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    )
+    Decoders.noResult
+
+replaceWorkflowProfile :: Pool -> ProfileId -> ProfileVersion -> SanctionedExecutionProfile -> ProfileDigest -> IO ()
+replaceWorkflowProfile pool profileId oldVersion replacement claimedDigest = do
+  let SanctionedExecutionProfile {version = newVersion} = replacement
+      params =
+        ( profileIdText profileId,
+          profileVersionText oldVersion,
+          profileVersionText newVersion,
+          toJSON replacement,
+          profileDigestText claimedDigest
+        )
+  result <- Pool.use pool (HasqlSession.statement params replaceWorkflowProfileStatement)
+  either (assertFailure . show) pure result
+
+replaceWorkflowProfileStatement :: Statement (Text, Text, Text, Value, Text) ()
+replaceWorkflowProfileStatement =
+  preparable
+    """
+    UPDATE shikigami.sanctioned_execution_profiles
+       SET version = $3, profile_content = $4, profile_digest = $5
+     WHERE profile_id = $1 AND version = $2
+    """
+    ( ((\(a, _, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, b, _, _, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, c, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, _, d, _) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
+        <> ((\(_, _, _, _, e) -> e) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    )
+    Decoders.noResult
+
+profileIdText :: ProfileId -> Text
+profileIdText (ProfileId value) = value
+
+profileVersionText :: ProfileVersion -> Text
+profileVersionText (ProfileVersion value) = value
+
+profileDigestText :: ProfileDigest -> Text
+profileDigestText (ProfileDigest value) = value
+
+issuerText :: Issuer -> Text
+issuerText (Issuer value) = value
 
 recordBeforeCompleteCrashJob :: RunJob
 recordBeforeCompleteCrashJob =

@@ -38,6 +38,7 @@ import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), Integr
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
+    PatchId (..),
     StepName (..),
     Workflow,
     WorkflowId (..),
@@ -45,6 +46,7 @@ import Keiro.Workflow
     WorkflowOutcome,
     currentRunGeneration,
     currentWorkflow,
+    patch,
     prepareJournalAppend,
     runWorkflowWith,
     step,
@@ -65,12 +67,14 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), ProfileRequirement (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
@@ -101,7 +105,12 @@ data AgentRunDeps = AgentRunDeps
     -- | Where this run's log lines go. A workflow runs in whichever process
     -- picked the job up, so the logger arrives with the dependencies rather
     -- than being reached for globally.
-    logger :: !Log.Logger
+    logger :: !Log.Logger,
+    -- | Resolve the profile named by an agent declaration. A function seam
+    -- keeps the durable workflow independent of PostgreSQL and lets replay tests
+    -- prove exactly how often resolution executed.
+    resolveRunProfile ::
+      !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile))
   }
 
 data AgentRunHooks = AgentRunHooks
@@ -223,6 +232,29 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either Text AgentRunResult)
 runResolvedAgent deps job decl = do
+  resolveProfileForRun <- patch profileResolutionPatch
+  profileResolution <-
+    if resolveProfileForRun
+      then
+        runStep
+          deps
+          (StepName "resolve-profile")
+          (liftIO (resolveRequiredProfile deps decl))
+      else pure (Right Nothing)
+  case profileResolution of
+    Left refusal -> pure (Left (renderProfileResolutionError refusal))
+    Right resolvedProfile -> runProfiledAgent deps job decl resolvedProfile
+
+profileResolutionPatch :: PatchId
+profileResolutionPatch = PatchId "shikigami-resolve-profile-v1"
+
+runProfiledAgent ::
+  AgentRunDeps ->
+  RunJob ->
+  AgentDecl ->
+  Maybe ResolvedProfile ->
+  Eff (Workflow : AppEffects) (Either Text AgentRunResult)
+runProfiledAgent deps job decl _resolvedProfile = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
@@ -259,6 +291,20 @@ runResolvedAgent deps job decl = do
                 recordedMemId = mem
               }
         )
+
+resolveRequiredProfile ::
+  AgentRunDeps ->
+  AgentDecl ->
+  IO (Either ProfileResolutionError (Maybe ResolvedProfile))
+resolveRequiredProfile deps AgentDecl {sanctionedProfile} =
+  case sanctionedProfile of
+    Nothing -> pure (Right Nothing)
+    Just ProfileRequirement {profileId, version} ->
+      fmap Just
+        <$> resolveRunProfile
+          deps
+          (ProfileId profileId)
+          (ProfileVersion <$> version)
 
 runStep ::
   (Workflow :> es, IOE :> es, ToJSON a, FromJSON a) =>

@@ -44,6 +44,12 @@ workflow AgentRun
     # `record` / `complete`.
     step ingest-job -> RunJob
     step lookup-agent -> AgentDecl
+    # Instances already in flight when profile resolution ships must retain
+    # their old body shape. Fresh instances resolve (or explicitly journal that
+    # no profile is required) before opening a session.
+    patch shikigami-resolve-profile-v1 {
+      step resolve-profile -> ProfileResolution
+    }
     step open-session -> SessionId
     step recall -> RecalledLearnings
     step run-behavior -> BehaviorOutput

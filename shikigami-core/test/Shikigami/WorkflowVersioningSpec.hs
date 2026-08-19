@@ -374,7 +374,8 @@ flowAgentDecl =
       description = "workflow versioning test agent",
       trigger = Event {eventType = "customer.risk_detected"},
       behavior = Deterministic {rule = "flow-test", params = mempty},
-      sinks = []
+      sinks = [],
+      sanctionedProfile = Nothing
     }
 
 flowOccurredAt :: UTCTime

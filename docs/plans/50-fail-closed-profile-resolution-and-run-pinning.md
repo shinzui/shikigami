@@ -56,10 +56,11 @@ anything. Recording and judging belong to
       to cover any read model added. No read model was added. (2026-08-19)
 - [x] M1: tests for all five refusals plus the success case, against a real ephemeral Postgres.
       The focused group reports all 6 tests passed. (2026-08-19)
-- [ ] M2: a `resolve-profile` journaled step in the agent-run workflow, placed before
-      `open-session`, declared through the checked specification.
-- [ ] M2: pinning test — resolve, crash mid-run, mutate the stored profile, resume, assert the
-      original digest survives.
+- [x] M2: a `resolve-profile` journaled step in the agent-run workflow, placed before
+      `open-session`, declared through the checked specification and guarded by
+      `shikigami-resolve-profile-v1`. (2026-08-19)
+- [x] M2: pinning test — resolve, crash mid-run, mutate the stored profile, resume, assert the
+      original content and digest survive without another resolver call. (2026-08-19)
 - [ ] M3: the resolved profile constrains the provider seam; a call outside the pinned tuple set
       is refused before dispatch, with a typed error naming the offending tuple.
 - [ ] M3: an agent declared without a profile requirement behaves exactly as it does today —
@@ -86,6 +87,12 @@ anything. Recording and judging belong to
   so it cannot enforce the policy it claims to be pinned to. The step must journal the resolved
   content together with its reference; this is recorded as a decision below and will be declared
   honestly in the checked specification. (2026-08-19)
+
+- `keiro-dsl diff` classifies inserting `resolve-profile` between existing labels as a breaking
+  workflow-body change unless the complete addition is inside a new patch guard. Although the
+  runtime could execute an unseen additive step during replay, the checked rollout contract is
+  stricter because an instance may straddle the insertion point. Declaring
+  `shikigami-resolve-profile-v1` changed the finding to `ADDITIVE` and replay-neutral. (2026-08-19)
 
 
 ## Decision Log
@@ -124,6 +131,15 @@ anything. Recording and judging belong to
   without re-reading mutable state. An agent with no requirement journals `Nothing`, and the
   checked Keiro specification names the actual persisted result rather than certifying a codec the
   runtime does not execute.
+  Date: 2026-08-19
+
+- Decision: Guard the new journal step with the permanent patch id
+  `shikigami-resolve-profile-v1` in both the checked specification and the workflow body.
+  Rationale: generations already in flight retain the old body shape and cannot acquire a profile
+  requirement because their `lookup-agent` result was journaled before the declaration field
+  existed. Fresh generations record the active patch and must resolve any declared requirement
+  before opening a session. This satisfies the repository's checked Keiro rollout gate without
+  weakening fail-closed behavior for any run that can actually declare a profile.
   Date: 2026-08-19
 
 
@@ -507,9 +523,11 @@ newBehaviorEnvForProfile ::
   ResolvedProfile -> ProviderSelection -> Maybe TraceSink -> IO (Either ProfileViolation BehaviorEnv)
 ```
 
-The journaled step is `StepName "resolve-profile"`, returning `Maybe SanctionedExecutionProfileRef`,
-encoded with `omitNothingFields`. That name and that encoding are permanent; changes to the value
-are additive only.
+The journaled step is `StepName "resolve-profile"`, returning
+`Either ProfileResolutionError (Maybe ResolvedProfile)`. `ResolvedProfile` contains the immutable
+profile content and its digest-bearing reference, so replay can enforce the exact tuple set without
+re-reading the store. The step name and encoding are permanent; changes to the value are additive
+only.
 
 
 ## Reconciliation with the delivered plan 39 (2026-08-19)

@@ -56,6 +56,11 @@ let Sink =
       | DanwaConversation : { topic : Text }
       >
 
+let ProfileRequirement =
+      { Type = { profileId : Text, version : Optional Text }
+      , default = { version = None Text }
+      }
+
 let Agent =
       { Type =
           { name : Text
@@ -63,8 +68,13 @@ let Agent =
           , trigger : Trigger
           , behavior : Behavior
           , sinks : List Sink
+          , sanctionedProfile : Optional ProfileRequirement.Type
           }
-      , default = { description = "", sinks = [] : List Sink }
+      , default =
+          { description = ""
+          , sinks = [] : List Sink
+          , sanctionedProfile = None ProfileRequirement.Type
+          }
       }
 
 in  { SignalType
@@ -74,5 +84,6 @@ in  { SignalType
     , Trigger
     , Behavior
     , Sink
+    , ProfileRequirement
     , Agent
     }

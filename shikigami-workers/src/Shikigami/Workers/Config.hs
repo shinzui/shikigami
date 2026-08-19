@@ -30,6 +30,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -83,8 +84,14 @@ agentRunDeps env =
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing,
       AgentWorkflow.logger = envLogger env,
-      AgentWorkflow.grants = envGrants env
+      AgentWorkflow.grants = envGrants env,
+      AgentWorkflow.resolveRunProfile = \profileId version -> do
+        now <- getCurrentTime
+        Profile.resolveProfile (Profile.postgresProfileStore (envPool env)) now profileId version
     }
+
+envPool :: WorkerEnv -> Pool
+envPool WorkerEnv {pool = p} = p
 
 -- | The conversation workflow's environment.
 conversationEnv :: WorkerEnv -> Conversation.ConversationEnv

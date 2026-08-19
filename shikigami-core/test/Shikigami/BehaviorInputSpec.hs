@@ -306,7 +306,8 @@ triageDecl =
       description = "triage inbound tickets into a short note",
       trigger = Event {eventType = "ticket.received"},
       behavior = Skill {path = "agents/skills/triage-note"},
-      sinks = []
+      sinks = [],
+      sanctionedProfile = Nothing
     }
 
 heartbeatDecl :: AgentDecl
@@ -322,7 +323,8 @@ heartbeatDecl =
             grounding = Nothing,
             enabledBy = Nothing
           },
-      sinks = []
+      sinks = [],
+      sanctionedProfile = Nothing
     }
 
 epoch :: UTCTime

@@ -183,7 +183,8 @@ agentWith sinks =
       description = "a declaration used only for its sinks",
       trigger = Schedule {cron = "*/5 * * * *"},
       behavior = Skill {path = "agents/skills/triage-note"},
-      sinks
+      sinks,
+      sanctionedProfile = Nothing
     }
 
 signalWith :: RecipientFrom -> Maybe Text -> Sink

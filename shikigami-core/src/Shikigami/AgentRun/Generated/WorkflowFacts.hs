@@ -20,9 +20,9 @@ workflowFacts =
     { workflowFactName = "shikigami.agent-run"
     , workflowFactIdVia = "idText"
     , workflowFactIdField = "idempotencyKey"
-    , workflowFactBody = ["step:ingest-job", "step:lookup-agent", "step:open-session", "step:recall", "step:run-behavior", "step:classify", "await:await-ack", "patch:shikigami-emit-signal-labels-v1()", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
+    , workflowFactBody = ["step:ingest-job", "step:lookup-agent", "patch:shikigami-resolve-profile-v1(step:resolve-profile)", "step:open-session", "step:recall", "step:run-behavior", "step:classify", "await:await-ack", "patch:shikigami-emit-signal-labels-v1()", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
     , workflowFactAwaitLabels = ["await-ack"]
-    , workflowFactPatchIds = ["shikigami-emit-signal-labels-v1"]
+    , workflowFactPatchIds = ["shikigami-resolve-profile-v1", "shikigami-emit-signal-labels-v1"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.

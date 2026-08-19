@@ -10,6 +10,7 @@ module Shikigami.Agent.Decl
     SignalType (..),
     Priority (..),
     RecipientFrom (..),
+    ProfileRequirement (..),
   )
 where
 
@@ -82,12 +83,32 @@ data Sink
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
+-- | Which sanctioned execution profile an agent run must resolve before it may
+-- open a memory session. An absent version means "the one active version" and
+-- therefore still fails if the store returns zero or multiple candidates.
+data ProfileRequirement = ProfileRequirement
+  { profileId :: !Text,
+    version :: !(Maybe Text)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
 data AgentDecl = AgentDecl
   { name :: !Text,
     description :: !Text,
     trigger :: !Trigger,
     behavior :: !Behavior,
-    sinks :: ![Sink]
+    sinks :: ![Sink],
+    sanctionedProfile :: !(Maybe ProfileRequirement)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
+  deriving anyclass (FromDhall)
+
+instance ToJSON AgentDecl where toJSON = genericToJSON agentDeclAesonOptions
+
+instance FromJSON AgentDecl where parseJSON = genericParseJSON agentDeclAesonOptions
+
+-- | Keep declarations without a profile byte-compatible with declarations
+-- journaled before the optional field existed.
+agentDeclAesonOptions :: Options
+agentDeclAesonOptions = defaultOptions {omitNothingFields = True}

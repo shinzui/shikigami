@@ -384,7 +384,8 @@ flowAgentDecl flowAgent =
           { rule = "flow-test",
             params = mempty
           },
-      sinks = []
+      sinks = [],
+      sanctionedProfile = Nothing
     }
 
 flowOccurredAt :: UTCTime
