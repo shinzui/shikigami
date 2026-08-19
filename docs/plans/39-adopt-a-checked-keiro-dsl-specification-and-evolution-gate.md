@@ -550,10 +550,84 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+### What a developer can do now that they could not before (2026-08-19)
 
-(To be filled during and after implementation.)
+`domain/shikigami.keiro-workspace` is the checked source of truth for Shikigami's durable workflow
+identities, and `just keiro-gate` refuses a change that would move one silently. Concretely:
+
+```bash
+nix develop
+just keiro-gate                 # or `just keiro-gate <merge-base>` on a branch
+```
+
+runs the language floor and warning denial, asserts every member declares its language,
+regenerates and proves the regeneration was a no-op, classifies the change across six
+compatibility surfaces, and runs the generated conformance target. Renaming
+`shikigami.agent-run` now costs:
+
+```text
+BREAKING: AgentRun workflow-name AgentRun: stable name changed
+  'shikigami.agent-run' -> 'shikigami.agent-run-v2';
+  in-flight journals remain under the old stream name [WorkflowStableNameChanged]
+    vector: persisted-identity=breaking
+    remedy: revert the re-keying change or perform an explicit operational identity migration
+```
+
+and it costs that because the name now exists once, in the specification: `Agent/Workflow/Name.hs`
+and `Agent/Conversation.hs` read it from the generated `WorkflowRuntime`, so the gate is over the
+value the runtime actually uses rather than over a document beside it.
+
+`cabal test all` grew two suites' worth of guard: the generated `keiro-shikigami-conformance`
+target asserts twelve workflow facts against a reviewed create-once `Expectations` module, and
+`Shikigami.KeiroSpecificationSpec` covers the four failures the toolchain structurally cannot see.
+Every existing golden is byte-identical — no identity was renamed and no codec moved, which is the
+evidence that adoption changed no behavior.
+
+### What the specification does *not* cover, and why that is the honest answer
+
+Milestone 1's census is the plan's most important output and it is mostly negative. Shikigami has
+**no aggregate, no read model, no projection, no router, and no process manager**, so most of
+keiro-dsl's checked surface has nothing to bite on yet. Four surfaces are deliberately undeclared
+because declaring them would certify a codec the runtime does not execute — the run-job queue, the
+Kafka inbox, the Danwa contract, and the sink outbox — and six journaled label families are
+undeclarable because a keiro-dsl label is a compile-time wire word that admits neither a colon nor
+a runtime value. All of it is inventoried, with evidence and an owning downstream plan, in
+`docs/architecture/shikigami-domain-inventory.md`.
+
+The temptation throughout was to declare more than was true: to describe the queue and let the
+runtime keep its own codec, to declare a `SinkIntent` wire shape nothing encodes, to write a
+partial conversation body as if it were the whole journal. Each would have produced a bigger,
+more impressive specification and a gate that attests to something false. The Portfolio
+Reconciliation of 2026-07-30 anticipated exactly this and its rule carried the plan: **do not
+certify a schema that differs from the codec actually executed.**
+
+### What remains
+
+The gate starts earning its keep when plan 51 adds Shikigami's first aggregate — that is when
+`behavior-obligations` stops reporting `required: 0`, when the warning table in Context becomes
+reachable, when golden payloads acquire an owner, and when `WorkspaceDuplicateDeclaration` gets a
+declaration to refuse. Plan 26 owns making the conversation journal declarable; plans 24 and 27
+own the run-job queue's codec; plan 14 owns the approval `signal` operation; plan 27 owns merging
+the two `SinkIntent` records in Haskell.
+
+### Lessons
+
+**The census should have come first, and this plan says so in its own instructions.** "Derive the
+member split from the completed inventory, not before it" was already written down, and the
+six-member proposal beside it still shaped eight days of planning around an aggregate, a router,
+an intake, a publisher, and read models that do not exist. A proposal offered before evidence gets
+treated as a default, however clearly it is labelled provisional.
+
+**Two of this plan's factual claims were wrong in ways only running the tool could reveal.**
+`module Shikigami` doubles the prefix rather than restating the context default, and a workflow
+label cannot contain a colon. Both were stated confidently, both were load-bearing, and both took
+one probe to disprove. Probing the toolchain on a scratch file before authoring cost minutes and
+saved a wrong specification.
+
+**A formatter is a hand.** `nix fmt` rewriting `-- @generated` files breaks the firewall and
+determinism at once, and nothing in the fleet standards mentions it because their reference
+services presumably emit fourmolu-stable output. Adopting a code generator into a formatted
+repository means deciding who owns the bytes, in the same change.
 
 
 ## Context and Orientation
@@ -679,28 +753,46 @@ Beyond the default, Language 5 carries three things this portfolio needs:
 
 ### Split the specification into workspace members
 
+**Delivered 2026-08-19. The manifest below was the pre-inventory proposal and is wrong in two
+ways; the delivered manifest follows it.** Everything after the manifest in this subsection —
+the composition mechanics, the ownership argument, the house criterion — stands and was followed.
+
 The specification is a **workspace**, not a single file: a `domain/shikigami.keiro-workspace`
 manifest plus one `.keiro` member per review boundary. Author it that way from the first commit,
 so the workspace never has to be adopted over standalone history later.
 
-The manifest is short, and it — not the CLI, and not the members — is the authority on placement:
+The manifest is short, and it — not the CLI, and not the members — is the authority on placement.
+This is what was delivered:
 
 ```text
 service shikigami
 runtime-package shikigami-core
-module Shikigami
 layout collocated
 spec shikigami-agent-run.keiro
 spec shikigami-conversation.keiro
-spec shikigami-flow.keiro
-spec shikigami-integration.keiro
-spec shikigami-shared.keiro
-spec shikigami-sink.keiro
 ```
 
-(Alphabetical, matching the canonical path order composition uses anyway. The member list is the
-*starting proposal* argued below, not a settled split — Milestone 1 derives it from the
-inventory.)
+The pre-inventory proposal was this, and both differences are corrections rather than
+simplifications:
+
+```text
+service shikigami
+runtime-package shikigami-core
+module Shikigami          # WRONG: doubles the prefix, see Surprises
+layout collocated
+spec shikigami-agent-run.keiro
+spec shikigami-conversation.keiro
+spec shikigami-flow.keiro          # no aggregate exists to own
+spec shikigami-integration.keiro   # the inbox and contract stay hand-written
+spec shikigami-shared.keiro        # nothing is shared: no id, enum, rule, or mapped type
+spec shikigami-sink.keiro          # SinkIntent cannot be a declaration that runs
+```
+
+`module Shikigami` is not a redundant restatement of `context shikigami`; it is a *prefix* applied
+on top of it, and declaring it scaffolds `Shikigami.Shikigami.*`. And five of the six proposed
+members assumed an aggregate, a router, an intake, a publisher, and read models that the Milestone
+1 census found do not exist — see `docs/architecture/shikigami-domain-inventory.md`. Member paths
+stay alphabetical, matching the canonical path order composition uses anyway.
 
 Mechanics that follow from that, and that Milestone 1 must respect:
 
@@ -717,8 +809,9 @@ Mechanics that follow from that, and that Milestone 1 must respect:
   manifests, no duplicates, and no case-fold collisions. Membership is a **set**, canonically
   sorted by normalized path, so reordering `spec` lines changes neither meaning nor generated
   bytes — keep them alphabetical and never argue about order in review.
-- `context shikigami` already supplies `Shikigami` as the default Haskell module root; the
-  `module` clause is stated anyway so placement is explicit rather than derived.
+- `context shikigami` already supplies `Shikigami` as the default Haskell module root, and the
+  `module` clause is a **prefix applied on top of it**, not a restatement of it. Do not declare
+  one. (This bullet said the opposite until 2026-08-19; see Surprises.)
 - Every file-taking command accepts the manifest and validates the **composed** service before
   acting, so `check`, `diff`, `scaffold`, `inspect`, and `behavior-obligations` all take
   `domain/shikigami.keiro-workspace`. `inspect` lists every member in canonical path order.
@@ -728,11 +821,17 @@ Mechanics that follow from that, and that Milestone 1 must respect:
 and every node exactly one owning member, enforced by `WorkspaceDuplicateDeclaration` ("a shared
 declaration has exactly one owning member; identical duplicates do not merge") and
 `WorkspaceDuplicateNodeName`, with an `OwnershipIndex` attributing each node to the member that
-owns it. Shikigami already has the failure this prevents: `Shikigami.Flow.SinkOutbox` keeps a
-hand-maintained copy of `Agent/Workflow.hs`'s `SinkIntent`, guarded by nothing but a comment
-reading "The flow path's copy" and "Must match ... exactly" (`Flow/SinkOutbox.hs:40,65`). One
-owning member turns that comment into a checked error. A single-file specification would have
-had no such mechanism to offer.
+owns it.
+
+The worked example this paragraph used to give was `SinkIntent`, duplicated between
+`Agent/Workflow.hs` and `Flow/SinkOutbox.hs` and guarded by nothing but a comment reading "Must
+match ... exactly" (`Flow/SinkOutbox.hs:40,65`). **That example does not work, and Milestone 1
+established why:** the mechanism applies to DSL declarations, and at keiro-dsl 0.13 a `SinkIntent`
+declaration cannot be one the runtime executes — an unconsumed `mapped structural` type generates
+a shape, a binding, projections, and conformance assertions, and no codec. The duplication stays
+guarded by `WireCompatSpec` until plan 27 merges the two records in Haskell. The ownership
+mechanism is still real and still the reason the workspace exists; it starts binding when plan 51
+adds an aggregate and a shared member with it.
 
 The second reason is concurrent editing. Milestone 4 hands this specification to seven downstream
 plans that each add to it — a single file gives them one merge surface and no boundary of
@@ -762,20 +861,27 @@ symmetry, not under-splitting. The starting proposal below is grounded in the cu
 the plans that will edit each member; collapse any member the inventory shows to be thin, and
 record the final split in the Decision Log.
 
-| Member | Owns | Downstream editors |
-| --- | --- | --- |
-| `shikigami-shared.keiro` | IDs, enums, rules, and mapped declarations more than one member needs — agent name, session ref, run/workflow ids, trigger kind, sink kind | — |
-| `shikigami-agent-run.keiro` | The `shikigami.agent-run` workflow, its journaled steps, and the `shikigami_run_jobs` queue that feeds it | 24, 27, 50 |
-| `shikigami-conversation.keiro` | The `shikigami.danwa-conversation` workflow, its steps, and the approval/idle timers and awakeables | 25, 26 |
-| `shikigami-sink.keiro` | Sink intents and the outbox contract/emit/publisher nodes — **the owner of `SinkIntent`** | 19, 27 |
-| `shikigami-integration.keiro` | Kafka intake, inbox dedupe and disposition policy, the Danwa integration contract | 18, 20 |
-| `shikigami-flow.keiro` | The at-risk-customer aggregate, whole and unsplit (`classify`, `await-ack`) | 25 |
+The starting proposal was the six members below. **Four of them were struck by the Milestone 1
+census and one lost its only reason to exist**; the delivered split is the two that survived.
 
-Delegation is deliberately **not** a member of its own in this proposal: its topology is child
-workflows of `shikigami.agent-run` and fields on the run contract, so it belongs with the
-agent-run member unless Milestone 1's inventory shows otherwise. Plan 51's run-evidence aggregate
-gets its own member when it lands — a new aggregate is a new review boundary, which is exactly the
-criterion above.
+| Proposed member | Owns | Outcome |
+| --- | --- | --- |
+| `shikigami-agent-run.keiro` | The `shikigami.agent-run` workflow and its journaled steps | **delivered** (24, 27, 35, 50) |
+| `shikigami-conversation.keiro` | The `shikigami.danwa-conversation` workflow and its steps | **delivered** (25, 26) |
+| `shikigami-shared.keiro` | IDs, enums, rules, and mapped declarations more than one member needs | struck — nothing is shared: neither workflow declares an id, enum, rule, or mapped type |
+| `shikigami-sink.keiro` | Sink intents and the outbox contract/emit/publisher nodes | struck — the outbox publisher calls HTTP sinks, not Kafka, and an unconsumed `SinkIntent` declaration owns no codec |
+| `shikigami-integration.keiro` | Kafka intake, inbox dedupe policy, the Danwa contract | struck — the inbox handlers are agent matchers over an open payload, and the Danwa body has no discriminator |
+| `shikigami-flow.keiro` | The at-risk-customer aggregate, whole and unsplit | struck — it is not an aggregate; it is a Keiki transducer that renders a Mermaid diagram |
+
+The `shikigami_run_jobs` queue was proposed for the agent-run member and stayed out; see the
+identities section below. The at-risk flow's `classify` and `await-ack` labels are journaled into
+`shikigami.agent-run`, so they are declared there rather than in a flow member.
+
+Delegation is deliberately **not** a member of its own: its topology is child workflows of
+`shikigami.agent-run` and fields on the run contract, so it belongs with the agent-run member —
+and the census confirmed that, so `child delegate ...` is declared there. Plan 51's run-evidence
+aggregate gets its own member when it lands, together with a `shikigami-shared.keiro` if it needs
+one — a new aggregate is a new review boundary, which is exactly the criterion above.
 
 Two further mechanics to respect: **never scaffold same-context members independently** — each
 invocation would see a partial graph and overwrite context-keyed history — and golden payloads are
@@ -872,7 +978,11 @@ The identities (locations re-verified 2026-08-18):
 - Thirteen journaled step names: `ingest-job`, `lookup-agent`, `open-session`, `recall`,
   `run-behavior`, `dispatch-sinks`, `record`, `complete`, `fail-session`, `await-ack`,
   `classify`, `ingest-start`, `resolve-session` — in `Agent/Workflow.hs:187-250,491`,
-  `Agent/Conversation.hs:127-161`, and `Flow/AtRiskCustomer.hs:45,50`.
+  `Agent/Conversation.hs:127-161`, and `Flow/AtRiskCustomer.hs:45,50`. All thirteen are declared
+  (`await-ack` as an `await`, the rest as `step`s); all thirteen were kept. Milestone 1 found a
+  further six *undeclarable* label families, every one of them carrying a colon and a
+  runtime-computed suffix; they are inventoried in
+  `docs/architecture/shikigami-domain-inventory.md` with their owning downstream plan.
 - Derived timer identities (`Shikigami/Agent/Approval.hs:182-184`).
 
 Note that `shikigami_run_jobs` is **not** scaffolded by keiro-dsl today and keeps its own payload
@@ -881,18 +991,27 @@ codec: `enqueueRunJob` sends `MessageBody (toJSON job)` — a bare `RunJob` reco
 that payload inside Keiro's schema-version-1 `{v,t,data}` envelope, because a scaffolded queue
 always carries one. That is not a problem of in-flight messages — there are none — but a silent
 codec substitution is a behavior change smuggled in under a documentation change, and this plan's
-acceptance is that adoption changes no behavior. So Milestone 1 must decide explicitly, with a
+acceptance is that adoption changes no behavior. So Milestone 1 had to decide explicitly, with a
 test, between two honest options:
 
 1. **Adopt the envelope**, as a stated decision with its own commit and its own wire test, and
    accept that `RunJob`'s producer and consumer both move. Language 5 makes this describable:
-   `triggerPayload` becomes an opaque `Json` boundary visible in `--coverage-report`,
-   `triggerKind` a structural tagged union, and the four `Maybe` fields explicit optionals.
+   `triggerPayload` becomes an explicit `Json` boundary visible in `--coverage-report`,
+   `triggerKind` a mapped structural enum, and the three `Maybe` fields `Optional` *types* —
+   not optional *presence*, which a 0.13 queue payload cannot express at all
+   (`keiro-dsl/src/Keiro/Dsl/Parser/Queue.hs:100-102`).
 2. **Leave the queue out of the scaffolded surface** for now, describing only its identity
    elsewhere, and record that the specification does not yet cover the run-job wire shape.
 
 What is not an option is describing the queue in the specification while the runtime keeps a
 different codec — do not certify a schema that differs from the codec actually executed.
+
+**Milestone 1 chose option 2 on 2026-08-19.** Three costs of option 1 compound: the generated
+codec is `keiroJobCodec`, whose own generated comment warns against adopting it on a bare-payload
+queue; the generated `Queue` module defines its *own* `RunJob` record that would replace
+`Shikigami.Agent.RunJob.RunJob` on both sides; and
+`shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81` asserts as a live case, against a captured
+literal, that the payload is bare. Plans 24 and 27 own moving it.
 
 This plan starts after
 `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` (complete)
@@ -987,21 +1106,32 @@ cabal run keiro-dsl -- parse domain/shikigami.keiro-workspace
 cabal run keiro-dsl -- check domain/shikigami.keiro-workspace --emit --explain-bindings
 cabal run keiro-dsl -- inspect domain/shikigami.keiro-workspace --format=json
 cabal run keiro-dsl -- behavior-obligations domain/shikigami.keiro-workspace --format=text
-cabal run keiro-dsl -- scaffold domain/shikigami.keiro-workspace \
-  --out shikigami-core/src \
-  --goldens shikigami-core/test/golden-payloads
+cabal run keiro-dsl -- scaffold domain/shikigami.keiro-workspace --out shikigami-core/src
 cabal test all
 ```
 
 `--module-root`, `--collocate`, and `--runtime-package` are deliberately absent: the manifest
-declares `module`, `layout`, and `runtime-package`, and those CLI flags exist to override a
-manifest, not to supply one. Passing them here would move committed placement facts into a
-command someone will eventually forget.
+declares `layout` and `runtime-package`, and those CLI flags exist to override a manifest, not to
+supply one. Passing them here would move committed placement facts into a command someone will
+eventually forget. The manifest deliberately declares **no** `module` clause — `context
+shikigami` already supplies the `Shikigami` prefix and the clause would double it.
+
+`--goldens shikigami-core/test/golden-payloads` was in this block and is not needed yet: golden
+payloads are aggregate-keyed and there is no aggregate. Pass it when plan 51 adds one, and
+consolidate the fixtures under that one root at the same time.
 
 The scaffold run prints the exact generated conformance `cabal test` target; use that, not a
 hand-written harness stanza.
 
-The CI gate:
+The gate, as delivered — this repository has no CI runner, so it is a named `just` recipe that a
+human and a future pipeline run identically:
+
+```bash
+just keiro-gate                 # or `just keiro-gate <merge-base>` on a branch
+```
+
+which is `keiro-check`, `keiro-inspect`, `keiro-scaffold`, `keiro-diff`, and `cabal test
+keiro-shikigami-conformance`. The two commands at its core are:
 
 ```bash
 cabal run -v0 keiro-dsl -- check domain/shikigami.keiro-workspace \
@@ -1043,14 +1173,25 @@ Acceptance requires the checked composed workspace at language 5, a deterministi
 green generated conformance package, and the full suite passing. A deliberate invalid
 cross-reference fails `check`, including one that crosses members, and is reported at the
 original member path, line, and column. A declaration duplicated across two members fails
-`WorkspaceDuplicateDeclaration` even when the two copies are identical — which is the acceptance
-test for retiring `Flow/SinkOutbox`'s `SinkIntent` copy, and should be exercised deliberately
-once. A member whose preamble disagrees with its siblings fails composition with
+`WorkspaceDuplicateDeclaration` even when the two copies are identical. That was meant to be the
+acceptance test for retiring `Flow/SinkOutbox`'s `SinkIntent` copy; Milestone 1 established it
+cannot be, because an unconsumed `mapped structural` declaration owns no codec, so it is untested
+here and starts binding when plan 51 adds an aggregate and a shared member.
+A member whose preamble disagrees with its siblings fails composition with
 `WorkspaceLanguageVersionMismatch` *before* the graph merges, so that is the failure to expect
 from a stray preamble, not `LanguageVersionBelowMinimum`. A manual edit to a
 generated module fails deterministic-output or firewall validation. A deliberate incompatible
-rename fails `diff --since`. A `Pending` behavior witness fails the generated conformance target.
-A newly introduced opaque boundary on a private persisted root fails `--fail-on-opaque`.
+rename fails `diff --since`. A `Pending` behavior witness fails the generated conformance target — untested here, because
+`behavior-obligations` reports `required: 0` with no aggregate to carry an obligation.
+A newly introduced opaque boundary on a private persisted root fails `--fail-on-opaque` —
+likewise untested, and for the same reason.
+
+Every gate that *could* be exercised was, against the failure it claims to catch: a deleted
+preamble (`WorkspaceLanguageVersionMismatch` from both `check` and `inspect`), a removed
+`-- @generated` banner (scaffold refuses, "nothing was written"), a specification change with no
+regeneration (`keiro-scaffold` exits 1), and a workflow rename (`BREAKING ...
+[WorkflowStableNameChanged]`, `keiro-diff` exits 1). The transcripts are in
+`docs/architecture/shikigami-domain-inventory.md`.
 
 Determinism is testable directly: scaffolding an unchanged specification twice must report every
 generated module `unchanged` and skip `KeiroConformance.Expectations` as `already present`. A
@@ -1085,10 +1226,12 @@ until the target is positively identified as disposable generated output; it byp
 missing-banner protection and cannot overwrite create-once hand code or authorize a name
 migration. `--apply-name-migrations` should never be needed by a specification authored fresh at
 0.13; if scaffold demands it, something older is present and must be understood before the flag is
-passed. Likewise `keiro-dsl-migration-report.workspace.shikigami.txt` should never appear: it is
-written when a workspace adopts attributable standalone history, and authoring as a workspace from
-the first commit means there is none. If it appears, a standalone scaffold happened somewhere and
-must be understood before proceeding. Adopt one vertical at a time with compatibility re-exports
+passed. `keiro-dsl-migration-report.workspace.shikigami.txt` **does** appear, and this paragraph used to
+say it should never. The workspace-adoption path runs whenever `--out` already contains Haskell
+under the target namespace, which `shikigami-core/src` obviously does; it claimed nothing, touched
+nothing, and does not re-run on a later scaffold. The report is committed as the record of what
+the workspace did and did not claim. What would still be alarming is a report that *claims* files,
+because that means a standalone same-context scaffold happened somewhere. Adopt one vertical at a time with compatibility re-exports
 so the suite stays green. Persisted identifiers are never renamed as cleanup — only as a recorded
 Milestone 1 decision.
 
@@ -1196,6 +1339,48 @@ diverge from one only with a Decision Log entry saying why:
   before describing `shikigami_run_jobs` as a mapped Language 5 workqueue payload, because a green
   aggregate harness is *not* evidence that an old queued payload is compatible.
 
+
+
+Revision note (2026-08-19): Implemented, and corrected across every section. Milestones 0 through
+4 are complete; Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective
+carry the detail, and this note records what a reader of the *narrative* sections must know
+changed.
+
+**The census overturned the plan's picture of what shikigami is.** This plan was written for a
+service with one aggregate, a router, an intake, a publisher, and read models. Milestone 1 found
+none of them: the only Keiro command runner in the repository targets kioku's session stream, and
+`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
+rather than an event source. The six-member proposal in Context lost four members to that finding
+and a fifth for want of anything shared; the delivered workspace has two, one per durable
+workflow. The member table now records the outcome of each proposal rather than the proposal.
+
+**Two Context claims were factually wrong and are corrected in place.** `module Shikigami` is a
+prefix applied on top of `context shikigami`, not a restatement of it, so declaring it scaffolds
+`Shikigami.Shikigami.*`; the manifest declares no `module` clause. And the `SinkIntent`
+ownership example does not work: an unconsumed `mapped structural` declaration generates a shape,
+a binding, projections, and conformance assertions but no codec, so declaring it would state a
+JSON policy nothing executes. Both corrections carry their evidence in Surprises. Plan 27's
+Decision Log, which depended on the second, is corrected in that plan.
+
+**The queue decision is made: option 2.** `shikigami_run_jobs` stays out of the scaffolded
+surface. Context now records why, and corrects a detail of option 1 while it is there — a 0.13
+workqueue payload cannot express optional *presence* at all, only an `Optional` type, and `RunJob`
+has three optional fields rather than four.
+
+**Concrete Steps, Validation, and Idempotence follow the delivered reality.** `--goldens` is
+dropped until an aggregate exists to key goldens by; the gate is `just keiro-gate`, because this
+repository has no CI runner and a workflow file for a system that does not exist would be a
+declaration with no effect; the acceptance criteria that cannot be exercised yet
+(`WorkspaceDuplicateDeclaration`, a `Pending` behavior witness, a new opaque boundary) say so
+rather than implying they were; and `keiro-dsl-migration-report.workspace.shikigami.txt`, which
+Idempotence said should never appear, does appear, benignly, whenever `--out` already contains
+Haskell under the target namespace.
+
+One thing is new rather than corrected: the generated layer is excluded from `treefmt`. fourmolu
+rewrote all four generated modules and cabal-fmt rewrote the generated conformance `.cabal`, which
+breaks the firewall and the determinism property Validation demands, together. The excludes live
+in `flake.module.nix`; the create-once `KeiroConformance.Expectations` module is deliberately not
+excluded.
 
 Revision note (2026-08-18b): Split the specification into a `.keiro-workspace`, and reversed two
 decisions taken earlier the same day after reading the fleet patterns at
