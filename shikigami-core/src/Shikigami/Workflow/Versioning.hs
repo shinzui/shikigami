@@ -17,11 +17,12 @@
 -- __This module is the only place Shikigami constructs 'WorkflowRunOptions'.__
 -- A second options value built at a call site is a second answer to "which
 -- patches are active", and the workflow that gets the wrong one silently takes
--- the wrong branch. New per-run options belong here too — notably the shibuya
--- lease heartbeat that
+-- the wrong branch. New workflow run or resume options belong here too. Keep
+-- their lease domains distinct: the PGMQ delivery heartbeat that
 -- @docs\/plans\/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md@
--- needs, which sets @leaseHeartbeat@ on this value rather than introducing
--- another one.
+-- needs uses @Keiro.PGMQ.JobContext.extendLease@; the Keiro resume worker
+-- injects @WorkflowRunOptions.leaseHeartbeat@ itself and is configured through
+-- @WorkflowResumeOptions.leaseTtl@. Direct runs leave @leaseHeartbeat@ unset.
 --
 -- The rules that govern when a change needs a patch at all are in
 -- @docs\/workflow-versioning.md@.

@@ -16,458 +16,678 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Today, a shikigami agent whose behavior fails once — a flaky LLM call, a downstream HTTP 503 — never recovers. The failure is journaled as the durable result of the `run-behavior` workflow step, so every "retry" replays the recorded failure from the journal without re-executing anything, and after three such replays the job is silently archived. Separately, any run that takes longer than 30 seconds (which is to say: any real LLM call) is redelivered by the queue while still executing, spawning a concurrent duplicate that dies on a journal conflict. There is no wall-clock limit on a run at all.
+Shikigami currently journals every synchronous behavior failure as the durable value of
+`run-behavior`. A later queue delivery therefore replays the same `Left` instead of calling
+the provider or program again. The run-job queue also has a 30-second visibility timeout
+and no renewal loop, so a healthy long-running behavior can be delivered to a second
+worker while the first is still executing. Permanent failures are either retried or
+archived through the raw Shibuya adapter, and neither behavior attempts nor approval waits
+have one operator-visible timeout policy.
 
-After this plan, transient behavior failures are genuinely re-executed on redelivery and eventually succeed; permanent failures (unknown task, malformed skill) are dead-lettered to an inspectable queue instead of being retried pointlessly and silently archived; a handler heartbeats the queue's visibility timeout while a long run is in flight so the job is never redelivered mid-execution; and every run has an explicit, configurable wall-clock budget. You can see it working by running the new test module `Shikigami.RetrySemanticsSpec` (fails before, passes after) and by watching a worker process a deliberately slow agent without ever logging a `JournalAppendConflict`.
+After this plan, a retryable behavior failure or timeout escapes the step before a journal
+record is appended, so Keiro can re-run the action on a later advance. A permanent failure
+is journaled once and sent to the PGMQ dead-letter queue. The run-job consumer uses
+`keiro-pgmq`'s typed `Job RunJob`, `JobOutcome`, startup queue reconciliation, and
+`JobContext.extendLease`; a supervised heartbeat keeps the PGMQ delivery lease alive for
+the duration of the queue handler. `worker.run_timeout_seconds` bounds one synchronous
+external behavior attempt, `approval.deadline_seconds` bounds approval waits, and the
+Keiro resume lease is sized above the behavior timeout.
+
+The observable proof is a test in which the first behavior attempt fails transiently, no
+`run-behavior-v2` value is journaled, a later advance calls the behavior again and
+succeeds, while a slow attempt renews its PGMQ lease and is delivered only once. A
+permanent failure reaches `shikigami_run_jobs_dlq`; a timeout consumes Keiro's bounded
+workflow failure budget instead of becoming a permanent step result.
 
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
-
-- [ ] **M0 (gate, added 2026-08-10): `shibuya-core 0.9.0.0` is in the cohort.** This plan should
-      not start before it. 0.9 ships the application-defined dead-letter code vocabulary that
-      Milestone 2 would otherwise hand-roll and then delete. It is currently excluded by
-      `keiro 0.11`'s `shibuya-core >=0.8.0.1 && <0.9`, so the gate is really `keiro 0.12` →
-      cohort bump → this plan. See Surprises & Discoveries and
-      `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`.
-- [ ] Milestone 1: add `FailureClass`/`classifyRunError`/`TransientBehaviorFailure` to `Shikigami.Behavior.Error`; throw transients in `runBehaviorStep`.
-- [ ] Milestone 1: tests — transient failure re-executes on second run; permanent failure replays without re-execution.
-- [ ] Prerequisites: plans 36/37 complete; worker ownership and Settei configuration are settled.
-- [ ] Milestone 2: extract pure `classifyOutcome`; preserve Shibuya as sole ack owner; consume the adapter's zero-based attempt and use the shared `mkRetryPolicy`; configure a real dead-letter queue.
-- [ ] Milestone 2: validate shikigami's finite dead-letter code set **once at worker startup**
-      with `mkDeadLetterCode`, hold the results in `WorkerEnv`, and classify permanent failures
-      as `ApplicationFailure` rather than `PoisonPill`. Do not validate per message.
-- [ ] Milestone 2: tests — classification table test asserting `deadLetterReasonCode` for each
-      case; dead-letter queue receives permanent failures with populated
-      `dead_letter_reason_code` and `dead_letter_reason_detail` fields.
-- [ ] Milestone 3: thread the shibuya lease into `handleRunJob`; periodic heartbeat around the workflow execution.
-- [ ] Milestone 3: test — pgmq visibility-extension primitive prevents redelivery.
-- [ ] Milestone 4: wall-clock run timeout (`runTimeout`) and configurable approval `deadline` in `WorkerEnv`; Settei wiring.
-- [ ] Milestone 4: test — a run exceeding the budget yields a retry decision and completes on the next attempt.
-- [ ] Register `Shikigami.RetrySemanticsSpec` in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
+- [x] (2026-08-19) Re-audited this plan against the current seven-package repository,
+      [the workflow-versioning rules](../workflow-versioning.md), the released dependency
+      cohort, and the applicable `keiro-runtime-patterns` documents.
+- [x] (2026-08-19) Cleared the old dependency gate: Hackage and upstream tags both contain
+      `keiro`/`keiro-pgmq` 0.13.0.0, `shibuya-core` 0.9.0.0,
+      `shibuya-pgmq-adapter` 0.14.0.0, and the `pgmq-*` 0.5.0.0 family.
+- [x] (2026-08-19) Confirmed plans 36 and 37 are implemented: worker ownership is now in
+      `shikigami-workers`, and service configuration is the single Settei `AppConfig`.
+- [ ] Milestone 0: add `keiro-pgmq ==0.13.0.0` to the worker dependency cohort and document
+      its released tag without changing the producer's existing raw JSON wire shape.
+- [ ] Milestone 1: add retryability classification, attempt-scoped timeouts, and the
+      versioned `run-behavior-v2` path for agent runs and conversations.
+- [ ] Milestone 1: declare `shikigami-behavior-retry-v1` in both workflow specifications,
+      scaffold, update conformance expectations, and pass `just keiro-gate`.
+- [ ] Milestone 2: replace the raw run-job consumer construction with a typed
+      `Job RunJob`; reconcile the main queue and DLQ at worker startup; map every workflow
+      result to a deliberate `JobOutcome`.
+- [ ] Milestone 3: run queue work with a supervised PGMQ visibility heartbeat and prove
+      lease renewal through the actual `jobProcessorWithContext` path.
+- [ ] Milestone 4: add `worker.run_timeout_seconds` and
+      `approval.deadline_seconds` to Settei, thread both values through the worker
+      environments, and size `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
+- [ ] Register focused core and worker test modules; run the specification gate, focused
+      tests, `cabal build all`, and `cabal test all -j1` inside `nix develop`.
 
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
+- The original plan targeted files that no longer own the work. Plan 36 moved the consumer
+  from the deleted `Shikigami.Worker` module to
+  `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`, with composition in
+  `Shikigami.Workers.Registry` and environment construction in
+  `Shikigami.Workers.Config`.
 
-**Shibuya shipped this plan's dead-letter vocabulary on 2026-08-10 (discovered same day).**
-`shibuya-core 0.9.0.0` extends `DeadLetterReason` with a fourth constructor:
+- The dependency gate in the old plan is obsolete. The current cohort already pins
+  `keiro` 0.13.0.0, `shibuya-core` 0.9.0.0,
+  `shibuya-pgmq-adapter` 0.14.0.0, and `pgmq-*` 0.5.0.0. `keiro-pgmq` 0.13.0.0
+  exists on Hackage and has upstream tag `keiro-pgmq-0.13.0.0` at commit
+  `1eef4b2f5323c419050f3584a0969a0c4f1c9308`; it is absent from
+  `cabal.project` only because no current component links it.
 
-```haskell
-data DeadLetterReason
-  = PoisonPill !Text
-  | InvalidPayload !Text
-  | MaxRetriesExceeded
-  | ApplicationFailure !DeadLetterCode !Text
-```
+- `Keiro.PGMQ` is the right application-facing façade, and its released
+  `JobRuntime`/`runJobEff` removes the worker's need to assemble
+  `Pgmq`, `PgmqAdapterEnv`, and tracing interpreters itself. The package is not a
+  lightweight codec-only package, however: its Cabal library depends transitively on
+  `keiro-core`, `pgmq-config`, `pgmq-core`, `pgmq-effectful`, `pgmq-hasql`,
+  `shibuya-core`, and `shibuya-pgmq-adapter`. It also does not depend on or re-export
+  the `keiro` workflow package. Shikigami therefore still needs a direct `keiro`
+  dependency for workflows, inbox, timers, and outbox, while redundant direct lower-level
+  queue dependencies should be removed after all application imports move to the façade.
 
-`DeadLetterCode` is an opaque newtype whose constructor is private; values come from
-`mkDeadLetterCode :: Text -> Either Text DeadLetterCode`, which accepts at most 128 ASCII
-characters in at least two dot-separated segments, each segment matching `[a-z][a-z0-9_]*`, with
-the first segment `shibuya` reserved for framework codes. Alongside it, 0.9 adds the total
-projections `deadLetterReasonCode :: DeadLetterReason -> DeadLetterCode` and
-`deadLetterReasonDetail :: DeadLetterReason -> Maybe Text`, the canonical renderer
-`renderDeadLetterReason`, and the built-in codes `poisonPillCode`, `invalidPayloadCode`, and
-`maxRetriesExceededCode`. Processing spans now carry the stable code as
-`shibuya.dead_letter.reason.code`, keeping human detail out of attributes and metrics.
-`shibuya-pgmq-adapter 0.14.0.0` carries it into the DLQ payload: every message keeps the
-compatibility field `dead_letter_reason` and gains `dead_letter_reason_code` plus an
-always-present `dead_letter_reason_detail`.
+- Depending on `keiro-pgmq` does not by itself change the payload wire. The selected
+  `JobCodec` does. `aesonJobCodec` is already safer than the current raw handler because
+  it provides one typed decode boundary and automatic malformed-payload dead-lettering,
+  while remaining byte-shape compatible with queued jobs. `keiroJobCodec` additionally
+  provides schema versions and upcasters, but a direct switch changes the wire to
+  `{v,t,data}` and would reject existing bare jobs. Adopting it requires a dual-decoder
+  rollout: consumers that accept both shapes first, versioned producers second, and
+  removal of the legacy decoder only after the queue and old producer fleet are drained.
 
-**Why this matters more than a version bump.** As written, Milestone 2 classifies every permanent
-failure as `AckDeadLetter (PoisonPill err)` — one bucket, with the actual reason smuggled into a
-free-text string that operators would have to grep. Milestone 2 also intends a table-driven
-classification test, which is a taxonomy in all but name. Building that taxonomy privately on
-0.8 and then meeting 0.9 means writing a code type, a renderer, and a projection and deleting all
-three. The upstream `DeadLetterCode` is also stricter than a hand-rolled string would have been —
-private constructor, validated shape, reserved namespace, validate-at-startup discipline — and
-that strictness is the point.
+- `mkRetryPolicy` does not calculate exponential backoff. Its released signature is
+  `Int64 -> RetryDelay -> Bool -> Either RetryPolicyConfigError RetryPolicy`, and it
+  validates a fixed default delay. Keiro's workflow resume worker, not the PGMQ job
+  policy, supplies bounded failure pacing: 2, 4, 8, 16, 32, then 64 seconds. This plan
+  uses `defaultRetryPolicy` (five deliveries, 60-second explicit-retry delay, DLQ
+  enabled) for transport-level redelivery and lets Keiro own workflow-attempt pacing.
 
-**The gate is indirect, which is easy to miss.** `shibuya-core 0.9.0.0` is published, but
-`keiro 0.11.0.0` declares `shibuya-core >=0.8.0.1 && <0.9` in `keiro/keiro.cabal`, so the cohort
-cannot take it yet. The release that lifts the cap is `keiro 0.12`, already staged in keiro's
-`Unreleased` section. `shibuya-pgmq-adapter 0.14.0.0` follows shibuya-core 0.9 and is excluded
-the same way, which is why plan 53 takes `0.13.0.0`. So the real chain is: keiro 0.12 publishes →
-a cohort bump takes shibuya-core 0.9 and adapter 0.14 → this plan starts.
+- PGMQ delivery leases and Keiro workflow-instance leases are different mechanisms.
+  `JobContext.extendLease` renews the current queue message's visibility. The
+  `WorkflowRunOptions.leaseHeartbeat` field renews a workflow instance claimed by the
+  resume worker; the resume worker populates it automatically, and direct runs must leave
+  it `Nothing`. Consequently this plan must not set `leaseHeartbeat` in
+  `shikigamiWorkflowRunOptions`. It must set `WorkflowResumeOptions.leaseTtl` above the
+  slowest synchronous step action instead.
 
-**If the gate does not clear in a reasonable time**, implement Milestone 2 against 0.8 but keep
-every permanent-failure classification behind one module that returns a shikigami-owned code
-type, with `PoisonPill (renderMyCode c <> ": " <> detail)` as the only place the two are flattened
-together. The 0.9 swap is then deleting that flattening and changing one constructor. Do not
-scatter `PoisonPill` construction across `classifyOutcome`'s arms.
+- `keiro-pgmq` 0.13.0.0 maps `JobOutcome.Dead detail` to
+  `AckDeadLetter (PoisonPill detail)`. It does not expose a way for an application to
+  construct Shibuya's `ApplicationFailure` from the typed job handler. Therefore the DLQ
+  code produced by this released API is the built-in `shibuya.poison_pill`; the bounded
+  detail may carry a stable `shikigami.<reason>:` prefix, but it is not an application
+  dead-letter code. Bypassing `keiro-pgmq` solely to obtain `ApplicationFailure` would
+  violate the fleet job pattern. If application-specific codes become an acceptance
+  requirement, first extend and release `keiro-pgmq`; do not reach through to raw
+  `AckDecision` here.
+
+- The current `RunError` already includes `ProviderFailed Bool Text`; the boolean is
+  Baikai's retryability classification. The plan must preserve that signal before
+  converting an error to `Text`. `ProgramFailed` currently conflates deterministic input
+  parsing with a runtime `ErrorS`; the implementation must make their retryability
+  explicit rather than guessing after rendering.
+
+- A wall-clock timeout around the queue handler would not protect an attempt run by the
+  Keiro resume worker. The timeout belongs immediately around synchronous
+  `runBehavior`, inside the workflow step body. It does not wrap a `Flow` or the
+  `research-supervisor` durable child/await path, because a durable suspension is not a
+  hung synchronous call.
+
+- Conversation failures need the same treatment. Today
+  `run-behavior:<messageId>` journals `Either Text Value` and then turns every `Left`
+  into an `IOException`, so an in-band permanent error is replayed and thrown forever.
+  Changing the interpretation of an existing journal value requires a patch or a new
+  step name. This plan uses both: a checked patch chooses a new
+  `run-behavior-v2:<messageId>` label for fresh instances while old instances keep their
+  original path.
+
+- Queue visibility renewal prevents a second PGMQ delivery; it does not create exactly-once
+  workflow effects. Keiro steps remain at-least-once across an external-effect /
+  journal-append crash window, and a direct run is intentionally lease-free. Step effects
+  must remain idempotent, and the runtime's instance and step arbitration remain the
+  authority for concurrent resume races.
 
 
 ## Decision Log
 
-Record every decision made while working on the plan.
+- Decision: Use the released `keiro-pgmq` consumer abstraction:
+  `Job RunJob`, `aesonJobCodec`, `queueRef "shikigami_run_jobs"`,
+  `defaultRetryPolicy`, `ensureJobQueue`, `jobProcessorWithContext`, and
+  `runJobWorkers`, all imported through `Keiro.PGMQ`. Run the effect stack through
+  `JobRuntime`/`runJobEff`.
+  Rationale: This is the applicable fleet standard and removes raw message decoding,
+  adapter/interpreter construction, retry-ceiling wiring, and DLQ construction from
+  application code. Remove direct `pgmq-effectful` and
+  `shibuya-pgmq-adapter` dependencies from `shikigami-workers` once no remaining source
+  imports them; retain direct packages only for modules actually imported elsewhere.
+  `aesonJobCodec` is deliberately the raw Aeson codec, so messages already on the queue
+  retain their current JSON shape.
+  Date: 2026-08-19
 
-- Decision: Express transient failures by throwing `TransientBehaviorFailure` from inside the step body instead of journaling a `Left`, rather than rotating a retry generation into the step name or adding a retry wrapper.
-  Rationale: Verified keiro semantics (keiro `src/Keiro/Workflow.hs`, `Step` handler: the journal append happens only after the step body returns a value; a thrown exception propagates un-journaled, so the step re-runs on the next execution). This is keiro's documented contract — "step side effects are at-least-once; bodies must be idempotent" — and needs no new framework features. Step-name rotation would violate the additive-only journal discipline of docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md.
-  Date: 2026-07-08
+- Decision: Keep the producer in `Shikigami.Trigger.Enqueue` on `pgmq-hasql` and test its
+  raw `toJSON RunJob` payload against `aesonJobCodec`.
+  Rationale: Plan 36 deliberately keeps the producer contract in `shikigami-core`, which
+  both server and worker packages may depend on, while forbidding the supervised queue
+  adapter (and `pgmq-effectful`) from the core-only link. `keiro-pgmq` currently bundles
+  its producer codec with Shibuya/adapter dependencies. Moving the producer to workers
+  would invert the package DAG; linking `keiro-pgmq` into core would violate the existing
+  architecture decision. This is a documented applicability exception to the full
+  producer-and-consumer job pattern, not an accidental second wire contract.
+  Date: 2026-08-19
 
-- Decision: Keep `agentRunWorkflow`'s result type `Either Text AgentRunResult` unchanged; after this plan a journaled `Left` means "permanent failure" by construction, and the worker dead-letters all `Completed (Left _)` outcomes.
-  Rationale: Keeping it deletes the `"unknown agent "` string-prefix hack for free: unknown-agent is just another permanent `Left`. (The original rationale also cited the JSON encoding of already-completed workflows, which no longer applies — shikigami has no users and no completed workflow is stored anywhere. The decision stands on the simplification alone.)
-  Date: 2026-07-08, rationale narrowed 2026-08-10
+- Decision: Do not switch this plan directly from `aesonJobCodec` to
+  `keiroJobCodec`.
+  Rationale: The versioned codec is the safer long-term evolution format, but the queue
+  already contains bare `RunJob` JSON and producers live in more than one deployable
+  process. A one-step codec change would turn valid in-flight work into malformed payloads.
+  A future adoption must include the dual-read rollout described in Surprises &
+  Discoveries; the compatibility test added here creates the baseline for that migration.
+  Date: 2026-08-19
 
-- Decision: Classify permanent failures as `ApplicationFailure` with a validated, shikigami-owned
-  `DeadLetterCode`, not as `PoisonPill` carrying free text.
-  Rationale: this plan was already going to build a permanent-failure taxonomy — Milestone 2's
-  table-driven classification test is that taxonomy — and `shibuya-core 0.9.0.0` ships the typed
-  vocabulary for it, with a validated code shape, a reserved framework namespace, total
-  projections, and transport of the code through the adapter into the DLQ payload as a
-  machine-queryable `dead_letter_reason_code`. `PoisonPill` flattens every permanent failure into
-  one bucket whose reason survives only as prose, which makes the DLQ greppable rather than
-  queryable. Building the taxonomy privately and meeting 0.9 later means writing a code type, a
-  renderer, and a projection and then deleting all three.
-  Date: 2026-08-10
+- Decision: Use `defaultRetryPolicy` for queue-level retries; do not describe it as
+  exponential backoff.
+  Rationale: Explicit `RetryDefault` is for a transient queue/store/initial-drive failure.
+  Retryable exceptions after a workflow instance exists are paced and bounded by Keiro's
+  resume worker. A second backoff algorithm in the queue layer would obscure which budget
+  failed.
+  Date: 2026-08-19
 
-- Decision: Validate the dead-letter code set once at worker startup and hold the values in
-  `WorkerEnv`, rather than calling `mkDeadLetterCode` per message.
-  Rationale: `mkDeadLetterCode` returns `Either Text DeadLetterCode`, and shibuya's own haddock
-  directs callers to validate a finite set during application startup and reuse the results.
-  Per-message validation would put a partial function on the hot path and force every
-  classification site to handle a failure that is really a programming error. A malformed code
-  should stop the worker from starting, not degrade one message.
-  Date: 2026-08-10
+- Decision: Classify a `RunError` before rendering it. Unknown task, skill load failure,
+  unsupported behavior, a non-retryable provider failure, and deterministic program-input
+  failure are permanent. Retryable provider failure, skill execution failure, and a
+  program runtime `ErrorS` are transient. A behavior timeout is transient.
+  Rationale: Only a transient exception escaping before the step append causes genuine
+  re-execution. Once an `Either Text Value` is journaled, its value is permanent.
+  Date: 2026-08-19
 
-- Decision: Use the code set `shikigami.unknown_agent`, `shikigami.unsupported_behavior`,
-  `shikigami.skill_load_failed`, `shikigami.behavior_failed`, and `shikigami.run_cancelled`.
-  Rationale: each satisfies `mkDeadLetterCode`'s shape (two segments, `[a-z][a-z0-9_]*`, first
-  segment not `shibuya`), and the set is the permanent half of the `RunError` classification this
-  plan already decided on — `UnknownTask`, `UnsupportedBehavior`, and `SkillLoadFailed` map one
-  to one, `behavior_failed` covers a permanent `Left` from any other source, and `run_cancelled`
-  replaces the `PoisonPill` currently produced for `Cancelled` at `Worker.hs:190`. Keeping the set
-  finite and startup-validated is what makes it a taxonomy rather than a string convention. Detail
-  text is transported verbatim to operators, so it must stay bounded and must not carry secrets,
-  raw payloads, raw SQL, or unrestricted backend errors — shibuya's haddock is explicit about
-  this and it is now shikigami's obligation.
-  Date: 2026-08-10
+- Decision: Introduce one patch id, `shikigami-behavior-retry-v1`, in both workflow
+  specifications. Fresh agent runs use `run-behavior-v2`; fresh conversation turns use
+  `run-behavior-v2:<messageId>`. Pre-patch instances retain the old labels and old
+  interpretation.
+  Rationale: The result encoding at an existing step must not change. A new label gives
+  the new action a clean journal slot, and the patch preserves replay coherence for
+  suspended instances. The per-message conversation label remains undeclarable, so its
+  specification patch block is intentionally empty and documents the hand-owned dynamic
+  family.
+  Date: 2026-08-19
 
-- Decision: Keep the PGMQ visibility timeout at 30 seconds and add a lease heartbeat, rather than raising the visibility timeout to cover the longest imaginable run.
-  Rationale: A large static timeout delays redelivery after a genuine worker crash by the full window; a heartbeat keeps crash-recovery latency at about 30 seconds while protecting arbitrarily long healthy runs. Shibuya 0.8 exposes `lease :: Maybe (Lease es)` on the handler's public `Message es msg`, and shibuya-pgmq-adapter 0.12 implements it with PGMQ `set_vt`.
-  Date: 2026-07-08
+- Decision: Give the queue layer an explicit legacy outcome. A pre-patch agent result that
+  contains a journaled behavior `Left` returns `RetryDefault`; the queue's delivery ceiling
+  eventually DLQs it. A v2 permanent result returns `Dead`; v2 transients never become
+  completed workflow results.
+  Rationale: Old journal values contain only rendered text and cannot be reclassified
+  reliably. Treating them conservatively as retryable preserves the pre-deploy behavior
+  without string parsing. The workflow's top-level result is not itself the completion
+  marker, so it may carry a non-journaled legacy/permanent disposition while every kept
+  step result retains its old decoder.
+  Date: 2026-08-19
 
-- Decision: Classify `RunError` conservatively: `UnknownTask`, `SkillLoadFailed`, `UnsupportedBehavior` are permanent; `ProgramFailed`, `SkillRunFailed` are transient.
-  Rationale: The permanent three are configuration errors that no retry can fix. The transient two wrap provider/tool execution and are where flaky LLM/HTTP failures surface; misclassifying a truly-permanent program bug as transient costs bounded retries (maxRetries=3) and then a dead-letter, which is inspectable — the safe failure mode.
-  Date: 2026-07-08
+- Decision: `worker.run_timeout_seconds` is a positive duration with a 300-second default
+  and bounds each synchronous external behavior attempt, not an entire durable workflow.
+  `approval.deadline_seconds` is a positive duration with a 900-second default.
+  Rationale: A durable workflow may legitimately remain suspended for hours or continue
+  through children; timing the whole queue handler would neither survive resumption nor
+  distinguish waiting from hanging. The key name is retained because plan 37 and the
+  master-plan portfolio already reserved it.
+  Date: 2026-08-19
 
-- Decision: On run timeout, return a retry decision (not dead-letter).
-  Rationale: The journal preserves all completed steps, so the retry resumes from the last journaled step rather than restarting; a slow run frequently completes within a second budget. Repeated timeouts exhaust `maxRetries` and land in the dead-letter queue anyway.
-  Date: 2026-07-08
-- Decision: Treat `Envelope.attempt` as zero-based and build delays/ceilings with the shared
-  `mkRetryPolicy`; do not normalize it again in Shikigami.
-  Rationale: shibuya-pgmq-adapter 0.12 already maps PGMQ's one-based `read_count` through
-  `Attempt (max 0 (readCount - 1))`. Subtracting again would make the first two deliveries
-  indistinguishable and shift retry ceilings.
-  Date: 2026-07-30
-- Decision: The shibuya handler returns exactly one `AckDecision`; it never deletes,
-  archives, commits, or moves the message directly.
-  Rationale: framework-owned acknowledgement preserves transactional DLQ behavior and
-  prevents duplicate finalization.
-  Date: 2026-07-22
+- Decision: Derive the resume worker's instance `leaseTtl` as
+  `worker.run_timeout_seconds + 30 seconds`, while leaving direct
+  `WorkflowRunOptions.leaseHeartbeat = Nothing`.
+  Rationale: Keiro renews the claimed instance lease before a fresh step but not during
+  that step. The TTL must exceed the slowest permitted behavior action, with a small
+  scheduling/database margin, and must not be confused with the PGMQ heartbeat.
+  Date: 2026-08-19
+
+- Decision: Renew PGMQ visibility every 10 seconds by extending it 30 seconds, and supervise
+  the heartbeat with `race` (or an equivalent linked primitive) so a renewal failure
+  cancels and fails the handler.
+  Rationale: A detached `withAsync` child can fail silently while the main action continues.
+  The heartbeat and work are one failure domain: successful work cancels the infinite
+  heartbeat; a failed heartbeat prevents an unsafe acknowledgement.
+  Date: 2026-08-19
 
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
-
-(To be filled during and after implementation.)
+Not implemented yet. On completion, record the exact patch id and generated artifacts,
+the dependency versions actually selected, focused and full test results, and any
+operational deviation from the retry, timeout, lease, or DLQ policy above.
 
 
 ## Context and Orientation
 
-Shikigami runs declared agents. A "run job" (`RunJob` in `shikigami-api/src/Shikigami/Api/RunJob.hs`) sits on a Postgres-backed message queue (pgmq) named `shikigami_run_jobs`. The worker in `shikigami-core/src/Shikigami/Worker.hs` drains that queue using shibuya, a queue-processing framework: `runQueueWorker` (Worker.hs:72-84) builds a pgmq adapter with `defaultConfig runQueueName` (Worker.hs:76) and registers `runJobHandler` (Worker.hs:126-128), which delegates to `handleRunJob` (Worker.hs:132-141). For an ordinary job, `runOneAgent` (Worker.hs:165-192) executes the agent as a keiro durable workflow via `AgentWorkflow.runAgentRunWorkflow` and maps the outcome to a shibuya `AckDecision` (`AckOk`, `AckRetry`, `AckDeadLetter` — defined in shibuya-core `Shibuya.Core.Ack`).
+The domain error is `shikigami-core/src/Shikigami/Behavior/Error.hs`. Synchronous
+behavior dispatch is in `Shikigami.Behavior.Run`; Baikai skill execution is in
+`Shikigami.Behavior.Skill`. The agent workflow lives in
+`shikigami-core/src/Shikigami/Agent/Workflow.hs`. Its ordinary behavior path journals
+`Either Text Value` under `run-behavior`; the flow and research-supervisor branches are
+durable paths and must not receive the synchronous attempt timeout.
 
-A keiro durable workflow (defined in `shikigami-core/src/Shikigami/Agent/Workflow.hs`) is a sequence of named steps whose results are journaled in Postgres: `step name action` runs `action` only if the journal has no entry for `name`; otherwise it "replays" — returns the journaled value without executing. The agent workflow's steps are `ingest-job`, `lookup-agent`, `open-session`, `recall`, `run-behavior`, `dispatch-sinks`, `record`, `complete` (see `expectedLifecycleSteps` in `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:565-576`). The workflow id is the job's idempotency key (Workflow.hs:152), so a redelivered job re-enters the same journal.
+The long-lived Danwa workflow is
+`shikigami-core/src/Shikigami/Agent/Conversation.hs`. Every turn has dynamic labels such
+as `run-behavior:<messageId>`, then waits on `next-message:<ordinal>`. Its checked
+specification is `domain/shikigami-conversation.keiro`; the agent-run specification is
+`domain/shikigami-agent-run.keiro`. The normative evolution procedure is
+[docs/workflow-versioning.md](../workflow-versioning.md), and the central options value is
+explained by [ADR-0004](../adr/0004-one-options-value-and-a-checked-patch-set.md).
 
-The three verified bugs this plan fixes:
+The queue consumer is
+`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`; worker-loop composition is
+`shikigami-workers/src/Shikigami/Workers/Registry.hs`; `WorkerEnv` construction is
+`shikigami-workers/src/Shikigami/Workers/Config.hs`. The producer remains
+`shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Plan 18 owns transactional producer
+enqueue, and plan 20 owns explicit trigger routing and removal of per-send queue creation;
+this plan must not absorb those changes.
 
-First, journaled failures. `runResolvedAgent` runs the behavior inside a journaled step: `runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job)` (Workflow.hs:182). `runBehaviorStep` (Workflow.hs:277-289) returns `Either Text Value` — including `Left` for failures (line 289 maps `runBehavior`'s `Either RunError Value` to `Either Text Value`). Because keiro's `step` journals whatever the body returns (verified in keiro `src/Keiro/Workflow.hs`: the `Step` handler runs the body, then appends `StepRecorded` — an exception thrown by the body propagates without journaling), a transient `Left` becomes the step's permanent recorded result. The worker sees `Completed (Left err)` and returns `AckRetry (RetryDelay 1s)` (Worker.hs:183-186), the queue redelivers, the workflow replays the journaled `Left` without executing anything, and after `maxRetries = 3` deliveries the pgmq adapter silently archives the message (pinned shibuya-pgmq-adapter `Shibuya/Adapter/Pgmq/Internal.hs`: `readCount > maxRetries` finalizes `AckDeadLetter MaxRetriesExceeded`, and with `deadLetterConfig = Nothing` that finalizer archives). Net effect: every behavior failure is permanent, and the "retries" burn queue deliveries on pure journal replays.
+Configuration is declared once in
+`shikigami-core/src/Shikigami/App/Config.hs`, documented in
+`docs/operations/configuration.md`, and tested in
+`shikigami-core/test/Shikigami/AppConfigSpec.hs`. Every new key needs a typed field,
+bounded decoder, schema entry, default, environment binding, renderer, documentation, and
+precedence/strictness tests.
 
-Second, mid-flight redelivery. `defaultConfig` (shibuya-pgmq-adapter `Shibuya/Adapter/Pgmq/Config.hs:279-293` in the canonical checkout at `/Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya-pgmq-adapter/shibuya-pgmq-adapter`; identical values in the pinned copy under `dist-newstyle/src/shibuya-p_-*`) sets `visibilityTimeout = 30`, `batchSize = 1`, `maxRetries = 3`, `deadLetterConfig = Nothing`. Any handler running longer than 30 seconds has its message redelivered while still executing. The duplicate executes the same `WorkflowId` concurrently; the loser of the journal race hits `JournalAppendConflict`, which `enqueueSinkIntents` converts to `ioError` (Workflow.hs:411-415) and which keiro's own step runtime converts to a thrown `WorkflowJournalAppendError`. The shibuya `Lease` capability (`Shibuya.Core.Lease`: `Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`) is already delivered to the handler — the pinned `Ingested` record has `lease :: !(Maybe (Lease es))` and the pinned adapter constructs it over pgmq `set_vt` — but `runJobHandler` (Worker.hs:127) pattern-matches only the envelope and drops it.
+The relevant accepted local architecture records are
+[ADR-0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md), which
+preserves the light-package dependency budget, and
+[ADR-0004](../adr/0004-one-options-value-and-a-checked-patch-set.md), which governs
+workflow options and patches. The deployed-service package ownership is the implemented
+decision in
+[plan 36](36-align-shikigami-with-the-six-package-deployed-service-architecture.md).
 
-Third, no run timeout. `agentRunDeps` hardcodes `deadline = Nothing` (Worker.hs:205); the `deadline` field of `AgentRunDeps` (Workflow.hs:88) only bounds approval waits (Workflow.hs:239) and the flow acknowledgement deadline (Workflow.hs:313). Nothing bounds the run's wall clock — `System.Timeout` appears nowhere in the repository.
+Applicable fleet standards:
 
-Additionally, the ack mapping in `runOneAgent` (Worker.hs:174-192) uses a fixed one-second `AckRetry` for every retryable case and detects the only dead-letter case by the string prefix `"unknown agent "` (Worker.hs:184) — matching the `Left` produced at Workflow.hs:137. With `deadLetterConfig = Nothing`, even explicit `AckDeadLetter` decisions merely archive the message with no queue to inspect.
+- `mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-jobs`
+- `mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-queue-reconciliation`
+- `mori://shinzui/keiro-runtime-patterns/docs/keiro-durable-workflows`
+- `mori://shinzui/keiro-runtime-patterns/docs/keiro-workflow-reliability`
+- `mori://shinzui/keiro-runtime-patterns/docs/keiro-evolution-and-rollout`
+- `mori://shinzui/keiro-runtime-patterns/docs/config-settei-service-standard`
 
-Terms: "visibility timeout" is pgmq's redelivery window — a read message stays invisible to other readers for that many seconds, after which it is redelivered; "heartbeat"/"lease extension" means pushing that window forward (`pgmq.set_vt`) while still working; "dead-letter queue" (DLQ) is a second pgmq queue that receives messages the worker refuses to process, instead of archiving them out of sight; "transient" failures are ones a retry can fix (network, rate limits), "permanent" ones it cannot (unknown task name).
-
-Test infrastructure: specs under `shikigami-core/test/` run against a real Postgres provisioned per test by `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`), which applies all migrations including the pgmq schema. `Shikigami.AgentWorkflowSpec` shows the established pattern, including `AgentRunHooks` (Workflow.hs:91-94) — test-only callbacks invoked before/after each step body, used to count executions and inject crashes (see the "resumes after a crash" test at AgentWorkflowSpec.hs:67-114).
+The dependency source and released APIs are owned by
+`mori://shinzui/keiro`, `mori://shinzui/shibuya`,
+`mori://shinzui/shibuya-pgmq-adapter`, and `mori://shinzui/pgmq-hs`.
 
 
 ## Plan of Work
 
-Milestone 1 — transient failures throw; permanent failures journal. Scope: `shikigami-core/src/Shikigami/Behavior/Error.hs`, `shikigami-core/src/Shikigami/Agent/Workflow.hs`, new test module. At the end, a behavior that fails transiently is re-executed (not replayed) on the next delivery of the same job, observable in a test that fails today.
+### Milestone 0 — adopt the released typed consumer dependency
 
-In `Shikigami/Behavior/Error.hs`, add a classification and a dedicated exception:
+Add `keiro-pgmq` to the `shikigami-workers` library dependencies and pin
+`keiro-pgmq ==0.13.0.0` beside the other Keiro packages in `cabal.project`. Add its
+release-matrix row to `docs/dependency-cohort.md` with tag
+`keiro-pgmq-0.13.0.0` and commit
+`1eef4b2f5323c419050f3584a0969a0c4f1c9308`; remove the statement that it
+"resolves into nothing" now that the worker links it. Do not add `keiro-pgmq` to
+`shikigami-core`.
 
-```haskell
-data FailureClass = Transient | Permanent
-  deriving stock (Eq, Show)
+Import queue-job APIs through the umbrella `Keiro.PGMQ` module and replace the hand-built
+effect stack in `Shikigami.Workers.Registry` with `JobRuntime`/`runJobEff`. After the
+source migration, audit `shikigami-workers.cabal` against actual imports: remove direct
+`pgmq-effectful`, `shibuya-pgmq-adapter`, and `keiro-core` dependencies when unused.
+Do not remove `keiro`, because worker modules directly import its workflow, inbox, timer,
+and outbox APIs; do not remove `shibuya-core` while worker supervision or telemetry imports
+its public types.
 
-classifyRunError :: RunError -> FailureClass
-classifyRunError = \case
-  UnknownTask _ -> Permanent
-  SkillLoadFailed _ -> Permanent
-  UnsupportedBehavior _ -> Permanent
-  ProgramFailed _ -> Transient
-  SkillRunFailed _ -> Transient
+Before coding against the API, re-run the Hackage/package-page and upstream-tag checks.
+The local Mori checkout may contain post-release commits, so the chosen implementation
+must compile against the tagged 0.13.0.0 surface rather than a newer working tree.
 
-newtype TransientBehaviorFailure = TransientBehaviorFailure Text
-  deriving stock (Show)
+### Milestone 1 — make behavior failure retryable before journaling
 
-instance Exception TransientBehaviorFailure
-```
+In `Shikigami.Behavior.Error`, introduce `FailureClass = Transient | Permanent`,
+`classifyRunError`, and an exception such as
+`TransientBehaviorFailure {detail :: Text}`. Preserve upstream retryability in the error
+constructors: split or annotate `ProgramFailed` so task-argument parsing is permanent and
+a runtime `ErrorS` is transient; keep `ProviderFailed Bool Text` authoritative. Rendering
+is for logs and journal detail only, never for classification.
 
-In `Shikigami/Agent/Workflow.hs`, change the last arm of `runBehaviorStep` (currently line 289: `liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv deps) decl triggerPayload)`) to inspect the `RunError` before deciding: on `Left err` with `classifyRunError err == Transient`, `liftIO (throwIO (TransientBehaviorFailure (Text.pack (show err))))`; on `Permanent`, return `Left` as today; on `Right`, return `Right`. Because the throw happens inside the step body, keiro journals nothing, and the next delivery re-runs the body. The `Flow` and research-supervisor arms (Workflow.hs:286-288) are unchanged — flows already run their own journaled sub-steps and only return `Left` for the permanent "unknown flow" case (Workflow.hs:301).
+Create one helper for synchronous v2 attempts. It applies `System.Timeout.timeout` using
+`worker.run_timeout_seconds`, calls `runBehavior`, throws
+`TransientBehaviorFailure` for timeouts and transient `RunError`s, and returns
+`Left boundedDetail` only for permanent errors. It must not catch asynchronous exceptions.
+Keep details bounded and redacted before they enter a journal or DLQ.
 
-Note the consequence, and record it in code comments: after this milestone, a journaled `Left` from `run-behavior` (and therefore a `Completed (Left _)` workflow outcome) means permanent by construction. The `fail-session` step (Workflow.hs:185) still runs for permanent failures, which is correct — the kioku session should be marked failed exactly when the failure is final.
+In the agent workflow, call `patch (PatchId "shikigami-behavior-retry-v1")`. The active
+branch uses a newly named `run-behavior-v2` step and the helper above. The inactive branch
+retains the existing `run-behavior` action and result decoder. Carry a non-journaled
+top-level failure disposition so the worker can distinguish a legacy recorded `Left` from
+a v2 permanent `Left`; do not parse constructor text.
 
-Milestone 2 — typed ack classification, backoff, and a real DLQ. Scope: `shikigami-core/src/Shikigami/Worker.hs`. At the end, the worker's outcome→ack mapping is a pure, unit-testable function; retry delays grow with the delivery attempt; permanent failures land on a `shikigami_run_jobs_dlq` pgmq queue.
+Apply the same patch in the conversation workflow. The active branch uses
+`run-behavior-v2:<messageId>` and returns a permanent failure as a terminal
+`Completed (Left ...)`; a transient exception escapes without a step record. The inactive
+branch retains `run-behavior:<messageId>` and its current behavior. Adjust
+`runConversationTurn` and the registry result type consistently. Keiro's completion marker
+does not serialize the workflow's Haskell result, but every journaled step decoder remains
+unchanged.
 
-Extract from `runOneAgent` a pure function (exported for tests):
+Declare the patch in both `.keiro` workflow bodies. The AgentRun block contains the new
+static `run-behavior-v2` step. The DanwaConversation patch block documents the dynamic v2
+family but remains empty because labels containing `:<messageId>` cannot be declared.
+Run the scaffold, copy the generated Cabal/conformance fragments as prescribed by the
+repository, update `KeiroConformance.Expectations`, and add a deploy-simulation test: an
+old journal takes the old branch and decodes; a fresh journal records the patch and uses
+only the v2 label.
 
-```haskell
-classifyOutcome ::
-  Maybe Attempt ->
-  Either StoreError (WorkflowOutcome (Either Text AgentRunResult)) ->
-  AckDecision
-```
+### Milestone 2 — consume run jobs through `keiro-pgmq`
 
-with this mapping: `Left storeErr` → `AckRetry (retryDelayFor attempt)` (transient infrastructure); `Right (Completed (Right _))` → `AckOk`; `Right (Completed (Left err))` → `AckDeadLetter (ApplicationFailure code detail)` (permanent by Milestone 1's construction — this deletes the `"unknown agent "` prefix match at Worker.hs:184-185); `Right Suspended` → `AckOk`; `Right ContinuedAsNew` → `AckOk`; `Right Cancelled` → `AckDeadLetter (ApplicationFailure shikigamiRunCancelled …)` (replacing the `PoisonPill` at Worker.hs:190); `Right Failed` → `AckRetry (retryDelayFor attempt)`.
-
-The `code` in the permanent case comes from the startup-validated set held in `WorkerEnv`, chosen
-from the `FailureClass` Milestone 1 attaches to the failure rather than re-derived from the error
-text: `UnknownTask` → `shikigami.unknown_agent`, `UnsupportedBehavior` →
-`shikigami.unsupported_behavior`, `SkillLoadFailed` → `shikigami.skill_load_failed`, and anything
-else permanent → `shikigami.behavior_failed`. `classifyOutcome` stays pure by taking the
-validated codes as an argument rather than reaching for a global. `detail` is the existing error
-text, bounded — shibuya transports it verbatim to operators, so it must not carry secrets, raw
-payloads, raw SQL, or unrestricted backend error text. Treat `Envelope.attempt = Just (Attempt 0)` as the first delivery and `Nothing` as zero for adapters without attempt metadata. Derive `retryDelayFor` from the shared `mkRetryPolicy` with an explicit cap. Do not duplicate exponential arithmetic in the worker. In `runOneAgent`, catch typed transient/framework errors and return the one `AckDecision` Shibuya will finalize; do not manipulate the queue directly. `runConversationAgent` uses the same policy.
-
-Configure the adapter with a DLQ: in `runQueueWorker` (Worker.hs:76), replace `defaultConfig runQueueName` with
-
-```haskell
-(defaultConfig runQueueName)
-  { deadLetterConfig =
-      Just DeadLetterConfig { dlqTarget = DirectQueue runDeadLetterQueueName, includeMetadata = True }
-  }
-```
-
-where `runDeadLetterQueueName` parses `"shikigami_run_jobs_dlq"` (add it next to `runQueueName` in `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`, and ensure the queue exists at worker startup with pgmq `createQueue` — coordinate with docs/plans/18, which introduces `ensureRunQueue`; and with docs/plans/20, which hardens this module). `DeadLetterConfig`/`DeadLetterTarget` come from `Shibuya.Adapter.Pgmq.Config`. With this set, both explicit `AckDeadLetter` decisions and `MaxRetriesExceeded` auto-dead-letters are moved to the DLQ transactionally instead of archived silently.
-
-Milestone 3 — visibility heartbeat. Scope: `shikigami-core/src/Shikigami/Worker.hs`. At the end, a handler extends its message lease every 10 seconds for as long as the run executes, so a 5-minute LLM call is never redelivered mid-flight.
-
-Change `runJobHandler` to keep the whole public `Message` value: Shibuya 0.8 defines
-`type Handler es msg = Message es msg -> Eff es AckDecision` and
-`Message { envelope, lease }`, deliberately omitting the framework-owned acknowledgement
-handle. Because `leaseExtend :: NominalDiffTime -> Eff es ()` lives in the handler's effect row
-but the heartbeat must tick concurrently with the IO orchestration, obtain an IO unlift with
-effectful's concurrent unlift — `withEffToIO (ConcUnlift Persistent (Limited 1))` from
-`Effectful` — and race the heartbeat against the work:
+Define the run-job consumer declaration in the worker package:
 
 ```haskell
-runJobHandler env message@Message {envelope = Envelope {payload = p, attempt}} =
-  withEffToIO (ConcUnlift Persistent (Limited 1)) \unlift ->
-    withAsync (heartbeat unlift (lease message)) \_ ->
-      handleRunJob env attempt p
-  where
-    heartbeat _ Nothing = pure ()
-    heartbeat unlift (Just l) = forever do
-      threadDelay 10_000_000
-      unlift (leaseExtend l 30)
+runJob :: Job RunJob
+runJob =
+  Job
+    { jobName = "shikigami_run_jobs",
+      jobQueue = queueRef "shikigami_run_jobs",
+      jobCodec = aesonJobCodec,
+      jobPolicy = defaultRetryPolicy
+    }
 ```
 
-`withAsync` (from `async`, already a transitive dependency; add `async` to `shikigami-core.cabal` build-depends if not present) cancels the heartbeat when the handler returns. Each tick pushes visibility 30 seconds ahead; a crashed worker stops ticking and the message becomes visible within ~30 seconds — crash-recovery latency is unchanged. Thread `attempt` through to `handleRunJob`/`runOneAgent` for Milestone 2's backoff (change `handleRunJob :: WorkerEnv -> Value -> IO AckDecision` to `WorkerEnv -> Maybe Attempt -> Value -> IO AckDecision`).
+Build the processor with `jobProcessorWithContext defaultJobTuning runJob`, then start it
+with `runJobWorkers IgnoreFailures 100`. Run the whole queue action through
+`runJobEff JobRuntime {runtimePool = pool env, runtimeTracer = Just (tracer (appEnv env))}`
+instead of importing the PGMQ interpreter and adapter environment directly. Run
+`ensureJobQueue runJob` before starting the app so both `shikigami_run_jobs` and
+`shikigami_run_jobs_dlq` are reconciled idempotently. Log successful reconciliation and
+fail worker startup on reconciliation or processor construction failure; do not start a
+worker that cannot guarantee its DLQ.
 
-Milestone 4 — explicit run timeout. Scope: the worker module assigned by plan 36 and
-plan 37's Settei application config. At the end, every run has a wall-clock budget
-(default 300 seconds) and the approval deadline is configurable instead of hardcoded `Nothing`.
+Replace `handleRunJob :: WorkerEnv -> Value -> IO AckDecision` with a typed handler whose
+application result is `JobOutcome`. Codec failure is owned by `aesonJobCodec` and
+`keiro-pgmq`: malformed JSON is dead-lettered before application dispatch. Preserve the
+current trigger-routing decision until plan 20 replaces it.
 
-Add to `WorkerEnv` two fields: `runTimeout :: !(Maybe NominalDiffTime)` and
-`approvalDeadline :: !(Maybe NominalDiffTime)`. Wrap workflow execution with the
-timeout and return the shared retry decision when it expires. Declare stable Settei
-keys with explicit legacy bindings for `SHIKIGAMI_RUN_TIMEOUT_SECONDS` and
-`SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`; validate positivity/bounds before constructing
-the environment. No worker module calls `lookupEnv`.
+Map outcomes explicitly:
 
-Journal-versioning constraint (applies to every milestone): no journaled step is renamed and no journaled value encoding changes; the only observable-journal change in this plan is that transient failures stop producing journal entries at all, which is strictly additive-safe per docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md.
+- successful agent or conversation completion: `Done`;
+- `Suspended` or `ContinuedAsNew`: `Done`, because the Keiro resume worker owns progress;
+- v2 permanent failure, unknown agent, cancelled workflow, or terminal `Failed`: `Dead`
+  with bounded, redacted detail and a stable `shikigami.<reason>:` prefix;
+- legacy recorded behavior failure, transient store failure, or
+  `TransientBehaviorFailure` from the initial direct advance: `RetryDefault`;
+- an unexpected synchronous exception: let it escape so Shibuya leaves the message
+  unacknowledged and crash-redelivery follows the visibility timeout.
+
+Do not add an application retry counter. `JobContext.attempt` is zero-based diagnostic
+data; the adapter enforces `defaultRetryPolicy.maxRetries` from PGMQ's delivery count and
+routes exhausted messages to the DLQ before application handling.
+
+Add a compatibility test that the existing producer's `toJSON RunJob` decodes through
+`runJob.jobCodec`, and that `encodeJob runJob.jobCodec` remains the same bare JSON. This
+test is the guard for the documented producer-side pattern exception.
+
+### Milestone 3 — supervise the PGMQ visibility heartbeat
+
+Wrap only the queue handler's in-flight work, not the durable lifetime of the workflow.
+Using the `JobContext` supplied by `jobProcessorWithContext`, wait 10 seconds, call
+`extendLease 30`, and repeat until work finishes. Run the work and heartbeat under
+`race` or an equivalent linked primitive:
+
+- work completion cancels the heartbeat and returns its `JobOutcome`;
+- heartbeat failure cancels the work and escapes, so no acknowledgement is emitted;
+- cancellation and asynchronous shutdown propagate normally.
+
+Do not write raw PGMQ `changeVisibilityTimeout` calls in application code. The acceptance
+test must run through `jobProcessorWithContext` (or `runJobWorkers`) with a deliberately
+short test visibility timeout, block the handler longer than that initial timeout, renew
+through `JobContext.extendLease`, and assert one handler entry plus an empty main queue.
+A companion negative control without renewal should demonstrate redelivery, but may be
+kept as a local diagnostic if timing makes it unsuitable for the default suite.
+
+### Milestone 4 — configure attempt and approval budgets coherently
+
+Extend the single `AppConfig` with direct record fields
+`runTimeout :: NominalDiffTime` and
+`approvalDeadline :: NominalDiffTime`. Declare:
+
+- `worker.run_timeout_seconds`, environment
+  `SHIKIGAMI_RUN_TIMEOUT_SECONDS`, default 300;
+- `approval.deadline_seconds`, environment
+  `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`, default 900.
+
+Use bounded positive-second decoders and renderers following the existing Settei pattern.
+The upper bound must keep conversion to microseconds safe; document it beside the setting.
+Add both fields to `defaultAppConfig`, `environmentBindings`, declared-key tests,
+YAML/environment/CLI precedence tests, `--describe-config`/`--explain-config` coverage,
+and `docs/operations/configuration.md`.
+
+Thread the values through `WorkerEnv`, `AgentRunDeps`, and `ConversationEnv`.
+`approvalDeadline` replaces the worker's current `deadline = Nothing`; both ordinary
+approval awaits and flow acknowledgement deadlines use it. `runTimeout` reaches only the
+synchronous v2 behavior helper.
+
+Change the central resume-options constructor to accept the configured behavior timeout,
+for example:
+
+```haskell
+shikigamiWorkflowResumeOptions :: NominalDiffTime -> WorkflowResumeOptions
+shikigamiWorkflowResumeOptions timeout =
+  defaultWorkflowResumeOptions
+    { runOptions = shikigamiWorkflowRunOptions,
+      leaseTtl = timeout + 30
+    }
+```
+
+Use generic-lens field updates if required by duplicate fields in the released API. The
+resume worker passes the configured timeout from `WorkerEnv`. First/direct workflow runs
+continue to use `shikigamiWorkflowRunOptions` with `leaseHeartbeat = Nothing`.
 
 
 ## Concrete Steps
 
-All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami`, inside the dev shell (`nix develop`), which provides GHC, cabal, and a Postgres reachable via the `PG*` environment variables.
+From the repository root:
 
-Edit the files as described in Plan of Work, in milestone order. After each milestone:
+1. Verify dependency identity and released surfaces:
 
-```bash
-nix develop -c cabal build all
-```
+   ```bash
+   mori registry show shinzui/keiro --full
+   mori registry docs shinzui/keiro
+   mori registry show shinzui/keiro-runtime-patterns --full
+   mori registry docs shinzui/keiro-runtime-patterns
+   keiro_source="$(mori path mori://shinzui/keiro)"
+   git -C "$keiro_source" show keiro-pgmq-0.13.0.0:keiro-pgmq/src/Keiro/PGMQ/Job.hs
+   ```
 
-Expected: compiles with no errors (warnings-as-errors settings per `shikigami-core.cabal` common stanza apply).
+   Also verify Hackage's latest package pages and upstream tags before changing bounds.
 
-Create the test module `shikigami-core/test/Shikigami/RetrySemanticsSpec.hs` exporting `tests :: TestTree`, add `Shikigami.RetrySemanticsSpec` to the `other-modules` of the `test-suite shikigami-core-test` stanza in `shikigami-core/shikigami-core.cabal` (alongside `Shikigami.AgentWorkflowSpec`), add `async` to the test suite's and library's `build-depends` if missing, and register `RetrySemanticsSpec.tests` in the `testGroup "shikigami"` list in `shikigami-core/test/Main.hs`.
+2. Add the dependency pin/cohort row and implement the shared failure classifier and v2
+   attempt helper. Add focused pure tests before editing workflow bodies.
 
-Run the suite:
+3. Declare and scaffold the workflow patch:
 
-```bash
-nix develop -c cabal test shikigami-core-test --test-show-details=streaming
-```
+   ```bash
+   just keiro-scaffold
+   just check-adr
+   ```
 
-Expected transcript excerpt once complete:
+   Update hand-owned conformance expectations and run the focused specification tests.
+   Before merging, calculate the real merge base and run:
 
-```text
-RetrySemantics
-  transient behavior failure re-executes on redelivery:            OK
-  permanent behavior failure replays without re-execution:         OK
-  classifyOutcome maps outcomes to ack decisions:                  OK
-  retry delay grows with attempt and caps at 60s:                  OK
-  visibility extension prevents redelivery of an in-flight message: OK
-  run exceeding its wall-clock budget yields a retry decision:     OK
-```
+   ```bash
+   just keiro-gate <merge-base>
+   ```
 
-Finally run the full suite to catch regressions in `AgentWorkflowSpec` (its crash-resume tests exercise the same step machinery):
+4. Implement the agent and conversation v2 branches and deploy-simulation tests. Confirm
+   old journals decode without running a v2 action and fresh journals never write the old
+   label.
 
-```bash
-nix develop -c cabal test all
-```
+5. Replace the raw consumer construction with the typed job processor, add startup
+   reconciliation and outcome mapping, then add the supervised heartbeat.
+
+6. Add the two Settei settings and thread them through the worker and central resume
+   options.
+
+7. Validate in the dev shell:
+
+   ```bash
+   nix develop --command cabal test shikigami-core-test --test-options='--pattern RetrySemantics'
+   nix develop --command cabal test shikigami-workers-test --test-options='--pattern RunJob'
+   nix develop --command cabal build all
+   nix develop --command cabal test all -j1
+   ```
+
+Record exact commands and results in Progress as each milestone completes.
 
 
 ## Validation and Acceptance
 
-Acceptance is behavioral, verified by tests that fail before the change and pass after, written in `shikigami-core/test/Shikigami/RetrySemanticsSpec.hs` using `withShikigamiMigratedDatabase` and the `AgentRunHooks` seam exactly as `Shikigami.AgentWorkflowSpec` does.
+Acceptance is behavioral, not merely a successful build.
 
-Transient re-execution (fails before): build `AgentRunDeps` whose hooks' `beforeStepBody` throws `TransientBehaviorFailure "simulated 503"` on the first entry into `"run-behavior"` (IORef-latched, as in AgentWorkflowSpec.hs:73-82). Call `runAgentRunWorkflow deps job`; assert it throws. Call it again with the same job (same `WorkflowId`); assert `Right (Completed (Right _))` and that the step-body counter for `"run-behavior"` is 2 — the body re-ran. Before this plan the equivalent scenario (a behavior returning `Left`) yields `Completed (Left _)` on both calls with the body having run once. Also drive the real classification path: an agent whose behavior is `ShikumiProgram { task = "nonexistent" }` produces `UnknownTask` → `Permanent` → journaled `Left`; assert two consecutive runs return the same `Completed (Left _)` and the body ran once (replay, correct for permanent).
-
-Ack classification (pure): a table-driven test over `classifyOutcome`: `Completed (Left "unknown agent x")` → `AckDeadLetter`; `Completed (Right …)` → `AckOk`; `Suspended` → `AckOk`; `Failed` → `AckRetry`; and `retryDelayFor` proves the zero-based first/second/third-delivery schedule from `mkRetryPolicy`, including its cap and `Nothing` normalization. Each dead-letter row additionally asserts the expected code through `deadLetterReasonCode`, so the taxonomy is pinned by test rather than by convention — this is the assertion that makes the code set a contract. A separate test asserts that every code in the startup set survives `mkDeadLetterCode`, which turns a typo into a failing test rather than a worker that will not boot.
-
-Heartbeat primitive: against the migrated database's pgmq schema, create a queue, send a message, read it with a 2-second visibility timeout, extend visibility by 30 seconds (the same `set_vt`-based operation the adapter's lease uses — `Pgmq` session API from `pgmq-hasql`), sleep 3 seconds, and assert a second read returns no message (it would be redelivered without the extension — that variant is the fails-before half of the pair).
-
-Run timeout: hooks whose `beforeStepBody` sleeps 3 seconds inside `"run-behavior"` on first execution only; `runTimeout = Just 1`. Assert the handler-level wrapper returns an `AckRetry` decision, and a second invocation (no sleep) completes with `AckOk`. Structure the timeout wrapper so this is testable without a live queue (export the function that wraps one workflow execution with the timeout).
-
-Beyond tests, observe end-to-end: start the stack (`process-compose.yaml` provides Postgres/Kafka; `just create-database` migrates), run the worker against `agents/`, and enqueue a run for an agent whose behavior takes ~90 seconds. Expected worker stderr: no `JournalAppendConflict`, no duplicate `agent.run` span for one idempotency key, one `workflow completed` line. Kill the worker mid-run and restart: the job is redelivered within ~30 seconds and resumes from the journal.
+- A transient `ProviderFailed True`, transient program runtime failure, and behavior
+  timeout throw before `run-behavior-v2` is appended. A later advance invokes the behavior
+  again and can complete.
+- `UnknownTask`, malformed/missing skill, unsupported behavior, non-retryable provider
+  failure, and deterministic program-input failure append one permanent v2 result and
+  replay without a second behavior call.
+- Conversation turns have the same transient/permanent behavior. A permanent v2 failure
+  completes as a typed failure rather than replaying an `IOException` indefinitely.
+- A deploy simulation proves pre-patch AgentRun and DanwaConversation journals stay on
+  their old labels and fresh instances record `shikigami-behavior-retry-v1`.
+- Raw producer JSON round-trips through `aesonJobCodec`; no `{v,t,data}` envelope appears.
+- Worker startup reconciles both the main queue and
+  `shikigami_run_jobs_dlq`; repeating startup is a no-op.
+- Typed outcome table tests cover every `WorkflowOutcome` plus store, legacy, transient,
+  and permanent failure cases. No application branch constructs `AckDecision`.
+- The integration heartbeat test holds work beyond the initial visibility timeout and
+  records exactly one handler entry. A heartbeat failure prevents acknowledgement.
+- `worker.run_timeout_seconds` and `approval.deadline_seconds` reject zero, negative,
+  malformed, and out-of-range values; defaults and source precedence are visible through
+  the config diagnostics.
+- `shikigamiWorkflowResumeOptions runTimeout` has
+  `leaseTtl > runTimeout`, and first-run options leave `leaseHeartbeat` unset.
+- `just keiro-gate <merge-base>`, focused suites, `cabal build all`, and
+  `cabal test all -j1` pass under `nix develop`.
 
 
 ## Idempotence and Recovery
 
-Every edit is additive or a local rewrite; re-running builds and tests is safe. The new DLQ queue creation is idempotent (pgmq `create` is create-if-not-exists). Rollback of any milestone is a revert of its commits — no migrations and no journal-format changes are involved, so already-journaled workflows are unaffected in both directions. The one behavioral ratchet to be aware of when reverting Milestone 1: runs journaled after the change contain no `run-behavior` entry for attempts that failed transiently (nothing was journaled), which replays identically under old code. If a test database gets into a confusing state, `withShikigamiMigratedDatabase` provisions a fresh database per test, so there is no shared state to clean.
+All specification, Haskell, Cabal, and documentation edits are repeatable. Queue
+reconciliation is additive and idempotent; it never drops or recreates an existing queue.
+`aesonJobCodec` preserves messages already present on `shikigami_run_jobs`.
+
+A crash during a transient behavior attempt leaves no v2 result, so the action may run
+again. External behavior calls and all step bodies therefore remain at-least-once and must
+use stable request/idempotency identities wherever a provider supports them. A crash after
+a permanent v2 result append replays that result without another external call.
+
+If heartbeat renewal fails, the handler must not acknowledge. PGMQ redelivers after the
+last visibility extension. If the queue retry ceiling is exhausted, the adapter moves the
+message to the DLQ. Operators recover a terminal Keiro workflow through the supported
+`resurrectFailedWorkflow` API after repairing the cause; they must not edit workflow
+instance/journal tables by hand.
+
+Rollback across the new patch is unsafe after fresh instances have journaled the active
+branch. Follow `docs/workflow-versioning.md`: keep both branches until no pre-patch
+instance can resume, and retire the patch id and old branch together in a later,
+separately reviewed change.
 
 
-## Portfolio Reconciliation (2026-07-30, amended 2026-08-10)
+## Portfolio Reconciliation
 
-This plan hard-depends on plans 36, 37, and 47. Shibuya 0.8 handlers receive public
-`Message es msg` values containing `envelope` and optional `lease` and return one
-`AckDecision`; never retain the old `Ingested`/ack-handle API. The current PGMQ adapter
-already maps one-based `read_count` to zero-based `Envelope.attempt`, so attempt zero is
-first delivery and Shikigami must not subtract again. Use `AppConfig` and `OrderingPolicy`
-from the released Shibuya surface.
+Plan 17 owns behavior failure classification, synchronous behavior-attempt timeouts,
+run-job consumer outcomes, PGMQ visibility heartbeat, and approval deadline wiring.
 
-Amended 2026-08-10: this plan now also depends on
-`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` and on the cohort
-bump that follows `keiro 0.12`, because Milestone 2's dead-letter taxonomy should be built on
-`shibuya-core 0.9.0.0`'s `ApplicationFailure`/`DeadLetterCode` rather than hand-rolled on 0.8.
-Plan 53 deliberately holds `shibuya-core` at `0.8.0.1` and `shibuya-pgmq-adapter` at `0.13.0.0`
-because keiro 0.11 caps them; it also records the request for `keiro 0.12` that lifts the cap.
-Everything above about the 0.8 handler shape and zero-based attempts remains true at 0.9 — that
-release adds a `DeadLetterReason` constructor and total projections and changes nothing else this
-plan touches.
+Plan 18 continues to own atomic inbox plus transactional producer enqueue and its
+`ensureRunQueue` producer bootstrap. Plan 20 continues to own explicit trigger routing,
+addressed-run idempotency, removal of per-send `createQueue`, and other enqueue hardening.
+The typed consumer introduced here must preserve their raw `RunJob` wire contract.
+
+Plan 36's deployed-service package boundary remains authoritative:
+`shikigami-workers` owns supervised consumer mechanics and `shikigami-core` owns the
+producer contract. ADR-0003's later seventh-package exception does not change that arrow;
+it strengthens the reason not to pull the adapter stack into core, because
+`shikigami-agent` is a light leaf over core. Plan 37's single Settei declaration remains
+the only configuration surface. Plan 39 and `docs/workflow-versioning.md` own
+scaffold/gate mechanics and patch retirement.
 
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36, 37, and 47. The worker lives in the package assigned by plan
-36, receives validated timeout/retry settings from plan 37's Settei composition root, and
-targets the coherent released Shibuya/PGMQ cohort from plan 47.
-
-Libraries and why: keiro (`Keiro.Workflow` — `step`, `runWorkflow`, `WorkflowOutcome (..)`, `WorkflowError (..)`; journaling semantics this plan leans on), shibuya-core (`Shibuya.Core.Ack` — `AckDecision (..)`, `RetryDelay (..)`, `DeadLetterReason (..)`; `Shibuya.Core.Ingested` — public `Message (..)` including `lease`; `Shibuya.Core.Lease` — `Lease (..)`; `Shibuya.Core.Types` — `Envelope (..)` including zero-based `attempt :: Maybe Attempt`), shibuya-pgmq-adapter (`Shibuya.Adapter.Pgmq.Config` — `defaultConfig`, `PgmqAdapterConfig (..)`, `DeadLetterConfig (..)`, `DeadLetterTarget (..)`), pgmq-hasql (queue creation for the DLQ; visibility-extension session for the heartbeat test), `async` (`Control.Concurrent.Async.withAsync`), `base` (`System.Timeout.timeout`), effectful (`Effectful.withEffToIO`, `UnliftStrategy (ConcUnlift …)`).
-
-Signatures that must exist at the end (full module paths):
+New or changed core interfaces are expected to have this shape; exact constructor names
+may vary, but the separation of classification, journal detail, and transient exception
+must not:
 
 ```haskell
--- shikigami-core/src/Shikigami/Behavior/Error.hs
-data Shikigami.Behavior.Error.FailureClass = Transient | Permanent
-Shikigami.Behavior.Error.classifyRunError :: RunError -> FailureClass
-newtype Shikigami.Behavior.Error.TransientBehaviorFailure = TransientBehaviorFailure Text
--- instance Exception TransientBehaviorFailure
+data FailureClass = Transient | Permanent
 
--- shikigami-core/src/Shikigami/Worker.hs
-Shikigami.Worker.classifyOutcome ::
-  Maybe Attempt -> Either StoreError (WorkflowOutcome (Either Text AgentRunResult)) -> AckDecision
-Shikigami.Worker.retryDelayFor :: Maybe Attempt -> RetryDelay
-Shikigami.Worker.handleRunJob :: WorkerEnv -> Maybe Attempt -> Value -> IO AckDecision
--- WorkerEnv gains: runTimeout :: !(Maybe NominalDiffTime), approvalDeadline :: !(Maybe NominalDiffTime)
+classifyRunError :: RunError -> FailureClass
 
--- shikigami-core/src/Shikigami/Trigger/Enqueue.hs
-Shikigami.Trigger.Enqueue.runDeadLetterQueueName :: QueueName
+data TransientBehaviorFailure = TransientBehaviorFailure
+  { detail :: !Text
+  }
+
+runBehaviorAttempt ::
+  NominalDiffTime ->
+  BehaviorEnv ->
+  AgentDecl ->
+  BehaviorInput ->
+  IO (Either Text Value)
 ```
 
-Verified upstream signatures relied upon: keiro `Keiro.Workflow.step :: (Workflow :> es, ToJSON a, FromJSON a) => StepName -> Eff es a -> Eff es a` (journals only on successful return); Shibuya 0.8 `type Shibuya.Handler.Handler es msg = Message es msg -> Eff es AckDecision` with `Message { envelope :: Envelope msg, lease :: Maybe (Lease es) }`; `Shibuya.Core.Lease.Lease { leaseId :: Text, leaseExtend :: NominalDiffTime -> Eff es () }`; shibuya-pgmq-adapter 0.12 exposes zero-based attempts and implements `AckRetry (RetryDelay delay)` as a relative `set_vt`, with auto-dead-letter after the configured retry ceiling.
+The worker-side typed queue surface is:
 
-Added by shibuya-core `0.9.0.0`, and required by this plan's Milestone 2 (verified against
-`shibuya-core/src/Shibuya/Core/Ack.hs` at tag `v0.9.0.0` on 2026-08-10):
-`DeadLetterReason` gains `ApplicationFailure !DeadLetterCode !Text`;
-`mkDeadLetterCode :: Text -> Either Text DeadLetterCode` is the only way to make a code;
-`deadLetterCodeText :: DeadLetterCode -> Text`,
-`deadLetterReasonCode :: DeadLetterReason -> DeadLetterCode`,
-`deadLetterReasonDetail :: DeadLetterReason -> Maybe Text`, and
-`renderDeadLetterReason :: DeadLetterReason -> Text` are total; `poisonPillCode`,
-`invalidPayloadCode`, and `maxRetriesExceededCode` name the built-ins. `shibuya-metrics 0.9.0.0`
-releases in lockstep with an updated bound and no API change. `shibuya-pgmq-adapter 0.14.0.0`
-requires `shibuya-core ^>=0.9.0.0` and writes `dead_letter_reason_code` and
-`dead_letter_reason_detail` into the DLQ payload alongside the retained `dead_letter_reason`.
+```haskell
+runJob :: Job RunJob
 
-Because `DeadLetterReason` gains a constructor, any exhaustive match over it must be extended.
-In this repository that is one import site today —
-`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:35` imports `DeadLetterReason (..)` — and
-the total projections exist precisely so downstream code can avoid matching exhaustively at all. Integration points with sibling plans: docs/plans/20 hard-depends on this plan and consumes `classifyOutcome` for its routing failures; docs/plans/18 shares `Shikigami/Trigger/Enqueue.hs` (queue-name constants and startup queue creation).
+handleRunJob ::
+  WorkerEnv ->
+  JobContext es ->
+  RunJob ->
+  Eff es JobOutcome
+
+withVisibilityHeartbeat ::
+  JobContext es ->
+  Eff es a ->
+  Eff es a
+```
+
+`AgentRunDeps` and `ConversationEnv` gain `runTimeout` and use the configured approval
+deadline where applicable. `WorkerEnv` carries both resolved values. The central resume
+options become a function of the synchronous behavior timeout.
+
+Released dependencies used by the implementation:
+
+- `keiro-pgmq ==0.13.0.0`: typed job, codec, retry policy, reconciliation, context lease,
+  processor, effect-stack façade, and runner APIs;
+- `keiro ==0.13.0.0`: workflow patches, outcomes, resume options, and workflow-instance
+  leases; it remains a direct dependency because `keiro-pgmq` does not re-export these
+  modules;
+- `shibuya-core ==0.9.0.0`: public supervision and telemetry types still imported by the
+  worker; `shibuya-pgmq-adapter` remains transitive behind `keiro-pgmq`, not a direct
+  application dependency;
+- `pgmq-hasql ==0.5.0.0`: the existing lightweight producer path in
+  `shikigami-core`; lower-level PGMQ runtime packages remain transitive behind
+  `keiro-pgmq` unless another Shikigami module directly imports them;
+- `async`: supervised `race` for heartbeat/work lifetime;
+- `base`: `System.Timeout` and the typed exception;
+- `settei ==0.2.0.0` plus the existing env/YAML/CLI integrations.
+
+No database migration is required. The new DLQ is a reconciled PGMQ queue, and the workflow
+patch is a journaled compatibility decision declared through the Keiro specification.
 
 
 ## Revision Notes
 
-- 2026-07-22: Recorded plan 20 as a hard downstream consumer of this plan's ack
-  classification, eliminating its conditional ad-hoc routing decision.
-- 2026-07-30: Corrected the released adapter contract: `Message` replaces handler-facing
-  `Ingested`, acknowledgement remains framework-owned, and `Envelope.attempt` is already
-  zero-based after the adapter converts PGMQ `read_count`.
-- 2026-08-10: Re-pointed Milestone 2's dead-letter handling at `shibuya-core 0.9.0.0`, and added
-  a gate so this plan does not start before that release is in the cohort.
-
-  The reason is rework, and it is the largest instance of it in the portfolio. Milestone 2 was
-  going to classify every permanent failure as `AckDeadLetter (PoisonPill err)` — one bucket with
-  the real reason as prose — while also building a table-driven classification test, which is a
-  permanent-failure taxonomy in all but name. Shibuya 0.9 ships exactly that taxonomy as typed
-  vocabulary: `ApplicationFailure !DeadLetterCode !Text`, an opaque code validated by
-  `mkDeadLetterCode`, total `deadLetterReasonCode`/`deadLetterReasonDetail` projections, a
-  canonical renderer, a reserved `shibuya` namespace, and adapter transport of the code into the
-  DLQ payload as a queryable `dead_letter_reason_code`. Implementing on 0.8 first means writing a
-  code type, a renderer, and a projection and then deleting all three.
-
-  Concretely: Progress gained an M0 gate and two Milestone 2 items (startup validation, and
-  code-asserting tests); Surprises & Discoveries records the 0.9 API with its validation rules and
-  explains that the gate is indirect — `keiro 0.11` caps `shibuya-core <0.9`, so the chain is
-  keiro 0.12 → cohort bump → this plan; the Decision Log gained three entries covering the
-  constructor choice, startup-only validation, and the concrete five-code set
-  (`shikigami.unknown_agent`, `shikigami.unsupported_behavior`, `shikigami.skill_load_failed`,
-  `shikigami.behavior_failed`, `shikigami.run_cancelled`); the Milestone 2 mapping now names
-  `ApplicationFailure` and says how the code is chosen from Milestone 1's `FailureClass` rather
-  than re-derived from error text; Validation asserts codes through `deadLetterReasonCode` and
-  proves the whole set passes `mkDeadLetterCode`; and Interfaces records the exact 0.9 surface
-  with the note that `DeadLetterReason` gaining a constructor breaks exhaustive matches, of which
-  this repository has one.
-
-  Surprises & Discoveries also records the fallback if the gate does not clear soon: implement on
-  0.8, but keep every permanent classification behind one module returning a shikigami-owned code
-  type, flattened to `PoisonPill` in exactly one place, so the 0.9 swap is a one-constructor
-  change.
-
-  One older rationale was narrowed rather than removed. The decision to keep
-  `agentRunWorkflow`'s `Either Text AgentRunResult` result type cited the JSON encoding of
-  already-completed workflows; shikigami has no users and no stored completed workflow, so that
-  argument is void. The decision stands on its other ground — it deletes the `"unknown agent "`
-  string-prefix hack.
+- 2026-08-19: Rewrote the plan after a full current-code and dependency audit. Replaced
+  stale monolithic worker paths and the obsolete keiro/shibuya gate; corrected
+  `mkRetryPolicy` and the fixed PGMQ retry policy; separated PGMQ delivery renewal from
+  Keiro instance leasing; moved the timeout from the whole queue handler to synchronous
+  behavior attempts so resumed workflows are covered; added conversation semantics and a
+  checked v2 patch path; adopted `keiro-pgmq` on the consumer side; documented the
+  producer-side package-boundary exception; removed the unsupported promise of
+  application-specific DLQ codes; and aligned configuration, tests, and validation with
+  the current Settei and workflow-versioning rules.
+- 2026-08-19: Clarified the dependency and payload boundary after review:
+  `Keiro.PGMQ` is the sole application-facing queue façade and replaces redundant direct
+  runtime/adapter dependencies, but it does not replace the separate `keiro` workflow
+  package and is not codec-only internally. Kept `aesonJobCodec` for a wire-compatible
+  typed migration and documented the dual-read rollout required before adopting
+  `keiroJobCodec`.

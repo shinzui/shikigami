@@ -241,10 +241,13 @@ carries them through `WorkflowResumeOptions.runOptions`
 (`keiro/src/Keiro/Workflow/Resume.hs:182-186`), so a resumed run honours exactly
 the options its first run did.
 
-New per-run options belong in that module too rather than in a fresh value at a
-call site. The lease heartbeat that
+New workflow run or resume options belong in that module too rather than in a
+fresh value at a call site. Keep the lease domains distinct: the PGMQ delivery
+heartbeat in
 `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md`
-needs is the next such field.
+uses `Keiro.PGMQ.JobContext.extendLease`; the Keiro resume worker injects
+`WorkflowRunOptions.leaseHeartbeat` itself and is configured through
+`WorkflowResumeOptions.leaseTtl`. Direct runs leave `leaseHeartbeat` unset.
 
 
 ## Registering a patch id

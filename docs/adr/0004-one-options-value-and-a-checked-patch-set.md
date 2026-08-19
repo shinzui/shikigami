@@ -28,11 +28,12 @@ silently: the wrong branch is taken, not an error.
 
 Second, the set is per-run rather than global. Nothing prevents a call site from
 building its own `WorkflowRunOptions`, and a second value is a second answer to
-"which patches are active". This is not hypothetical:
-`docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md`
-needs a shibuya lease heartbeat threaded around workflow execution, and
-`leaseHeartbeat` is a field of the same record. A plan that constructs its own
-options to set it would quietly drop `activePatches`.
+"which patches are active". This is not hypothetical: future changes need one
+place to combine patch activation with snapshot and telemetry policy. Plan 17
+also demonstrates why the option types must be distinguished carefully: its
+PGMQ delivery heartbeat belongs to `Keiro.PGMQ.JobContext.extendLease`, while
+its slow-step budget changes `WorkflowResumeOptions.leaseTtl`. Neither is a
+reason to set `WorkflowRunOptions.leaseHeartbeat` on a direct run.
 
 There was also no written rule about which workflow-body changes are safe to
 deploy over suspended instances, and one capability was already violating the
@@ -52,8 +53,12 @@ Concretely:
   workflow, and the resume worker that re-invokes both — goes through
   `shikigamiWorkflowRunOptions` or `shikigamiWorkflowResumeOptions`. No
   production call site uses `runWorkflow` or `runWorkflowResumeWorker`.
-* New per-run options are added to that module, not to a fresh value at a call
-  site. Plan 17's lease heartbeat sets `leaseHeartbeat` there.
+* New workflow run or resume options are added to that module, not to a fresh
+  value at a call site. Plan 17 leaves direct
+  `WorkflowRunOptions.leaseHeartbeat` unset, uses
+  `JobContext.extendLease` for the independent PGMQ delivery heartbeat, and
+  sizes the central `WorkflowResumeOptions.leaseTtl` above its slowest
+  synchronous step.
 * `shikigamiActivePatches` is the union of the generated per-workflow
   `declaredPatches` sets. Adding a patch id therefore means declaring it in
   `domain/shikigami-agent-run.keiro` or `domain/shikigami-conversation.keiro`,
