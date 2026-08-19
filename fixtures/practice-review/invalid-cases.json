@@ -1,0 +1,125 @@
+[
+  {
+    "name": "branch name used as revision",
+    "base": "trigger",
+    "operation": "replace",
+    "pointer": "/targetRange/head",
+    "replacement": "main",
+    "expected": "trigger-decode"
+  },
+  {
+    "name": "uppercase revision",
+    "base": "trigger",
+    "operation": "replace",
+    "pointer": "/targetRange/head",
+    "replacement": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "expected": "trigger-decode"
+  },
+  {
+    "name": "short revision",
+    "base": "trigger",
+    "operation": "replace",
+    "pointer": "/targetRange/head",
+    "replacement": "bbbbbbbb",
+    "expected": "trigger-decode"
+  },
+  {
+    "name": "missing content hash",
+    "base": "verdicts",
+    "at": 0,
+    "operation": "remove",
+    "pointer": "/targetEvidence/0/content/contentHash",
+    "expected": "verdict-decode"
+  },
+  {
+    "name": "project and provenance repositories disagree",
+    "base": "verdicts",
+    "at": 0,
+    "operation": "replace",
+    "pointer": "/targetEvidence/0/content/project/repository",
+    "replacement": "repo_other",
+    "expected": "verdict-validation"
+  },
+  {
+    "name": "claim cites unknown evidence",
+    "base": "verdicts",
+    "at": 0,
+    "operation": "replace",
+    "pointer": "/claims/0/evidenceIds",
+    "replacement": ["evidence-missing"],
+    "expected": "verdict-validation"
+  },
+  {
+    "name": "target suspect selects practice owner",
+    "base": "verdicts",
+    "at": 1,
+    "operation": "replace",
+    "pointer": "/recommendedOwner/role",
+    "replacement": "practice-owner",
+    "expected": "verdict-validation"
+  },
+  {
+    "name": "consistent verdict selects an owner",
+    "base": "verdicts",
+    "at": 0,
+    "operation": "add",
+    "pointer": "/recommendedOwner",
+    "replacement": {"role": "target-owner", "principals": ["team-example-service"]},
+    "expected": "verdict-validation"
+  },
+  {
+    "name": "legitimate exception has empty scope",
+    "base": "verdicts",
+    "at": 3,
+    "operation": "replace",
+    "pointer": "/applicability",
+    "replacement": {"projects": [], "paths": [], "dependencies": [], "practices": []},
+    "expected": "verdict-validation"
+  },
+  {
+    "name": "trigger names a specialist",
+    "base": "trigger",
+    "operation": "add",
+    "pointer": "/specialist",
+    "replacement": "producer-selected-specialist",
+    "expected": "trigger-decode"
+  },
+  {
+    "name": "unsupported trigger schema version",
+    "base": "trigger",
+    "operation": "replace",
+    "pointer": "/schemaVersion",
+    "replacement": 2,
+    "expected": "trigger-validation"
+  },
+  {
+    "name": "Kizashi acknowledgement is not a resolution",
+    "base": "literal",
+    "operation": "replace",
+    "pointer": "",
+    "replacement": {"signalId": "sig_1", "acknowledgedBy": "human_1", "acknowledgedAt": "2026-08-19T20:04:00Z"},
+    "expected": "resolution-decode"
+  },
+  {
+    "name": "rejected resolution carries guiding applicability",
+    "base": "resolutions",
+    "at": 1,
+    "operation": "add",
+    "pointer": "/resultingApplicability",
+    "replacement": {
+      "projects": [{"name": "shinzui/example-service", "repository": "repo_target"}],
+      "paths": [],
+      "dependencies": [],
+      "practices": ["opentelemetry"]
+    },
+    "expected": "resolution-validation"
+  },
+  {
+    "name": "superseded resolution omits newer review",
+    "base": "resolutions",
+    "at": 3,
+    "operation": "remove",
+    "pointer": "/supersedingReviewId",
+    "expected": "resolution-validation"
+  }
+]

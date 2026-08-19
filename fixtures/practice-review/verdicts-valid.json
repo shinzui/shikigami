@@ -1,7 +1,7 @@
 [
   {
     "schemaVersion": 1,
-    "reviewId": "review-consistent",
+    "reviewId": "12ee877e-85da-561d-8cfc-0ebbd5a1f497",
     "triggerIdempotencyKey": "trigger-consistent",
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
@@ -61,7 +61,7 @@
   },
   {
     "schemaVersion": 1,
-    "reviewId": "review-target-suspect",
+    "reviewId": "be79e848-6ce5-5fef-a5c8-bce0596f3784",
     "triggerIdempotencyKey": "trigger-target-suspect",
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
@@ -116,7 +116,7 @@
   },
   {
     "schemaVersion": 1,
-    "reviewId": "review-reference-suspect",
+    "reviewId": "b0d0b23d-2c41-5fd9-820f-a2940a2b0380",
     "triggerIdempotencyKey": "trigger-reference-suspect",
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
@@ -182,7 +182,7 @@
   },
   {
     "schemaVersion": 1,
-    "reviewId": "review-legitimate-exception",
+    "reviewId": "766f5730-1349-5830-b462-4694c6f9c109",
     "triggerIdempotencyKey": "trigger-legitimate-exception",
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
@@ -242,7 +242,7 @@
   },
   {
     "schemaVersion": 1,
-    "reviewId": "review-unresolved",
+    "reviewId": "34221675-3b4b-5da7-b345-13d596e07391",
     "triggerIdempotencyKey": "trigger-unresolved",
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",

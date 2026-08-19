@@ -39,13 +39,31 @@ module Shikigami.PracticeReview
     PracticeReviewVerdict (..),
     ResolutionOutcome (..),
     PracticeReviewResolution (..),
+    ReviewContractError (..),
+    ValidatedPracticeReviewTrigger,
+    ValidatedPracticeReviewVerdict,
+    ValidatedPracticeReviewResolution,
+    validatedTriggerValue,
+    validatedVerdictValue,
+    validatedResolutionValue,
+    deriveReviewId,
+    deriveResolutionId,
+    validateTrigger,
+    validateVerdict,
+    validateResolution,
   )
 where
 
 import Data.Aeson (Value (Object))
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString qualified as ByteString
+import Data.Set qualified as Set
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUIDv5
 import Shikigami.Prelude
-import Shikigami.Repository (RelativePath, RepoRef, RepositoryId, Revision)
+import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision)
 
 -- | The only schema version accepted by the first contract release.
 practiceReviewSchemaVersion :: Int
@@ -428,6 +446,651 @@ data PracticeReviewResolution = PracticeReviewResolution
 instance ToJSON PracticeReviewResolution where toJSON = genericToJSON practiceReviewAesonOptions
 
 instance FromJSON PracticeReviewResolution where parseJSON = genericParseJSON practiceReviewAesonOptions
+
+-- | One precise reason a raw contract value was rejected.
+data ReviewContractError = ReviewContractError
+  { field :: !Text,
+    message :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | A trigger whose schema, identities, ranges, adoption bindings, and routing
+-- boundary have been checked and normalized.
+newtype ValidatedPracticeReviewTrigger = ValidatedPracticeReviewTrigger PracticeReviewTrigger
+  deriving stock (Eq, Show)
+
+-- | A verdict whose evidence graph and classification invariants have been
+-- checked and normalized.
+newtype ValidatedPracticeReviewVerdict = ValidatedPracticeReviewVerdict PracticeReviewVerdict
+  deriving stock (Eq, Show)
+
+-- | A resolution whose deterministic identity and outcome-specific fields have
+-- been checked and normalized.
+newtype ValidatedPracticeReviewResolution = ValidatedPracticeReviewResolution PracticeReviewResolution
+  deriving stock (Eq, Show)
+
+validatedTriggerValue :: ValidatedPracticeReviewTrigger -> PracticeReviewTrigger
+validatedTriggerValue (ValidatedPracticeReviewTrigger trigger) = trigger
+
+validatedVerdictValue :: ValidatedPracticeReviewVerdict -> PracticeReviewVerdict
+validatedVerdictValue (ValidatedPracticeReviewVerdict verdict) = verdict
+
+validatedResolutionValue :: ValidatedPracticeReviewResolution -> PracticeReviewResolution
+validatedResolutionValue (ValidatedPracticeReviewResolution resolution) = resolution
+
+-- | Deterministically identify one practice/specialist review of a normalized
+-- producer trigger.
+deriveReviewId :: PracticeReviewTrigger -> PracticeKey -> Text -> ReviewId
+deriveReviewId PracticeReviewTrigger {idempotencyKey} practice specialist =
+  deriveReviewIdFromParts idempotencyKey practice specialist
+
+-- | Deterministically identify one resolution command for a review.
+deriveResolutionId :: ReviewId -> Text -> ResolutionId
+deriveResolutionId (ReviewId reviewValue) commandKey =
+  ResolutionId
+    ( uuidText
+        [ "resolution",
+          Text.strip reviewValue,
+          normalizeOpaqueKey commandKey
+        ]
+    )
+
+deriveReviewIdFromParts :: Text -> PracticeKey -> Text -> ReviewId
+deriveReviewIdFromParts triggerKey (PracticeKey practice) specialist =
+  ReviewId
+    ( uuidText
+        [ "review",
+          normalizeOpaqueKey triggerKey,
+          normalizeNamedKey practice,
+          normalizeNamedKey specialist
+        ]
+    )
+
+uuidText :: [Text] -> Text
+uuidText identityParts =
+  UUID.toText
+    ( UUIDv5.generateNamed
+        practiceReviewNamespace
+        (ByteString.unpack (TextEncoding.encodeUtf8 (lengthPrefixed identityParts)))
+    )
+
+practiceReviewNamespace :: UUID.UUID
+practiceReviewNamespace =
+  UUIDv5.generateNamed
+    UUIDv5.namespaceURL
+    (ByteString.unpack (TextEncoding.encodeUtf8 "mori://shinzui/shikigami/contracts/practice-review/v1"))
+
+lengthPrefixed :: [Text] -> Text
+lengthPrefixed = Text.intercalate "|" . fmap (\part -> Text.pack (show (Text.length part)) <> ":" <> part)
+
+normalizeOpaqueKey :: Text -> Text
+normalizeOpaqueKey = Text.strip
+
+normalizeNamedKey :: Text -> Text
+normalizeNamedKey = Text.toCaseFold . Text.strip
+
+-- | Validate and normalize a raw trigger, accumulating every error that can be
+-- found without external state.
+validateTrigger :: PracticeReviewTrigger -> Either (NonEmpty ReviewContractError) ValidatedPracticeReviewTrigger
+validateTrigger trigger =
+  toValidationResult
+    (triggerErrors trigger)
+    (ValidatedPracticeReviewTrigger (normalizeTrigger trigger))
+
+-- | Validate and normalize a raw verdict, including its evidence citation
+-- graph and classification-specific owner rules.
+validateVerdict :: PracticeReviewVerdict -> Either (NonEmpty ReviewContractError) ValidatedPracticeReviewVerdict
+validateVerdict verdict =
+  toValidationResult
+    (verdictErrors verdict)
+    (ValidatedPracticeReviewVerdict (normalizeVerdict verdict))
+
+-- | Validate and normalize an explicit resolution command.
+validateResolution :: PracticeReviewResolution -> Either (NonEmpty ReviewContractError) ValidatedPracticeReviewResolution
+validateResolution resolution =
+  toValidationResult
+    (resolutionErrors resolution)
+    (ValidatedPracticeReviewResolution (normalizeResolution resolution))
+
+toValidationResult :: [ReviewContractError] -> value -> Either (NonEmpty ReviewContractError) value
+toValidationResult [] value = Right value
+toValidationResult (problem : problems) _ = Left (problem :| problems)
+
+contractError :: Text -> Text -> ReviewContractError
+contractError = ReviewContractError
+
+check :: Bool -> Text -> Text -> [ReviewContractError]
+check condition fieldName problem = [contractError fieldName problem | condition]
+
+blankErrors :: Text -> Text -> [ReviewContractError]
+blankErrors fieldName raw = check (Text.null (Text.strip raw)) fieldName "must not be empty"
+
+schemaErrors :: Text -> Int -> [ReviewContractError]
+schemaErrors document actual =
+  check
+    (actual /= practiceReviewSchemaVersion)
+    (document <> ".schemaVersion")
+    ( "unsupported schema version "
+        <> Text.pack (show actual)
+        <> "; expected "
+        <> Text.pack (show practiceReviewSchemaVersion)
+    )
+
+projectErrors :: Text -> ProjectRef -> [ReviewContractError]
+projectErrors prefix ProjectRef {name, repository = RepositoryId repositoryId} =
+  blankErrors (prefix <> ".name") name
+    <> blankErrors (prefix <> ".repository") repositoryId
+
+repoRefErrors :: Text -> RepoRef -> [ReviewContractError]
+repoRefErrors prefix RepoRef {repository = RepositoryId repositoryId} =
+  blankErrors (prefix <> ".repository") repositoryId
+
+revisionRangeErrors :: Text -> RevisionRange -> [ReviewContractError]
+revisionRangeErrors prefix RevisionRange {changeKind, before} =
+  case changeKind of
+    Added -> check (isJust before) (prefix <> ".before") "must be absent for an added object"
+    Modified -> check (isNothing before) (prefix <> ".before") "is required for a modified object"
+
+applicabilityErrors :: Bool -> Text -> Applicability -> [ReviewContractError]
+applicabilityErrors requireBounded prefix Applicability {projects, paths, dependencies, practices} =
+  check
+    (requireBounded && null projects && null paths && null dependencies && null practices)
+    prefix
+    "must bound at least one project, path, dependency, or practice"
+    <> concatMap (uncurry projectErrors) (indexedFields (prefix <> ".projects") projects)
+    <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".dependencies") dependencies)
+    <> concatMap practiceKeyErrors (indexedFields (prefix <> ".practices") practices)
+  where
+    practiceKeyErrors (fieldName, PracticeKey practice) = blankErrors fieldName practice
+
+triggerErrors :: PracticeReviewTrigger -> [ReviewContractError]
+triggerErrors
+  PracticeReviewTrigger
+    { schemaVersion,
+      triggerKind,
+      idempotencyKey,
+      target,
+      targetRange,
+      changedDecisionPaths,
+      adoptions,
+      referenceChange,
+      priorReviewId
+    } =
+    schemaErrors "trigger" schemaVersion
+      <> blankErrors "trigger.idempotencyKey" idempotencyKey
+      <> projectErrors "trigger.target" target
+      <> revisionRangeErrors "trigger.targetRange" targetRange
+      <> check (null changedDecisionPaths) "trigger.changedDecisionPaths" "must contain at least one path"
+      <> check (null adoptions) "trigger.adoptions" "must contain at least one practice adoption"
+      <> concatMap (uncurry adoptionErrors) (indexedFields "trigger.adoptions" adoptions)
+      <> referenceChangeErrors triggerKind referenceChange
+      <> maybe [] (\(ReviewId reviewValue) -> blankErrors "trigger.priorReviewId" reviewValue) priorReviewId
+
+referenceChangeErrors :: PracticeReviewTriggerKind -> Maybe ChangedReference -> [ReviewContractError]
+referenceChangeErrors TargetChange Nothing = []
+referenceChangeErrors TargetChange (Just changed) =
+  changedReferenceErrors changed
+    <> [contractError "trigger.referenceChange" "must be absent for target-change"]
+referenceChangeErrors ReferenceChange Nothing =
+  [contractError "trigger.referenceChange" "is required for reference-change"]
+referenceChangeErrors ReferenceChange (Just changed@ChangedReference {range = RevisionRange {changeKind}}) =
+  changedReferenceErrors changed
+    <> check (changeKind /= Modified) "trigger.referenceChange.range.changeKind" "must be modified"
+
+changedReferenceErrors :: ChangedReference -> [ReviewContractError]
+changedReferenceErrors ChangedReference {project, range, changedPaths} =
+  projectErrors "trigger.referenceChange.project" project
+    <> revisionRangeErrors "trigger.referenceChange.range" range
+    <> check (null changedPaths) "trigger.referenceChange.changedPaths" "must contain at least one path"
+
+adoptionErrors :: Text -> PracticeAdoptionBinding -> [ReviewContractError]
+adoptionErrors
+  prefix
+  PracticeAdoptionBinding
+    { practice = PracticeKey practice,
+      references,
+      claimedApplicability,
+      mode,
+      owners,
+      upstreamProjects
+    } =
+    blankErrors (prefix <> ".practice") practice
+      <> check (null references) (prefix <> ".references") "must contain at least one registered reference"
+      <> concatMap (uncurry registeredReferenceErrors) (indexedFields (prefix <> ".references") references)
+      <> applicabilityErrors True (prefix <> ".claimedApplicability") claimedApplicability
+      <> check (mode /= Advisory) (prefix <> ".mode") "version 1 supports advisory mode only"
+      <> ownerErrors (prefix <> ".owners") owners
+      <> concatMap (uncurry upstreamProjectErrors) (indexedFields (prefix <> ".upstreamProjects") upstreamProjects)
+
+registeredReferenceErrors :: Text -> RegisteredPracticeReference -> [ReviewContractError]
+registeredReferenceErrors
+  prefix
+  RegisteredPracticeReference
+    { project = project@ProjectRef {repository = projectRepository},
+      provenance = provenance@RepoRef {repository = provenanceRepository},
+      documentIds
+    } =
+    projectErrors (prefix <> ".project") project
+      <> repoRefErrors (prefix <> ".provenance") provenance
+      <> check
+        (projectRepository /= provenanceRepository)
+        (prefix <> ".provenance.repository")
+        "must match the registered project repository"
+      <> check (null documentIds) (prefix <> ".documentIds") "must contain at least one document id"
+      <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".documentIds") documentIds)
+
+ownerErrors :: Text -> ReviewOwners -> [ReviewContractError]
+ownerErrors prefix ReviewOwners {targetOwner = OwnerPrincipal target, practiceOwner = OwnerPrincipal practice, triageOwner = OwnerPrincipal triage, exceptionApprover} =
+  blankErrors (prefix <> ".targetOwner") target
+    <> blankErrors (prefix <> ".practiceOwner") practice
+    <> blankErrors (prefix <> ".triageOwner") triage
+    <> maybe [] (\(OwnerPrincipal approver) -> blankErrors (prefix <> ".exceptionApprover") approver) exceptionApprover
+
+upstreamProjectErrors :: Text -> RegisteredUpstreamProject -> [ReviewContractError]
+upstreamProjectErrors prefix RegisteredUpstreamProject {project, dependency} =
+  projectErrors (prefix <> ".project") project
+    <> blankErrors (prefix <> ".dependency") dependency
+
+verdictErrors :: PracticeReviewVerdict -> [ReviewContractError]
+verdictErrors
+  PracticeReviewVerdict
+    { schemaVersion,
+      reviewId = actualReviewId@(ReviewId reviewValue),
+      triggerIdempotencyKey,
+      practice = practiceKey@(PracticeKey practice),
+      specialist,
+      lineage,
+      targetEvidence,
+      referenceEvidence,
+      upstreamEvidence,
+      claims,
+      confidence = Confidence confidence,
+      routingRationale,
+      classification,
+      recommendedOwner,
+      recommendedAction,
+      exceptionApproval,
+      reReviewCondition,
+      applicability
+    } =
+    schemaErrors "verdict" schemaVersion
+      <> blankErrors "verdict.reviewId" reviewValue
+      <> blankErrors "verdict.triggerIdempotencyKey" triggerIdempotencyKey
+      <> blankErrors "verdict.practice" practice
+      <> blankErrors "verdict.specialist" specialist
+      <> check
+        (actualReviewId /= deriveReviewIdFromParts triggerIdempotencyKey practiceKey specialist)
+        "verdict.reviewId"
+        "does not match the deterministic trigger/practice/specialist identity"
+      <> lineageErrors lineage
+      <> check (null targetEvidence) "verdict.targetEvidence" "must contain pinned target evidence"
+      <> check (classification /= Unresolved && null referenceEvidence) "verdict.referenceEvidence" "must contain pinned practice evidence"
+      <> evidenceCollectionErrors TargetEvidence "verdict.targetEvidence" targetEvidence
+      <> evidenceCollectionErrors ReferenceEvidence "verdict.referenceEvidence" referenceEvidence
+      <> evidenceCollectionErrors UpstreamEvidence "verdict.upstreamEvidence" upstreamEvidence
+      <> duplicateEvidenceErrors allEvidence
+      <> concatMap (uncurry (claimErrors knownEvidence)) (indexedFields "verdict.claims" claims)
+      <> duplicateClaimErrors claims
+      <> check (confidence < 0 || confidence > 100) "verdict.confidence" "must be between 0 and 100"
+      <> blankErrors "verdict.routingRationale" routingRationale
+      <> blankErrors "verdict.recommendedAction" recommendedAction
+      <> recommendedOwnerErrors recommendedOwner
+      <> classificationErrors classification recommendedOwner exceptionApproval applicability claims
+      <> reReviewErrors reReviewCondition
+      <> applicabilityErrors False "verdict.applicability" applicability
+    where
+      allEvidence = targetEvidence <> referenceEvidence <> upstreamEvidence
+      knownEvidence = Set.fromList [evidenceId | EvidenceItem {evidenceId} <- allEvidence]
+
+lineageErrors :: ReviewLineage -> [ReviewContractError]
+lineageErrors ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId, priorReviewId} =
+  blankErrors "verdict.lineage.parentSessionId" parentSessionId
+    <> blankErrors "verdict.lineage.childSessionId" childSessionId
+    <> blankErrors "verdict.lineage.parentWorkflowId" parentWorkflowId
+    <> blankErrors "verdict.lineage.childWorkflowId" childWorkflowId
+    <> maybe [] (\(ReviewId reviewValue) -> blankErrors "verdict.lineage.priorReviewId" reviewValue) priorReviewId
+
+evidenceCollectionErrors :: EvidenceRole -> Text -> [EvidenceItem] -> [ReviewContractError]
+evidenceCollectionErrors expected prefix =
+  concatMap (uncurry (evidenceItemErrors expected)) . indexedFields prefix
+
+evidenceItemErrors :: EvidenceRole -> Text -> EvidenceItem -> [ReviewContractError]
+evidenceItemErrors expected prefix EvidenceItem {evidenceId = EvidenceId evidence, role, content} =
+  blankErrors (prefix <> ".evidenceId") evidence
+    <> check (role /= expected) (prefix <> ".role") "does not match its evidence collection"
+    <> contentReferenceErrors (prefix <> ".content") content
+
+contentReferenceErrors :: Text -> ContentReference -> [ReviewContractError]
+contentReferenceErrors
+  prefix
+  ContentReference
+    { project = project@ProjectRef {repository = projectRepository},
+      provenance = provenance@RepoRef {repository = provenanceRepository},
+      contentHash = ContentHash contentHash
+    } =
+    projectErrors (prefix <> ".project") project
+      <> repoRefErrors (prefix <> ".provenance") provenance
+      <> check
+        (projectRepository /= provenanceRepository)
+        (prefix <> ".provenance.repository")
+        "must match the content project repository"
+      <> blankErrors (prefix <> ".contentHash") contentHash
+
+duplicateEvidenceErrors :: [EvidenceItem] -> [ReviewContractError]
+duplicateEvidenceErrors items =
+  [ contractError "verdict.evidenceId" ("duplicate evidence id: " <> evidence)
+  | EvidenceId evidence <- duplicateValues [evidenceId | EvidenceItem {evidenceId} <- items]
+  ]
+
+duplicateClaimErrors :: [PracticeReviewClaim] -> [ReviewContractError]
+duplicateClaimErrors claims =
+  [ contractError "verdict.claimId" ("duplicate claim id: " <> claim)
+  | ClaimId claim <- duplicateValues [claimId | PracticeReviewClaim {claimId} <- claims]
+  ]
+
+claimErrors :: Set.Set EvidenceId -> Text -> PracticeReviewClaim -> [ReviewContractError]
+claimErrors known prefix PracticeReviewClaim {claimId = ClaimId claim, statement, evidenceIds} =
+  blankErrors (prefix <> ".claimId") claim
+    <> blankErrors (prefix <> ".statement") statement
+    <> check (null evidenceIds) (prefix <> ".evidenceIds") "must cite at least one evidence item"
+    <> [ contractError (prefix <> ".evidenceIds") ("references unknown evidence id: " <> evidence)
+       | evidenceId@(EvidenceId evidence) <- evidenceIds,
+         Set.notMember evidenceId known
+       ]
+
+recommendedOwnerErrors :: Maybe RecommendedOwner -> [ReviewContractError]
+recommendedOwnerErrors Nothing = []
+recommendedOwnerErrors (Just RecommendedOwner {role, principals}) =
+  check (null principals) "verdict.recommendedOwner.principals" "must contain at least one principal"
+    <> check (role == JointOwners && length principals < 2) "verdict.recommendedOwner.principals" "joint-owners requires at least two principals"
+    <> check (role /= JointOwners && length principals /= 1) "verdict.recommendedOwner.principals" "this owner role requires exactly one principal"
+    <> concatMap principalErrors (indexedFields "verdict.recommendedOwner.principals" principals)
+  where
+    principalErrors (fieldName, OwnerPrincipal principal) = blankErrors fieldName principal
+
+classificationErrors :: PracticeReviewClassification -> Maybe RecommendedOwner -> ExceptionApproval -> Applicability -> [PracticeReviewClaim] -> [ReviewContractError]
+classificationErrors classification recommendedOwner exceptionApproval applicability claims =
+  case classification of
+    Consistent ->
+      check (isJust recommendedOwner) "verdict.recommendedOwner" "must be absent for consistent"
+        <> noExceptionApproval
+    TargetSuspect ->
+      expectedRole TargetOwner
+        <> materialClaimRequired
+        <> noExceptionApproval
+    ReferenceSuspect ->
+      expectedRole PracticeOwner
+        <> materialClaimRequired
+        <> noExceptionApproval
+    Unresolved ->
+      unresolvedOwner
+        <> noExceptionApproval
+    LegitimateException ->
+      applicabilityErrors True "verdict.applicability" applicability
+        <> case exceptionApproval of
+          NoApproval -> check (isJust recommendedOwner) "verdict.recommendedOwner" "must be absent when exception approval is not required"
+          ApprovalRequired -> expectedRole ExceptionApprover
+  where
+    roleOf RecommendedOwner {role} = role
+    expectedRole expected =
+      check
+        (fmap roleOf recommendedOwner /= Just expected)
+        "verdict.recommendedOwner.role"
+        ("must be " <> ownerRoleText expected)
+    unresolvedOwner =
+      check
+        (maybe True (\owner -> roleOf owner `notElem` [TriageOwner, JointOwners]) recommendedOwner)
+        "verdict.recommendedOwner.role"
+        "must be triage-owner or joint-owners for unresolved"
+    materialClaimRequired =
+      check
+        (not (any (\PracticeReviewClaim {material, evidenceIds} -> material && not (null evidenceIds)) claims))
+        "verdict.claims"
+        "suspect classifications require a cited material claim"
+    noExceptionApproval =
+      check (exceptionApproval /= NoApproval) "verdict.exceptionApproval" "must be no-approval outside legitimate-exception"
+
+ownerRoleText :: RecommendedOwnerRole -> Text
+ownerRoleText TargetOwner = "target-owner"
+ownerRoleText PracticeOwner = "practice-owner"
+ownerRoleText TriageOwner = "triage-owner"
+ownerRoleText JointOwners = "joint-owners"
+ownerRoleText ExceptionApprover = "exception-approver"
+
+reReviewErrors :: ReReviewCondition -> [ReviewContractError]
+reReviewErrors ReReviewCondition {condition, watches} =
+  blankErrors "verdict.reReviewCondition.condition" condition
+    <> concatMap (uncurry repoRefErrors) (indexedFields "verdict.reReviewCondition.watches" watches)
+
+resolutionErrors :: PracticeReviewResolution -> [ReviewContractError]
+resolutionErrors
+  PracticeReviewResolution
+    { schemaVersion,
+      resolutionId = actualResolutionId@(ResolutionId resolution),
+      idempotencyKey,
+      reviewId = reviewId@(ReviewId reviewValue),
+      outcome,
+      resolver = OwnerPrincipal resolver,
+      reason,
+      resultingApplicability,
+      supersedingReviewId
+    } =
+    schemaErrors "resolution" schemaVersion
+      <> blankErrors "resolution.resolutionId" resolution
+      <> blankErrors "resolution.idempotencyKey" idempotencyKey
+      <> blankErrors "resolution.reviewId" reviewValue
+      <> check
+        (actualResolutionId /= deriveResolutionId reviewId idempotencyKey)
+        "resolution.resolutionId"
+        "does not match the deterministic review/command identity"
+      <> blankErrors "resolution.resolver" resolver
+      <> blankErrors "resolution.reason" reason
+      <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
+
+resolutionOutcomeErrors :: ResolutionOutcome -> Maybe Applicability -> Maybe ReviewId -> ReviewId -> [ReviewContractError]
+resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId =
+  case outcome of
+    Accepted ->
+      requiredApplicability
+        <> noSupersedingReview
+    Rejected ->
+      check (isJust resultingApplicability) "resolution.resultingApplicability" "must be absent for rejected"
+        <> noSupersedingReview
+    Narrowed ->
+      requiredApplicability
+        <> noSupersedingReview
+    Superseded ->
+      check (isJust resultingApplicability) "resolution.resultingApplicability" "must be absent for superseded"
+        <> check (isNothing supersedingReviewId) "resolution.supersedingReviewId" "is required for superseded"
+        <> check (supersedingReviewId == Just reviewId) "resolution.supersedingReviewId" "must name a different review"
+  where
+    requiredApplicability =
+      case resultingApplicability of
+        Nothing -> [contractError "resolution.resultingApplicability" "is required for this outcome"]
+        Just applicability -> applicabilityErrors True "resolution.resultingApplicability" applicability
+    noSupersedingReview =
+      check (isJust supersedingReviewId) "resolution.supersedingReviewId" "must be absent for this outcome"
+
+indexedFields :: Text -> [value] -> [(Text, value)]
+indexedFields prefix = zipWith (\fieldIndex value -> (prefix <> "[" <> Text.pack (show fieldIndex) <> "]", value)) [(0 :: Int) ..]
+
+duplicateValues :: (Ord value) => [value] -> [value]
+duplicateValues = Set.toList . snd . foldl step (Set.empty, Set.empty)
+  where
+    step (seen, duplicates) value
+      | Set.member value seen = (seen, Set.insert value duplicates)
+      | otherwise = (Set.insert value seen, duplicates)
+
+normalizeRepositoryId :: RepositoryId -> RepositoryId
+normalizeRepositoryId (RepositoryId repository) = RepositoryId (Text.strip repository)
+
+normalizeRepoRef :: RepoRef -> RepoRef
+normalizeRepoRef RepoRef {repository, revision} =
+  RepoRef {repository = normalizeRepositoryId repository, revision}
+
+normalizeProject :: ProjectRef -> ProjectRef
+normalizeProject ProjectRef {name, repository} =
+  ProjectRef {name = Text.strip name, repository = normalizeRepositoryId repository}
+
+normalizeApplicability :: Applicability -> Applicability
+normalizeApplicability Applicability {projects, paths, dependencies, practices} =
+  Applicability
+    { projects = fmap normalizeProject projects,
+      paths,
+      dependencies = fmap Text.strip dependencies,
+      practices = fmap normalizePracticeKey practices
+    }
+
+normalizePracticeKey :: PracticeKey -> PracticeKey
+normalizePracticeKey (PracticeKey practice) = PracticeKey (normalizeNamedKey practice)
+
+normalizeOwnerPrincipal :: OwnerPrincipal -> OwnerPrincipal
+normalizeOwnerPrincipal (OwnerPrincipal principal) = OwnerPrincipal (Text.strip principal)
+
+normalizeReviewId :: ReviewId -> ReviewId
+normalizeReviewId (ReviewId reviewValue) = ReviewId (Text.strip reviewValue)
+
+normalizeResolutionId :: ResolutionId -> ResolutionId
+normalizeResolutionId (ResolutionId resolution) = ResolutionId (Text.strip resolution)
+
+normalizeEvidenceId :: EvidenceId -> EvidenceId
+normalizeEvidenceId (EvidenceId evidence) = EvidenceId (Text.strip evidence)
+
+normalizeClaimId :: ClaimId -> ClaimId
+normalizeClaimId (ClaimId claim) = ClaimId (Text.strip claim)
+
+normalizeRevisionRange :: RevisionRange -> RevisionRange
+normalizeRevisionRange RevisionRange {changeKind, before, head = headRevision} =
+  RevisionRange {changeKind, before, head = headRevision}
+
+normalizeOwners :: ReviewOwners -> ReviewOwners
+normalizeOwners ReviewOwners {targetOwner, practiceOwner, triageOwner, exceptionApprover} =
+  ReviewOwners
+    { targetOwner = normalizeOwnerPrincipal targetOwner,
+      practiceOwner = normalizeOwnerPrincipal practiceOwner,
+      triageOwner = normalizeOwnerPrincipal triageOwner,
+      exceptionApprover = fmap normalizeOwnerPrincipal exceptionApprover
+    }
+
+normalizeRegisteredReference :: RegisteredPracticeReference -> RegisteredPracticeReference
+normalizeRegisteredReference RegisteredPracticeReference {project, provenance, documentIds} =
+  RegisteredPracticeReference
+    { project = normalizeProject project,
+      provenance = normalizeRepoRef provenance,
+      documentIds = fmap Text.strip documentIds
+    }
+
+normalizeUpstreamProject :: RegisteredUpstreamProject -> RegisteredUpstreamProject
+normalizeUpstreamProject RegisteredUpstreamProject {project, dependency} =
+  RegisteredUpstreamProject {project = normalizeProject project, dependency = Text.strip dependency}
+
+normalizeAdoption :: PracticeAdoptionBinding -> PracticeAdoptionBinding
+normalizeAdoption PracticeAdoptionBinding {practice, references, claimedApplicability, mode, owners, upstreamProjects} =
+  PracticeAdoptionBinding
+    { practice = normalizePracticeKey practice,
+      references = fmap normalizeRegisteredReference references,
+      claimedApplicability = normalizeApplicability claimedApplicability,
+      mode,
+      owners = normalizeOwners owners,
+      upstreamProjects = fmap normalizeUpstreamProject upstreamProjects
+    }
+
+normalizeChangedReference :: ChangedReference -> ChangedReference
+normalizeChangedReference ChangedReference {project, range, changedPaths} =
+  ChangedReference {project = normalizeProject project, range = normalizeRevisionRange range, changedPaths}
+
+normalizeTrigger :: PracticeReviewTrigger -> PracticeReviewTrigger
+normalizeTrigger PracticeReviewTrigger {schemaVersion, triggerKind, idempotencyKey, target, targetRange, changedDecisionPaths, adoptions, referenceChange, priorReviewId} =
+  PracticeReviewTrigger
+    { schemaVersion,
+      triggerKind,
+      idempotencyKey = normalizeOpaqueKey idempotencyKey,
+      target = normalizeProject target,
+      targetRange = normalizeRevisionRange targetRange,
+      changedDecisionPaths,
+      adoptions = fmap normalizeAdoption adoptions,
+      referenceChange = fmap normalizeChangedReference referenceChange,
+      priorReviewId = fmap normalizeReviewId priorReviewId
+    }
+
+normalizeContentReference :: ContentReference -> ContentReference
+normalizeContentReference ContentReference {project, provenance, path, contentHash = ContentHash contentHash} =
+  ContentReference
+    { project = normalizeProject project,
+      provenance = normalizeRepoRef provenance,
+      path,
+      contentHash = ContentHash (Text.strip contentHash)
+    }
+
+normalizeEvidenceItem :: EvidenceItem -> EvidenceItem
+normalizeEvidenceItem EvidenceItem {evidenceId, role, content} =
+  EvidenceItem {evidenceId = normalizeEvidenceId evidenceId, role, content = normalizeContentReference content}
+
+normalizeClaim :: PracticeReviewClaim -> PracticeReviewClaim
+normalizeClaim PracticeReviewClaim {claimId, kind, statement, material, evidenceIds} =
+  PracticeReviewClaim
+    { claimId = normalizeClaimId claimId,
+      kind,
+      statement,
+      material,
+      evidenceIds = fmap normalizeEvidenceId evidenceIds
+    }
+
+normalizeLineage :: ReviewLineage -> ReviewLineage
+normalizeLineage ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId, priorReviewId} =
+  ReviewLineage
+    { parentSessionId = Text.strip parentSessionId,
+      childSessionId = Text.strip childSessionId,
+      parentWorkflowId = Text.strip parentWorkflowId,
+      childWorkflowId = Text.strip childWorkflowId,
+      priorReviewId = fmap normalizeReviewId priorReviewId
+    }
+
+normalizeRecommendedOwner :: RecommendedOwner -> RecommendedOwner
+normalizeRecommendedOwner RecommendedOwner {role, principals} =
+  RecommendedOwner {role, principals = fmap normalizeOwnerPrincipal principals}
+
+normalizeReReviewCondition :: ReReviewCondition -> ReReviewCondition
+normalizeReReviewCondition ReReviewCondition {condition, watches} =
+  ReReviewCondition {condition, watches = fmap normalizeRepoRef watches}
+
+normalizeVerdict :: PracticeReviewVerdict -> PracticeReviewVerdict
+normalizeVerdict PracticeReviewVerdict {schemaVersion, reviewId, triggerIdempotencyKey, practice, specialist, lineage, targetEvidence, referenceEvidence, upstreamEvidence, claims, confidence, routingRationale, classification, recommendedOwner, recommendedAction, exceptionApproval, reReviewCondition, applicability} =
+  PracticeReviewVerdict
+    { schemaVersion,
+      reviewId = normalizeReviewId reviewId,
+      triggerIdempotencyKey = normalizeOpaqueKey triggerIdempotencyKey,
+      practice = normalizePracticeKey practice,
+      specialist = normalizeNamedKey specialist,
+      lineage = normalizeLineage lineage,
+      targetEvidence = fmap normalizeEvidenceItem targetEvidence,
+      referenceEvidence = fmap normalizeEvidenceItem referenceEvidence,
+      upstreamEvidence = fmap normalizeEvidenceItem upstreamEvidence,
+      claims = fmap normalizeClaim claims,
+      confidence,
+      routingRationale,
+      classification,
+      recommendedOwner = fmap normalizeRecommendedOwner recommendedOwner,
+      recommendedAction,
+      exceptionApproval,
+      reReviewCondition = normalizeReReviewCondition reReviewCondition,
+      applicability = normalizeApplicability applicability
+    }
+
+normalizeResolution :: PracticeReviewResolution -> PracticeReviewResolution
+normalizeResolution PracticeReviewResolution {schemaVersion, resolutionId, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId} =
+  PracticeReviewResolution
+    { schemaVersion,
+      resolutionId = normalizeResolutionId resolutionId,
+      idempotencyKey = normalizeOpaqueKey idempotencyKey,
+      reviewId = normalizeReviewId reviewId,
+      outcome,
+      resolver = normalizeOwnerPrincipal resolver,
+      reason,
+      resolvedAt,
+      resultingApplicability = fmap normalizeApplicability resultingApplicability,
+      supersedingReviewId = fmap normalizeReviewId supersedingReviewId
+    }
 
 practiceReviewAesonOptions :: Options
 practiceReviewAesonOptions = defaultOptions {omitNothingFields = True}

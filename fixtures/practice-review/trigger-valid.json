@@ -30,6 +30,19 @@
           "documentIds": [
             "api-opentelemetry-integration"
           ]
+        },
+        {
+          "project": {
+            "name": "shinzui/haskell-jitsurei",
+            "repository": "repo_practice"
+          },
+          "provenance": {
+            "repository": "repo_practice",
+            "revision": "cccccccccccccccccccccccccccccccccccccccc"
+          },
+          "documentIds": [
+            "governance-review-policy"
+          ]
         }
       ],
       "claimedApplicability": {

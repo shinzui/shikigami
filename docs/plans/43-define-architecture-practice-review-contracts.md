@@ -38,8 +38,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19T21:52:41Z) M1: define and round-trip shared repository identity plus version-1 trigger, revision-range, adoption, owner, and provenance types.
 - [x] (2026-08-19T21:57:24Z) M2: define the closed verdict, claim, confidence, applicability, lineage, and re-review types.
 - [x] (2026-08-19T21:57:24Z) M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
-- [ ] M3: add deterministic `ReviewId` derivation and semantic validators.
-- [ ] M3: add valid/invalid golden fixtures and export the contract from `shikigami-core`.
+- [x] (2026-08-19T22:10:25Z) M3: add deterministic `ReviewId` derivation and semantic validators.
+- [x] (2026-08-19T22:10:25Z) M3: add valid/invalid golden fixtures and export the contract from `shikigami-core`.
 - [ ] Final: focused core tests, package-architecture tests, and `cabal test all` pass with no runtime/database dependency.
 
 
@@ -140,6 +140,14 @@ Record every decision made while working on the plan.
   `mori://shinzui/keiro-runtime-patterns` guidance and `docs/workflow-versioning.md`.
   Date: 2026-08-19
 
+- Decision: Represent invalid golden cases as named JSON patch operations over the checked-in
+  valid trigger, verdict, and resolution fixtures.
+  Rationale: Each negative case then changes exactly one intended invariant—such as removing
+  a content hash or selecting the wrong owner—without copying hundreds of unrelated valid
+  fields that could drift independently. The test materializes and rejects every named
+  payload deterministically.
+  Date: 2026-08-19
+
 
 ## Outcomes & Retrospective
 
@@ -159,6 +167,13 @@ Compare the result against the original purpose.
   explicit resolution outcomes. Checked-in fixture arrays prove all five classifications and
   all four resolution outcomes decode and round-trip. The focused suite now passes eight
   tests without adding a runtime dependency.
+
+- Milestone 3 (2026-08-19): UUIDv5 review and resolution ids are pinned in the golden
+  fixtures, normalized identity inputs produce the same id, reordered registered references
+  preserve it, and a changed producer trigger key changes it. Validators accumulate errors,
+  return normalized wrappers, check provenance/citation graphs, enforce all classification
+  and resolution branches, and reject fourteen named malformed or inconsistent fixture
+  cases. The focused suite passes twelve tests.
 
 
 ## Context and Orientation
