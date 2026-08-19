@@ -92,21 +92,29 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19) M2: `behavior-obligations --format=text` reports `required: 0` — there is no
       aggregate, so there is no live transition, rejection cell, or replay-only transition to
       witness. Nothing is `Pending`.
-- [ ] M3: add the CI gates. On keiro-dsl 0.13 this is concrete: `keiro-dsl check
-      domain/shikigami.keiro-workspace --min-language 5 --deny-warnings`, plus
-      `--report-out <path>` for a machine-readable record and `--coverage-report <path>
-      --fail-on-opaque` for the mapped-boundary gate; and `keiro-dsl diff
-      domain/shikigami.keiro-workspace --since <ref> --explain --report-out <path>` for
-      compatibility classification. Every file-taking command accepts the manifest and validates
-      the composed service before acting. See Context for the full 0.13 surface.
-- [ ] M3: if any warning fires by design — process or router benign inversion are the usual
-      reasons — record it and fall back to an explicit `--deny CODE` list naming everything else.
-      Do **not** reach for the fallback pre-emptively; reach for it when a green specification
-      cannot pass `--deny-warnings`. Record the outcome either way.
-- [ ] M3: `inspect --format=json` asserted in CI so that **every member reports
-      `sourceForm: "declared"`** at effective version 5. A member that loses its preamble silently
-      falls back to legacy version 1, and composition would then fail on version mismatch rather
-      than on the real cause.
+- [x] (2026-08-19) M3: the gate is five `just` recipes — `keiro-check`, `keiro-inspect`,
+      `keiro-scaffold`, `keiro-diff`, and `keiro-gate`, which runs all four plus `cabal test
+      keiro-shikigami-conformance`. This repository has **no CI runner** (no `.github/workflows`,
+      no pipeline file of any kind), so "a CI step" is realized as a named repository command
+      plus in-suite tests; see the Decision Log.
+- [x] (2026-08-19) M3: `--deny-warnings` stands. **No warning fires** — the specification is
+      green under `--min-language 5 --deny-warnings --fail-on-opaque` with no `--deny CODE`
+      fallback and nothing to justify. This is unsurprising given the census: every warning code
+      in the Context table belongs to an aggregate, process, router, queue, intake, or read-model
+      surface, and shikigami declares none of them.
+- [x] (2026-08-19) M3: `keiro-inspect` asserts `sourceForm == "declared"`, effective version 5,
+      and `languageSupport == "stable"` for every member, and fails the recipe otherwise.
+      Verified against the real failure: deleting a member's preamble makes both `keiro-check`
+      and `keiro-inspect` exit 1 with `WorkspaceLanguageVersionMismatch`.
+- [x] (2026-08-19) M3: added `Shikigami.KeiroSpecificationSpec` to `shikigami-core-test`, six
+      cases covering the failures the toolchain structurally cannot catch — a `.keiro` file in
+      `domain/` that the manifest does not list, a generated module absent from
+      `shikigami-core.cabal`, a `.cabal` entry with no file, and a lost `-- @generated` banner.
+      Each was mutation-tested and fails on the mutation.
+- [x] (2026-08-19) M3: proved the gate fails on every failure mode it claims: a lost preamble
+      (`WorkspaceLanguageVersionMismatch`), a hand-edited generated module (scaffold refuses,
+      "nothing was written"), a stale committed generated layer (`keiro-scaffold` exits 1), and
+      an incompatible rename (`BREAKING ... [WorkflowStableNameChanged]`, `keiro-diff` exits 1).
 - [x] (2026-08-19) M3: declared `runtime-package shikigami-core` in the manifest and added the
       stable glob `optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal`
       to `cabal.project`. `cabal test keiro-shikigami-conformance` passes twelve workflow facts.
@@ -250,6 +258,34 @@ would now be reimplementing a generated artifact by hand.
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19): **The gate is `just keiro-gate` plus in-suite tests, because this
+  repository has no CI runner.** Rationale: there is no `.github/workflows`, no pipeline file,
+  and no hosted job anywhere in the tree — the `justfile` is the repository's command surface and
+  `treefmt` under git-hooks is its only automatic enforcement. Writing a workflow file for a CI
+  system that does not exist would be a declaration with no effect, which the house standard
+  tells us to delete rather than ship. So the gate is a named command a human and a future
+  pipeline both run identically, and the parts of it that are cheap enough to run every time
+  moved into `cabal test all`: `Shikigami.KeiroSpecificationSpec` covers the manifest/member/
+  cabal/banner invariants, and the generated `keiro-shikigami-conformance` target covers the
+  workflow facts. When a pipeline is added, it runs `just keiro-gate` and nothing here changes.
+
+- Decision (2026-08-19): **Add `Shikigami.KeiroSpecificationSpec` rather than relying on the
+  toolchain alone.** Rationale: three of its six cases cover failures `keiro-dsl` structurally
+  cannot see. `check`, `inspect`, and `scaffold` all operate on the manifest's member set, so a
+  `.keiro` file added to `domain/` and never listed is invisible to every one of them — it is
+  simply not part of the service. Likewise a generated module that nobody pastes into
+  `shikigami-core.cabal` sits in `src` uncompiled. The banner case duplicates a scaffold refusal,
+  but only fires on the next scaffold, whereas the test fires on the next `cabal test`. Each case
+  was mutation-tested: introducing the fault makes exactly that case fail, with a message naming
+  the file.
+
+- Decision (2026-08-19): **`--deny-warnings` with no `--deny CODE` fallback.** Rationale: the
+  fallback is for a green specification that cannot pass the blanket gate, and this one passes.
+  No warning fires, and the reason is structural rather than lucky: every emittable warning code
+  in this plan's Context table belongs to an aggregate, process, router, queue, intake, or
+  read-model surface, and the Milestone 1 census found that shikigami declares none of those. The
+  gate will start earning its keep when plan 51 adds an aggregate.
 
 - Decision (2026-08-19): **Exclude the generated keiro-dsl layer from `treefmt`, and only the
   generated layer.** Rationale: see Surprises — formatting generated bytes breaks the firewall

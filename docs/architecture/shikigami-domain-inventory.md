@@ -318,7 +318,61 @@ Two names were argued about and kept anyway:
   than a silent overwrite.
 
 
-## How to reproduce this
+## The gate
+
+Run this before merging anything that touches `domain/`, the generated layer
+under `shikigami-core/src/Shikigami/*/Generated/`, or a durable identity named
+above:
+
+```bash
+nix develop
+just keiro-gate                 # or `just keiro-gate <merge-base>` on a branch
+```
+
+It runs, in the order a failure is cheapest to read:
+
+| Recipe | What it fails on |
+|---|---|
+| `just keiro-check` | any error, any warning (`--deny-warnings`), an effective language below 5 (`--min-language 5`), a new opaque boundary on a persisted root (`--fail-on-opaque`) |
+| `just keiro-inspect` | a member that does not declare its language, or whose effective version is not 5, or a contract that is not `stable` |
+| `just keiro-scaffold` | a committed generated layer that the current specification would not produce |
+| `just keiro-diff <ref>` | a `BREAKING` finding on any gated compatibility surface |
+| `cabal test keiro-shikigami-conformance` | a workflow fact that no longer matches the reviewed `KeiroConformance.Expectations` |
+
+`cabal test all` additionally runs `Shikigami.KeiroSpecificationSpec`, which
+covers what the toolchain structurally cannot: a `.keiro` file in `domain/` that
+the manifest does not list is not part of the service, so `check`, `inspect`, and
+`scaffold` never see it.
+
+Each gate was verified against the failure it claims to catch. Deleting a
+member's preamble:
+
+```text
+domain/shikigami-agent-run.keiro:18: error[WorkspaceLanguageVersionMismatch]:
+  workspace members select different effective language versions (5, 1)
+  domain/shikigami-conversation.keiro:14: note: member selects effective language version 1
+```
+
+Removing a generated module's banner:
+
+```text
+error: refusing to overwrite 1 file(s) at Generated paths that lack the '-- @generated' banner
+  Shikigami/AgentRun/Generated/WorkflowFacts.hs
+nothing was written
+```
+
+Renaming a durable workflow name:
+
+```text
+BREAKING: AgentRun workflow-name AgentRun: stable name changed
+  'shikigami.agent-run' -> 'shikigami.agent-run-v2';
+  in-flight journals remain under the old stream name [WorkflowStableNameChanged]
+    vector: persisted-identity=breaking
+    remedy: revert the re-keying change or perform an explicit operational identity migration
+```
+
+
+## How to reproduce this inventory
 
 ```bash
 nix develop

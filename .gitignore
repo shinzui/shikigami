@@ -20,3 +20,6 @@ result-*
 # scaffold ledger and the conformance ledger beside it ARE committed -- they are
 # the machine-owned history the next scaffold reads to report stale paths.
 shikigami-core/src/keiro-dsl-cabal-fragment.workspace.*.txt
+
+# keiro-dsl check/coverage/diff reports (`just keiro-check`, `just keiro-diff`).
+build/
