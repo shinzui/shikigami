@@ -94,12 +94,41 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19) M3: wrote
       `docs/adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md` and updated
       `docs/architecture/implementation-order.md`.
+- [x] (2026-08-19) M4 (added during M3): swept the user-facing documentation. The sweep was
+      commissioned for plan 55's fallout and found something larger — `README.md` and
+      `docs/user/cli.md` still documented the pre-plan-36 `shikigami <subcommand>` umbrella,
+      retired 2026-07-30. See Surprises.
 
 
 ## Surprises & Discoveries
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+**The user-facing documentation had been describing a command surface that did not exist for
+twenty days** (found 2026-08-19, sweeping for this plan's own fallout). Plan 36 replaced the
+`shikigami <subcommand>` umbrella with separate role binaries on 2026-07-30 and did not update
+`README.md` or `docs/user/cli.md`. Every one of these was documented and none of them ran:
+
+```text
+shikigami run-behavior     shikigami agent-run     shikigami worker
+shikigami consume-stream   shikigami consume-events
+```
+
+Sixteen `cabal run shikigami -- <retired-subcommand>` invocations across six user-guide files,
+plus the whole "Main Commands" block in `README.md` and the command list at the top of
+`docs/user/cli.md`. `README.md`'s "Repository Shape" still listed `shikigami-cli/` and described
+`shikigami-core` as containing the worker, and omitted `shikigami-server`, `shikigami-workers`,
+and `shikigami-client` entirely.
+
+This plan's own fallout turned out to be **nil**: `docs/operations/configuration.md` names
+binaries and their required keys but never their package, and the binary names did not change.
+`process-compose.yaml` runs only Postgres. So the sweep found no plan-55 staleness and one
+plan-36 regression of a different kind — documentation that was never swept when the interface
+changed.
+
+The CLI reference was also missing four commands that do exist — `render-lifecycle`,
+`grants`, `danwa-spike`, and `shikigami-scheduler` — so it was both wrong and incomplete.
 
 **The one-off commands were never coupled to the platform; their dispatcher was** (found
 2026-08-19, before implementation). `shikigami-workers/src/Shikigami/Workers/Command/RunBehavior.hs`
@@ -219,6 +248,12 @@ because the capability's rationale lived in someone's head rather than in the re
 Nothing in the repository could have told it the package also served consumers who are not
 running the platform. The fix is not more careful reading; it is writing the purpose down where
 the architecture is described.
+
+**Documentation is not swept by the change that invalidates it.** Plan 36 changed how every
+runtime command is invoked and left `README.md` and `docs/user/cli.md` describing the old
+surface for twenty days. Nothing failed, because nothing tests prose. The same class of gap the
+package boundary closes for code is wide open for the user guide, and the only cheap defence is
+to sweep at the moment the interface changes rather than when someone next reads it.
 
 **A boundary that a test cannot see is a convention.** The two one-off commands were never
 coupled to Kafka or PGMQ — their imports prove it — but they linked both for three weeks,

@@ -75,7 +75,7 @@ keiro inbox's delivery-level dedup.
    or `at-risk-customer.dhall` (LLM) as a starting point.
 2. **Validate** it: `cabal run shikigami -- validate agents/detectors/<name>.dhall`.
 3. **Point the stream consumer at the directory** so the runtime loads and matches it:
-   `cabal run shikigami -- consume-stream --agents agents/detectors`.
+   `cabal run shikigami-consume-stream -- --agents agents/detectors`.
 
 There is no hardcoded registry and no migration step: a detector *is* a declared agent.
 

@@ -57,14 +57,14 @@ prints the output JSON. It does not touch the database or dispatch sinks — the
 to see what an agent produces:
 
 ```bash
-$ cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
+$ cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
 {"summary":"...","...":"..."}
 ```
 
 Pass a trigger payload as JSON with `--payload`:
 
 ```bash
-$ cabal run shikigami -- run-behavior --agent agents/triage-note.dhall \
+$ cabal run shikigami-run-behavior -- --agent agents/triage-note.dhall \
     --payload '{"text":"customer is furious about the outage"}'
 ```
 
@@ -101,7 +101,7 @@ learnings, run the behavior, record the new learning, complete the session — a
 across-run report:
 
 ```bash
-$ cabal run shikigami -- agent-run --agent heartbeat
+$ cabal run shikigami-agent-run -- --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 0 prior memories:
 recorded learning mem_01k…

@@ -57,7 +57,7 @@ each accepted `KawaDigest` back onto the stream (exactly what real kawa's outbox
 ### 2. Start the worker
 
 ```bash
-$ cabal run shikigami -- worker --agents agents \
+$ cabal run shikigami-worker -- --agents agents \
     --kawa-url http://localhost:8088 --kizashi-url http://localhost:8089
 [worker] loaded N agents
 ```
@@ -71,7 +71,7 @@ and kizashi URLs, and records a kioku session.
 Publish a fixture envelope and let the consumer match it:
 
 ```bash
-$ cabal run shikigami -- consume-stream --agents agents --broker 127.0.0.1:9092 &
+$ cabal run shikigami-consume-stream -- --agents agents --broker 127.0.0.1:9092 &
 $ cabal run shikigami -- publish-fixture fixtures/envelope.json --broker 127.0.0.1:9092
 ```
 
@@ -92,7 +92,7 @@ agent-produced activities**, so a digest only triggers agents that explicitly op
 meta-detectors match agent output:
 
 ```bash
-$ cabal run shikigami -- consume-stream --agents agents --include-agent-actors
+$ cabal run shikigami-consume-stream -- --agents agents --include-agent-actors
 ```
 
 Publishing `fixtures/envelope-agent.json` (an `actor.kind: "agent"` envelope) without that
@@ -119,7 +119,7 @@ configured with integration publishing enabled, it emits
 Start the event consumer:
 
 ```bash
-$ cabal run shikigami -- consume-events \
+$ cabal run shikigami-consume-events -- \
     --agents agents \
     --broker 127.0.0.1:9092 \
     --topic danwa.message-addressed.v1 \
@@ -129,7 +129,7 @@ $ cabal run shikigami -- consume-events \
 Then start the worker with Danwa HTTP settings:
 
 ```bash
-$ cabal run shikigami -- worker --agents agents \
+$ cabal run shikigami-worker -- --agents agents \
     --danwa-url http://localhost:8080 \
     --danwa-agent part_shikigami
 ```
@@ -147,7 +147,7 @@ agent starts two named specialists, parks durably while they run, and resumes wi
 Start the worker against the proof manifests:
 
 ```bash
-$ cabal run shikigami -- worker --agents agents/proof
+$ cabal run shikigami-worker -- --agents agents/proof
 ```
 
 In another shell, enqueue the supervisor:

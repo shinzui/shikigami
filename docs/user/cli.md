@@ -1,28 +1,70 @@
 # CLI Reference
 
-All functionality is exposed by the single `shikigami` executable. In the dev shell, invoke it
-through cabal:
+Shikigami is **several binaries, not one**. There is no umbrella `shikigami <subcommand>`
+dispatcher: each long-running role is its own executable so an operator can scale, restart, and
+roll them out independently, and because one process could not honestly link both the HTTP
+server and the worker implementations. See
+[the package architecture](../architecture/packages.md).
+
+In the dev shell, invoke any of them through cabal:
 
 ```bash
-$ cabal run shikigami -- <command> [options]
+$ cabal run <binary> -- [command] [options]
 ```
+
+**Administrative and offline commands** — the `shikigami` binary, from `shikigami-server`:
 
 ```text
 shikigami validate <FILE>
-shikigami run-behavior --agent <FILE> [--payload <JSON>]
-shikigami agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>]
-shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC> --broker <HOST:PORT>]
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
-shikigami consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
-shikigami consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
-shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
+shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <URL>]
+shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
+shikigami grants grant <AGENT> <KIND> [--by <WHO>]
+shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
 ```
 
-Commands that record sessions, use the run queue, or use the Keiro inbox (`agent-run`,
-`enqueue-run`, `consume-stream`, `consume-events`, `worker`) need the
+**One-off agent runs** — from `shikigami-agent`, which links none of the platform's messaging,
+queueing, or telemetry stack, so a consumer who is not running the Kikan platform can build and
+use just these:
+
+```text
+shikigami-run-behavior --agent <FILE> [--payload <JSON>]
+shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+```
+
+**Long-running roles** — from `shikigami-workers`:
+
+```text
+shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+shikigami-scheduler [--agents <DIR>]
+shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
+shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+```
+
+**The rest**: `shikigami-server` serves the public HTTP API, `shikigami-client` calls a running
+server through the typed client, `shikigami-migrate` applies database migrations, and
+`shikigami-openapi` regenerates `docs/api/openapi.json` (it takes no arguments and writes the
+file).
+
+One wrinkle worth knowing: `cabal run shikigami-server` is ambiguous, because the name is both a
+package and one of that package's two executables. Disambiguate it:
+
+```bash
+$ cabal run shikigami-server:exe:shikigami-server
+```
+
+Every other binary is unambiguous, because no other executable shares its package's name.
+
+Binaries that record sessions, use the run queue, or use the Keiro inbox
+(`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami-consume-stream`,
+`shikigami-consume-events`, `shikigami-worker`, `shikigami-scheduler`) need the
 `database.connection_string` setting and a migrated database (`just create-database`). The
 dev shell exports `PG_CONNECTION_STRING`, the environment variable bound to that setting.
+`shikigami validate`, `shikigami render-lifecycle`, and `shikigami-run-behavior` need neither a
+database nor a model key.
 
 Every binary also accepts `--config PATH`, `--set KEY=VALUE`, and the five configuration
 diagnostics (`--describe-config`, `--describe-config-json`, `--explain-config`,
@@ -32,7 +74,7 @@ precedence order, and which binary refuses to start without what.
 
 ---
 
-## `validate`
+## `shikigami validate`
 
 ```bash
 $ shikigami validate <FILE>
@@ -44,10 +86,22 @@ success, non-zero with a typed error on any load/skill failure. **No DB or key.*
 
 → See [Getting Started](./getting-started.md), [Writing Agents](./writing-agents.md).
 
-## `run-behavior`
+## `shikigami render-lifecycle`
 
 ```bash
-$ shikigami run-behavior --agent <FILE> [--payload <JSON>]
+$ shikigami render-lifecycle <FILE>
+```
+
+Render a Flow agent's declared lifecycle as a Mermaid state diagram on standard output. Reads
+the manifest, resolves its `Flow{name}` against the registered flows, and prints the diagram
+for that flow's Keiki transducer. **No DB or key.**
+
+→ See [Flows](./flows.md).
+
+## `shikigami-run-behavior`
+
+```bash
+$ shikigami-run-behavior --agent <FILE> [--payload <JSON>]
 ```
 
 Load a manifest and run **only its behavior** with deterministic stubs, printing the output
@@ -56,10 +110,10 @@ JSON (defaults to `null`; invalid JSON exits non-zero). **No DB or key.**
 
 → See [Behaviors](./behaviors.md).
 
-## `agent-run`
+## `shikigami-agent-run`
 
 ```bash
-$ shikigami agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+$ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>]
 ```
 
 Run an agent through the full **kioku** lifecycle — open session, recall prior learnings, run
@@ -72,7 +126,7 @@ envelope (JSON) directly into the agent's memory (payload → content; verb/subj
 
 → See [Memory & Sessions](./memory.md).
 
-## `enqueue-run`
+## `shikigami enqueue-run`
 
 ```bash
 $ shikigami enqueue-run <AGENT> [--payload <JSON>]
@@ -84,7 +138,7 @@ queue — the Event trigger class. `--payload` is the addressed run payload as J
 
 → See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
 
-## `stub-kawa`
+## `shikigami stub-kawa`
 
 ```bash
 $ shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
@@ -98,7 +152,7 @@ topic — the mechanism that **closes the living loop**.
 
 → See [The Living Loop](./living-loop.md), [Sinks](./sinks.md).
 
-## `publish-fixture`
+## `shikigami publish-fixture`
 
 ```bash
 $ shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
@@ -110,10 +164,10 @@ headers** so the keiro inbox accepts it. Defaults: `--broker 127.0.0.1:9092`,
 
 → See [The Living Loop](./living-loop.md).
 
-## `consume-stream`
+## `shikigami-consume-stream`
 
 ```bash
-$ shikigami consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
+$ shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
 ```
 
 Consume the `activity.v1` stream, reconstruct each envelope (deduped via the keiro idempotent
@@ -126,10 +180,10 @@ default** is the feedback guard.
 
 → See [Triggers](./triggers.md), [Detectors](./detectors.md).
 
-## `consume-events`
+## `shikigami-consume-events`
 
 ```bash
-$ shikigami consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+$ shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
 ```
 
 Consume a public integration-event topic, reconstruct each Keiro integration event, match it
@@ -144,10 +198,10 @@ database, event store, read models, or outbox tables.
 
 → See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
 
-## `worker`
+## `shikigami-worker`
 
 ```bash
-$ shikigami worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+$ shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
 ```
 
 Boot the supervised worker. Loads every `.dhall` in `--agents`, then drains
@@ -160,6 +214,47 @@ are the same thing.
 **Needs the DB** (`database.connection_string`).
 
 → See [The Living Loop](./living-loop.md).
+
+## `shikigami-scheduler`
+
+```bash
+$ shikigami-scheduler [--agents <DIR>]
+```
+
+Arm Schedule triggers and drive Keiro timer firing. Loads every `.dhall` in `--agents`
+(default `agents`), computes each schedule agent's next due minute, and arms a Keiro timer for
+it; the same loop fires due timers, including approval timeouts.
+**Needs the DB** (`database.connection_string`).
+
+→ See [Triggers](./triggers.md).
+
+---
+
+## `shikigami grants`
+
+```bash
+$ shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
+$ shikigami grants grant <AGENT> <KIND> [--by <WHO>]
+$ shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
+```
+
+Inspect and change the per-agent sink permission table that gates every dispatch. `KIND` is one
+of `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, `ChannelEgress`. `list`
+pages most-significant first (1–200 rows, default 50); `--by` is recorded in the table's
+`granted_by` / `revoked_by` column. A worker picks a change up on its next dispatch — there is
+no cache to invalidate. **Needs the DB** (`database.connection_string`).
+
+→ See [Sinks](./sinks.md).
+
+## `shikigami danwa-spike`
+
+```bash
+$ shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <URL>]
+```
+
+Exercise the Danwa HTTP client end to end by starting a conversation, posting a human message,
+and replying as the agent. A development spike for checking connectivity and participant ids
+against a running Danwa, not part of the runtime path.
 
 ---
 

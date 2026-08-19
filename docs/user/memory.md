@@ -39,7 +39,7 @@ field is used directly; otherwise the compact JSON encoding is stored.
 ## Run an agent with memory
 
 ```bash
-$ cabal run shikigami -- agent-run --agent heartbeat
+$ cabal run shikigami-agent-run -- --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 0 prior memories:
 recorded learning mem_01k…
@@ -48,7 +48,7 @@ recorded learning mem_01k…
 Run it again and `recalled` grows — the previous run's learning comes back:
 
 ```bash
-$ cabal run shikigami -- agent-run --agent heartbeat
+$ cabal run shikigami-agent-run -- --agent heartbeat
 agent "heartbeat" run run_01k…
 recalled 1 prior memories:
   - mem_01k… [Pattern/Medium] <the prior run's summary>
@@ -68,7 +68,7 @@ agent's memory** with `--from-activity`. The envelope's `payload` becomes the me
 and its `verb`/`subject.type` become searchable tags:
 
 ```bash
-$ cabal run shikigami -- agent-run --agent triage-note --from-activity fixtures/envelope.json
+$ cabal run shikigami-agent-run -- --agent triage-note --from-activity fixtures/envelope.json
 recorded activity memory mem_01k…
 ```
 

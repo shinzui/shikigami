@@ -109,7 +109,7 @@ acknowledgement, and escalates on timeout. See **[Flows](./flows.md)**.
 The synchronous arms are provable with deterministic stubs:
 
 ```bash
-$ cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
+$ cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
 {"summary":"..."}
 ```
 

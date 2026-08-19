@@ -51,20 +51,29 @@ flows working as one inspectable system. Shikigami is one way that mechanism act
   actions, and Danwa conversations.
 - Records sessions and reusable memory through `kioku` so agents do not start
   blank on every run.
-- Provides a supervised worker and CLI for validating, running, enqueueing, and
-  consuming agent work.
+- Provides supervised workers and command-line tools for validating, running,
+  enqueueing, and consuming agent work.
 
 ## Repository Shape
 
+Shikigami is seven Cabal packages, with dependency direction enforced by Cabal and by a test.
+See [docs/architecture/packages.md](docs/architecture/packages.md) for the authoritative map.
+
 ```text
-shikigami-api/         Client-safe wire types and Dhall-decoded agent schema
-shikigami-core/        Loader, triggers, behavior runner, sinks, worker, memory
+shikigami-core/        Domain: declarations, agent runs, behaviors, flows, sinks, memory
 shikigami-core/src/Shikigami/Flow/
                        Haskell Flow DSL definitions and registered flow bodies
-shikigami-cli/         The `shikigami` command-line tool
+shikigami-agent/       One-off agent runs, for consumers not operating the platform
+shikigami-api/         Public HTTP contract: route records, DTOs, OpenAPI generation
+shikigami-server/      Servant/WAI execution and the administrative `shikigami` command
+shikigami-workers/     Supervised background loops: queue, streams, scheduler, timers
+shikigami-client/      Typed HTTP client derived from the served route type
 shikigami-migrations/  Database migrations for Shikigami and composed Kioku state
+domain/                The checked keiro-dsl service specification
 agents/                Example and proof agent declarations
 schema/                Dhall schema for declared agents
+docs/architecture/     Package map, implementation order, domain inventory
+docs/adr/              Architecture decision records
 docs/user/             User guide and CLI reference
 docs/plans/            ExecPlans for the runtime build-out
 docs/initial-spec.md   Original architecture spec
@@ -93,7 +102,7 @@ cabal run shikigami -- validate agents/heartbeat.dhall
 Run only its behavior with deterministic stubs, without a database or model key:
 
 ```sh
-cabal run shikigami -- run-behavior --agent agents/heartbeat.dhall
+cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
 ```
 
 Create and migrate the local development database for session, memory, queue, and
@@ -106,7 +115,7 @@ just create-database
 Run an agent through the full memory-backed lifecycle:
 
 ```sh
-cabal run shikigami -- agent-run --agent heartbeat
+cabal run shikigami-agent-run -- --agent heartbeat
 ```
 
 For a fuller walkthrough, start with
@@ -114,17 +123,31 @@ For a fuller walkthrough, start with
 
 ## Main Commands
 
-All runtime functionality is exposed through the `shikigami` executable:
+Shikigami is several binaries, not one. Each long-running role is its own executable so an
+operator can scale and restart them independently.
 
 ```text
-shikigami validate <FILE>
-shikigami run-behavior --agent <FILE> [--payload <JSON>]
-shikigami agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+shikigami validate <FILE>              # administrative, from shikigami-server
+shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>]
-shikigami consume-stream [--agents <DIR>]
-shikigami consume-events [--agents <DIR>]
-shikigami worker [--agents <DIR>]
+shikigami grants list|grant|revoke
+
+shikigami-run-behavior --agent <FILE>  # one-off, from shikigami-agent
+shikigami-agent-run --agent <NAME|FILE>
+
+shikigami-worker [--agents <DIR>]      # long-running, from shikigami-workers
+shikigami-scheduler [--agents <DIR>]
+shikigami-consume-stream [--agents <DIR>]
+shikigami-consume-events [--agents <DIR>]
+
+shikigami-server                       # the public HTTP API
+shikigami-migrate up                   # database migrations
 ```
+
+`shikigami-run-behavior` and `shikigami-agent-run` live in `shikigami-agent`, which depends
+only on `shikigami-core`. A consumer who is not running the Kikan platform can build and use
+just those two without acquiring the messaging, queueing, or telemetry stack the deployed
+service needs.
 
 See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
 
