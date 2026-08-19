@@ -34,12 +34,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: define and round-trip version-1 trigger, project, revision-range, adoption, owner, and provenance types.
+- [x] (2026-08-19T21:43:33Z) Preflight: reconcile this July plan with the current seven-package tree, shared attestation vocabulary, ADR corpus, core test layout, and released `uuid` dependency.
+- [ ] M1: define and round-trip shared repository identity plus version-1 trigger, revision-range, adoption, owner, and provenance types.
 - [ ] M2: define the closed verdict, claim, confidence, applicability, lineage, and re-review types.
 - [ ] M2: define explicit accepted/rejected/narrowed/superseded resolution commands.
 - [ ] M3: add deterministic `ReviewId` derivation and semantic validators.
-- [ ] M3: add valid/invalid golden fixtures and export the API module from the plan-36 API package.
-- [ ] Final: API tests and `cabal test all` pass with no runtime/database dependency.
+- [ ] M3: add valid/invalid golden fixtures and export the contract from `shikigami-core`.
+- [ ] Final: focused core tests, package-architecture tests, and `cabal test all` pass with no runtime/database dependency.
 
 
 ## Surprises & Discoveries
@@ -47,9 +48,39 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-- `shikigami-api` currently exports only Activity, Agent, and RunJob modules. The review
-  contract can remain a client-safe types-only addition with `aeson`, `text`, `time`, and
-  `uuid`; it does not need Kioku, Keiro, Hasql, or model dependencies.
+- The July plan expected `shikigami-api` to export Activity, Agent, and RunJob modules and
+  host this contract. That package shape no longer exists.
+
+- The first sentence above is historical rather than current: plan 36 reduced
+  `shikigami-api` to public HTTP route/problem modules, while the worker-reachable domain
+  vocabulary lives in `shikigami-core`. Evidence: `docs/architecture/packages.md` and
+  `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` enforce that workers cannot
+  depend on `shikigami-api`.
+
+- Plan 49 has already introduced temporary `RepositoryId` and `Revision` definitions in
+  `Shikigami.Attestation.Reviewed`, and no other production module consumes them yet. This
+  plan can now establish their neutral home without a compatibility migration; the
+  attestation module can import and re-export the shared names.
+
+- The repository instruction for record conventions moved from
+  `core/record-patterns.md` to `patterns/core/record-patterns.md`. Mori identifies it as
+  `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`; the current document still
+  requires direct strict fields, explicit deriving strategies, and per-module generic-lens
+  imports only when `#field` is actually used.
+
+- The existing `shikigami-core-test` suite is the correct fixture/test component; a new
+  `shikigami-api-test` suite would duplicate infrastructure and violate the current package
+  boundary.
+
+- `uuid` is already a direct `shikigami-core` dependency. Mori located the source at
+  `mori://haskell-hvr/uuid/packages/uuid`; Hackage and the upstream `uuid-1.3.16.1` tag both
+  identify 1.3.16.1 as the current release, whose `Data.UUID.V5.generateNamed` API accepts a
+  namespace UUID and name bytes.
+
+- The ADR corpus is an unprofiled filesystem corpus; `mori show --full` reports no
+  `docs/adr` OKF bundle. No existing ADR governs this practice-review wire contract. ADR
+  0003 explains the current package split, while ADRs 0005 and 0006 are adjacent attestation
+  decisions rather than authority for this contract.
 
 
 ## Decision Log
@@ -75,6 +106,35 @@ Record every decision made while working on the plan.
   partial duplicate identity in Shikigami would create a second source of truth.
   Date: 2026-07-25
 
+- Decision: Implement the public contract as `Shikigami.PracticeReview` in
+  `shikigami-core`, with focused internal type/validation modules only if the implementation
+  needs them; do not add an HTTP DTO or a second test suite.
+  Rationale: The current package architecture places worker-reachable domain concepts in
+  core and reserves `shikigami-api` for served HTTP contracts.
+  Date: 2026-08-19
+
+- Decision: Move the neutral repository vocabulary into `Shikigami.Repository` now and
+  have `Shikigami.Attestation.Reviewed` import and re-export it.
+  Rationale: Repository identity, strict 40-hex Mori content revisions, `RepoRef`, and safe
+  relative paths are shared by practice review, evidence acquisition, and attestation; the
+  current attestation-local definitions explicitly describe themselves as temporary and
+  have no production consumers outside that module.
+  Date: 2026-08-19
+
+- Decision: Keep Mori content-plane revisions stricter than attestation `FullCommit`:
+  exactly 40 lowercase hexadecimal characters on the wire.
+  Rationale: Kikan C16 still resolves and serves explicit 40-character Git SHA-1 revisions,
+  while `FullCommit` deliberately accepts 40- or 64-character hashes for the broader signed
+  attestation domain. Sharing repository identity does not require weakening either wire
+  invariant.
+  Date: 2026-08-19
+
+- Decision: Keep this plan free of Keiro workflow edits.
+  Rationale: The deliverable is pure JSON/domain validation. Workflow composition belongs
+  to plan 46; if that scope changes, the implementation must first review the applicable
+  `mori://shinzui/keiro-runtime-patterns` guidance and `docs/workflow-versioning.md`.
+  Date: 2026-08-19
+
 
 ## Outcomes & Retrospective
 
@@ -86,79 +146,111 @@ Compare the result against the original purpose.
 
 ## Context and Orientation
 
-**Path correction, verified 2026-08-10 — the two exemplar files named in this paragraph no longer
-exist where it says.** Plan 36 moved the domain out of `shikigami-api`, which now contains only
-`Shikigami.Api`, `Shikigami.Api.OpenApi`, `Shikigami.Api.Problem`, and `Shikigami.Health.Api`.
-`ls shikigami-api/src/Shikigami/Api/` returns `OpenApi.hs` and `Problem.hs` and nothing else.
+`shikigami-core` is the worker-reachable domain package. Its Cabal component already depends
+on `aeson`, `bytestring`, `text`, `time`, and `uuid`, and its single
+`shikigami-core-test` component already hosts pure contract tests. The public HTTP package
+`shikigami-api` depends on core and contains only route, problem, OpenAPI, and health
+contracts; workers may not depend on it. The package boundary is documented in
+`docs/architecture/packages.md` and enforced by
+`shikigami-core/test/Shikigami/PackageArchitectureSpec.hs`.
 
-Read the paragraph below with these substitutions. The client-safe style exemplar is now
-`shikigami-core/src/Shikigami/Agent/Decl.hs` — strict records, explicit JSON instances, snake-case
-wire options where required, unprefixed fields under `DuplicateRecordFields`. The trigger-payload
-carrier is now `shikigami-core/src/Shikigami/Agent/RunJob.hs`. And the module this plan adds is
-`Shikigami.PracticeReview` in `shikigami-core`, not `Shikigami.Api.PracticeReview` in
-`shikigami-api` — which is what the Portfolio Reconciliation of 2026-08-05 below already decided
-on package-architecture grounds, and this note simply makes the file paths agree with it. The
-style guidance and the "leaves trigger transport unchanged" commitment are both unaffected.
+`shikigami-core/src/Shikigami/Agent/Decl.hs` is the local record/JSON style exemplar:
+direct strict fields under `DuplicateRecordFields`, explicit deriving strategies, and
+explicit JSON options when wire compatibility needs them.
+`shikigami-core/src/Shikigami/Agent/RunJob.hs` remains the untyped trigger carrier. This
+plan adds pure contracts and leaves trigger transport unchanged; plan 46 will decode the
+payload at its Flow boundary.
 
-`shikigami-api/src/Shikigami/Api/Activity.hs` demonstrates the current client-safe API style:
-strict records, explicit JSON instances, and snake-case wire options where required.
-`shikigami-api/src/Shikigami/Api/RunJob.hs` carries the untyped trigger payload into a durable
-run. This plan adds `Shikigami.Api.PracticeReview` and leaves trigger transport unchanged;
-the domain Flow decodes the payload at its boundary.
+`shikigami-core/src/Shikigami/Attestation/Reviewed.hs` currently owns temporary
+`RepositoryId` and `Revision` newtypes. Its Haddock says those names must move when the shared
+evidence vocabulary lands. This plan is now the first real consumer, so Milestone 1 creates
+`shikigami-core/src/Shikigami/Repository.hs`, moves those two public names there, adds
+`RepoRef` and `RelativePath`, and keeps the attestation module source-compatible by importing
+and re-exporting the moved names. `Revision` in the shared module is a Mori content-plane
+revision: exactly 40 lowercase hexadecimal characters. `FullCommit` remains attestation's
+separate 40-or-64-character type.
 
-Kikan's C16 contract, captured in its plans 25, 28, and 29 and summarized in
-`docs/improvement-requests/add-architecture-practice-review-flow.md`, defines a `RepoRef` as
-Mori `repoId` plus a full immutable Git commit SHA. Each content read also carries a path,
-content hash, and provenance stamp. A "claim" is one statement in the verdict. `Fact` means
-the statement is directly supported by cited content; `Inference` means the specialist
-reasoned from cited facts. "Applicability" is the bounded project/path/dependency/practice
-scope within which a resolution may guide later reviews.
+Kikan's C16 contract defines a `RepoRef` as Mori `repoId` plus a full immutable
+40-character Git commit SHA. The current sources are
+`mori://shinzui/kikan/plans/25-author-contract-c16-the-repo-content-plane-and-its-provenance-stamp`,
+`mori://shinzui/kikan/plans/28-author-mori-s-content-plane-revision-pinning-bare-mirrors-and-the-repository-content-api`,
+and
+`mori://shinzui/kikan/plans/29-author-the-content-plane-toolenv-and-ephemeral-worktrees-for-shikumi-and-shikigami`.
+The live content-plane delivery remains tracked by
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`. Each content reference in this
+plan carries a project name, the exact `RepoRef`, a safe repository-relative path, and a
+non-empty content hash. A validator checks that the readable project identity and provenance
+repository identity agree.
 
-An agent verdict is provisional. A resolution is a separate command from an authorized human
-or approved artifact workflow. Kizashi acknowledgement alone is attention state and is not a
-truth-producing resolution.
+A "claim" is one statement in the verdict. `Fact` means the statement is directly supported
+by cited content; `Inference` means the specialist reasoned from cited facts. An evidence id
+names one pinned content reference and every claim cites ids present in the same verdict.
+"Applicability" is the bounded project/path/dependency/practice scope within which an
+exception or adjudicated resolution may guide later reviews.
+
+An agent verdict is provisional. A resolution is a separate command from an authorized
+human or approved artifact workflow. Kizashi acknowledgement alone is attention state and is
+not a truth-producing resolution. This contract contains no Keiro workflow body, database
+operation, model provider, sink call, or runtime dependency. No current ADR directly governs
+the wire shape; the package boundary is current architecture documentation, and the shared
+repository-module ownership decision will be distilled into a new filesystem ADR before
+completion.
 
 
 ## Plan of Work
 
-Milestone 1 creates `shikigami-api/src/Shikigami/Api/PracticeReview.hs`. Define
-`PracticeReviewTrigger` with `schemaVersion = 1`, trigger kind, stable idempotency key,
-canonical target project/repository identity, before/head revisions, changed decision paths,
-practice-adoption bindings, optional changed-reference range, and optional prior review id.
-Each adoption binding carries a stable practice key, registered reference document ids,
-claimed applicability, advisory mode, target/practice/triage owners, and registered upstream
-projects. The trigger contains no specialist name or candidate list. Validate every content
-revision as a full lowercase 40-hex SHA; before may be absent only for an added repository
-object.
+Milestone 1 creates `shikigami-core/src/Shikigami/Repository.hs` and
+`shikigami-core/src/Shikigami/PracticeReview.hs`. The repository module owns
+`RepositoryId`, strict `Revision`, `RepoRef`, and safe `RelativePath` smart constructors.
+Move the two temporary definitions out of `Shikigami.Attestation.Reviewed`, importing and
+re-exporting them there so existing consumers keep compiling. The practice-review module
+defines `PracticeReviewTrigger` with `schemaVersion = 1`, trigger kind, stable idempotency
+key, canonical target project/repository identity, an added-or-modified revision range,
+changed decision paths, practice-adoption bindings, optional changed-reference range, and
+optional prior review id. Each adoption binding carries a stable practice key, pinned
+registered reference project/document ids, claimed applicability, advisory mode,
+target/practice/triage owners, optional exception approver, and registered upstream projects.
+The trigger type contains no specialist or candidate field, and its decoder explicitly
+rejects a top-level `specialist` key instead of silently ignoring it.
 
-Milestone 2 defines the output. `PracticeReviewVerdict` carries schema version, deterministic
-review id, practice, specialist, parent/child session and workflow lineage, target and
-reference/upstream content references, claim-level evidence, confidence, routing rationale,
-classification, recommended owner/action, re-review condition, and applicability. The five
-classifications are exactly `consistent`, `target-suspect`, `reference-suspect`,
-`legitimate-exception`, and `unresolved`. Define `PracticeReviewResolution` separately with a
-deterministic resolution id and idempotency key, outcome `accepted`, `rejected`, `narrowed`,
-or `superseded`, resolver principal, reason, resolved time, resulting applicability, and the
-review being resolved.
+Milestone 2 defines output and resolution values in `Shikigami.PracticeReview`.
+`PracticeReviewVerdict` carries schema version, deterministic review id, the originating
+trigger idempotency key, practice, specialist, parent/child session and workflow lineage,
+target/reference/upstream evidence items, claim-level evidence, integer confidence from 0
+through 100, routing rationale, classification, recommended owner/action, exception approval
+requirement, re-review condition, and applicability. The five JSON classifications are
+exactly `consistent`, `target-suspect`, `reference-suspect`, `legitimate-exception`, and
+`unresolved`. A recommended owner is a closed role (`target-owner`, `practice-owner`,
+`triage-owner`, `joint-owners`, or `exception-approver`) plus one or more resolved principals;
+this makes impossible routing choices machine-checkable without comparing display strings.
+`PracticeReviewResolution` is separate and carries deterministic resolution id, command
+idempotency key, outcome `accepted`, `rejected`, `narrowed`, or `superseded`, resolver
+principal, reason, resolved time, resulting applicability when the outcome can guide later
+reviews, and the optional newer review required by `superseded`.
 
-Milestone 3 adds pure smart constructors/validators in the same API package or a companion
-`Shikigami.Api.PracticeReview.Validation` module if
-`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`
-permits it. Normalize keys and
-paths, reject empty ids/statements/owners, validate content hashes and revision/path tuples,
-ensure each claim cites existing evidence identities, and enforce classification invariants:
-consistent has no recommended attention owner; target-suspect selects the target owner;
-reference-suspect selects the practice owner; unresolved selects triage/both-owner
-adjudication; legitimate-exception includes non-empty applicability and names an approver
-only when approval is required. Suspect classifications require at least one cited material
-claim. Add deterministic id derivation with `Data.UUID.V5`, golden fixtures under
-`fixtures/practice-review/`, plus
-`shikigami-api/test/Shikigami/Api/PracticeReviewSpec.hs` and a small
-`shikigami-api/test/Main.hs`. Add a `shikigami-api-test` test suite to
-`shikigami-api/shikigami-api.cabal` (or the exact API package paths produced by
-`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`).
-Export the module from the final API Cabal component and re-export only if that plan's package
-convention calls for it.
+Milestone 3 adds pure validators and deterministic identifiers in the same module, splitting
+an internal `Shikigami.PracticeReview.Validation` module only if the single source file
+becomes materially harder to navigate. Validation returns all discovered
+`ReviewContractError` values as a `NonEmpty`, and successful wrappers carry normalized values.
+Trim surrounding whitespace from opaque idempotency keys; case-fold and trim practice keys
+and specialist names for UUID input; normalize safe relative paths in their smart constructor.
+Reject empty ids/statements/owners/hashes, invalid repository identity, confidence outside
+0–100, unsupported schema versions, inconsistent provenance, duplicate evidence identities,
+and claims citing missing evidence. Enforce classification invariants: `consistent` has no
+recommended attention owner; `target-suspect` selects `target-owner`; `reference-suspect`
+selects `practice-owner`; `unresolved` selects triage or joint adjudication and never a target
+or practice accusation; `legitimate-exception` has non-empty applicability and selects an
+exception approver exactly when approval is required. Suspect classifications require at
+least one cited material claim.
+
+Derive UUIDv5 identifiers with the released `uuid` package. The fixed v1 namespace is itself
+derived from the URL namespace and the canonical project/domain name; review names concatenate
+the normalized trigger idempotency key, practice key, and specialist name with unambiguous
+length-prefixing, and resolution names concatenate review id plus the normalized command key.
+Add checked-in JSON under `fixtures/practice-review/` and register
+`shikigami-core/test/Shikigami/PracticeReviewSpec.hs` in the existing core test suite. Expose
+`Shikigami.Repository` and `Shikigami.PracticeReview` from
+`shikigami-core/shikigami-core.cabal`. Do not touch Keiro workflow modules.
 
 
 ## Concrete Steps
@@ -167,22 +259,50 @@ Run from `/Users/shinzui/Keikaku/bokuno/shikigami`.
 
 ```bash
 sed -n '1,280p' docs/improvement-requests/add-architecture-practice-review-flow.md
-sed -n '1,240p' shikigami-api/src/Shikigami/Api/Activity.hs
-sed -n '1,220p' shikigami-api/src/Shikigami/Api/RunJob.hs
+sed -n '1,260p' shikigami-core/src/Shikigami/Agent/Decl.hs
+sed -n '1,220p' shikigami-core/src/Shikigami/Agent/RunJob.hs
+sed -n '1,220p' shikigami-core/src/Shikigami/Attestation/Reviewed.hs
+sed -n '1,230p' shikigami-core/shikigami-core.cabal
 ```
 
-After authoring types and fixtures:
+Mori has already located the record convention and `uuid` source. Re-run these lookups if the
+registered paths change; read source from the reported project paths rather than a package store:
 
 ```bash
-nix develop -c fourmolu -i shikigami-api/src/Shikigami/Api/PracticeReview.hs
-nix develop -c cabal test shikigami-api:shikigami-api-test --test-show-details=direct
-nix develop -c cabal test all
+mori registry show shinzui/haskell-jitsurei --full
+mori registry docs shinzui/haskell-jitsurei
+mori registry show haskell-hvr/uuid --full
+uuid_repo="$(mori path mori://haskell-hvr/uuid/repos/uuid)"
+sed -n '1,220p' "$uuid_repo/uuid/src/Data/UUID/V5.hs"
 ```
 
-If `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`
-creates a separately named API test component, use its landed equivalent and
-update this plan before implementation. The focused output must show five valid
-classification fixtures, four valid resolution fixtures, stable review-id derivation, and
+After each milestone, format only the hand-authored modules and run the focused contract
+tests. Cabal executes the suite from the package directory, so the test loader resolves
+fixtures through `../fixtures/practice-review`.
+
+```bash
+nix develop -c fourmolu -i \
+  shikigami-core/src/Shikigami/Repository.hs \
+  shikigami-core/src/Shikigami/PracticeReview.hs \
+  shikigami-core/src/Shikigami/Attestation/Reviewed.hs \
+  shikigami-core/test/Shikigami/PracticeReviewSpec.hs \
+  shikigami-core/test/Main.hs
+nix develop -c cabal test shikigami-core-test \
+  --test-options='-p "practice review"' \
+  --test-show-details=direct
+```
+
+At completion, prove the package edge and the entire workspace remain healthy:
+
+```bash
+nix develop -c cabal test shikigami-core-test \
+  --test-options='-p "package architecture"' \
+  --test-show-details=direct
+nix develop -c cabal test all --test-show-details=direct
+```
+
+The focused output must show five valid classification fixtures, four valid resolution
+fixtures, stable review/resolution id derivation, normalized-key identity behavior, and
 rejection of every invalid fixture.
 
 
@@ -195,54 +315,50 @@ least one inference claim and the practice owner. The unresolved fixture may rep
 required evidence but must not accuse an owner. The consistent fixture has no attention
 owner. The legitimate-exception fixture has bounded applicability.
 
-Invalid fixtures must cover a branch name used as revision, uppercase/short SHA, absent
-content hash, claim referencing an unknown evidence id, target-suspect pointing at the
-practice owner, consistent with a notification owner, empty exception scope, trigger naming a
-specialist, unsupported schema version, and a Kizashi acknowledgement-shaped payload decoded
-as a resolution. Reordering reference bindings while retaining Mori's normalized trigger
-idempotency key must not change `ReviewId`; changing a material revision and therefore the
-trigger key must. All API tests and `nix develop -c cabal test all` exit zero.
+Invalid fixtures must cover a branch name used as revision, uppercase SHA, short SHA, absent
+content hash, project/provenance repository mismatch, a claim referencing an unknown evidence
+id, `target-suspect` pointing at the practice owner, `consistent` with a notification owner,
+empty exception scope, trigger naming a specialist, unsupported schema version, and a Kizashi
+acknowledgement-shaped payload decoded as a resolution. Reordering reference bindings while
+retaining Mori's normalized trigger idempotency key must not change `ReviewId`; changing a
+material revision and therefore the producer-supplied trigger key must. Changing only leading
+or trailing whitespace in an opaque trigger key, or case/whitespace in a practice key or
+specialist name, must not change it either. A different command idempotency key must change
+`ResolutionId`.
+
+`Shikigami.AttestationContractsSpec` must still pass after the repository types move, proving
+the existing attestation JSON is unchanged. `Shikigami.PackageArchitectureSpec` must still
+pass, proving the new module did not create an API-to-worker dependency inversion. The focused
+core tests and `nix develop -c cabal test all --test-show-details=direct` all exit zero.
 
 
 ## Idempotence and Recovery
 
-This plan changes only types, pure validation, and fixtures. It has no migration or external
-write. Formatting and tests are safe to repeat. Golden files should be regenerated only by an
-explicit repository script or reviewed patch; never silently bless a changed wire shape. If
-the wire contract changes after implementation, add a new schema version and decoder path
-rather than reinterpreting version 1 in place.
+This plan changes only shared/domain types, pure validation, Cabal exposure, tests, fixtures,
+and the attestation module's import site. It has no migration, workflow journal, database,
+network call, or external write. Formatting and tests are safe to repeat. The
+`RepositoryId`/`Revision` move is recoverable by restoring the two definitions to
+`Shikigami.Attestation.Reviewed`; no stored value changes representation. Golden files are
+changed only by reviewed patches and are never silently regenerated or blessed. If the wire
+contract changes after implementation, add a new schema version and decoder path rather than
+reinterpreting version 1 in place.
 
 
-## Portfolio Reconciliation (2026-07-30)
+## Portfolio Reconciliation (2026-08-19)
 
-This contract-only plan may start in parallel with the foundation chain, but any package
-implementation/fixture build consumes plan 47's released cohort. Its wire types precede plans 44 and
-45 and must remain judgment-free, versioned, bounded, and directly named under
-`DuplicateRecordFields`.
+The package foundation and attestation contracts that were future work when this plan was
+written are now present. The implementation consumes the released cohort in `cabal.project`,
+lands in `shikigami-core`, uses its existing test suite, and replaces the attestation-local
+repository placeholders with a neutral `Shikigami.Repository` module. Plans 44 and 45 continue
+to consume the contract through `Shikigami.PracticeReview`; they must not define local
+lookalikes. Plan 44 still owns `PinnedDiff` and `EvidenceReader`, which it should define over
+the `RepositoryId`, `Revision`, `RepoRef`, and `RelativePath` types landed here.
 
-
-## Portfolio Reconciliation (2026-08-05)
-
-Two corrections, both found by a portfolio audit on 2026-08-05.
-
-**Package placement.** The Interfaces section below says these types belong to `shikigami-api` and
-names its existing `aeson`/`text`/`time`/`uuid` dependencies. That is stale. Plan 36 made
-`shikigami-api` the *public HTTP contract* package, which depends on `shikigami-core` and whose
-exposed modules are only `Shikigami.Api`, `Shikigami.Api.OpenApi`, `Shikigami.Api.Problem`, and
-`Shikigami.Health.Api` (`docs/architecture/packages.md:35-48`); `shikigami-workers` is forbidden from
-depending on it, and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` fails the build on
-that edge. Domain vocabulary a worker must reach therefore belongs in `shikigami-core`. Place these
-contracts there; only HTTP DTOs and route records belong in `shikigami-api`.
-
-**Shared, not private.** The revision-pinned repository vocabulary that this plan and
-`docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` introduce —
-`RepositoryId`, `Revision`, `RepoRef`, `PinnedDiff`, and the `EvidenceReader` seam — is
-portfolio-shared, not private to MasterPlan 9. MasterPlan 10's `ReviewedArtifact`
-(`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md`) binds canonical
-repository identity, full base and head commits, and a diff digest over exactly those types, and
-plan 49 carries placeholder definitions only until plan 44 lands. Keep them general enough to serve a
-code-review binding as well as an architecture-decision-record review, and do not narrow them to
-Mori-addressed documents.
+The repository types remain general enough for code-review attestations, but `Revision` is
+intentionally the current Mori C16 wire revision: a full lowercase 40-character SHA. The
+attestation-only `FullCommit` retains its broader 40-or-64-character invariant. If the Mori
+content plane later adopts SHA-256 object format, that is a versioned shared-contract change,
+not a reason to silently broaden version 1 fixtures.
 
 
 ## Interfaces and Dependencies
@@ -251,6 +367,16 @@ The module must expose at least these domain concepts (field lists above are nor
 if constructors are split for readability):
 
 ```haskell
+-- Shikigami.Repository
+newtype RepositoryId = RepositoryId { value :: Text }
+newtype Revision = Revision { value :: Text }
+data RepoRef = RepoRef { repository :: !RepositoryId, revision :: !Revision }
+newtype RelativePath = RelativePath { value :: Text }
+
+mkRevision :: Text -> Either Text Revision
+mkRelativePath :: Text -> Either Text RelativePath
+
+-- Shikigami.PracticeReview
 newtype ReviewId = ReviewId { value :: Text }
 newtype ResolutionId = ResolutionId { value :: Text }
 newtype PracticeKey = PracticeKey { value :: Text }
@@ -271,14 +397,35 @@ validateVerdict :: PracticeReviewVerdict -> Either (NonEmpty ReviewContractError
 validateResolution :: PracticeReviewResolution -> Either (NonEmpty ReviewContractError) ValidatedPracticeReviewResolution
 ```
 
+`Revision` and `RelativePath` constructors are not exported; their `FromJSON` instances call
+the same smart constructors, so branch names, uppercase or short hashes, absolute paths, and
+traversal cannot enter through JSON. `RepositoryId` remains a transparent newtype because
+both Mori TypeIDs and canonical repository URIs occur in current portfolio values; the
+practice-review validator rejects only empty/whitespace identity.
+
 All records use strict direct fields, `DuplicateRecordFields`, explicit deriving strategies,
-and shared Aeson options. Dependencies are the existing `aeson`, `text`, `time`, and `uuid`
-packages in `shikigami-api`; `mmzk-typeid` is not required unless the implementation chooses a
-portfolio TypeID after verifying its source with Mori. This plan introduces no dependency on
-Kioku, Keiro, Mori client code, or a model provider.
+and explicit Aeson options. Record keys are camelCase to match existing Shikigami payloads;
+closed semantic enums use the exact lowercase hyphenated strings named in this plan. Optional
+fields are omitted rather than encoded as `null`, so a future optional field can remain
+backward-compatible. Every schema-bearing top-level type carries integer version 1.
+
+Dependencies are the existing `aeson`, `bytestring`, `text`, `time`, and `uuid` packages in
+`shikigami-core`; no new dependency or bound is required. `uuid` 1.3.16.1 is the verified
+released API used for `Data.UUID.V5.generateNamed`. This plan introduces no dependency on
+Kioku, Keiro, Mori client code, `mmzk-typeid`, a database, or a model provider.
 
 
 ## Revision Notes
+
+- 2026-08-19: Reconciled the entire plan before implementation. Replaced the stale API
+  package/test paths with `shikigami-core`, incorporated the already-landed package and
+  attestation architecture, assigned shared repository provenance to
+  `Shikigami.Repository`, made the current Mori 40-hex revision invariant explicit, updated
+  fixtures and validation cases, added current formatting/test commands, corrected
+  cross-repository references to canonical `mori://` URIs, recorded the no-Keiro boundary,
+  and documented the verified `uuid` 1.3.16.1 API. The requested user-visible contract is
+  unchanged; this revision removes obsolete implementation instructions and resolves
+  ownership that July plans could only describe as future work.
 
 - 2026-08-10: Corrected the two exemplar file paths in Context and Orientation, which named
   modules that plan 36 had already moved.
