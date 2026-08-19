@@ -1,109 +1,163 @@
 {-# LANGUAGE TypeApplications #-}
 
--- | Draining the @shikigami_run_jobs@ queue: one message becomes one agent run.
+-- | The typed @shikigami_run_jobs@ consumer.
 --
--- A \"run job\" is the message a fired trigger leaves on the queue, described by
--- 'Shikigami.Agent.RunJob.RunJob'. This module decodes one, decides which
--- durable workflow it belongs to, drives it, and maps the outcome onto the
--- acknowledgement the queue supervisor expects:
---
---   * @AckOk@ — the message is done and is removed.
---   * @AckRetry@ — the message becomes visible again after a delay.
---   * @AckDeadLetter@ — the message can never succeed and is set aside.
---
--- Getting that mapping wrong is how work is silently dropped or repeated
--- forever, so each case is decided explicitly below rather than by a catch-all.
--- The retry ceilings, lease durations, and failure taxonomy that should govern
--- those choices are owned by
--- @docs\/plans\/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md@;
--- this module preserves today's behavior unchanged.
+-- The producer deliberately still writes the historical bare 'RunJob' JSON.
+-- 'aesonJobCodec' keeps that wire stable while moving decode failures, retry
+-- ceilings, and DLQ routing behind the fleet-standard 'Job' abstraction.
 module Shikigami.Agent.RunJob.Worker
-  ( runJobHandler,
+  ( runJob,
     handleRunJob,
+    withVisibilityHeartbeat,
+    withVisibilityHeartbeatEvery,
   )
 where
 
-import Data.Aeson (Value)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async qualified as Async
+import Control.Exception qualified as Exception
+import Control.Monad (forever)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (Pair)
 import Data.List (find)
 import Data.Text qualified as Text
-import Data.Time.Clock (secondsToNominalDiffTime)
-import Effectful (IOE, runEff, (:>))
+import Data.Time.Clock (NominalDiffTime)
+import Data.Void (absurd)
+import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
+import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..), aesonJobCodec, defaultRetryPolicy, queueRef)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..))
-import Shibuya.Core.Ingested (Message (..))
-import Shibuya.Core.Types (Envelope (..))
-import Shibuya.Handler (Handler)
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
 
--- | The shibuya handler: lift the orchestration into the worker's effect row.
-runJobHandler :: (IOE :> es) => WorkerEnv -> Handler es Value
-runJobHandler env (Message {envelope = Envelope {payload = p}}) =
-  liftIO (handleRunJob env p)
+-- | The queue contract for run jobs. Its codec intentionally preserves the
+-- existing unwrapped Aeson payload until a dual-read migration can introduce a
+-- versioned envelope.
+runJob :: Job RunJob
+runJob =
+  Job
+    { jobName = "shikigami_run_jobs",
+      jobQueue = queueRef "shikigami_run_jobs",
+      jobCodec = aesonJobCodec,
+      jobPolicy = defaultRetryPolicy
+    }
 
--- | Orchestrate one drained job.
+-- | Process one decoded delivery while renewing its PGMQ visibility lease.
+-- Codec failures never reach this function: @keiro-pgmq@ dead-letters them at
+-- the typed boundary.
+handleRunJob :: (IOE :> es) => WorkerEnv -> JobContext es -> RunJob -> Eff es JobOutcome
+handleRunJob env context job =
+  withVisibilityHeartbeat context do
+    attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
+    case attemptResult of
+      Left (TransientBehaviorFailure {detail}) -> do
+        liftIO $
+          jobLog
+            env
+            job
+            Log.Error
+            "worker.job.retried"
+            [ "error" Aeson..= detail,
+              "reason" Aeson..= ("transient_behavior_failure" :: Text)
+            ]
+        pure RetryDefault
+      Right outcome -> pure outcome
+
+-- | Production heartbeat policy: after ten seconds, extend visibility to thirty
+-- seconds from now, and repeat until work completes.
+withVisibilityHeartbeat :: (IOE :> es) => JobContext es -> Eff es a -> Eff es a
+withVisibilityHeartbeat = withVisibilityHeartbeatEvery 10 30
+
+-- | Run work and its lease-renewal loop as linked peers. Work completion
+-- cancels the heartbeat. A lease-extension failure cancels the work and escapes,
+-- preventing acknowledgement. The explicit concurrent unlift is required
+-- because both branches use the job processor's effect environment.
 --
--- A payload that decodes as an addressed danwa message goes to the conversation
--- workflow; anything else goes to the agent-run workflow. A payload that is not
--- a 'RunJob' at all is dead-lettered immediately, because no amount of retrying
--- will make malformed JSON parse.
-handleRunJob :: WorkerEnv -> Value -> IO AckDecision
-handleRunJob env payloadV =
-  case Aeson.fromJSON payloadV of
-    Aeson.Error e -> do
-      Log.logError
-        (envLogger env)
-        "worker.job.dead_lettered"
-        [ "reason" Aeson..= ("invalid_payload" :: Text),
-          "error" Aeson..= Text.pack e
-        ]
-      pure (AckDeadLetter (InvalidPayload (Text.pack e)))
-    Aeson.Success job ->
-      case Aeson.fromJSON (triggerPayload job) of
-        Aeson.Success addressed -> runConversationAgent env job addressed
-        Aeson.Error _ -> runOneAgent env job
+-- Exported so the worker-path integration test can use sub-second timings while
+-- production keeps the fixed 10/30-second policy above.
+withVisibilityHeartbeatEvery :: (IOE :> es) => NominalDiffTime -> NominalDiffTime -> JobContext es -> Eff es a -> Eff es a
+withVisibilityHeartbeatEvery interval extension context work =
+  withEffToIO (ConcUnlift Persistent (Limited 2)) $ \runInIO -> do
+    let heartbeat = forever do
+          threadDelay (nominalMicroseconds interval)
+          runInIO (extendLease context extension)
+    raced <- Async.race (runInIO work) heartbeat
+    pure (either id absurd raced)
+
+nominalMicroseconds :: NominalDiffTime -> Int
+nominalMicroseconds duration =
+  max 1 (ceiling (realToFrac duration * (1_000_000 :: Double)))
+
+dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
+dispatchRunJob env job =
+  case Aeson.fromJSON (triggerPayload job) of
+    Aeson.Success addressed -> runConversationAgent env job addressed
+    Aeson.Error _ -> runOneAgent env job
 
 -- | Drive one turn of a conversation agent.
-runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO AckDecision
+runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome
 runConversationAgent env job addressed =
   case find ((== agentName job) . name) (agents env) of
-    Nothing -> pure (AckDeadLetter (PoisonPill ("unknown agent " <> agentName job)))
+    Nothing -> do
+      let detail = "unknown agent " <> agentName job
+      jobLog
+        env
+        job
+        Log.Error
+        "worker.conversation.dead_lettered"
+        [ "error" Aeson..= detail,
+          "reason" Aeson..= ("unknown_agent" :: Text)
+        ]
+      pure (deadOutcome "unknown_agent" detail)
     Just decl -> do
       result <- Conversation.runConversationTurn (conversationEnv env) decl addressed
       case result of
         Left (Conversation.ConversationTransientFailure err) -> do
-          Log.logError
-            (envLogger env)
+          jobLog
+            env
+            job
+            Log.Error
             "worker.conversation.retried"
-            [ "agent" Aeson..= agentName job,
-              Log.runIdKey Aeson..= idempotencyKey job,
-              "error" Aeson..= err
+            [ "error" Aeson..= err,
+              "reason" Aeson..= ("transient_conversation_failure" :: Text)
             ]
-          pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
-        Left failure -> do
-          let err = Conversation.conversationTurnFailureDetail failure
-          Log.logError
-            (envLogger env)
+          pure RetryDefault
+        Left (Conversation.ConversationPermanentFailure err) -> do
+          jobLog
+            env
+            job
+            Log.Error
             "worker.conversation.dead_lettered"
-            [ "agent" Aeson..= agentName job,
-              Log.runIdKey Aeson..= idempotencyKey job,
-              "error" Aeson..= err
+            [ "error" Aeson..= err,
+              "reason" Aeson..= ("permanent_conversation_failure" :: Text)
             ]
-          pure (AckDeadLetter (PoisonPill err))
-        Right _ -> pure AckOk
+          pure (deadOutcome "permanent_conversation_failure" err)
+        Left (Conversation.ConversationTerminalFailure err) -> do
+          jobLog
+            env
+            job
+            Log.Error
+            "worker.conversation.dead_lettered"
+            [ "error" Aeson..= err,
+              "reason" Aeson..= ("terminal_conversation_failure" :: Text)
+            ]
+          pure (deadOutcome "terminal_conversation_failure" err)
+        Right _ -> do
+          jobLog env job Log.Info "worker.conversation.completed" []
+          pure Done
 
--- | Run a resolved agent through the durable agent-run workflow and dispatch its sinks.
-runOneAgent :: WorkerEnv -> RunJob -> IO AckDecision
+-- | Run a resolved agent through the durable agent-run workflow and dispatch
+-- its sinks.
+runOneAgent :: WorkerEnv -> RunJob -> IO JobOutcome
 runOneAgent env job =
   runEff . runTracing (tracer (appEnv env)) $
     withSpan' "agent.run" (spanArgs Consumer) \traceSpan -> do
@@ -115,44 +169,81 @@ runOneAgent env job =
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
         case resE of
           Left err -> do
-            jobLog Log.Error "worker.job.retried" ["error" Aeson..= Text.pack (show err), "reason" Aeson..= ("store_error" :: Text)]
-            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+            jobLog
+              env
+              job
+              Log.Error
+              "worker.job.retried"
+              [ "error" Aeson..= Text.pack (show err),
+                "reason" Aeson..= ("store_error" :: Text)
+              ]
+            pure RetryDefault
           Right (Completed (Right _result)) -> do
-            jobLog Log.Info "worker.job.completed" []
-            pure AckOk
+            jobLog env job Log.Info "worker.job.completed" []
+            pure Done
           Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure err))) -> do
-            jobLog Log.Error "worker.job.retried" ["error" Aeson..= err, "reason" Aeson..= ("legacy_behavior_failure" :: Text)]
-            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+            jobLog
+              env
+              job
+              Log.Error
+              "worker.job.retried"
+              [ "error" Aeson..= err,
+                "reason" Aeson..= ("legacy_behavior_failure" :: Text)
+              ]
+            pure RetryDefault
           Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
             let err = AgentWorkflow.agentRunFailureDetail failure
-            jobLog Log.Error "worker.job.dead_lettered" ["error" Aeson..= err, "reason" Aeson..= ("permanent_workflow_failure" :: Text)]
-            pure (AckDeadLetter (PoisonPill err))
+            jobLog
+              env
+              job
+              Log.Error
+              "worker.job.dead_lettered"
+              [ "error" Aeson..= err,
+                "reason" Aeson..= ("permanent_workflow_failure" :: Text)
+              ]
+            pure (deadOutcome "permanent_workflow_failure" err)
           Right Suspended -> do
-            jobLog Log.Info "worker.job.suspended" []
-            pure AckOk
+            jobLog env job Log.Info "worker.job.suspended" []
+            pure Done
           Right Cancelled -> do
-            jobLog Log.Warn "worker.job.dead_lettered" ["reason" Aeson..= ("workflow_cancelled" :: Text)]
-            pure (AckDeadLetter (PoisonPill ("workflow cancelled for " <> agentName job)))
+            let detail = "workflow cancelled for " <> agentName job
+            jobLog
+              env
+              job
+              Log.Warn
+              "worker.job.dead_lettered"
+              ["reason" Aeson..= ("workflow_cancelled" :: Text)]
+            pure (deadOutcome "workflow_cancelled" detail)
           Right Failed -> do
-            jobLog Log.Error "worker.job.retried" ["reason" Aeson..= ("workflow_failed" :: Text)]
-            pure (AckRetry (RetryDelay (secondsToNominalDiffTime 1)))
+            let detail = "workflow failed for " <> agentName job
+            jobLog
+              env
+              job
+              Log.Error
+              "worker.job.dead_lettered"
+              ["reason" Aeson..= ("workflow_failed" :: Text)]
+            pure (deadOutcome "workflow_failed" detail)
           Right ContinuedAsNew -> do
-            jobLog Log.Info "worker.job.continued_as_new" []
-            pure AckOk
-  where
-    -- Every outcome line for one job carries the same identifying fields, so
-    -- they are written once here rather than repeated at each branch.
-    jobLog level event fields =
-      Log.logEvent
-        (envLogger env)
-        level
-        event
-        ( [ "agent" Aeson..= agentName job,
-            Log.runIdKey Aeson..= idempotencyKey job,
-            "trigger_kind" Aeson..= triggerKindText (triggerKind job)
-          ]
-            <> fields
-        )
+            jobLog env job Log.Info "worker.job.continued_as_new" []
+            pure Done
+
+deadOutcome :: Text -> Text -> JobOutcome
+deadOutcome reason detail =
+  Dead (boundedBehaviorDetail ("shikigami." <> reason <> ": " <> detail))
+
+-- | Every outcome line for one job carries the same identifying fields.
+jobLog :: WorkerEnv -> RunJob -> Log.Level -> Text -> [Pair] -> IO ()
+jobLog env job level event fields =
+  Log.logEvent
+    (envLogger env)
+    level
+    event
+    ( [ "agent" Aeson..= agentName job,
+        Log.runIdKey Aeson..= idempotencyKey job,
+        "trigger_kind" Aeson..= triggerKindText (triggerKind job)
+      ]
+        <> fields
+    )
 
 triggerKindText :: TriggerKind -> Text
 triggerKindText = \case

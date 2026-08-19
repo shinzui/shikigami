@@ -55,17 +55,14 @@ library
     , hw-kafka-client
     , kafka-effectful
     , keiro
-    , keiro-core
     , keiro-pgmq
     , kioku-api
     , kioku-core
     , kiroku-store
     , optparse-applicative            >=0.19    && <0.20
-    , pgmq-effectful
     , settei                          ==0.2.0.0
     , settei-optparse-applicative     ==0.2.0.0
     , shibuya-core
-    , shibuya-pgmq-adapter
     , shikigami-core
     , text                            >=2.1
     , time                            >=1.12
@@ -117,6 +114,7 @@ test-suite shikigami-workers-test
   main-is:        Main.hs
   hs-source-dirs: test
   other-modules:
+    Shikigami.Agent.RunJob.WorkerSpec
     Shikigami.SchedulerSpec
     Shikigami.Workers.CommandSpec
 
@@ -125,14 +123,17 @@ test-suite shikigami-workers-test
     , aeson
     , base
     , containers
+    , effectful
     , hasql-pool
     , keiro
+    , keiro-pgmq
     , kioku-api
     , kioku-core
     , kiroku-store
     , optparse-applicative
     , pgmq-hasql
     , settei-env
+    , shibuya-core
     , shikigami-core
     , shikigami-migrations:test-support
     , shikigami-workers

@@ -64,11 +64,11 @@ workflow failure budget instead of becoming a permanent step result.
       conformance expectations, and passed all 12 conformance facts plus the 3-case
       `WorkflowVersioning` deploy simulation. The final merge-base `just keiro-gate`
       remains part of completion validation.
-- [ ] Milestone 2: replace the raw run-job consumer construction with a typed
-      `Job RunJob`; reconcile the main queue and DLQ at worker startup; map every workflow
-      result to a deliberate `JobOutcome`.
-- [ ] Milestone 3: run queue work with a supervised PGMQ visibility heartbeat and prove
-      lease renewal through the actual `jobProcessorWithContext` path.
+- [x] (2026-08-19) Milestone 2: replaced the raw run-job consumer construction with a typed
+      `Job RunJob`, reconciled the main queue and DLQ at worker startup, and mapped every
+      workflow result to a deliberate `JobOutcome`.
+- [x] (2026-08-19) Milestone 3: ran queue work with a supervised PGMQ visibility heartbeat
+      and proved lease renewal through the actual `jobProcessorWithContext` path.
 - [ ] Milestone 4: add `worker.run_timeout_seconds` and
       `approval.deadline_seconds` to Settei, thread both values through the worker
       environments, and size `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
@@ -166,6 +166,11 @@ workflow failure budget instead of becoming a permanent step result.
   bundle, so ADR validation follows the repository's existing plain-filesystem
   convention. Evidence: `just check-adr` returned `justfile does not contain recipe
   check-adr`.
+
+- `effectful` 2.6.1.0's `withEffToIO` supports the required two-thread use only with an
+  explicit concurrent unlift. The heartbeat uses
+  `ConcUnlift Persistent (Limited 2)` around `async`'s `race`; a sequential unlift would
+  reject or unsafely share the effect environment across the work and renewal threads.
 
 
 ## Decision Log
@@ -265,6 +270,14 @@ workflow failure budget instead of becoming a permanent step result.
   Rationale: A detached `withAsync` child can fail silently while the main action continues.
   The heartbeat and work are one failure domain: successful work cancels the infinite
   heartbeat; a failed heartbeat prevents an unsafe acknowledgement.
+  Date: 2026-08-19
+
+- Decision: Use `withEffToIO (ConcUnlift Persistent (Limited 2))` to place the typed
+  handler action and `JobContext.extendLease` loop under `async`'s `race`.
+  Rationale: `jobProcessorWithContext` fixes the handler's effect row and does not supply
+  a `Concurrent` effect. The explicit bounded concurrent unlift safely makes that row
+  available to exactly the work and heartbeat threads while preserving `race`'s sibling
+  cancellation and exception propagation.
   Date: 2026-08-19
 
 - Decision: Represent non-journaled workflow dispositions with
@@ -717,3 +730,8 @@ patch is a journaled compatibility decision declared through the Keiro specifica
 - 2026-08-19: Implemented milestones 0 and 1. Added the released `keiro-pgmq`
   dependency, introduced classified attempt failures and bounded synchronous timeouts,
   scaffolded the shared retry patch, and added retry/replay and deploy-simulation tests.
+- 2026-08-19: Implemented milestones 2 and 3. Replaced raw Shibuya/PGMQ consumer wiring
+  with the typed `Job RunJob` façade, startup queue/DLQ reconciliation, explicit
+  `JobOutcome` mapping, and a linked 10/30-second visibility heartbeat. Added a wire
+  compatibility test, a real `jobProcessorWithContext` slow-handler test, and a renewal
+  failure cancellation test; the focused `RunJob` selection passed all three cases.

@@ -26,20 +26,14 @@ where
 import Control.Concurrent.Async (concurrently_)
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
-import Effectful (runEff)
-import Effectful.Error.Static (runErrorNoCallStack)
+import Keiro.PGMQ (JobRuntime (..), defaultJobTuning, ensureJobQueue, jobProcessorWithContext, runJobEff, runJobWorkers)
 import Kioku.App (AppEnv (..))
-import Pgmq.Effectful.Interpreter (PgmqRuntimeError, runPgmq)
-import Shibuya.Adapter.Pgmq (pgmqAdapter)
-import Shibuya.Adapter.Pgmq.Config (defaultConfig, mkPgmqAdapterEnv)
-import Shibuya.App (AppConfig (..), ProcessorId (..), SupervisionStrategy (IgnoreFailures), mkProcessor, runApp, waitApp)
-import Shibuya.Telemetry.Effect (runTracing)
-import Shikigami.Agent.RunJob.Worker (runJobHandler)
+import Shibuya.App (SupervisionStrategy (IgnoreFailures), waitApp)
+import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Trigger.Enqueue (runQueueName)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envLogger)
 
@@ -57,24 +51,34 @@ runWorkers env = do
 -- the handler itself decides retry versus dead-letter per message.
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
-  result <-
-    runEff . runErrorNoCallStack @PgmqRuntimeError . runPgmq (pool env) . runTracing (tracer (appEnv env)) $ do
-      -- shibuya-pgmq-adapter 0.12 splits the adapter's runtime environment
-      -- (pool plus dead-letter/ack-failure callbacks) from its queue
-      -- configuration, and validates the latter before constructing anything.
-      adapterResult <- pgmqAdapter (mkPgmqAdapterEnv (pool env)) (defaultConfig runQueueName)
-      case adapterResult of
-        Left cfgErr ->
-          liftIO (Log.logError (envLogger env) "worker.queue.misconfigured" ["error" Aeson..= Text.pack (show cfgErr)])
-        Right adapter -> do
-          let processor = mkProcessor adapter (runJobHandler env)
-          appResult <-
-            runApp
-              AppConfig {strategy = IgnoreFailures, inboxSize = 100}
-              [(ProcessorId "shikigami_run_jobs", processor)]
-          case appResult of
-            Left err -> liftIO (Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)])
-            Right h -> waitApp h
+  let runtime =
+        JobRuntime
+          { runtimePool = pool env,
+            runtimeTracer = Just (tracer (appEnv env))
+          }
+  result <- runJobEff runtime do
+    -- Queue reconciliation owns both the main queue and its policy-enabled DLQ.
+    -- The worker does not start unless both are available.
+    ensureJobQueue runJob
+    liftIO $
+      Log.logInfo
+        (envLogger env)
+        "worker.queue.reconciled"
+        [ "queue" Aeson..= ("shikigami_run_jobs" :: Text),
+          "dlq" Aeson..= ("shikigami_run_jobs_dlq" :: Text)
+        ]
+    appResult <-
+      runJobWorkers
+        IgnoreFailures
+        100
+        [jobProcessorWithContext defaultJobTuning runJob (handleRunJob env)]
+    case appResult of
+      Left err -> liftIO do
+        Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)]
+        ioError (userError ("run-job processor failed to start: " <> show err))
+      Right app -> waitApp app
   case result of
-    Left perr -> Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
+    Left perr -> do
+      Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
+      ioError (userError ("run-job queue reconciliation failed: " <> show perr))
     Right () -> pure ()
