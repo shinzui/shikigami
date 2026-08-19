@@ -17,6 +17,20 @@ import Data.ByteString.Lazy (ByteString)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as Vector
+import Shikigami.Attestation.Agent
+  ( AgentArtifactSet (..),
+    AgentVersion (..),
+    AgentVersionRef (..),
+    BehaviorDigest (..),
+    DeclarationDigest (..),
+    GroundingDigest (..),
+    LogicalAgentId (..),
+    PolicyDigest (..),
+    RuntimeDigest (..),
+    SkillsDigest (..),
+    ToolCatalogDigest (..),
+    declarationOnlyArtifacts,
+  )
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
     EvidenceStrength (..),
@@ -42,7 +56,8 @@ tests :: TestTree
 tests =
   testGroup
     "attestation contracts"
-    [ profileTests
+    [ profileTests,
+      agentTests
     ]
 
 -- ---------------------------------------------------------------------------
@@ -179,6 +194,89 @@ sampleProfileRef =
 minimalProfileBytes :: ByteString
 minimalProfileBytes =
   "{\"allowedCalls\":[{\"api\":\"messages\",\"endpointClass\":\"https\",\"modelId\":\"claude-opus-5-20260401\",\"provider\":\"anthropic\",\"thinking\":\"ThinkingHigh\"}],\"issuer\":\"shinzui/kikan\",\"lifecycle\":\"active\",\"limits\":{},\"minimumEvidenceStrength\":\"model_observed\",\"profileId\":\"sanctioned-review\",\"prohibitions\":{\"aliasesAllowed\":false,\"cliTransportsAllowed\":false,\"defaultedThinkingAllowed\":false,\"effortClampingAllowed\":false,\"modelFallbackAllowed\":false,\"providerFallbackAllowed\":false},\"requiredCorrelationFields\":[\"request-id\"],\"signerRequirements\":{\"allowedKeyIds\":[]},\"validFrom\":\"2026-08-05T00:00:00Z\",\"version\":\"1\"}"
+
+-- ---------------------------------------------------------------------------
+-- Milestone 2 -- agent version and artifact set
+-- ---------------------------------------------------------------------------
+
+agentTests :: TestTree
+agentTests =
+  testGroup
+    "agent version and artifacts"
+    [ testCase "an agent version ref round-trips" do
+        roundTrips "agent version ref" sampleAgentVersionRef,
+      testCase "a fully populated artifact set round-trips" do
+        roundTrips "full artifact set" fullArtifactSet,
+      testCase "a declaration-only artifact set round-trips" do
+        roundTrips "sparse artifact set" (declarationOnlyArtifacts (DeclarationDigest "sha256:decl")),
+      -- This is the test that protects the governed-evolution follow-up
+      -- requested in docs/improvement-requests/governed-agent-evolution.md.
+      -- When that work adds a baseline pointer, a candidate relation, and a
+      -- rollout state as OPTIONAL fields, these bytes must not move: runs
+      -- attested before the change were signed over exactly this encoding, and
+      -- a verifier re-deriving a digest over different bytes cannot tell a
+      -- schema drift from tampering.
+      --
+      -- If this fails, do not update the literal. Either a required field was
+      -- added, or omitNothingFields was dropped from agentAesonOptions, and
+      -- both are wire-format changes that need a schema-version bump and a
+      -- migration story.
+      testCase "a fully populated agent version ref matches its pinned bytes" do
+        assertEqual
+          "AgentVersionRef bytes are pinned so lineage fields can be added later"
+          pinnedAgentVersionRefBytes
+          (encode sampleAgentVersionRef),
+      -- The same promise, shown working rather than asserted. An artifact set
+      -- whose optional digests are all absent encodes to exactly the object it
+      -- would have encoded to before those fields existed -- one key. That is
+      -- what omitNothingFields is for, and with every field on AgentVersionRef
+      -- currently required, this record is where the mechanism is observable.
+      testCase "absent optional digests vanish from the encoding entirely" do
+        assertEqual
+          "a declaration-only artifact set is a one-key object"
+          pinnedDeclarationOnlyBytes
+          (encode (declarationOnlyArtifacts (DeclarationDigest "sha256:decl")))
+        assertBool
+          "no null appears anywhere in the encoding"
+          (not (hasNull (toJSON (declarationOnlyArtifacts (DeclarationDigest "sha256:decl"))))),
+      -- An absent digest means "this agent has no such part", which is a
+      -- different claim from "this part was not measured". Present and absent
+      -- must therefore stay distinguishable after a round trip rather than both
+      -- decoding to some default.
+      testCase "a present digest and an absent one stay distinct" do
+        let sparse = declarationOnlyArtifacts (DeclarationDigest "sha256:decl")
+            grounded = sparse {groundingDigest = Just (GroundingDigest "sha256:ground")}
+        assertBool "sparse and grounded differ" (sparse /= grounded)
+        roundTrips "grounded artifact set" grounded
+    ]
+
+sampleAgentVersionRef :: AgentVersionRef
+sampleAgentVersionRef =
+  AgentVersionRef
+    { logicalAgentId = LogicalAgentId "architecture-reviewer",
+      agentVersion = AgentVersion "2026-08-05.1",
+      declarationDigest = DeclarationDigest "sha256:11111111111111111111111111111111"
+    }
+
+fullArtifactSet :: AgentArtifactSet
+fullArtifactSet =
+  AgentArtifactSet
+    { declarationDigest = DeclarationDigest "sha256:decl",
+      behaviorDigest = Just (BehaviorDigest "sha256:behavior"),
+      skillsDigest = Just (SkillsDigest "sha256:skills"),
+      toolCatalogDigest = Just (ToolCatalogDigest "sha256:tools"),
+      groundingDigest = Just (GroundingDigest "sha256:ground"),
+      runtimeDigest = Just (RuntimeDigest "sha256:runtime"),
+      policyDigest = Just (PolicyDigest "sha256:policy")
+    }
+
+pinnedAgentVersionRefBytes :: ByteString
+pinnedAgentVersionRefBytes =
+  "{\"agentVersion\":\"2026-08-05.1\",\"declarationDigest\":\"sha256:11111111111111111111111111111111\",\"logicalAgentId\":\"architecture-reviewer\"}"
+
+pinnedDeclarationOnlyBytes :: ByteString
+pinnedDeclarationOnlyBytes =
+  "{\"declarationDigest\":\"sha256:decl\"}"
 
 -- ---------------------------------------------------------------------------
 -- Helpers

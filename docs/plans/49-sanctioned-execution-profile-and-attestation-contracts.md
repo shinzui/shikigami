@@ -62,10 +62,13 @@ under Integration Points.
 - [x] M1: round-trip and rejection tests for the profile; a profile whose allowed tuples are
       empty is rejected by construction — `allowedCalls` is a `NonEmpty`, and the compile-error
       example is kept as a haddock comment on `minimalProfile` in the spec. (2026-08-19)
-- [ ] M2: `Shikigami.Attestation.Agent` — `AgentVersionRef` and `AgentArtifactSet`, shaped so
-      lineage can be added additively.
-- [ ] M2: byte-stability test — a record carrying no optional values encodes identically to the
+- [x] M2: `Shikigami.Attestation.Agent` — `AgentVersionRef` and `AgentArtifactSet`, shaped so
+      lineage can be added additively. (2026-08-19)
+- [x] M2: byte-stability test — a record carrying no optional values encodes identically to the
       pinned fixture, proving a later plan can add lineage fields without rewriting history.
+      Two tests: `AgentVersionRef` bytes are pinned as a literal, and a declaration-only
+      `AgentArtifactSet` is shown encoding to a one-key object with six optional digests absent
+      rather than null. (2026-08-19)
 - [ ] M3: `Shikigami.Attestation.Reviewed` — `ReviewedArtifact` over the revision-pinned
       repository vocabulary, plus `NonConformingReason`. **`EvidenceStrength` is no longer
       defined here** — `baikai 0.5.0.0`'s `Baikai.Evidence` publishes it. Re-export baikai's if a
@@ -147,6 +150,20 @@ tiers are declared in Milestone 3 as `AttestationStrength` in a small
 authorised creating to avoid an import cycle. The haddock caution about ordering rides on
 `AttestationStrength`, where it belongs: that ordering is the one a verifier must never use to
 promote a weaker claim.
+
+**Making the byte-stability promise checkable needed a real optional field (2026-08-19).** Every
+field the plan specifies for `AgentVersionRef` is required, so `omitNothingFields` on that record
+is currently a no-op: the pinned-bytes test passes whether or not the option is set, and would keep
+passing if someone removed it — right up until the governed-evolution plan added a lineage field
+and silently changed every historical encoding. The pinned literal alone therefore proves less than
+Milestone 2 claims for it.
+
+`AgentArtifactSet` closes the gap without inventing speculative fields. Its non-declaration digests
+are genuinely optional facts rather than placeholders — an agent with no grounding bundle has no
+grounding digest, and one whose behavior is a declared prompt has no behavior digest — so six of
+its seven fields are `Maybe`, and `declarationOnlyArtifacts` encodes to a literal one-key object.
+That is the mechanism working where it can be observed today. The spec pins both: the
+`AgentVersionRef` literal for the historical record, and the sparse artifact set for the mechanism.
 
 **Baikai also publishes `ThinkingLevel`, and here reuse *is* right (discovered 2026-08-19).**
 `Baikai.ThinkingLevel.ThinkingLevel` is `ThinkingMinimal | ThinkingLow | ThinkingMedium |
