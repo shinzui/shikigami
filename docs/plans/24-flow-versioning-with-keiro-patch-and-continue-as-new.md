@@ -69,8 +69,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Write `docs/workflow-versioning.md` (discipline rules, keiro semantics summary,
-      step-name inventory) and add a pointer to it in `AGENTS.md`.
+- [x] M1 (2026-08-19): Wrote `docs/workflow-versioning.md` — keiro journal semantics, the nine
+      rules, the one-construction-site rule, how a patch id is declared and gated, the
+      `emitSignal` worked example, the full step-name inventory with file:line citations, and
+      the undeclarable-label families. Added the pointer section to `AGENTS.md`.
 - [ ] M2: Add `shikigami-core/src/Shikigami/Workflow/Versioning.hs` with
       `shikigamiActivePatches`, `shikigamiWorkflowRunOptions`, `shikigamiWorkflowResumeOptions`.
 - [ ] M2: Rewire `runAgentRunWorkflow`, `runConversationWorkflow`, and
@@ -89,12 +91,90 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery (2026-08-19): **A keiro-dsl patch id may not contain a dot, so this plan's chosen
+  id `shikigami.emit-signal-labels-v1` is unparseable.** The grammar is `patchIdWord`
+  (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs:290-294`): an ASCII alphanumeric followed by
+  `identChar | '-' | ':'`, where `identChar` is `asciiAlphaNum <|> char '_'`
+  (`:149-150`). The colon is admitted only so the validator can reject it with a specific
+  diagnostic — `WorkflowPatchIdInvalid`, "the runtime reserves that separator for the patch
+  journal-key prefix" (`keiro-dsl/src/Keiro/Dsl/Validate.hs:2224-2228`). A dot is not admitted
+  at all. Probed against a scratch copy of `domain/`:
+
+  ```text
+  domain-probe/shikigami-agent-run.keiro:53:20:
+     |
+  53 |     patch shikigami.emit-signal-labels-v1 {
+     |                    ^
+  unexpected '.'
+  expecting '-', ':', '_', or '{'
+  ```
+
+  The hyphenated `shikigami-emit-signal-labels-v1` parses, checks, and scaffolds. See the
+  Decision Log entry of the same date.
+
+- Discovery (2026-08-19): **An empty `patch <id> { }` block is valid, and the generated layer
+  already exposes exactly the patch plumbing this plan was going to hand-write.** The block's
+  items are parsed with `many` (`keiro-dsl/src/Keiro/Dsl/Parser/Workflow.hs:64-68`) and
+  `validateWorkflow` checks only for duplicate ids, colons in ids, and `continueAsNew`
+  position (`keiro-dsl/src/Keiro/Dsl/Validate.hs:2203`), so an empty block passes
+  `keiro-dsl check` with `--deny-warnings --fail-on-opaque`. That matters because every label
+  this patch guards is undeclarable (`emit-signal:<label>` carries a colon), so an empty block
+  is the only honest way to declare the id.
+
+  Scaffolding the probe produced, in
+  `Shikigami/AgentRun/Generated/WorkflowRuntime.hs`:
+
+  ```haskell
+  declaredPatches :: Set PatchId
+  declaredPatches = Set.fromList [PatchId "shikigami-emit-signal-labels-v1"]
+
+  declaredPatchStepNames :: [Text]
+  declaredPatchStepNames = map patchStepName (Set.toList declaredPatches)
+
+  withDeclaredPatches :: WorkflowRunOptions -> WorkflowRunOptions
+  withDeclaredPatches opts = opts{activePatches = declaredPatches}
+  ```
+
+  and set `workflowFactPatchIds = ["shikigami-emit-signal-labels-v1"]` in the generated facts,
+  which is what the conformance target asserts against the hand-owned `Expectations`. The
+  generated `declaredPatches` is therefore a checked source of truth that did not exist when
+  this plan was written; see the Decision Log.
 
 
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19, implementation): **The patch id is
+  `shikigami-emit-signal-labels-v1`, not `shikigami.emit-signal-labels-v1`.**
+  Rationale: keiro-dsl cannot parse a dot in a patch id (see Surprises), and this plan's own
+  reconciliation section requires the id to be declared in the owning member and gated by
+  `just keiro-diff`. Keeping the dot would mean either abandoning the declaration — which
+  contradicts `docs/adr/0001-declare-only-what-the-runtime-executes.md` in reverse, leaving a
+  durable identity outside the gate that could perfectly well be inside it — or carrying a
+  Haskell literal that the specification can never see. The id has never been persisted
+  anywhere (no instance has ever journaled a patch decision), so choosing the legal spelling
+  now costs nothing; choosing it after the first `patch:<id>` row exists would cost a
+  migration.
+
+- Decision (2026-08-19, implementation): **`shikigamiActivePatches` is the union of the
+  generated per-workflow `declaredPatches` sets, not a hand-written literal.**
+  Rationale: plan 39 shipped after this plan was written, and its scaffold already emits
+  `declaredPatches :: Set PatchId` into each workflow's generated `WorkflowRuntime` from the
+  checked specification (see Surprises). A hand-written `Set.fromList [PatchId "..."]` beside
+  it would be a second list that can drift from the gated one, which is the exact failure mode
+  this plan exists to prevent — and M4 of this plan already states the principle for flow
+  names ("the generated list is the validation source; do not maintain a second literal
+  list"). Sourcing the set from the generated modules means adding a patch id *requires*
+  editing `domain/`, regenerating, and passing `just keiro-gate`, which is the discipline
+  itself rather than a description of it.
+
+  The union is deliberate. keiro's resume worker carries one `WorkflowRunOptions` for every
+  workflow it drives (`runOptions`, `keiro/src/Keiro/Workflow/Resume.hs:186`), so per-workflow
+  precision is not reachable through the resume path and `withDeclaredPatches` cannot be used
+  at that boundary. A patch id declared on `AgentRun` but active while a `DanwaConversation`
+  instance runs is inert — that workflow never calls `patch` with it — and costs only an
+  extra entry in that instance's `__workflow_patches__` record.
 
 - Decision (2026-08-19): **Refresh every file:line citation in this plan before implementation,
   and keep them mechanically checkable.**
