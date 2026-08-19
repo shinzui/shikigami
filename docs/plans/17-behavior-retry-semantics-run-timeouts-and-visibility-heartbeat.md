@@ -50,8 +50,11 @@ workflow failure budget instead of becoming a permanent step result.
       `shibuya-pgmq-adapter` 0.14.0.0, and the `pgmq-*` 0.5.0.0 family.
 - [x] (2026-08-19) Confirmed plans 36 and 37 are implemented: worker ownership is now in
       `shikigami-workers`, and service configuration is the single Settei `AppConfig`.
-- [ ] Milestone 0: add `keiro-pgmq ==0.13.0.0` to the worker dependency cohort and document
-      its released tag without changing the producer's existing raw JSON wire shape.
+- [x] (2026-08-19) Milestone 0: added `keiro-pgmq ==0.13.0.0` to the worker
+      dependency cohort and documented its released tag without changing the producer's
+      existing raw JSON wire shape. `nix develop --command cabal build
+      shikigami-workers --dry-run` resolved the Hackage release and selected
+      `keiro-pgmq-0.13.0.0`.
 - [ ] Milestone 1: add retryability classification, attempt-scoped timeouts, and the
       versioned `run-behavior-v2` path for agent runs and conversations.
 - [ ] Milestone 1: declare `shikigami-behavior-retry-v1` in both workflow specifications,

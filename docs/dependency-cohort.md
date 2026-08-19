@@ -64,6 +64,7 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 | `keiro-core` | 0.4.0.1 | **0.13.0.0** | `keiro-core-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-dsl` | — | **0.13.0.0** | `keiro-dsl-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-migrations` | 0.4.0.1 | **0.13.0.0** | `keiro-migrations-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `keiro-pgmq` | — | **0.13.0.0** | `keiro-pgmq-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `kioku-api` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
 | `kioku-core` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
 | `kioku-migrations` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
@@ -81,9 +82,10 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 | `settei` (+ `-env`, `-yaml`, `-optparse-applicative`) | 0.2.0.0 | 0.2.0.0 | `v0.2.0.0` | `1bf62b0af110b4f42fe2528e9d459e0ccf12d626` |
 | `hs-opentelemetry-*` | 1.0.0.0 | 1.0.0.0 | Hackage (third party) | — |
 
-Two constraints left the block rather than moving: `keiro-pgmq` and `pgmq-migration`
-resolve into nothing now that kioku composes its migrations through `pg-migrate`.
-Neither appears in `cabal build all --dry-run`, so pinning them pinned nothing.
+`pgmq-migration` left the block rather than moving because it resolves into
+nothing now that kioku composes its migrations through `pg-migrate`.
+`keiro-pgmq`, by contrast, is linked by `shikigami-workers` for the typed
+run-job consumer and is pinned with the rest of the Keiro family.
 
 `keiro-dsl` is new to this cohort and is the one row that is not a library this
 service links against. It is the build-time specification toolchain that checks
