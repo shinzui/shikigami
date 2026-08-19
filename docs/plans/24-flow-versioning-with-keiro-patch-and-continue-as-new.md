@@ -74,14 +74,14 @@ This section must always reflect the actual current state of the work.
 - [ ] M2: Add `shikigami-core/src/Shikigami/Workflow/Versioning.hs` with
       `shikigamiActivePatches`, `shikigamiWorkflowRunOptions`, `shikigamiWorkflowResumeOptions`.
 - [ ] M2: Rewire `runAgentRunWorkflow`, `runConversationWorkflow`, and
-      `Shikigami.Worker.runResumeWorker` through the shared options.
+      `Shikigami.Agent.Workflow.Resume.runResumeWorker` through the shared options.
 - [ ] M3: Change the `Sink` capability so `emitSignal` takes a stable label; add the
       `shikigami.emit-signal-labels-v1` patch guard in `runSink`; update
       `atRiskCustomerFlow` call sites and existing tests.
 - [ ] M4: Expose `registeredFlowNames`; make `shikigami validate` and worker boot fail on
       unknown `Flow{name}`.
 - [ ] M5: Add `shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs` deploy-simulation
-      tests; wire into `test/Main.hs`; full suite green.
+      tests; wire into `shikigami-core/test/Main.hs`; full suite green.
 
 
 ## Surprises & Discoveries
@@ -96,6 +96,41 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
+- Decision (2026-08-19): **Refresh every file:line citation in this plan before implementation,
+  and keep them mechanically checkable.**
+  Rationale: this plan was authored 2026-07-08 against keiro 0.4.0.1 and the pre-split package
+  layout. Two later changes invalidated its citations wholesale. Plan 36 split shikigami into six
+  packages, so `shikigami-cli/src/Shikigami/Cli/Commands/{Validate,RenderLifecycle}.hs` and
+  `shikigami-core/src/Shikigami/Worker.hs` name packages and modules that **no longer exist** —
+  the CLI commands are `shikigami-server/src/Shikigami/Server/Command/*.hs`, the resume loop is
+  `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs`, and the run-job worker is
+  `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`. Plan 53 moved keiro from 0.4.0.1 to
+  0.13.0.0, and **all fourteen** keiro line citations drifted — `patch` moved from `:289` to
+  `:368`, `WorkflowStepDecodeError` from `:347` to `:829`, the patch-API test from
+  `keiro/test/Main.hs:5257` to `:9241`. A novice following this plan would have opened the wrong
+  lines or missing files at nearly every step, which is exactly the failure the self-containment
+  rule exists to prevent. All 59 citations now resolve; three name files this plan creates.
+
+- Decision (2026-08-19): **Construct `WorkflowRunOptions` by record update, and make
+  `Shikigami.Workflow.Versioning` the single construction site.**
+  Rationale: `WorkflowRunOptions` gained `leaseHeartbeat` and `onJournalAppend` between 0.4 and
+  0.13 and keiro's own haddock says to extend it additively, so spelling out every field would
+  break on the next release for no benefit. More importantly,
+  `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md` M3 needs a
+  shibuya lease heartbeat threaded around workflow execution, and `leaseHeartbeat` is where it
+  goes. If this plan leaves the construction site implicit, plan 17 will introduce a second
+  options value and the two will disagree about `activePatches` — which is the precise failure
+  this plan exists to prevent.
+
+- Decision (2026-08-19): **M3's stable labels stay undeclarable, and this plan says so rather
+  than implying otherwise.**
+  Rationale: replacing `emit-signal:<ordinal>` with `emit-signal:<label>` fixes the
+  deploy-fragility this plan owns, but a keiro-dsl workflow label is a wire word
+  (`[A-Za-z0-9][A-Za-z0-9_-]*`) and the result still carries a colon. Claiming the checked
+  specification will gate these labels afterwards would be false. Changing the separator is a
+  second decision about a persisted step name; plan 16 owns that family per
+  `docs/architecture/shikigami-domain-inventory.md`.
+
 - Decision: `domain/shikigami.keiro-workspace` is the authoritative durable-topology inventory;
   this plan's discipline and active patches must agree with its checker/scaffold/harness.
   Rationale: stable names are persisted compatibility identifiers and need a machine-
@@ -106,7 +141,7 @@ Record every decision made while working on the plan.
   with keiro's `freshOrdinal`.
   Rationale: `freshOrdinal` is also a per-run counter and keiro's own documentation warns
   ordinal names are stable only if the order of calls never changes across deploys
-  (`keiro/src/Keiro/Workflow.hs:234-241`); labels are unconditionally stable and match the
+  (`keiro/src/Keiro/Workflow.hs:306-311`); labels are unconditionally stable and match the
   named-form guidance keiro gives for sleeps and awakeables. The `patch` guard keeps
   in-flight flows on the old ordinal scheme so their journaled `emit-signal:0` entries and
   deterministic outbox ids stay valid.
@@ -118,11 +153,11 @@ Record every decision made while working on the plan.
   discipline document instead requires a new `WorkflowName` for wholesale rewrites.
   Date: 2026-07-08
 - Decision: Keep the flow registry a hardcoded list; validation only.
-  Rationale: one flow exists (`shikigami-core/src/Shikigami/Flow.hs:57-64`); the failure
+  Rationale: one flow exists (`shikigami-core/src/Shikigami/Flow.hs:57-65`); the failure
   mode worth closing is unknown-flow-at-run-time, which load-time validation closes
   cheaply. See the MasterPlan Decision Log (2026-07-08).
   Date: 2026-07-08
-- Decision: Leave the `ContinuedAsNew` outcome handling in `Shikigami.Worker` (`AckOk`) and
+- Decision: Leave the `ContinuedAsNew` outcome handling in `Shikigami.Agent.RunJob.Worker` (`AckOk`) and
   `Shikigami.Agent.Conversation` (error) as-is in this plan; plan 26 changes conversation
   behavior.
   Rationale: nothing in shikigami calls `continueAsNew` until plan 26, so those branches
@@ -153,93 +188,99 @@ through keiro's `runWorkflow`. Each `step (StepName "x") action` either runs `ac
 appends a `StepRecorded "x" <json result>` event to a per-instance journal stream in
 Postgres, or — if the journal already contains an entry named `"x"` — returns the recorded
 result without running `action`. Verified semantics from `keiro/src/Keiro/Workflow.hs`
-(module header, lines 17-29, and the `Step` handler at lines 533-576):
+(module header, lines 1-29, and the `Step` handler at line 689):
 
 - Replay is keyed by step name, not by source position. Reordering code between deploys
   does not corrupt an in-flight workflow as long as the names are stable
-  (`keiro/src/Keiro/Workflow/Types.hs:121-126`).
+  (`keiro/src/Keiro/Workflow/Types.hs:129-132`).
 - Renaming a step intentionally orphans the old journal entry: the renamed step has no
   journal history under its new name, so its action runs fresh on the next replay. This is
   keiro's recommended treatment for a single-step semantic change
-  (`keiro/src/Keiro/Workflow.hs:280-288`).
+  (`keiro/src/Keiro/Workflow.hs:24-26`).
 - Step side effects are at-least-once at the step boundary: if the process crashes after
   the action ran but before the journal append commits, a resume runs the action again.
 - If a journaled result no longer decodes into the type the replaying step expects, the
-  runtime throws `WorkflowStepDecodeError` (`keiro/src/Keiro/Workflow.hs:347-353`) — a
+  runtime throws `WorkflowStepDecodeError` (`keiro/src/Keiro/Workflow.hs:829`) — a
   changed result type is a deploy-breaking change unless the JSON stays compatible.
 
 keiro provides two evolution primitives shikigami does not use today:
 
-`patch :: PatchId -> Eff es Bool` (`keiro/src/Keiro/Workflow.hs:289-290`; the effect
-constructor `Patch :: PatchId -> Workflow m Bool` is at line 191). A patch is a named,
+`patch :: PatchId -> Eff es Bool` (`keiro/src/Keiro/Workflow.hs:368`; the effect
+constructor `Patch :: PatchId -> Workflow m Bool` is at line 266). A patch is a named,
 journaled branch decision for a cross-cutting code change. The deployed code declares its
-active patch ids in `WorkflowRunOptions.activePatches` (`keiro/src/Keiro/Workflow.hs:318-323`).
+active patch ids in `WorkflowRunOptions.activePatches` (`keiro/src/Keiro/Workflow.hs:406`).
 When a workflow generation starts fresh, the runtime records the active set once under the
-reserved step `__workflow_patches__` (`recordPatchSetIfFresh`, lines 516-527; the step-name
-constant is `patchSetStepName`, `keiro/src/Keiro/Workflow/Types.hs:399-403`). Each
+reserved step `__workflow_patches__` (`recordPatchSetIfFresh`, defined at line 657 and called at line 584; the step-name
+constant is `patchSetStepName`, `keiro/src/Keiro/Workflow/Types.hs:389`). Each
 `patch pid` call journals its `Bool` decision under `patch:<pid>` on first encounter and
-replays it verbatim forever after (handler at lines 604-634). The net effect: an instance
+replays it verbatim forever after (handler at line 781). The net effect: an instance
 that was already in flight when the patch shipped has no recorded patch set, so its
 decision is `False` (old branch); a fresh instance records the set containing the id, so
 its decision is `True` (new branch). Crucially, `runWorkflow` (the plain entry point,
-lines 408-414) uses `defaultWorkflowRunOptions`, whose `activePatches` is empty — so
+line 516) uses `defaultWorkflowRunOptions`, whose `activePatches` is empty — so
 adopting `patch` REQUIRES switching call sites to `runWorkflowWith` with explicit options,
 and threading the same options through the resume worker
-(`WorkflowResumeOptions.runOptions`, `keiro/src/Keiro/Workflow/Resume.hs:160-174`;
-`defaultWorkflowResumeOptions` at lines 186-194). keiro's own test
-("Keiro.Workflow patch API", `keiro/test/Main.hs:5257` onward) is the reference idiom:
+(`WorkflowResumeOptions.runOptions`, `keiro/src/Keiro/Workflow/Resume.hs:182-186`;
+`defaultWorkflowResumeOptions` at line 229). keiro's own test
+("Keiro.Workflow patch API", `keiro/test/Main.hs:9241` onward) is the reference idiom:
 run an instance to suspension under pre-patch code, re-run the same id under post-patch
 code with `activePatches` set, observe the old branch; a fresh id observes the new branch;
 the decision is journaled exactly once under `patch:<id>`.
 
-`continueAsNew :: (ToJSON s) => s -> Eff es a` (`keiro/src/Keiro/Workflow.hs:256-257`)
+`continueAsNew :: (ToJSON s) => s -> Eff es a` (`keiro/src/Keiro/Workflow.hs:337`)
 rotates an unbounded workflow onto a fresh journal "generation". The runtime appends the
 carried seed as a `StepRecorded __workflow_seed__` on generation g+1 first (so a crash
 between the two appends still converges forward), then appends a terminal
-`WorkflowContinuedAsNew` marker on generation g (`rotateGeneration`, lines 801-826). The
-run's outcome is `ContinuedAsNew` (`keiro/src/Keiro/Workflow/Types.hs:300-313`), which
+`WorkflowContinuedAsNew` marker on generation g (`rotateGeneration`, lines 923-932). The
+run's outcome is `ContinuedAsNew` (`keiro/src/Keiro/Workflow/Types.hs:299-310`), which
 means "unfinished, continue on the new generation" — the resume worker rediscovers and
 drives it (proven by keiro's test "rediscovers and resumes a rotated workflow on its
 current generation"). The next run reads the seed back with
 `restoreSeed :: s -> Eff es s` called at the top of the body
-(`keiro/src/Keiro/Workflow.hs:267-268`). Generation 0 keeps the legacy stream name; later
+(`keiro/src/Keiro/Workflow.hs:347`). Generation 0 keeps the legacy stream name; later
 generations get a `#<g>` suffix (`workflowGenerationStreamName`,
-`keiro/src/Keiro/Workflow/Types.hs:162-167`). This plan adopts `continueAsNew` only in its
+`keiro/src/Keiro/Workflow/Types.hs:166`). This plan adopts `continueAsNew` only in its
 discipline document and test; plan 26 is the production consumer (the conversation loop).
 
 What shikigami does today, verified in code:
 
 - `FlowDef {name, lifecycle, run}` has no version field
-  (`shikigami-core/src/Shikigami/Flow.hs:41-45`). The flow registry is a hardcoded
-  one-element list (`Flow.hs:57-64`) and `lookupFlow` is a linear name match (`Flow.hs:66-68`).
-- The agent-run workflow name is the constant `WorkflowName "shikigami.agent-run"`
-  (`shikigami-core/src/Shikigami/Agent/Workflow/Name.hs:9`); the conversation workflow name
-  is `"shikigami.danwa-conversation"` (`shikigami-core/src/Shikigami/Agent/Conversation.hs:90-91`).
+  (`shikigami-core/src/Shikigami/Flow.hs:41-46`). The flow registry is a hardcoded
+  one-element list (`shikigami-core/src/Shikigami/Flow.hs:57-65`) and `lookupFlow` is a linear name match (`shikigami-core/src/Shikigami/Flow.hs:66-68`).
+- Both workflow names now come from the checked specification rather than from a Haskell
+  literal. `shikigami-core/src/Shikigami/Agent/Workflow/Name.hs:19` re-exports
+  `Shikigami.AgentRun.Generated.WorkflowRuntime.workflowName`, and
+  `shikigami-core/src/Shikigami/Agent/Conversation.hs:100-101` reads
+  `Shikigami.DanwaConversation.Generated.WorkflowRuntime.workflowName`. The literals
+  `"shikigami.agent-run"` and `"shikigami.danwa-conversation"` live in
+  `domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro`, and renaming
+  either is gated by `just keiro-diff`, which classifies it `BREAKING` on the
+  persisted-identity surface with the code `WorkflowStableNameChanged`.
 - Every workflow run uses default options: `runAgentRunWorkflow` calls plain `runWorkflow`
-  (`shikigami-core/src/Shikigami/Agent/Workflow.hs:140-153`), `runConversationWorkflow`
-  calls plain `runWorkflow` (`Agent/Conversation.hs:186-200`), and the worker's resume loop
+  (`shikigami-core/src/Shikigami/Agent/Workflow.hs:193-207`), `runConversationWorkflow`
+  calls plain `runWorkflow` (`shikigami-core/src/Shikigami/Agent/Conversation.hs:200-214`), and the worker's resume loop
   calls `runWorkflowResumeWorker` with defaults
-  (`shikigami-core/src/Shikigami/Worker.hs:86-101`). Nothing sets `activePatches`; nothing
+  (`shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs:35-41`). Nothing sets `activePatches`; nothing
   calls `patch` or `continueAsNew`. The only mentions of rotation are unreachable
-  pattern-matches on the `ContinuedAsNew` outcome (`Worker.hs:192` maps it to `AckOk`;
-  `Conversation.hs:105` maps it to an error).
+  pattern-matches on the `ContinuedAsNew` outcome (`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:130` maps it to `AckOk`;
+  `shikigami-core/src/Shikigami/Agent/Conversation.hs:115` maps it to an error).
 - The `emitSignal` capability is deploy-fragile. `runSink`
-  (`shikigami-core/src/Shikigami/Flow/Capability.hs:116-127`) allocates a fresh `IORef`
+  (`shikigami-core/src/Shikigami/Flow/Capability.hs:129-141`) allocates a fresh `IORef`
   counter per interpreted flow run and names each emission's journal step
-  `emit-signal:<n>` from it (line 123). The counter restarts at 0 on every run, including
+  `emit-signal:<n>` from it (line 136). The counter restarts at 0 on every run, including
   replays — which is fine while the code is frozen (the i-th emission always gets ordinal
   i) but wrong across a deploy that inserts, removes, or reorders an emission: a suspended
   flow resumed under the new code assigns shifted ordinals, so a NEW emission can land on
   an ALREADY-JOURNALED step name and silently replay the wrong recorded `SinkResult`, while
   the old journal entry for the shifted emission is orphaned and its outbox enqueue re-runs
   under a new deterministic id (the outbox id is derived from workflow id + step name,
-  `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs:97-98,154-159`) — a duplicate signal.
+  `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs:125-126,183-184`) — a duplicate signal.
 - The flow behavior path fails on unknown flows only at run time:
   `runFlowBehavior` returns `Left ("unknown flow " <> flowName)` when `lookupFlow` misses
-  (`shikigami-core/src/Shikigami/Agent/Workflow.hs:299-301`). The `validate` CLI command
-  (`shikigami-cli/src/Shikigami/Cli/Commands/Validate.hs`) parses the manifest and checks
+  (`shikigami-core/src/Shikigami/Agent/Workflow.hs:369-370`). The `validate` CLI command
+  (`shikigami-server/src/Shikigami/Server/Command/Validate.hs`) parses the manifest and checks
   skill directories but never consults the flow registry; only `render-lifecycle`
-  (`shikigami-cli/src/Shikigami/Cli/Commands/RenderLifecycle.hs:40-45`) does.
+  (`shikigami-server/src/Shikigami/Server/Command/RenderLifecycle.hs:40`) does.
 - The test harness: real-Postgres tests use
   `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`),
   which provisions a migrated throwaway database and hands the test a connection string.
@@ -279,12 +320,12 @@ ids are never reused and are removed from the active set only after the correspo
 listing every step name shikigami journals today, gathered from the code — agent-run
 lifecycle (`ingest-job`, `lookup-agent`, `open-session`, `recall`, `run-behavior`,
 `dispatch-sinks`, `record`, `complete`, `fail-session`, `approval:<kind>:<ordinal>` from
-`Agent/Workflow.hs:245-246`), conversation (`ingest-start`, `lookup-agent`,
+`shikigami-core/src/Shikigami/Agent/Workflow.hs:299-300`), conversation (`ingest-start`, `lookup-agent`,
 `resolve-session`, `record-user:<messageId>`, `run-behavior:<messageId>`,
 `record-assistant-and-reply:<messageId>`, `turn-result:<messageId>`, `next-message:<n>`
-awakeables, from `Agent/Conversation.hs:122-184,238-252`), flow capabilities
+awakeables, from `shikigami-core/src/Shikigami/Agent/Conversation.hs:127-193,248-262`), flow capabilities
 (`classify`, `await-ack`, `emit-signal:<n>` pre-patch / `emit-signal:<label>` post-patch,
-plus `<step>:notify` from `Agent/Approval.hs:151-152`), and keiro's reserved names
+plus `<step>:notify` from `shikigami-core/src/Shikigami/Agent/Approval.hs:156-157`), and keiro's reserved names
 (`__workflow_completed__`, `__workflow_seed__`, `__workflow_patches__`, `patch:<id>`,
 `sleep:`/`awk:`/`awkid:`/`child:` prefixes); (d) a worked example — the M3 emitSignal
 change — showing the before/after code and why the patch guard is needed. Add a short
@@ -305,22 +346,33 @@ shikigamiWorkflowResumeOptions :: WorkflowResumeOptions
 "shikigami.emit-signal-labels-v1"` (added in M3; if M2 is committed first, start empty and
 let M3 add it). `shikigamiWorkflowRunOptions` is `defaultWorkflowRunOptions` with
 `activePatches = shikigamiActivePatches` (a record update; the type derives `Generic`, and
-plain record-update syntax works). `shikigamiWorkflowResumeOptions` is
+plain record-update syntax works).
+
+Build it as a record update on `defaultWorkflowRunOptions` rather than by writing every
+field, because `WorkflowRunOptions` has grown since this plan was written. At keiro 0.13 it
+also carries `leaseHeartbeat :: Maybe LeaseHeartbeat` and `onJournalAppend :: Maybe (IO ())`
+(`keiro/src/Keiro/Workflow.hs:389-418`), neither of which this plan sets. That matters
+beyond compilation: this module becomes the **one** place shikigami constructs
+`WorkflowRunOptions`, so
+`docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md` M3, which
+needs a shibuya lease heartbeat threaded around workflow execution, will set
+`leaseHeartbeat` here rather than introducing a second options value. Leave a haddock note
+saying so. `shikigamiWorkflowResumeOptions` is
 `defaultWorkflowResumeOptions` with `runOptions = shikigamiWorkflowRunOptions`. Then rewire
-the three call sites: in `shikigami-core/src/Shikigami/Agent/Workflow.hs:140-153` replace
+the three call sites: in `shikigami-core/src/Shikigami/Agent/Workflow.hs:193-207` replace
 `runWorkflow agentRunWorkflowName ...` with `runWorkflowWith shikigamiWorkflowRunOptions
-agentRunWorkflowName ...`; in `shikigami-core/src/Shikigami/Agent/Conversation.hs:186-200`
-likewise for the conversation run; in `shikigami-core/src/Shikigami/Worker.hs:98` replace
+agentRunWorkflowName ...`; in `shikigami-core/src/Shikigami/Agent/Conversation.hs:200-214`
+likewise for the conversation run; in `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs:38` replace
 `runWorkflowResumeWorker registry` with `runWorkflowResumeWorkerWith
 shikigamiWorkflowResumeOptions registry` (import from `Keiro.Workflow.Resume`). Register
 the new module in `shikigami-core/shikigami-core.cabal` under `exposed-modules`. Acceptance:
 `cabal build all` succeeds and the whole existing test suite passes unchanged (an empty or
 irrelevant patch set is behaviorally identical to defaults for workflows that never call
 `patch`; note keiro only journals `__workflow_patches__` on fresh generations when the set
-is non-empty, `keiro/src/Keiro/Workflow.hs:516-527` — after M3 lands, fresh workflow
+is non-empty, `keiro/src/Keiro/Workflow.hs:657` — after M3 lands, fresh workflow
 journals will contain that extra reserved step, which is additive and invisible to
 `loadStepIndex` consumers that look up specific names, but the AgentWorkflowSpec assertion
-`loadLifecycleStepKeys` (`test/Shikigami/AgentWorkflowSpec.hs:560-576`) compares an exact
+`loadLifecycleStepKeys` (`shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:664-667`) compares an exact
 step-name set and must be updated to delete `__workflow_patches__` alongside
 `completedStepName`).
 
@@ -338,10 +390,10 @@ The first argument is the caller-supplied stable label: a short lowercase token,
 emission site within one flow, never derived from runtime data that varies across replays
 (the message/subject ids that ARE replay-stable, such as a journaled verdict's ticket id,
 are permissible but discouraged; prefer static tokens). In `runSink` (currently lines
-116-127) decide the scheme once per interpreted run with the patch primitive:
+129-141) decide the scheme once per interpreted run with the patch primitive:
 
 ```haskell
-runSink SinkEnv {..} action = do
+runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants} action = do
   useLabels <- patch (PatchId "shikigami.emit-signal-labels-v1")
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
@@ -352,7 +404,7 @@ runSink SinkEnv {..} action = do
                 if useLabels
                   then StepName ("emit-signal:" <> label)
                   else StepName ("emit-signal:" <> Text.pack (show ordinal))
-          enqueueSinkIntentStep stepName agent runId ordinal occurredAt danwaTarget sink output
+          enqueueSinkIntentStep grants stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
     )
     action
 ```
@@ -365,10 +417,10 @@ outbox UUID change on the new branch. In-flight flow workflows (suspended, e.g.,
 their generation's journal predates the patch set, so their journaled `emit-signal:0`
 replays correctly and the escalation emission still lands on `emit-signal:1`. Fresh flows
 record the patch set and use labels. Update the call sites in
-`shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs`: line 48 becomes
-`emitSignal "alert" (alertFor verdict activity) (toJSON verdict)` and line 58 becomes
+`shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs`: line 49 becomes
+`emitSignal "alert" (alertFor verdict activity) (toJSON verdict)` and line 59 becomes
 `emitSignal "escalate" (escalationFor verdict activity) (toJSON verdict)`. Update
-`shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`: `sinkFlow` (line 194) passes a label
+`shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`: `sinkFlow` (line 196) passes a label
 (use `"alert"`), and the expected delivered detail at line 87 becomes
 `"outbox:flow-sink-spike:emit-signal:alert"` (fresh test workflows take the new branch
 because the harness now runs with `shikigamiWorkflowRunOptions` — also switch the spec's
@@ -427,9 +479,9 @@ plus `__workflow_patches__`.
 
 Test B, "emitSignal ordinals are preserved for in-flight flows and labeled for fresh ones":
 using the FlowLifecycleSpec harness style, run `atRiskCustomerFlow` with the high-risk
-payload (`FlowLifecycleSpec.hs:349-358`) to suspension under OLD options (empty patch set)
+payload (`shikigami-core/test/Shikigami/FlowLifecycleSpec.hs:362`) to suspension under OLD options (empty patch set)
 — journal now holds `emit-signal:0`. Resolve the acknowledgement-timeout timer path (fire
-the approval timer as `fireDueApprovalTimer` does at `FlowLifecycleSpec.hs:295-299`) and
+the approval timer as `fireDueApprovalTimer` does at `shikigami-core/test/Shikigami/FlowLifecycleSpec.hs:308-312`) and
 resume under NEW options (patch set containing `shikigami.emit-signal-labels-v1`): the
 escalation emission must journal as `emit-signal:1` (old scheme — assert via
 `loadStepIndex`), and the outbox must contain exactly two rows (no duplicate alert). Then
@@ -568,13 +620,14 @@ From keiro, the following existing interfaces are consumed (verified signatures)
 patch          :: (Workflow :> es) => PatchId -> Eff es Bool
 continueAsNew  :: (Workflow :> es, ToJSON s) => s -> Eff es a
 restoreSeed    :: (Workflow :> es, ToJSON s, FromJSON s) => s -> Eff es s
-runWorkflowWith :: (IOE :> es, Store :> es)
+runWorkflowWith :: (IOE :> es, Store :> es, Error StoreError :> es)
                 => WorkflowRunOptions -> WorkflowName -> WorkflowId
                 -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 defaultWorkflowRunOptions :: WorkflowRunOptions   -- activePatches = Set.empty
 
 -- keiro/src/Keiro/Workflow/Resume.hs
-runWorkflowResumeWorkerWith :: WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ()  -- (loops forever)
+runWorkflowResumeWorkerWith :: (IOE :> es, Store :> es, Error StoreError :> es)
+                            => WorkflowResumeOptions -> WorkflowRegistry es -> Eff es ()  -- (loops forever)
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 
 -- keiro/src/Keiro/Workflow/Types.hs
@@ -605,10 +658,10 @@ registeredFlowNames :: [Text]
 ```
 
 Downstream plans that consume these: plan 25 (label convention, patch plumbing, and the
-same `Flow/Capability.hs` module), plan 26 (`continueAsNew`/`restoreSeed` usage under the
+same `shikigami-core/src/Shikigami/Flow/Capability.hs` module), plan 26 (`continueAsNew`/`restoreSeed` usage under the
 discipline; `shikigamiWorkflowRunOptions` at conversation call sites), plan 27 (the
 discipline document and step-name inventory as the review standard for code motion), and
-plans 15/17/23 in other MasterPlans (any change to `Agent/Workflow.hs` step structure must
+plans 15/17/23 in other MasterPlans (any change to `shikigami-core/src/Shikigami/Agent/Workflow.hs` step structure must
 follow `docs/workflow-versioning.md`). Plan 35 (MasterPlan 7) is a hard downstream
 consumer: delegation work begins only after this plan and updates the step inventory for
 any added durable steps.
@@ -707,8 +760,49 @@ Adding the first patch id changes that fact, so this plan must review and commit
 `Expectations` change deliberately — it is create-once hand-owned code and keiro-dsl will never
 rewrite it.
 
+**M3's stable labels do not become declarable, and the plan should not claim they will.**
+`emit-signal:<ordinal>` is listed in `docs/architecture/shikigami-domain-inventory.md` as one
+of six undeclarable label families. M3 replaces the ordinal with a caller-supplied token, which
+fixes the deploy-fragility this plan is about — but the resulting `emit-signal:alert` still
+carries a colon, and a keiro-dsl workflow label is parsed by the wire-word production
+`[A-Za-z0-9][A-Za-z0-9_-]*`. So after M3 the label is *stable* but still outside the
+specification, and `just keiro-diff` will not gate a later rename of it. Making it declarable
+means choosing a separator the grammar accepts (`emit-signal-alert`), which is a second,
+independent decision about a persisted step name and belongs to whichever plan is willing to
+own it — most naturally
+`docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md`, which the
+inventory already names as this family's owner. If this plan takes it, take it deliberately and
+declare the labels in `domain/shikigami-agent-run.keiro` in the same change.
+
 This plan also inherits the run-job queue decision. If it moves `shikigami_run_jobs` onto the
 declared `workqueue` surface, that is a codec change on both the producer
 (`Shikigami.Trigger.Enqueue`) and the consumer (`Shikigami.Agent.RunJob.Worker`), and it must
 retire the live assertion at `shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81` that the
 payload is bare — in its own commit, with its own Decision Log entry and its own fixture.
+
+Revision note (2026-08-19): Citation refresh and three corrections; no scope change, no
+milestone added or removed.
+
+Every `file:line` reference in this plan was resolved mechanically against the working tree and
+against `keiro-0.13.0.0`, and **21 of them were wrong**. Two causes, both external to this plan:
+plan 36's six-package split retired `shikigami-cli` and `shikigami-core/src/Shikigami/Worker.hs`
+entirely, and plan 53's move from keiro 0.4.0.1 to 0.13.0.0 shifted every keiro line number. The
+Decision Log entry of 2026-08-19 records the specifics. All 59 citations now resolve; the only
+ones that do not name an existing file are the three artifacts this plan creates.
+
+Three substantive corrections came out of the same pass. The two keiro signatures this plan
+quotes as "verified" were missing constraints — `runWorkflowWith` needs `Error StoreError :> es`
+and `runWorkflowResumeWorkerWith` had no constraint list at all — so the M2 rewiring would not
+have compiled as written. The `enqueueSinkIntentStep` call sketched in M3 was missing the
+`grants` and `resolvedRecipient` arguments the current signature takes. And the claim that the
+two workflow names are Haskell constants is no longer true: plan 39 moved both into the checked
+specification, so `Agent/Workflow/Name.hs` and `Agent/Conversation.hs` now read them from the
+generated `WorkflowRuntime`, and renaming either is gated by `just keiro-diff` as
+`BREAKING [WorkflowStableNameChanged]`.
+
+Two forward-looking notes were added rather than corrected. `WorkflowRunOptions` grew
+`leaseHeartbeat` and `onJournalAppend` at 0.13, and this plan's `Shikigami.Workflow.Versioning`
+becomes the single construction site — which is where plan 17 M3's lease heartbeat must go, so
+the two plans do not end up with disagreeing options values. And M3's stable `emit-signal:<label>`
+step names remain outside the keiro-dsl grammar because they still carry a colon; the plan now
+states that instead of leaving a reader to assume the specification will gate them.
