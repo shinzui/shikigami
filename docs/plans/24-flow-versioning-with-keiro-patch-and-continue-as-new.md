@@ -95,8 +95,18 @@ This section must always reflect the actual current state of the work.
       `AgentWorkflowSpec.loadLifecycleStepKeys` now also filters `patchSetStepName`.
       `cabal test shikigami-core-test` green at 176; `cabal test keiro-shikigami-conformance`
       green at 12.
-- [ ] M4: Expose `registeredFlowNames`; make `shikigami validate` and worker boot fail on
-      unknown `Flow{name}`.
+- [x] M4 (2026-08-19): Exposed `registeredFlowNames` and `flowDeclarationErrors` from
+      `shikigami-core/src/Shikigami/Flow.hs`, both projections of one unexported
+      `flowRegistrations` list so the registry and the name list cannot disagree. Wired the
+      check into `Shikigami.Server.Command.Validate` and into worker boot
+      (`refuseUndeployableAgents` in `shikigami-workers/src/Shikigami/Workers/Command/Worker.hs`).
+      Demonstrated: `validate` on a `Flow { name = "no-such-flow" }` manifest exits 1 with
+      `validate: unknown flow no-such-flow; registered flows: at-risk-customer`;
+      `agents/detectors/at-risk-customer-flow.dhall` and every other repo manifest still exit 0;
+      the worker exits 1 logging `worker.agents.undeployable` per offender, and boots normally
+      against `agents/detectors`. Two tests added to `FlowLifecycleSpec`.
+      NOTE: the flow names are **not** declared in `domain/shikigami.keiro-workspace`; see the
+      Decision Log for why that part of M4 as written is not achievable.
 - [ ] M5: Add `shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs` deploy-simulation
       tests; wire into `shikigami-core/test/Main.hs`; full suite green.
 
@@ -159,6 +169,31 @@ implementation. Provide concise evidence.
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19, implementation): **M4's flow names stay in Haskell; keiro-dsl has no
+  declaration form for them, and inventing one would violate ADR-0001.**
+  Rationale: M4 as written says to "add the flow names and their stable workflow relationships
+  to plan 39's checked `domain/shikigami.keiro-workspace` specification, regenerate, and export
+  the generated runtime-free name list". There is no node kind that could hold them. keiro-dsl's
+  top-level nodes are aggregates, processes, routers, workqueues, dispatches, read models,
+  projections, workflows, operations, contracts, intakes, emits, and publishers
+  (`keiro-dsl/src/Keiro/Dsl/Grammar.hs:1452-1470`); a shikigami "flow" is a Haskell function in
+  `flowRegistry` that runs *inside* the agent-run workflow, not a durable node of its own. The
+  nearest declarable thing — the flow path's `classify` and `await-ack` steps — is already
+  declared, and it is not a registry of names.
+
+  `docs/adr/0001-declare-only-what-the-runtime-executes.md` is decisive here and points the
+  same way: declare a contract only when the specification's generated artifact is the one the
+  runtime executes. A generated name list that no generated code consumed would be the
+  decorative declaration that ADR forbids, and it would make `just keiro-diff` gate a document
+  nothing reads.
+
+  So the *intent* of M4 — one source of truth, no second hand-maintained list — is honored
+  structurally instead. `Shikigami.Flow` gains an unexported `flowRegistrations`, and both
+  `flowRegistry` (which needs a `FlowRuntime`) and `registeredFlowNames` (which must not) are
+  projections of it. A flow cannot be runnable but unlisted, or listed but unrunnable, because
+  there is only one list. `FlowLifecycleSpec` pins the projection anyway, which is the
+  conformance test M4 asks for.
 
 - Decision (2026-08-19, implementation): **The patch id is
   `shikigami-emit-signal-labels-v1`, not `shikigami.emit-signal-labels-v1`.**

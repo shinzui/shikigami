@@ -22,7 +22,7 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..))
-import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, lookupFlow)
+import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
@@ -71,6 +71,30 @@ tests =
         case lookupFlow runtime "unknown-flow" of
           Nothing -> pure ()
           Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
+      -- registeredFlowNames is what `shikigami validate` and worker boot consult,
+      -- and they must never disagree with what the runtime can actually run. The
+      -- two are projections of one list in Shikigami.Flow, and this pins that.
+      testCase "registeredFlowNames names exactly the flows the registry builds" do
+        session <- genSessionId
+        let runtime = FlowRuntime {approval = Approval.defaultApprovalEnv session, acknowledgementDeadline = secondsToNominalDiffTime 1}
+        assertEqual
+          "registered names match the built registry"
+          [flowName | FlowDef {name = flowName} <- flowRegistry runtime]
+          registeredFlowNames
+        assertBool "at least one flow is registered" (not (null registeredFlowNames)),
+      testCase "a Flow behavior naming an unregistered flow is a declaration error" do
+        assertEqual
+          "unknown flow is refused, and the message names what is registered"
+          ["unknown flow no-such-flow; registered flows: at-risk-customer"]
+          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
+        assertEqual
+          "a registered flow is accepted"
+          []
+          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "at-risk-customer"})))
+        assertEqual
+          "a non-flow behavior is not this check's business"
+          []
+          (flowDeclarationErrors (flowBehaviorAgent (Deterministic {rule = "flow-test", params = mempty}))),
       testCase "trivial flow completes through keiro runWorkflowWith" do
         outcome <- runFlowWorkflow completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
@@ -343,6 +367,11 @@ sampleKizashiSink =
       intentTemplate = "triage this",
       extraContextTags = ["verb:customer.risk_detected"]
     }
+
+-- | An agent declaration that differs from 'flowAgentDecl' only in its behavior,
+-- so a behavior-validation assertion is about the behavior and nothing else.
+flowBehaviorAgent :: Behavior -> AgentDecl
+flowBehaviorAgent behavior = (flowAgentDecl "declaration-test") {behavior}
 
 flowAgentDecl :: Text -> AgentDecl
 flowAgentDecl flowAgent =
