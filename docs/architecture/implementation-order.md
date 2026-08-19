@@ -186,7 +186,7 @@ onto on 2026-08-10). Its title and filename still say "0.11"; that is deliberate
 
 | Plan | Required update |
 |---|---|
-| 39 | **Re-baseline from keiro-dsl 0.11 to 0.13.** Author onto **Language 5**, not Language 4 — 0.13 publishes 5 as the sole stable default and this document's previous "pin `--min-language 4`, exclude 5" advice is superseded. Re-derive the `--deny CODE` list against 0.13's diagnostic set. Add the `keiro-dsl` dependency, which the repository does not yet have. |
+| 39 | ✅ **Done 2026-08-18.** Re-baselined onto keiro-dsl 0.13 and Language 5; the `--min-language 4` / exclude-5 decision is marked superseded in place. Its Milestone 0 now adds the `keiro-dsl ==0.13.0.0` pin the repository still lacks, Milestone 3 consumes the *generated* conformance package (`scaffold --runtime-package`) instead of a hand-written harness, and the `--deny CODE` list is re-derived against 0.13's emittable warning set. |
 | 17 | Gate cleared. Re-author against `shibuya-core 0.9`'s `ApplicationFailure DeadLetterCode Text`, the total reason projections, the canonical renderer, and the `shibuya.dead_letter.reason.code` span attribute. Delete any privately defined code taxonomy or renderer. Its M0 checklist item can be closed. |
 | 48 | Gate cleared. Rewrite as a consumer of `Baikai.Agent` / `baikai-agent`: `AgentRunRequest`, `AgentCapability`, `AgentSafety`, `AgentCommand`, `AgentCeiling`/`applyAgentCeiling`. Drop the invented vocabulary. |
 | 49 | Cite `Baikai.Evidence`'s `evidenceSchemaVersion` and digest split (`commitmentDigest` binds a record to a request; `configurationDigest` compares across runs). Do not define a second canonical encoder. |
@@ -250,8 +250,9 @@ Retired. Delivered by commit `9991032`.
 
 - **Plan 39** — the checked keiro DSL and evolution gate, now against **Language 5**. *The widest
   unblocker in the portfolio:* gates 24, 25, 26, 27, 35, 50, 51, and sits on both critical-path
-  long poles. **This is the recommended next plan.** Re-baseline it onto keiro-dsl 0.13 as its
-  first act.
+  long poles. **This is the recommended next plan.** ✅ Re-baselined onto keiro-dsl 0.13 and
+  Language 5 on 2026-08-18, so it is ready to implement as written; its first act is now adding
+  the `keiro-dsl ==0.13.0.0` pin, which plan 53 deliberately left out.
 - **Plan 18** — atomic offsets, inbox, and enqueue in one boundary. No upstream gate.
 - **Plan 21** — database-backed sink permission grants. No upstream gate.
 - **Plan 43** — practice-review contracts. Contract-only, no dependencies.
