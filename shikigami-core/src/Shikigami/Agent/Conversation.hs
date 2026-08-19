@@ -53,6 +53,7 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, triggerOnly)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
@@ -162,7 +163,7 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
     step (StepName ("record-user:" <> msgMessageId)) $
       liftIO do
         turns <- loadTurns env sid
-        recordTurnOnce env sid ("danwa:user:" <> msgMessageId) Nothing "user" msgContent turns
+        recordTurnOnce env decl sid ("danwa:user:" <> msgMessageId) Nothing "user" msgContent turns
   outputE <-
     step (StepName ("run-behavior:" <> msgMessageId)) do
       prior <- liftIO (loadTurns env sid)
@@ -282,7 +283,7 @@ turnPayload TurnRow {turnIndex, role, content} =
 resolveSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
 resolveSession env decl conversationId = do
   let scope = agentScope (name decl)
-  rowsE <- runKioku env (Session.getByScope scope)
+  rowsE <- runKioku env (Session.getByScope shikigamiMemorySpace scope)
   case rowsE of
     Left err -> pure (Left (Text.pack (show err)))
     Right (Left err) -> pure (Left (Text.pack (show err)))
@@ -304,6 +305,9 @@ startSession env decl conversationId = do
       Session.start
         StartSessionData
           { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (name decl),
+            ownerPrincipal = Nothing,
             agentId = name decl,
             focus = "conversation",
             scope = agentScope (name decl),
@@ -320,18 +324,18 @@ startSession env decl conversationId = do
 
 loadTurns :: ConversationEnv -> SessionId -> IO [TurnRow]
 loadTurns env sid = do
-  result <- runKioku env (Session.getTurns sid)
+  result <- runKioku env (Session.getTurns shikigamiMemorySpace sid)
   pure case result of
     Right (Right turns) -> turns
     _ -> []
 
-recordTurnOnce :: ConversationEnv -> SessionId -> Text -> Maybe Int -> Text -> Text -> [TurnRow] -> IO RecordedTurn
-recordTurnOnce env sid turnId desiredIndex role content turns =
+recordTurnOnce :: ConversationEnv -> AgentDecl -> SessionId -> Text -> Maybe Int -> Text -> Text -> [TurnRow] -> IO RecordedTurn
+recordTurnOnce env decl sid turnId desiredIndex role content turns =
   case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
     Just TurnRow {turnIndex} -> pure RecordedTurn {turnId, turnIndex}
     Nothing -> do
       let turnIndex = fromMaybe (length turns) desiredIndex
-      requireRight =<< recordTurn env sid turnId turnIndex role content
+      requireRight =<< recordTurn env decl sid turnId turnIndex role content
       pure RecordedTurn {turnId, turnIndex}
 
 recordAssistantTurnAndEnqueueReply ::
@@ -353,7 +357,7 @@ recordAssistantTurnAndEnqueueReply grantSource decl sid msg@AddressedMessage {me
     Nothing -> do
       now <- liftIO getCurrentTime
       prepared <- liftIO (prepareConversationReplySinkIntent grantSource decl sid msg replyText now)
-      existing <- Session.getById sid
+      existing <- Session.getById shikigamiMemorySpace sid
       case existing of
         Left err -> pure (Left (Text.pack (show err)))
         Right Nothing -> pure (Left "SessionNotFound")
@@ -373,6 +377,8 @@ recordAssistantTurnAndEnqueueReply grantSource decl sid msg@AddressedMessage {me
           ( RecordTurn
               RecordTurnData
                 { sessionId = sid,
+                  memorySpaceId = shikigamiMemorySpace,
+                  actorPrincipal = agentActor (name decl),
                   turnId,
                   turnIndex,
                   role = "assistant",
@@ -429,14 +435,16 @@ prepareConversationReplySinkIntent grantSource decl sid msg@AddressedMessage {co
     (Aeson.object ["reply" Aeson..= replyText])
     now
 
-recordTurn :: ConversationEnv -> SessionId -> Text -> Int -> Text -> Text -> IO (Either Text ())
-recordTurn env sid turnId turnIndex role content = do
+recordTurn :: ConversationEnv -> AgentDecl -> SessionId -> Text -> Int -> Text -> Text -> IO (Either Text ())
+recordTurn env decl sid turnId turnIndex role content = do
   now <- getCurrentTime
   result <-
     runKioku env $
       Session.recordTurn
         RecordTurnData
           { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (name decl),
             turnId,
             turnIndex,
             role,

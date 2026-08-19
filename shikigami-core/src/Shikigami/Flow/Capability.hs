@@ -37,6 +37,7 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
 import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
@@ -106,6 +107,9 @@ runMemory MemoryEnv {appEnv, agent = decl, sessionId} =
           record =
             RecordMemoryData
               { memoryId = mid,
+                memorySpaceId = shikigamiMemorySpace,
+                actorPrincipal = agentActor (name decl),
+                ownerPrincipal = Nothing,
                 agentId = name decl,
                 sessionId,
                 scope = agentScope (name decl),

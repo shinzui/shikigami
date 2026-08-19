@@ -75,6 +75,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId,
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Log qualified as Log
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
@@ -235,7 +236,7 @@ runResolvedAgent deps job decl = do
         _ -> runStep deps (StepName "run-behavior") (runBehaviorStep deps sid decl job prior)
   case behaviorE of
     Left err -> do
-      _ <- runStep deps (StepName "fail-session") (failSession deps sid err)
+      _ <- runStep deps (StepName "fail-session") (failSession deps decl sid err)
       pure (Left err)
     Right output -> do
       approvedSinks <- approveSinks deps sid job decl output
@@ -246,7 +247,7 @@ runResolvedAgent deps job decl = do
           enqueueSinkIntents (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
       mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
-      _ <- runStep deps (StepName "complete") (completeSession deps sid)
+      _ <- runStep deps (StepName "complete") (completeSession deps decl sid)
       pure
         ( Right
             AgentRunResult
@@ -315,6 +316,9 @@ openSession deps job decl = liftIO do
     Session.start
       StartSessionData
         { sessionId = sid,
+          memorySpaceId = shikigamiMemorySpace,
+          actorPrincipal = agentActor (agentDeclName decl),
+          ownerPrincipal = Nothing,
           agentId = agentDeclName decl,
           focus = focusTxt,
           scope = agentScope (agentDeclName decl),
@@ -438,13 +442,15 @@ runResearchSupervisor currentSession RunJob {triggerPayload, parentSessionId, pa
         ]
     )
 
-failSession :: (IOE :> es) => AgentRunDeps -> SessionId -> Text -> Eff es ()
-failSession deps sid err = liftIO do
+failSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Text -> Eff es ()
+failSession deps decl sid err = liftIO do
   failedAt' <- getCurrentTime
   void $
     Session.failSession
       FailSessionData
         { sessionId = sid,
+          memorySpaceId = shikigamiMemorySpace,
+          actorPrincipal = agentActor (agentDeclName decl),
           failedAt = failedAt',
           errorMessage = err
         }
@@ -670,6 +676,9 @@ recordLearning deps decl sid output = liftIO do
     Memory.record
       RecordMemoryData
         { memoryId = mid,
+          memorySpaceId = shikigamiMemorySpace,
+          actorPrincipal = agentActor (agentDeclName decl),
+          ownerPrincipal = Nothing,
           agentId = agentDeclName decl,
           sessionId = Just sid,
           scope = agentScope (agentDeclName decl),
@@ -694,13 +703,15 @@ recordLearning deps decl sid output = liftIO do
 -- This changes what the @complete@ step body writes, not the journal: the step
 -- name and its recorded result shape are untouched, so a workflow parked before
 -- this change still replays.
-completeSession :: (IOE :> es) => AgentRunDeps -> SessionId -> Eff es ()
-completeSession deps sid = liftIO do
+completeSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Eff es ()
+completeSession deps decl sid = liftIO do
   completedAt' <- getCurrentTime
   void $
     Session.complete
       CompleteSessionData
         { sessionId = sid,
+          memorySpaceId = shikigamiMemorySpace,
+          actorPrincipal = agentActor (agentDeclName decl),
           completedAt = completedAt',
           modelUsed = Just (behaviorModelId (behaviorEnv deps)),
           summary = Just "agent-run completed"

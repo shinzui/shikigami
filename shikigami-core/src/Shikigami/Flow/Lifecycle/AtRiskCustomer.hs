@@ -12,10 +12,11 @@ module Shikigami.Flow.Lifecycle.AtRiskCustomer
 where
 
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Keiki.Builder qualified as B
 import Keiki.Core
   ( HsPred,
-    InCtor (..),
+    InCtor,
     RegFile (RNil),
     SymTransducer,
     TransducerValidationWarning,
@@ -23,6 +24,7 @@ import Keiki.Core
     defaultValidationOptions,
     validateTransducer,
   )
+import Keiki.Generics (mkInCtorVia)
 import Keiki.Render.Mermaid (defaultMermaidOptions, toMermaidWith)
 import Prelude
 
@@ -39,7 +41,7 @@ data AtRiskCustomerCommand
   | ClassifyHighRisk
   | Acknowledge
   | DeadlineExpired
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Generic, Show)
 
 type AtRiskCustomerLifecycle =
   SymTransducer
@@ -109,26 +111,26 @@ atRiskCustomerValidationWarnings :: [TransducerValidationWarning AtRiskCustomerS
 atRiskCustomerValidationWarnings =
   validateTransducer diagramValidationOptions atRiskCustomerLifecycle
 
+-- Keiki 0.9 sealed @InCtor@ behind a read-only pattern synonym: manual record
+-- construction no longer compiles. Of the two ways back in, @mkInCtorVia@ is
+-- the one that preserves structural evidence, so @validateTransducer@ keeps
+-- returning verified results instead of degrading to @UnverifiedOpaque@;
+-- @unavailableInCtor@ would have compiled just as readily and silently cost us
+-- that. It derives match and build from @AtRiskCustomerCommand@'s @Generic@
+-- representation, which is why the deriving clause above grew @Generic@.
+
 classifyLowRisk :: InCtor AtRiskCustomerCommand '[]
 classifyLowRisk =
-  nullary "ClassifyLowRisk" ClassifyLowRisk
+  mkInCtorVia @"ClassifyLowRisk"
 
 classifyHighRisk :: InCtor AtRiskCustomerCommand '[]
 classifyHighRisk =
-  nullary "ClassifyHighRisk" ClassifyHighRisk
+  mkInCtorVia @"ClassifyHighRisk"
 
 acknowledge :: InCtor AtRiskCustomerCommand '[]
 acknowledge =
-  nullary "Acknowledge" Acknowledge
+  mkInCtorVia @"Acknowledge"
 
 deadlineExpired :: InCtor AtRiskCustomerCommand '[]
 deadlineExpired =
-  nullary "DeadlineExpired" DeadlineExpired
-
-nullary :: String -> AtRiskCustomerCommand -> InCtor AtRiskCustomerCommand '[]
-nullary name command =
-  InCtor
-    { icName = name,
-      icMatch = \candidate -> if candidate == command then Just RNil else Nothing,
-      icBuild = \RNil -> command
-    }
+  mkInCtorVia @"DeadlineExpired"

@@ -76,33 +76,56 @@ This section must always reflect the actual current state of the work.
       no migration was added, and no event payload or snapshot is affected.
 - [x] (2026-08-10) M0: the two-body assumption re-verified. Re-checked on 2026-08-10 that no
       other pinned co-developed package has grown a keiro or keiki dependency.
-- [ ] M1: pins bumped in `cabal.project` — `keiki`/`keiki-codec-json` to `0.9.0.0`,
-      `keiro`/`-core`/`-migrations` to `0.11.0.0`, `kioku-api`/`-core`/`-migrations` to
-      `0.3.0.0`, `shikumi` to `0.3.0.2`, `pgmq-*` to `0.5.0.0`, `shibuya-pgmq-adapter` to
-      `0.13.0.0`. `cabal build all --dry-run` resolves with no `allow-newer` between
-      co-developed packages; the resolved matrix recorded.
-- [ ] M1: `keiro-pgmq` removed from the constraints block if it is still listed — plan 47
-      recorded that it left the build plan when kioku moved to `pg-migrate`.
-- [ ] M2: the tree compiles. Fallout is expected in exactly one file,
-      `shikigami-core/src/Shikigami/Flow/Lifecycle/AtRiskCustomer.hs`.
-- [ ] M2: the four `InCtor` values in `AtRiskCustomer.hs` moved off direct record construction,
-      which keiki 0.9 seals. Prefer `mkInCtorVia @"<ConstructorName>"`, which requires adding
-      `Generic` to `AtRiskCustomerCommand`'s deriving clause — see Surprises & Discoveries for
-      why this is not the same choice as `unavailableInCtor`.
-- [ ] M2: `atRiskCustomerMermaid` re-checked against keiki 0.8's renderer change, and the
-      FlowLifecycle rendering tests updated to whatever the chosen options actually produce.
-- [ ] M2: `validateTransducer` results re-checked against keiki 0.7's conservative projection.
-      If any check now returns `UnverifiedOpaque` where it returned a `Verified*` result,
-      record it in Surprises & Discoveries and decide explicitly — do not silence it.
-- [ ] M3: `cabal test all` green. `Shikigami.WireCompatSpec` is a change detector here, not a
-      compatibility contract — see the Decision Log entry of 2026-08-10.
-- [ ] M4: `docs/dependency-cohort.md` records the new matrix, the upstream tag behind each
-      release, and — as named rows, not omissions — the three releases this cohort excludes and
-      the bound that excludes each.
-- [ ] M4: plan 39 re-pointed at the keiro-dsl 0.11 surface (see Interfaces and Dependencies).
-- [ ] M4: the two upstream release requests filed — `keiro 0.12` and a `kioku` admitting
-      `baikai ^>=0.5` — because between them they gate plans 17, 48, 51, and 52.
-
+- [x] (2026-08-17) M0: **re-baselined onto a larger cohort than this plan was written for.**
+      `kioku 0.4.0.0` published 2026-08-17 declaring `keiro ^>=0.13.0.0`,
+      `kiroku-store ^>=0.8.0.0`, `shibuya-core ^>=0.9.0.0`, and
+      `shibuya-kiroku-adapter ^>=0.5.1.1`. That admits three releases this plan had named as
+      deliberate exclusions. See the Revision Note of 2026-08-17.
+- [x] (2026-08-17) M1: pins bumped in `cabal.project` — `keiki`/`keiki-codec-json` to `0.9.0.0`,
+      `keiro`/`-core`/`-migrations` to **`0.13.0.0`**, `kioku-api`/`-core`/`-migrations` to
+      **`0.4.0.0`**, `pgmq-*` to `0.5.0.0`, `shibuya-core` to **`0.9.0.0`**,
+      `shibuya-pgmq-adapter` to **`0.14.0.0`**, `shibuya-kiroku-adapter` to **`0.5.1.1`**,
+      `kiroku-store` to **`0.8.0.0`**, `kiroku-store-migrations` to **`0.4.0.0`**.
+      `cabal build all --dry-run` resolves with no `allow-newer` between co-developed packages;
+      the resolved matrix is recorded in `docs/dependency-cohort.md`.
+- [x] (2026-08-18) M1: **the last exclusion lifted.** `kioku 0.4.1.0` moves kioku onto baikai
+      0.5, so `baikai`/`baikai-claude` went to `0.5.0.0`, `shikumi` to `0.3.0.2`, and
+      `baikai-effectful` to `0.3.0.3`. Nothing is held back: every co-developed package is at its
+      newest Hackage release with no `allow-newer` between them. (Superseded the 2026-08-17 entry
+      recording these three as held by `kioku-core 0.4.0.0`'s `baikai ^>=0.4.1.0`.)
+- [x] (2026-08-18) M2: baikai 0.5's new `ApiProvider.describeThinking` field implemented in
+      `shikigami-core/src/Shikigami/Behavior/StubProvider.hs` — the repository's only
+      `ApiProvider`, and the only compile error the baikai upgrade produced.
+- [x] (2026-08-17) M1: `keiro-pgmq` **and** `pgmq-migration` removed from the constraints block.
+      Neither appears in `cabal build all --dry-run`, so both pinned nothing.
+- [x] (2026-08-17) M2: the tree compiles. Fallout was **not** confined to one file — see
+      Surprises & Discoveries.
+- [x] (2026-08-17) M2: the four `InCtor` values in `AtRiskCustomer.hs` moved to
+      `mkInCtorVia @"<ConstructorName>"`, with `Generic` added to `AtRiskCustomerCommand`'s
+      deriving clause, exactly as this plan predicted.
+- [x] (2026-08-17) M2: **unplanned** — kioku 0.4's mandatory memory-space and principal fields
+      reached five files. Answered in one new module,
+      `shikigami-core/src/Shikigami/Memory/Access.hs`.
+- [x] (2026-08-17) M2: `atRiskCustomerMermaid` and `validateTransducer` re-checked. The
+      `FlowLifecycle` rendering and validation tests pass unchanged — no `Verified*` result
+      degraded to `UnverifiedOpaque`, which is the evidence that `mkInCtorVia` was the right
+      choice over `unavailableInCtor`.
+- [x] (2026-08-17) M3: `cabal test all` green — 233 tests across 7 suites, including
+      `Shikigami.WireCompatSpec` with no diff to explain.
+- [x] (2026-08-17) M3: **unplanned** — 16 migrations applied to the dev cluster (kiroku
+      `0009`–`0011`, keiro `0021`–`0030`, kioku `0011`–`0012`); 57 applied, 0 pending, tests
+      green afterwards.
+- [x] (2026-08-17) M4: `docs/dependency-cohort.md` records the new matrix with tag commits, the
+      held-back baikai/shikumi rows and the bound that holds them, the source cost, the
+      deprecation debt, and the migration consequence.
+- [ ] M4: plan 39 re-pointed at the keiro-dsl surface. **Now a `keiro-dsl 0.13` question, not
+      0.11** — and note this repository does not depend on `keiro-dsl` at all today, so adopting
+      it is plan 39's own work.
+- [ ] M4: upstream requests filed. Two of the three are **discharged**: the `keiro 0.12` request
+      is obsolete (0.13 is pinned), and the kioku-admitting-`baikai ^>=0.5` request was satisfied
+      by `kioku 0.4.1.0` on 2026-08-18 without ever being filed — which also unblocks plans 17,
+      48, 51, and 52. One stands: kioku 0.4.0.0's changelog omits the mandatory memory-space and
+      principal fields entirely.
 
 ## Surprises & Discoveries
 
@@ -161,6 +184,64 @@ added to `AtRiskCustomerCommand`'s deriving clause at
 `deriving stock (Eq, Show)`), and fall back to `unavailableInCtor` only if the Generic path
 genuinely does not typecheck — recording that here if so.
 
+
+**Correction (2026-08-17): the cohort is bigger than "smaller than it looks".** The
+Surprises entry above says only kioku depends on keiro or keiki, so this is a two-body
+problem. That stayed true, and it still understated the work — because the second body
+changed more than its bounds. `kioku 0.4.0.0` made memory spaces and principals mandatory
+across its command and query API, and this plan had analyzed kioku only as a gate.
+
+Concretely, every session and memory command record grew required `memorySpaceId` and
+`actorPrincipal` fields (`StartSessionData` and `RecordMemoryData` also grew
+`ownerPrincipal`); every read grew a leading `MemorySpaceId` argument
+(`Session.getById`/`getByScope`/`getTurns`/`getDelegationChildren`,
+`Memory.getRowsBySession`, `Recall.getActiveByScope`); and `Recall.recall` changed shape to
+take a `MemoryAccessContext` and a new `RecallQuery`. Five shikigami files were affected:
+`Agent/Run.hs`, `Agent/Workflow.hs`, `Agent/Conversation.hs`, `Flow/Capability.hs`, and
+`test/Shikigami/AgentWorkflowSpec.hs`.
+
+**None of this is in kioku's changelog.** The 0.4.0.0 entry covers the projection-schema
+relocation only. The 0.3.0.0 entry states "no Kioku source file changed". The mandatory
+access fields appear in neither, and were found by compiling against the release. This is
+the strongest single argument in this plan's history for the rule that a cohort member is
+verified by building, not by reading its release notes.
+
+**`Recall.recall` grew a second `Either`.** `runAppIO`'s `Either` now wraps recall's own
+`Either RecallError`, so `case recalled of Right hits` silently became a type error rather
+than a behavior change — the good failure direction. Kioku added the inner channel so an
+unrunnable query stops being indistinguishable from a query that matched nothing.
+
+**The danwa pin was a false alarm worth having checked.** `danwa-core` is a
+`source-repository-package` pulled in transitively (`shikigami-core` → `danwa-api` →
+`danwa-core`) and it `build-depends` on unbounded `keiki`, `keiki-codec-json`, `keiro`,
+`keiro-core`, and `kiroku-store`. Cabal compiles it inside shikigami's plan against
+shikigami's versions — danwa's own `cabal.project` pins are not consulted — and the pinned
+commit `301bc1b` is built upstream against far older keiro/keiki. It compiled clean against
+keiro 0.13 / keiki 0.9 anyway. Worth recording because the structural exposure remains:
+shikigami uses danwa only as an HTTP client for the `DanwaConversation` sink, and pulls
+danwa's entire server-side event-sourcing substrate into its build plan to get the API
+types. If `danwa-api` were separated from `danwa-core` upstream, that exposure disappears.
+
+**16 migrations, not zero.** This plan described itself as invisible at runtime and said
+nothing about schema. The cohort carries kiroku `0009`–`0011`, keiro `0021`–`0030`, and
+kioku `0011`–`0012`. kioku `0012` relocates seven relations into a dedicated `kioku` schema
+and upstream calls it a planned-outage upgrade with no compatibility views and no rollback
+by restarting the old binary. Applied cleanly on the dev cluster; a database with real data
+is the `cohort-migrate` skill's job.
+
+**baikai 0.5 cost exactly one field, and it was a designed-in break.** `ApiProvider` gained
+`describeThinking :: Model -> Options -> ThinkingTranslation`, which the pre-dispatch
+strictness gate needs in order to refuse a call *before* a request is built — it cannot wait
+for the translation a provider hands back alongside its mapped request. Adding a strict field
+to a public record is a compile error for every implementor by construction, which is the
+loud failure direction. The repository has exactly one `ApiProvider`
+(`Shikigami.Behavior.StubProvider`), so the blast radius was one file, and this time the
+version number did predict the cost.
+
+Baikai's own documentation on the field is worth heeding: implement it by calling the same
+function that builds the request's translation, never by writing a second one, because two
+descriptions of one mapping diverge silently. The stub has no mapping to share, so it has no
+divergence risk — but a real provider added here later would.
 
 ## Decision Log
 
@@ -249,12 +330,100 @@ Record every decision made while working on the plan.
   Date: 2026-08-05
 
 
+- Decision (2026-08-17): **take the whole cohort, not the one this plan was scoped to.**
+  `kioku 0.4.0.0` admits `keiro 0.13`, `kiroku-store 0.8`, `shibuya-core 0.9`, and
+  `shibuya-kiroku-adapter 0.5.1.1`, which this plan had named as deliberate exclusions under
+  keiro 0.11's bounds. Splitting them into a follow-up plan would have meant a second full
+  build-and-migrate cycle for pins that resolve together today. The exclusions section in
+  Context is therefore superseded for those three; only the baikai row survives.
+
+- Decision (2026-08-17): **hold `baikai` at 0.4.1.0 and `shikumi` at 0.3.0.1.**
+  `kioku-core 0.4.0.0`'s library declares `baikai ^>=0.4.1.0`, capping baikai below 0.5;
+  `shikumi 0.3.0.2` requires `baikai >=0.5 && <0.6`, so shikumi is pulled back with it, and
+  `baikai-effectful` is held at `0.3.0.2` because `0.3.0.3` targets baikai 0.5. No
+  `allow-newer` was used. The bound is a true statement about what kioku compiled against,
+  and overriding it would produce a build plan nobody upstream has ever built.
+
+- Decision (2026-08-17): **answer kioku's two new questions in one module rather than at the
+  call sites.** `shikigami-core/src/Shikigami/Memory/Access.hs` holds the memory space, the
+  recorded actor, and the read context. The alternative — inlining `legacyMemorySpaceId` at
+  ~24 sites — would have scattered a decision that IR-9 is going to revisit wholesale.
+
+- Decision (2026-08-17): **record `LegacyPrincipal`, not a minted `KnownPrincipal`.** Kioku's
+  `KnownPrincipal` means a directory issued the principal and vouched for it. Shikigami has no
+  directory, so building one from a free-text agent name would fabricate the vouching — the
+  exact failure kioku's ADR "historical attribution is marked, never invented" describes.
+  `LegacyPrincipal` is the honest label for attribution that is real but unvouched, and it
+  keeps the two distinguishable for whoever reads the stream later.
+
+  The read path is different and deliberately so: minting a `MemoryAccessContext` requires a
+  real `PrincipalRef`, and there is no legacy-shaped actor for one. That is sound because a
+  context is a decision rather than a document — kioku gives it no `FromJSON` instance
+  precisely so it cannot be stored and replayed — and no read persists its actor. Naming the
+  service there records nothing.
+
+- Decision (2026-08-17): **accept the deprecation warnings.** The `*WithContext` variants are
+  the non-deprecated surface, but taking them means having principals, which is IR-9. ~24
+  `-Wdeprecations` warnings against a non-`-Werror` build is the cheaper and more honest
+  position than inventing identity to silence them.
+
+- Decision (2026-08-18): **take `kioku 0.4.1.0` and baikai 0.5 immediately rather than as
+  follow-up work.** The release exists precisely to lift the one bound this plan had recorded as
+  surviving it, its keiro/keiki/kiroku/shibuya bounds are unchanged from 0.4.0.0, and it adds no
+  migration — so taking it is a constraints edit plus whatever baikai 0.5 breaks. That turned out
+  to be one field on one record in one file. Deferring it would have cost a second build-and-test
+  cycle to save nothing.
+
+- Decision (2026-08-18): **the stub provider reports its reasoning support as unsupported, not
+  absent.** baikai 0.5's `describeThinking` feeds a pre-dispatch gate that refuses calls before a
+  request is built. `Shikigami.Behavior.StubProvider` returns a fixed string and touches no wire,
+  so a caller who asked for a thinking level gets `ThinkingModeUnsupported` with
+  `ThinkingDroppedUnsupportedHost` recorded, while a caller who asked for nothing gets
+  `noThinkingRequested`. Collapsing the two — or claiming the request was expressed — would let a
+  caller demanding guaranteed evidence pass the gate and receive a stub, which is the exact
+  failure the gate exists to prevent.
+
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered 2026-08-17 and completed 2026-08-18, against a larger cohort than planned.**
+`cabal build all` and `cabal test all` pass (233 tests, 7 suites), `docs/dependency-cohort.md`
+names the new matrix, and the composed migration plan is applied on the dev cluster with 0
+pending. As of 2026-08-18 the cohort has **no exclusions at all**: `kioku 0.4.1.0` lifted the
+baikai bound, so every co-developed package sits at its newest Hackage release with no
+`allow-newer` between them — which is more than this plan set out to achieve.
+
+**Compared against the original purpose, one premise held and one did not.**
+
+The premise that held: this is a foundation move with no runtime behavior change. Nothing an
+agent does changed, and the test suite passed without a single expectation being rewritten.
+
+The premise that did not: *"keiki reaches exactly one file... five keiki majors therefore have
+a blast radius of one file plus its tests, which is why this upgrade is far less risky than the
+version numbers suggest."* That reasoning was sound for keiki and wrong as a conclusion about
+the upgrade, because it measured the wrong dependency. keiki's blast radius was exactly the one
+file predicted. kioku's was five files and a new module — and kioku was the package this plan
+treated as a *gate* to be waited on rather than a dependency to be analyzed. The plan tracked
+kioku's version bounds closely and its API surface not at all.
+
+**The lesson worth carrying: a package that gates an upgrade is still a package that changes.**
+The two-body framing ("shikigami and kioku") was right about coherence and hid the API risk.
+When a gate clears, the correct next step is to diff the gating package's surface, not just its
+bounds.
+
+**A second lesson, about trusting changelogs.** kioku 0.4.0.0's changelog documents a schema
+relocation and says nothing about making memory spaces and principals mandatory; 0.3.0.0 calls
+itself bounds-only with no source change. Both statements are true about what they cover and
+neither covers the breaking change that actually cost the most work here. Reading the changelog
+was not a substitute for compiling against the release.
+
+**Gap left open deliberately.** Shikigami now sits on kioku's deprecated legacy compatibility
+surface (~24 `-Wdeprecations` warnings), with `legacyMemorySpaceId` and `LegacyPrincipal` as its
+answers to the two new questions. Both are honest for a single-space deployment with no
+principal directory, and both retire against IR-9. Taking the `*WithContext` surface now would
+have meant inventing principals, which is worse than the warning.
 
 
 ## Context and Orientation
@@ -736,3 +905,56 @@ future reader should be pointed at.
   Milestone 4 also gained a new obligation: file the two upstream release requests (`keiro 0.12`,
   and a kioku admitting `baikai ^>=0.5`). Four plans — 17, 48, 51, and 52 — wait on them, and no
   other plan in the portfolio surfaces the need.
+
+- 2026-08-17: **Re-baselined onto the keiro 0.13 / kioku 0.4 cohort, implemented, and closed
+  except for two Milestone 4 follow-ups.**
+
+  **Re-baselined.** This plan's title, slug, and body say "keiro 0.11 and keiki 0.9". keiki 0.9
+  is still correct. keiro is not: `kioku 0.4.0.0` (2026-08-17) requires `keiro ^>=0.13.0.0`, so
+  0.11 was never a reachable target by the time the work ran. The title and filename were left
+  alone on purpose — `mori://` references to plan 53 are durable and renaming the artifact to
+  fix a version number is a worse trade than a Revision Note saying what the plan actually did.
+
+  **Widened again.** `shibuya-core 0.9.0.0`, the kiroku 0.8 line, and `shibuya-pgmq-adapter
+  0.14.0.0` were all named in the 2026-08-10 note as deliberate exclusions, each blocked by
+  keiro 0.11's own bounds. keiro 0.13 lifts all three. The only exclusion that survives is
+  `baikai 0.5.0.0`, still capped by kioku's `baikai ^>=0.4.1.0`, and it now also holds back
+  `shikumi 0.3.0.2` and `baikai-effectful 0.3.0.3`.
+
+  **Corrected, and this one matters more than the 2026-08-10 correction.** The plan's central
+  risk assessment — that five keiki majors have a blast radius of one file, so the version
+  numbers overstate the danger — was right about keiki and wrong about the upgrade. The cost
+  came from kioku, which this plan had modelled only as a gate with bounds. Its 0.4 release
+  made memory spaces and principals mandatory across the command and query API, and documented
+  none of it in its changelog. See Surprises & Discoveries.
+
+  **Also unrecorded until now: this cohort carries 16 migrations,** including a kioku
+  projection-schema relocation that upstream classifies as a planned-outage upgrade with no
+  rollback-by-restart. A plan whose stated proof was "invisible at runtime" should have said so.
+
+  **Obsoleted.** The `keiro 0.12` upstream release request in Milestone 4 is moot; 0.13 is
+  pinned. The kioku-admitting-`baikai ^>=0.5` request stands. A new one is warranted against
+  kioku for the undocumented breaking change.
+
+- 2026-08-18: **The last exclusion lifted; the cohort is now complete.**
+
+  `kioku 0.4.1.0` moved kioku onto baikai 0.5 (`baikai ^>=0.5.0.0`, `baikai-claude ^>=0.5.0.0`,
+  `baikai-effectful ^>=0.3.0.3`, `shikumi ^>=0.3.0.2`, `shikumi-trace ^>=0.2.0.2`), leaving its
+  keiro/keiki/kiroku/shibuya bounds unchanged and adding no migration. `baikai`, `baikai-claude`,
+  `shikumi`, and `baikai-effectful` all moved with it.
+
+  This plan can now say something its 2026-08-10 and 2026-08-17 revisions could not: **there are
+  no exclusions.** Every co-developed package is at its newest Hackage release, and no
+  `allow-newer` sits between any two of them. The "What this cohort excludes, and why" section in
+  Context is fully superseded — first for shibuya-core/kiroku-store/adapter by keiro 0.13, now
+  for baikai/shikumi by kioku 0.4.1.0.
+
+  **The one code change was `ApiProvider.describeThinking`,** baikai 0.5's new field for the
+  pre-dispatch evidence gate, implemented in `StubProvider.hs`. See Surprises & Discoveries and
+  the Decision Log.
+
+  **Worth recording about process, not just versions.** The 2026-08-17 note said the baikai bound
+  could only be lifted upstream and that no `allow-newer` should force it. That held for one day
+  and cost one compile error to collect. It is a cleaner argument for the cohort discipline than
+  any of the reasoning written in advance of it: the bound was true, waiting was correct, and the
+  upstream fix was cheap to consume precisely because nobody had worked around it locally.

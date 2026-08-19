@@ -1,4 +1,4 @@
-# Dependency cohort — July 2026
+# Dependency cohort — August 2026
 
 Shikigami builds against **one** coherent set of co-developed releases. This
 document is the contract: it names the released version of every co-developed
@@ -53,62 +53,67 @@ referring to them from anywhere durable.
 
 ## Release matrix
 
-Every row below is resolved from Hackage. "Was" is the version selected by the
-pre-upgrade commit-pinned `cabal.project`.
+Every row below is resolved from Hackage. "Was" is the version this repository
+pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 
 | Package | Was | Now | Upstream tag | Tag commit |
 |---|---|---|---|---|
-| `keiki` | 0.1.0.0 | **0.4.0.0** | `v0.4.0.0` | `6807aac817fe53bbcc1b11b9e1a1b226bae14413` |
-| `keiki-codec-json` | 0.1.0.0 | **0.4.0.0** | `v0.4.0.0` | `6807aac817fe53bbcc1b11b9e1a1b226bae14413` |
-| `keiro` | 0.1.0.0 | **0.4.0.1** | `keiro-0.4.0.1` | `ad9f4c0371763616d1a96fd63b712d4061415175` |
-| `keiro-core` | 0.1.0.0 | **0.4.0.1** | `keiro-core-0.4.0.1` | `ad9f4c0371763616d1a96fd63b712d4061415175` |
-| `keiro-migrations` | 0.1.0.0 | **0.4.0.1** | `keiro-migrations-0.4.0.1` | `ad9f4c0371763616d1a96fd63b712d4061415175` |
-| `kioku-api` | 0.1.0.0 | **0.2.0.0** | `v0.2.0.0` | `5765f98add2a87a356c70793a6ba54375ef5feec` |
-| `kioku-core` | 0.1.0.0 | **0.2.0.0** | `v0.2.0.0` | `5765f98add2a87a356c70793a6ba54375ef5feec` |
-| `kioku-migrations` | 0.1.0.0 | **0.2.0.0** | `v0.2.0.0` | `5765f98add2a87a356c70793a6ba54375ef5feec` |
-| `shikumi` | 0.1.0.1 | **0.3.0.1** | `shikumi-0.3.0.1` | `580b6c70a58bc96a8d52502c2e7c9376d2c46a15` |
-| `shikumi-trace` | 0.1.0.1 | **0.2.0.1** | `shikumi-trace-0.2.0.1` | `580b6c70a58bc96a8d52502c2e7c9376d2c46a15` |
-| `shikumi-eval` | 0.1.0.1 | **0.2.0.1** | `shikumi-eval-0.2.0.1` | `580b6c70a58bc96a8d52502c2e7c9376d2c46a15` |
-| `shikumi-cache` | 0.1.0.1 | **0.1.2.1** | `shikumi-cache-0.1.2.1` | `580b6c70a58bc96a8d52502c2e7c9376d2c46a15` |
-| `shikumi-trace-otel` | 0.1.0.0 | **0.1.1.0** | `shikumi-trace-otel-0.1.1.0` | `580b6c70a58bc96a8d52502c2e7c9376d2c46a15` |
-| `baikai` | 0.2.0.0 | **0.4.1.0** | `baikai-0.4.1.0` | `62e1d919def1c02023b14dfba567922347bbfe83` |
-| `baikai-claude` | 0.2.0.0 | **0.4.0.1** | `baikai-claude-0.4.0.1` | `97fa0d5727128f567a40b190dc7a657670fb03a4` |
-| `baikai-effectful` | 0.2.0.0 | **0.3.0.2** | `baikai-effectful-0.3.0.2` | `62e1d919def1c02023b14dfba567922347bbfe83` |
-| `baikai-trace-otel` | 0.2.0.0 | **0.3.0.2** | `baikai-trace-otel-0.3.0.2` | `62e1d919def1c02023b14dfba567922347bbfe83` |
-| `baikai-openai` | 0.2.0.0 | **0.4.0.0** | `baikai-openai-0.4.0.0` | `62e1d919def1c02023b14dfba567922347bbfe83` |
-| `shibuya-core` | 0.7.1.0 | **0.8.0.1** | `v0.8.0.1` | `172df245f40a454af46dd7f4cde855eaa4414c5a` |
-| `shibuya-pgmq-adapter` | 0.8.0.0 | **0.12.0.0** | `v0.12.0.0` | `85931b45702faecc035d89bb5cff381e8679f793` |
-| `shibuya-kiroku-adapter` | 0.4.0.0 | 0.4.0.0 | `shibuya-kiroku-adapter-v0.4.0.0` | (unchanged) |
-| `kiroku-store` | 0.2.1.0 | **0.3.1.0** | `kiroku-store-v0.3.1.0` | `3009dda7238f7d05b1d0c97b04ec5d4c55031304` |
-| `kiroku-store-migrations` | 0.1.1.0 | **0.3.0.0** | `kiroku-store-migrations-v0.3.0.0` | `3009dda7238f7d05b1d0c97b04ec5d4c55031304` |
-| `pgmq-core` / `-hasql` / `-effectful` | 0.3.0.0 | **0.4.0.1** | `v0.4.0.1` | `f4a101843ea6f5c055277fd84859ece02865eff4` |
-| `pg-migrate` (+ `-cli`, `-embed`, `-test-support`) | — | **1.1.0.0** | `v1.1.0.0` | `f39d64e354818999667d345a1452f33eb4857fc1` |
-| `ephemeral-pg` | 0.2.1.0 (fork pin) | **0.2.2.0** | Hackage | — |
+| `keiki` | 0.4.0.0 | **0.9.0.0** | `v0.9.0.0` | `9714d37033c37595e3aaa3319ca0ca77466782e0` |
+| `keiki-codec-json` | 0.4.0.0 | **0.9.0.0** | `v0.9.0.0` | `9714d37033c37595e3aaa3319ca0ca77466782e0` |
+| `keiro` | 0.4.0.1 | **0.13.0.0** | `keiro-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `keiro-core` | 0.4.0.1 | **0.13.0.0** | `keiro-core-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `keiro-migrations` | 0.4.0.1 | **0.13.0.0** | `keiro-migrations-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `kioku-api` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
+| `kioku-core` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
+| `kioku-migrations` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
+| `shikumi` | 0.3.0.1 | **0.3.0.2** | `shikumi-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
+| `baikai` | 0.4.1.0 | **0.5.0.0** | `baikai-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
+| `baikai-claude` | 0.4.0.1 | **0.5.0.0** | `baikai-claude-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
+| `baikai-effectful` | 0.3.0.2 | **0.3.0.3** | `baikai-effectful-0.3.0.3` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
+| `shibuya-core` | 0.8.0.1 | **0.9.0.0** | `v0.9.0.0` | `d958a5748475a4b84075feda7a2a4f5cc7471c60` |
+| `shibuya-pgmq-adapter` | 0.12.0.0 | **0.14.0.0** | `v0.14.0.0` | `301652375ecdec01c4e1ff50902900ad3a078ea3` |
+| `shibuya-kiroku-adapter` | 0.4.0.0 | **0.5.1.1** | `shibuya-kiroku-adapter-v0.5.1.1` | `7726d23028cd4edfba69762edf659485b9547da4` |
+| `kiroku-store` | 0.3.1.0 | **0.8.0.0** | `kiroku-store-v0.8.0.0` | `7726d23028cd4edfba69762edf659485b9547da4` |
+| `kiroku-store-migrations` | 0.3.0.0 | **0.4.0.0** | `kiroku-store-migrations-v0.4.0.0` | `7c8f2dac48c077427834650aa6e76d0682712809` |
+| `pgmq-core` / `-hasql` / `-effectful` | 0.4.0.1 | **0.5.0.0** | `v0.5.0.0` | `fc13d7a432dbc0cf0ad4cd3616e5d7d28fdf5abe` |
+| `pg-migrate` (+ `-cli`, `-embed`, `-test-support`) | 1.1.0.0 | 1.1.0.0 | `v1.1.0.0` | `f39d64e354818999667d345a1452f33eb4857fc1` |
 | `settei` (+ `-env`, `-yaml`, `-optparse-applicative`) | 0.2.0.0 | 0.2.0.0 | `v0.2.0.0` | `1bf62b0af110b4f42fe2528e9d459e0ccf12d626` |
-| `servant-health` | 0.1.0.0 | 0.1.0.0 | `v0.1.0.0` | `c70bffdd59e9336700dde304dac1328d3cb62f6a` |
 | `hs-opentelemetry-*` | 1.0.0.0 | 1.0.0.0 | Hackage (third party) | — |
 
-### Pending: the keiro 0.11 / keiki 0.9 cohort
+Two constraints left the block rather than moving: `keiro-pgmq` and `pgmq-migration`
+resolve into nothing now that kioku composes its migrations through `pg-migrate`.
+Neither appears in `cabal build all --dry-run`, so pinning them pinned nothing.
 
-Recorded 2026-08-05, **not yet applied**. `keiro` (with `-core`, `-migrations`, `-pgmq`,
-`-dsl`) is published at `0.11.0.0` and `keiki` / `keiki-codec-json` at `0.9.0.0`, against the
-`0.4.0.1` / `0.4.0.0` pinned here. The upgrade is owned by
-`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` and is blocked on
-one thing: `kioku-core 0.2.0.0` declares `keiro ^>=0.4.0.1` and `keiki ^>=0.4.0.0`, both capped
-below the next major, and no published kioku admits the new majors. Kioku is being updated.
+### Nothing is held back
 
-No other pinned co-developed package is affected — `kiroku-store 0.3.1.0`,
-`shibuya-core 0.8.0.1`, `shibuya-kiroku-adapter 0.4.0.0`, and `pgmq-hasql 0.4.0.1` declare no
-dependency on keiro or keiki (checked against their Hackage `.cabal` files on 2026-08-05).
+This cohort has no exclusions. Every co-developed package is at its newest Hackage release,
+and no `allow-newer` is used anywhere between them.
 
-`keiro-pgmq` and `pgmq-migration` leave the build plan: `kioku-migrations 0.2.0.0`
-composes its migrations through `pg-migrate` rather than the legacy PGMQ
-migration path, and nothing else pulled them in.
+That was not true when the upgrade started. `kioku-core 0.4.0.0`'s library declared
+`baikai ^>=0.4.1.0`, capping baikai below 0.5, which in turn pinned `shikumi` to `0.3.0.1`
+(because `shikumi 0.3.0.2` requires `baikai >=0.5`) and `baikai-effectful` to `0.3.0.2`.
+Three packages held by one bound.
 
-`kiroku-test-support` also leaves the plan. It was pinned but had no reverse
-dependency; the shikigami test suites use `shikigami-migrations:test-support`
-instead.
+`kioku 0.4.1.0` (2026-08-18) lifted it: the release moves kioku onto baikai 0.5, declaring
+`baikai ^>=0.5.0.0`, `baikai-claude ^>=0.5.0.0`, `baikai-effectful ^>=0.3.0.3`,
+`shikumi ^>=0.3.0.2`, and `shikumi-trace ^>=0.2.0.2`. Its keiro, keiki, kiroku, and shibuya
+bounds are unchanged from 0.4.0.0, and it adds no migration.
 
+This is the outcome the cohort discipline is for. The bound was a true statement about which
+baikai kioku had compiled against, so the fix was an upstream release rather than a solver
+override — and when it arrived, taking it was a version bump and one compile error.
+
+### The keiro 0.11 / keiki 0.9 gate, and how it cleared
+
+The July cohort recorded this upgrade as blocked: `kioku-core 0.2.0.0` declared
+`keiro ^>=0.4.0.1` and `keiki ^>=0.4.0.0`, both capped below the next major.
+
+It cleared twice over. `kioku 0.3.0.0` (2026-08-05) was a bounds-only release admitting
+keiki 0.9 / keiro 0.11, and `kioku 0.4.0.0` (2026-08-17) went further, declaring
+`keiro ^>=0.13.0.0`, `kiroku-store ^>=0.8.0.0`, `shibuya-core ^>=0.9.0.0`, and
+`shibuya-kiroku-adapter ^>=0.5.1.1`. That second release is what makes this cohort larger
+than the one plan 53 was written against: `shibuya-core 0.9.0.0` and the kiroku 0.8 line
+were excluded by keiro 0.11's own bounds and are admissible under keiro 0.13.
 
 ## Packages still resolved from Git
 
@@ -188,3 +193,111 @@ shikigami-workers-test      PASS   21 tests
 Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
 an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
 intermittently while every suite passes serially.
+
+
+## What this cohort cost in source, and what it left behind
+
+Two upstream changes reached this repository. Both are recorded here because the version
+numbers do not predict either one.
+
+**keiki 0.9 sealed `InCtor`.** It is now a read-only pattern synonym: matching and field
+selection still work, construction and record update do not.
+`shikigami-core/src/Shikigami/Flow/Lifecycle/AtRiskCustomer.hs` built four `InCtor` values
+by direct record construction and stopped compiling. They moved to
+`mkInCtorVia @"<ConstructorName>"`, which required adding `Generic` to
+`AtRiskCustomerCommand`'s deriving clause.
+
+That choice is deliberate and worth not re-litigating. keiki offers `unavailableInCtor`,
+which compiles just as readily and needs no `Generic` instance — but it carries no trusted
+structural evidence, so `validateTransducer` would start returning `UnverifiedOpaque` where
+it returns verified results today. The cheaper fix silently weakens a replay-safety check,
+which is exactly the kind of regression a passing test suite does not catch.
+
+**kioku 0.4 made memory spaces and principals mandatory.** Every session and memory command
+record grew required `memorySpaceId` and `actorPrincipal` fields (`StartSessionData` and
+`RecordMemoryData` also grew `ownerPrincipal`), and every read — `Session.getById`,
+`getByScope`, `getTurns`, `getDelegationChildren`, `Memory.getRowsBySession`,
+`Recall.getActiveByScope` — grew a leading `MemorySpaceId` argument. `Recall.recall` changed
+shape entirely, taking a `MemoryAccessContext` and a new `RecallQuery`.
+
+**This is not in kioku's changelog.** The 0.4.0.0 entry documents only the projection-schema
+relocation; the 0.3.0.0 entry calls itself bounds-only with no source change. The mandatory
+access fields are a breaking change that neither entry mentions, and they were discovered
+here by compiling against it. That is worth an upstream improvement request.
+
+Shikigami's answer to both new questions lives in one module,
+`shikigami-core/src/Shikigami/Memory/Access.hs`, rather than at ~24 call sites:
+
+- the space is `legacyMemorySpaceId`, the space kioku's migration `0011` backfills existing
+  rows into. Shikigami is a single-space deployment, so this is the space, not a placeholder;
+- the recorded actor is `LegacyPrincipal` carrying the agent's declared name. Shikigami has
+  no principal directory yet, and kioku's `KnownPrincipal` means a directory issued and
+  vouched for the principal. Minting one from a free-text agent name would invent exactly
+  that vouching, which kioku's ADR "historical attribution is marked, never invented" exists
+  to prevent;
+- reads go through `assumeAuthorizedMemoryContext` under a service principal. A context is a
+  decision rather than a document — kioku deliberately gives it no `FromJSON` instance — and
+  no read path persists its actor, so naming the service there records nothing.
+
+The retirement condition for all three is
+`docs/improvement-requests/key-agent-continuity-by-meibo-principal.md` (IR-9). When agents
+resolve to real principals, that module changes and the call sites do not.
+
+**baikai 0.5 added a field to `ApiProvider`.** `describeThinking :: Model -> Options ->
+ThinkingTranslation` lets the pre-dispatch strictness gate refuse a call *before* a request is
+built, so it cannot wait for the translation a provider returns alongside its mapped request.
+`shikigami-core/src/Shikigami/Behavior/StubProvider.hs` is the repository's only `ApiProvider`
+and stopped compiling.
+
+The stub calls no model and puts nothing on any wire, so it now reports that honestly: a caller
+who set no level gets `noThinkingRequested`, and a caller who asked for one gets
+`ThinkingModeUnsupported` with `ThinkingDroppedUnsupportedHost` recorded. The weaker answer —
+claiming the request was expressed — would let a caller who asked for guaranteed evidence pass
+the gate and then receive a fixed string, which is the failure the gate exists to prevent.
+
+### Debt this cohort takes on knowingly
+
+Shikigami now calls kioku's legacy compatibility surface — `Session.start`, `complete`,
+`failSession`, `recordTurn`, `Memory.record`, and `Recall.legacyRecall` — all of which are
+deprecated with "accepts only `legacyMemorySpaceId` and will be removed". That is ~24
+`-Wdeprecations` warnings in `shikigami-core`. The build is not `-Werror`, so this is debt
+rather than breakage, but it is debt with an announced expiry: the `*WithContext` variants
+are the replacement, and taking them properly means having real principals, which is IR-9
+again.
+
+Three smaller deprecations survive from baikai: `_Model`, `_Response`, and `_Context`, the
+record bases `StubProvider.hs` builds its fixtures from. They are unrelated to this upgrade and
+were already deprecated before it; they are noted here so the next reader does not mistake them
+for fallout from baikai 0.5.
+
+
+## Migration consequence
+
+This upgrade is migration-first. It added **16** migrations to the composed plan — kiroku
+`0009`–`0011`, keiro `0021`–`0030`, and kioku `0011`–`0012` — bringing the applied total to
+57. Two of them deserve operator attention:
+
+- **`kioku/0011-kioku-memory-space-partition`** adds the partition column and backfills every
+  existing row into `kioku_legacy` before making the column `NOT NULL`. A row that escapes
+  the backfill becomes inaccessible rather than universally visible, which is the failure
+  direction kioku chose deliberately.
+- **`kioku/0012-relocate-projections-to-kioku-schema`** moves seven relations out of the
+  `kiroku` schema into a dedicated `kioku` schema and drops the redundant prefix
+  (`kiroku.kioku_memories` becomes `kioku.memories`). It is metadata only — OIDs, rows,
+  indexes, constraints, and grants are preserved — and it accepts exactly two catalog states,
+  raising transactionally on anything else.
+
+Upstream calls this a planned-outage upgrade: stop writers, back up, migrate, grant
+`USAGE ON SCHEMA kioku` if the runtime role is not the schema owner, reconcile the read-model
+registry, then start the new binary. There are no compatibility views and restarting the old
+binary is **not** a rollback. Shikigami is a library embedder, so the registry reconciliation
+is its own responsibility; it is already wired at
+`shikigami-migrations/src/Shikigami/Migrations.hs:106`.
+
+`kioku 0.4.1.0` adds no migration — it is a dependency-bounds release — so the plan below is
+unchanged by it.
+
+Applied and verified on the in-repo dev cluster on 2026-08-17: 57 applied, 0 pending, and
+`cabal test all` green afterwards. **A database holding real data is a different exercise** —
+use the `cohort-migrate` skill, which proves the remediation on a restored clone before
+production is touched.

@@ -38,6 +38,7 @@ import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), Sta
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 
@@ -66,6 +67,9 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
       Session.start
         StartSessionData
           { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor agentName',
+            ownerPrincipal = Nothing,
             agentId = agentName',
             focus = focusTxt,
             scope = scope',
@@ -87,6 +91,8 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
           Session.failSession
             FailSessionData
               { sessionId = sid,
+                memorySpaceId = shikigamiMemorySpace,
+                actorPrincipal = agentActor agentName',
                 failedAt = failedAt',
                 errorMessage = Text.pack (show runErr)
               }
@@ -100,6 +106,9 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
           Memory.record
             RecordMemoryData
               { memoryId = mid,
+                memorySpaceId = shikigamiMemorySpace,
+                actorPrincipal = agentActor agentName',
+                ownerPrincipal = Nothing,
                 agentId = agentName',
                 sessionId = Just sid,
                 scope = scope',
@@ -118,6 +127,8 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
           Session.complete
             CompleteSessionData
               { sessionId = sid,
+                memorySpaceId = shikigamiMemorySpace,
+                actorPrincipal = agentActor agentName',
                 completedAt = completedAt',
                 -- Which model produced the output, so a stub run stays
                 -- distinguishable from a real one after the log has rotated.
@@ -152,6 +163,9 @@ recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
       Memory.record
         RecordMemoryData
           { memoryId = mid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor agentName',
+            ownerPrincipal = Nothing,
             agentId = agentName',
             sessionId = Nothing,
             scope = scope',
@@ -203,23 +217,29 @@ recallPriorLearnings appEnv scope' query = do
       Left _ -> RecallCapability.VectorExtensionUnavailable
   recalled <-
     runAppIO appEnv $
-      Recall.recall
+      Recall.legacyRecall
         (Embedding.toEmbeddingModel cfg)
         capability
+        shikigamiReadContext
         Recall.RecallRequest
-          { scope = scope',
+          { memorySpaceId = shikigamiMemorySpace,
+            scope = scope',
             query,
             strategy = Recall.Hybrid,
             maxResults = 10
           }
+  -- Two Eithers now: the outer one is runAppIO's, the inner one is recall's own
+  -- "could not be asked" channel, which Kioku 0.4 added so an unrunnable query
+  -- stops looking like a query that matched nothing. Both fall through to the
+  -- read-model path, as before.
   case recalled of
-    Right hits
+    Right (Right hits)
       | not (null hits) -> pure (Recall.memory <$> hits)
     _ -> recallActiveByScope appEnv scope'
 
 recallActiveByScope :: AppEnv -> MemoryScope -> IO [MemoryRecord]
 recallActiveByScope appEnv scope' = do
-  priorE <- runAppIO appEnv $ Recall.getActiveByScope scope'
+  priorE <- runAppIO appEnv $ Recall.getActiveByScope shikigamiMemorySpace scope'
   pure $ case priorE of
     Right (Right ms) -> ms
     _ -> []

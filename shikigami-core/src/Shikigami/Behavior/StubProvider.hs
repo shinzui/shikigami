@@ -14,8 +14,15 @@ where
 
 import Baikai.Api (Api (Custom))
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
+import Baikai.Evidence
+  ( ThinkingAdjustment (ThinkingDroppedUnsupportedHost),
+    ThinkingMode (ThinkingModeUnsupported),
+    ThinkingTranslation (..),
+    noThinkingRequested,
+  )
 import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model (..), _Model)
+import Baikai.Options (Options (..))
 import Baikai.Provider.Registry (ApiProvider (..), registerApiProvider)
 import Baikai.Response (Response (..), _Response)
 import Baikai.Stream (liftCompleteToStream)
@@ -56,8 +63,35 @@ stubApiProvider =
   ApiProvider
     { apiTag = stubApi,
       stream = liftCompleteToStream (\_model _ctx _opts -> pure stubResponse),
-      complete = \_model _ctx _opts -> pure stubResponse
+      complete = \_model _ctx _opts -> pure stubResponse,
+      describeThinking = stubThinking
     }
+
+-- | What the stub would do with a reasoning-effort request: nothing, and it says so.
+--
+-- baikai 0.5 added this to 'ApiProvider' for the pre-dispatch strictness gate, which must be
+-- able to refuse /before/ a request is built. The stub calls no model and puts nothing on any
+-- wire, so the honest answer is that the host exposes no reasoning controls at all — not that
+-- the request was expressed. Reporting anything weaker would let a caller who asked for
+-- guaranteed evidence pass the gate and then receive a fixed string.
+--
+-- The two cases stay distinct because baikai draws the distinction: a caller who set no level
+-- gets 'noThinkingRequested', while a caller who asked for one gets 'ThinkingModeUnsupported'
+-- with the drop recorded, which is what a reader of the evidence needs to tell "nobody asked"
+-- from "asked and could not be served".
+stubThinking :: Model -> Options -> ThinkingTranslation
+stubThinking _model opts =
+  case thinking opts of
+    Nothing -> noThinkingRequested
+    Just level ->
+      ThinkingTranslation
+        { requested = Just level,
+          mode = ThinkingModeUnsupported,
+          effortText = Nothing,
+          budgetTokens = Nothing,
+          wireField = Nothing,
+          adjustments = [ThinkingDroppedUnsupportedHost level]
+        }
 
 -- | Install the stub provider into baikai's process-global registry. Idempotent
 -- (insert is overwrite-by-tag), so calling it twice is harmless.

@@ -16,31 +16,29 @@ with-compiler: ghc-9.12.4
 
 constraints:
   -- durable execution, event model, and agent memory
-    keiki                   ==0.4.0.0
-  , keiki-codec-json        ==0.4.0.0
-  , keiro                   ==0.4.0.1
-  , keiro-core              ==0.4.0.1
-  , keiro-migrations        ==0.4.0.1
-  , keiro-pgmq              ==0.4.0.1
-  , kioku-api               ==0.2.0.0
-  , kioku-core              ==0.2.0.0
-  , kioku-migrations        ==0.2.0.0
+    keiki                   ==0.9.0.0
+  , keiki-codec-json        ==0.9.0.0
+  , keiro                   ==0.13.0.0
+  , keiro-core              ==0.13.0.0
+  , keiro-migrations        ==0.13.0.0
+  , kioku-api               ==0.4.1.0
+  , kioku-core              ==0.4.1.0
+  , kioku-migrations        ==0.4.1.0
 
   -- typed model programs and providers
-  , shikumi                 ==0.3.0.1
-  , baikai                  ==0.4.1.0
-  , baikai-claude           ==0.4.0.1
+  , shikumi                 ==0.3.0.2
+  , baikai                  ==0.5.0.0
+  , baikai-claude           ==0.5.0.0
 
   -- worker runtime, queues, and the event store
-  , shibuya-core            ==0.8.0.1
-  , shibuya-pgmq-adapter    ==0.12.0.0
-  , shibuya-kiroku-adapter  ==0.4.0.0
-  , pgmq-core               ==0.4.0.1
-  , pgmq-hasql              ==0.4.0.1
-  , pgmq-effectful          ==0.4.0.1
-  , pgmq-migration          ==0.4.0.1
-  , kiroku-store            ==0.3.1.0
-  , kiroku-store-migrations ==0.3.0.0
+  , shibuya-core            ==0.9.0.0
+  , shibuya-pgmq-adapter    ==0.14.0.0
+  , shibuya-kiroku-adapter  ==0.5.1.1
+  , pgmq-core               ==0.5.0.0
+  , pgmq-hasql              ==0.5.0.0
+  , pgmq-effectful          ==0.5.0.0
+  , kiroku-store            ==0.8.0.0
+  , kiroku-store-migrations ==0.4.0.0
   , pg-migrate              ==1.1.0.0
 
   -- process configuration (plan 37) and tracing (plan 28)

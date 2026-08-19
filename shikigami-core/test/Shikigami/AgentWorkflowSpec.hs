@@ -44,6 +44,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
@@ -193,12 +194,12 @@ tests =
             assertEqual "record replayed without rerunning" (Just 1) (Map.lookup "record" finalCounts)
             assertEqual "complete body ran once after recovery" (Just 2) (Map.lookup "complete" finalCounts)
 
-            memories <- runAppIO appEnv (Memory.getRowsBySession sid)
+            memories <- runAppIO appEnv (Memory.getRowsBySession shikigamiMemorySpace sid)
             case memories of
               Right (Right rows) -> assertEqual "exactly one memory row for the resumed session" 1 (length rows)
               other -> assertFailure ("memory lookup should succeed, got " <> show other)
 
-            session <- runAppIO appEnv (Session.getById sid)
+            session <- runAppIO appEnv (Session.getById shikigamiMemorySpace sid)
             case session of
               Right (Right (Just SessionRow {status, modelUsed})) -> do
                 assertEqual "session completed after resume" "completed" status
@@ -295,7 +296,7 @@ tests =
                     assertBool "first reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_1" `Text.isPrefixOf` Conversation.replyMessageId firstResult)
                     assertBool "second reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_2" `Text.isPrefixOf` Conversation.replyMessageId secondResult)
 
-                    turns <- runAppIO appEnv (Session.getTurns (Conversation.sessionId firstResult))
+                    turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace (Conversation.sessionId firstResult))
                     case turns of
                       Right (Right rows) ->
                         assertEqual
@@ -416,7 +417,7 @@ tests =
                       pure parentSessionId'
                     other -> assertFailure ("research supervisor should complete after children, got " <> show other)
 
-                children <- runAppIO appEnv (Session.getDelegationChildren parentSession)
+                children <- runAppIO appEnv (Session.getDelegationChildren shikigamiMemorySpace parentSession)
                 case children of
                   Right (Right rows) ->
                     assertEqual
@@ -825,6 +826,9 @@ recordPriorEscalation appEnv ticket = do
       Memory.record
         RecordMemoryData
           { memoryId = mid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor "at-risk-customer",
+            ownerPrincipal = Nothing,
             agentId = "at-risk-customer",
             sessionId = Nothing,
             scope = agentScope "at-risk-customer",

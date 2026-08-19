@@ -53,6 +53,7 @@ library
     Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
+    Shikigami.Memory.Access
     Shikigami.Memory.Scope
     Shikigami.Prelude
     Shikigami.Program.Registry
