@@ -62,6 +62,7 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 | `keiki-codec-json` | 0.4.0.0 | **0.9.0.0** | `v0.9.0.0` | `9714d37033c37595e3aaa3319ca0ca77466782e0` |
 | `keiro` | 0.4.0.1 | **0.13.0.0** | `keiro-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-core` | 0.4.0.1 | **0.13.0.0** | `keiro-core-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `keiro-dsl` | — | **0.13.0.0** | `keiro-dsl-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-migrations` | 0.4.0.1 | **0.13.0.0** | `keiro-migrations-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `kioku-api` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
 | `kioku-core` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
@@ -83,6 +84,20 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 Two constraints left the block rather than moving: `keiro-pgmq` and `pgmq-migration`
 resolve into nothing now that kioku composes its migrations through `pg-migrate`.
 Neither appears in `cabal build all --dry-run`, so pinning them pinned nothing.
+
+`keiro-dsl` is new to this cohort and is the one row that is not a library this
+service links against. It is the build-time specification toolchain that checks
+`domain/shikigami.keiro-workspace` and scaffolds `shikigami-core/src`, so it is
+declared as `extra-packages: keiro-dsl` in `cabal.project` rather than as a
+`build-depends` of any component. `extra-packages` makes the solver treat a
+Hackage package as if it were local, which is what lets `cabal run keiro-dsl --
+check ...` resolve to the pinned version from inside this project instead of
+depending on a developer's `PATH` or on a separate keiro checkout. The
+`constraints:` row pins it to the same `0.13.0.0` as the runtime packages,
+because the toolchain and the runtime move in lockstep: `keiro-dsl 0.13.0.0`
+declares `keiro-core ^>=0.13.0.0` and `keiki >=0.9 && <0.10`, both of which this
+cohort already satisfies. Adopted by
+`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`.
 
 ### Nothing is held back
 

@@ -45,11 +45,12 @@ This section must always reflect the actual current state of the work.
       `keiro-migrations` at `0.13.0.0`, not 0.11 — so the specification is authored against
       keiro-dsl **0.13** language **5**, not against 0.11 language 4. This plan's earlier 0.11 /
       language-4 instructions are superseded throughout; see the Revision Note of 2026-08-18.
-- [ ] M0: add `keiro-dsl ==0.13.0.0` to `cabal.project`'s constraints block and record the row in
-      `docs/dependency-cohort.md`. **The repository has no `keiro-dsl` dependency today** — plan 53
-      deliberately did not add one, because nothing consumed it. `cabal run keiro-dsl -- --help`
-      must report the 0.13 command surface (`new`, `parse`, `pretty`, `check`, `inspect`,
-      `behavior-obligations`, `scaffold`, `diff`) before Milestone 1 starts.
+- [x] (2026-08-19) M0: added `keiro-dsl ==0.13.0.0` to `cabal.project`'s constraints block **and**
+      `extra-packages: keiro-dsl` above it (a constraint alone does not make `cabal run keiro-dsl`
+      resolve — see the Decision Log entry of 2026-08-19), and recorded the row plus the
+      `extra-packages` rationale in `docs/dependency-cohort.md`. `cabal run keiro-dsl -- --help`
+      reports the full 0.13 command surface: `parse`, `pretty`, `check`, `inspect`,
+      `behavior-obligations`, `scaffold`, `diff`, `new`.
 - [ ] M1: inventory current aggregates, workflows, timers/process managers, queues, integrations, inbox/outbox contracts, routers, and read models; encode their stable identities across the workspace members.
 - [ ] M1: author `domain/shikigami.keiro-workspace` and derive its member split **from the
       completed inventory**, not before it. The manifest carries `service shikigami`,
@@ -123,6 +124,25 @@ would now be reimplementing a generated artifact by hand.
 ## Decision Log
 
 Record every decision made while working on the plan.
+
+- Decision (2026-08-19): **Declare `keiro-dsl` with `extra-packages:` in `cabal.project`, not
+  only with a `constraints:` row.**
+  Rationale: the plan's Milestone 0 said to "add `keiro-dsl ==0.13.0.0` to `cabal.project`'s
+  constraints block" and then to run `cabal run keiro-dsl -- --help`. A `constraints:` row alone
+  cannot do that. Constraints only bound versions the solver may pick for packages the project
+  already depends on; `keiro-dsl` is a build-time toolchain that no shikigami component links
+  against, so nothing would pull it in and `cabal run keiro-dsl` would fail with an unknown
+  target. `extra-packages: keiro-dsl` is Cabal's supported spelling for exactly this case — it
+  tells the solver to treat a package from the Hackage index as if it were a local project
+  package, so its executable becomes a `cabal run`/`cabal build` target. The constraints row is
+  kept as well, so the version is pinned in the same block as the rest of the cohort and a drift
+  between `docs/dependency-cohort.md` and the solver stays a one-line diff. This keeps the plan's
+  actual requirement — "`cabal run keiro-dsl` is reproducible in CI and does not depend on a
+  developer's `PATH` or on the Keiro checkout" (Concrete Steps) — and satisfies it more directly
+  than the house pattern at `mori://shinzui/keiro-runtime-patterns/docs/architecture-spec-and-scaffolding`,
+  which observes that danwa runs the CLI out of a keiro checkout "because the executable is not
+  installed globally". Verified: `cabal build keiro-dsl` resolves `keiro-dsl-0.13.0.0` against the
+  already-pinned `keiro-core-0.13.0.0` and `keiki-0.9.0.0` with no `allow-newer`.
 
 - Decision (2026-08-18): **Author onto Language 5 and pin `check --min-language 5`.** This
   reverses the decision of 2026-08-10 below, which is retained for history and must not be

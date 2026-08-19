@@ -6,6 +6,13 @@ packages:
   shikigami-server
   shikigami-workers
 
+-- keiro-dsl is the build-time specification toolchain, not a library this
+-- service links against. Listing it here makes `cabal run keiro-dsl -- ...`
+-- resolve to the pinned cohort version inside this project, so CI and every
+-- developer run the same checker against domain/shikigami.keiro-workspace
+-- without depending on PATH or on a separate keiro checkout.
+extra-packages: keiro-dsl
+
 with-compiler: ghc-9.12.4
 
 -- The co-developed dependency cohort is selected from published Hackage
@@ -20,6 +27,7 @@ constraints:
   , keiki-codec-json        ==0.9.0.0
   , keiro                   ==0.13.0.0
   , keiro-core              ==0.13.0.0
+  , keiro-dsl               ==0.13.0.0
   , keiro-migrations        ==0.13.0.0
   , kioku-api               ==0.4.1.0
   , kioku-core              ==0.4.1.0
