@@ -1,8 +1,9 @@
 # Shikigami package architecture
 
 Shikigami is a deployed service, so the repository follows the fleet's six-package
-deployed-service layout. This document is the authoritative statement of which package
-owns what, which dependency arrows are legal, where a new module belongs, and which
+deployed-service layout — **plus one**, `shikigami-agent`, for the one-off runs described
+under [Two ways to use Shikigami](#two-ways-to-use-shikigami). This document is the
+authoritative statement of which package owns what, which dependency arrows are legal, where a new module belongs, and which
 executable owns each user-facing command. It is owned by
 `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`;
 change it only through a plan revision.
@@ -28,11 +29,35 @@ modules are the one place technical names are allowed, and only from a fixed all
 (below).
 
 
-## The six packages
+## Two ways to use Shikigami
+
+Shikigami is deliberately usable two ways, and the second is a requirement rather than a
+side effect.
+
+The **deployed service** is the one the six-package layout is built for: a server, supervised
+background loops, Kafka, PGMQ, Postgres, and the Kikan platform around it.
+
+A **one-off agent run** is the other. Someone who is *not* running Kikan takes a declared
+agent and runs it once, from a command line, against a payload or a repository. This is what
+makes Shikigami versatile to consumers with simpler needs, and **Kikan itself does not use
+it**. It is served by `shikigami-agent`, which depends on `shikigami-core` and nothing else,
+so a consumer building it acquires none of the platform's messaging, queueing, or
+telemetry-export stack — in particular not `librdkafka`, the C library behind
+`hw-kafka-client`.
+
+Treat that as a constraint on future changes, not a convenience. It has been lost once: plan
+36 deleted the `shikigami-cli` package in 2026-07-30 as an umbrella dispatcher, correctly on
+the architecture, without knowing the package also carried this use case — because the use
+case was written down nowhere. It is written down here now so the next architecture change has
+to argue against it explicitly.
+
+
+## The seven packages
 
 | Package | Role | Depends on (Shikigami siblings) |
 |---|---|---|
 | `shikigami-core` | Domain: declarations, agent runs, behaviors, flows, sinks, memory, durable workflow logic | none |
+| `shikigami-agent` | One-off agent runs for consumers not operating the platform | `shikigami-core` |
 | `shikigami-api` | Public HTTP contract: Servant route records, DTOs, problem details, OpenAPI generation | `shikigami-core` |
 | `shikigami-server` | Servant/WAI execution, HTTP provider lifetimes, administrative and test-stub commands | `shikigami-core`, `shikigami-api` |
 | `shikigami-workers` | Supervised background loops: queue processing, stream subscriptions, scheduler, outbox, timers, resume | `shikigami-core` |
@@ -42,6 +67,7 @@ modules are the one place technical names are allowed, and only from a fixed all
 The legal arrows, and only these:
 
 ```text
+shikigami-agent   -> shikigami-core
 shikigami-api     -> shikigami-core
 shikigami-server  -> shikigami-core, shikigami-api
 shikigami-workers -> shikigami-core
@@ -100,8 +126,14 @@ stanzas.
      `Shikigami.Server.Seam`
    - `Shikigami.Workers.Config`, `Shikigami.Workers.Registry`,
      `Shikigami.Workers.Subscription`
+   - `Shikigami.App.Role` — the `RoleInfo` record and `runRole`, in `shikigami-core`.
+     Every executable in every package resolves configuration through it, for the same
+     reason they all resolve settings through `Shikigami.App.Config`: `runRole` *is* the
+     resolution order (parse, resolve, act), and two copies could disagree about when
+     `--check-config` runs relative to the action opening a database.
    - `Shikigami.Server.Command`, `Shikigami.Server.Command.*`,
-     `Shikigami.Workers.Command`, `Shikigami.Workers.Command.*` — the option parsers
+     `Shikigami.Workers.Command`, `Shikigami.Workers.Command.*`,
+     `Shikigami.Agent.Command`, `Shikigami.Agent.Command.*` — the option parsers
      and entry actions of each package's executables. These are exposed rather than
      buried in `app/` so that a `--help` smoke test can drive the parser purely with
      `optparse-applicative`'s `execParserPure` instead of shelling out to a built
@@ -129,15 +161,29 @@ their role and live in the package that owns that role.
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
 | `shikigami-consume-stream` | `shikigami-workers` | Consumes `activity.v1` and enqueues matching run jobs. |
 | `shikigami-consume-events` | `shikigami-workers` | Consumes public integration events and enqueues addressed run jobs. |
-| `shikigami-run-behavior` | `shikigami-workers` | Runs one agent's behavior with deterministic stubs (no database, no key). |
-| `shikigami-agent-run` | `shikigami-workers` | Runs one agent through the kioku session/memory lifecycle. |
+| `shikigami-run-behavior` | `shikigami-agent` | Runs one agent's behavior with deterministic stubs (no database, no key). |
+| `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle. |
 | `shikigami-migrate` | `shikigami-migrations` | Applies database migrations. |
 | `shikigami-client` | `shikigami-client` | Calls a running server through the typed client. |
 | `shikigami-openapi` | `shikigami-api` | Regenerates `docs/api/openapi.json` from the served route proxy. |
 
-There is no umbrella dispatcher binary and no utility package. A single process that
-dispatched into both server and worker implementations could not honestly satisfy the
-dependency graph.
+There is no umbrella dispatcher binary. A single process that dispatched into both server
+and worker implementations could not honestly satisfy the dependency graph, which is why
+`shikigami-cli` was retired in 2026-07-30.
+
+`shikigami-agent` is not a counterexample and not a utility package. The objection to
+`shikigami-cli` was that it depended on `shikigami-api`, `shikigami-core`,
+`shikigami-server`, **and** `shikigami-workers` at once, so it sat above every other package
+and its one binary linked all of them. `shikigami-agent` depends only on `shikigami-core`: it
+is a lighter leaf under the domain, not a lid over the graph. The distinguishing rule is
+enforced — `Shikigami.PackageArchitectureSpec` fails if any executable in any package depends
+on a sibling library other than its own package's.
+
+That rule exists because the weaker one was not enough. Between 2026-07-30 and 2026-08-19 the
+two one-off commands lived in `shikigami-workers`, where every executable depends on the whole
+library, so `shikigami-run-behavior` linked Kafka, PGMQ, Shibuya, and an OTLP exporter while
+this table described it as needing no database and no key. The sibling-edge rule could not see
+it, because the coupling was inside a package rather than between two.
 
 
 ## The public HTTP API standard

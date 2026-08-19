@@ -79,16 +79,21 @@ This section must always reflect the actual current state of the work.
       `forbiddenInLightPackages` over a `lightPackages` list, and a new case: **every executable
       links only its own package's library**. All three were mutation-tested and each fails on
       its own fault.
-- [ ] M3: update `docs/architecture/packages.md` (the six-package table, the executable
-      ownership table, the module placement rules, and the "no umbrella dispatcher" paragraph).
-      It is owned by plan 36, so revise plan 36 in the same change.
-- [ ] M3: revise `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`
-      to record what its Decision Log missed — the one-off consumer use case — and why deleting
-      `shikigami-cli` was right for the umbrella problem and wrong for the capability.
-- [ ] M3: revise `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` to own
-      `shikigami-run` from `shikigami-agent` instead of `shikigami-workers`.
-- [ ] M3: write `docs/adr/0003-*.md` recording the deliberate divergence from the fleet's
-      six-package standard, and update `docs/architecture/implementation-order.md`.
+- [x] (2026-08-19) M3: updated `docs/architecture/packages.md` — a new "Two ways to use
+      Shikigami" section states the one-off mode as a **constraint** rather than leaving it
+      implicit, the package table and arrow list gain `shikigami-agent`, the executable-ownership
+      table re-points both commands, the composition allowlist gains `Shikigami.App.Role` and
+      `Shikigami.Agent.Command.*`, and the "no umbrella dispatcher" paragraph now explains why
+      `shikigami-agent` is neither an umbrella nor a utility package.
+- [x] (2026-08-19) M3: revised plan 36 with a reconciliation section. Its architectural
+      judgement stands and is explicitly not reversed; what it missed was the product intent,
+      which was written down nowhere.
+- [x] (2026-08-19) M3: revised plan 48 — `shikigami-run` targets `shikigami-agent`, with a
+      reconciliation section covering the now-enforced boundary and the shared
+      `Shikigami.App.Role.runRole`.
+- [x] (2026-08-19) M3: wrote
+      `docs/adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md` and updated
+      `docs/architecture/implementation-order.md`.
 
 
 ## Surprises & Discoveries
@@ -152,6 +157,18 @@ Record every decision made while working on the plan.
   raises none of it. The standard also does not contemplate a service that is deliberately
   usable outside its own platform, which is the property being preserved.
 
+- Decision (2026-08-19, taken during Milestone 1): **Move `RoleInfo` and `runRole` to
+  `Shikigami.App.Role` in `shikigami-core` rather than duplicating them.** The plan left this
+  open ("duplicating a fifteen-line helper is acceptable; duplicating configuration resolution
+  is not"), and on reading `Shikigami.Workers.Command` it is the second: `runRole` calls
+  `runAppConfig`, so it *is* the resolution order — parse, resolve, act — and that ordering is
+  what makes `--check-config` honest, per that module's own haddock. Two copies could disagree
+  about when required-key checking runs relative to the action opening a database or joining a
+  consumer group. `Shikigami.App.Role` joins the composition-name allowlist beside
+  `Shikigami.App.Config`, for the same stated reason: every executable in every package
+  resolves settings the same way. The type is renamed from `WorkerRoleInfo` to `RoleInfo` now
+  that it is not worker-specific.
+
 - Decision (2026-08-19): **`shikigami-agent-run` keeps its database dependency and stays in the
   new package anyway.** It opens a kioku session and therefore needs `hasql`, `hasql-pool`, and
   `kiroku-store`, all of which `shikigami-core` already carries. "Light" here means *does not
@@ -162,12 +179,55 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose. Before marking the plan complete,
-distill durable project context from the Decision Log, Surprises & Discoveries, and
-this section into docs/adr/. Keep task-local execution details here.
+### What a consumer can do now (2026-08-19)
 
-(To be filled during and after implementation.)
+`shikigami-agent` depends on `shikigami-core` and nothing else, and owns both one-off
+executables. The dependency win is checkable in one command:
+
+```text
+$ cabal build shikigami-agent --dry-run | grep -E 'kafka|pgmq|otlp|shibuya|workers'
+$ echo $?
+1                                  # nothing matched
+```
+
+Eight packages dropped off the path for a one-off run — `hw-kafka-client`, `kafka-effectful`,
+`pgmq-effectful`, `shibuya-pgmq-adapter`, `hs-opentelemetry-sdk`,
+`hs-opentelemetry-exporter-otlp`, `baikai-trace-otel`, and `async`. The first matters most to
+the consumer this mode exists for: `librdkafka` is a C library, and building it was previously a
+precondition for running one agent once.
+
+Nine test suites pass, including a new `shikigami-agent-test` that mirrors
+`Shikigami.Workers.CommandSpec` so the diagnostic flags stay identical across packages.
+
+### The part that outlives the package
+
+`Shikigami.PackageArchitectureSpec` gained the rule that **every executable links only its own
+package's library**. That is the check that would have caught the original regression, and its
+absence is why the regression survived a test suite written to prevent exactly this class of
+problem: the old rule looked at what a *library* declares, so it structurally could not see
+coupling that lived inside a package rather than between two. All three new assertions were
+mutation-tested rather than assumed.
+
+The other durable output is a sentence in `docs/architecture/packages.md` saying what
+`shikigami-agent` is *for*. Plan 36's reasoning was sound and its outcome removed a capability,
+because the capability's rationale lived in someone's head rather than in the repository.
+
+### Lessons
+
+**A dependency graph describes what a package *is*, never what it is *for*.** Plan 36 read
+`shikigami-cli` correctly as an umbrella dispatcher and deleted it correctly on that reading.
+Nothing in the repository could have told it the package also served consumers who are not
+running the platform. The fix is not more careful reading; it is writing the purpose down where
+the architecture is described.
+
+**A boundary that a test cannot see is a convention.** The two one-off commands were never
+coupled to Kafka or PGMQ — their imports prove it — but they linked both for three weeks,
+because the coupling was one composition module inside a package whose executables all depend on
+the whole library. `PackageArchitectureSpec` existed the entire time and was blind to it.
+
+**The same mistake recurs one level down.** Plan 36 removed an umbrella dispatcher that spanned
+four packages and recreated a smaller one inside `shikigami-workers`. Worth watching for
+whenever a structural fix moves a problem rather than dissolving it.
 
 
 ## Context and Orientation

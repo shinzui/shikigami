@@ -517,3 +517,56 @@ discovery, the real gap the invariant test found in `shikigami-migrations`, and 
 duplicated agent-directory loaders. Outcomes states plainly that roughly forty sibling
 plan documents now cite module and file paths that no longer exist, with the mapping in the
 Decision Log.
+
+
+## Reconciliation (2026-08-19): what the `shikigami-cli` decision missed
+
+This plan's Decision Log entry of 2026-07-22 — "Preserve command capabilities as executable
+components inside the six packages rather than retaining `shikigami-cli` as a seventh package"
+— remains correct **as an architectural judgement** and is not reversed. `shikigami-cli`
+depended on `shikigami-api`, `shikigami-core`, `shikigami-server`, and `shikigami-workers` at
+once, so it sat above every other package and its single binary linked the HTTP server, the
+Kafka consumers, the OTel exporter, and the worker loops together. The rationale recorded here
+— that "a single umbrella process dispatcher cannot honestly import both server and worker
+implementation without violating the dependency graph" — is exactly right about that package.
+
+**What it missed is that the package also carried a product intent.** `shikigami-cli` served
+one-off agent runs for consumers who are *not* operating the Kikan platform, a mode Kikan
+itself does not use and which is what makes Shikigami versatile to simpler consumers. That
+intent appeared in no plan, no MasterPlan, no improvement request, and nowhere in
+`docs/architecture/packages.md`, so this plan read the package as pure architecture and removed
+it as such.
+
+The capability survived the split and was quietly degraded. `shikigami-run-behavior` and
+`shikigami-agent-run` moved to `shikigami-workers`, where every executable is
+`build-depends: base, optparse-applicative, shikigami-workers` — so a command this plan's own
+`docs/architecture/packages.md` describes as running "with deterministic stubs (no database, no
+key)" linked `hw-kafka-client`, `kafka-effectful`, `pgmq-effectful`, `shibuya-pgmq-adapter`,
+`hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp`, and `baikai-trace-otel`. Neither
+command was ever coupled to any of them; the coupling was `Shikigami.Workers.Command`, one
+composition module importing the two light commands alongside the scheduler, worker, and Kafka
+subscription. That is the same umbrella shape this plan deleted `shikigami-cli` for, moved down
+one level from between packages to inside one, where
+`Shikigami.PackageArchitectureSpec` could not see it — it checked which *siblings* a library
+declares, not what an *executable* drags in.
+
+`docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md`
+corrects this, registered as F4 under MasterPlan 2 because it corrects F1 rather than extending
+it. It adds `shikigami-agent`, depending only on `shikigami-core`; moves both commands there;
+adds the executable-weight rule to the architecture test; and writes the one-off use case into
+`docs/architecture/packages.md` as a constraint. The durable version is
+[ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md).
+
+Two of this plan's statements are therefore superseded in fact:
+
+- `docs/architecture/packages.md`'s "There is no umbrella dispatcher binary and no utility
+  package" now reads with a second paragraph explaining why `shikigami-agent` is neither. The
+  first clause stands.
+- The executable-ownership table's rows for `shikigami-run-behavior` and `shikigami-agent-run`
+  now name `shikigami-agent`.
+
+The lesson this plan should carry forward, because its reasoning was sound and its outcome
+still removed a capability: **an architecture document that lists what each package *is* does
+not protect what a package is *for*.** When a package exists for a reason that is not visible
+from its dependency graph, that reason belongs in `docs/architecture/packages.md` — which is
+now where it is.

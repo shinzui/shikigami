@@ -39,11 +39,11 @@ this revision.
 
 ## The open set
 
-55 ExecPlans across 10 MasterPlans. **16 are complete**; 39 have open work.
+55 ExecPlans across 10 MasterPlans. **17 are complete**; 38 have open work.
 
-Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, 21, 36, **39**, 47, 53.
+Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, 21, 36, **39**, 47, 53, **55**.
 
-New 2026-08-19: **plan 55**, registered as F4 under MasterPlan 2. See
+Plan 55 was created and implemented on 2026-08-19, registered as F4 under MasterPlan 2. See
 [the seventh package](#the-seventh-package-plan-55).
 
 Open with a small remainder (5 plans, ~1 session each):
@@ -56,8 +56,8 @@ Open with a small remainder (5 plans, ~1 session each):
 | 37 | M3: `shikigami-migrate` still uses codd's `CODD_*` contract instead of Settei. Blocked by a Cabal package cycle. Reassigned to plan 38. |
 | 38 | M4: the same `shikigami-migrate` Settei unification, plus `just migrate` still passing `DATABASE_URL`. |
 
-Open and substantial (34 plans): 12, 14, 17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28 (10 of 14
-items), 29, 30, 31, 32, 33, 34, 35, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55.
+Open and substantial (33 plans): 12, 14, 17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28 (10 of 14
+items), 29, 30, 31, 32, 33, 34, 35, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 52, 54.
 
 
 ## The cohort, as pinned
@@ -213,15 +213,23 @@ deleted — moved down one level, from between packages to inside one, where it 
 visible. `Shikigami.PackageArchitectureSpec` cannot see it either: it checks which *siblings* a
 library declares, not what an *executable* drags in.
 
-Plan 55 adds `shikigami-agent`, depending only on `shikigami-core`, moves both commands into it,
-extends the architecture test to police executable weight, and records the one-off consumer use
-case in `packages.md` and an ADR so the next architecture change has to argue against it. It is
-a deliberate divergence from the fleet's "exactly six cabal packages" standard
+**Implemented 2026-08-19.** `shikigami-agent` exists, depends only on `shikigami-core`, and owns
+`shikigami-run-behavior` and `shikigami-agent-run`; `cabal build shikigami-agent --dry-run`
+names none of the eight platform packages. `RoleInfo`/`runRole` moved to `Shikigami.App.Role` in
+core so both packages share one configuration-resolution order.
+`Shikigami.PackageArchitectureSpec` now expects seven packages, applies the light-package
+forbidden list to `shikigami-agent`, and adds the rule that **every executable links only its
+own package's library** — the check that would have caught the original regression, since the
+old sibling-edge rule could not see coupling inside a package. All three assertions were
+mutation-tested. `docs/architecture/packages.md` gains a "Two ways to use Shikigami" section
+stating the one-off mode as a constraint, and
+[ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md) is the durable
+record. It is a deliberate divergence from the fleet's "exactly six cabal packages" standard
 (`mori://shinzui/keiro-runtime-patterns/docs/architecture-service-packages`), recorded as such:
 the standard's objection is to edges *between* existing packages, and this adds a lighter leaf
 under core.
 
-**Sequencing: plan 55 lands before plan 48.** Plan 48's Purpose says its `shikigami-run` command
+**Sequencing: plan 55 landed before plan 48**, and plan 48 is revised to match. Plan 48's Purpose says its `shikigami-run` command
 "never dispatches the declaration's sinks, never starts a trigger, and never opens Kioku or
 PostgreSQL", and then assigns its executable to "the post-plan-36 workers package" — which would
 ship a binary linking PGMQ and Kafka to prove it does not use them. Plan 55 gives it an honest
@@ -334,7 +342,7 @@ onto on 2026-08-10). Its title and filename still say "0.11"; that is deliberate
 | 39 | ✅ **Implemented 2026-08-19.** No longer a plan needing an update; see [what it delivered](#what-plan-39-delivered-and-what-it-changes-for-everyone-else). |
 | 24 | ✅ **Discharged 2026-08-19.** Citations refreshed against the working tree and keiro 0.13 (21 of 59 were wrong), two quoted keiro signatures corrected, the `enqueueSinkIntentStep` sketch brought up to its current arity, and the "workflow names are Haskell constants" claim replaced — plan 39 moved both into the specification. It also gained the plan-39 reconciliation section. **Ready to implement as written.** |
 | every open plan | **New standing requirement.** Audit `file:line` citations immediately before implementing, per [Citation rot](#citation-rot-19-open-plans). 19 open plans cite deleted paths. |
-| 48 | **New requirement.** Its `shikigami-run` executable moves from `shikigami-workers` to `shikigami-agent`; see [the seventh package](#the-seventh-package-plan-55). Plan 55 revises plan 48 directly when it lands. Registration under a MasterPlan is still open. |
+| 48 | ✅ **Discharged 2026-08-19.** Its `shikigami-run` executable is re-pointed at `shikigami-agent`, and it gained a reconciliation section covering the enforced package boundary and the shared `Shikigami.App.Role.runRole`. Registration under a MasterPlan is still open. |
 | 17 | Gate cleared. Re-author against `shibuya-core 0.9`'s `ApplicationFailure DeadLetterCode Text`, the total reason projections, the canonical renderer, and the `shibuya.dead_letter.reason.code` span attribute. Delete any privately defined code taxonomy or renderer. Its M0 checklist item can be closed. |
 | 48 | Gate cleared. Rewrite as a consumer of `Baikai.Agent` / `baikai-agent`: `AgentRunRequest`, `AgentCapability`, `AgentSafety`, `AgentCommand`, `AgentCeiling`/`applyAgentCeiling`. Drop the invented vocabulary. |
 | 49 | Cite `Baikai.Evidence`'s `evidenceSchemaVersion` and digest split (`commitmentDigest` binds a record to a request; `configurationDigest` compares across runs). Do not define a second canonical encoder. |
@@ -408,8 +416,8 @@ complete list since that revision, and the entry bullet was stale. Plan 39 is co
   which is what opens Stage C.
 - **Plan 18** — atomic offsets, inbox, and enqueue in one boundary. No upstream gate.
 - **Plan 43** — practice-review contracts. Contract-only, no dependencies.
-- **Plan 55** — the seventh package for one-off agent runs. No upstream gate, no dependency on
-  anything open; it only revises plan 36's output. Small, and it blocks plan 48.
+- **Plan 55** ✅ **complete 2026-08-19.** The seventh package for one-off agent runs. It
+  unblocked plan 48, which now targets `shikigami-agent`.
 - **Plan 49** — attestation vocabulary, citing `Baikai.Evidence`. Contract-only. Worth landing
   early: nine plans (12, 14, 22, 28, 33, 35, 39, 43, 44, 48) are each about to name an agent
   version, a repository revision, a correlation id, a review id, or a tool-catalog digest, and
@@ -620,6 +628,9 @@ complete since the 2026-08-18 revision); the Language-5 advice is discharged rat
 outstanding; and the coverage-gap entry on stale package placement now carries a measured number
 instead of naming two plans.
 
-**Addendum (2026-08-19).** Plan 55 added and registered as MasterPlan 2's F4; the open set is 55
-plans. See [the seventh package](#the-seventh-package-plan-55) for why plan 36's deletion of
-`shikigami-cli` needs correcting, and the coverage-gap note on capabilities held only by intent.
+**Addendum (2026-08-19).** Plan 55 created, registered as MasterPlan 2's F4, and **implemented**
+the same day; the open set is 55 plans, 17 complete. See
+[the seventh package](#the-seventh-package-plan-55) for why plan 36's deletion of
+`shikigami-cli` needed correcting, and the coverage-gap note on capabilities held only by
+intent. The recommended next plan is unchanged: **plan 24** on the feature pole, **plan 49** on
+the attestation pole.

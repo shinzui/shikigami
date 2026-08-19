@@ -22,8 +22,10 @@ loads an agent from either that repository or an explicitly supplied agent bundl
 task and repository context to the configured real model, and gives the agent bounded tools
 for reading, searching, editing, and running approved commands inside that worktree.
 
-The user-visible entry point is a dedicated executable owned by the post-plan-36 workers
-package:
+The user-visible entry point is a dedicated executable owned by **`shikigami-agent`**
+(**revised 2026-08-19** — it said "the post-plan-36 workers package", which would have shipped a
+binary linking PGMQ and Kafka to prove it does not use them; see
+`docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md`):
 
 ```bash
 shikigami-run \
@@ -829,3 +831,39 @@ Intention: intention_01kyv7saq6ew2a2k5vw230pw1f
   same gate as plans 51 and 52, owned by plan 53. The plan explicitly rejects working around it by
   defining the vocabulary locally "for now", since that produces exactly the duplicate this
   revision exists to prevent.
+
+
+## Reconciliation with plan 55 (2026-08-19)
+
+`shikigami-run` belongs in **`shikigami-agent`**, not `shikigami-workers`.
+
+This plan's Purpose says the command "never dispatches the declaration's sinks, never starts a
+trigger, and never opens Kioku or PostgreSQL", and then assigned its executable to the workers
+package. Every executable there is `build-depends: base, optparse-applicative,
+shikigami-workers`, and that library links `hw-kafka-client`, `kafka-effectful`,
+`pgmq-effectful`, `shibuya-pgmq-adapter`, `hs-opentelemetry-sdk`,
+`hs-opentelemetry-exporter-otlp`, and `baikai-trace-otel`. The binary would have linked a Kafka
+C library in order to demonstrate that it does not use one — which also defeats the plan's own
+"without cloning Shikigami, starting its service stack, or creating a database" premise for the
+consumer who has to build it.
+
+`docs/plans/55-...md` added `shikigami-agent`, which depends on `shikigami-core` and nothing
+else and already owns `shikigami-run-behavior` and `shikigami-agent-run`. Add `shikigami-run`
+there, as a third `RoleInfo` in `Shikigami.Agent.Command`, with its command module at
+`shikigami-agent/src/Shikigami/Agent/Command/Run.hs`. Two consequences for this plan's
+milestones:
+
+- The architecture test now enforces the boundary. `Shikigami.PackageArchitectureSpec` fails if
+  `shikigami-agent`'s library acquires a sibling other than `shikigami-core`, or any of the
+  listener, exporter, queue-adapter, or stream-client packages, or if an executable links a
+  sibling other than its own package. If this plan's tooling needs something that trips those,
+  that is a finding to resolve deliberately, not a test to relax.
+- Configuration resolution is shared. Use `Shikigami.App.Role.runRole` from `shikigami-core`
+  and `withConfigOptions` as the existing two roles do, rather than a private `main`; that is
+  what makes `--check-config` and the other diagnostic flags work identically across every
+  Shikigami binary.
+
+The durable rationale for the package is
+[ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md). This plan is the
+second consumer of the mode it protects, and remains unregistered under any MasterPlan — worth
+resolving when it is scheduled.
