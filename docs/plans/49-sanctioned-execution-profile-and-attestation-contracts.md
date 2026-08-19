@@ -56,11 +56,12 @@ under Integration Points.
 
 ## Progress
 
-- [ ] M1: `Shikigami.Attestation.Profile` — the sanctioned execution profile, its allowed
+- [x] M1: `Shikigami.Attestation.Profile` — the sanctioned execution profile, its allowed
       `(provider, API, model, thinking)` tuples, its prohibitions, its limits, its issuer and
-      validity window, its lifecycle, and its canonical digest.
-- [ ] M1: round-trip and rejection tests for the profile; a profile whose allowed tuples are
-      empty is rejected by construction.
+      validity window, its lifecycle, and its canonical digest. (2026-08-19)
+- [x] M1: round-trip and rejection tests for the profile; a profile whose allowed tuples are
+      empty is rejected by construction — `allowedCalls` is a `NonEmpty`, and the compile-error
+      example is kept as a haddock comment on `minimalProfile` in the spec. (2026-08-19)
 - [ ] M2: `Shikigami.Attestation.Agent` — `AgentVersionRef` and `AgentArtifactSet`, shaped so
       lineage can be added additively.
 - [ ] M2: byte-stability test — a record carrying no optional values encodes identically to the
@@ -108,12 +109,54 @@ of `canonicalEncode` — because what this plan owns is which fields the payload
 what shape, and that is the part kikan IR-6 ratifies. The encoder is borrowed; the payload
 definition is not.
 
-**A note on the gate.** `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the cohort cannot take
-baikai 0.5 yet, and this plan is otherwise contract-only with no dependencies. Do not let that
-gate delay Milestones 1, 2, and 4. For Milestone 3, if the import is not yet available, declare
-`EvidenceStrength` locally *with a haddock note naming baikai as its future home* and delete it
-when the bound lifts — the same pattern this plan already uses for `RepositoryId` and `Revision`
-pending plan 44. What must not happen is a locally owned scale that outlives the gate silently.
+**The gate is gone (confirmed 2026-08-19).** The cohort has moved since this plan was revised:
+`cabal.project` now pins `baikai ==0.5.0.0`, `baikai-claude ==0.5.0.0`, and `kioku-core ==0.4.1.0`,
+and `dist-newstyle/cache/plan.json` resolves exactly those. Kioku was upgraded to support the
+current baikai, so nothing caps it at `^>=0.4.1.0` any more. Every fallback this plan describes —
+"if the import is not yet available, declare it locally with a haddock note" — is therefore dead
+code for this implementation. `Baikai.Evidence` and `Baikai.ThinkingLevel` are imported directly
+and no local copy of either was written.
+
+**`EvidenceStrength` is two different scales wearing one name (discovered 2026-08-19).** This is
+the most consequential thing found while implementing, and it reverses the 2026-08-10 revision
+note. That note said baikai ships "an identical scale" and that shikigami should stop defining its
+own. Reading both sources side by side shows they are not identical and not substitutes:
+
+- `baikai 0.5.0.0`'s `Baikai.Evidence.EvidenceStrength` is
+  `EvidenceRequestedOnly | EvidenceCorrelated | EvidenceModelObserved | EvidenceFullyObserved`,
+  rendering as `requested_only`, `correlated`, `model_observed`, `fully_observed`. It measures
+  **how much the provider corroborated about one call** — did a correlation id come back, did the
+  response name the model, did it name the effective thinking configuration.
+- kikan IR-6's table defines `declared | runtime-observed | runtime-attested | provider-attested`.
+  It measures **who vouches for the claim** — configuration, the runtime's own records, a
+  runtime signature over a complete roll-up, or the provider itself.
+
+They answer different questions and are not rankings of the same thing. Baikai cannot express
+`runtime-attested`, because baikai does not sign shikigami run attestations; it cannot express
+`declared` either, since every record it emits is by definition a runtime observation. The whole
+of baikai's four-level scale sits *inside* kikan's single `runtime-observed` tier. Collapsing them
+would break IR-6 acceptance criterion 6 outright — "a declaration-only record cannot satisfy a
+runtime-attested policy" is unstatable if `declared` and `runtime-attested` are not levels the
+type can hold.
+
+So both are kept, named apart so the collision cannot recur: baikai's `EvidenceStrength` is
+imported for the per-call floor (`minimumEvidenceStrength` on the profile, which is what UC-8's
+"response evidence is below the profile's required strength" actually measures), and kikan's four
+tiers are declared in Milestone 3 as `AttestationStrength` in a small
+`Shikigami.Attestation.Strength` module — the module this plan's Interfaces section already
+authorised creating to avoid an import cycle. The haddock caution about ordering rides on
+`AttestationStrength`, where it belongs: that ordering is the one a verifier must never use to
+promote a weaker claim.
+
+**Baikai also publishes `ThinkingLevel`, and here reuse *is* right (discovered 2026-08-19).**
+`Baikai.ThinkingLevel.ThinkingLevel` is `ThinkingMinimal | ThinkingLow | ThinkingMedium |
+ThinkingHigh | ThinkingXHigh | ThinkingMax`, a provider-neutral reasoning-effort scale. This plan's
+Interfaces section lists `ThinkingLevel` as something `Shikigami.Attestation.Profile` defines. It
+should not: `Baikai.Evidence.ThinkingTranslation` carries `requested :: Maybe ThinkingLevel` of
+baikai's type, so a shikigami-local copy would have to be translated at precisely the point where
+a profile's permitted tuple is compared against what a call actually requested — the one
+comparison this whole initiative exists to make trustworthy. Unlike `EvidenceStrength`, these two
+really are the same concept, so `Shikigami.Attestation.Profile` imports and re-exports baikai's.
 
 
 ## Decision Log
@@ -140,6 +183,34 @@ pending plan 44. What must not happen is a locally owned scale that outlives the
   its byte encoding means the governed-evolution work extends one vocabulary instead of
   reconciling two.
   Date: 2026-08-05
+
+- Decision: Keep both strength scales, and name kikan's `AttestationStrength` rather than
+  `EvidenceStrength`.
+  Rationale: they are not the same measurement — baikai's grades how completely a provider
+  corroborated one call, kikan's grades who vouches for the claim — and two types with the same
+  name in one process, one of which arrives on every `ModelCallEvidence` plan 51 collects, is the
+  exact translation hazard this plan exists to prevent. Naming them apart makes the distinction
+  visible at every use site instead of relying on import lists. `AttestationStrength` goes in
+  `Shikigami.Attestation.Strength`, which this plan's Interfaces section already sanctioned as the
+  escape hatch for an awkward import direction; it also removes the `Profile` → `Reviewed` import
+  the plan was worried about, since `Profile` now imports baikai's scale directly.
+  Date: 2026-08-19
+
+- Decision: Import `ThinkingLevel` from `Baikai.ThinkingLevel` instead of defining it in
+  `Shikigami.Attestation.Profile` as the Interfaces section says.
+  Rationale: the evidence a call returns carries baikai's `ThinkingLevel`, so a local copy would
+  need translating at the exact comparison the profile exists to make. Here — unlike
+  `EvidenceStrength` — the two are genuinely one concept, so this is the reuse the 2026-08-10
+  revision note was reaching for.
+  Date: 2026-08-19
+
+- Decision: Express the profile's cost ceiling as `maxCostMicroUsd :: Maybe Integer` rather than a
+  fractional type.
+  Rationale: `ProfileLimits` is covered by a digest another repository — possibly in another
+  language — must reproduce byte for byte, and decimal fractions are the classic way for two
+  canonical encoders to disagree. Integer micro-dollars removes the question. Recorded because the
+  field name is the only place the unit is stated.
+  Date: 2026-08-19
 
 - Decision: `ReviewedArtifact` is defined over the revision-pinned repository vocabulary that
   `docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` introduces, and

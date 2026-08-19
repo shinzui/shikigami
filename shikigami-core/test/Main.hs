@@ -16,6 +16,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
+import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
 import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
@@ -58,6 +59,7 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AppConfigSpec.tests,
+          AttestationContractsSpec.tests,
           BehaviorInputSpec.tests,
           BehaviorProviderSpec.tests,
           DelegateContextSpec.tests,
