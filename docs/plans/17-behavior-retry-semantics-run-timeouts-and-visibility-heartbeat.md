@@ -72,8 +72,9 @@ workflow failure budget instead of becoming a permanent step result.
 - [x] (2026-08-19) Milestone 4: added `worker.run_timeout_seconds` and
       `approval.deadline_seconds` to Settei, threaded both values through the worker
       environments, and sized `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
-- [ ] Register focused core and worker test modules; run the specification gate, focused
-      tests, `cabal build all`, and `cabal test all -j1` inside `nix develop`.
+- [x] (2026-08-19) Registered focused core and worker test modules; passed the
+      specification gate from baseline `664b5eb`, focused tests, `cabal build all`, and
+      `cabal test all -j1` inside `nix develop`.
 
 
 ## Surprises & Discoveries
@@ -298,9 +299,45 @@ workflow failure budget instead of becoming a permanent step result.
 
 ## Outcomes & Retrospective
 
-Not implemented yet. On completion, record the exact patch id and generated artifacts,
-the dependency versions actually selected, focused and full test results, and any
-operational deviation from the retry, timeout, lease, or DLQ policy above.
+Implemented the retry boundary where it matters: a transient behavior error or timeout
+now escapes before Keiro can append a step result, while a permanent error is bounded,
+redacted, and journaled once. Both durable workflow families use patch id
+`shikigami-behavior-retry-v1`; fresh agent runs write `run-behavior-v2`, fresh Danwa turns
+write `run-behavior-v2:<messageId>`, and pre-patch instances retain their old branch. The
+scaffolded artifacts are
+`Shikigami.AgentRun.Generated.WorkflowFacts`,
+`Shikigami.AgentRun.Generated.WorkflowRuntime`,
+`Shikigami.DanwaConversation.Generated.WorkflowFacts`,
+`Shikigami.DanwaConversation.Generated.WorkflowRuntime`, and
+`Shikigami.Generated.Conformance`.
+
+The run-job consumer now uses `keiro-pgmq` 0.13.0.0's typed `Job RunJob` surface with the
+wire-compatible `aesonJobCodec`, startup main-queue/DLQ reconciliation, explicit
+`JobOutcome` mapping, and the released default five-delivery transport policy. A linked
+heartbeat renews visibility every 10 seconds to 30 seconds; the integration proof held a
+handler for 2.5 seconds under a one-second initial visibility timeout and observed one
+handler entry plus an empty queue. The released façade still represents application dead
+letters as Shibuya's `shibuya.poison_pill`; stable bounded `shikigami.<reason>:` detail is
+the one intentional operational deviation already recorded in this plan.
+
+Settei now exposes `worker.run_timeout_seconds` (300 default) and
+`approval.deadline_seconds` (900 default), both bounded to 1-86400 whole seconds. The
+first reaches synchronous behavior attempts and derives a Keiro resume lease with a
+30-second margin; the second reaches ordinary approvals and flow acknowledgements.
+Direct workflow runs continue to leave `WorkflowRunOptions.leaseHeartbeat` unset.
+
+Validation completed with `just keiro-gate 664b5eb` (both patch additions additive and
+replay-neutral, all 12 conformance facts), `cabal build all`, and serialized
+`cabal test all -j1`. The full suite passed 8 agent, 15 API, 3 client, 259 core, 5
+migration, 20 server, and 22 worker tests in addition to conformance. The focused suites
+also passed 5 retry-semantics, 3 run-job/heartbeat, 34 configuration, 4 workflow-versioning,
+and 15 worker-command cases.
+
+ADR review found no new record to create. The durable workflow-option and patch-set
+decision is already captured by ADR-0004, including the separation between PGMQ delivery
+heartbeats and Keiro instance leases; the typed consumer and exact retry/timeout values
+are implementation and operational policy kept in this ExecPlan. The repository has no
+`just check-adr` recipe, as recorded under Surprises & Discoveries.
 
 
 ## Context and Orientation
@@ -746,3 +783,7 @@ patch is a journaled compatibility decision declared through the Keiro specifica
   deadline into approvals and acknowledgements, and derived the Keiro resume lease as
   the behavior timeout plus 30 seconds. The focused configuration suite passed 34 cases,
   workflow versioning passed 4, and worker command configuration passed 15.
+- 2026-08-19: Completed validation and retrospective. The workflow gate classified both
+  patch additions as additive and replay-neutral, the all-target build passed, the full
+  serialized suite passed, and ADR review confirmed ADR-0004 already owns the durable
+  architecture decision.
