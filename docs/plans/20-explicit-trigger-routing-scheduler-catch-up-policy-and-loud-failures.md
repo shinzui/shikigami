@@ -1052,7 +1052,34 @@ exit=1
 Without the flag the same three manifests load, the failure is still reported, and the worker
 carries on — which is the point of the lenient default.
 
-Manual check of scheduler catch-up, against the dev cluster:
+The operator surface, which is the visible half of Milestone 1 and Milestone 4's key change
+(observed 2026-08-20):
+
+```text
+$ nix develop -c cabal run -v0 shikigami -- enqueue-run --help
+Usage: shikigami enqueue-run AGENT [--payload JSON] [--conversation]
+                             [--key TEXT]
+
+  Enqueue an addressed run job for a named agent
+
+Available options:
+  --payload JSON           Addressed run payload as JSON
+  --conversation           Route the job as a danwa conversation turn instead of
+                           an agent run
+  --key TEXT               Idempotency key; defaults to one derived from the
+                           agent and payload
+```
+
+Manual check of scheduler catch-up, against the dev cluster. **Not run during implementation**,
+because `just create-database` recreates the developer's own `shikigami` database and the
+scheduler would leave rows and an armed timer behind in it — a destructive change to somebody
+else's environment, and not one to make unasked. The automated equivalent is stronger anyway and
+did run: `SchedulerSpec`'s "waking a day late arms exactly one future run (SkipMissed)" drives the
+identical scenario against a real ephemeral Postgres, asserts exactly one enqueued job with the
+expected idempotency key, asserts no timer is armed for the next stale minute, and asserts the
+timer that *is* armed fires strictly after the wake-up. Its `FireAll` counterpart observes the
+re-armed tick still in the past, which is the fails-before half. Run the steps below on a
+throwaway database when a human-visible demonstration is wanted:
 
 ```bash
 nix develop -c just create-database
@@ -1144,7 +1171,11 @@ called `ensureRunQueue` first, exactly as the two production startup paths now d
 
 **Operationally**, the scheduler check in Concrete Steps is the human-visible acceptance: stop the
 scheduler for several minutes on a `* * * * *` agent, restart it, and observe one enqueued run
-rather than one per missed minute.
+rather than one per missed minute. It was not performed during implementation — it recreates the
+developer's own database — and `SchedulerSpec` covers the same claim deterministically. The two
+checks that *were* performed against real processes are the strict-startup refusal
+(`--set agents.strict=true`, three JSON lines and exit code 1) and the `enqueue-run` help,
+both transcribed in Concrete Steps.
 
 
 ## Idempotence and Recovery
