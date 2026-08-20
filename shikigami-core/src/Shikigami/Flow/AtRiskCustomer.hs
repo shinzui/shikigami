@@ -41,7 +41,7 @@ atRiskCustomerFlow ::
   Eff es Value
 atRiskCustomerFlow approval deadline payload = do
   activity <- currentActivity
-  prior <- recall (riskQuery activity)
+  prior <- recall "risk-history" (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))
   if level verdict /= "high"
     then pure (toJSON verdict)
@@ -50,14 +50,14 @@ atRiskCustomerFlow approval deadline payload = do
       ack <- awaitAcknowledgement approval (StepName "await-ack") (ackRequest verdict activity) deadline
       case ack of
         Acknowledged answer -> do
-          _ <- remember (acknowledgedNote verdict answer)
+          _ <- remember "acknowledged" (acknowledgedNote verdict answer)
           pure (resolvedValue verdict answer)
         Declined reason -> do
-          _ <- remember (declinedNote verdict reason)
+          _ <- remember "declined" (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
           _ <- emitSignal "escalate" (escalationFor verdict activity) (toJSON verdict)
-          _ <- remember (escalatedNote verdict)
+          _ <- remember "escalated" (escalatedNote verdict)
           pure (escalatedValue verdict)
 
 -- | Classify this activity's risk from what it says and what the agent already

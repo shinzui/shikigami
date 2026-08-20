@@ -5,11 +5,15 @@ module Shikigami.Flow.Capability
     Memory,
     MemoryEnv (..),
     MemoryQuery (..),
+    RememberOptions (..),
     Sink,
     SinkEnv (..),
     currentActivity,
+    defaultRememberOptions,
+    deterministicFlowMemoryId,
     emitSignal,
     recall,
+    recordFlowMemory,
     remember,
     runActivity,
     runMemory,
@@ -18,17 +22,23 @@ module Shikigami.Flow.Capability
 where
 
 import Data.Aeson (Value)
+import Data.ByteString qualified as ByteString
 import Data.IORef (atomicModifyIORef', newIORef)
+import Data.KindID.V7 qualified as KindID
+import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime, getCurrentTime)
+import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
-import Keiro.Workflow (PatchId (..), StepName (..), Workflow, patch)
+import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentRunGeneration, currentWorkflow, patch, step)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEnv, runAppIO)
-import Kioku.Id (MemoryId, SessionId, genMemoryId)
+import Kioku.Id (MemoryId, SessionId)
+import Kioku.Memory (MemoryWriteError)
 import Kioku.Memory qualified as MemoryStore
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kiroku.Store.Effect (Store)
@@ -68,8 +78,8 @@ data SinkEnv = SinkEnv
   }
 
 data Memory :: Effect where
-  Recall :: MemoryQuery -> Memory m [MemoryRecord]
-  Remember :: Value -> Memory m MemoryId
+  Recall :: Text -> MemoryQuery -> Memory m [MemoryRecord]
+  Remember :: Text -> RememberOptions -> Value -> Memory m MemoryId
 
 type instance DispatchOf Memory = Dynamic
 
@@ -83,11 +93,72 @@ data Activity :: Effect where
 
 type instance DispatchOf Activity = Dynamic
 
-recall :: (Memory :> es) => MemoryQuery -> Eff es [MemoryRecord]
-recall query' = send (Recall query')
+-- | The metadata a 'Remember' writes alongside its content.
+--
+-- Every field was a hardcoded constant in this interpreter before flows could
+-- choose. 'defaultRememberOptions' holds those same constants, so a flow that
+-- does not care keeps recording exactly what it recorded before.
+--
+-- 'extraTags' is additive on purpose: the interpreter unions it with the
+-- @[\"flow\", \<behavior kind\>]@ tags it has always written rather than replacing
+-- them, so a flow cannot accidentally un-tag its own memories out of the
+-- queries that find them.
+data RememberOptions = RememberOptions
+  { priority :: !Int,
+    confidence :: !Confidence,
+    memoryType :: !MemoryType,
+    supersedes :: !(Maybe MemoryId),
+    extraTags :: !(Set Text)
+  }
+  deriving stock (Eq, Show)
 
-remember :: (Memory :> es) => Value -> Eff es MemoryId
-remember value = send (Remember value)
+-- | What this interpreter wrote on every flow memory before flows could choose.
+defaultRememberOptions :: RememberOptions
+defaultRememberOptions =
+  RememberOptions
+    { priority = 100,
+      confidence = MediumConfidence,
+      memoryType = MemoryPattern,
+      supersedes = Nothing,
+      extraTags = Set.empty
+    }
+
+-- | Recall prior learnings, journaling the result under a step name derived
+-- from @label@.
+--
+-- @label@ is a caller-supplied stable token with the same meaning it has for
+-- 'emitSignal': short, lowercase, unique among the memory operations of one
+-- flow, and never derived from data that varies between a run and its replays.
+-- Journaling is what makes recall replay-safe — a resumed or re-invoked run is
+-- handed the /recorded/ result list rather than re-querying a store that other
+-- runs have written to since, so a flow that branches on what it recalled takes
+-- the same branch it took the first time.
+--
+-- One rule 'emitSignal' does not have applies here. A memory label is also a
+-- declared wire word, so it must match @[A-Za-z0-9][A-Za-z0-9_-]*@ (no colons,
+-- nothing computed at run time) and, when the flow is registered in
+-- "Shikigami.Flow", it must appear as @step recall-\<label\>@ in
+-- @domain\/shikigami-agent-run.keiro@. That is what puts these names under
+-- @just keiro-gate@ instead of merely being stable by convention.
+recall :: (Memory :> es) => Text -> MemoryQuery -> Eff es [MemoryRecord]
+recall label query' = send (Recall label query')
+
+-- | Record a learning, journaling it under a step name derived from @label@,
+-- with the metadata this interpreter has always written.
+--
+-- @label@ carries the same contract as 'recall'\'s, and the declared step name
+-- is @remember-\<label\>@. It does double duty here: besides naming the journal
+-- entry, it is an input to the deterministic memory id
+-- ('deterministicFlowMemoryId'), which is what makes a crash inside the step
+-- window re-write the same row instead of a second one.
+--
+-- Because the id is deterministic, the arguments to a 'remember' must be a pure
+-- function of replay-stable inputs — a note built from journaled step results,
+-- not from a fresh clock read or a live query. Kioku answers a second write
+-- against a known id idempotently only when the whole semantic payload matches;
+-- a payload that drifted yields a conflict rather than a silent second row.
+remember :: (Memory :> es) => Text -> Value -> Eff es MemoryId
+remember label value = send (Remember label defaultRememberOptions value)
 
 -- | Emit a signal through a declared sink, journaling it under a step name
 -- derived from @label@.
@@ -105,36 +176,117 @@ emitSignal label sink output = send (EmitSignal label sink output)
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
 currentActivity = send CurrentActivity
 
-runMemory :: (IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
-runMemory MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}, sessionId} =
+-- | Interpret 'Memory' by journaling every recall and every write as a keiro
+-- step named after the caller's label.
+--
+-- This is what makes flow memory replay-safe, and it closes two distinct holes.
+-- A durable workflow re-executes its body on every resume and on every
+-- re-invocation of an already-completed instance, answering journaled steps from
+-- the journal and running everything else again. Before this interpreter
+-- journaled anything, that meant a @recall@ re-queried a store other runs had
+-- written to since (so a flow branching on what it recalled could take a
+-- different branch than the one its journal records) and a @remember@ minted a
+-- fresh id and wrote one extra row per replay.
+--
+-- The step journal closes the replay hole. It does not close the /crash/ hole:
+-- keiro steps are at-least-once at the step boundary, so an action that ran but
+-- whose journal append did not commit runs again on resume. That is what
+-- 'deterministicFlowMemoryId' is for — the re-execution derives the same id, and
+-- kioku answers a second write against a known id as an idempotent success
+-- rather than a second row.
+--
+-- 'currentWorkflow' and 'currentRunGeneration' are read /outside/ the step on
+-- purpose. Both are replay-stable by construction, so reading them outside costs
+-- nothing and keeps the step body a single IO action whose result is the value
+-- being journaled.
+runMemory :: (Workflow :> es, IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
+runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}} =
   interpret \_ -> \case
-    Recall MemoryQuery {query} ->
-      liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query)
-    Remember value -> liftIO do
-      mid <- genMemoryId
-      recordedAt <- getCurrentTime
-      let focus = behaviorKindText (behavior decl)
-          record =
-            RecordMemoryData
-              { memoryId = mid,
-                memorySpaceId = shikigamiMemorySpace,
-                actorPrincipal = agentActor (name decl),
-                ownerPrincipal = Nothing,
-                agentId = name decl,
-                sessionId,
-                scope = agentScope (name decl),
-                memoryType = MemoryPattern,
-                content = renderLearning value,
-                priority = 100,
-                confidence = MediumConfidence,
-                tags = Set.fromList ["flow", focus],
-                supersedes = Nothing,
-                recordedAt
-              }
-      runAppIO appEnv (MemoryStore.record record) >>= \case
-        Right (Right stored) -> pure stored
-        Right (Left err) -> ioError (userError ("failed to record flow memory: " <> show err))
-        Left err -> ioError (userError ("failed to record flow memory: " <> show err))
+    Recall label MemoryQuery {query} ->
+      step
+        (StepName ("recall-" <> label))
+        (liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query))
+    Remember label opts value -> do
+      (wfName, wfId) <- currentWorkflow
+      generation <- currentRunGeneration
+      let mid = deterministicFlowMemoryId wfName wfId generation label
+      step (StepName ("remember-" <> label)) $
+        liftIO $
+          recordFlowMemory env mid opts value >>= \case
+            Right stored -> pure stored
+            -- A conflict is not a duplicate to swallow: it means the payload
+            -- changed between two attempts under one id, which is a flow
+            -- building its note from something that is not replay-stable.
+            Left err -> ioError (userError ("failed to record flow memory: " <> show err))
+
+-- | The memory id a labeled 'Remember' always maps to.
+--
+-- Keyed on the workflow identity, the journal generation, and the caller's
+-- label, so a crash between the record landing and the journal append committing
+-- re-derives the __same__ id on resume; kioku answers the second write
+-- idempotently rather than writing a second row. The generation is included for
+-- the reason 'currentRunGeneration' names: a journal rotated by @continueAsNew@
+-- must not collide with the generation before it.
+--
+-- The tradeoff is a name-based (v5) UUID inside an id family that is otherwise
+-- time-ordered (v7), which costs time-sortability for these rows and nothing
+-- else. Kioku took the identical tradeoff for distilled L1 atoms
+-- (@Kioku.Distill.L1.l1AtomMemoryId@), which is the same construction; it is not
+-- exported, so this mints its own.
+--
+-- Hashes UTF-8 bytes rather than @fromEnum@ over 'Char's. This deliberately
+-- diverges from @deterministicOutboxIdForMessage@ in "Shikigami.Agent.Workflow",
+-- whose @fromEnum@ truncates any code point above 255 and is safe only because
+-- its inputs are ASCII by construction. A workflow name is not: nothing in the
+-- type system keeps it ASCII. Do not \"fix\" this back to match its neighbour.
+deterministicFlowMemoryId :: WorkflowName -> WorkflowId -> Int -> Text -> MemoryId
+deterministicFlowMemoryId (WorkflowName wfName) (WorkflowId wfId) generation label =
+  KindID.decorateKindID $
+    UUID.V5.generateNamed UUID.V5.namespaceURL $
+      ByteString.unpack $
+        TextEncoding.encodeUtf8 $
+          Text.intercalate ":" ["shikigami:flow-memory", wfName, wfId, Text.pack (show generation), label]
+
+-- | Write one flow memory under a caller-supplied id, returning kioku's answer.
+--
+-- Exported because it is the only honest way to test the crash window this
+-- interpreter depends on. There is no public API for losing a journal append, so
+-- a test calls this the way a re-executed step would: twice with one id and one
+-- payload (both must succeed, and one row must exist), then once more with the
+-- same id and different content (which must conflict rather than succeed).
+--
+-- The @Left@ it returns is kioku's domain answer and is the interesting one. A
+-- 'Kiroku.Store.Error.StoreError' from the surrounding 'runAppIO' is
+-- infrastructure failing rather than the write being refused, and is raised as
+-- an 'IOError' the way this interpreter has always raised it.
+recordFlowMemory :: MemoryEnv -> MemoryId -> RememberOptions -> Value -> IO (Either MemoryWriteError MemoryId)
+recordFlowMemory
+  MemoryEnv {appEnv, agent = decl, sessionId}
+  mid
+  RememberOptions {priority, confidence, memoryType, supersedes, extraTags}
+  value = do
+    recordedAt <- getCurrentTime
+    let focus = behaviorKindText (behavior decl)
+        record =
+          RecordMemoryData
+            { memoryId = mid,
+              memorySpaceId = shikigamiMemorySpace,
+              actorPrincipal = agentActor (name decl),
+              ownerPrincipal = Nothing,
+              agentId = name decl,
+              sessionId,
+              scope = agentScope (name decl),
+              memoryType,
+              content = renderLearning value,
+              priority,
+              confidence,
+              tags = Set.fromList ["flow", focus] <> extraTags,
+              supersedes,
+              recordedAt
+            }
+    runAppIO appEnv (MemoryStore.record record) >>= \case
+      Right outcome -> pure outcome
+      Left err -> ioError (userError ("failed to record flow memory: " <> show err))
 
 -- | Interpret 'Sink' by enqueueing each emission as a journaled outbox intent.
 --

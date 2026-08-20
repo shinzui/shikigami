@@ -52,20 +52,30 @@ This section must always reflect the actual current state of the work.
       against `cabal.project` and `docs/dependency-cohort.md`.
 - [x] (2026-08-19) Plan reconciled against the delivered tree: see the Revision Note of
       2026-08-19 and the Surprises entries it points at. No runtime code written yet.
-- [ ] M1: Add failing test: replaying an acknowledged at-risk flow duplicates its recorded
-      memory (red). Capture the transcript in Surprises & Discoveries before fixing it.
-- [ ] M2: Declare `recall-risk-history`, `remember-acknowledged`, `remember-declined`, and
-      `remember-escalated` in `domain/shikigami-agent-run.keiro`; regenerate; accept the
-      conformance expectation change; `just keiro-gate <merge-base>` green.
-- [ ] M2: Labeled `Memory` effect (`Recall`/`Remember` carry a `Text` label and `Remember`
-      carries `RememberOptions`); `runMemory` journals both as keiro steps under
-      `recall-<label>` / `remember-<label>`; deterministic memory ids; M1 test green.
-- [ ] M2: Crash-window idempotency test — the same deterministic id and the same semantic
-      payload recorded twice yields one active row and `Right` both times; the same id with
-      different content yields `MemoryConflict`.
-- [ ] M2: `docs/workflow-versioning.md`'s "What Shikigami journals today" table gains the two
-      new label families, and its "Undeclarable label families" section records that memory
-      labels are deliberately declarable.
+- [x] (2026-08-19) M1: Failing test added — "replaying a completed flow does not duplicate its
+      memory" in `shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`, with the
+      `acknowledgedMemoryCount` / `isAcknowledgedNote` helpers it needs. Run red against the
+      unmodified interpreter; transcript captured in Surprises & Discoveries. Not committed
+      alone (this tasty suite has no expected-failure idiom); it lands with M2.
+- [x] (2026-08-19) M2: Declared `recall-risk-history`, `remember-acknowledged`,
+      `remember-declined`, and `remember-escalated` in `domain/shikigami-agent-run.keiro`,
+      regenerated (`shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs` and
+      `shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt`), and hand-accepted the
+      `workflow/AgentRun/body` fact in
+      `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`.
+- [x] (2026-08-19) M2: Labeled `Memory` effect — `Recall` carries a `Text` label, `Remember`
+      carries a label and `RememberOptions`; `runMemory` journals both under
+      `recall-<label>` / `remember-<label>` with constraint `(Workflow :> es, IOE :> es)`;
+      `deterministicFlowMemoryId` and `recordFlowMemory` added; call sites in
+      `Shikigami/Flow/AtRiskCustomer.hs` and the spec's `memoryFlow` labeled. M1 test green,
+      and it now also asserts both labels are in the step index.
+- [x] (2026-08-19) M2: Crash-window idempotency test green in both directions — "one
+      deterministic id records idempotently and refuses a changed payload".
+- [x] (2026-08-19) M2: `docs/workflow-versioning.md` updated — the journal inventory gains
+      `recall-<label>` / `remember-<label>` marked `declared`, and the "Undeclarable label
+      families" section records why memory labels are deliberately declarable.
+- [ ] M2: `just keiro-gate origin/master` green (run after the commit, since
+      `keiro-scaffold` requires the regenerated layer to be committed).
 - [ ] M3: `Acknowledgement` capability added; `IOE` and `Store` removed from `FlowEffects`;
       `FlowRuntime` becomes the `runAcknowledgement` environment rather than a flow-body
       argument; `atRiskCustomerFlow`, `Shikigami.Flow`'s registry, and the specs compile
@@ -132,6 +142,28 @@ minted context — `shikigamiReadContext` in
 `shikigami-core/src/Shikigami/Memory/Access.hs` — carries the *service* principal `shikigami`,
 while memory writes record the *agent* principal `shikigami.agent.<name>`. See the Decision Log
 for why that swap stays out of this plan.
+
+**The red run reproduces the defect exactly as predicted, on the replay and not before.**
+Against the unmodified `runMemory`, `cabal test shikigami-core-test --test-options='-p "duplicate
+its memory"'`:
+
+```text
+shikigami
+  FlowLifecycle
+    replaying a completed flow does not duplicate its memory: FAIL
+      Exception: user error (MigratedDatabaseCallbackFailed (HUnitFailure (...
+      srcLocStartLine = 201 ...) "replay does not record the note a second time
+      expected: 1
+       but got: 2"))
+
+1 out of 1 tests failed (1.46s)
+```
+
+The intermediate assertion at line 196 — "the acknowledged branch records its note once" —
+passed, so the second row is written by the third invocation (the pure replay of an already
+completed workflow) and by nothing earlier. That isolates the fault to the un-journaled
+`Remember` rather than to the park-and-resume, and it is why the resume in the middle of the
+test is kept: without it the replay would not be replaying an acknowledged branch at all.
 
 
 ## Decision Log

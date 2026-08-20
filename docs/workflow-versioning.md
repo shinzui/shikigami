@@ -403,6 +403,8 @@ conversation  (workflow "shikigami.danwa-conversation",
 flow capabilities  (run inside the agent-run workflow)
   classify                         Shikigami/Flow/AtRiskCustomer.hs:45
   await-ack                        Shikigami/Flow/AtRiskCustomer.hs:50
+  recall-<label>                   Shikigami/Flow/Capability.hs   -- declared
+  remember-<label>                 Shikigami/Flow/Capability.hs   -- declared
   <step>:notify                    Shikigami/Agent/Approval.hs:157
   emit-signal:<label>              Shikigami/Flow/Capability.hs   -- post-patch
   emit-signal:<ordinal>            (pre-patch; in-flight instances only)
@@ -426,6 +428,15 @@ reserved by keiro  (keiro/src/Keiro/Workflow/Types.hs)
   child:<childWorkflowId>          :376
 ```
 
+The two memory families are marked `declared` because they are the first
+flow-side journal names this service can gate rather than merely keep stable by
+convention. `runMemory` journals a flow's `recall` and `remember` under the
+caller's label, and the labels every *registered* flow reaches are declared in
+`domain/shikigami-agent-run.keiro` — today `recall-risk-history`,
+`remember-acknowledged`, `remember-declined`, and `remember-escalated`. Adding a
+labeled memory call to a registered flow therefore also means adding its label
+there and passing `just keiro-gate`.
+
 Two ordinal-derived names remain, and this document does not fix them; it records
 that they are governed by rule 5 and names their owners.
 `approval:<SinkKind>:<ordinal>` counts approvals within one run, so inserting a
@@ -447,6 +458,16 @@ which means `just keiro-diff` cannot gate a change to it. Those families are
 `approval:<SinkKind>:<ordinal>`, `<step>:notify`, `emit-signal:<label>`, and
 every per-message conversation label; the census with per-family owners is
 `docs/architecture/shikigami-domain-inventory.md`.
+
+Flow memory labels are deliberately *not* in that list, and the contrast is the
+point. `recall-<label>` and `remember-<label>` use a hyphen where the sink family
+uses a colon, which is the whole difference between a name this gate governs and
+a name it cannot see. The same fix already applies to patch ids, where
+`shikigami.emit-signal-labels-v1` fails to parse and
+`shikigami-emit-signal-labels-v1` does not. A new capability choosing a separator
+for its journal labels should choose the hyphen for this reason, and accept the
+cost that comes with it: a new label on a registered flow is now a specification
+edit, a regeneration, and a gate run, not just a Haskell edit.
 
 Note what the worked example did and did not achieve. `emit-signal:alert` is
 *stable* — that was the point — but it still carries a colon, so it is still

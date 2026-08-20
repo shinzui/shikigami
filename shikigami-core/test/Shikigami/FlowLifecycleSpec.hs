@@ -2,19 +2,25 @@ module Shikigami.FlowLifecycleSpec (tests) where
 
 import Data.Aeson (Value (Bool, String), object, toJSON, (.=))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Map.Strict qualified as Map
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflowWith, step)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
 import Kioku.Api.Types (MemoryRecord (..))
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
-import Kioku.Id (SessionId, genSessionId)
+import Kioku.Id (MemoryId, SessionId, genSessionId)
+import Kioku.Memory (MemoryWriteError (..))
+import Kioku.Memory qualified as Memory
+import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
@@ -29,8 +35,11 @@ import Shikigami.Flow.Capability
     MemoryQuery (..),
     SinkEnv (..),
     currentActivity,
+    defaultRememberOptions,
+    deterministicFlowMemoryId,
     emitSignal,
     recall,
+    recordFlowMemory,
     remember,
     runActivity,
     runMemory,
@@ -40,6 +49,8 @@ import Shikigami.Flow.Lifecycle.AtRiskCustomer
   ( atRiskCustomerMermaid,
     atRiskCustomerValidationWarnings,
   )
+import Shikigami.Memory.Access (shikigamiMemorySpace)
+import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
@@ -170,6 +181,72 @@ tests =
           assertBool "approval signal resolves after replay" resolved
           completed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "replayed flow can still complete" (Right (Completed acknowledgedOutput)) completed,
+      -- Replay is the regime a durable workflow exists to survive: re-invoking a
+      -- completed workflow under the same id re-runs its body with every
+      -- journaled step answered from the journal rather than executed. An effect
+      -- that is not itself a step has no journal entry to answer it, so it runs
+      -- again -- and a `remember` that mints a fresh memory id each time turns
+      -- that into one extra memory row per replay.
+      testCase "replaying a completed flow does not duplicate its memory" do
+        withAtRiskFlow \appEnv aidRef flow -> do
+          let workflowId = WorkflowId "flow-at-risk-memory-replay"
+          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
+
+          aid <- readCapturedAwakeable aidRef
+          resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
+          assertBool "approval signal resolves the awakeable" resolved
+
+          completed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "acknowledged flow completes" (Right (Completed acknowledgedOutput)) completed
+          afterFirst <- acknowledgedMemoryCount appEnv
+          assertEqual "the acknowledged branch records its note once" 1 afterFirst
+
+          replayed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          assertEqual "replaying the completed flow returns the journaled value" (Right (Completed acknowledgedOutput)) replayed
+          afterReplay <- acknowledgedMemoryCount appEnv
+          assertEqual "replay does not record the note a second time" 1 afterReplay
+
+          -- The row count says the duplicate is gone; the step index says *why*.
+          -- Both memory operations are now journal entries, which is what the
+          -- replay answers from instead of re-running them.
+          journaled <- flowStepKeys appEnv workflowId
+          assertBool
+            ("recall is journaled under its label, got " <> show journaled)
+            (Set.member "recall-risk-history" journaled)
+          assertBool
+            ("remember is journaled under its label, got " <> show journaled)
+            (Set.member "remember-acknowledged" journaled),
+      -- The crash window a journaled step cannot close by itself: keiro steps are
+      -- at-least-once at the step boundary, so an action that ran but whose
+      -- journal append did not commit runs again on resume. There is no public
+      -- API for losing an append, so this exercises the property the
+      -- deterministic id buys, in both directions -- which is also the contract
+      -- `remember` documents: its arguments must be a pure function of
+      -- replay-stable inputs.
+      testCase "one deterministic id records idempotently and refuses a changed payload" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", sessionId = Nothing}
+                mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
+                note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
+
+            firstWrite <- recordFlowMemory memoryEnv mid defaultRememberOptions note
+            assertRecordedId "the first write succeeds" mid firstWrite
+            secondWrite <- recordFlowMemory memoryEnv mid defaultRememberOptions note
+            assertRecordedId "a re-executed step window writes the same id" mid secondWrite
+            rows <- acknowledgedMemoryCount appEnv
+            assertEqual "one active row survives both writes" 1 rows
+
+            drifted <- recordFlowMemory memoryEnv mid defaultRememberOptions (object ["summary" .= ("something else entirely" :: Text)])
+            case drifted of
+              Left (MemoryConflict detail) ->
+                assertBool
+                  ("the conflict should name the field that differs, got " <> show detail)
+                  ("content" `Text.isInfixOf` detail)
+              other -> assertFailure ("a changed payload under a known id must conflict, got " <> show other),
       testCase "acknowledgement wrapper maps approval decisions" do
         assertEqual "approved maps to acknowledged" (Acknowledged (toJSON True)) (ackFromDecision (Approval.Approved (toJSON True)))
         assertEqual "rejected maps to declined" (Declined "no") (ackFromDecision (Approval.Rejected "no"))
@@ -208,8 +285,8 @@ memoryFlow =
     { name = "memory-spike",
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
-        _ <- remember (object ["summary" .= ("flow durable note" :: Text)])
-        memories <- recall (MemoryQuery "flow durable note")
+        _ <- remember "note" (object ["summary" .= ("flow durable note" :: Text)])
+        memories <- recall "note-back" (MemoryQuery "flow durable note")
         pure (Bool (any (\MemoryRecord {content} -> content == "flow durable note") memories))
     }
 
@@ -336,6 +413,39 @@ fireDueApprovalTimer appEnv = do
   now <- getCurrentTime
   fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) Approval.approvalTimeoutFireAction)
   assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
+
+-- | How many active memories carry the at-risk flow's acknowledged note.
+--
+-- Counted by scope rather than by session because this harness builds its
+-- 'MemoryEnv' with @sessionId = Nothing@ (see 'runFlowBody'), so there is no
+-- session to count under. The content compared against is what
+-- @Shikigami.Flow.AtRiskCustomer@'s acknowledged note puts in its @summary@
+-- field, which @Shikigami.Agent.Run.renderLearning@ stores verbatim.
+acknowledgedMemoryCount :: AppEnv -> IO Int
+acknowledgedMemoryCount appEnv =
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "at-risk-customer")) >>= \case
+    Right (Right rows) -> pure (length (filter isAcknowledgedNote rows))
+    Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
+    Left _ -> assertFailure "memory rows should be readable, got a store error"
+
+-- | Every step name the harness's flow workflow journaled for one instance,
+-- minus the markers keiro writes on its own behalf (all of which are @__@-
+-- prefixed). Mirrors @loadLifecycleStepKeys@ in "Shikigami.AgentWorkflowSpec".
+flowStepKeys :: AppEnv -> WorkflowId -> IO (Set Text)
+flowStepKeys appEnv workflowId =
+  runAppIO appEnv (loadStepIndex (WorkflowName "shikigami.flow.spike") workflowId 0) >>= \case
+    Right journal -> pure (Set.filter (not . Text.isPrefixOf "__") (Map.keysSet journal))
+    Left err -> assertFailure ("the step index should be readable, got " <> show err)
+
+-- | 'MemoryWriteError' has no 'Eq' instance, so a successful write is asserted
+-- by pattern rather than by comparing the whole 'Either'.
+assertRecordedId :: String -> MemoryId -> Either MemoryWriteError MemoryId -> IO ()
+assertRecordedId label expected = \case
+  Right actual -> assertEqual label expected actual
+  Left err -> assertFailure (label <> ", got " <> show err)
+
+isAcknowledgedNote :: MemoryRow -> Bool
+isAcknowledgedNote MemoryRow {content} = content == "at-risk customer alert acknowledged"
 
 outboxCount :: AppEnv -> IO (Either StoreError Int)
 outboxCount appEnv =
