@@ -56,7 +56,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-20T03:25:00Z) M3: consumed the new load report in every worker role, added loud enabled-agent selection, and kept single-file validation/runs available for parked agents.
 - [x] (2026-08-20T03:25:00Z) M3: validated `recallLimit` into `RecallLimit` (1–1000) before conversion, capped vector and fallback recall, and enforced all three record-policy branches in direct and durable runs; `cabal test shikigami-core` passes all 309 tests.
 - [x] (2026-08-20T03:25:00Z) M4: updated docs/user/writing-agents.md and docs/user/memory.md with defaults, enforcement boundaries, and lifecycle semantics.
-- [ ] M4: full-suite regression `cabal test all`.
+- [x] (2026-08-20T03:32:00Z) M4: `nix develop --command cabal test all` passes all 9 suites and 415 tests; `just keiro-gate` reports replay-neutral evolution, unchanged generated modules, and passing conformance witnesses.
 
 
 ## Surprises & Discoveries
@@ -86,8 +86,9 @@ implementation. Provide concise evidence.
 - 2026-08-20: `AgentDecl` is itself a durable workflow value: the `lookup-agent` step
   journals its JSON. Generic derivation after adding three fields would preserve Dhall
   source compatibility but not old journal bytes or missing-key decoding. The mirror now
-  omits compatibility-default fields and restores them when absent; ADR 0011 records the
-  rule.
+  omits compatibility-default fields and restores them when absent;
+  [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md)
+  records the rule.
 - 2026-08-20: GHC rejects a strict field annotation on a `newtype` constructor. The plan's
   allowed one-field `data` fallback for `IdentityDecl` therefore also satisfies the
   repository's strict-field convention and decodes the Dhall record successfully.
@@ -197,7 +198,7 @@ Record every decision made while working on the plan.
   `Always` failure recording occurs inside the existing `fail-session` step. `Always` and
   `Never` could not appear in historical declarations, so there is no old execution that
   needs a different branch. This conclusion is checked by `just keiro-gate` and documented
-  in ADR 0011.
+  in [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md).
   Date: 2026-08-20
 
 - Decision: Implement only plan 20's canonical report and loud lenient-loading slice here;
@@ -215,7 +216,28 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Completed. Agent authors can now declare identity, memory policy, and enablement through the
+canonical Dhall schema. The proof declaration exercises every new field, while all existing
+live manifests validate without edits. Default declarations also retain their exact old JSON
+encoding and restore defaults when replaying a historical workflow value.
+
+The runtime enforces the three values this plan owns. Every long-running loader path reports
+manifest failures, visibly filters disabled agents, and the manual worker proof shows five
+runnable declarations after skipping `declared-identity`. Recall carries a validated
+1–1000 `RecallLimit` through both vector and fallback paths. `Never`, `OnSuccess`, and
+`Always` have distinct, database-proven recording behavior in the durable workflow, with no
+step rename, removal, reorder, or result-shape change.
+
+Validation finished green: every live manifest passed, both intentional negative fixtures
+failed, the focused core suite passed 309 tests, the Keiro gate classified the change as
+replay-neutral, and the full repository passed 9 suites / 415 tests. The implementation is
+committed as `cf513b7`.
+
+The planned ownership boundaries remain intact. `memory.scope = Shared` is declared but
+awaits plan 34's shared-memory semantics; `identity.principal` is declared but awaits plan
+23's meibo verification. Plan 20's canonical report and loud lenient path landed only
+because this plan hard-depended on them; its strict setting, cron handling, routing,
+scheduling, and enqueue milestones remain in plan 20.
 
 
 ## Context and Orientation
@@ -609,15 +631,15 @@ Owned and defined by this plan:
 - `schema/Agent.dhall` — `Identity`, `MemoryScope`, `RecordPolicy`, `MemoryPolicy` types;
   `identity : Optional Identity`, `memory : MemoryPolicy`, `enabled : Bool` on `Agent` with
   defaults `None Identity` / `defaultMemoryPolicy` / `True`; all exported.
-- `Shikigami.Api.Agent` (shikigami-api) — `IdentityDecl(..)`, `MemoryScopeDecl(..)`,
+- `Shikigami.Agent.Decl` (shikigami-core) — `IdentityDecl(..)`, `MemoryScopeDecl(..)`,
   `RecordPolicy(..)`, `MemoryPolicy(..)`; `AgentDecl` gains
   `identity :: !(Maybe IdentityDecl)`, `memory :: !MemoryPolicy`, `enabled :: !Bool`.
-- `Shikigami.Api.Agent.RecallLimit` — smart constructor/decoder enforcing 1–1000 and a
+- `Shikigami.Agent.Decl.RecallLimit` — smart constructor/decoder enforcing 1–1000 and a
   total accessor for the validated SQL/runtime bound.
 - `Shikigami.Agent.Loader` — consume plan 20's `AgentLoadReport` and
   `loadAgentsReport`; add `enabledAgentsFromReport :: AgentLoadReport -> IO [AgentDecl]`.
 - `Shikigami.Agent.Run` —
-  `recallPriorLearnings :: AppEnv -> Int -> MemoryScope -> Text -> IO [MemoryRecord]`
+  `recallPriorLearnings :: AppEnv -> RecallLimit -> MemoryScope -> Text -> IO [MemoryRecord]`
   (limit threaded to both the vector `maxResults` and the fallback cap); record-policy
   branching in `runAgentWithMemory`.
 - `Shikigami.Agent.Workflow` — record-policy branching around `recordLearning`; no step
@@ -685,3 +707,10 @@ this plan and plan 30 before adding lifecycle state.
   The note gives the substitution to apply throughout, and extends it to the four sibling plans —
   12, 32, 35, and 40 — that inherit this plan's additive-field pattern, since this plan is where
   the pattern is established.
+
+- 2026-08-20: Implemented and validated the plan. The implementation carries the bounded
+  `RecallLimit` to the dependency boundary, adds an old-shape-compatible `AgentDecl` JSON
+  codec for workflow replay, and records the compatibility rule in ADR 0011. Plan 20's
+  prerequisite load-report/loud-loader slice landed with this work; its remaining milestones
+  stay pending in that plan. Updated Progress, Surprises & Discoveries, Decision Log,
+  interfaces, and Outcomes & Retrospective with the observed result and validation evidence.
