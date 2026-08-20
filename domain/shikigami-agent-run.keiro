@@ -59,21 +59,36 @@ workflow AgentRun
     patch shikigami-behavior-retry-v1 {
       step run-behavior-v2 -> BehaviorOutput
     }
-    # The flow path's own labels, in the order Shikigami.Flow.AtRiskCustomer
-    # writes them. `recall-risk-history` and the three `remember-*` steps are
-    # journaled by Shikigami.Flow.Capability.runMemory under the label the flow
-    # passes to `recall` / `remember`; `classify` and `await-ack` are written by
-    # the flow body itself. Unlike the emit-signal family below, a memory label
-    # is a plain hyphenated wire word, so it can be declared here and this gate
-    # governs it. Adding a labeled memory call to a *registered* flow means
-    # adding its label here too, or keiro-scaffold and the conformance suite
-    # will disagree with the runtime.
-    step recall-risk-history -> RecalledLearnings
     step classify -> RiskVerdict
     await await-ack -> ApprovalDecision
-    step remember-acknowledged -> RecordedLearning
-    step remember-declined -> RecordedLearning
-    step remember-escalated -> RecordedLearning
+    # The flow path's memory labels. Shikigami.Flow.Capability.runMemory
+    # journals a flow's `recall` and `remember` under the label the flow passes
+    # it, so `recall-risk-history` and the three `remember-*` steps are the
+    # labels Shikigami.Flow.AtRiskCustomer reaches. Unlike the emit-signal
+    # family below, a memory label is a plain hyphenated wire word, so it can be
+    # declared here and this gate governs it. Adding a labeled memory call to a
+    # *registered* flow means adding its label here too.
+    #
+    # These sit inside a patch block for the reason every added step in this
+    # body does: `keiro-dsl diff` classifies ANY change to a declared workflow
+    # body as BREAKING unless the whole change is contained in a NEW patch
+    # guard — appends included. The guard is not decoration. runMemory reads it
+    # once per interpreted flow run and an instance that was already in flight
+    # keeps the un-journaled behavior its journal was written under, exactly as
+    # `shikigami-emit-signal-labels-v1` does for sink labels. Delete the guard,
+    # the False branch, and this block together once no pre-change flow can
+    # still resume; see docs/workflow-versioning.md.
+    #
+    # The labels are declared here rather than beside `classify` because a
+    # patch block must contain the entire change contiguously, and the body is
+    # ordered for reading rather than for control flow: replay matches journal
+    # records by label, so position carries no meaning.
+    patch shikigami-flow-memory-steps-v1 {
+      step recall-risk-history -> RecalledLearnings
+      step remember-acknowledged -> RecordedLearning
+      step remember-declined -> RecordedLearning
+      step remember-escalated -> RecordedLearning
+    }
     # Shikigami.Flow.Capability.runSink decides once per interpreted flow run
     # whether a sink emission's journal label is the caller's stable token
     # (`emit-signal:alert`) or the old per-run ordinal (`emit-signal:0`). The

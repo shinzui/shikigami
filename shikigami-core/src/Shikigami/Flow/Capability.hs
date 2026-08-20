@@ -37,7 +37,7 @@ import Effectful.Dispatch.Dynamic (interpret, send)
 import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentRunGeneration, currentWorkflow, patch, step)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEnv, runAppIO)
-import Kioku.Id (MemoryId, SessionId)
+import Kioku.Id (MemoryId, SessionId, genMemoryId)
 import Kioku.Memory (MemoryWriteError)
 import Kioku.Memory qualified as MemoryStore
 import Kioku.Memory.Domain (RecordMemoryData (..))
@@ -176,6 +176,14 @@ emitSignal label sink output = send (EmitSignal label sink output)
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
 currentActivity = send CurrentActivity
 
+-- | The guard that decides whether this run journals its memory operations.
+--
+-- Declared as a @patch@ block in @domain\/shikigami-agent-run.keiro@; the
+-- generated @declaredPatches@ carries it into 'shikigamiActivePatches', so
+-- nothing activates it by hand.
+flowMemoryStepsPatch :: PatchId
+flowMemoryStepsPatch = PatchId "shikigami-flow-memory-steps-v1"
+
 -- | Interpret 'Memory' by journaling every recall and every write as a keiro
 -- step named after the caller's label.
 --
@@ -199,25 +207,51 @@ currentActivity = send CurrentActivity
 -- purpose. Both are replay-stable by construction, so reading them outside costs
 -- nothing and keeps the step body a single IO action whose result is the value
 -- being journaled.
+--
+-- The 'patch' is read once per interpreted flow run, not per operation, so every
+-- memory operation of one instance agrees about which scheme it is on — the same
+-- reason 'runSink' reads its own guard once. An instance already in flight when
+-- this shipped has no recorded patch set, takes 'False', and keeps the
+-- un-journaled behavior its journal was written under; a fresh instance records
+-- the set, takes 'True', and journals for good. Delete the 'False' branch and
+-- the patch id together, and only once no pre-change flow can still resume; see
+-- @docs\/workflow-versioning.md@.
 runMemory :: (Workflow :> es, IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
-runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}} =
-  interpret \_ -> \case
-    Recall label MemoryQuery {query} ->
-      step
-        (StepName ("recall-" <> label))
-        (liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query))
-    Remember label opts value -> do
-      (wfName, wfId) <- currentWorkflow
-      generation <- currentRunGeneration
-      let mid = deterministicFlowMemoryId wfName wfId generation label
-      step (StepName ("remember-" <> label)) $
-        liftIO $
-          recordFlowMemory env mid opts value >>= \case
-            Right stored -> pure stored
-            -- A conflict is not a duplicate to swallow: it means the payload
-            -- changed between two attempts under one id, which is a flow
-            -- building its note from something that is not replay-stable.
-            Left err -> ioError (userError ("failed to record flow memory: " <> show err))
+runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}} action = do
+  journalMemory <- patch flowMemoryStepsPatch
+  interpret
+    ( \_ -> \case
+        Recall label MemoryQuery {query} ->
+          let fetch = liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query)
+           in if journalMemory
+                then step (StepName ("recall-" <> label)) fetch
+                else fetch
+        Remember label opts value
+          | journalMemory -> do
+              (wfName, wfId) <- currentWorkflow
+              generation <- currentRunGeneration
+              let mid = deterministicFlowMemoryId wfName wfId generation label
+              step (StepName ("remember-" <> label)) (liftIO (writeMemory env mid opts value))
+          | otherwise -> liftIO do
+              -- The pre-patch path: a fresh random id per execution, which is
+              -- what makes a replay duplicate the row. Retained only so an
+              -- in-flight instance keeps the behavior its journal was written
+              -- under.
+              mid <- genMemoryId
+              writeMemory env mid opts value
+    )
+    action
+
+-- | 'recordFlowMemory' with kioku's refusal raised rather than returned.
+--
+-- A conflict is not a duplicate to swallow: it means the payload changed between
+-- two attempts under one id, which is a flow building its note from something
+-- that is not replay-stable.
+writeMemory :: MemoryEnv -> MemoryId -> RememberOptions -> Value -> IO MemoryId
+writeMemory env mid opts value =
+  recordFlowMemory env mid opts value >>= \case
+    Right stored -> pure stored
+    Left err -> ioError (userError ("failed to record flow memory: " <> show err))
 
 -- | The memory id a labeled 'Remember' always maps to.
 --
