@@ -10,6 +10,7 @@ module Shikigami.Agent.Approval
     deliverInput,
     resolveApproval,
     approvalTimeoutFireAction,
+    approvalTimeoutKind,
   )
 where
 

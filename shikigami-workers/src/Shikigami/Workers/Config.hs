@@ -17,6 +17,7 @@ module Shikigami.Workers.Config
   ( WorkerEnv (..),
     envLogger,
     envGrants,
+    envCatchUpPolicy,
     agentRunDeps,
     conversationEnv,
     schedulerEnv,
@@ -36,7 +37,7 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
-import Shikigami.Trigger.Schedule (parseCron)
+import Shikigami.Trigger.Schedule (CatchUpPolicy, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 
 -- | Everything the worker loops need.
@@ -47,6 +48,9 @@ data WorkerEnv = WorkerEnv
     behaviorEnv :: !BehaviorEnv,
     runTimeout :: !NominalDiffTime,
     approvalDeadline :: !NominalDiffTime,
+    -- | What the timer loop does about cron minutes that passed while the
+    -- process was down. Resolved from @scheduler.catch_up@.
+    catchUpPolicy :: !CatchUpPolicy,
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
@@ -74,6 +78,11 @@ envGrants WorkerEnv {grants = g} = g
 
 envRunTimeout :: WorkerEnv -> NominalDiffTime
 envRunTimeout WorkerEnv {runTimeout = timeout} = timeout
+
+-- | Named for the same reason as 'envLogger': 'Scheduler.SchedulerEnv' also
+-- carries a @catchUpPolicy@ field.
+envCatchUpPolicy :: WorkerEnv -> CatchUpPolicy
+envCatchUpPolicy WorkerEnv {catchUpPolicy = policy} = policy
 
 envApprovalDeadline :: WorkerEnv -> NominalDiffTime
 envApprovalDeadline WorkerEnv {approvalDeadline = deadline} = deadline
@@ -126,7 +135,9 @@ schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
 schedulerEnv env =
   Scheduler.SchedulerEnv
     { Scheduler.pool = pool env,
-      Scheduler.schedules = Map.fromList (mapMaybe scheduleFor (agents env))
+      Scheduler.schedules = Map.fromList (mapMaybe scheduleFor (agents env)),
+      Scheduler.catchUpPolicy = envCatchUpPolicy env,
+      Scheduler.logger = envLogger env
     }
   where
     scheduleFor AgentDecl {name = agentName, trigger = Schedule {cron}} =

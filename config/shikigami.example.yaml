@@ -25,6 +25,13 @@ agents:
   # Where the .dhall agent manifests live, relative to the working directory.
   directory: agents
 
+scheduler:
+  # What to do about cron minutes that passed while the scheduler was down.
+  # skip_missed arms the first tick after now, so a process that wakes a day
+  # late enqueues one run. fire_all arms from the tick that just fired, so every
+  # missed minute runs — a * * * * * agent offline for a day produces 1440 runs.
+  catch_up: skip_missed
+
 worker:
   # Bounds one synchronous provider or program attempt, not the lifetime of a
   # durable workflow. Whole seconds, 1-86400.

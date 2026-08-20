@@ -46,7 +46,13 @@ runSchedulerCmd config = do
   StoreConnection.withStore settings \st -> do
     tracer <- noopTracer
     let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
-        env = SchedulerEnv {pool = StoreConnection.pool st, schedules = Map.fromList schedules}
+        env =
+          SchedulerEnv
+            { pool = StoreConnection.pool st,
+              schedules = Map.fromList schedules,
+              catchUpPolicy = Config.schedulerCatchUp config,
+              logger
+            }
     armAll logger appEnv schedules
     forever do
       now <- getCurrentTime

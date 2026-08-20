@@ -46,6 +46,7 @@ import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -84,6 +85,7 @@ surfaceTests =
                 "kafka.groups.events",
                 "kafka.groups.stream",
                 "kafka.include_agent_actors",
+                "scheduler.catch_up",
                 "sinks.danwa.agent_participant",
                 "sinks.danwa.base_url",
                 "sinks.kawa.base_url",
@@ -119,6 +121,7 @@ surfaceTests =
               ("SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT", "sinks.kawa.source_segment"),
               ("SHIKIGAMI_SINKS_KIZASHI_BASE_URL", "sinks.kizashi.base_url"),
               ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
+              ("SHIKIGAMI_SCHEDULER_CATCH_UP", "scheduler.catch_up"),
               ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url"),
               ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "worker.run_timeout_seconds")
             ],
@@ -126,6 +129,9 @@ surfaceTests =
         sort (fmap snd boundVariables) @?= sort (fmap renderKey declaredKeys),
       testCase "with no source at all, the declared defaults are what a process gets" do
         agentsDirectory defaultAppConfig @?= "agents"
+        -- Skip-missed is the deliberate behavior change on upgrade: waking late
+        -- arms one future tick rather than replaying every minute of downtime.
+        schedulerCatchUp defaultAppConfig @?= SkipMissed
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
         runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300

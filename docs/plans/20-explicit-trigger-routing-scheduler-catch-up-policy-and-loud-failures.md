@@ -76,10 +76,13 @@ This section must always reflect the actual current state of the work.
       `RouteError` dead-letters through the new named `routeErrorJobOutcome`; `WireCompatSpec`
       keeps its captured bytes and gains legacy-decode and explicit-route cases; `WorkerSpec`
       gains the routing table and an end-to-end route-error DLQ case.
-- [ ] Milestone 2: `CatchUpPolicy` in `Shikigami.Trigger.Schedule`; `SkipMissed` default wired
-      through `AppConfig` into `SchedulerEnv`; `scheduleFireAction` re-arms from `now` under
-      `SkipMissed`; explicit timer-kind dispatch replaces the try-then-fall-through composition;
-      failed enqueues and unknown timer kinds are logged.
+- [x] (2026-08-20T06:05:00Z) Milestone 2: `CatchUpPolicy` in `Shikigami.Trigger.Schedule`;
+      `SkipMissed` default wired through `AppConfig` (`scheduler.catch_up`,
+      `SHIKIGAMI_SCHEDULER_CATCH_UP`) into both `SchedulerEnv` construction sites;
+      `scheduleFireAction` re-arms from `now` under `SkipMissed`; explicit timer-kind dispatch
+      replaces the try-then-fall-through composition; failed enqueues and unknown timer kinds are
+      logged; `SchedulerSpec` gains five cases; `docs/operations/configuration.md` and
+      `config/shikigami.example.yaml` document the key.
 - [ ] Milestone 3: truth-bearing kioku failures in `Shikigami.Agent.Workflow` propagate into the
       existing `AgentRunFailure` / `JobOutcome` taxonomy; the best-effort writes that remain are
       named as such and logged; the one-off harness path in `Shikigami.Agent.Run` gets the same
@@ -318,6 +321,33 @@ Record every decision made while working on the plan.
   Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
   `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
   second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: `scheduleFireAction` and `shikigamiTimerFallback` take `now` as a parameter rather
+  than reading `getCurrentTime` inside. The Interfaces section's pinned
+  `shikigamiTimerFallback :: SchedulerEnv -> TimerRow -> Eff es (Maybe EventId)` gains a `UTCTime`
+  argument before the `TimerRow`.
+  Rationale: `runSchedulerTimerWorker appEnv env now` already holds the instant keiro used to
+  decide the timer was due, and both call sites (`Trigger.Timer.runTimerWorker` and
+  `Command.Scheduler.runSchedulerCmd`) compute it one line earlier. Reading the clock a second
+  time inside the fire action would let the re-arm disagree with the claim that produced it, and
+  would make `SkipMissed` untestable: `SchedulerSpec` drives fixed instants in June 2026, so a
+  wall-clock re-arm would arm a timer months away and break the existing "re-armed next schedule
+  timer fired" case. With `now` threaded, the day-late scenario is an ordinary pure-ish assertion.
+  Date: 2026-08-20
+
+- Decision: `Shikigami.Agent.Approval` exports `approvalTimeoutKind`.
+  Rationale: the explicit dispatch has to name the kind it is routing to. The constant already
+  existed and was already the guard inside `parseApprovalTimeoutPayload`; exporting it is what
+  lets the dispatch compare against the one spelling rather than repeating the string literal.
+  Date: 2026-08-20
+
+- Decision: `SchedulerEnv` gains a `logger` field alongside `catchUpPolicy`.
+  Rationale: this milestone's whole subject is that a failed enqueue and an unclaimed timer kind
+  say nothing. Both facts are discovered inside the fire action, which had no way to report them;
+  `Shikigami.Workers.Config.schedulerEnv` and `runSchedulerCmd` both already have a logger in
+  scope. `WorkerEnv` gains a matching `catchUpPolicy` field so the worker's timer loop and the
+  scheduler process resolve the same key.
   Date: 2026-08-20
 
 - Decision: The route-error dead-letter mapping is a named export,
@@ -997,6 +1027,13 @@ data RunRouteKind = AgentWorkflowRoute | ConversationWorkflowRoute | InferredLeg
 data Shikigami.Agent.RunJob.Worker.RunRoute
   = ConversationRoute !AddressedMessage | AgentRunRoute | RouteError !Text
 Shikigami.Agent.RunJob.Worker.routeRunJob :: RunJob -> RunRoute
+Shikigami.Agent.RunJob.Worker.routeErrorJobOutcome :: Text -> JobOutcome
+
+-- shikigami-workers/src/Shikigami/Workers/Config.hs
+-- WorkerEnv gains: catchUpPolicy :: !CatchUpPolicy, read through envCatchUpPolicy
+
+-- shikigami-core/src/Shikigami/Agent/Approval.hs
+Shikigami.Agent.Approval.approvalTimeoutKind :: Text   -- newly exported
 
 -- shikigami-core/src/Shikigami/Trigger/Schedule.hs
 data Shikigami.Trigger.Schedule.CatchUpPolicy = SkipMissed | FireAll
@@ -1007,8 +1044,13 @@ data Shikigami.Trigger.Schedule.CatchUpPolicy = SkipMissed | FireAll
 
 -- shikigami-workers/src/Shikigami/Trigger/Scheduler.hs
 -- SchedulerEnv gains: catchUpPolicy :: !CatchUpPolicy, logger :: !Log.Logger
+-- The fire actions take the instant keiro claimed the timer at, so the re-arm
+-- cannot disagree with the claim (see the Decision Log).
 Shikigami.Trigger.Scheduler.shikigamiTimerFallback ::
-  (Store :> es, IOE :> es) => SchedulerEnv -> TimerRow -> Eff es (Maybe EventId)
+  (Store :> es, IOE :> es) => SchedulerEnv -> UTCTime -> TimerRow -> Eff es (Maybe EventId)
+Shikigami.Trigger.Scheduler.scheduleFireAction ::
+  (Store :> es, IOE :> es) => SchedulerEnv -> UTCTime -> TimerRow -> Eff es (Maybe EventId)
+Shikigami.Trigger.Scheduler.timerPayloadKind :: Value -> Maybe Text
 
 -- shikigami-core/src/Shikigami/Agent/Loader.hs
 Shikigami.Agent.Loader.loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport

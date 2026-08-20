@@ -3,6 +3,7 @@ module Shikigami.Trigger.Scheduler
     scheduleTimerKind,
     scheduleTimerPayload,
     parseSchedulePayload,
+    timerPayloadKind,
     scheduleTimerId,
     armNextRun,
     scheduleFireAction,
@@ -29,13 +30,18 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueScheduledRun)
-import Shikigami.Trigger.Schedule (CronSchedule, nextDue)
+import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
 
 data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
-    schedules :: !(Map Text CronSchedule)
+    schedules :: !(Map Text CronSchedule),
+    -- | What to do about cron minutes that passed while the process was down.
+    catchUpPolicy :: !CatchUpPolicy,
+    -- | Where the timer loop reports what it did and what it could not do.
+    logger :: !Log.Logger
   }
 
 data ScheduleTimerPayload = ScheduleTimerPayload
@@ -59,6 +65,12 @@ parseSchedulePayload value = do
   if kind == scheduleTimerKind
     then Just (agent, dueAt)
     else Nothing
+
+-- | Every timer payload this runtime writes self-describes through a @kind@
+-- field. Reading it is what lets the dispatch below say which action owns a row
+-- instead of discovering it by trying one action and seeing whether it declined.
+timerPayloadKind :: Value -> Maybe Text
+timerPayloadKind = parseMaybe (Aeson.withObject "timer payload" (Aeson..: "kind"))
 
 scheduleTimerId :: Text -> UTCTime -> TimerId
 scheduleTimerId agent dueAt =
@@ -89,24 +101,66 @@ armNextRun cron agent now =
             payload = scheduleTimerPayload agent dueAt
           }
 
-scheduleFireAction :: (Store :> es, IOE :> es) => SchedulerEnv -> TimerRow -> Eff es (Maybe EventId)
-scheduleFireAction env TimerRow {payload = timerPayload} =
+-- | Enqueue the run this timer was armed for, then arm the next one.
+--
+-- @now@ is the instant keiro used to decide this timer was due, threaded through
+-- rather than read again, so the re-arm cannot disagree with the claim.
+--
+-- Under 'SkipMissed' the next timer is armed from @now@, so a process that wakes
+-- a day late arms one future tick rather than the next stale minute; 'nextDue'
+-- already returns the first strictly-future match, so no loop is needed. Under
+-- 'FireAll' the next timer is armed from the tick that just fired, which
+-- reproduces the pre-policy backlog drain.
+scheduleFireAction :: (Store :> es, IOE :> es) => SchedulerEnv -> UTCTime -> TimerRow -> Eff es (Maybe EventId)
+scheduleFireAction env now TimerRow {payload = timerPayload} =
   case parseSchedulePayload timerPayload of
     Nothing -> pure Nothing
     Just (agent, dueAt) -> do
       enqueued <- liftIO (enqueueScheduledRun (pool env) agent dueAt)
       case enqueued of
-        Left _ -> pure Nothing
+        -- Returning Nothing leaves the row in Firing for keiro to requeue. The
+        -- log line is what makes that retry visible: before it, a failed enqueue
+        -- was indistinguishable from "this is not a schedule timer".
+        Left err -> do
+          liftIO $
+            Log.logError
+              (logger env)
+              "scheduler.schedule.enqueue_failed"
+              [ "agent" Aeson..= agent,
+                "due_at" Aeson..= dueAt,
+                "error" Aeson..= Text.pack (show err)
+              ]
+          pure Nothing
         Right _ -> do
+          let armFrom = case catchUpPolicy env of
+                SkipMissed -> now
+                FireAll -> dueAt
           for_ (Map.lookup agent (schedules env)) \cron ->
-            armNextRun cron agent dueAt
+            armNextRun cron agent armFrom
           pure (Just (scheduleFiredEventId agent dueAt))
 
-shikigamiTimerFallback :: (Store :> es, IOE :> es) => SchedulerEnv -> TimerRow -> Eff es (Maybe EventId)
-shikigamiTimerFallback env row =
-  scheduleFireAction env row >>= \case
-    Just eventId -> pure (Just eventId)
-    Nothing -> Approval.approvalTimeoutFireAction row
+-- | Route one due timer row to the action that owns its kind.
+--
+-- Both payloads this runtime writes carry a @kind@ discriminator, so the
+-- dispatch reads it rather than trying the schedule action and falling through
+-- on 'Nothing'. The observable behavior for a well-formed timer is unchanged;
+-- what changes is that the code says which action owns which row, and that a row
+-- carrying a kind nobody claims is reported instead of silently left to expire.
+shikigamiTimerFallback :: (Store :> es, IOE :> es) => SchedulerEnv -> UTCTime -> TimerRow -> Eff es (Maybe EventId)
+shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = TimerId rowTimerId} =
+  case timerPayloadKind timerPayload of
+    Just kind
+      | kind == scheduleTimerKind -> scheduleFireAction env now row
+      | kind == Approval.approvalTimeoutKind -> Approval.approvalTimeoutFireAction row
+    other -> do
+      liftIO $
+        Log.logError
+          (logger env)
+          "scheduler.timer.unknown_kind"
+          [ "timer_id" Aeson..= show rowTimerId,
+            "timer_kind" Aeson..= other
+          ]
+      pure Nothing
 
 runSchedulerTimerWorker ::
   (Store :> es, IOE :> es) =>
@@ -115,4 +169,4 @@ runSchedulerTimerWorker ::
   UTCTime ->
   Eff es (Maybe TimerRow)
 runSchedulerTimerWorker appEnv env now =
-  runWorkflowTimerWorker (metrics appEnv) now (shikigamiTimerFallback env)
+  runWorkflowTimerWorker (metrics appEnv) now (shikigamiTimerFallback env now)

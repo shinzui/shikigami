@@ -55,6 +55,7 @@ runWorkerCmd config = do
                 behaviorEnv = behEnv,
                 runTimeout = Config.runTimeout config,
                 approvalDeadline = Config.approvalDeadline config,
+                catchUpPolicy = Config.schedulerCatchUp config,
                 kizashi =
                   KizashiConfig
                     { baseUrl = Config.kizashiBaseUrl config,
