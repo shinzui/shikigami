@@ -510,6 +510,25 @@ implementation. Provide concise evidence.
   generation" rather than an empty session block. A `Maybe SessionRow` alone would have rendered
   those two identically.
 
+- **(2026-08-20, validation) `cabal test all` fails intermittently while a `shikigami-worker` is
+  running, and the cause is contention rather than anything in the change.** Mid-implementation
+  `cabal test all` reported `shikigami-core-test: FAIL`, then on a re-run `shikigami-core-test`
+  *and* `shikigami-workers-test`, and then hung `shikigami-core-test` for eleven minutes against a
+  standalone runtime of about twenty-five seconds. The suspect was the PostgreSQL 18 bump, since
+  it is the only change touching shared test infrastructure. It is not the cause, established by
+  running the two suites together under each toolchain:
+
+  ```text
+  PG 17.10, cabal test shikigami-core shikigami-workers  -> 342 passed, 74 passed, both PASS
+  PG 18.4,  cabal test shikigami-core shikigami-workers  -> 342 passed, 74 passed, both PASS
+  ```
+
+  The actual cause was a `shikigami-worker` process left running from the M2 and M3 acceptance
+  work, competing with a test fleet that stands up many ephemeral PostgreSQL clusters on a machine
+  already hosting other services. With the worker stopped, `cabal test all` passes all nine
+  suites. Worth knowing before debugging a "flaky" suite here: check for a worker you started
+  yourself first.
+
 - (Findings from implementation go below this line.)
 
 
@@ -1298,7 +1317,9 @@ Acceptance is behavior an operator can observe.
 7. The parser/dispatch test proves the preview gate: each mutating verb makes no state change
    without `--force` and reaches the correct handler once forced.
 8. Regression: `cabal build all` and `cabal test all` pass; the seven existing subcommands are
-   unchanged.
+   unchanged. Confirmed 2026-08-20: all nine suites PASS, and the seven original subcommand names
+   are still asserted by `CommandSpec`'s first case, now alongside `agents` and `runs`. Stop any
+   `shikigami-worker` you started before running the full fleet — see Surprises & Discoveries.
 
 
 ## Idempotence and Recovery
