@@ -27,14 +27,15 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: `enqueueRunJobTx` and `ensureRunQueue` in `Shikigami.Trigger.Enqueue`; hit-enqueue moved inside the inbox transaction for both the activity and the integration-event consumers.
-- [ ] Milestone 1: tests — atomic success, atomic rollback, duplicate delivery enqueues once.
-- [ ] Prerequisites: plans 36/37 complete; consumer ownership and Settei Kafka settings are settled.
+- [x] (2026-08-20T00:35:42Z) Milestone 1: added `enqueueRunJobTx` and `ensureRunQueue` in `Shikigami.Trigger.Enqueue`; both activity and integration-event handlers now enqueue inside the inbox transaction, and the composition callbacks are logging-only.
+- [x] (2026-08-20T00:35:42Z) Milestone 1 tests: real-Postgres atomic success, forced queue-send rollback, and duplicate delivery all pass in `Shikigami.StreamInboxSpec`.
+- [x] (2026-08-20T00:25:35Z) Prerequisites reconciled: plan 36 moved the consumer to `shikigami-workers`; plan 37 settled both consumer roles' Settei Kafka settings (its only remaining migration-CLI item is unrelated); plan 47's dependency cohort has since been superseded by the released Keiro 0.13 / Shibuya 0.9 / PGMQ 0.5 cohort already selected by `cabal.project`.
 - [ ] Milestone 2: `RecordDisposition` covers enqueued, duplicate, permanent-dead-letter, and transient failure; offsets commit only for a durable terminal disposition.
 - [ ] Milestone 2: test — a failing disposition leaves no inbox row and no message (and the loop signals retry rather than committing).
 - [ ] Milestone 3: shibuya `Serial`/framework-owned consume loop with bounded reconnect policy; poison records go to a durable DLQ and halt rather than commit if DLQ persistence fails.
-- [ ] CLI updates: `consume-stream`/`consume-events` `onHit` becomes logging-only; startup calls `ensureRunQueue`.
-- [ ] Register `Shikigami.StreamInboxSpec` in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
+- [x] (2026-08-20T00:35:42Z) Consumer composition updates: `consume-stream`/`consume-events` `onHit` is logging-only and each startup calls `ensureRunQueue` before subscribing.
+- [x] (2026-08-20T00:35:42Z) Registered `Shikigami.StreamInboxSpec` in the worker test suite; `nix develop -c cabal build all` passes and all 27 worker tests pass after Milestone 1.
+- [ ] Final validation: expand `StreamInboxSpec` for disposition/ack, store failure, and poison-DLQ behavior; run `cabal test all` and the feasible manual resilience checks.
 
 
 ## Surprises & Discoveries
@@ -42,7 +43,29 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The plan's July source locations and dependency snapshot are stale after plans 36, 37,
+  and later cohort upgrades. The live consumer is
+  `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`; Hackage and upstream tags both
+  identify Keiro 0.13.0.0, Shibuya core 0.9.0.0, Shibuya Kafka adapter 0.9.0.0, and
+  PGMQ 0.5.0.0 as the current releases on 2026-08-19.
+  Evidence: `cabal.project`, `mori registry show`, Hackage `preferred.json`, and upstream
+  `git ls-remote --tags` agree on those versions.
+
+- Shibuya Kafka adapter 0.9.0.0 preserves the raw `Maybe ByteString` payload and owns
+  offset storage, seek-on-retry, partition pause, and consumer serialization, but its
+  documentation explicitly says it has no DLQ producer. `AckDeadLetter` alone would
+  therefore commit over and drop a poison record. Shikigami must persist its own durable
+  dead-letter evidence before returning a terminal disposition.
+  Evidence: `Shibuya.Adapter.Kafka.kafkaAdapter` returns
+  `Adapter es (Maybe ByteString)`, and the released adapter README says
+  `AckDeadLetter` stores the offset after a warning and does not produce to a DLQ.
+
+- Plan 36 moved the consumer vertical but this plan's test instructions still name the
+  core test suite. The worker test suite already depends on `pgmq-hasql` and
+  `shikigami-migrations:test-support`, so it is now the package-correct home for the
+  broker-free transactional acceptance tests.
+  Evidence: `shikigami-workers/shikigami-workers.cabal` exposes
+  `Shikigami.Trigger.Consumer` and declares both test dependencies.
 
 
 ## Decision Log
@@ -74,18 +97,47 @@ Record every decision made while working on the plan.
   Rationale: Atomicity requires the enqueue inside the inbox transaction, which lives in `Shikigami.Trigger.Consumer`; a callback that performs IO cannot run inside a `Tx.Transaction`. `onHit` survives as a logging hook only.
   Date: 2026-07-08
 
+- Decision: Reconcile this plan to the released Shibuya Kafka adapter 0.9.0.0 and run its
+  processor as `StrictInOrder` plus `Serial`; do not retain the hand-written
+  `pollMessage`/`commitOffsetMessage` loop.
+  Rationale: the released adapter preserves raw bytes, seeks on retry, serializes every
+  librdkafka operation, and explicitly requires serial processing because librdkafka
+  stores only the highest offset per partition. Using the public adapter makes Shibuya the
+  single acknowledgement owner required by this plan.
+  Date: 2026-08-19
+
+- Decision: Persist undecodable records to a Shikigami-owned PGMQ dead-letter queue in
+  the same Postgres database, and create that queue idempotently at consumer startup.
+  Rationale: the released Kafka adapter does not produce dead letters, the plan forbids a
+  log-and-commit fallback, PGMQ is already migrated and available without a schema change,
+  and its returned `MessageId` supplies the required durable `DeadLetterId`. A failed send
+  remains transient and cannot authorize an offset commit.
+  Date: 2026-08-19
+
+- Decision: Put `Shikigami.StreamInboxSpec` in `shikigami-workers/test`, not
+  `shikigami-core/test`.
+  Rationale: plan 36 moved `Shikigami.Trigger.Consumer` into the worker package. Keeping
+  the test beside its owner preserves the package dependency direction and uses the worker
+  suite's existing database/PGMQ test dependencies.
+  Date: 2026-08-19
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Milestone 1 complete (2026-08-19). The consumer's success path now has the promised
+all-or-nothing Postgres boundary. Against a migrated test database, one matching activity
+produces one completed Keiro inbox row and one decodable `RunJob`; replay returns
+`Duplicate` and leaves one queue message; dropping the run queue forces the transactional
+send to fail, leaves no inbox row, and permits a successful redelivery after queue
+reconciliation. The worker suite reports 27 passing tests and `cabal build all` succeeds.
 
 
 ## Context and Orientation
 
-Two long-running consumers live in `shikigami-core/src/Shikigami/Trigger/Consumer.hs`. `subscribeActivityStream` (Consumer.hs:77-97) consumes the `activity.v1` Kafka topic: each record is decoded into a keiro `IntegrationEvent`, pushed through the keiro idempotent inbox, matched against the declared stream agents, and reported as `StreamHit` values to an `onHit :: StreamHit -> IO ()` callback. `subscribeIntegrationEventStream` (Consumer.hs:104-124) does the same for public integration-event topics (danwa addressed messages), producing `EventHit`s. The CLI commands `consume-stream` and `consume-events` (`shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`) supply `onHit` callbacks that build a `RunJob` and enqueue it onto the `shikigami_run_jobs` pgmq queue via `Shikigami.Trigger.Enqueue` (`enqueueRunJob` at Enqueue.hs:52-61, `enqueueAddressedRunWithKey` at Enqueue.hs:70-84).
+Two long-running consumers live in `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`. `subscribeActivityStream` consumes the `activity.v1` Kafka topic: each record is decoded into a keiro `IntegrationEvent`, pushed through the keiro idempotent inbox, matched against the declared stream agents, and reported as `StreamHit` values to an `onHit :: StreamHit -> IO ()` callback. `subscribeIntegrationEventStream` does the same for public integration-event topics (danwa addressed messages), producing `EventHit`s. The composition functions `runConsumeStream` and `runConsumeEvents` in `shikigami-workers/src/Shikigami/Workers/Subscription.hs` currently supply `onHit` callbacks that build a `RunJob` and enqueue it onto the `shikigami_run_jobs` PGMQ queue via `Shikigami.Trigger.Enqueue`.
 
 The "keiro idempotent inbox" is a Postgres table (`keiro.keiro_inbox`) plus `runInboxTransaction` (keiro `src/Keiro/Inbox.hs:80-88`, re-exported as `Keiro.Inbox.runInboxTransaction`), which in one Postgres transaction inserts a dedupe row for the event and runs a caller-supplied handler of type `IntegrationEvent -> Tx.Transaction a` — `Tx` being hasql-transaction's `Hasql.Transaction`. If the dedupe row already exists, it returns `InboxDuplicate` without running the handler. Everything the handler writes commits atomically with the dedupe row. Crucially, pgmq is also plain Postgres in the same database: `pgmq-hasql` exposes `Pgmq.Hasql.Statements.Message.sendMessage :: Statement SendMessage MessageId` at the `Statement` level, so a queue send can be composed into the same transaction with `Hasql.Transaction.statement` (the shibuya pgmq adapter already composes pgmq statements into transactions this way).
 
@@ -183,10 +235,10 @@ Edit per Plan of Work. After each milestone:
 nix develop -c cabal build all
 ```
 
-Create `shikigami-core/test/Shikigami/StreamInboxSpec.hs` exporting `tests :: TestTree`; add `Shikigami.StreamInboxSpec` to `other-modules` of `test-suite shikigami-core-test` in `shikigami-core/shikigami-core.cabal`; register `StreamInboxSpec.tests` in `shikigami-core/test/Main.hs` (the test suite already depends on `pgmq-hasql`, which the assertions need to read queue contents).
+Create `shikigami-workers/test/Shikigami/StreamInboxSpec.hs` exporting `tests :: TestTree`; add `Shikigami.StreamInboxSpec` to `other-modules` of `test-suite shikigami-workers-test` in `shikigami-workers/shikigami-workers.cabal`; register `StreamInboxSpec.tests` in `shikigami-workers/test/Main.hs` (the suite already depends on `pgmq-hasql` and `shikigami-migrations:test-support`).
 
 ```bash
-nix develop -c cabal test shikigami-core-test --test-show-details=streaming
+nix develop -c cabal test shikigami-workers-test --test-show-details=streaming
 ```
 
 Expected transcript excerpt:
@@ -215,7 +267,7 @@ Expected consumer stderr: a `reconnecting in 1s: …` line (then 2s, 4s… if th
 
 ## Validation and Acceptance
 
-Acceptance is a set of tests in `shikigami-core/test/Shikigami/StreamInboxSpec.hs` that exercise the extracted transactional core against a real Postgres (`withShikigamiMigratedDatabase`), plus the manual broker-restart check above. To make the core testable without Kafka, factor `processRecord` so the part after `integrationEventFromKafka` is an exported function taking the decoded event — for example `processDecodedActivity :: AppEnv -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IntegrationEvent -> Maybe KafkaDeliveryRef -> IO RecordDisposition` — and have the Kafka loop call it. Tests then drive it with hand-built `IntegrationEvent`s (encode a sample `ActivityEnvelope` with `Keiro.Integration.Event.encodeJsonIntegrationEvent`, as `sinkIntentEvent` in `Shikigami/Agent/Workflow.hs:523-544` demonstrates).
+Acceptance is a set of tests in `shikigami-workers/test/Shikigami/StreamInboxSpec.hs` that exercise the extracted transactional core against a real Postgres (`withShikigamiMigratedDatabase`), plus the manual broker-restart check above. To make the core testable without Kafka, factor record handling so the part after `integrationEventFromKafka` is an exported function taking the decoded event — for example `processDecodedActivity :: AppEnv -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IntegrationEvent -> Maybe KafkaDeliveryRef -> IO RecordDisposition` — and have the Shibuya handler call it. Tests then drive it with hand-built `IntegrationEvent`s (encode a sample `ActivityEnvelope` with `Keiro.Integration.Event.encodeJsonIntegrationEvent`, as `sinkIntentEvent` in `Shikigami/Agent/Workflow.hs` demonstrates).
 
 Atomic success (fails before): with one declared stream agent matching the event, call the core once; assert disposition `Enqueued`, exactly one message on `shikigami_run_jobs` (read it back with pgmq-hasql `readMessage` through the pool and decode the `RunJob`, asserting its `idempotencyKey` is `<agent>:<activityId>`), and one completed inbox row. Before this plan the enqueue does not happen at all from the consumer module, so the message assertion fails.
 
@@ -241,8 +293,9 @@ All edits are code-only; no migrations. Re-running tests is safe — each test g
 
 ## Portfolio Reconciliation (2026-07-30)
 
-This plan hard-depends on plans 36, 37, and 47. Use PGMQ 0.4.0.1 and the current
-transaction/effectful APIs located through Mori. Queue creation remains outside the atomic inbox
+This plan hard-depends on plans 36, 37, and 47. The current reconciled cohort is Keiro
+0.13.0.0, Shibuya core and Kafka adapter 0.9.0.0, and PGMQ 0.5.0.0, verified through
+Mori, Hackage, and upstream tags. Queue creation remains outside the atomic inbox
 transaction; plan 38/pg-migrate owns schema components, while this plan owns the all-or-nothing
 runtime enqueue boundary.
 
@@ -261,7 +314,7 @@ Signatures that must exist at the end (full module paths):
 Shikigami.Trigger.Enqueue.enqueueRunJobTx :: RunJob -> Hasql.Transaction.Transaction MessageId
 Shikigami.Trigger.Enqueue.ensureRunQueue :: Hasql.Pool.Pool -> IO (Either Hasql.Pool.UsageError ())
 
--- shikigami-core/src/Shikigami/Trigger/Consumer.hs
+-- shikigami-workers/src/Shikigami/Trigger/Consumer.hs
 data Shikigami.Trigger.Consumer.RecordDisposition
   = Enqueued | Duplicate | PermanentlyDeadLettered !DeadLetterId | TransientFailure !Text
 Shikigami.Trigger.Consumer.processDecodedActivity ::
@@ -287,3 +340,9 @@ the worker's workflow dedupe and must not change here.
 - 2026-07-22: Replaced log-and-skip poison handling with a durable dead-letter/halt
   policy, made every inbox result an explicit terminal/transient disposition, and moved
   serial acknowledgement/offset ownership to shibuya. Added plans 36/37 prerequisites.
+- 2026-08-19: Reconciled the living plan after plans 36/37 and the newer dependency
+  cohort: updated consumer/test ownership, recorded released dependency evidence, selected
+  Shibuya Kafka adapter 0.9's serial ack path, and made the Shikigami-owned PGMQ poison
+  queue explicit because the adapter intentionally has no DLQ producer.
+- 2026-08-19: Recorded Milestone 1 implementation and validation, including the worker-suite
+  relocation and the forced queue-send rollback proof.

@@ -4,6 +4,8 @@
 module Shikigami.Trigger.Enqueue
   ( runQueueName,
     runJobFromEnvelope,
+    enqueueRunJobTx,
+    ensureRunQueue,
     enqueueRunJob,
     enqueueAddressedRun,
     enqueueAddressedRunWithKey,
@@ -18,7 +20,9 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
+import Hasql.Transaction qualified as Tx
 import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQueue, parseQueueName, sendMessage)
+import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
@@ -46,6 +50,26 @@ runJobFromEnvelope decl env =
   where
     ActivityEnvelope {activityId = envActivityId, occurredAt = envOccurredAt} = env
     epoch = UTCTime (fromGregorian 1970 1 1) 0
+
+-- | Enqueue a run job inside a caller-owned Postgres transaction.
+--
+-- The queue must already exist; call 'ensureRunQueue' once at process startup.
+-- Keeping queue creation out of this function lets an inbox row and its run-job
+-- message commit or roll back as one database fact.
+enqueueRunJobTx :: RunJob -> Tx.Transaction MessageId
+enqueueRunJobTx job =
+  Tx.statement
+    SendMessage
+      { queueName = runQueueName,
+        messageBody = MessageBody (toJSON job),
+        delay = Nothing
+      }
+    PgmqStatements.sendMessage
+
+-- | Reconcile the run-job queue before accepting trigger deliveries.
+-- PGMQ queue creation is idempotent.
+ensureRunQueue :: Pool -> IO (Either UsageError ())
+ensureRunQueue pool = Pool.use pool (createQueue runQueueName)
 
 -- | Enqueue a run job: ensure the queue exists (idempotent), then send. The pgmq
 -- schema itself is installed by the @pgmq-schema@ migration (shikigami-migrations).
