@@ -265,6 +265,51 @@ implementation. Provide concise evidence.
   returning, and returning now exits the process. A per-pass success event in keiro would let
   this loop join the others; that is a reasonable upstream ask but not one this plan needs.
 
+- **(2026-08-20, implementation) The first PostgreSQL ping reported every healthy database as
+  unreachable, and only a live probe caught it.** `databaseReachable` decoded `select 1` as
+  `int8`. The literal `1` is `int4`, so the decode failed, `Pool.use` returned `Left`, and the
+  check reported `postgres` down against a database that was up and accepting connections. Every
+  unit test passed throughout: the conformance kit injects its own checks, so nothing in the
+  suite ever ran this query. It surfaced on the first `curl` — `/health/live` 200 and
+  `/health/ready` 503 with Postgres demonstrably running. Fixed by running the ping through
+  `Hasql.Session.script`, which cannot collect a result: a ping that names its own column types
+  can be wrong about them; one that reads nothing cannot.
+
+- **(2026-08-20, implementation) A worker cannot serve a 503 for its own database, because losing
+  Postgres kills it.** The plan's user-visible proof was "point the process at an unreachable
+  Postgres and watch `/health/ready` return 503". A worker pointed at a dead database does not
+  start at all — `Kiroku.Store.Connection.withStore` starts a notifier that connects eagerly and
+  throws `NotifierStartError`. And a worker whose database dies *while running* exits within
+  about a second, by the fail-fast path below. So the worker's readiness check only ever reports
+  a partial fault (pool exhaustion, a refused connection against a live server), not a dead
+  database.
+
+  The 503 is demonstrable on the server, which runs no loops and therefore survives the outage.
+  Verified live: `/health/ready` went 200 → 503 with `"check":"postgres"`, `/health/live` stayed
+  200 throughout — the two probes are genuinely independent — and `failingSince` was byte-for-byte
+  identical across probes four seconds apart, which is the failure tracker reporting onset rather
+  than observation.
+
+- **(2026-08-20, implementation) Fail-fast was proved by a real fault, not just by the unit
+  test.** Killing PostgreSQL under a running `shikigami-worker` produced exactly the designed
+  chain: the shibuya processor stopped, `waitApp` returned cleanly (the silent-death hole),
+  `worker.queue.stopped` was logged, `LoopExited QueueLoop` was thrown, `superviseLoops` cancelled
+  the three siblings, and the process exited `1`. Before this plan the same fault would have
+  fallen through to `pure ()` and left three loops running around a dead queue processor.
+
+  One honest limitation: the `worker.queue.stopped` line logged `"processors":{}`. Shibuya clears
+  its metrics map on master shutdown, so when the whole supervisor goes the states are already
+  gone. The line still earns its place — a failed processor under a master still standing does
+  populate it, and an empty map is itself the signal that the whole supervisor went — but it is
+  not the rich diagnostic the plan imagined for this particular path. The code comment says so.
+
+- **(2026-08-20, implementation) The consumer's supervisor-report design was verified past the
+  point where the plan's design would have failed.** `shikigami-consume-stream` pointed at an
+  unreachable broker held `/health/live` and `/health/ready` at 200 for 100 seconds — well past
+  the 60-second consumer staleness bound at which a per-record heartbeat would have gone stale
+  and had the pod restarted for a fault it could not fix. Kafka being unreachable changed neither
+  probe, which is the blast-radius property the readiness decision was made for.
+
 - (Findings from implementation go below this line.)
 
 

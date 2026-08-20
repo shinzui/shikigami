@@ -13,7 +13,7 @@ import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Control.Exception (Exception, throwIO, try)
 import Control.Monad (forever, void)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
-import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), runResumeLoop, runResumeLoopWith)
+import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), runResumeLoopWith)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, ResumeLoop, TimerLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)

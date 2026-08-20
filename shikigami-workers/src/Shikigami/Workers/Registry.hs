@@ -107,15 +107,18 @@ runQueueWorker env = do
         waitApp app
         -- Reaching here means the supervisor stopped. Under @IgnoreFailures@ a
         -- processor that died takes its supervisor with it without raising
-        -- anything, so this is a silent death and not a clean shutdown. Report
-        -- what each processor was doing before throwing: which one stopped, and
-        -- in what state, is the one line an operator will want.
+        -- anything, so this is a silent death rather than a clean shutdown.
+        --
+        -- The metrics map is read for the log line, keyed by processor id and
+        -- rendered by shibuya's own codecs so it cannot drift from the states
+        -- the liveness probe reads. Expect it to be empty when the master shut
+        -- down rather than an individual processor failing: shibuya clears the
+        -- map on shutdown, so the states are already gone by the time this runs.
+        -- It is logged anyway because the non-empty case — a failed processor
+        -- under a master still standing — is the one an operator most needs, and
+        -- an empty map is itself the signal that the whole supervisor went.
         metrics <- getAppMetrics app
         liftIO do
-          -- The whole metrics map, keyed by processor id: which processor
-          -- stopped, in what state, and with what counters behind it. Shibuya's
-          -- own codecs render it, so this line cannot drift from the states the
-          -- probe reads.
           Log.logError (envLogger env) "worker.queue.stopped" ["processors" Aeson..= metrics]
           throwIO (LoopExited QueueLoop)
   case result of

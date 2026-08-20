@@ -21,12 +21,9 @@ module Shikigami.Health.Ping
   )
 where
 
-import Hasql.Decoders qualified as Decoders
-import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
-import Hasql.Statement (Statement, preparable)
 import Shikigami.Prelude
 
 -- | The check name a failed PostgreSQL probe reports under.
@@ -44,6 +41,13 @@ postgresCheckName = "postgres"
 -- problems, but ones a restart or a load-balancer eviction does not fix, which
 -- is the test for whether something belongs in readiness at all.
 --
+-- Run through 'Session.script', which cannot collect a result, rather than
+-- through a decoded statement. The first version of this decoded the column as @int8@ and
+-- so reported every healthy database as unreachable: the literal @1@ is @int4@,
+-- the decode failed, and the failure was indistinguishable from a connection
+-- failure. A ping that names its own column types can be wrong about them; one
+-- that reads nothing cannot.
+--
 -- Returns 'False' for any pool error rather than throwing: an unreachable
 -- database is the expected outcome this exists to report, not an exception.
 -- Callers still wrap it in @safeCheck@, because an exception thrown from
@@ -51,11 +55,4 @@ postgresCheckName = "postgres"
 -- trace instead of a probe report.
 databaseReachable :: Pool -> IO Bool
 databaseReachable pool =
-  either (const False) (const True) <$> Pool.use pool (Session.statement () pingStatement)
-
-pingStatement :: Statement () ()
-pingStatement =
-  preparable
-    "select 1"
-    Encoders.noParams
-    (void (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int8))))
+  either (const False) (const True) <$> Pool.use pool (Session.script "select 1")
