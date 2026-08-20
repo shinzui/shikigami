@@ -15,6 +15,7 @@ module Shikigami.Flow.Capability
     recall,
     recordFlowMemory,
     remember,
+    rememberWith,
     runActivity,
     runMemory,
     runSink,
@@ -158,7 +159,26 @@ recall label query' = send (Recall label query')
 -- against a known id idempotently only when the whole semantic payload matches;
 -- a payload that drifted yields a conflict rather than a silent second row.
 remember :: (Memory :> es) => Text -> Value -> Eff es MemoryId
-remember label value = send (Remember label defaultRememberOptions value)
+remember label = rememberWith label defaultRememberOptions
+
+-- | 'remember' with the metadata spelled out instead of defaulted.
+--
+-- Everything 'remember' documents applies unchanged — the label is a declared
+-- journal step name, and the payload must be a pure function of replay-stable
+-- inputs. The options are part of that payload: kioku compares @priority@,
+-- @confidence@, @memoryType@, @tags@, and @supersedes@ when deciding whether a
+-- second write under a known id is a retry or a conflict, so options that vary
+-- between a run and its replay are as much a bug as content that does.
+--
+-- @supersedes@ records __lineage__ and nothing more. It writes \"this memory
+-- descends from that one\" onto the new row; it does not retire the old one,
+-- which stays active and stays recallable. Kioku separates the two deliberately
+-- and does the same thing itself: @Kioku.Distill.L1@ records a winner carrying
+-- @supersedes@ and then issues a distinct merge command for each target it
+-- means to retire. Retiring a flow memory would be a second aggregate write
+-- from one capability call, and this capability does not make it.
+rememberWith :: (Memory :> es) => Text -> RememberOptions -> Value -> Eff es MemoryId
+rememberWith label opts value = send (Remember label opts value)
 
 -- | Emit a signal through a declared sink, journaling it under a step name
 -- derived from @label@.

@@ -1,6 +1,7 @@
 module Shikigami.FlowLifecycleSpec (tests) where
 
-import Data.Aeson (Value (Bool, String), object, toJSON, (.=))
+import Data.Aeson (Value (Bool, Object, String), object, toJSON, (.=))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -15,9 +16,9 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (.
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
-import Kioku.Api.Types (MemoryRecord (..))
+import Kioku.Api.Types (Confidence (HighConfidence, MediumConfidence), MemoryRecord (..), MemoryType (MemoryConstraint, MemoryPattern), confidenceToText, memoryTypeToText)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
-import Kioku.Id (MemoryId, SessionId, genSessionId)
+import Kioku.Id (MemoryId, SessionId, genSessionId, idText)
 import Kioku.Memory (MemoryWriteError (..))
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.ReadModel (MemoryRow (..))
@@ -33,6 +34,7 @@ import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledge
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
     MemoryQuery (..),
+    RememberOptions (..),
     SinkEnv (..),
     currentActivity,
     defaultRememberOptions,
@@ -41,6 +43,7 @@ import Shikigami.Flow.Capability
     recall,
     recordFlowMemory,
     remember,
+    rememberWith,
     runActivity,
     runMemory,
     runSink,
@@ -245,6 +248,101 @@ tests =
                   ("the conflict should name the field that differs, got " <> show detail)
                   ("content" `Text.isInfixOf` detail)
               other -> assertFailure ("a changed payload under a known id must conflict, got " <> show other),
+      -- The other half of the defect, and the one a row count cannot see: a flow
+      -- that branches on what it recalled must take the same branch on replay.
+      -- Journaling `recall` is what makes that true, and the only way to observe
+      -- it is to change the store between a run and its replay. This flow puts
+      -- no `step` between the recall and its result on purpose -- the at-risk
+      -- flow's own `classify` step would mask the difference by answering from
+      -- the journal whether or not the recall did.
+      testCase "a replayed recall answers from the journal, not from the changed store" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            session <- genSessionId
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", sessionId = Nothing}
+                replayedId = WorkflowId "flow-recall-replay"
+                freshId = WorkflowId "flow-recall-fresh"
+                runCount workflowId = runFlowBody appEnv (spikeRuntime session) "at-risk-customer" recallCountFlow workflowId (object [])
+
+            before <- runCount replayedId
+            assertEqual "the first run recalls nothing" (Right (Completed (toJSON (0 :: Int)))) before
+
+            let decoyId = deterministicFlowMemoryId (WorkflowName "decoy") (WorkflowId "decoy") 0 "decoy"
+            written <- recordFlowMemory memoryEnv decoyId defaultRememberOptions (object ["summary" .= ("ticket_1 was escalated before" :: Text)])
+            assertRecordedId "the decoy memory is written" decoyId written
+
+            after <- runCount replayedId
+            assertEqual "the replay answers from the journal" (Right (Completed (toJSON (0 :: Int)))) after
+
+            -- Without this the assertion above would pass just as well against a
+            -- store that never actually changed.
+            freshRun <- runCount freshId
+            assertEqual "a run with no journal does see the new memory" (Right (Completed (toJSON (1 :: Int)))) freshRun,
+      -- What a flow can say about its own memories now that the metadata is not
+      -- hardcoded. This flow runs under WorkflowName "shikigami.flow.spike",
+      -- which no specification member declares, so its labels need no
+      -- declaration in domain/shikigami-agent-run.keiro.
+      testCase "rememberWith records chosen metadata while remember keeps the old defaults" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            session <- genSessionId
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            outcome <- runFlowBody appEnv (spikeRuntime session) "at-risk-customer" supersessionFlow (WorkflowId "flow-supersession-spike") (object [])
+            (firstId, secondId) <- case outcome of
+              Right (Completed (Object o)) -> case (KeyMap.lookup "first" o, KeyMap.lookup "second" o) of
+                (Just (String a), Just (String b)) -> pure (a, b)
+                _ -> assertFailure ("flow should return both memory ids, got " <> show o)
+              other -> assertFailure ("supersession flow should complete, got " <> show other)
+
+            rows <- scopeRows appEnv
+            -- Destructured rather than read through selectors because
+            -- MemoryRow, MemoryRecord and RememberOptions all have fields by
+            -- these names; naming the constructor is what disambiguates them.
+            MemoryRow
+              { priority = defaultedPriority,
+                confidence = defaultedConfidence,
+                memoryType = defaultedType,
+                supersedes = defaultedLineage,
+                tags = defaultedTags,
+                status = defaultedStatus
+              } <-
+              requireRow "the plain remember" firstId rows
+            MemoryRow
+              { priority = chosenPriority,
+                confidence = chosenConfidence,
+                memoryType = chosenType,
+                supersedes = chosenLineage,
+                tags = chosenTags,
+                status = chosenStatus
+              } <-
+              requireRow "the rememberWith" secondId rows
+
+            -- A pre-existing flow memory must still record exactly what it did
+            -- before RememberOptions existed.
+            assertEqual "default priority is unchanged" 100 defaultedPriority
+            assertEqual "default confidence is unchanged" (confidenceToText MediumConfidence) defaultedConfidence
+            assertEqual "default type is unchanged" (memoryTypeToText MemoryPattern) defaultedType
+            assertEqual "a default remember claims no lineage" Nothing defaultedLineage
+            assertBool "the flow tag is still written" (Set.member "flow" defaultedTags)
+
+            assertEqual "chosen priority lands" 10 chosenPriority
+            assertEqual "chosen confidence lands" (confidenceToText HighConfidence) chosenConfidence
+            assertEqual "chosen type lands" (memoryTypeToText MemoryConstraint) chosenType
+            assertEqual "the lineage pointer names the first memory" (Just firstId) chosenLineage
+            assertBool
+              "extraTags union rather than replace, so a flow cannot un-tag itself out of its own queries"
+              (Set.isSubsetOf (Set.fromList ["flow", "revision"]) chosenTags)
+
+            -- kioku separates lineage from retirement: `supersedes` on a record
+            -- says "this descends from that", and retiring the older row is a
+            -- distinct command this capability does not issue. Kioku's own L1
+            -- distillation does both explicitly. So both rows are still active,
+            -- and this pins that rather than the other way round.
+            assertEqual "recording lineage does not retire the older memory" "active" defaultedStatus
+            assertEqual "the superseding memory is active too" "active" chosenStatus,
       testCase "acknowledgement wrapper maps approval decisions" do
         assertEqual "approved maps to acknowledged" (Acknowledged (toJSON True)) (ackFromDecision (Approval.Approved (toJSON True)))
         assertEqual "rejected maps to declined" (Declined "no") (ackFromDecision (Approval.Rejected "no"))
@@ -278,6 +376,48 @@ memoryFlow =
         _ <- remember "note" (object ["summary" .= ("flow durable note" :: Text)])
         memories <- recall "note-back" (MemoryQuery "flow durable note")
         pure (Bool (any (\MemoryRecord {content} -> content == "flow durable note") memories))
+    }
+
+-- | How many memories the recall returned, and nothing else.
+--
+-- Deliberately has no 'step' after the recall: its result /is/ the recall's
+-- result, so a replay that re-queried the store instead of reading the journal
+-- would return a different number.
+recallCountFlow :: FlowDef
+recallCountFlow =
+  FlowDef
+    { name = "recall-count-spike",
+      lifecycle = atRiskCustomerLifecycleDiagram,
+      run = \_payload -> toJSON . length <$> recall "history" (MemoryQuery "prior escalation")
+    }
+
+-- | Two memories, the second declaring the first as its lineage.
+--
+-- The non-obvious part is why threading @first@ into the second call is safe.
+-- @first@ is a journaled step result, not a fresh value: a replay hands the
+-- flow the same 'MemoryId' the original run recorded, so the supersession
+-- target is replay-stable and the deterministic id of the superseding row does
+-- not move between a run and its replay. Building the second write out of
+-- anything /not/ journaled would break exactly that.
+supersessionFlow :: FlowDef
+supersessionFlow =
+  FlowDef
+    { name = "supersession-spike",
+      lifecycle = atRiskCustomerLifecycleDiagram,
+      run = \_payload -> do
+        first <- remember "first" (object ["summary" .= ("original note" :: Text)])
+        second <- rememberWith "constraint" (revisionOptions first) (object ["summary" .= ("revised note" :: Text)])
+        pure (object ["first" .= idText first, "second" .= idText second])
+    }
+
+revisionOptions :: MemoryId -> RememberOptions
+revisionOptions first =
+  defaultRememberOptions
+    { priority = 10,
+      confidence = HighConfidence,
+      memoryType = MemoryConstraint,
+      supersedes = Just first,
+      extraTags = Set.singleton "revision"
     }
 
 sinkFlow :: FlowDef
@@ -475,6 +615,20 @@ assertRecordedId :: String -> MemoryId -> Either MemoryWriteError MemoryId -> IO
 assertRecordedId label expected = \case
   Right actual -> assertEqual label expected actual
   Left err -> assertFailure (label <> ", got " <> show err)
+
+-- | Every active memory in the test agent's scope.
+scopeRows :: AppEnv -> IO [MemoryRow]
+scopeRows appEnv =
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "at-risk-customer")) >>= \case
+    Right (Right rows) -> pure rows
+    Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
+    Left _ -> assertFailure "memory rows should be readable, got a store error"
+
+requireRow :: String -> Text -> [MemoryRow] -> IO MemoryRow
+requireRow label wanted rows =
+  case [row | row@MemoryRow {memoryId} <- rows, memoryId == wanted] of
+    [row] -> pure row
+    other -> assertFailure (label <> " should be exactly one active row " <> show wanted <> ", got " <> show (length other))
 
 isAcknowledgedNote :: MemoryRow -> Bool
 isAcknowledgedNote MemoryRow {content} = content == "at-risk customer alert acknowledged"

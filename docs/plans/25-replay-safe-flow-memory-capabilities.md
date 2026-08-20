@@ -96,8 +96,19 @@ This section must always reflect the actual current state of the work.
       attempt and reverted: a flow body with `liftIO` fails with
       `Could not deduce 'IOE :> es' arising from a use of 'liftIO' from the context:
       FlowEffects es`.
-- [ ] M4: `rememberWith` exported, metadata threaded into `RecordMemoryData`, supersession
-      spec green; defaults preserve today's values; docs updated.
+- [x] (2026-08-19) M4: `rememberWith` exported (the metadata was already threaded into
+      `RecordMemoryData` in M2, per the Decision Log's one-interpreter rule). Spec
+      "rememberWith records chosen metadata while remember keeps the old defaults" green, and
+      it pins the defaults — priority 100, `MediumConfidence`, `MemoryPattern`, no lineage —
+      so a pre-existing flow memory is unchanged.
+- [x] (2026-08-19) M4: Corrected the plan's supersession claim. `supersedes` on a record is
+      lineage metadata; it does NOT retire the older row. See Surprises & Discoveries and the
+      Decision Log; Validation item 6 is rewritten to match what kioku actually does.
+- [x] (2026-08-19) Validation item 2 (journaled recall) proved by its own test, "a replayed
+      recall answers from the journal, not from the changed store". The at-risk flow could not
+      show this — its `classify` step would answer from the journal either way — so the test
+      uses a spike flow whose output is the recall result with no step after it, and a
+      fresh-workflow-id run as the control that proves the store really changed.
 
 
 ## Surprises & Discoveries
