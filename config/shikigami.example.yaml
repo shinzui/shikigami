@@ -46,6 +46,9 @@ kafka:
   groups:
     stream: shikigami-stream
     events: shikigami-events
+  dead_letter:
+    # Poison records land here before their Kafka offsets can advance.
+    queue: shikigami_stream_dead_letters
   # Off is the feedback guard: it stops an agent's own output from triggering
   # it again. Turn it on only for deliberate meta-detectors.
   include_agent_actors: false

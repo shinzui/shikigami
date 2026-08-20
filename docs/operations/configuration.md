@@ -117,6 +117,7 @@ nested under `kafka`.
 | `kafka.events.topic` | `danwa.message-addressed.v1` | `SHIKIGAMI_KAFKA_EVENTS_TOPIC` | Topic carrying public integration events. |
 | `kafka.groups.stream` | `shikigami-stream` | `SHIKIGAMI_KAFKA_STREAM_GROUP` | Consumer group of the activity-stream consumer. |
 | `kafka.groups.events` | `shikigami-events` | `SHIKIGAMI_KAFKA_EVENTS_GROUP` | Consumer group of the integration-event consumer. |
+| `kafka.dead_letter.queue` | `shikigami_stream_dead_letters` | `SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE` | PGMQ queue that stores poison Kafka records before their offsets advance. Queue names are non-empty, at most 47 characters, and contain only lowercase letters, digits, and underscores. |
 | `kafka.include_agent_actors` | `false` | `SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS` | Whether the stream consumer matches agent-produced activities. Leaving it off is the feedback guard that stops an agent triggering itself. |
 | `http.host` | `127.0.0.1` | `SHIKIGAMI_HTTP_HOST` | Interface the API binds. `*` binds every interface. |
 | `http.port` | `8080` | `SHIKIGAMI_HTTP_PORT` | Port the API binds. Must be 1–65535; checked at resolution, not at bind. |

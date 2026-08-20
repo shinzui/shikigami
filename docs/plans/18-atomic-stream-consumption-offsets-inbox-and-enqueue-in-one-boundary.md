@@ -30,12 +30,13 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-20T00:35:42Z) Milestone 1: added `enqueueRunJobTx` and `ensureRunQueue` in `Shikigami.Trigger.Enqueue`; both activity and integration-event handlers now enqueue inside the inbox transaction, and the composition callbacks are logging-only.
 - [x] (2026-08-20T00:35:42Z) Milestone 1 tests: real-Postgres atomic success, forced queue-send rollback, and duplicate delivery all pass in `Shikigami.StreamInboxSpec`.
 - [x] (2026-08-20T00:25:35Z) Prerequisites reconciled: plan 36 moved the consumer to `shikigami-workers`; plan 37 settled both consumer roles' Settei Kafka settings (its only remaining migration-CLI item is unrelated); plan 47's dependency cohort has since been superseded by the released Keiro 0.13 / Shibuya 0.9 / PGMQ 0.5 cohort already selected by `cabal.project`.
-- [ ] Milestone 2: `RecordDisposition` covers enqueued, duplicate, permanent-dead-letter, and transient failure; offsets commit only for a durable terminal disposition.
-- [ ] Milestone 2: test — a failing disposition leaves no inbox row and no message (and the loop signals retry rather than committing).
-- [ ] Milestone 3: shibuya `Serial`/framework-owned consume loop with bounded reconnect policy; poison records go to a durable DLQ and halt rather than commit if DLQ persistence fails.
+- [x] (2026-08-20T00:56:21Z) Milestone 2: `RecordDisposition` covers enqueued, duplicate, permanent-dead-letter, and transient failure; `ackDecisionFor` authorizes terminal acknowledgement only for the first three.
+- [x] (2026-08-20T00:56:21Z) Milestone 2 tests: store/send failures leave no inbox row, `TransientFailure` becomes `AckHalt`, and terminal dispositions each map to one framework ack decision.
+- [x] (2026-08-20T00:56:21Z) Milestone 3: both subscriptions now use Shibuya Kafka adapter 0.9 with `StrictInOrder`/`Serial`, no application-side commit call, capped 1/2/4/…/30-second reconnect delay, and typed programming-failure escape.
+- [x] (2026-08-20T00:56:21Z) Milestone 3 poison path: malformed records persist bounded evidence and delivery coordinates to the configured PGMQ queue before `AckDeadLetter`; failed persistence becomes `AckHalt`.
 - [x] (2026-08-20T00:35:42Z) Consumer composition updates: `consume-stream`/`consume-events` `onHit` is logging-only and each startup calls `ensureRunQueue` before subscribing.
 - [x] (2026-08-20T00:35:42Z) Registered `Shikigami.StreamInboxSpec` in the worker test suite; `nix develop -c cabal build all` passes and all 27 worker tests pass after Milestone 1.
-- [ ] Final validation: expand `StreamInboxSpec` for disposition/ack, store failure, and poison-DLQ behavior; run `cabal test all` and the feasible manual resilience checks.
+- [ ] Final validation: `StreamInboxSpec` now covers disposition/ack, unavailable store, durable poison-DLQ, and failed-DLQ behavior (31 worker tests pass); run `cabal test all` and the feasible manual resilience checks.
 
 
 ## Surprises & Discoveries
@@ -66,6 +67,21 @@ implementation. Provide concise evidence.
   broker-free transactional acceptance tests.
   Evidence: `shikigami-workers/shikigami-workers.cabal` exposes
   `Shikigami.Trigger.Consumer` and declares both test dependencies.
+
+- The released Shibuya Kafka adapter does not copy `ConsumerRecord.crKey` into its public
+  `Envelope`; it does preserve raw value bytes, headers, partition, and cursor. Shikigami's
+  inbox identity and both trigger matchers use the canonical integration headers/payload,
+  not `IntegrationEvent.key`, so the adapter can own acknowledgement without changing the
+  current trigger result. Evidence: the 0.9.0.0 `consumerRecordToEnvelope` implementation in
+  `mori://shinzui/shibuya-kafka-adapter/packages/shibuya-kafka-adapter` and repository-wide
+  key-use inspection.
+
+- An unavailable database can raise Kiroku's typed `NotifierStartError` while acquiring the
+  store, before `runAppIO` enters its `StoreError` effect. Treating only this typed startup
+  exception as transient is necessary for the promised disposition; unrelated synchronous
+  exceptions remain programming failures and escape after Shibuya halts without storing the
+  offset. Evidence: the unavailable-port acceptance test initially raised
+  `NotifierConnectError`, then passed after the typed boundary was added.
 
 
 ## Decision Log
@@ -121,6 +137,25 @@ Record every decision made while working on the plan.
   suite's existing database/PGMQ test dependencies.
   Date: 2026-08-19
 
+- Decision: Accept the Shibuya Kafka adapter 0.9 public envelope's missing Kafka key for
+  this consumer, while preserving every header and payload byte it does expose.
+  Rationale: neither activity matching, event matching, Keiro inbox dedupe, nor `RunJob`
+  identity consults the reconstructed `IntegrationEvent.key`; retaining a private raw
+  librdkafka loop solely for that unused field would give acknowledgement ownership back to
+  application code and violate the more important offset-safety invariant. The limitation is
+  recorded against `mori://shinzui/shibuya-kafka-adapter` for a future adapter enhancement.
+  Date: 2026-08-19
+
+- Decision: Convert only Kiroku's typed `NotifierStartError` and ordinary returned store
+  errors to `TransientFailure`; trap any other synchronous handler exception long enough to
+  return `AckHalt HaltFatal`, then rethrow it outside Shibuya so the process supervisor sees
+  it.
+  Rationale: Shibuya intentionally converts a thrown handler exception to retry. Recording
+  the exception, halting the partition without offset storage, and rethrowing after processor
+  shutdown preserves both requirements: programming failures escape, and their current
+  record cannot be committed.
+  Date: 2026-08-19
+
 
 ## Outcomes & Retrospective
 
@@ -134,14 +169,23 @@ produces one completed Keiro inbox row and one decodable `RunJob`; replay return
 send to fail, leaves no inbox row, and permits a successful redelivery after queue
 reconciliation. The worker suite reports 27 passing tests and `cabal build all` succeeds.
 
+Milestones 2 and 3 complete (2026-08-19). Application code no longer imports a Kafka
+offset-commit operation. The Shibuya adapter is the sole acknowledgement owner under
+`StrictInOrder` plus `Serial`: enqueued and duplicate records return `AckOk`, a poison
+record returns `AckDeadLetter` only after its PGMQ message is durable, and any store or
+dead-letter failure returns `AckHalt` so the rebuilt consumer resumes from the last stored
+offset. The poison message retains topic/partition/offset, a 2,048-character-bounded error,
+and at most 256 payload bytes with full byte count/truncation metadata. All 31 worker tests
+pass, including a real unavailable-store probe and both dead-letter outcomes.
+
 
 ## Context and Orientation
 
-Two long-running consumers live in `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`. `subscribeActivityStream` consumes the `activity.v1` Kafka topic: each record is decoded into a keiro `IntegrationEvent`, pushed through the keiro idempotent inbox, matched against the declared stream agents, and reported as `StreamHit` values to an `onHit :: StreamHit -> IO ()` callback. `subscribeIntegrationEventStream` does the same for public integration-event topics (danwa addressed messages), producing `EventHit`s. The composition functions `runConsumeStream` and `runConsumeEvents` in `shikigami-workers/src/Shikigami/Workers/Subscription.hs` currently supply `onHit` callbacks that build a `RunJob` and enqueue it onto the `shikigami_run_jobs` PGMQ queue via `Shikigami.Trigger.Enqueue`.
+Two long-running consumers live in `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`. `subscribeActivityStream` consumes the `activity.v1` Kafka topic: each record is decoded into a keiro `IntegrationEvent`, pushed through the keiro idempotent inbox, matched against the declared stream agents, and reported as `StreamHit` values to an `onHit :: StreamHit -> IO ()` callback. `subscribeIntegrationEventStream` does the same for public integration-event topics (danwa addressed messages), producing `EventHit`s. The inbox handlers build and enqueue `RunJob`s inside their transaction; the composition functions `runConsumeStream` and `runConsumeEvents` in `shikigami-workers/src/Shikigami/Workers/Subscription.hs` now use `onHit` for logging only and reconcile both PGMQ queues before subscribing.
 
 The "keiro idempotent inbox" is a Postgres table (`keiro.keiro_inbox`) plus `runInboxTransaction` (keiro `src/Keiro/Inbox.hs:80-88`, re-exported as `Keiro.Inbox.runInboxTransaction`), which in one Postgres transaction inserts a dedupe row for the event and runs a caller-supplied handler of type `IntegrationEvent -> Tx.Transaction a` — `Tx` being hasql-transaction's `Hasql.Transaction`. If the dedupe row already exists, it returns `InboxDuplicate` without running the handler. Everything the handler writes commits atomically with the dedupe row. Crucially, pgmq is also plain Postgres in the same database: `pgmq-hasql` exposes `Pgmq.Hasql.Statements.Message.sendMessage :: Statement SendMessage MessageId` at the `Statement` level, so a queue send can be composed into the same transaction with `Hasql.Transaction.statement` (the shibuya pgmq adapter already composes pgmq statements into transactions this way).
 
-The three verified bugs:
+The three verified pre-plan bugs were:
 
 Unconditional offset commit. Both poll loops commit the offset immediately after processing, regardless of outcome: `liftIO (processRecord …) >> commitOffsetMessage OffsetCommit record` (Consumer.hs:94-96) and identically at Consumer.hs:121-123. `processRecord` (Consumer.hs:127-160) returns `()` and swallows every failure into stderr: decode errors (line 150), inbox errors (line 159), and store errors (line 160 — `Left serr`, e.g. a Postgres connection failure) are all logged and then committed over. A transient database outage therefore permanently skips every event polled during it.
 
@@ -149,7 +193,7 @@ Non-atomic inbox→enqueue. The inbox transaction marks the event processed and 
 
 No Kafka resilience. `runKafkaConsumer props sub loop` is run once under `runError @KafkaError` (Consumer.hs:84); any `KafkaError` (broker restart, rebalance timeout) exits with one stderr line (Consumer.hs:86, 113) and the function returns — the process stops consuming.
 
-Supporting pieces you will touch: `runJobFromEnvelope :: AgentDecl -> ActivityEnvelope -> RunJob` (Enqueue.hs:34-48) is the pure stream-hit→job builder (its epoch fallback at line 39 is fixed by docs/plans/20, not here); the event-hit path builds a `TriggeredByEvent` job with idempotency key `eventAgentName <> ":" <> integrationMessageId` (ConsumeStream.hs:82). `Shikigami.Api.RunJob.RunJob` is the queue payload type. The worker draining the queue is unaffected by this plan.
+Supporting pieces touched: `runJobFromEnvelope :: AgentDecl -> ActivityEnvelope -> RunJob` is the pure stream-hit→job builder (its epoch fallback is fixed by docs/plans/20, not here); the event-hit path builds a `TriggeredByEvent` job with idempotency key `agentName <> ":" <> messageId`. `Shikigami.Agent.RunJob.RunJob` is the queue payload type. The worker draining the queue is unaffected by this plan.
 
 Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`) provisions a per-test Postgres with all schemas migrated, including `keiro` (inbox tables) and `pgmq`. Kafka is not available in tests; the transactional core is therefore factored so it is testable without a broker, and the reconnect behavior is validated manually (the repo's `process-compose.yaml` runs a broker for the living-loop demo).
 
@@ -305,7 +349,7 @@ runtime enqueue boundary.
 Hard dependencies: plans 36 and 37. Consumer code lives in the worker package and reads
 Kafka/DLQ settings only through the Settei application config.
 
-Libraries and why: keiro (`Keiro.Inbox.runInboxTransaction :: Maybe KeiroMetrics -> InboxDedupePolicy -> IntegrationEvent -> Maybe KafkaDeliveryRef -> (IntegrationEvent -> Tx.Transaction a) -> Eff es (Either InboxError (InboxResult a))` — verified in keiro `src/Keiro/Inbox.hs:80-88`; the handler runs inside the transaction, `attemptOneTx` at Inbox.hs:350-377; `Keiro.Inbox.Types.InboxResult (InboxProcessed, InboxDuplicate, InboxInProgress, InboxPreviouslyFailed, InboxHandlerFailed)`), hasql-transaction (`Hasql.Transaction` — `statement`, `condemn`), pgmq-hasql (`Pgmq.Hasql.Statements.Message.sendMessage :: Statement SendMessage MessageId` — verified transaction-composable; session-level `createQueue`, `readMessage` for tests), hasql-pool (`Pool`, `UsageError`), kafka-effectful (`pollMessage`, `commitOffsetMessage`, `runKafkaConsumer`, `KafkaError` — unchanged usage, new supervision around it).
+Libraries and why: keiro (`Keiro.Inbox.runInboxTransaction :: Maybe KeiroMetrics -> InboxDedupePolicy -> IntegrationEvent -> Maybe KafkaDeliveryRef -> (IntegrationEvent -> Tx.Transaction a) -> Eff es (Either InboxError (InboxResult a))` — verified in keiro `src/Keiro/Inbox.hs:80-88`; the handler runs inside the transaction, `attemptOneTx` at Inbox.hs:350-377; `Keiro.Inbox.Types.InboxResult (InboxProcessed, InboxDuplicate, InboxInProgress, InboxPreviouslyFailed, InboxHandlerFailed)`), hasql-transaction (`Hasql.Transaction` — `statement`, `condemn`), pgmq-hasql (`Pgmq.Hasql.Statements.Message.sendMessage :: Statement SendMessage MessageId` — verified transaction-composable; session-level `createQueue`, `readMessage` for tests), hasql-pool (`Pool`, `UsageError`), kafka-effectful (`runKafkaConsumer`, `KafkaError`, with offset storage delegated to the adapter), and `mori://shinzui/shibuya-kafka-adapter/packages/shibuya-kafka-adapter` (`kafkaAdapter`, serial polling and framework-owned ack finalization).
 
 Signatures that must exist at the end (full module paths):
 
@@ -346,3 +390,6 @@ the worker's workflow dedupe and must not change here.
   queue explicit because the adapter intentionally has no DLQ producer.
 - 2026-08-19: Recorded Milestone 1 implementation and validation, including the worker-suite
   relocation and the forced queue-send rollback proof.
+- 2026-08-19: Recorded Milestones 2/3 implementation: Shibuya serial acknowledgement,
+  bounded reconnect supervision, typed programming-failure escape, configured PGMQ poison
+  storage, adapter key limitation, and the expanded 31-test worker acceptance suite.

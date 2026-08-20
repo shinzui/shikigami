@@ -80,6 +80,7 @@ module Shikigami.App.Config
     kafkaStreamGroupKey,
     kafkaEventsGroupKey,
     kafkaIncludeAgentActorsKey,
+    kafkaDeadLetterQueueKey,
     httpHostKey,
     httpPortKey,
     workerRunTimeoutSecondsKey,
@@ -105,6 +106,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
 import GHC.Generics (Generic)
+import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
 
@@ -253,6 +255,8 @@ data AppConfig = AppConfig
     -- Off by default: leaving it off is the feedback guard that stops an agent's
     -- own output from triggering it again.
     kafkaIncludeAgentActors :: !Bool,
+    -- | Durable PGMQ target for Kafka records that cannot be decoded.
+    kafkaDeadLetterQueue :: !QueueName,
     -- | Interface the public HTTP API binds.
     httpHost :: !Text,
     -- | Port the public HTTP API binds.
@@ -311,6 +315,7 @@ appConfig =
     <*> withDefault kafkaStreamGroupSetting (constant "stream-group" "One consumer group per stream role" "shikigami-stream")
     <*> withDefault kafkaEventsGroupSetting (constant "events-group" "One consumer group per stream role" "shikigami-events")
     <*> withDefault kafkaIncludeAgentActorsSetting (constant "feedback-guard" "Ignore agent-produced activities so an agent cannot trigger itself" False)
+    <*> withDefault kafkaDeadLetterQueueSetting (constant "stream-dead-letter-queue" "Keep poison Kafka records in Postgres before advancing their offsets" defaultKafkaDeadLetterQueue)
     <*> withDefault httpHostSetting (constant "loopback" "Keep a development server off the network" "127.0.0.1")
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
@@ -419,6 +424,30 @@ kafkaIncludeAgentActorsSetting =
     kafkaIncludeAgentActorsKey
     "Match agent-produced activities too (meta-detectors; off is the feedback guard)"
     boolDecoder
+
+kafkaDeadLetterQueueSetting :: Setting QueueName
+kafkaDeadLetterQueueSetting =
+  publicSettingWithRenderer
+    kafkaDeadLetterQueueKey
+    "PGMQ queue that durably stores undecodable Kafka records before their offsets advance"
+    queueNameDecoder
+    queueNameToText
+
+queueNameDecoder :: Decoder QueueName
+queueNameDecoder =
+  decoder
+    ( \key raw ->
+        case runDecoder textDecoder key raw of
+          Right value -> either (const (Left (decodeFailure key queueNameExpectation))) Right (parseQueueName value)
+          Left _ -> Left (decodeFailure key queueNameExpectation)
+    )
+
+queueNameExpectation :: Text
+queueNameExpectation = "a non-empty PGMQ queue name of at most 47 lowercase letters, digits, and underscores"
+
+defaultKafkaDeadLetterQueue :: QueueName
+defaultKafkaDeadLetterQueue =
+  either (error . show) id (parseQueueName "shikigami_stream_dead_letters")
 
 httpHostSetting :: Setting Text
 httpHostSetting =
@@ -572,6 +601,9 @@ kafkaEventsGroupKey = stableKey "kafka.groups.events"
 kafkaIncludeAgentActorsKey :: Key
 kafkaIncludeAgentActorsKey = stableKey "kafka.include_agent_actors"
 
+kafkaDeadLetterQueueKey :: Key
+kafkaDeadLetterQueueKey = stableKey "kafka.dead_letter.queue"
+
 httpHostKey :: Key
 httpHostKey = stableKey "http.host"
 
@@ -663,6 +695,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KAFKA_STREAM_GROUP") kafkaStreamGroupKey,
           binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_GROUP") kafkaEventsGroupKey,
           binding (EnvName "SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS") kafkaIncludeAgentActorsKey,
+          binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,

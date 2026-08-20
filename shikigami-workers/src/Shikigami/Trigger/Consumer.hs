@@ -1,55 +1,75 @@
 {-# LANGUAGE TypeApplications #-}
 
--- | The live @activity.v1@ stream trigger (C3, class 2). A consumer that decodes each
--- Kafka record through the keiro idempotent inbox (C9), runs 'matchesStream' for each
--- declared stream agent, and reports the hits. Offsets are committed manually only
--- after the inbox transaction commits (Open Question 7), so a restart neither
--- double-fires (inbox dedup guards) nor loses position.
+-- | Durable Kafka consumers for stream and public integration-event triggers.
+-- Shibuya owns polling and offset storage; application code establishes one of
+-- the explicit durable dispositions below and returns exactly one ack decision.
 module Shikigami.Trigger.Consumer
   ( StreamConfig (..),
     StreamHit (..),
     EventHit (..),
     DeadLetterId (..),
+    PayloadEvidence (..),
+    DeadLetterRecord (..),
     RecordDisposition (..),
     subscribeActivityStream,
     subscribeIntegrationEventStream,
+    processActivityRecord,
+    processIntegrationEventRecord,
     processDecodedActivity,
     processDecodedIntegrationEvent,
+    ackDecisionFor,
+    ensureDeadLetterQueue,
   )
 where
 
+import Control.Concurrent (threadDelay)
+import Control.Exception qualified as Exception
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Types (Pair)
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as ByteString
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.Int (Int64)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
-import Effectful (Eff, IOE, runEff, (:>))
+import Data.Text.Encoding.Error (lenientDecode)
+import Data.Text.Read qualified as TextRead
+import Data.Word (Word8)
+import Effectful (runEff)
 import Effectful.Error.Static (runError)
+import Hasql.Pool (Pool, UsageError)
+import Hasql.Pool qualified as Pool
 import Hasql.Transaction qualified as Tx
 import Kafka.Consumer
   ( ConsumerGroupId (..),
-    ConsumerRecord (..),
-    Offset (..),
     OffsetReset (..),
-    PartitionId (..),
-    Timeout (..),
     TopicName (..),
     brokersList,
     groupId,
-    noAutoCommit,
+    noAutoOffsetStore,
     offsetReset,
     topics,
   )
-import Kafka.Effectful (KafkaConsumer, KafkaError, OffsetCommit (OffsetCommit), commitOffsetMessage, pollMessage, runKafkaConsumer)
-import Kafka.Types (BrokerAddress (..), headersToList)
+import Kafka.Effectful (KafkaError, runKafkaConsumer)
+import Kafka.Types (BrokerAddress (..))
 import Keiro.Inbox (runInboxTransaction)
 import Keiro.Inbox.Kafka (KafkaInboundRecord (..), integrationEventFromKafka)
-import Keiro.Inbox.Types (InboxDedupePolicy (PreferIntegrationMessageId), InboxResult (..), KafkaDeliveryRef)
+import Keiro.Inbox.Types (InboxDedupePolicy (PreferIntegrationMessageId), InboxResult (..), KafkaDeliveryRef (..))
 import Keiro.Integration.Event (IntegrationEvent, decodeJsonIntegrationEvent)
-import Kioku.App (AppEnv, runAppIO)
+import Kioku.App (AppEnv (..), runAppIO)
+import Kiroku.Store.Notification (NotifierStartError)
+import Kiroku.Store.Transaction (runTransaction)
+import Pgmq (MessageBody (..), MessageId (..), QueueName, SendMessage (..), createQueue)
+import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
+import Shibuya.Adapter.Kafka (defaultConfig, kafkaAdapter)
+import Shibuya.App qualified as Shibuya
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterCode, DeadLetterReason (ApplicationFailure), HaltReason (..), mkDeadLetterCode)
+import Shibuya.Core.Ingested (Message (..))
+import Shibuya.Core.Types (Cursor (..), Envelope (..))
+import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
+import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), StreamMatch, Trigger (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByEvent))
@@ -58,22 +78,21 @@ import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
--- | Where to consume the activity stream.
+-- | Connection and durable poison-record target for one Kafka subscription.
 data StreamConfig = StreamConfig
-  { broker :: !Text, -- "host:port"
-    topic :: !Text, -- "activity.v1"
-    consumerGroupId :: !Text
+  { broker :: !Text,
+    topic :: !Text,
+    consumerGroupId :: !Text,
+    deadLetterQueue :: !QueueName
   }
   deriving stock (Eq, Show)
 
--- | A matched (agent, envelope) pair the consumer reports.
 data StreamHit = StreamHit
   { agentName :: !Text,
     envelope :: !ActivityEnvelope
   }
   deriving stock (Eq, Show)
 
--- | A matched event-triggered agent and the public integration-event payload.
 data EventHit = EventHit
   { agentName :: !Text,
     eventType :: !Text,
@@ -82,11 +101,30 @@ data EventHit = EventHit
   }
   deriving stock (Eq, Show)
 
--- | Durable identity returned by poison-record storage.
 newtype DeadLetterId = DeadLetterId Text
   deriving stock (Eq, Show)
 
--- | What durable processing established for one Kafka delivery.
+-- | Bounded raw evidence. The full poison payload never enters the queue.
+data PayloadEvidence = PayloadEvidence
+  { byteCount :: !Int,
+    sample :: ![Word8],
+    truncated :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+-- | Recoverable operator evidence for an unprocessable Kafka delivery.
+data DeadLetterRecord = DeadLetterRecord
+  { topic :: !Text,
+    partition :: !Int64,
+    offset :: !Int64,
+    error :: !Text,
+    evidence :: !PayloadEvidence,
+    recordedAt :: !UTCTime
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
 data RecordDisposition
   = Enqueued
   | Duplicate
@@ -94,141 +132,170 @@ data RecordDisposition
   | TransientFailure !Text
   deriving stock (Eq, Show)
 
--- | Subscribe to the activity stream and report each declared stream agent that
--- matches an incoming envelope. Decodes via the keiro inbox; a re-delivery is logged
--- and not re-fired. Runs forever.
+-- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
 subscribeActivityStream :: Log.Logger -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} include agents onHit = do
-  let props =
-        brokersList [BrokerAddress streamBroker]
-          <> groupId (ConsumerGroupId streamGroup)
-          <> noAutoCommit
-      sub = topics [TopicName streamTopic] <> offsetReset Earliest
-  result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
-  case result of
-    Left err -> Log.logError logger "stream.consumer.failed" ["topic" Aeson..= streamTopic, "error" Aeson..= Text.pack (show err)]
-    Right () -> pure ()
-  where
-    loop :: (KafkaConsumer :> es, IOE :> es) => Eff es ()
-    loop = do
-      mr <- pollMessage (Timeout 1000)
-      case mr of
-        Nothing -> loop
-        Just record -> do
-          liftIO (processRecord logger appEnv include agents onHit record)
-          commitOffsetMessage OffsetCommit record
-          loop
+subscribeActivityStream logger appEnv config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger "stream" appEnv config $ processActivityRecord appEnv deadLetterQueue include agents onHit
 
--- | Subscribe to a public integration-event topic and report declared event
--- agents whose `Trigger.Event.eventType` matches the integration event type.
---
--- This is the supported path for Danwa addressed-message events. It consumes
--- the public topic Danwa publishes; it does not read Danwa's database.
+-- | Subscribe to a public integration-event topic through the same durable
+-- acknowledgement boundary.
 subscribeIntegrationEventStream :: Log.Logger -> AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream logger appEnv StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} agents onHit = do
-  let props =
-        brokersList [BrokerAddress streamBroker]
-          <> groupId (ConsumerGroupId streamGroup)
-          <> noAutoCommit
-      sub = topics [TopicName streamTopic] <> offsetReset Earliest
-  result <- runEff . runError @KafkaError $ runKafkaConsumer props sub loop
-  case result of
-    Left err -> Log.logError logger "events.consumer.failed" ["topic" Aeson..= streamTopic, "error" Aeson..= Text.pack (show err)]
-    Right () -> pure ()
-  where
-    loop :: (KafkaConsumer :> es, IOE :> es) => Eff es ()
-    loop = do
-      mr <- pollMessage (Timeout 1000)
-      case mr of
-        Nothing -> loop
-        Just record -> do
-          liftIO (processEventRecord logger appEnv agents onHit record)
-          commitOffsetMessage OffsetCommit record
-          loop
+subscribeIntegrationEventStream logger appEnv config@StreamConfig {deadLetterQueue} agents onHit =
+  runSubscription logger "events" appEnv config $ processIntegrationEventRecord appEnv deadLetterQueue agents onHit
 
--- | Decode one record through the keiro inbox and fire the matching agents.
-processRecord ::
+runSubscription ::
   Log.Logger ->
+  Text ->
   AppEnv ->
+  StreamConfig ->
+  (KafkaInboundRecord -> IO RecordDisposition) ->
+  IO ()
+runSubscription logger prefix AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
+  reconnect 1
+  where
+    reconnect backoffSeconds = do
+      let props =
+            brokersList [BrokerAddress streamBroker]
+              <> groupId (ConsumerGroupId streamGroup)
+              <> noAutoOffsetStore
+          sub = topics [TopicName streamTopic] <> offsetReset Earliest
+      result <-
+        runEff . runError @KafkaError . runTracing tracer $
+          runKafkaConsumer props sub do
+            adapter <- kafkaAdapter (defaultConfig [TopicName streamTopic])
+            programmingFailure <- liftIO (newIORef Nothing)
+            let handler message = do
+                  attempt <-
+                    liftIO . trySynchronous $ do
+                      disposition <- processKafkaMessage streamTopic processRecord message
+                      logDisposition logger prefix disposition
+                      pure disposition
+                  case attempt of
+                    Left err -> do
+                      liftIO (writeIORef programmingFailure (Just err))
+                      pure (AckHalt (HaltFatal (Text.take errorLimit (Text.pack (show err)))))
+                    Right disposition -> pure (ackDecisionFor disposition)
+                processor =
+                  Shibuya.QueueProcessor
+                    { adapter,
+                      handler,
+                      ordering = StrictInOrder,
+                      concurrency = Serial
+                    }
+                appConfig =
+                  Shibuya.AppConfig
+                    { strategy = Shibuya.StopAllOnFailure,
+                      inboxSize = 1
+                    }
+            appResult <- Shibuya.runApp appConfig [(Shibuya.ProcessorId streamTopic, processor)]
+            case appResult of
+              Left err -> pure (Left err)
+              Right app -> do
+                Shibuya.waitApp app
+                Shibuya.stopApp app
+                failure <- liftIO (readIORef programmingFailure)
+                pure (Right failure)
+      case result of
+        Left err -> retryAfter backoffSeconds (Text.pack (show err)) (min 30 (backoffSeconds * 2))
+        Right (Left appError) -> fail (Text.unpack (prefix <> " consumer configuration failed: " <> Text.pack (show appError)))
+        Right (Right (Just programmingFailure)) -> Exception.throwIO programmingFailure
+        Right (Right Nothing) -> retryAfter 1 "ordered processor halted without committing its current record" 1
+
+    retryAfter seconds reason next = do
+      Log.logError
+        logger
+        (prefix <> ".consumer.reconnecting")
+        [ "delay_seconds" Aeson..= seconds,
+          "reason" Aeson..= reason
+        ]
+      threadDelay (seconds * 1_000_000)
+      reconnect next
+
+trySynchronous :: IO value -> IO (Either Exception.SomeException value)
+trySynchronous action =
+  Exception.try action >>= \case
+    Left err
+      | Just (_ :: Exception.SomeAsyncException) <- Exception.fromException err -> Exception.throwIO err
+      | otherwise -> pure (Left err)
+    Right value -> pure (Right value)
+
+processKafkaMessage :: Text -> (KafkaInboundRecord -> IO RecordDisposition) -> Message es (Maybe ByteString) -> IO RecordDisposition
+processKafkaMessage streamTopic processRecord Message {envelope = Envelope {cursor, partition, headers, payload}} = do
+  now <- getCurrentTime
+  case do
+    recordPartition <- maybe (Left "Kafka envelope has no partition") parsePartition partition
+    recordOffset <- maybe (Left "Kafka envelope has no cursor") parseCursor cursor
+    pure
+      KafkaInboundRecord
+        { topic = streamTopic,
+          partition = recordPartition,
+          offset = recordOffset,
+          -- Shibuya Kafka adapter 0.9 does not surface ConsumerRecord.crKey.
+          -- Shikigami's inbox and matchers do not consult the integration key.
+          key = Nothing,
+          payload = fromMaybe mempty payload,
+          headers = decodeHeaders (fromMaybe [] headers),
+          receivedAt = now
+        } of
+    Left err -> pure (TransientFailure err)
+    Right record -> processRecord record
+
+parsePartition :: Text -> Either Text Int64
+parsePartition = parseSignedDecimal "Kafka partition"
+
+parseCursor :: Cursor -> Either Text Int64
+parseCursor = \case
+  CursorInt value -> Right (fromIntegral value)
+  CursorText value -> parseSignedDecimal "Kafka cursor" value
+
+parseSignedDecimal :: Text -> Text -> Either Text Int64
+parseSignedDecimal label value =
+  case TextRead.signed TextRead.decimal value of
+    Right (number, rest) | Text.null rest -> Right number
+    _ -> Left (label <> " is not a signed decimal: " <> Text.take 128 value)
+
+decodeHeaders :: [(ByteString, ByteString)] -> [(Text, Text)]
+decodeHeaders = fmap (bimap decode decode)
+  where
+    decode = TE.decodeUtf8With lenientDecode
+
+-- | Process a raw activity delivery. Any envelope or payload decode failure is
+-- persisted before a terminal disposition is returned.
+processActivityRecord ::
+  AppEnv ->
+  QueueName ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
-  ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
-  IO ()
-processRecord logger appEnv include agents onHit record = do
-  now <- getCurrentTime
-  let TopicName topicT = crTopic record
-      PartitionId partI = crPartition record
-      Offset offI = crOffset record
-      kir =
-        KafkaInboundRecord
-          { topic = topicT,
-            partition = fromIntegral partI,
-            offset = offI,
-            key = TE.decodeUtf8 <$> crKey record,
-            payload = fromMaybe mempty (crValue record),
-            headers = [(TE.decodeUtf8 k, TE.decodeUtf8 v) | (k, v) <- headersToList (crHeaders record)],
-            receivedAt = now
-          }
-  case integrationEventFromKafka kir of
-    Left err -> recordLog Log.Error "stream.record.undecodable" ["error" Aeson..= Text.pack (show err)]
-    Right (event, kref) -> do
-      disposition <- processDecodedActivity appEnv include agents onHit event (Just kref)
-      logDisposition "stream" disposition
-  where
-    -- Every line about one record names the topic and offset it came from, so a
-    -- report of a skipped record says which record was skipped.
-    recordLog level event fields =
-      Log.logEvent logger level event (recordFields record <> fields)
+  KafkaInboundRecord ->
+  IO RecordDisposition
+processActivityRecord appEnv queue include agents onHit record =
+  case integrationEventFromKafka record of
+    Left err -> persistPoison appEnv queue record (Text.pack (show err))
+    Right (event, delivery) ->
+      case decodeJsonIntegrationEvent event of
+        Left err -> persistPoison appEnv queue record (Text.pack (show err))
+        Right activity -> processActivity appEnv include agents onHit event (Just delivery) activity
 
-    logDisposition prefix = \case
-      Enqueued -> recordLog Log.Debug (prefix <> ".record.enqueued") []
-      Duplicate -> recordLog Log.Debug (prefix <> ".record.deduped") []
-      PermanentlyDeadLettered deadLetterId ->
-        recordLog Log.Error (prefix <> ".record.dead_lettered") ["dead_letter_id" Aeson..= Text.pack (show deadLetterId)]
-      TransientFailure err -> recordLog Log.Error (prefix <> ".record.transient_failure") ["error" Aeson..= err]
-
-processEventRecord ::
-  Log.Logger ->
+-- | Process one raw public integration-event delivery.
+processIntegrationEventRecord ::
   AppEnv ->
+  QueueName ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
-  ConsumerRecord (Maybe ByteString) (Maybe ByteString) ->
-  IO ()
-processEventRecord logger appEnv agents onHit record = do
-  now <- getCurrentTime
-  let TopicName topicT = crTopic record
-      PartitionId partI = crPartition record
-      Offset offI = crOffset record
-      kir =
-        KafkaInboundRecord
-          { topic = topicT,
-            partition = fromIntegral partI,
-            offset = offI,
-            key = TE.decodeUtf8 <$> crKey record,
-            payload = fromMaybe mempty (crValue record),
-            headers = [(TE.decodeUtf8 k, TE.decodeUtf8 v) | (k, v) <- headersToList (crHeaders record)],
-            receivedAt = now
-          }
-  case integrationEventFromKafka kir of
-    Left err -> recordLog Log.Error "events.record.undecodable" ["error" Aeson..= Text.pack (show err)]
-    Right (event, kref) -> do
-      disposition <- processDecodedIntegrationEvent appEnv agents onHit event (Just kref)
-      logDisposition disposition
-  where
-    recordLog level event fields =
-      Log.logEvent logger level event (recordFields record <> fields)
+  KafkaInboundRecord ->
+  IO RecordDisposition
+processIntegrationEventRecord appEnv queue agents onHit record =
+  case integrationEventFromKafka record of
+    Left err -> persistPoison appEnv queue record (Text.pack (show err))
+    Right (event, delivery) ->
+      case decodeJsonIntegrationEvent event of
+        Left err -> persistPoison appEnv queue record (Text.pack (show err))
+        Right payloadValue -> processIntegrationEvent appEnv agents onHit event (Just delivery) payloadValue
 
-    logDisposition = \case
-      Enqueued -> recordLog Log.Debug "events.record.enqueued" []
-      Duplicate -> recordLog Log.Debug "events.record.deduped" []
-      PermanentlyDeadLettered deadLetterId ->
-        recordLog Log.Error "events.record.dead_lettered" ["dead_letter_id" Aeson..= Text.pack (show deadLetterId)]
-      TransientFailure err -> recordLog Log.Error "events.record.transient_failure" ["error" Aeson..= err]
-
--- | Process a decoded activity event through the inbox transaction. Matching
--- run jobs are sent before that transaction commits; 'onHit' runs afterwards
--- and is therefore for reporting only.
+-- | Process an already decoded transport event. An invalid activity payload is
+-- transient here because this broker-free entry point has no raw delivery to
+-- preserve; the raw-record entry point above durably dead-letters it.
 processDecodedActivity ::
   AppEnv ->
   IncludeAgentActors ->
@@ -237,14 +304,30 @@ processDecodedActivity ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivity appEnv include agents onHit event kafka = do
-  result <-
-    runAppIO appEnv $
-      runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler include agents)
-  classifyInboxResult onHit result
+processDecodedActivity appEnv include agents onHit event kafka =
+  case decodeJsonIntegrationEvent event of
+    Left err -> pure (TransientFailure (Text.pack (show err)))
+    Right activity -> processActivity appEnv include agents onHit event kafka activity
 
--- | Process a decoded public integration event through the same atomic inbox
--- plus run-job boundary used by the activity consumer.
+processActivity ::
+  AppEnv ->
+  IncludeAgentActors ->
+  [AgentDecl] ->
+  (StreamHit -> IO ()) ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  ActivityEnvelope ->
+  IO RecordDisposition
+processActivity appEnv include agents onHit event kafka activity = do
+  attempt <-
+    Exception.try @NotifierStartError $
+      runAppIO appEnv $
+        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler include agents activity)
+  case attempt of
+    Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
+    Right result -> classifyInboxResult event onHit result
+
+-- | Broker-free transactional entry point for public integration events.
 processDecodedIntegrationEvent ::
   AppEnv ->
   [AgentDecl] ->
@@ -252,98 +335,162 @@ processDecodedIntegrationEvent ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedIntegrationEvent appEnv agents onHit event kafka = do
+processDecodedIntegrationEvent appEnv agents onHit event kafka =
+  case decodeJsonIntegrationEvent event of
+    Left err -> pure (TransientFailure (Text.pack (show err)))
+    Right payloadValue -> processIntegrationEvent appEnv agents onHit event kafka payloadValue
+
+processIntegrationEvent ::
+  AppEnv ->
+  [AgentDecl] ->
+  (EventHit -> IO ()) ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  Value ->
+  IO RecordDisposition
+processIntegrationEvent appEnv agents onHit event kafka payloadValue = do
   receivedAt <- getCurrentTime
-  result <-
-    runAppIO appEnv $
-      runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler receivedAt agents)
-  classifyInboxResult onHit result
+  attempt <-
+    Exception.try @NotifierStartError $
+      runAppIO appEnv $
+        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler receivedAt agents payloadValue)
+  case attempt of
+    Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
+    Right result -> classifyInboxResult event onHit result
 
 classifyInboxResult ::
   (Show storeError, Show inboxError) =>
+  IntegrationEvent ->
   (hit -> IO ()) ->
   Either storeError (Either inboxError (InboxResult [hit])) ->
   IO RecordDisposition
-classifyInboxResult onHit = \case
+classifyInboxResult event onHit = \case
   Right (Right (InboxProcessed hits)) -> traverse_ onHit hits >> pure Enqueued
   Right (Right InboxDuplicate) -> pure Duplicate
   Right (Right InboxInProgress) -> pure (TransientFailure "inbox row is still in progress")
-  Right (Right (InboxPreviouslyFailed reason)) ->
-    pure (TransientFailure ("inbox row previously failed: " <> fromMaybe "unknown failure" reason))
-  Right (Right (InboxHandlerFailed reason attempts)) ->
-    pure (TransientFailure ("inbox handler failed at attempt " <> Text.pack (show attempts) <> ": " <> reason))
+  Right (Right (InboxPreviouslyFailed _)) -> pure (permanentInboxFailure event)
+  Right (Right (InboxHandlerFailed _ _)) -> pure (permanentInboxFailure event)
   Right (Left inboxError) -> pure (TransientFailure (Text.pack (show inboxError)))
   Left storeError -> pure (TransientFailure (Text.pack (show storeError)))
 
--- | Which Kafka record a consumer line is about. Shared by both consumers so
--- that @topic@, @partition@, and @offset@ are spelled the same way in each.
-recordFields :: ConsumerRecord (Maybe ByteString) (Maybe ByteString) -> [Pair]
-recordFields record =
-  let TopicName topicT = crTopic record
-      PartitionId partI = crPartition record
-      Offset offI = crOffset record
-   in [ "topic" Aeson..= topicT,
-        "partition" Aeson..= partI,
-        "offset" Aeson..= offI
-      ]
+permanentInboxFailure :: IntegrationEvent -> RecordDisposition
+permanentInboxFailure event =
+  PermanentlyDeadLettered (DeadLetterId ("keiro-inbox:" <> event ^. #messageId))
 
--- | The inbox handler runs matching and queue sends inside the inbox database
--- transaction. Returning from this handler does not make either write visible;
--- both become durable only when the surrounding transaction commits.
-inboxHandler :: IncludeAgentActors -> [AgentDecl] -> IntegrationEvent -> Tx.Transaction [StreamHit]
-inboxHandler include agents event =
-  case decodeJsonIntegrationEvent event of
-    Left _ -> pure []
-    Right env -> do
-      let matched =
-            [ agent
-            | agent <- agents,
-              Just streamMatch <- [streamMatchOf agent],
-              matchesStreamWith include streamMatch env
-            ]
-      traverse_ (enqueueRunJobTx . (`runJobFromEnvelope` env)) matched
-      pure [StreamHit {agentName = agent ^. #name, envelope = env} | agent <- matched]
+persistPoison :: AppEnv -> QueueName -> KafkaInboundRecord -> Text -> IO RecordDisposition
+persistPoison appEnv queue KafkaInboundRecord {topic, partition, offset, payload} failure = do
+  recordedAt <- getCurrentTime
+  let byteCount = ByteString.length payload
+      evidence =
+        PayloadEvidence
+          { byteCount,
+            sample = ByteString.unpack (ByteString.take evidenceLimit payload),
+            truncated = byteCount > evidenceLimit
+          }
+      deadLetter =
+        DeadLetterRecord
+          { topic,
+            partition,
+            offset,
+            error = Text.take errorLimit failure,
+            evidence,
+            recordedAt
+          }
+      send =
+        Tx.statement
+          SendMessage
+            { queueName = queue,
+              messageBody = MessageBody (Aeson.toJSON deadLetter),
+              delay = Nothing
+            }
+          PgmqStatements.sendMessage
+  attempt <- Exception.try @NotifierStartError (runAppIO appEnv (runTransaction send))
+  pure $ case attempt of
+    Left storeStartupError -> TransientFailure (Text.pack (show storeStartupError))
+    Right (Left storeError) -> TransientFailure (Text.pack (show storeError))
+    Right (Right (MessageId messageId)) -> PermanentlyDeadLettered (DeadLetterId (Text.pack (show messageId)))
 
--- | The 'StreamMatch' of an agent, if its trigger is a stream trigger.
+evidenceLimit :: Int
+evidenceLimit = 256
+
+errorLimit :: Int
+errorLimit = 2_048
+
+-- | The only translation from application durability to broker mechanics.
+ackDecisionFor :: RecordDisposition -> AckDecision
+ackDecisionFor = \case
+  Enqueued -> AckOk
+  Duplicate -> AckOk
+  PermanentlyDeadLettered (DeadLetterId deadLetterId) ->
+    AckDeadLetter (ApplicationFailure permanentFailureCode ("durable dead letter " <> deadLetterId))
+  TransientFailure err -> AckHalt (HaltOrderedStream (Text.take errorLimit err))
+
+permanentFailureCode :: DeadLetterCode
+permanentFailureCode =
+  case mkDeadLetterCode "shikigami.consumer_permanent" of
+    Left err -> Prelude.error (Text.unpack err)
+    Right code -> code
+
+-- | Reconcile the operator-owned poison queue at startup.
+ensureDeadLetterQueue :: Pool -> QueueName -> IO (Either UsageError ())
+ensureDeadLetterQueue pool queue = Pool.use pool (createQueue queue)
+
+logDisposition :: Log.Logger -> Text -> RecordDisposition -> IO ()
+logDisposition logger prefix = \case
+  Enqueued -> Log.logDebug logger (prefix <> ".record.enqueued") []
+  Duplicate -> Log.logDebug logger (prefix <> ".record.deduped") []
+  PermanentlyDeadLettered (DeadLetterId deadLetterId) ->
+    Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" Aeson..= deadLetterId]
+  TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" Aeson..= err]
+
+-- | Matching and queue sends run inside the inbox transaction.
+inboxHandler :: IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IntegrationEvent -> Tx.Transaction [StreamHit]
+inboxHandler include agents activity _event = do
+  let matched =
+        [ agent
+        | agent <- agents,
+          Just streamMatch <- [streamMatchOf agent],
+          matchesStreamWith include streamMatch activity
+        ]
+  traverse_ (enqueueRunJobTx . (`runJobFromEnvelope` activity)) matched
+  pure [StreamHit {agentName = agent ^. #name, envelope = activity} | agent <- matched]
+
 streamMatchOf :: AgentDecl -> Maybe StreamMatch
 streamMatchOf agent = case agent ^. #trigger of
-  Stream {match = m} -> Just m
+  Stream {match = streamMatch} -> Just streamMatch
   _ -> Nothing
 
-eventInboxHandler :: UTCTime -> [AgentDecl] -> IntegrationEvent -> Tx.Transaction [EventHit]
-eventInboxHandler receivedAt agents event =
-  case decodeJsonIntegrationEvent event of
-    Left _ -> pure []
-    Right payloadValue -> do
-      let matched =
-            [ agent
-            | agent <- agents,
-              Just expectedEventType <- [eventTriggerTypeOf agent],
-              expectedEventType == event ^. #eventType
-            ]
-          jobFor agent =
-            RunJob
-              { agentName = agent ^. #name,
-                triggerKind = TriggeredByEvent,
-                occurredAt = receivedAt,
-                triggerPayload = payloadValue,
-                idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
-                parentSessionId = Nothing,
-                parentRunWorkflowId = Nothing,
-                delegationDepth = Nothing
-              }
-      traverse_ (enqueueRunJobTx . jobFor) matched
-      pure
-        [ EventHit
-            { agentName = agent ^. #name,
-              eventType = event ^. #eventType,
-              integrationMessageId = event ^. #messageId,
-              payload = payloadValue
-            }
-        | agent <- matched
+eventInboxHandler :: UTCTime -> [AgentDecl] -> Value -> IntegrationEvent -> Tx.Transaction [EventHit]
+eventInboxHandler receivedAt agents payloadValue event = do
+  let matched =
+        [ agent
+        | agent <- agents,
+          Just expectedEventType <- [eventTriggerTypeOf agent],
+          expectedEventType == event ^. #eventType
         ]
+      jobFor agent =
+        RunJob
+          { agentName = agent ^. #name,
+            triggerKind = TriggeredByEvent,
+            occurredAt = receivedAt,
+            triggerPayload = payloadValue,
+            idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
+            parentSessionId = Nothing,
+            parentRunWorkflowId = Nothing,
+            delegationDepth = Nothing
+          }
+  traverse_ (enqueueRunJobTx . jobFor) matched
+  pure
+    [ EventHit
+        { agentName = agent ^. #name,
+          eventType = event ^. #eventType,
+          integrationMessageId = event ^. #messageId,
+          payload = payloadValue
+        }
+    | agent <- matched
+    ]
 
 eventTriggerTypeOf :: AgentDecl -> Maybe Text
 eventTriggerTypeOf agent = case agent ^. #trigger of
-  Event {eventType = t} -> Just t
+  Event {eventType} -> Just eventType
   _ -> Nothing

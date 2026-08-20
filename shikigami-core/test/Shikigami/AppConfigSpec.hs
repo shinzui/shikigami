@@ -30,6 +30,7 @@ import Data.List (sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
+import Pgmq (queueNameToText)
 import Settei
   ( Key,
     ResolveResult (..),
@@ -78,6 +79,7 @@ surfaceTests =
                 "http.port",
                 "kafka.activity.topic",
                 "kafka.broker",
+                "kafka.dead_letter.queue",
                 "kafka.events.topic",
                 "kafka.groups.events",
                 "kafka.groups.stream",
@@ -106,6 +108,7 @@ surfaceTests =
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
               ("SHIKIGAMI_KAFKA_ACTIVITY_TOPIC", "kafka.activity.topic"),
               ("SHIKIGAMI_KAFKA_BROKER", "kafka.broker"),
+              ("SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE", "kafka.dead_letter.queue"),
               ("SHIKIGAMI_KAFKA_EVENTS_GROUP", "kafka.groups.events"),
               ("SHIKIGAMI_KAFKA_EVENTS_TOPIC", "kafka.events.topic"),
               ("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "kafka.include_agent_actors"),
@@ -133,6 +136,7 @@ surfaceTests =
         kafkaStreamGroup defaultAppConfig @?= "shikigami-stream"
         kafkaEventsGroup defaultAppConfig @?= "shikigami-events"
         kafkaIncludeAgentActors defaultAppConfig @?= False
+        queueNameToText (kafkaDeadLetterQueue defaultAppConfig) @?= "shikigami_stream_dead_letters"
         kawaBaseUrl defaultAppConfig @?= "http://localhost:8088"
         kawaSourceSegment defaultAppConfig @?= "shinzui/shikigami"
         kizashiBaseUrl defaultAppConfig @?= "http://localhost:8089"
@@ -261,7 +265,13 @@ strictnessTests =
         standardError run @?= "config.yaml: does not exist",
       testCase "a textual boolean from the environment decodes" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "true")]
-        kafkaIncludeAgentActors config @?= True
+        kafkaIncludeAgentActors config @?= True,
+      testCase "an invalid dead-letter queue name is rejected at resolution time" do
+        let run = runWith (optionsWith [] [cliOverride kafkaDeadLetterQueueKey "Not-A-PGMQ-Queue"]) [] []
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the failure should name the queue key and grammar:\n" <> Text.unpack (standardError run))
+          ("kafka.dead_letter.queue" `Text.isInfixOf` standardError run && "lowercase" `Text.isInfixOf` standardError run)
     ]
 
 -- ── Per-role requirements ───────────────────────────────────────────────────

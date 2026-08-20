@@ -12,7 +12,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Log qualified as Log
-import Shikigami.Trigger.Consumer (EventHit (..), StreamConfig (..), StreamHit (..), subscribeActivityStream, subscribeIntegrationEventStream)
+import Shikigami.Trigger.Consumer (EventHit (..), StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 
@@ -42,9 +42,19 @@ runConsumeStream config = do
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
+    deadLetterResult <- ensureDeadLetterQueue (pool st) (Config.kafkaDeadLetterQueue config)
+    case deadLetterResult of
+      Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
+      Right () -> pure ()
     tr <- noopTracer
     let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
-        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaStreamGroup config}
+        cfg =
+          StreamConfig
+            { broker = broker,
+              topic = topic,
+              consumerGroupId = Config.kafkaStreamGroup config,
+              deadLetterQueue = Config.kafkaDeadLetterQueue config
+            }
         onHit StreamHit {agentName} = do
           let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
           Log.logInfo logger "stream.record.matched" matched
@@ -73,9 +83,19 @@ runConsumeEvents config = do
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
+    deadLetterResult <- ensureDeadLetterQueue (pool st) (Config.kafkaDeadLetterQueue config)
+    case deadLetterResult of
+      Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
+      Right () -> pure ()
     tr <- noopTracer
     let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
-        cfg = StreamConfig {broker = broker, topic = topic, consumerGroupId = Config.kafkaEventsGroup config}
+        cfg =
+          StreamConfig
+            { broker = broker,
+              topic = topic,
+              consumerGroupId = Config.kafkaEventsGroup config,
+              deadLetterQueue = Config.kafkaDeadLetterQueue config
+            }
         onHit EventHit {agentName, eventType, integrationMessageId} = do
           let matched =
                 [ "agent" Aeson..= agentName,
