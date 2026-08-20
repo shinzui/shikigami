@@ -4,11 +4,15 @@ module Shikigami.Generated.Conformance
   , serviceConformanceFacts
   ) where
 
+import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
 
 runServiceConformanceChecks :: IO [(String, Bool)]
-runServiceConformanceChecks = pure []
+runServiceConformanceChecks =
+  pure (
+    [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
+  )
 
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =

@@ -31,6 +31,7 @@ import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
+import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
     DanwaConfig (..),
@@ -73,6 +74,7 @@ main =
           PackageArchitectureSpec.tests,
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,
+          RunEvidenceSpec.tests,
           SinkHonestySpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,

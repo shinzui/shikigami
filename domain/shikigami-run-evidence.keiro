@@ -1,0 +1,71 @@
+# The monotonic lifecycle of the evidence collected for one sanctioned run.
+#
+# Rich evidence payloads remain hand-owned because Baikai's
+# ModelCallEvidence is intentionally encode-only. This aggregate owns the
+# lifecycle event stream that decides when those payloads may be bound,
+# collected, sealed, and attested.
+language keiro-dsl 5
+context shikigami
+layout collocated
+
+id RunEvidenceId prefix=runevidence
+
+aggregate RunEvidence
+  regs
+    runEvidenceId RunEvidenceId = placeholder
+    runId Text = ""
+  states Requested ProfileResolved Running EvidenceSealed Attested! NonConforming! Incomplete! Failed!
+
+  command BindProfile       { runEvidenceId runId:Text }
+  command StartCollection   { runEvidenceId runId:Text }
+  command SealEvidence      { runEvidenceId runId:Text }
+  command MarkAttested      { runEvidenceId runId:Text }
+  command MarkNonConforming { runEvidenceId runId:Text }
+  command MarkIncomplete    { runEvidenceId runId:Text }
+  command MarkFailed        { runEvidenceId runId:Text }
+
+  event ProfileBound          = fields(BindProfile)
+  event CollectionStarted     = fields(StartCollection)
+  event EvidenceSealed        = fields(SealEvidence)
+  event EvidenceAttested      = fields(MarkAttested)
+  event EvidenceNonConforming = fields(MarkNonConforming)
+  event EvidenceIncomplete    = fields(MarkIncomplete)
+  event EvidenceFailed        = fields(MarkFailed)
+
+  Requested -- BindProfile -->
+    write runEvidenceId := cmd.runEvidenceId
+    write runId := cmd.runId
+    emit ProfileBound
+    goto ProfileResolved
+
+  ProfileResolved -- StartCollection -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit CollectionStarted
+    goto Running
+
+  Running -- SealEvidence -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit EvidenceSealed
+    goto EvidenceSealed
+
+  EvidenceSealed -- MarkAttested -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit EvidenceAttested
+    goto Attested
+
+  Running -- MarkNonConforming -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit EvidenceNonConforming
+    goto NonConforming
+
+  Running -- MarkIncomplete -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit EvidenceIncomplete
+    goto Incomplete
+
+  Running -- MarkFailed -->
+    guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
+    emit EvidenceFailed
+    goto Failed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

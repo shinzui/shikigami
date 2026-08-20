@@ -54,11 +54,11 @@ remaining obstacle, which is a bound rather than a missing contract.
 
 ## Progress
 
-- [ ] M1: the run-evidence aggregate and its lifecycle, declared through the checked
+- [x] M1: the run-evidence aggregate and its lifecycle, declared through the checked
       specification: requested, profile-resolved, running, evidence-sealed, attested, plus the
-      non-conforming, incomplete, and failed terminal states.
-- [ ] M1: illegal transitions are rejected — a run cannot seal from `requested`, and an
-      `attested` record cannot be reopened.
+      non-conforming, incomplete, and failed terminal states. Completed 2026-08-19.
+- [x] M1: illegal transitions are rejected — a run cannot seal from `requested`, and an
+      `attested` record cannot be reopened. Completed 2026-08-19.
 - [ ] M2: `Baikai.Evidence.ModelCallEvidence` collected through a deterministic seam, with a
       fixture source in tests. **Import the type from baikai; do not define a local one.**
 - [ ] M2 (gate): `baikai 0.5.0.0` is in the cohort. Blocked as of 2026-08-10 by
@@ -82,6 +82,19 @@ remaining obstacle, which is a bound rather than a missing contract.
 
 
 ## Surprises & Discoveries
+
+**The checked aggregate expands to 56 behavior obligations (discovered 2026-08-19).** Seven live
+transitions plus every reachable rejection cell are now covered by consumer-owned executable
+witnesses. The generated harness initially covers the create transition and codec round trips,
+but it does not execute `BehaviorHoles`; `Shikigami.RunEvidence.Conformance` brings those witnesses
+into the ordinary test suite so a `Pending` row or an incorrect rejection witness fails CI.
+
+**Baikai 0.5 has a complete live evidence source after all (verified 2026-08-19).** The released
+`Baikai.Trace` path emits exactly one `CallEvidence` event for each terminal call when
+`Options.evidence` is set, including failures. The earlier changelog statement quoted below is
+stale relative to the released source. Production collection can therefore use a filtered trace
+sink now; the fixture seam remains valuable for deterministic accounting and mutation tests, but
+is no longer a stand-in for missing provider integration.
 
 **Baikai IR-3 landed the same day this plan was written, and nobody noticed for five days
 (discovered 2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, adds the exposed module
@@ -134,6 +147,23 @@ needs to author its own encoder.
 
 
 ## Decision Log
+
+- Decision: Keep lifecycle events small and store Baikai evidence in the SQL projection rather
+  than embedding it in the Keiro event codec.
+  Rationale: `ModelCallEvidence` deliberately has no `FromJSON` instance, while an event-sourced
+  aggregate must decode and replay every event. The generated aggregate therefore owns monotonic
+  phase changes keyed by run identity; the hand-owned projection stores Baikai's encode-only JSON
+  payloads and the immutable attestation binding. `transitionEvidence` executes the generated
+  transducer, so this separation does not create a second lifecycle authority.
+  Date: 2026-08-19
+
+- Decision: Follow the lifecycle diagram literally: non-conforming, incomplete, and failed are
+  terminal outcomes from `running`; only a conforming run enters `evidence-sealed`, and only that
+  phase may enter `attested`.
+  Rationale: This preserves the plan's explicit state diagram and makes `attested` unreachable
+  from every unsealed outcome. The compliance evaluator still judges a closed evidence set before
+  choosing either `evidence-sealed` or a terminal failure verdict.
+  Date: 2026-08-19
 
 - Decision: Build against a deterministic evidence seam with stub fixtures rather than waiting for
   baikai IR-3.

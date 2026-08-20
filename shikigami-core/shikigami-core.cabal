@@ -40,6 +40,7 @@ library
     Shikigami.App.Role
     Shikigami.Attestation.Agent
     Shikigami.Attestation.Envelope
+    Shikigami.Attestation.Evidence
     Shikigami.Attestation.Profile
     Shikigami.Attestation.Resolve
     Shikigami.Attestation.Reviewed
@@ -67,6 +68,7 @@ library
     Shikigami.Prelude
     Shikigami.Program.Registry
     Shikigami.Repository
+    Shikigami.RunEvidence.Conformance
     Shikigami.Sink
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
@@ -95,6 +97,18 @@ library
     Shikigami.AgentRun.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
+    Shikigami.Generated.BehaviorSourceMap
+    Shikigami.Generated.Nominals
+    Shikigami.Generated.Nominals.Internal
+    Shikigami.Generated.ReplayAudit
+    Shikigami.RunEvidence.BehaviorHoles
+    Shikigami.RunEvidence.Generated.BehaviorContract
+    Shikigami.RunEvidence.Generated.Codec
+    Shikigami.RunEvidence.Generated.Domain
+    Shikigami.RunEvidence.Generated.EventStream
+    Shikigami.RunEvidence.Generated.Harness
+    Shikigami.RunEvidence.Generated.Projection
+    Shikigami.RunEvidence.Generated.Transducer
 
   build-depends:
     , aeson                        >=2.2
@@ -161,6 +175,7 @@ test-suite shikigami-core-test
     Shikigami.PackageArchitectureSpec
     Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
+    Shikigami.RunEvidenceSpec
     Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec

@@ -3,3 +3,4 @@ runtime-package shikigami-core
 layout collocated
 spec shikigami-agent-run.keiro
 spec shikigami-conversation.keiro
+spec shikigami-run-evidence.keiro
