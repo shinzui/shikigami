@@ -6,6 +6,7 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (Exception)
 import Control.Exception qualified as Exception
 import Data.Aeson qualified as Aeson
+import Data.Foldable (for_)
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -35,10 +36,11 @@ import Keiro.PGMQ
 import Keiro.Workflow (WorkflowOutcome (..))
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByEvent))
-import Shikigami.Agent.RunJob.Worker (agentJobOutcome, conversationJobOutcome, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Agent.RunJob.Worker (RunRoute (..), agentJobOutcome, conversationJobOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
+import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
@@ -82,7 +84,43 @@ tests =
         assertDone "conversation completed" (conversationJobOutcome (Right ()))
         assertRetryDefault
           "transient behavior exception"
-          (transientBehaviorJobOutcome (TransientBehaviorFailure "retry")),
+          (transientBehaviorJobOutcome (TransientBehaviorFailure "retry"))
+        assertDeadWith
+          "route error"
+          "shikigami.invalid_route_payload:"
+          (routeErrorJobOutcome "not an addressed message"),
+      -- Routing is declared, not guessed. Before this table the worker decided
+      -- by trying to decode the payload as an addressed message, so a schedule
+      -- job whose payload happened to look addressed ran as a conversation and a
+      -- genuinely addressed payload that failed to decode ran as an agent run.
+      testCase "schedule job with addressed-looking payload routes to agent-run" do
+        assertAgentRun
+          "an explicit agent-run route ignores the payload's shape"
+          (routeRunJob sampleJob {triggerKind = TriggeredBySchedule, routeKind = AgentWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+      testCase "event job on the danwa event type routes to conversation" do
+        assertConversation
+          "a declared conversation route with a decodable payload"
+          (routeRunJob sampleJob {routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+      testCase "undecodable payload on a conversation route dead-letters" do
+        assertRouteError
+          "a declared conversation route with an undecodable payload"
+          (routeRunJob sampleJob {routeKind = ConversationWorkflowRoute}),
+      testCase "a legacy job with no routeKind reproduces the old decision" do
+        assertConversation
+          "an addressed-looking payload"
+          (routeRunJob sampleJob {routeKind = InferredLegacyRoute, triggerPayload = Aeson.toJSON sampleAddressed})
+        assertAgentRun
+          "anything else"
+          (routeRunJob sampleJob {routeKind = InferredLegacyRoute}),
+      testCase "trigger kind does not affect any route" do
+        let kinds = [TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation]
+        for_ kinds \kind -> do
+          assertAgentRun
+            ("agent-run route under " <> show kind)
+            (routeRunJob sampleJob {triggerKind = kind, routeKind = AgentWorkflowRoute})
+          assertConversation
+            ("conversation route under " <> show kind)
+            (routeRunJob sampleJob {triggerKind = kind, routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
       testCase "worker-path heartbeat keeps one slow delivery leased" do
         withShikigamiMigratedDatabase \connStr -> do
           callCount <- newIORef (0 :: Int)
@@ -148,6 +186,40 @@ tests =
           dlqMetrics <- runDb connStr \runtime -> runJobEff runtime (jobDlqMetrics runJob)
           assertEqual "main queue is empty after dead-lettering" 0 (queueLength mainMetrics)
           assertEqual "DLQ contains the permanent message" 1 (queueLength dlqMetrics),
+      -- The routing decision and its outcome mapping are the real ones here; only
+      -- the workflow bodies behind them are absent. That is what makes this a
+      -- proof that a mis-declared route lands in the operator-visible DLQ rather
+      -- than quietly running the other workflow.
+      testCase "a route error reaches the reconciled DLQ" do
+        withShikigamiMigratedDatabase \connStr -> do
+          let tuning = requireTuning (mkJobTuning 2 1 (PollEvery 0.1))
+              misdeclared = sampleJob {routeKind = ConversationWorkflowRoute}
+          reachedDlq <-
+            runDb connStr \runtime ->
+              runJobEff runtime do
+                ensureJobQueue runJob
+                ensureJobQueue runJob
+                _ <- enqueue runJob misdeclared
+                appResult <-
+                  runJobWorkers
+                    IgnoreFailures
+                    16
+                    [ jobProcessorWithContext tuning runJob \_context payload ->
+                        pure case routeRunJob payload of
+                          RouteError detail -> routeErrorJobOutcome detail
+                          _ -> Done
+                    ]
+                case appResult of
+                  Left err -> liftIO (assertFailure ("runJobWorkers failed: " <> show err))
+                  Right app -> do
+                    reached <- liftIO $ waitUntil do
+                      metrics <- runDb connStr \probeRuntime -> runJobEff probeRuntime (jobDlqMetrics runJob)
+                      pure (queueLength metrics == 1)
+                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1} app
+                    pure reached
+          assertBool "the mis-declared job reached the DLQ" reachedDlq
+          mainMetrics <- runDb connStr \runtime -> runJobEff runtime (jobQueueMetrics runJob)
+          assertEqual "main queue is empty after dead-lettering" 0 (queueLength mainMetrics),
       testCase "heartbeat failure cancels work and escapes" do
         cleanedUp <- newIORef False
         let context =
@@ -175,6 +247,38 @@ data TestHeartbeatFailure = TestHeartbeatFailure
 
 instance Exception TestHeartbeatFailure
 
+assertAgentRun :: String -> RunRoute -> IO ()
+assertAgentRun _label AgentRunRoute = pure ()
+assertAgentRun label other = assertFailure (label <> ": expected AgentRunRoute, got " <> showRoute other)
+
+assertConversation :: String -> RunRoute -> IO ()
+assertConversation _label (ConversationRoute _) = pure ()
+assertConversation label other = assertFailure (label <> ": expected ConversationRoute, got " <> showRoute other)
+
+assertRouteError :: String -> RunRoute -> IO ()
+assertRouteError _label (RouteError _) = pure ()
+assertRouteError label other = assertFailure (label <> ": expected RouteError, got " <> showRoute other)
+
+showRoute :: RunRoute -> String
+showRoute = \case
+  ConversationRoute _ -> "ConversationRoute"
+  AgentRunRoute -> "AgentRunRoute"
+  RouteError detail -> "RouteError " <> Text.unpack detail
+
+sampleAddressed :: AddressedMessage
+sampleAddressed =
+  AddressedMessage
+    { conversationId = "conv_1",
+      messageId = "msg_1",
+      parentMessageId = Nothing,
+      author = "person_1",
+      content = "how are the numbers?",
+      agentParticipantId = "participant_1",
+      embellishmentId = "emb_1",
+      mentionedBy = "person_1",
+      occurredAt = UTCTime (fromGregorian 2026 8 19) 0
+    }
+
 assertDone :: String -> JobOutcome -> IO ()
 assertDone _label Done = pure ()
 assertDone label other = assertFailure (label <> ": expected Done, got " <> show other)
@@ -193,6 +297,7 @@ sampleJob =
   RunJob
     { agentName = "codec-agent",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
       triggerPayload = Aeson.object ["kind" Aeson..= ("test" :: Text)],
       idempotencyKey = "codec-agent:event:1",

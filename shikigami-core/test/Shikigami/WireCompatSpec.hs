@@ -16,9 +16,11 @@
 -- change and needs a migration story, not a fixture edit.
 module Shikigami.WireCompatSpec (tests) where
 
-import Data.Aeson (FromJSON, Value, eitherDecodeStrict, encode, toJSON)
+import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON)
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.List qualified as List
 import Data.Time (UTCTime (..), fromGregorian)
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
 import Shikigami.Agent.Decl
@@ -27,7 +29,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByStream))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
 import Shikigami.Agent.Workflow (SinkIntent (..))
 import Shikigami.Flow.SinkOutbox qualified as FlowOutbox
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
@@ -77,7 +79,30 @@ queueTests =
         -- A keiroJobCodec envelope would wrap the job under a schema-version
         -- key. Decoding straight to a RunJob is what proves it does not.
         value <- decodeOrFail @Value preUpgradeRunJob
-        assertEqual "the payload is the job itself" (toJSON sampleRunJob) value
+        assertEqual "the payload is the job itself" (toJSON sampleRunJob) value,
+      -- The route discriminator is additive. A job enqueued or journaled before
+      -- it existed carries no @routeKind@ key, and must keep meaning what it
+      -- meant then: "nobody declared a route, so reproduce the old decision".
+      testCase "a legacy job decodes with the inferred route" do
+        RunJob {routeKind} <- decodeOrFail @RunJob preUpgradeRunJob
+        assertEqual "no routeKind key means the legacy route" InferredLegacyRoute routeKind,
+      testCase "an explicit route round-trips and adds exactly one key" do
+        let explicit = sampleRunJob {routeKind = ConversationWorkflowRoute}
+        encodedValue <- decodeOrFail @Value (LazyByteString.toStrict (encode explicit))
+        legacyValue <- decodeOrFail @Value preUpgradeRunJob
+        case (encodedValue, legacyValue) of
+          (Object explicitObject, Object legacyObject) -> do
+            assertEqual
+              "removing routeKind leaves exactly the pre-upgrade keys"
+              (List.sort (KeyMap.keys legacyObject))
+              (List.sort (KeyMap.keys (KeyMap.delete "routeKind" explicitObject)))
+            assertEqual
+              "the added key is the declared route"
+              (Just (toJSON ConversationWorkflowRoute))
+              (KeyMap.lookup "routeKind" explicitObject)
+          _ -> assertFailure "a run job must encode as a JSON object"
+        decoded <- decodeOrFail @RunJob (LazyByteString.toStrict (encode explicit))
+        assertEqual "an explicit route survives a round trip" explicit decoded
     ]
 
 sampleRunJob :: RunJob
@@ -85,6 +110,7 @@ sampleRunJob =
   RunJob
     { agentName = "at-risk-watch",
       triggerKind = TriggeredByStream,
+      routeKind = InferredLegacyRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,
       idempotencyKey = "at-risk-watch:act_1",

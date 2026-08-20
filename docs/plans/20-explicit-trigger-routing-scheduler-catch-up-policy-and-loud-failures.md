@@ -70,10 +70,12 @@ This section must always reflect the actual current state of the work.
       `AgentLoadEntry`/`AgentLoadReport`, `loadAgentsReport`, `loadAgentsLoud`, and `loadedAgents`
       in `shikigami-core/src/Shikigami/Agent/Loader.hs`; all four long-running worker roles call
       `loadAgentsLoud … False` and then plan 33's `enabledAgentsFromReport`.
-- [ ] Milestone 1: add `RunRouteKind` to `RunJob` with an ADR-0011-style omit-when-legacy codec;
-      set it explicitly in all four producers; `routeRunJob` decides from the field alone;
-      `RouteError` dead-letters through `deadOutcome`; `WireCompatSpec` keeps its captured bytes
-      and gains a legacy-decode case.
+- [x] (2026-08-20T05:10:00Z) Milestone 1: added `RunRouteKind` to `RunJob` with an ADR-0011-style
+      omit-when-legacy codec; set it explicitly in all four producers plus the `enqueue-run`
+      operator path (new `--conversation` flag); `routeRunJob` decides from the field alone;
+      `RouteError` dead-letters through the new named `routeErrorJobOutcome`; `WireCompatSpec`
+      keeps its captured bytes and gains legacy-decode and explicit-route cases; `WorkerSpec`
+      gains the routing table and an end-to-end route-error DLQ case.
 - [ ] Milestone 2: `CatchUpPolicy` in `Shikigami.Trigger.Schedule`; `SkipMissed` default wired
       through `AppConfig` into `SchedulerEnv`; `scheduleFireAction` re-arms from `now` under
       `SkipMissed`; explicit timer-kind dispatch replaces the try-then-fall-through composition;
@@ -183,6 +185,23 @@ implementation. Provide concise evidence.
   before this plan's other milestones were ready, so that independently useful slice landed first;
   `agents.strict` and cron handling remain here. `loadAgentsIn` survives as a thin wrapper
   (`Loader.hs:130-131`) with no remaining caller and should be deleted by Milestone 4.
+- 2026-08-20: **`cabal test all` must be run with `-j1`.** The default parallel build runs several
+  database-backed suites at once against the one dev cluster, and `shikigami-workers-test` hung for
+  over eleven minutes without finishing a single case; the same suite run alone finishes in about
+  five seconds. Serialized, the whole gate passes:
+
+  ```text
+  Test suite conformance: PASS
+  Test suite shikigami-agent-test: PASS        (8 tests)
+  Test suite shikigami-api-test: PASS          (15 tests)
+  Test suite shikigami-client-test: PASS       (3 tests)
+  Test suite shikigami-core-test: PASS         (315 tests)
+  Test suite shikigami-migrations-smoke: PASS  (2 tests)
+  Test suite shikigami-migrations-test: PASS   (3 tests)
+  Test suite shikigami-server-test: PASS       (20 tests)
+  Test suite shikigami-workers-test: PASS      (37 tests)
+  ```
+
 - 2026-08-20: **`config/worker-strict.yaml`, referenced by the previous revision's manual check,
   does not exist.** `config/` holds `shikigami.example.yaml` and
   `worker-agent-schema-proof.yaml`. The strict-mode demonstration uses `--set` instead, which
@@ -299,6 +318,25 @@ Record every decision made while working on the plan.
   Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
   `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
   second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: The route-error dead-letter mapping is a named export,
+  `Shikigami.Agent.RunJob.Worker.routeErrorJobOutcome :: Text -> JobOutcome`, rather than an inline
+  `deadOutcome "invalid_route_payload"` inside `dispatchRunJob`.
+  Rationale: `transientBehaviorJobOutcome` already exists in that module for exactly this reason —
+  its haddock says it is "kept as a named mapping so the outcome table can pin it without
+  manufacturing a full worker environment". `dispatchRunJob` needs a `WorkerEnv` carrying a kioku
+  `AppEnv`, a behavior environment, and a danwa client, none of which a routing test has any use
+  for. With the mapping named, `WorkerSpec` drives the real `routeRunJob` and the real outcome
+  mapping against a real queue and asserts the message lands in the reconciled DLQ.
+  Date: 2026-08-20
+
+- Decision: `eventInboxHandler` decides its route through a named `eventRouteOf :: AgentDecl ->
+  RunRouteKind` helper in `shikigami-workers/src/Shikigami/Trigger/Consumer.hs`, comparing the
+  agent's declared `eventType` against `Shikigami.Integration.Danwa.addressedMessageEventType`.
+  Rationale: the plan called for exactly this comparison; giving it a name and a haddock keeps the
+  reason for the distinction ("the declaration is what asks for a conversation") at the place a
+  future reader will look, instead of as a bare guard inside a `let` binding in a transaction body.
   Date: 2026-08-20
 
 - Decision: `loadAgentsLoud` takes a `Shikigami.Log.Logger` and emits structured events rather

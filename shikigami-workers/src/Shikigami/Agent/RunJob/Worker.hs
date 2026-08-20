@@ -8,6 +8,9 @@
 module Shikigami.Agent.RunJob.Worker
   ( runJob,
     handleRunJob,
+    RunRoute (..),
+    routeRunJob,
+    routeErrorJobOutcome,
     agentJobOutcome,
     conversationJobOutcome,
     transientBehaviorJobOutcome,
@@ -34,7 +37,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Integration.Danwa (AddressedMessage)
@@ -100,11 +103,67 @@ nominalMicroseconds :: NominalDiffTime -> Int
 nominalMicroseconds duration =
   max 1 (ceiling (realToFrac duration * (1_000_000 :: Double)))
 
+-- | Which workflow one delivery is for, decided from the producer's declared
+-- route and never from the payload's shape.
+data RunRoute
+  = ConversationRoute !AddressedMessage
+  | AgentRunRoute
+  | -- | The producer declared a conversation but its payload is not an
+    -- addressed message. That is a producer bug, and running the other workflow
+    -- instead would hide it.
+    RouteError !Text
+
+-- | The pure routing decision. Payload decoding validates the declared route; it
+-- never chooses one. 'InferredLegacyRoute' is the single exception, and only
+-- because it means "enqueued before the discriminator existed".
+routeRunJob :: RunJob -> RunRoute
+routeRunJob job = case routeKind job of
+  AgentWorkflowRoute -> AgentRunRoute
+  ConversationWorkflowRoute ->
+    case Aeson.fromJSON (triggerPayload job) of
+      Aeson.Success addressed -> ConversationRoute addressed
+      Aeson.Error err -> RouteError (Text.pack err)
+  InferredLegacyRoute ->
+    case Aeson.fromJSON (triggerPayload job) of
+      Aeson.Success addressed -> ConversationRoute addressed
+      Aeson.Error _ -> AgentRunRoute
+
 dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
-dispatchRunJob env job =
-  case Aeson.fromJSON (triggerPayload job) of
-    Aeson.Success addressed -> runConversationAgent env job addressed
-    Aeson.Error _ -> runOneAgent env job
+dispatchRunJob env job = do
+  let route = routeRunJob job
+  when (routeKind job == InferredLegacyRoute) $
+    jobLog
+      env
+      job
+      Log.Warn
+      "worker.job.route_inferred"
+      ["resolved_route" Aeson..= routeText route]
+  case route of
+    ConversationRoute addressed -> runConversationAgent env job addressed
+    AgentRunRoute -> runOneAgent env job
+    RouteError detail -> do
+      jobLog
+        env
+        job
+        Log.Error
+        "worker.job.dead_lettered"
+        [ "error" Aeson..= detail,
+          "reason" Aeson..= ("invalid_route_payload" :: Text)
+        ]
+      pure (routeErrorJobOutcome detail)
+
+-- | A declared route whose payload does not match it is a permanent producer
+-- bug, so the delivery dead-letters rather than running the other workflow.
+-- Kept as a named mapping, like 'transientBehaviorJobOutcome', so the outcome
+-- table can pin it without manufacturing a full worker environment.
+routeErrorJobOutcome :: Text -> JobOutcome
+routeErrorJobOutcome = deadOutcome "invalid_route_payload"
+
+routeText :: RunRoute -> Text
+routeText = \case
+  ConversationRoute _ -> "conversation"
+  AgentRunRoute -> "agent_run"
+  RouteError _ -> "route_error"
 
 -- | Drive one turn of a conversation agent.
 runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome

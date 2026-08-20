@@ -20,7 +20,7 @@ import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowC
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByDelegation))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Prelude
 
@@ -53,6 +53,7 @@ delegate ctx childAgent payload = do
         RunJob
           { agentName = childAgent,
             triggerKind = TriggeredByDelegation,
+            routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,
             idempotencyKey = childWorkflowIdText,

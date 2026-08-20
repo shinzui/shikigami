@@ -72,7 +72,8 @@ import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), StreamMatch, Trigger (..))
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
+import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, runJobFromEnvelope)
@@ -472,6 +473,7 @@ eventInboxHandler receivedAt agents payloadValue event = do
         RunJob
           { agentName = agent ^. #name,
             triggerKind = TriggeredByEvent,
+            routeKind = eventRouteOf agent,
             occurredAt = receivedAt,
             triggerPayload = payloadValue,
             idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
@@ -494,3 +496,13 @@ eventTriggerTypeOf :: AgentDecl -> Maybe Text
 eventTriggerTypeOf agent = case agent ^. #trigger of
   Event {eventType} -> Just eventType
   _ -> Nothing
+
+-- | The declared event type is the honest source of the conversation/agent-run
+-- distinction: an agent that subscribes to @danwa.message-addressed-to-agent@ is
+-- asking for a conversation turn, and every other event trigger is an ordinary
+-- agent run. Deciding here, where the declaration is in scope, is what lets the
+-- worker stop guessing from the payload's shape.
+eventRouteOf :: AgentDecl -> RunRouteKind
+eventRouteOf agent
+  | eventTriggerTypeOf agent == Just Danwa.addressedMessageEventType = ConversationWorkflowRoute
+  | otherwise = AgentWorkflowRoute

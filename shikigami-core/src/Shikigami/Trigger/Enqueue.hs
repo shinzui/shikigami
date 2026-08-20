@@ -25,7 +25,7 @@ import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQue
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Prelude
 
 -- | The IP-7 queue name (shared with the worker).
@@ -40,6 +40,7 @@ runJobFromEnvelope decl env =
   RunJob
     { agentName = name decl,
       triggerKind = TriggeredByStream,
+      routeKind = AgentWorkflowRoute,
       occurredAt = fromMaybe epoch (iso8601ParseM (Text.unpack envOccurredAt)),
       triggerPayload = toJSON env,
       idempotencyKey = name decl <> ":" <> envActivityId,
@@ -85,20 +86,24 @@ enqueueRunJob pool job =
         }
 
 -- | Enqueue an addressed (event-trigger) run for a named agent with a payload.
-enqueueAddressedRun :: Pool -> Text -> Value -> IO (Either UsageError MessageId)
-enqueueAddressedRun pool agent payload = do
+enqueueAddressedRun :: Pool -> Text -> RunRouteKind -> Value -> IO (Either UsageError MessageId)
+enqueueAddressedRun pool agent route payload = do
   now <- getCurrentTime
-  enqueueAddressedRunWithKey pool agent payload (agent <> ":evt:" <> Text.pack (iso8601Show now))
+  enqueueAddressedRunWithKey pool agent route payload (agent <> ":evt:" <> Text.pack (iso8601Show now))
 
 -- | Enqueue an addressed run with a caller-supplied stable idempotency key.
-enqueueAddressedRunWithKey :: Pool -> Text -> Value -> Text -> IO (Either UsageError MessageId)
-enqueueAddressedRunWithKey pool agent payload key = do
+--
+-- The route is a parameter rather than an inference: an event-triggered job can
+-- mean either workflow, and only the caller knows which one it meant.
+enqueueAddressedRunWithKey :: Pool -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunWithKey pool agent route payload key = do
   now <- getCurrentTime
   enqueueRunJob
     pool
     RunJob
       { agentName = agent,
         triggerKind = TriggeredByEvent,
+        routeKind = route,
         occurredAt = now,
         triggerPayload = payload,
         idempotencyKey = key,
@@ -115,6 +120,7 @@ enqueueScheduledRun pool agent dueAt =
     RunJob
       { agentName = agent,
         triggerKind = TriggeredBySchedule,
+        routeKind = AgentWorkflowRoute,
         occurredAt = dueAt,
         triggerPayload =
           Aeson.object

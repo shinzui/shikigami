@@ -47,7 +47,7 @@ import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
-import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
@@ -1168,6 +1168,7 @@ job =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-workflow-replay",
@@ -1181,6 +1182,7 @@ retryVersioningJob key =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = key,
@@ -1197,6 +1199,7 @@ permanentFailureJob =
   RunJob
     { agentName = "missing-task-agent",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "missing-task-agent:test-permanent-failure",
@@ -1210,6 +1213,7 @@ crashJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-workflow-crash-resume",
@@ -1223,6 +1227,7 @@ profileRefusalJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-profile-refusal",
@@ -1236,6 +1241,7 @@ profilePinningJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-profile-pinning",
@@ -1249,6 +1255,7 @@ profileViolationJob =
   RunJob
     { agentName = "profiled-skill",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "profiled-skill:test-profile-violation",
@@ -1388,6 +1395,7 @@ recordBeforeCompleteCrashJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-record-before-complete-crash",
@@ -1401,6 +1409,7 @@ flowJob =
   RunJob
     { agentName = "at-risk-customer",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
       idempotencyKey = "at-risk-customer:test-flow-low",
@@ -1416,6 +1425,7 @@ flowMemoryJob =
   RunJob
     { agentName = "at-risk-customer",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
       idempotencyKey = "at-risk-customer:test-flow-memory-high",
@@ -1494,6 +1504,7 @@ approvalJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-approval-approved",
@@ -1507,6 +1518,7 @@ rejectedJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-approval-rejected",
@@ -1520,6 +1532,7 @@ timeoutJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-approval-timeout",
@@ -1533,6 +1546,7 @@ answeredBeforeDeadlineJob =
   RunJob
     { agentName = "heartbeat",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
       idempotencyKey = "heartbeat:test-approval-before-deadline",
@@ -1546,6 +1560,7 @@ researchSupervisorJob =
   RunJob
     { agentName = "research-supervisor",
       triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["topic" .= ("durable workflows" :: Text)],
       idempotencyKey = "research-supervisor:test-fanout",
