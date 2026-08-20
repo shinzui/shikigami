@@ -30,8 +30,8 @@ runConsumeStream config = do
   let include = if Config.kafkaIncludeAgentActors config then IncludeAgentActors else ExcludeAgentActors
       broker = Config.kafkaBroker config
       topic = Config.kafkaActivityTopic config
-  report <- loadAgentsLoud (Config.agentsDirectory config) False
-  agents <- enabledAgentsFromReport report
+  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
+  agents <- enabledAgentsFromReport logger report
   Log.logInfo
     logger
     "stream.consumer.started"
@@ -72,8 +72,8 @@ runConsumeEvents config = do
   logger <- Log.newStderrLogger Log.Info
   let broker = Config.kafkaBroker config
       topic = Config.kafkaEventsTopic config
-  report <- loadAgentsLoud (Config.agentsDirectory config) False
-  agents <- enabledAgentsFromReport report
+  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
+  agents <- enabledAgentsFromReport logger report
   Log.logInfo
     logger
     "events.consumer.started"

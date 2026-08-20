@@ -74,6 +74,7 @@ module Shikigami.App.Config
     -- * Stable keys
     databaseConnectionStringKey,
     agentsDirectoryKey,
+    agentsStrictKey,
     schedulerCatchUpKey,
     kafkaBrokerKey,
     kafkaActivityTopicKey,
@@ -243,6 +244,10 @@ data AppConfig = AppConfig
     databaseUrl :: !(Maybe SecretText),
     -- | Directory holding the @.dhall@ agent manifests.
     agentsDirectory :: !FilePath,
+    -- | Whether a manifest that fails to load refuses the process's startup.
+    -- Off by default: upgrading must not turn a deployment that has been
+    -- tolerating a broken manifest into a failed deploy on its own.
+    agentsStrict :: !Bool,
     -- | What the scheduler does about cron minutes that passed while it was
     -- down. Skip-missed by default: a cron agent's value is "run about now",
     -- not "run once for every minute I was offline".
@@ -315,6 +320,7 @@ appConfig =
   AppConfig
     <$> optional databaseConnectionStringSetting
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
+    <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
     <*> withDefault schedulerCatchUpSetting (constant "skip-missed" "Waking late arms the next future tick instead of replaying every missed minute" SkipMissed)
     <*> withDefault kafkaBrokerSetting (constant "kafka-broker" "Use the development shell's local broker" "127.0.0.1:9092")
     <*> withDefault kafkaActivityTopicSetting (constant "activity-topic" "The canonical activity stream topic" "activity.v1")
@@ -409,6 +415,13 @@ agentsDirectorySetting =
     "Directory containing agent manifests (.dhall)"
     (Text.unpack <$> textDecoder)
     Text.pack
+
+agentsStrictSetting :: Setting Bool
+agentsStrictSetting =
+  publicShowSetting
+    agentsStrictKey
+    "Refuse to start when any agent manifest fails to load (off reports the failure and starts)"
+    boolDecoder
 
 schedulerCatchUpSetting :: Setting CatchUpPolicy
 schedulerCatchUpSetting =
@@ -603,6 +616,9 @@ databaseConnectionStringKey = stableKey "database.connection_string"
 agentsDirectoryKey :: Key
 agentsDirectoryKey = stableKey "agents.directory"
 
+agentsStrictKey :: Key
+agentsStrictKey = stableKey "agents.strict"
+
 schedulerCatchUpKey :: Key
 schedulerCatchUpKey = stableKey "scheduler.catch_up"
 
@@ -712,6 +728,7 @@ environmentBindings =
     ( bindings
         [ binding (EnvName "PG_CONNECTION_STRING") databaseConnectionStringKey,
           binding (EnvName "SHIKIGAMI_AGENTS_DIRECTORY") agentsDirectoryKey,
+          binding (EnvName "SHIKIGAMI_AGENTS_STRICT") agentsStrictKey,
           binding (EnvName "SHIKIGAMI_SCHEDULER_CATCH_UP") schedulerCatchUpKey,
           binding (EnvName "SHIKIGAMI_KAFKA_BROKER") kafkaBrokerKey,
           binding (EnvName "SHIKIGAMI_KAFKA_ACTIVITY_TOPIC") kafkaActivityTopicKey,

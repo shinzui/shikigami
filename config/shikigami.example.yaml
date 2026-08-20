@@ -24,6 +24,11 @@ database:
 agents:
   # Where the .dhall agent manifests live, relative to the working directory.
   directory: agents
+  # Off reports a manifest that will not load (and a scheduled agent whose cron
+  # will not parse) and starts anyway; on refuses to start after reporting every
+  # offender. Off is the default so that upgrading cannot turn a deployment that
+  # has been tolerating a broken manifest into a failed deploy on its own.
+  strict: false
 
 scheduler:
   # What to do about cron minutes that passed while the scheduler was down.

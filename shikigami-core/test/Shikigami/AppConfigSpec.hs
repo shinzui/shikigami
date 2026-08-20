@@ -71,6 +71,7 @@ surfaceTests =
     [ testCase "the declaration accepts exactly these keys" $
         fmap renderKey declaredKeys
           @?= [ "agents.directory",
+                "agents.strict",
                 "approval.deadline_seconds",
                 "behavior.model",
                 "behavior.provider",
@@ -103,6 +104,7 @@ surfaceTests =
             [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
               ("PG_CONNECTION_STRING", "database.connection_string"),
               ("SHIKIGAMI_AGENTS_DIRECTORY", "agents.directory"),
+              ("SHIKIGAMI_AGENTS_STRICT", "agents.strict"),
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "approval.deadline_seconds"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
@@ -132,6 +134,9 @@ surfaceTests =
         -- Skip-missed is the deliberate behavior change on upgrade: waking late
         -- arms one future tick rather than replaying every minute of downtime.
         schedulerCatchUp defaultAppConfig @?= SkipMissed
+        -- Lenient by default: upgrading must not turn a tolerated broken
+        -- manifest into a failed deploy without an explicit configuration change.
+        agentsStrict defaultAppConfig @?= False
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
         runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300

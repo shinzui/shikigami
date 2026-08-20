@@ -20,14 +20,14 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
-import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Log qualified as Log
-import Shikigami.Trigger.Schedule (CronSchedule, parseCron)
+import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
+import Shikigami.Workers.Config (schedulerSchedules)
 
 -- | Arm every scheduled agent and drive keiro timer firing.
 --
@@ -37,9 +37,13 @@ import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerT
 runSchedulerCmd :: AppConfig -> IO ()
 runSchedulerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  report <- loadAgentsLoud (Config.agentsDirectory config) False
-  agents <- enabledAgentsFromReport report
-  schedules <- traverse parseScheduleAgent (filter isSchedule agents)
+  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
+  agents <- enabledAgentsFromReport logger report
+  -- The same resolution the worker's timer loop uses, so both processes report a
+  -- bad cron the same way instead of one raising an ioError and the other
+  -- dropping the agent in silence.
+  scheduleMap <- schedulerSchedules logger (Config.agentsStrict config) agents
+  let schedules = Map.toList scheduleMap
   Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
@@ -49,7 +53,7 @@ runSchedulerCmd config = do
         env =
           SchedulerEnv
             { pool = StoreConnection.pool st,
-              schedules = Map.fromList schedules,
+              schedules = scheduleMap,
               catchUpPolicy = Config.schedulerCatchUp config,
               logger
             }
@@ -74,18 +78,6 @@ armAll logger appEnv schedules =
           "scheduler.agent.arm_failed"
           ["agent" Aeson..= agentName, "error" Aeson..= Text.pack (show err)]
       Right () -> pure ()
-
-parseScheduleAgent :: AgentDecl -> IO (Text, CronSchedule)
-parseScheduleAgent AgentDecl {name, trigger = Schedule {cron}} =
-  case parseCron cron of
-    Right parsed -> pure (name, parsed)
-    Left err -> ioError (userError ("invalid cron for " <> Text.unpack name <> ": " <> Text.unpack err))
-parseScheduleAgent AgentDecl {name} =
-  ioError (userError ("agent is not scheduled: " <> Text.unpack name))
-
-isSchedule :: AgentDecl -> Bool
-isSchedule AgentDecl {trigger = Schedule {}} = True
-isSchedule _ = False
 
 runStore :: AppEnv -> Eff '[Store, KirokuStoreResource, Error StoreError, IOE] a -> IO (Either StoreError a)
 runStore appEnv =

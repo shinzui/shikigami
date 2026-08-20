@@ -18,7 +18,7 @@ import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
-import Shikigami.Workers.Config (WorkerEnv (..))
+import Shikigami.Workers.Config (WorkerEnv (..), schedulerSchedules)
 import Shikigami.Workers.Registry (runWorkers)
 import System.Exit qualified as Exit
 
@@ -37,10 +37,14 @@ import System.Exit qualified as Exit
 runWorkerCmd :: AppConfig -> IO ()
 runWorkerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  report <- loadAgentsLoud (Config.agentsDirectory config) False
-  agents <- enabledAgentsFromReport report
+  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
+  agents <- enabledAgentsFromReport logger report
   Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
   refuseUndeployableAgents logger agents
+  -- Resolved here, at the composition root, so an unparseable cron is reported
+  -- (and under agents.strict refused) once at boot rather than dropped silently
+  -- on every pass of the timer loop.
+  schedules <- schedulerSchedules logger (Config.agentsStrict config) agents
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTracer \tr -> do
     behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
@@ -56,6 +60,7 @@ runWorkerCmd config = do
                 runTimeout = Config.runTimeout config,
                 approvalDeadline = Config.approvalDeadline config,
                 catchUpPolicy = Config.schedulerCatchUp config,
+                schedules,
                 kizashi =
                   KizashiConfig
                     { baseUrl = Config.kizashiBaseUrl config,

@@ -7,21 +7,21 @@ module Shikigami.Agent.Loader
     loadAgentsLoud,
     loadedAgents,
     enabledAgentsFromReport,
-    loadAgentsIn,
   )
 where
 
 import Control.Exception (SomeException, try)
+import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.List (isSuffixOf, sort)
 import Data.Text qualified as Text
 import Dhall (auto, inputFile)
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import System.Directory (listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
-import System.IO (hPutStrLn, stderr)
 
 -- | A typed loader error. The Text carries Dhall's own (already very precise)
 -- type-error / parse-error message.
@@ -62,31 +62,47 @@ loadAgentsReport dir = do
       paths
   pure (AgentLoadReport entries)
 
--- | Report every failed manifest and a summary to stderr. Strict mode refuses
--- startup after reporting; lenient mode returns the same complete report.
-loadAgentsLoud :: FilePath -> Bool -> IO AgentLoadReport
-loadAgentsLoud dir strictMode = do
+-- | Report every failed manifest and a summary, then optionally refuse to start.
+--
+-- Every failure is reported /before/ the refusal, so an operator running a
+-- strict process sees all of them in one go rather than fixing one manifest per
+-- restart. The default is lenient (@agents.strict = false@) so that upgrading
+-- does not turn a deployment that has been tolerating a broken manifest into a
+-- failed deploy without an explicit configuration change.
+--
+-- The logger is a parameter rather than a bare @stderr@ write because these are
+-- lines a long-running process emits, and plan 28's rule is that every one of
+-- those is a single JSON object an operator can filter with @jq@.
+loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport
+loadAgentsLoud logger dir strictMode = do
   report@AgentLoadReport {entries} <- loadAgentsReport dir
   traverse_ reportFailure entries
   let loadedCount = length [() | AgentLoaded {} <- entries]
       failedCount = length entries - loadedCount
-  hPutStrLn
-    stderr
-    ( "[load] loaded "
-        <> show loadedCount
-        <> " of "
-        <> show (length entries)
-        <> " agent manifests ("
-        <> show failedCount
-        <> " failed)"
-    )
-  when (strictMode && failedCount > 0) exitFailure
+      summary =
+        [ "directory" Aeson..= dir,
+          "loaded" Aeson..= loadedCount,
+          "total" Aeson..= length entries,
+          "failed" Aeson..= failedCount
+        ]
+  if failedCount > 0
+    then Log.logError logger "agents.manifest.loaded" summary
+    else Log.logInfo logger "agents.manifest.loaded" summary
+  when (strictMode && failedCount > 0) do
+    Log.logError
+      logger
+      "agents.manifest.strict_refused"
+      ["directory" Aeson..= dir, "failed" Aeson..= failedCount]
+    exitFailure
   pure report
   where
     reportFailure = \case
       AgentLoaded {} -> pure ()
       AgentLoadFailed {path, error = LoadError message} ->
-        hPutStrLn stderr ("[load] FAILED " <> path <> ": " <> Text.unpack message)
+        Log.logError
+          logger
+          "agents.manifest.load_failed"
+          ["path" Aeson..= path, "error" Aeson..= message]
 
 loadedAgents :: AgentLoadReport -> [AgentDecl]
 loadedAgents AgentLoadReport {entries} =
@@ -94,8 +110,8 @@ loadedAgents AgentLoadReport {entries} =
 
 -- | Select runnable declarations while retaining single-file load behavior for
 -- validation and operator commands. Every explicit disable is visible.
-enabledAgentsFromReport :: AgentLoadReport -> IO [AgentDecl]
-enabledAgentsFromReport AgentLoadReport {entries} = do
+enabledAgentsFromReport :: Log.Logger -> AgentLoadReport -> IO [AgentDecl]
+enabledAgentsFromReport logger AgentLoadReport {entries} = do
   traverse_ reportDisabled entries
   pure
     [ declaration
@@ -104,28 +120,8 @@ enabledAgentsFromReport AgentLoadReport {entries} = do
   where
     reportDisabled = \case
       AgentLoaded {path, declaration = AgentDecl {name, enabled = False}} ->
-        hPutStrLn
-          stderr
-          ( "[loader] skipping disabled agent '"
-              <> Text.unpack name
-              <> "' ("
-              <> path
-              <> ")"
-          )
+        Log.logInfo
+          logger
+          "agents.manifest.disabled"
+          ["agent" Aeson..= name, "path" Aeson..= path]
       _ -> pure ()
-
--- | Load every @*.dhall@ manifest in a directory, in filename order.
---
--- A manifest that fails to load is skipped rather than failing the call. That is
--- the behavior every worker entry point already had, duplicated four times; it
--- is centralized here so there is one place for
--- @docs\/plans\/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md@
--- to make the skip loud, and one place for
--- @docs\/plans\/33-agent-schema-evolution-identity-memory-policy-and-enablement.md@
--- to filter by enablement, instead of four.
---
--- Silently skipping a broken manifest means an agent can stop running because of
--- a typo with nothing said about it. Do not build on that; it is preserved only
--- so this refactor changes no behavior.
-loadAgentsIn :: FilePath -> IO [AgentDecl]
-loadAgentsIn dir = loadedAgents <$> loadAgentsReport dir

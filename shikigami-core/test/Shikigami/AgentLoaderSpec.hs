@@ -1,7 +1,11 @@
 module Shikigami.AgentLoaderSpec (tests) where
 
+import Control.Exception (try)
 import Data.Aeson (Value (Object), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as ByteString.Char8
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -19,9 +23,12 @@ import Shikigami.Agent.Loader
     LoadError (..),
     enabledAgentsFromReport,
     loadAgent,
+    loadAgentsLoud,
     loadAgentsReport,
     loadedAgents,
   )
+import Shikigami.Log qualified as Log
+import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -86,10 +93,65 @@ tests =
         assertBool "broken manifest is retained as a failure" (maybe False isFailure broken)
         assertBool "broken manifest is absent from loaded declarations" (all ((/= "broken") . agentName) (loadedAgents report)),
       testCase "enabled selection omits the disabled proof declaration" do
+        (logger, _captured) <- capturingLogger
         report <- loadAgentsReport "../agents/proof"
-        selected <- enabledAgentsFromReport report
-        assertBool "disabled declaration is omitted" (all ((/= "declared-identity") . agentName) selected)
+        selected <- enabledAgentsFromReport logger report
+        assertBool "disabled declaration is omitted" (all ((/= "declared-identity") . agentName) selected),
+      -- A manifest typo used to be invisible: the directory walk dropped the file
+      -- and the process started with one fewer agent than the operator declared.
+      -- @agents/broken.dhall@ is the checked-in fixture for that, and it is the
+      -- only failing file the walk reaches — the traversal is not recursive, so
+      -- @agents/detectors/schema.dhall@ is never opened.
+      testCase "loadAgentsLoud reports the broken manifest through the logger" do
+        (logger, captured) <- capturingLogger
+        report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" False
+        lines' <- readIORef captured
+        assertBool
+          ("expected agents.manifest.load_failed in " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"event\":\"agents.manifest.load_failed\"") lines')
+        assertBool
+          ("expected the broken manifest's path in " <> show lines')
+          (any (ByteString.Char8.isInfixOf "../agents/broken.dhall") lines')
+        assertBool
+          ("expected a summary naming one failure in " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"failed\":1") lines')
+        assertBool "the report retains the failure" (any isFailure (filter isBroken entries))
+        assertBool
+          "loadedAgents excludes it"
+          (all ((/= "broken") . agentName) (loadedAgents report)),
+      -- Before this there was no configuration source for strict mode, so every
+      -- call site hard-coded False and the refusal was unreachable.
+      testCase "strict mode refuses to start when a manifest fails" do
+        (logger, captured) <- capturingLogger
+        outcome <- try @ExitCode (loadAgentsLoud logger "../agents" True)
+        case outcome of
+          Left code -> code @?= ExitFailure 1
+          Right _ -> assertFailure "strict mode must refuse to start when a manifest fails"
+        lines' <- readIORef captured
+        assertBool
+          ("the failures are reported before the refusal: " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"event\":\"agents.manifest.load_failed\"") lines')
+        assertBool
+          ("the refusal says why: " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"event\":\"agents.manifest.strict_refused\"") lines'),
+      testCase "strict mode starts when every manifest loads" do
+        (logger, _captured) <- capturingLogger
+        AgentLoadReport {entries} <- loadAgentsLoud logger "../agents/proof" True
+        assertBool "the proof directory has no failing manifest" (not (any isFailure entries))
     ]
+
+-- | A logger that keeps every line it is given, so a case can assert on the
+-- structured event rather than on a side effect the event happens to accompany.
+capturingLogger :: IO (Log.Logger, IORef [ByteString])
+capturingLogger = do
+  captured <- newIORef []
+  pure
+    ( Log.Logger
+        { Log.minLevel = Log.Debug,
+          Log.sink = \line -> modifyIORef' captured (<> [line])
+        },
+      captured
+    )
 
 expectLoaded :: FilePath -> IO AgentDecl
 expectLoaded path =

@@ -1,6 +1,6 @@
 module Shikigami.SchedulerSpec (tests) where
 
-import Control.Exception (bracket)
+import Control.Exception (bracket, try)
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -19,12 +19,15 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Enqueue (runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
+import Shikigami.Workers.Config (schedulerSchedules)
+import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -176,6 +179,34 @@ tests =
             assertBool
               ("expected scheduler.timer.unknown_kind in " <> show lines')
               (any (ByteString.Char8.isInfixOf "\"event\":\"scheduler.timer.unknown_kind\"") lines'),
+      -- The worker's schedule extraction was a pure mapMaybe, which is why it
+      -- could only drop: an agent whose cron did not parse was removed from the
+      -- timer loop's map, so it loaded fine, logged nothing, and never fired.
+      testCase "an unparseable cron is reported, not dropped" do
+        (logger, captured) <- capturingLogger
+        schedules <- schedulerSchedules logger False [scheduledAgent "good-agent" "* * * * *", scheduledAgent "bad-agent" "not a cron"]
+        assertEqual "only the parseable agent is scheduled" ["good-agent"] (Map.keys schedules)
+        lines' <- readIORef captured
+        assertBool
+          ("expected scheduler.cron.invalid in " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"event\":\"scheduler.cron.invalid\"") lines')
+        assertBool
+          ("the line names the offending agent: " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"agent\":\"bad-agent\"") lines'),
+      testCase "strict mode refuses to start on an unparseable cron" do
+        (logger, captured) <- capturingLogger
+        outcome <- try @ExitCode (schedulerSchedules logger True [scheduledAgent "bad-agent" "not a cron"])
+        case outcome of
+          Left code -> assertEqual "refusal exit code" (ExitFailure 1) code
+          Right _ -> assertFailure "strict mode must refuse to start on an unparseable cron"
+        lines' <- readIORef captured
+        assertBool
+          ("the offender is reported before the refusal: " <> show lines')
+          (any (ByteString.Char8.isInfixOf "\"event\":\"scheduler.cron.invalid\"") lines'),
+      testCase "a parseable cron under strict mode still starts" do
+        (logger, _captured) <- capturingLogger
+        schedules <- schedulerSchedules logger True [scheduledAgent "good-agent" "*/5 * * * *"]
+        assertEqual "the agent is scheduled" ["good-agent"] (Map.keys schedules),
       testCase "an approval-timeout payload still reaches the approval action" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -201,6 +232,21 @@ tests =
               ("an approval payload must not be reported as unknown: " <> show lines')
               (not (any (ByteString.Char8.isInfixOf "scheduler.timer.unknown_kind") lines'))
     ]
+
+-- | A minimal schedule-triggered declaration, for driving cron resolution.
+scheduledAgent :: Text -> Text -> AgentDecl
+scheduledAgent agentName cron =
+  AgentDecl
+    { name = agentName,
+      description = "scheduler spec fixture",
+      trigger = Schedule {cron},
+      behavior = Deterministic {rule = "test", params = Map.empty},
+      sinks = [],
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
+    }
 
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.
 testSchedulerEnv :: Pool.Pool -> Map.Map Text CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv

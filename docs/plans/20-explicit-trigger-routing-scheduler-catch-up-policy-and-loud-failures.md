@@ -91,9 +91,15 @@ This section must always reflect the actual current state of the work.
       `recordFailureLearningBestEffort` and logs `agent.memory.best_effort_failed`;
       `Shikigami.Agent.Run` gets the same treatment at its own severity (a `Left` naming the write,
       stderr for the best-effort one). `AgentWorkflowSpec` and `WireCompatSpec` gain cases.
-- [ ] Milestone 4 (remaining): thread `Shikigami.Log.Logger` through `loadAgentsLoud`, wire the
-      new Settei `agents.strict` key, test strict refusal, and make an unparseable cron loud in
-      `Shikigami.Workers.Config.schedulerEnv`.
+- [x] (2026-08-20T07:55:00Z) Milestone 4 (remaining): `loadAgentsLoud` and
+      `enabledAgentsFromReport` take a `Shikigami.Log.Logger` and emit
+      `agents.manifest.load_failed` / `.loaded` / `.strict_refused` / `.disabled`; `loadAgentsIn`
+      deleted; the Settei `agents.strict` key (`SHIKIGAMI_AGENTS_STRICT`, default `false`) is wired
+      into all four worker roles; an unparseable cron is resolved once at boot by the new
+      `Shikigami.Workers.Config.schedulerSchedules`, which logs `scheduler.cron.invalid` per
+      offender and refuses under the same strict switch — the scheduler process's `ioError` is
+      gone, so both processes report identically. Tested in `AgentLoaderSpec` and `SchedulerSpec`,
+      documented in `docs/operations/configuration.md` and `config/shikigami.example.yaml`.
 - [ ] Milestone 4 (hardening): idempotent addressed enqueue key, drop the per-enqueue
       `createQueue` (adding `ensureRunQueue` to the two startup paths that relied on it), stop
       backdating to the Unix epoch, encode UUIDv5 name bytes as UTF-8 at all six sites, and pin
@@ -353,6 +359,25 @@ Record every decision made while working on the plan.
   Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
   `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
   second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: An unparseable cron is governed by `agents.strict`, not by a second key of its own.
+  Rationale: the operator intent is one intent — "refuse to start on a declaration this process
+  cannot act on". A manifest that will not load and a scheduled agent whose cron will not parse are
+  the same kind of mistake reaching the same deploy, and splitting them into `agents.strict` and
+  some `scheduler.strict` would make an operator set two keys to express one decision. The
+  documentation row for `agents.strict` names both cases.
+  Date: 2026-08-20
+
+- Decision: Cron resolution moves out of `schedulerEnv` into
+  `Shikigami.Workers.Config.schedulerSchedules`, called once by the worker's composition root, and
+  `WorkerEnv` gains the resolved `schedules` map.
+  Rationale: `schedulerEnv` is a pure function called on every timer pass, which is exactly why it
+  could only drop a bad cron — there was nowhere to log from and nothing to refuse with. Resolving
+  at boot reports each offender once, in the place a deploy watches, and makes the refusal
+  possible. `Shikigami.Workers.Command.Scheduler` now calls the same function instead of its own
+  `parseScheduleAgent`, so the scheduler process and the worker's timer loop report a bad cron the
+  same way rather than one raising an `ioError` and the other saying nothing.
   Date: 2026-08-20
 
 - Decision: A kioku transport failure and a kioku refusal get opposite dispositions. An
@@ -919,15 +944,21 @@ nix develop -c just keiro-gate
 Manual check of loud loading, using the checked-in broken manifest and no new config file:
 
 ```bash
-nix develop -c cabal run shikigami-worker -- --set agents.strict=true 2>&1 | head
+nix develop -c cabal run -v0 shikigami-worker -- --set agents.strict=true; echo "exit=$?"
 ```
 
-Expect one JSON line per failure and a summary line, then a non-zero exit:
+Observed 2026-08-20 — one JSON line per failure, a summary, a refusal, and exit code 1
+(fields elided for width):
 
 ```text
-{"level":"error","event":"agents.manifest.load_failed","path":"agents/broken.dhall","error":"..."}
-{"level":"error","event":"agents.manifest.loaded","loaded":3,"total":4,"failed":1}
+{"event":"agents.manifest.load_failed","level":"error","path":"agents/broken.dhall","error":"…behaviour vs behavior…"}
+{"directory":"agents","event":"agents.manifest.loaded","failed":1,"level":"error","loaded":3,"total":4}
+{"directory":"agents","event":"agents.manifest.strict_refused","failed":1,"level":"error"}
+exit=1
 ```
+
+Without the flag the same three manifests load, the failure is still reported, and the worker
+carries on — which is the point of the lenient default.
 
 Manual check of scheduler catch-up, against the dev cluster:
 
@@ -993,14 +1024,17 @@ reading it, and it is stated here rather than claimed as tested.
 
 **Loud loading** — fails before. Call `loadAgentsLoud logger "../agents" False` against a captured
 logger and assert the emitted JSON contains `agents.manifest.load_failed` with
-`"path":"../agents/broken.dhall"`, that the report retains an `AgentLoadFailed` entry for it, and
-that `loadedAgents` excludes it. Call with strict `True` in a subprocess and assert a non-zero
-exit. Before this plan the strict path is unreachable because nothing supplies the flag.
+`"path":"../agents/broken.dhall"`, that the summary says `"failed":1`, that the report retains an
+`AgentLoadFailed` entry for it, and that `loadedAgents` excludes it. Call with strict `True` and
+assert it raises `ExitFailure 1` after reporting every failure — `System.Exit.exitFailure` throws
+a catchable `ExitCode`, so `try @ExitCode` proves the refusal in process and no subprocess is
+needed. Before this plan the strict path is unreachable because nothing supplies the flag.
 
 **Loud crons** — fails before. Build an `AgentDecl` with `trigger = Schedule { cron = "not a
-cron" }`, run it through the worker's schedule extraction, and assert `scheduler.cron.invalid`
-names the agent; under strict mode assert the process refuses. Today the agent is dropped with
-nothing logged.
+cron" }`, run it through `Shikigami.Workers.Config.schedulerSchedules`, and assert only the
+parseable agent is in the resulting map, that `scheduler.cron.invalid` names the offender, and
+that under strict mode the call raises `ExitFailure 1` after reporting it. Today the agent is
+dropped with nothing logged.
 
 **Enqueue hardening** — fails before, except the queue-name case which is a regression guard.
 Assert `parseQueueName "shikigami_run_jobs"` is `Right`. Assert `runJobFromEnvelope` on an envelope
@@ -1137,6 +1171,11 @@ Shikigami.Trigger.Scheduler.timerPayloadKind :: Value -> Maybe Text
 Shikigami.Agent.Loader.loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport
 Shikigami.Agent.Loader.enabledAgentsFromReport :: Log.Logger -> AgentLoadReport -> IO [AgentDecl]
 -- loadAgentsIn is removed.
+
+-- shikigami-workers/src/Shikigami/Workers/Config.hs
+Shikigami.Workers.Config.schedulerSchedules ::
+  Log.Logger -> Bool -> [AgentDecl] -> IO (Map Text CronSchedule)
+-- WorkerEnv also gains: schedules :: !(Map Text CronSchedule), resolved once at boot.
 
 -- shikigami-core/src/Shikigami/Trigger/Enqueue.hs
 Shikigami.Trigger.Enqueue.runJobFromEnvelope :: Log.Logger -> AgentDecl -> ActivityEnvelope -> IO RunJob

@@ -110,6 +110,7 @@ nested under `kafka`.
 |---|---|---|---|
 | `database.connection_string` | *(none — secret)* | `PG_CONNECTION_STRING` | PostgreSQL connection string, libpq URI or key/value form. |
 | `agents.directory` | `agents` | `SHIKIGAMI_AGENTS_DIRECTORY` | Directory holding the `.dhall` agent manifests. |
+| `agents.strict` | `false` | `SHIKIGAMI_AGENTS_STRICT` | Refuse to start when any agent manifest fails to load, or when a scheduled agent's declared cron does not parse. Every offender is reported before the refusal, so one restart shows them all. Off reports the same lines and starts anyway. |
 | `scheduler.catch_up` | `skip_missed` | `SHIKIGAMI_SCHEDULER_CATCH_UP` | What the scheduler does about cron minutes that passed while it was down. `skip_missed` arms the first tick after now, so waking a day late produces one run. `fire_all` arms from the tick that just fired, replaying every missed minute — the pre-policy behavior. |
 | `worker.run_timeout_seconds` | `300` | `SHIKIGAMI_RUN_TIMEOUT_SECONDS` | Maximum duration of one synchronous external behavior attempt. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |

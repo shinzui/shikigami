@@ -20,10 +20,14 @@ module Shikigami.Workers.Config
     envCatchUpPolicy,
     agentRunDeps,
     conversationEnv,
+    schedulerSchedules,
     schedulerEnv,
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.Foldable (traverse_)
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
@@ -37,8 +41,9 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
-import Shikigami.Trigger.Schedule (CatchUpPolicy, parseCron)
+import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
+import System.Exit (exitFailure)
 
 -- | Everything the worker loops need.
 data WorkerEnv = WorkerEnv
@@ -51,6 +56,10 @@ data WorkerEnv = WorkerEnv
     -- | What the timer loop does about cron minutes that passed while the
     -- process was down. Resolved from @scheduler.catch_up@.
     catchUpPolicy :: !CatchUpPolicy,
+    -- | Every scheduled agent whose declared cron parsed, resolved once at boot
+    -- by 'schedulerSchedules' so that an unparseable cron is reported there
+    -- rather than dropped silently on every timer pass.
+    schedules :: !(Map Text CronSchedule),
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
@@ -124,24 +133,51 @@ conversationEnv env =
       Conversation.grants = envGrants env
     }
 
--- | The scheduler's view: the pool plus every agent whose trigger is a parseable
--- cron schedule.
+-- | Resolve every scheduled agent's declared cron, once, at boot.
 --
--- An unparseable cron is dropped rather than failing the process. That is the
--- behavior this refactor preserves, not endorses; making a bad declaration loud
--- belongs to
--- @docs\/plans\/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md@.
+-- This used to be a pure @mapMaybe@ inside 'schedulerEnv', which is why it could
+-- only drop: an agent whose @cron@ did not parse was silently removed from the
+-- timer loop's map, so it loaded fine, logged nothing, and never fired. A
+-- declaration this process cannot act on is a misconfiguration, and it belongs
+-- where a deploy can see it, so each offender is named and — under
+-- @agents.strict@, the same switch that governs a manifest that will not load —
+-- the process refuses to start after reporting all of them.
+schedulerSchedules :: Log.Logger -> Bool -> [AgentDecl] -> IO (Map Text CronSchedule)
+schedulerSchedules logger strictMode declarations = do
+  let scheduled =
+        [ (agentName, cron)
+        | AgentDecl {name = agentName, trigger = Schedule {cron}} <- declarations
+        ]
+      parsed = [(agentName, parseCron cron) | (agentName, cron) <- scheduled]
+      invalid = [(agentName, err) | (agentName, Left err) <- parsed]
+  traverse_ reportInvalid invalid
+  unless (null invalid) do
+    when strictMode do
+      Log.logError
+        logger
+        "scheduler.cron.strict_refused"
+        ["invalid" Aeson..= length invalid]
+      exitFailure
+  pure (Map.fromList [(agentName, schedule) | (agentName, Right schedule) <- parsed])
+  where
+    reportInvalid (agentName, err) =
+      Log.logError
+        logger
+        "scheduler.cron.invalid"
+        ["agent" Aeson..= agentName, "error" Aeson..= err]
+
+-- | The scheduler's view: the pool, the schedules resolved at boot, the catch-up
+-- policy, and the logger the timer loop reports through.
 schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
 schedulerEnv env =
   Scheduler.SchedulerEnv
     { Scheduler.pool = pool env,
-      Scheduler.schedules = Map.fromList (mapMaybe scheduleFor (agents env)),
+      Scheduler.schedules = envSchedules env,
       Scheduler.catchUpPolicy = envCatchUpPolicy env,
       Scheduler.logger = envLogger env
     }
-  where
-    scheduleFor AgentDecl {name = agentName, trigger = Schedule {cron}} =
-      case parseCron cron of
-        Right parsed -> Just (agentName, parsed)
-        Left _ -> Nothing
-    scheduleFor _ = Nothing
+
+-- | Named for the same reason as 'envLogger': 'Scheduler.SchedulerEnv' also
+-- carries a @schedules@ field.
+envSchedules :: WorkerEnv -> Map Text CronSchedule
+envSchedules WorkerEnv {schedules = s} = s
