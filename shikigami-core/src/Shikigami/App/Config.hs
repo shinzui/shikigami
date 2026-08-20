@@ -70,6 +70,8 @@ module Shikigami.App.Config
     roleBinary,
     roleRequiredKeys,
     missingRequirements,
+    defaultHealthPort,
+    healthPortFor,
 
     -- * Stable keys
     databaseConnectionStringKey,
@@ -85,6 +87,7 @@ module Shikigami.App.Config
     kafkaDeadLetterQueueKey,
     httpHostKey,
     httpPortKey,
+    healthPortKey,
     workerRunTimeoutSecondsKey,
     approvalDeadlineSecondsKey,
     conversationIdleTimeoutSecondsKey,
@@ -273,6 +276,13 @@ data AppConfig = AppConfig
     httpHost :: !Text,
     -- | Port the public HTTP API binds.
     httpPort :: !Port,
+    -- | Port a probe listener binds, when an operator names one.
+    --
+    -- 'Maybe' rather than a declared default because the sensible default is
+    -- per-role — four worker processes on one host cannot share a port — and one
+    -- declaration cannot carry four defaults. 'healthPortFor' applies the role's
+    -- default when this is absent; 'defaultHealthPort' is the table.
+    healthPort :: !(Maybe Port),
     -- | Maximum duration of one synchronous external behavior attempt.
     runTimeout :: !NominalDiffTime,
     -- | Maximum duration an approval or flow acknowledgement may remain open.
@@ -339,6 +349,7 @@ appConfig =
     <*> withDefault kafkaDeadLetterQueueSetting (constant "stream-dead-letter-queue" "Keep poison Kafka records in Postgres before advancing their offsets" defaultKafkaDeadLetterQueue)
     <*> withDefault httpHostSetting (constant "loopback" "Keep a development server off the network" "127.0.0.1")
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
+    <*> optional healthPortSetting
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
@@ -507,6 +518,14 @@ httpPortSetting =
     portDecoder
     (Text.pack . show . portNumber)
 
+healthPortSetting :: Setting Port
+healthPortSetting =
+  publicSettingWithRenderer
+    healthPortKey
+    "TCP port the probe listener binds; defaults per role (8091 worker, 8092 scheduler, 8093 stream, 8094 events)"
+    portDecoder
+    (Text.pack . show . portNumber)
+
 -- | Decode a port through the bounded integer decoder, then range-check it.
 --
 -- Built from the public decoder combinators so that both a native YAML number
@@ -666,6 +685,9 @@ httpHostKey = stableKey "http.host"
 httpPortKey :: Key
 httpPortKey = stableKey "http.port"
 
+healthPortKey :: Key
+healthPortKey = stableKey "health.port"
+
 workerRunTimeoutSecondsKey :: Key
 workerRunTimeoutSecondsKey = stableKey "worker.run_timeout_seconds"
 
@@ -759,6 +781,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
+          binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
           binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
@@ -807,6 +830,39 @@ roleBinary = \case
   RunBehaviorRole -> "shikigami-run-behavior"
   AgentRunRole -> "shikigami-agent-run"
   MigrateRole -> "shikigami-migrate"
+
+-- | The probe port a role binds when @health.port@ names none.
+--
+-- Four worker processes routinely run on one host, so they cannot share a
+-- default; 8091-8094 keeps the whole local stack probeable without an operator
+-- configuring anything. @Nothing@ means the role serves no probe listener of its
+-- own: @shikigami-server@ answers the same two routes on its @http.port@
+-- listener rather than opening a second socket, and the one-off commands
+-- (@shikigami-run-behavior@, @shikigami-agent-run@, @shikigami-migrate@,
+-- @shikigami@) run to completion instead of staying up to be probed.
+defaultHealthPort :: Role -> Maybe Port
+defaultHealthPort = \case
+  WorkerRole -> Just (Port 8091)
+  SchedulerRole -> Just (Port 8092)
+  StreamConsumerRole -> Just (Port 8093)
+  EventConsumerRole -> Just (Port 8094)
+  ServerRole -> Nothing
+  AdminRole -> Nothing
+  RunBehaviorRole -> Nothing
+  AgentRunRole -> Nothing
+  MigrateRole -> Nothing
+
+-- | Which port this role's probe listener binds, if it has one.
+--
+-- A configured @health.port@ wins for every role that serves probes. Setting it
+-- on a role with no listener resolves fine and is then ignored, which is the
+-- same thing that happens to @kafka.broker@ on the scheduler: one declaration
+-- serves every binary, and a key a given role does not read is not an error.
+healthPortFor :: Role -> AppConfig -> Maybe Port
+healthPortFor role config =
+  case defaultHealthPort role of
+    Nothing -> Nothing
+    roleDefault -> maybe roleDefault Just (healthPort config)
 
 -- | Keys a role cannot start without.
 --

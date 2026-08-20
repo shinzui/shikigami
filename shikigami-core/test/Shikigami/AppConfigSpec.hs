@@ -78,6 +78,7 @@ surfaceTests =
                 "conversation.idle_timeout_seconds",
                 "credentials.providers.anthropic.api_key",
                 "database.connection_string",
+                "health.port",
                 "http.host",
                 "http.port",
                 "kafka.activity.topic",
@@ -110,6 +111,7 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
+              ("SHIKIGAMI_HEALTH_PORT", "health.port"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
               ("SHIKIGAMI_KAFKA_ACTIVITY_TOPIC", "kafka.activity.topic"),
@@ -316,8 +318,43 @@ requirementTests =
           ("the failure should name the binary and the key:\n" <> Text.unpack (standardError run))
           ( "shikigami-worker" `Text.isInfixOf` standardError run
               && "database.connection_string" `Text.isInfixOf` standardError run
-          )
+          ),
+      -- The four worker processes routinely run on one host, so a shared probe
+      -- default would make three of them fail to bind. Pinning the distinctness
+      -- rather than the numbers alone is what keeps a future role from being
+      -- given a port that is already taken.
+      testCase "every probe-serving role gets its own default port" do
+        fmap portNumber (defaultHealthPort WorkerRole) @?= Just 8091
+        fmap portNumber (defaultHealthPort SchedulerRole) @?= Just 8092
+        fmap portNumber (defaultHealthPort StreamConsumerRole) @?= Just 8093
+        fmap portNumber (defaultHealthPort EventConsumerRole) @?= Just 8094
+        let assigned = [portNumber port | role <- [minBound .. maxBound], Just port <- [defaultHealthPort role]]
+        -- Distinctness is the property that matters; the numbers above are just
+        -- which distinct ones. @nub@ is not imported, so compare against the
+        -- sorted list with adjacent duplicates dropped.
+        sort assigned @?= [8091, 8092, 8093, 8094]
+        dedupe (sort assigned) @?= sort assigned,
+      testCase "roles with no listener of their own get no probe port" $
+        mapM_
+          (\role -> fmap portNumber (defaultHealthPort role) @?= Nothing)
+          [ServerRole, AdminRole, RunBehaviorRole, AgentRunRole, MigrateRole],
+      testCase "an unset health.port leaves each role on its own default" $
+        fmap portNumber (healthPortFor WorkerRole defaultAppConfig) @?= Just 8091,
+      testCase "a configured health.port overrides the role default" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_HEALTH_PORT", "9100")]
+        fmap portNumber (healthPortFor WorkerRole config) @?= Just 9100,
+      -- Resolving fine and then being ignored is the same thing that happens to
+      -- kafka.broker on the scheduler: one declaration serves every binary.
+      testCase "a configured health.port does not give a listener to a role without one" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_HEALTH_PORT", "9100")]
+        fmap portNumber (healthPortFor ServerRole config) @?= Nothing
     ]
+
+-- | Drop adjacent duplicates from a sorted list.
+dedupe :: (Eq a) => [a] -> [a]
+dedupe (x : y : rest) | x == y = dedupe (y : rest)
+dedupe (x : rest) = x : dedupe rest
+dedupe [] = []
 
 -- ── Diagnostics ─────────────────────────────────────────────────────────────
 
