@@ -33,6 +33,7 @@ import Keiro.Workflow
     WorkflowName (..),
     WorkflowOutcome (..),
     awakeableAllocStepPrefix,
+    currentGeneration,
     loadStepIndex,
     patch,
     runWorkflowWith,
@@ -51,6 +52,7 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (renderLearning)
@@ -261,10 +263,21 @@ runConversationWorkflow env mStart msg =
 deliverConversationInput :: ConversationEnv -> AddressedMessage -> IO Bool
 deliverConversationInput env = deliverConversationInputFromApp (appEnv env)
 
+-- | Signal the live @next-message@ awakeable, if one is armed.
+--
+-- __The generation is resolved, never assumed.__ This read used to pass a
+-- literal @0@, which was correct only because nothing rotated the journal. An
+-- awakeable id is allocated fresh in each generation and journaled under
+-- @awkid:next-message@ in /that/ generation's step index, so once
+-- 'continueAsNew' moves the conversation to generation 1 a generation-0 read
+-- finds the previous generation's abandoned id and signals something nobody is
+-- awaiting.
 deliverConversationInputFromApp :: AppEnv -> AddressedMessage -> IO Bool
 deliverConversationInputFromApp appEnv' msg = do
   result <- runAppIO appEnv' do
-    stepIndex <- loadStepIndex conversationWorkflowName (conversationWorkflowId msg) 0
+    let wid = conversationWorkflowId msg
+    generation <- currentGeneration conversationWorkflowName wid
+    stepIndex <- loadStepIndex conversationWorkflowName wid generation
     let aids = pendingInputAids stepIndex
     signalFirst msg aids
   pure case result of
@@ -287,9 +300,15 @@ signalFirst value = \case
       True -> pure True
       False -> signalFirst value rest
 
+-- | Read a turn result back out of the journal, from the live generation.
+--
+-- Same latent bug as 'deliverConversationInputFromApp' had: the literal @0@ was
+-- right only while nothing rotated.
 loadConversationResult :: ConversationEnv -> WorkflowId -> Text -> IO (Maybe ConversationTurnResult)
 loadConversationResult env workflowId msgMessageId = do
-  result <- runAppIO (appEnv env) (loadStepIndex conversationWorkflowName workflowId 0)
+  result <- runAppIO (appEnv env) do
+    generation <- currentGeneration conversationWorkflowName workflowId
+    loadStepIndex conversationWorkflowName workflowId generation
   pure case result of
     Right stepIndex -> Map.lookup (unStepName (turnResultStepName msgMessageId)) stepIndex >>= parseMaybe Aeson.parseJSON
     Left _ -> Nothing
@@ -329,8 +348,59 @@ turnPayload TurnRow {turnIndex, role, content} =
       "content" Aeson..= content
     ]
 
+-- | Which kioku session this conversation is being recorded into.
+--
+-- __Keyed, not scanned.__ This used to ask kioku for every session the agent had
+-- ever had ('Session.getByScope') and then linearly scan for one whose
+-- @subjectRef@ matched — O(sessions per agent) on every turn, over a set that
+-- only grows because nothing ever completed a session. It now asks
+-- @shikigami.conversation_sessions@ for this one conversation's session id.
+--
+-- Kioku remains the authority. The index answers with an id and kioku is still
+-- asked to produce the row, so a stale or wrong pointer can only cause a miss —
+-- it can never invent a session that does not exist.
+--
+-- Three arms, in cost order:
+--
+-- 1. The index hits and kioku confirms a running session for this conversation.
+--    That is the routine case and the only one a healthy conversation takes.
+-- 2. The index misses, or points at something that is no longer this
+--    conversation's running session, so the old scan runs and __backfills the
+--    index__ if it finds one. This is what repairs a session started before the
+--    index existed, and a session whose index write was lost to a crash between
+--    the two transactions.
+-- 3. Nothing exists, so a session is started (which writes the index).
 resolveSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
 resolveSession env decl conversationId = do
+  indexedE <- runKioku env (SessionIndex.lookupConversationSession conversationId)
+  case indexedE of
+    Left err -> pure (Left (Text.pack (show err)))
+    Right indexed -> do
+      confirmed <- maybe (pure Nothing) (confirmIndexedSession env conversationId) indexed
+      case confirmed of
+        Just sid -> pure (Right sid)
+        Nothing -> scanForConversationSession env decl conversationId
+
+-- | Re-read an indexed pointer through kioku before trusting it.
+--
+-- Every way this can disagree with kioku — an unparseable id, a session that was
+-- deleted, one that belongs to a different conversation, one that is no longer
+-- running — resolves to 'Nothing', which sends the caller to the scan. The index
+-- is never allowed to be the reason a turn fails.
+confirmIndexedSession :: ConversationEnv -> Text -> Text -> IO (Maybe SessionId)
+confirmIndexedSession env conversationId sidText =
+  case parseId sidText of
+    Left _ -> pure Nothing
+    Right sid -> do
+      rowE <- runKioku env (Session.getById shikigamiMemorySpace sid)
+      pure case rowE of
+        Right (Right (Just row))
+          | isRunningConversationSession conversationId row -> Just sid
+        _ -> Nothing
+
+-- | The pre-index resolution path, kept as the repair arm behind an index miss.
+scanForConversationSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
+scanForConversationSession env decl conversationId = do
   let scope = agentScope (name decl)
   rowsE <- runKioku env (Session.getByScope shikigamiMemorySpace scope)
   case rowsE of
@@ -338,8 +408,25 @@ resolveSession env decl conversationId = do
     Right (Left err) -> pure (Left (Text.pack (show err)))
     Right (Right rows) ->
       case find (isRunningConversationSession conversationId) rows of
-        Just (SessionRow {sessionId = sidText}) -> pure (first ("parse session id: " <>) (parseId sidText))
+        Just (SessionRow {sessionId = sidText}) ->
+          case parseId sidText of
+            Left err -> pure (Left ("parse session id: " <> err))
+            Right sid -> fmap (const sid) <$> rememberSession env conversationId sid
         Nothing -> startSession env decl conversationId
+
+-- | Point the index at this conversation's session.
+--
+-- The failure is propagated rather than swallowed. An upsert has no domain
+-- refusal layer, so the only way it fails is that the store was unreachable —
+-- and 'resolveSession' runs inside the @resolve-session@ journaled step, so
+-- surfacing it retries the turn, which re-runs the scan and re-attempts the
+-- write. Discarding it would leave the conversation permanently on the scan
+-- path with nothing anywhere saying so.
+rememberSession :: ConversationEnv -> Text -> SessionId -> IO (Either Text ())
+rememberSession env conversationId sid = do
+  now <- getCurrentTime
+  result <- runKioku env (SessionIndex.rememberConversationSession conversationId (idText sid) now)
+  pure (first (\err -> "index conversation session: " <> Text.pack (show err)) result)
 
 isRunningConversationSession :: Text -> SessionRow -> Bool
 isRunningConversationSession conversationId (SessionRow {subjectRef = rowSubjectRef, status = rowStatus}) =
@@ -366,10 +453,13 @@ startSession env decl conversationId = do
             delegationDepth = 0,
             startedAt = now
           }
-  pure case result of
-    Left err -> Left (Text.pack (show err))
-    Right (Left err) -> Left (Text.pack (show err))
-    Right (Right _) -> Right sid
+  case result of
+    Left err -> pure (Left (Text.pack (show err)))
+    Right (Left err) -> pure (Left (Text.pack (show err)))
+    -- The index write follows the session it points at, so a crash between the
+    -- two leaves a pointer-less session rather than a pointer to nothing. That
+    -- is the direction 'scanForConversationSession' can repair.
+    Right (Right _) -> fmap (const sid) <$> rememberSession env conversationId sid
 
 loadTurns :: ConversationEnv -> SessionId -> IO [TurnRow]
 loadTurns env sid = do

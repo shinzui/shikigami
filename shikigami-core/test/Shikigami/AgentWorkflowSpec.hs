@@ -37,11 +37,13 @@ import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
+import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultMemoryPolicy, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -574,15 +576,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                    env =
-                      Conversation.ConversationEnv
-                        { Conversation.appEnv = appEnv,
-                          Conversation.behaviorEnv = behaviorEnv,
-                          Conversation.runTimeout = secondsToNominalDiffTime 300,
-                          Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
-                          Conversation.agents = [conversationDecl],
-                          Conversation.grants = StaticGrants defaultGrantTable
-                        }
+                    env = testConversationEnv appEnv behaviorEnv [conversationDecl]
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
                 secondTurn <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
@@ -626,15 +620,7 @@ tests =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                    env =
-                      Conversation.ConversationEnv
-                        { Conversation.appEnv = appEnv,
-                          Conversation.behaviorEnv = behaviorEnv,
-                          Conversation.runTimeout = secondsToNominalDiffTime 300,
-                          Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
-                          Conversation.agents = [missingTaskDecl],
-                          Conversation.grants = StaticGrants defaultGrantTable
-                        }
+                    env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
 
                 firstFailure <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
                 replayed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
@@ -644,7 +630,82 @@ tests =
                 assertEqual "replay returns the same typed failure" firstFailure replayed
                 stepIndex <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId permanentConversationMessage) 0)
                 assertEqual "conversation journals the dynamic v2 label" (Right True) (Map.member "run-behavior-v2:msg_permanent" <$> stepIndex)
-                assertEqual "conversation never journals the legacy label" (Right False) (Map.member "run-behavior:msg_permanent" <$> stepIndex)
+                assertEqual "conversation never journals the legacy label" (Right False) (Map.member "run-behavior:msg_permanent" <$> stepIndex),
+          -- Session resolution used to be a linear scan over every session the
+          -- agent had ever had, filtered on subjectRef. It is now a keyed read
+          -- of shikigami.conversation_sessions, confirmed against kioku. The
+          -- decoy is a running session in the same scope under a different
+          -- subject: the exact row the scan had to walk past, and the exact row
+          -- a mis-keyed lookup would return.
+          testCase "resolves its own session and ignores a decoy in the same scope" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnv appEnv behaviorEnv [conversationDecl]
+
+                decoy <- startDecoyConversationSession appEnv "heartbeat" "conv_decoy_thread"
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                secondTurn <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
+
+                case (firstTurn, secondTurn) of
+                  (Right firstResult, Right secondResult) -> do
+                    let sid = Conversation.sessionId firstResult
+                    assertEqual "both turns resolve the same session" sid (Conversation.sessionId secondResult)
+                    assertBool "the decoy in the same scope is never selected" (sid /= decoy)
+
+                    indexed <- runAppIO appEnv (SessionIndex.lookupConversationSession "conv_thread_1")
+                    assertEqual
+                      "the index points at this conversation's own session"
+                      (Right (Just (idText sid)))
+                      indexed
+
+                    -- The decoy was started outside the conversation path, so
+                    -- nothing indexed it. That is what makes the hit above a
+                    -- keyed answer rather than a coincidence.
+                    decoyIndexed <- runAppIO appEnv (SessionIndex.lookupConversationSession "conv_decoy_thread")
+                    assertEqual "the decoy conversation has no index row" (Right Nothing) decoyIndexed
+
+                    ours <- runningSessionsFor appEnv "heartbeat" "conv_thread_1"
+                    assertEqual "exactly one running session carries this conversation id" [idText sid] ours
+
+                    theirs <- runningSessionsFor appEnv "heartbeat" "conv_decoy_thread"
+                    assertEqual "the decoy is still running and untouched" [idText decoy] theirs
+                  other -> assertFailure ("both conversation turns should succeed, got " <> show other),
+          -- The ingress path used to read the step index at a hard-coded
+          -- generation 0. That is correct only while nothing rotates the
+          -- journal, and M2 makes every turn rotate. Reading the resolved
+          -- generation must be behaviour-preserving *before* rotation exists,
+          -- which is what this pins: delivery finds the armed promise on a
+          -- parked conversation, and refuses one that was never started rather
+          -- than throwing.
+          testCase "delivery resolves the live generation instead of assuming zero" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnv appEnv behaviorEnv [conversationDecl]
+
+                -- Nothing has run, so there is no instance and no generation.
+                -- currentGeneration answers 0 for an unknown workflow, so this
+                -- is also the proof that the new read is total.
+                cold <- Conversation.deliverConversationInputFromApp appEnv firstAddressedMessage
+                assertEqual "a conversation that never started has nothing to deliver to" False cold
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                assertBool ("first turn should succeed, got " <> show firstTurn) (either (const False) (const True) firstTurn)
+
+                -- The turn parked on next-message, so the promise is armed and
+                -- discoverable through the resolved generation.
+                delivered <- Conversation.deliverConversationInputFromApp appEnv secondAddressedMessage
+                assertEqual "a parked conversation accepts the next message" True delivered
+
+                -- Signalling the same promise twice must not resolve it twice.
+                again <- Conversation.deliverConversationInputFromApp appEnv secondAddressedMessage
+                assertEqual "the promise is consumed once" False again
         ],
       testGroup
         "Delegate"
@@ -977,6 +1038,68 @@ childStatusText = \case
   ChildCompleted -> "completed"
   ChildCancelled -> "cancelled"
   ChildFailed -> "failed"
+
+-- | The conversation environment every Conversation case runs against.
+--
+-- Named rather than repeated per case because there are now several cases and
+-- the interesting differences between them are the agent list and the idle
+-- window, not the six fields they all share.
+testConversationEnv :: AppEnv -> BehaviorEnv -> [AgentDecl] -> Conversation.ConversationEnv
+testConversationEnv appEnv behaviorEnv conversationAgents =
+  Conversation.ConversationEnv
+    { Conversation.appEnv = appEnv,
+      Conversation.behaviorEnv = behaviorEnv,
+      Conversation.runTimeout = secondsToNominalDiffTime 300,
+      Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      Conversation.agents = conversationAgents,
+      Conversation.grants = StaticGrants defaultGrantTable
+    }
+
+-- | A running session in the same agent scope under a different subject.
+--
+-- This is the row the pre-index resolver had to walk past on every single turn:
+-- 'Kioku.Session.getByScope' returns every session the agent has ever had, and
+-- resolution then scanned them for a @subjectRef@ match. The decoy makes "we
+-- selected the right session" a claim with something to be wrong about.
+startDecoyConversationSession :: AppEnv -> Text -> Text -> IO SessionId
+startDecoyConversationSession appEnv agentName decoyConversationId = do
+  now <- getCurrentTime
+  sid <- genSessionId
+  result <-
+    runAppIO appEnv $
+      Session.start
+        StartSessionData
+          { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor agentName,
+            ownerPrincipal = Nothing,
+            agentId = agentName,
+            focus = "conversation",
+            scope = agentScope agentName,
+            subjectRef = Just decoyConversationId,
+            previousSessionId = Nothing,
+            parentSessionId = Nothing,
+            delegationDepth = 0,
+            startedAt = now
+          }
+  case result of
+    Right (Right _) -> pure sid
+    other -> assertFailure ("decoy session should start, got " <> show (first (const ("store-error" :: String)) other))
+
+-- | Every running session in this agent's scope whose subject is this
+-- conversation.
+runningSessionsFor :: AppEnv -> Text -> Text -> IO [Text]
+runningSessionsFor appEnv agentName wantedConversationId = do
+  rows <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope agentName))
+  case rows of
+    Right (Right allRows) ->
+      pure
+        [ sessionId
+        | SessionRow {sessionId, subjectRef, status} <- allRows,
+          subjectRef == Just wantedConversationId,
+          status == "running"
+        ]
+    other -> assertFailure ("getByScope should succeed, got " <> show (first (const ("store-error" :: String)) other))
 
 turnRoleIndex :: TurnRow -> (Text, Int)
 turnRoleIndex TurnRow {role, turnIndex} = (role, turnIndex)

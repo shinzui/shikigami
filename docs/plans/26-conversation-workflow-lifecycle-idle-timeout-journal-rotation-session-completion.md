@@ -103,17 +103,27 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19) Design refreshed: one turn per generation (which makes every label static and
       the body declarable) and one awakeable with two signalers (which makes the idle race a
       single declared `await`). Recorded in the Decision Log.
-- [ ] **M0 (gate, still open): kioku IR-2.** `Kioku.Session` at `0.4.1.0` exports `getById`,
-      `getRecentInNamespace`, `getByScope`, `getByFocus`, `getByStartedRange`, `getChain`,
-      `getDelegationChildren`, `getAwaitingByCorrelationKey`, `getTurns` — and no subjectRef
-      query. `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2` is still `status:
-      proposed`. M1 has a shikigami-side fallback and is not blocked; see M1.
-- [ ] M1: indexed session resolution — `getBySubjectRef` if kioku ships it, otherwise the
-      documented shikigami-side fallback; decoy-session test proves resolution is keyed.
-- [ ] M1: generation-aware ingress and result loading — `deliverConversationInputFromApp`
-      (`Conversation.hs:264-272`) and `loadConversationResult` (`Conversation.hs:290-295`) stop
-      passing a literal `0` to `loadStepIndex`; `Shikigami.Agent.Workflow.Input.deliverInputTo`
-      gets the same fix.
+- [x] (2026-08-20) **M0 (gate) resolved as CLOSED-NEGATIVE: kioku IR-2 has not shipped.**
+      Re-verified against the pinned `kioku 0.4.1.0` checkout: `Kioku.Session`'s export list
+      (`/Users/shinzui/Keikaku/bokuno/kioku/kioku-core/src/Kioku/Session.hs:40-50`) is
+      `getById`, `getRecentInNamespace`, `getByScope`, `getByFocus`, `getByStartedRange`,
+      `getChain`, `getDelegationChildren`, `getAwaitingByCorrelationKey`, `getTurns` — no
+      subjectRef query, and `grep -rn 'getBySubjectRef' kioku-core/src` is empty. M1 therefore
+      took the documented shikigami-side fallback. See the Decision Log entry of 2026-08-20.
+- [x] (2026-08-20) M1: indexed session resolution — the fallback index
+      `shikigami.conversation_sessions` (migration
+      `shikigami-migrations/sql-migrations/2026-08-20-17-30-49-conversation-session-index.sql`),
+      read and written through the new
+      `shikigami-core/src/Shikigami/Agent/Conversation/SessionIndex.hs`. `resolveSession` is now
+      three arms: keyed hit confirmed against kioku, scan-and-backfill on a miss, start on
+      nothing. Test "resolves its own session and ignores a decoy in the same scope" is green.
+- [x] (2026-08-20) M1: generation-aware ingress and result loading —
+      `deliverConversationInputFromApp` and `loadConversationResult` resolve the live generation
+      with `currentGeneration` instead of passing a literal `0`, and
+      `Shikigami.Agent.Workflow.Input.deliverInputTo` got the same fix. Test "delivery resolves
+      the live generation instead of assuming zero" is green, and the two pre-existing
+      Conversation cases pass unchanged — which is the proof the change is behaviour-preserving
+      before rotation exists.
 - [ ] M2: one-turn-per-generation restructure — `ConversationSeed`, `restoreSeed` at the top of
       the body, `continueAsNew` as the final body item, every label static, `ContinuedAsNew`
       handled as success rather than as an error (`Conversation.hs:137`).
@@ -187,6 +197,51 @@ implementation. Provide concise evidence.
 
 - (Everything above was found while refreshing the plan, not while implementing it. Add
   implementation findings below this line.)
+
+- **(2026-08-20, M1) ADR 0012 landed after this plan's refresh and contradicts its central
+  no-patch-guard decision.** `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md`
+  is dated 2026-08-19 — the same day as the refresh — and the plan does not cite it. It quotes
+  `Keiro.Dsl.Diff.classifyWorkflowBody` directly:
+
+  ```haskell
+  safeAdditions =
+    (not (null newPatchIds) || isJust appendedSeed)
+      && comparableNewBody == oldBody
+  ```
+
+  and records that "there is no waiver: `diff`'s only policy flag is `--gate SURFACE`, which
+  *adds* failures." `docs/plans/25-replay-safe-flow-memory-capabilities.md` is cited as the plan
+  that learned this at the gate after concluding the opposite in its Decision Log. This plan was
+  about to make the same mistake. Recorded as a Decision Log entry of the same date.
+
+- **(2026-08-20, M1) `currentGeneration` is total on an unknown workflow, which is what makes the
+  ingress fix safe to land on its own.** `keiro/src/Keiro/Workflow/Schema.hs:362-369`:
+
+  ```sql
+  SELECT COALESCE(MAX(generation), 0)::int4
+  FROM keiro.keiro_workflow_steps
+  WHERE workflow_id = $1 AND workflow_name = $2
+  ```
+
+  So delivering to a conversation that has never run answers generation 0 and finds no pending
+  awakeable, exactly as the hard-coded `0` did. The new test
+  "delivery resolves the live generation instead of assuming zero" pins that cold-start arm
+  alongside the parked and already-consumed arms.
+
+- **(2026-08-20, M1) the existing two Conversation cases passed unchanged after the M1 rewrite**,
+  which is the evidence the plan asked for that the generation fix is behaviour-preserving before
+  rotation exists:
+
+  ```text
+  AgentWorkflow
+    Conversation
+      parks and resumes a danwa conversation as one workflow session:            OK (1.70s)
+      conversation permanent v2 failure completes as a replayable typed failure: OK (1.65s)
+      resolves its own session and ignores a decoy in the same scope:            OK (1.72s)
+      delivery resolves the live generation instead of assuming zero:            OK (1.56s)
+
+  All 7 tests passed (1.72s)
+  ```
 
 
 ## Decision Log
@@ -344,6 +399,50 @@ Record every decision made while working on the plan.
   `Shikigami.Memory.Access` supplies, even though the surrounding code still calls the wrappers.
   Date: 2026-08-19
 
+
+- Decision: **M1 took the fallback index, and the index is a self-healing cache rather than a
+  co-transactional write.**
+  Rationale: kioku IR-2 has not shipped (verified above), so the fallback was the only path. The
+  plan asked for the index row to be written "in the same transaction as `startSession`". That is
+  not reachable without bypassing `Kioku.Session.startWithContext` — the only way to get a
+  shikigami write into kioku's start transaction is to call `runCommandWithSqlEvents` with a raw
+  `StartSession` command and a continuation, which means re-implementing kioku's lineage
+  validation, its start idempotency check, and its memory-access gate in shikigami. That trades a
+  narrow crash window for a permanent duplicate of another service's invariants, and
+  `docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md`
+  is explicit that shikigami answers the space-and-principal question in one place.
+  What replaces it is strictly stronger for the property the transaction was protecting. The index
+  write follows the session, so the only reachable divergence is "a session exists with no index
+  row" — never "an index row points at a session that does not exist". `resolveSession` treats
+  every disagreement with kioku (unparseable id, missing row, wrong subject, not running) as a
+  miss, falls back to the original `getByScope` scan, and **backfills the index** from what it
+  finds. So a crash between the two writes costs one scan and then repairs itself, and so does a
+  conversation whose session predates the index. `confirmIndexedSession` re-reads through
+  `Session.getById` on every hit, which is what keeps kioku the authority rather than the cache.
+  The one place the result is *not* swallowed is the index write itself: it returns its error, and
+  because `resolveSession` runs inside the journaled `resolve-session` step, that surfaces as a
+  turn retry which re-runs the scan and re-attempts the write. Discarding it would leave a
+  conversation permanently on the scan path with nothing anywhere saying so, which is the failure
+  mode ADR 0015 was written about.
+  Date: 2026-08-20
+
+- Decision: **`ConversationSeed` and the rotation restructure must ship behind a new `patch`
+  block, contradicting the 2026-08-19 "do not carry an old branch behind a patch" decision.**
+  Rationale: `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` was accepted on
+  2026-08-19 — the same day this plan was refreshed — and the plan does not cite it. It records
+  that `Keiro.Dsl.Diff.classifyWorkflowBody` admits exactly two additive escapes, "a change wholly
+  contained in a *new* `patch` block, or a terminal `continueAsNew` append", and that everything
+  else is `WorkflowBodyChanged`, breaking on `private-history-read` and `old-binary-read-new-events`
+  with no waiver. M2 adds five steps and one await to a declared body. Under ADR 0012 that is a
+  gated `BREAKING` finding unless the whole addition sits inside one new contiguous patch block.
+  This supersedes the plan's structural argument against a guard, which was that "a guard here
+  would have to hold the *old* loop shape, and the old loop shape is precisely the undeclarable
+  one". That argument is sound about what the `False` branch *contains* but wrong about whether a
+  guard is optional — ADR 0012 makes it a gate condition, not a design preference. The plan's own
+  M2 instruction ("run `just keiro-check`, and let the checker decide") is the tie-breaker, and
+  the checker's rule is already written down. The exact classification transcript is recorded in
+  Surprises & Discoveries.
+  Date: 2026-08-20
 
 ## Outcomes & Retrospective
 
