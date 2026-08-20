@@ -36,7 +36,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-20T00:56:21Z) Milestone 3 poison path: malformed records persist bounded evidence and delivery coordinates to the configured PGMQ queue before `AckDeadLetter`; failed persistence becomes `AckHalt`.
 - [x] (2026-08-20T00:35:42Z) Consumer composition updates: `consume-stream`/`consume-events` `onHit` is logging-only and each startup calls `ensureRunQueue` before subscribing.
 - [x] (2026-08-20T00:35:42Z) Registered `Shikigami.StreamInboxSpec` in the worker test suite; `nix develop -c cabal build all` passes and all 27 worker tests pass after Milestone 1.
-- [ ] Final validation: `StreamInboxSpec` now covers disposition/ack, unavailable store, durable poison-DLQ, and failed-DLQ behavior (31 worker tests pass); run `cabal test all` and the feasible manual resilience checks.
+- [x] (2026-08-20T01:03:04Z) Final validation: all 31 worker tests pass, `nix develop -c cabal build all` passes, and every suite in `nix develop -c cabal test all --test-show-details=streaming` passes. The manual broker-restart check is inapplicable in this checkout because `process-compose.yaml` contains only Postgres; that substrate belongs to unfinished plan 31.
 
 
 ## Surprises & Discoveries
@@ -82,6 +82,17 @@ implementation. Provide concise evidence.
   exceptions remain programming failures and escape after Shibuya halts without storing the
   offset. Evidence: the unavailable-port acceptance test initially raised
   `NotifierConnectError`, then passed after the typed boundary was added.
+
+- The manual instructions assumed the repository's process-compose stack included Kafka,
+  but the checked-in file currently defines only Postgres and schema creation. Starting a
+  private broker or expanding the deployment stack is outside this plan; plan 31 already
+  owns that work. Evidence: the complete `process-compose.yaml` process list has
+  `sanity_check`, `create_schema`, and `postgres`, with no broker process.
+
+- This repository has no `just check-adr` recipe or ADR profile. The attempted command
+  reports `justfile does not contain recipe check-adr`; `docs/adr/README.md` defines the
+  corpus as plain Markdown, so ADR 0009 was checked against that filesystem convention and
+  its Mori references were resolved with `mori path`.
 
 
 ## Decision Log
@@ -178,6 +189,14 @@ offset. The poison message retains topic/partition/offset, a 2,048-character-bou
 and at most 256 payload bytes with full byte count/truncation metadata. All 31 worker tests
 pass, including a real unavailable-store probe and both dead-letter outcomes.
 
+Plan complete (2026-08-19). The original loss windows are closed: Postgres can expose
+neither a completed inbox row without its jobs nor a committed-over poison record without
+durable evidence, and application code has no Kafka commit path. Repository-wide build and
+test validation passes. The durable architecture contract is distilled in
+[ADR 0009](../adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md). The live
+broker restart demonstration remains unavailable until plan 31 adds Kafka to the local
+process-compose substrate; this is a validation-environment gap, not an implementation gap.
+
 
 ## Context and Orientation
 
@@ -195,7 +214,7 @@ No Kafka resilience. `runKafkaConsumer props sub loop` is run once under `runErr
 
 Supporting pieces touched: `runJobFromEnvelope :: AgentDecl -> ActivityEnvelope -> RunJob` is the pure stream-hit→job builder (its epoch fallback is fixed by docs/plans/20, not here); the event-hit path builds a `TriggeredByEvent` job with idempotency key `agentName <> ":" <> messageId`. `Shikigami.Agent.RunJob.RunJob` is the queue payload type. The worker draining the queue is unaffected by this plan.
 
-Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`) provisions a per-test Postgres with all schemas migrated, including `keiro` (inbox tables) and `pgmq`. Kafka is not available in tests; the transactional core is therefore factored so it is testable without a broker, and the reconnect behavior is validated manually (the repo's `process-compose.yaml` runs a broker for the living-loop demo).
+Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`) provisions a per-test Postgres with all schemas migrated, including `keiro` (inbox tables) and `pgmq`. Kafka is not available in tests; the transactional core is therefore factored so it is testable without a broker. The checked-in `process-compose.yaml` also lacks a broker, so the manual restart demonstration awaits plan 31's deployment-substrate work.
 
 
 ## Plan of Work
@@ -301,7 +320,7 @@ Manual Kafka-resilience check (needs the demo stack):
 
 ```bash
 nix develop -c just create-database
-nix develop -c process-compose up   # brings up Postgres + Kafka per process-compose.yaml
+nix develop -c process-compose up   # after plan 31 adds Kafka; current checkout starts only Postgres
 cabal run shikigami-consume-stream -- --config config/consume-stream-dev.yaml
 # in another shell: restart the Kafka broker process
 ```
@@ -393,3 +412,6 @@ the worker's workflow dedupe and must not change here.
 - 2026-08-19: Recorded Milestones 2/3 implementation: Shibuya serial acknowledgement,
   bounded reconnect supervision, typed programming-failure escape, configured PGMQ poison
   storage, adapter key limitation, and the expanded 31-test worker acceptance suite.
+- 2026-08-19: Completed repository-wide validation, recorded the missing local Kafka/ADR
+  validation recipes, and distilled the durable boundary into
+  [ADR 0009](../adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md).
