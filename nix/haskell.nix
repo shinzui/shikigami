@@ -26,7 +26,13 @@
         pkgs.zlib
         pkgs.just
         pkgs.pkg-config
-        pkgs.postgresql
+        # PostgreSQL 18 specifically, not the nixpkgs default. keiro-migrations
+        # 0.13 embeds a PG 18 schema snapshot and its verifyExpectedSchema
+        # refuses any other major version outright, so on PG 17 every keiro-ops
+        # verb mounted into the `shikigami` binary -- including the read-only
+        # ones -- fails before it runs. See
+        # docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md.
+        pkgs.postgresql_18
         pkgs.jq
         pkgs.process-compose
       ];

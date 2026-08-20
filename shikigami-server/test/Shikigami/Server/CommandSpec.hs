@@ -12,8 +12,10 @@ module Shikigami.Server.CommandSpec (tests) where
 
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
+import Data.Text qualified as Text
 import Options.Applicative
-import Shikigami.Server.Command (adminInfo, adminSubcommands)
+import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
+import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -30,7 +32,8 @@ tests =
                 "stub-kawa",
                 "danwa-spike",
                 "grants",
-                "agents"
+                "agents",
+                "runs"
               ],
       testCase "shikigami --help lists every command" do
         let rendered = helpTextOf ["--help"]
@@ -77,7 +80,7 @@ tests =
       -- A diagnostic with no subcommand has to parse: it is how an operator
       -- inspects the schema, and there is nothing to run.
       testCase "a diagnostic parses with no subcommand at all" $
-        case execParserPure defaultPrefs adminInfo ["--describe-config"] of
+        case execParserPure adminPrefs adminInfo ["--describe-config"] of
           Success (chosen, _) -> assertBool "no subcommand should have been chosen" (isNothing chosen)
           Failure failure ->
             let (message, _) = renderFailure failure "shikigami"
@@ -91,7 +94,63 @@ tests =
       testCase "a subcommand's downstream flags name the configuration keys they set" do
         assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
         assertMentions ["stub-kawa", "--help"] ["kafka.broker"]
-        assertMentions ["danwa-spike", "--help"] ["sinks.danwa.base_url"]
+        assertMentions ["danwa-spike", "--help"] ["sinks.danwa.base_url"],
+      -- The mounted keiro-ops tree is not in `adminSubcommands` -- it cannot be,
+      -- because keiro-ops exports its tree as one ParserInfo over an abstract
+      -- type -- so nothing above covers it. A mount that silently stopped
+      -- resolving would still compile and would still pass every test before
+      -- this one.
+      testCase "every mounted keiro-ops group is reachable from the top level" do
+        let rendered = helpTextOf ["--help"]
+        mapM_
+          (\name -> assertBool (name <> " is not mounted:\n" <> rendered) (name `isInfixOf` rendered))
+          ["wf", "timer", "outbox", "inbox", "pgmq", "projection", "shard", "snapshot", "stream"],
+      testCase "a mounted group renders its own help" do
+        let rendered = helpTextOf ["wf", "--help"]
+        mapM_
+          (\verb -> assertBool ("wf help does not mention " <> verb <> ":\n" <> rendered) (verb `isInfixOf` rendered))
+          ["list", "show", "cancel", "resurrect", "lease"],
+      -- keiro-ops declares --force before its subcommand, but the message it
+      -- prints tells the operator to re-run `... wf cancel NAME ID --force`
+      -- with the flag last. This pins that the printed form actually parses, so
+      -- a preview can never advertise a command this binary would reject. It
+      -- passes under either parser preference -- an unrecognised option is
+      -- handed back to the parent parser, and --force belongs to the parent --
+      -- so it guards the arrangement, not the preference.
+      testCase "a mutating verb accepts --force after its arguments" $
+        case execParserPure adminPrefs adminInfo ["wf", "cancel", "shikigami.agent-run", "run-1", "--force"] of
+          Success (chosen, _) ->
+            assertBool "no command was chosen for a forced cancel" (not (isNothing chosen))
+          Failure failure ->
+            let (message, _) = renderFailure failure "shikigami"
+             in assertBool ("a forced cancel did not parse:\n" <> message) False
+          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
+      -- The companion to the case above: a flag nobody declares must still be
+      -- refused there. Without this, the case above would pass just as happily
+      -- against a parser that swallowed anything after the arguments.
+      testCase "an undeclared flag in that same position is refused" $
+        case execParserPure adminPrefs adminInfo ["wf", "cancel", "shikigami.agent-run", "run-1", "--nonsense"] of
+          Success _ -> assertBool "an undeclared flag was accepted after a verb's arguments" False
+          Failure _ -> pure ()
+          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
+      -- The audit line is built from the process arguments, which is the one
+      -- place a connection string arrives in the clear.
+      testCase "no spelling of --database-url survives into an audit line" do
+        let secret = "postgresql://user:hunter2@host/db"
+        mapM_
+          ( \argv ->
+              assertBool
+                ("a connection string survived redaction: " <> show (redactDatabaseUrl argv))
+                (not (secret `Text.isInfixOf` redactDatabaseUrl argv))
+          )
+          [ ["wf", "list", "--database-url", secret],
+            ["wf", "list", "--database-url=" <> secret],
+            ["--database-url", secret, "wf", "list"]
+          ]
+        -- Redaction must not eat the command itself.
+        assertBool
+          "redaction dropped the verb"
+          ("wf list" `Text.isInfixOf` redactDatabaseUrl ["wf", "list", "--database-url", secret])
     ]
 
 assertMentions :: [String] -> [String] -> IO ()
@@ -110,7 +169,7 @@ assertMentions args expected =
 -- help, which is itself the bug these tests look for.
 helpTextOf :: [String] -> String
 helpTextOf args =
-  case execParserPure defaultPrefs adminInfo args of
+  case execParserPure adminPrefs adminInfo args of
     Failure failure -> let (message, _) = renderFailure failure "shikigami" in message
     Success _ -> "unexpected success: the parser did not handle --help"
     CompletionInvoked _ -> "unexpected completion invocation"

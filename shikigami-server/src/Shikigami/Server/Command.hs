@@ -31,6 +31,7 @@
 -- @execParserPure@.
 module Shikigami.Server.Command
   ( adminInfo,
+    adminPrefs,
     adminSubcommands,
     AdminAction,
     runAdmin,
@@ -52,8 +53,10 @@ import Shikigami.Server.Command.Agents (runAgentsList)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
+import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
+import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
 import System.Exit (ExitCode (..), exitWith)
@@ -64,14 +67,44 @@ import System.IO (hPutStrLn, stderr)
 type AdminAction = (AppConfig -> IO (), [Source])
 
 -- | The whole @shikigami@ command line.
+--
+-- The chosen command is either one of this repository's own subcommands or one
+-- of the mounted @keiro-ops@ groups, which is why the two are an alternative
+-- rather than entries in one list. @keiro-ops@ exports its tree as a whole
+-- 'ParserInfo' over an abstract @OpsInvocation@, so its groups cannot be
+-- unpacked into 'adminSubcommands' and mounted individually — see
+-- "Shikigami.Server.Command.Ops".
+--
+-- Shikigami's own subcommands come first so that a name appearing in both
+-- resolves here rather than upstream. None collide today; if one ever does,
+-- this is where the collision is decided, and deliberately.
 adminInfo :: ParserInfo (Maybe AdminAction, ConfigOptions)
 adminInfo =
   info
-    (((,) <$> optional (subparser (foldMap snd adminSubcommands)) <*> configOptions) <**> helper)
+    (((,) <$> optional (subparser (foldMap snd adminSubcommands) <|> opsAction) <*> configOptions) <**> helper)
     ( fullDesc
         <> progDesc "shikigami declared-agent runtime: administrative commands"
         <> failureCode usageExitCode
     )
+  where
+    opsAction = (\invocation -> (runOps invocation, [])) <$> opsInvocationParser
+
+-- | The parser preferences this command line is run with.
+--
+-- @subparserInline@ matches what @keiro-ops@'s own @main@ uses, so a command an
+-- operator reads in Keiro's documentation parses the same way here as it does
+-- against the standalone binary. Behavioural parity with the tree we mounted is
+-- the whole reason to take a preference from it.
+--
+-- It is /not/ what makes @--force@ work after a subcommand, which was this
+-- comment's original claim and is false: optparse-applicative hands an option
+-- it does not recognise back to the parent parser, and @--force@ belongs to the
+-- parent, so @wf cancel NAME ID --force@ parses under 'defaultPrefs' too. That
+-- was checked by running the binary both ways rather than reasoned about.
+--
+-- Exported so a test drives the same parser an operator does.
+adminPrefs :: ParserPrefs
+adminPrefs = prefs subparserInline
 
 -- | Parse the command line, resolve configuration, and run the chosen command.
 --
@@ -80,7 +113,7 @@ adminInfo =
 -- producer.
 runAdmin :: IO ()
 runAdmin = do
-  (chosen, options) <- execParser adminInfo
+  (chosen, options) <- customExecParser adminPrefs adminInfo
   case chosen of
     -- A diagnostic with no subcommand is legitimate, and 'runAppConfig' exits
     -- inside it. Reaching the next line therefore means no command was given.
@@ -105,8 +138,41 @@ adminSubcommands =
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
     ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
     ("grants", command "grants" grantsInfo),
-    ("agents", command "agents" agentsInfo)
+    ("agents", command "agents" agentsInfo),
+    ("runs", command "runs" runsInfo)
   ]
+
+-- | @runs@ is the join across keiro and kioku that neither library can perform.
+--
+-- Everything about the keiro half alone is already served by the mounted
+-- @keiro-ops@ tree; this group exists only for what that tree structurally
+-- cannot know. See "Shikigami.Server.Command.Runs".
+runsInfo :: ParserInfo AdminAction
+runsInfo =
+  info
+    (subparser (foldMap snd runsSubcommands) <**> helper)
+    (progDesc "Inspect an agent run across its keiro workflow and its kioku session")
+
+runsSubcommands :: [(String, Mod CommandFields AdminAction)]
+runsSubcommands = [("show", command "show" runsShowInfo)]
+
+-- | @runs show \<workflow-name\> \<workflow-id\> [--json]@.
+--
+-- Both positional arguments are required because keiro keys an instance by
+-- @(workflow_name, workflow_id)@, which is also why @keiro-ops@'s own @wf@ verbs
+-- take the pair. Defaulting the name would make the command wrong for
+-- conversation workflows rather than merely terse.
+runsShowInfo :: ParserInfo AdminAction
+runsShowInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Show one run's workflow instance and its kioku session together")
+  where
+    parser =
+      (\wfName wfId asJson -> (runRunsShow wfName wfId asJson, []))
+        <$> strArgument (metavar "WORKFLOW_NAME" <> help "such as shikigami.agent-run")
+        <*> strArgument (metavar "WORKFLOW_ID" <> help "the run job's idempotency key")
+        <*> switch (long "json" <> help "Emit machine-readable JSON")
 
 -- | @agents@ is a group from the start, though it has one verb today.
 --
