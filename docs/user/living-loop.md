@@ -34,11 +34,20 @@ publish-fixture ──▶ activity.v1 ──▶ consume-stream (matches agents) 
   ```console
   $ process-compose up        # postgres + just create-database
   ```
-- A Kafka/Redpanda broker reachable for the stream commands. The stream commands default to
-  broker `127.0.0.1:9092` and topic `activity.v1`; point `--broker` at your broker.
+- The globally managed Redpanda broker reachable at `127.0.0.1:9092`. Verify it before
+  starting a stream command:
+
+  ```console
+  $ rpk cluster info --brokers 127.0.0.1:9092
+  ```
+
+  The stream commands default to that broker and topic `activity.v1`; point `--broker` at
+  another broker only when intentionally testing a different cluster.
 
   > The bundled `process-compose.yaml` starts **Postgres only**. Run a broker separately (or
-  > skip the stream and use the addressed `enqueue-run` path, which needs no broker).
+  > skip the stream and use the addressed `enqueue-run` path, which needs no broker). In the
+  > standard development environment, the separate broker is the global Redpanda service;
+  > do not start a repository-private broker on the same port.
 
 ## Walkthrough
 

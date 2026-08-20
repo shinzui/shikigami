@@ -36,7 +36,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-20T00:56:21Z) Milestone 3 poison path: malformed records persist bounded evidence and delivery coordinates to the configured PGMQ queue before `AckDeadLetter`; failed persistence becomes `AckHalt`.
 - [x] (2026-08-20T00:35:42Z) Consumer composition updates: `consume-stream`/`consume-events` `onHit` is logging-only and each startup calls `ensureRunQueue` before subscribing.
 - [x] (2026-08-20T00:35:42Z) Registered `Shikigami.StreamInboxSpec` in the worker test suite; `nix develop -c cabal build all` passes and all 27 worker tests pass after Milestone 1.
-- [x] (2026-08-20T01:03:04Z) Final validation: all 31 worker tests pass, `nix develop -c cabal build all` passes, and every suite in `nix develop -c cabal test all --test-show-details=streaming` passes. The manual broker-restart check is inapplicable in this checkout because `process-compose.yaml` contains only Postgres; that substrate belongs to unfinished plan 31.
+- [x] (2026-08-20T01:15:28Z) Final validation: all 31 worker tests pass, `nix develop -c cabal build all` passes, and every suite in `nix develop -c cabal test all --test-show-details=streaming` passes. Against the globally managed Redpanda broker at `127.0.0.1:9092`, a consumer on an isolated topic processed one event, survived a controlled `redpanda-0` restart, processed a second event, and reached committed offset 2 with lag 0; Postgres held two completed inbox rows and their two run jobs before the test artifacts were removed.
 
 
 ## Surprises & Discoveries
@@ -83,11 +83,18 @@ implementation. Provide concise evidence.
   offset. Evidence: the unavailable-port acceptance test initially raised
   `NotifierConnectError`, then passed after the typed boundary was added.
 
-- The manual instructions assumed the repository's process-compose stack included Kafka,
-  but the checked-in file currently defines only Postgres and schema creation. Starting a
-  private broker or expanding the deployment stack is outside this plan; plan 31 already
-  owns that work. Evidence: the complete `process-compose.yaml` process list has
-  `sanity_check`, `create_schema`, and `postgres`, with no broker process.
+- The repository's process-compose stack intentionally contains only Postgres, but that does
+  not make broker validation unavailable: development tests use the globally managed
+  Redpanda broker exposed at `127.0.0.1:9092`. Evidence: `container inspect redpanda-0`
+  identifies the managed Redpanda 26.2.1 broker and its host port, while
+  `rpk cluster info --brokers 127.0.0.1:9092` reports the live single-node cluster.
+
+- During a controlled global-broker restart, librdkafka kept the consumer process alive and
+  repaired the connection internally; the outer application backoff did not emit a
+  `stream.consumer.reconnecting` event for this outage. After Redpanda returned, the same
+  consumer process rejoined, matched the next record, and committed through offset 2 with
+  lag 0. The outer 1/2/4/.../30-second supervisor remains the fallback for Kafka errors that
+  escape the client/adapter or for ordered processor halts.
 
 - This repository has no `just check-adr` recipe or ADR profile. The attempted command
   reports `justfile does not contain recipe check-adr`; `docs/adr/README.md` defines the
@@ -167,6 +174,14 @@ Record every decision made while working on the plan.
   record cannot be committed.
   Date: 2026-08-19
 
+- Decision: Use the globally managed Redpanda broker at `127.0.0.1:9092` for live Kafka
+  validation; do not treat the absence of a broker in this repository's process-compose file
+  as a validation blocker.
+  Rationale: the shared development broker is the established test substrate. An isolated
+  topic and consumer group make the proof independent of other users, while the broker
+  lifecycle remains globally managed rather than duplicated in each repository.
+  Date: 2026-08-19
+
 
 ## Outcomes & Retrospective
 
@@ -194,8 +209,11 @@ neither a completed inbox row without its jobs nor a committed-over poison recor
 durable evidence, and application code has no Kafka commit path. Repository-wide build and
 test validation passes. The durable architecture contract is distilled in
 [ADR 0009](../adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md). The live
-broker restart demonstration remains unavailable until plan 31 adds Kafka to the local
-process-compose substrate; this is a validation-environment gap, not an implementation gap.
+global-Redpanda proof also passes: one consumer processed records on both sides of a broker
+restart, its group committed offset 2 with lag 0, and the two corresponding completed inbox
+rows and run jobs demonstrated end-to-end durable progress. librdkafka self-healed this
+ordinary broker interruption without terminating the Shibuya processor; the explicit outer
+backoff remains for failures that do escape that boundary.
 
 
 ## Context and Orientation
@@ -214,7 +232,7 @@ No Kafka resilience. `runKafkaConsumer props sub loop` is run once under `runErr
 
 Supporting pieces touched: `runJobFromEnvelope :: AgentDecl -> ActivityEnvelope -> RunJob` is the pure stream-hit→job builder (its epoch fallback is fixed by docs/plans/20, not here); the event-hit path builds a `TriggeredByEvent` job with idempotency key `agentName <> ":" <> messageId`. `Shikigami.Agent.RunJob.RunJob` is the queue payload type. The worker draining the queue is unaffected by this plan.
 
-Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`) provisions a per-test Postgres with all schemas migrated, including `keiro` (inbox tables) and `pgmq`. Kafka is not available in tests; the transactional core is therefore factored so it is testable without a broker. The checked-in `process-compose.yaml` also lacks a broker, so the manual restart demonstration awaits plan 31's deployment-substrate work.
+Test infrastructure: `withShikigamiMigratedDatabase` (`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`) provisions a per-test Postgres with all schemas migrated, including `keiro` (inbox tables) and `pgmq`. Automated tests keep the transactional core broker-free. Live Kafka checks use the globally managed Redpanda broker at `127.0.0.1:9092`; the checked-in `process-compose.yaml` starts only this repository's Postgres and schema setup.
 
 
 ## Plan of Work
@@ -316,16 +334,24 @@ StreamInbox
   failed dead-letter persistence halts without commit:              OK
 ```
 
-Manual Kafka-resilience check (needs the demo stack):
+Manual Kafka-resilience check (uses the global Redpanda broker):
 
 ```bash
 nix develop -c just create-database
-nix develop -c process-compose up   # after plan 31 adds Kafka; current checkout starts only Postgres
+rpk cluster info --brokers 127.0.0.1:9092
 cabal run shikigami-consume-stream -- --config config/consume-stream-dev.yaml
-# in another shell: restart the Kafka broker process
+# In another shell, briefly restart the globally managed broker:
+container stop redpanda-0
+container start redpanda-0
 ```
 
-Expected consumer stderr: a `reconnecting in 1s: …` line (then 2s, 4s… if the broker stays down), followed by resumed `MATCH` lines once the broker returns — instead of today's single fatal `consumer error:` line and silence.
+Coordinate the brief restart with other users of the shared broker, and use an isolated
+topic and consumer group so the test records and offsets do not collide with their work.
+Expected consumer output is librdkafka disconnect/rejoin diagnostics followed by a resumed
+`stream.record.matched` event after the broker returns; the process must not exit. Confirm
+the isolated group has zero lag with `rpk group describe`. Kafka failures that escape
+librdkafka/Shibuya instead exercise the application's `stream.consumer.reconnecting` path
+with its 1/2/4/.../30-second capped delay.
 
 
 ## Validation and Acceptance
@@ -346,7 +372,11 @@ Poison handling: feed garbage bytes; assert a durable dead-letter row contains d
 coordinates, error, and bounded evidence before `PermanentlyDeadLettered` permits commit.
 Force dead-letter persistence to fail and assert `TransientFailure` with no commit.
 
-End-to-end behavior beyond tests: with the demo stack running and `PG_CONNECTION_STRING` set, stop Postgres, publish an activity fixture (`cabal run shikigami -- publish-fixture …`), observe the consumer log `RetryRecord`-driven reconnects without committing, restart Postgres, and observe the same event get processed and enqueued exactly once — where today it would have been committed-over and lost.
+End-to-end database behavior beyond tests: with this repository's Postgres and the global
+Redpanda broker running, stop Postgres and publish an activity fixture. Observe
+`stream.record.transient_failure` followed by an ordered-processor halt/reconnect without
+offset advancement. Restart Postgres and observe the same event get processed and enqueued
+exactly once; before this plan it would have been committed-over and lost.
 
 
 ## Idempotence and Recovery
@@ -415,3 +445,7 @@ the worker's workflow dedupe and must not change here.
 - 2026-08-19: Completed repository-wide validation, recorded the missing local Kafka/ADR
   validation recipes, and distilled the durable boundary into
   [ADR 0009](../adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md).
+- 2026-08-19: Corrected the stale assumption that Kafka validation depended on the local
+  process-compose file. Recorded the successful isolated-topic proof across a controlled
+  restart of the globally managed Redpanda broker and the observed librdkafka self-healing
+  path.
