@@ -157,13 +157,23 @@ This section must always reflect the actual current state of the work.
       `ConversationStart` — the existing code path, unchanged" silently returned the *previous*
       epoch's result and dropped the message. See Surprises & Discoveries. Test "opens a new epoch
       after idle timeout, chaining session lineage".
-- [ ] M4: racing-message smoothing — next-turn awakeable allocated before the behavior runs;
-      undelivered-but-live messages redelivered instead of restarting the conversation; the
-      worker's `RetryDefault` demoted to a genuine-failure fallback.
-- [ ] M5: tests — extend the `Conversation` group in
-      `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:536-614` with idle-timeout, new-epoch,
-      rotation, and racing cases; update the two existing cases for the label change; `cabal test
-      all` green.
+- [x] (2026-08-20) M4: racing-message smoothing — the next turn's awakeable is allocated before
+      the behavior runs (and withdrawn with `cancelAwakeable` if the turn then fails), and an
+      undelivered message whose instance is still live returns the new `ConversationBusy` outcome
+      instead of running a `ConversationStart` against a live workflow. `liveConversationInstance`
+      asks `Keiro.Workflow.Instance.lookupInstance` rather than inferring liveness from the
+      journal, because a failed or cancelled instance has a journal and would otherwise be
+      reported busy forever. The worker maps `ConversationBusy` to `RetryDefault` as backpressure
+      and logs `worker.conversation.redelivered` at **info**, leaving error level for genuine
+      faults. Tests "arms the next promise before running the behavior" and "redelivers a message
+      that finds no armed promise, rather than restarting".
+- [x] (2026-08-20) M5: tests — the `Conversation` group went from 2 cases to 13. The two
+      pre-existing cases were rewritten for the static labels and the two-generation layout; the
+      new cases are the decoy resolution, the generation-aware delivery, five-turn rotation, idle
+      timeout, superseded timer, new epoch with lineage, early promise arming, and busy
+      redelivery. `cabal test all -j1` is green across all eight suites (432 tests). The parallel
+      form is not reliable on this machine for an environment reason recorded in Surprises &
+      Discoveries — it is a kernel shared-memory limit hit by `initdb`, not a test or code fault.
 - [x] (2026-08-20) M5 (done early, with M2, because M2 is what invalidated them):
       `docs/workflow-versioning.md` — the journal table now lists both conversation shapes, the
       ordinal-derived-names paragraph records that `next-message:<ordinal>` survives only on the
@@ -360,6 +370,48 @@ implementation. Provide concise evidence.
   `scheduler.timer.unknown_kind` error log per ramp timer, which is noise an operator will
   eventually ask about. Out of scope here — this plan does not own kioku distillation — but it
   should not stay unrecorded.
+
+- **(2026-08-20, M4) resuming a rotated generation with the wrong options makes it take the
+  legacy branch and crash — a live demonstration of what ADR 0004 is for.** The first version of
+  the M4 test resumed with `defaultWorkflowResumeOptions`, whose active patch set is empty. A
+  generation created by `continueAsNew` has not journaled its own patch decision yet, so
+  `patch shikigami-conversation-rotation-v1` read `False`, the body took the legacy branch, and
+  `ingestStart` — which on that branch has no seed to fall back on — failed:
+
+  ```text
+  keiro resume worker: workflow shikigami.danwa-conversation (id danwa-conversation:conv_thread_1)
+    crashed on attempt 1/5: user error (danwa conversation workflow resumed before ingest-start was journaled)
+  ```
+
+  The generation's step index showed exactly that: `["__workflow_seed__",
+  "patch:shikigami-conversation-rotation-v1"]` — the seed was there, carrying `msg_human_2`, and
+  the body never got far enough to read it. Production is correct
+  (`shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs:39` uses
+  `shikigamiWorkflowResumeOptions`, and its registry includes the conversation); the test was not.
+  The fix was a named `resumeConversationOnce` helper that carries the production options, so the
+  test cannot drift from the deployment again.
+  The transferable point: a patched body makes the resume options load-bearing in a way an
+  unpatched one does not. Rotation plus a guard means a *fresh* generation is created on the fly,
+  and a fresh generation is exactly where an empty active-patch set does damage.
+
+- **(2026-08-20, M5) `cabal test all` in its parallel form is unreliable on this machine, and the
+  reason is the kernel, not the tests.** Every database-backed case provisions its own ephemeral
+  Postgres cluster with `initdb`, and each cluster needs a SysV shared-memory segment. With eight
+  suites running concurrently the system-wide segment limit is reached and `initdb` fails before
+  any shikigami code runs:
+
+  ```text
+  FATAL:  could not create shared memory segment: No space left on device
+  DETAIL:  Failed system call was shmget(key=853537982, size=56, 03600).
+  HINT:  ... all available shared memory IDs have been taken, in which case you need to raise
+         the SHMMNI parameter in your kernel ...
+  ```
+
+  The failures land on whichever cases happen to be provisioning at that moment — `GrantStore`
+  paging, profile resolution — none of which this plan touches, and they move between runs.
+  `cabal test all -j1` is green across all eight suites. This is pre-existing and capacity-shaped
+  rather than caused by this plan; adding two database-backed cases moved it from "usually fits"
+  to "usually does not". Recorded so the next contributor does not spend an hour on a phantom.
 
 - **(2026-08-20, M1) the existing two Conversation cases passed unchanged after the M1 rewrite**,
   which is the evidence the plan asked for that the generation fix is behaviour-preserving before

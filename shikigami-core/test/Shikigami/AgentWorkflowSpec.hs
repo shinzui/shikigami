@@ -84,6 +84,7 @@ import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (revokeGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -806,10 +807,13 @@ tests =
                 fired <- fireDueConversationIdleTimer appEnv
                 assertBool "the idle timer fires" fired
 
-                -- Firing resolves the awakeable; driving the workflow is what
-                -- lets it observe the timeout and end.
-                resumed <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
-                assertBool ("the epoch should end cleanly, got " <> show resumed) (either (const False) (const True) resumed)
+                -- Firing resolves the awakeable and flips the instance back to
+                -- running; the resume worker is what drives it to observe the
+                -- timeout and end. That is the production path -- the ingress
+                -- path deliberately will not drive a live conversation, which is
+                -- the same refusal the busy case relies on.
+                resumed <- runAppIO appEnv (resumeConversationOnce appEnv env)
+                assertEqual "the resume pass ends the idle epoch" (Right 1) (completed <$> resumed)
 
                 (completedStatus, _) <- conversationSessionState appEnv sid
                 assertEqual "the idle timeout completes the kioku session" "completed" completedStatus
@@ -871,8 +875,8 @@ tests =
                   Left err -> assertFailure ("first turn should succeed, got " <> show err)
 
                 _ <- fireDueConversationIdleTimer appEnv
-                ended <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
-                assertBool ("the epoch should end, got " <> show ended) (either (const False) (const True) ended)
+                ended <- runAppIO appEnv (resumeConversationOnce appEnv env)
+                assertEqual "the resume pass ends the idle epoch" (Right 1) (completed <$> ended)
 
                 (closedStatus, _) <- conversationSessionState appEnv firstSession
                 assertEqual "the first epoch's session is closed" "completed" closedStatus
@@ -910,7 +914,99 @@ tests =
                 epoch1 <- conversationStepKeysAt 1 appEnv secondAddressedMessage 0
                 assertBool "epoch 0's journal holds the timeout that ended it" (Map.member "idle-timeout" epoch0)
                 assertBool "epoch 1 has a journal of its own" (Map.member "turn-result" epoch1)
-                assertBool "epoch 1 did not end" (not (Map.member "idle-timeout" epoch1))
+                assertBool "epoch 1 did not end" (not (Map.member "idle-timeout" epoch1)),
+          -- The next turn's promise is now armed BEFORE the behavior runs, so
+          -- the window in which a message finds nothing to signal is a few
+          -- journaled steps rather than a whole model call.
+          --
+          -- A failing turn is what makes that testable without racing a thread:
+          -- the behavior fails, so the turn never reaches the point where the
+          -- promise used to be allocated -- and the promise is in the journal
+          -- anyway. The old ordering could not have produced this journal.
+          -- Because the turn then ends, the promise is withdrawn rather than
+          -- left pending on a workflow that is over.
+          testCase "arms the next promise before running the behavior" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
+
+                failed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
+                assertBool
+                  ("the turn should fail permanently, got " <> show failed)
+                  (either (Text.isInfixOf "unknown task" . Conversation.conversationTurnFailureDetail) (const False) failed)
+
+                keys <- conversationStepKeys appEnv permanentConversationMessage 0
+                assertBool "the promise was allocated before the behavior ran" (Map.member "awkid:next-message" keys)
+                assertBool "the behavior did run and failed" (Map.member "run-behavior-v2" keys)
+                assertBool "the turn recorded no result" (not (Map.member "turn-result" keys))
+
+                pending <- runAppIO appEnv countPendingAwakeables
+                assertEqual "a failed turn withdraws the promise it armed" (Right 0) pending,
+          -- The routine busy case used to run down an error path. A message that
+          -- finds no armed promise was treated as a brand-new conversation, so
+          -- it ran a ConversationStart against a live workflow and came back as
+          -- a transient failure -- indistinguishable, to the worker, from a
+          -- store problem.
+          --
+          -- Consuming the promise without driving the workflow reproduces that
+          -- window deterministically: the instance is alive, nothing is armed,
+          -- and a third message arrives.
+          testCase "redelivers a message that finds no armed promise, rather than restarting" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnv appEnv behaviorEnv [conversationDecl]
+                    thirdMessage = thirdAddressedMessage
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                sid <- case firstTurn of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("first turn should succeed, got " <> show err)
+
+                -- Claim the armed promise without letting the workflow advance.
+                claimed <- Conversation.deliverConversationInputFromApp appEnv secondAddressedMessage
+                assertEqual "the second message claims the armed promise" True claimed
+
+                -- The third message now finds a live conversation with nothing
+                -- armed: the busy window.
+                busy <- Conversation.runConversationTurn env conversationDecl thirdMessage
+                case busy of
+                  Left (Conversation.ConversationBusy detail) ->
+                    assertBool
+                      ("the backpressure names the message: " <> Text.unpack detail)
+                      ("msg_human_3" `Text.isInfixOf` detail)
+                  other -> assertFailure ("a busy conversation should report backpressure, got " <> show other)
+
+                -- Backpressure, not damage: no second session, and the
+                -- conversation is exactly where it was.
+                running <- runningSessionsFor appEnv "heartbeat" "conv_thread_1"
+                assertEqual "no new session was created for the busy message" [idText sid] running
+
+                -- Letting the conversation catch up is the resume worker's job:
+                -- the claimed promise flipped the instance back to running, and
+                -- resuming it processes the second message and parks again.
+                drained <- drainConversationResumes appEnv env
+                assertBool ("the resume worker should advance the conversation, got " <> show drained) (drained > 0)
+
+                -- With the conversation free again, the redelivery lands.
+                redelivered <- Conversation.runConversationTurn env conversationDecl thirdMessage
+                case redelivered of
+                  Right result -> assertEqual "the redelivered turn lands in the same session" sid (Conversation.sessionId result)
+                  Left err -> assertFailure ("the redelivered message should be processed, got " <> show err)
+
+                turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace sid)
+                case turns of
+                  Right (Right rows) ->
+                    assertEqual
+                      "all three messages are recorded in one session, in order"
+                      [("user", 0), ("assistant", 1), ("user", 2), ("assistant", 3), ("user", 4), ("assistant", 5)]
+                      (turnRoleIndex <$> rows)
+                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other))
         ],
       testGroup
         "Delegate"
@@ -1329,6 +1425,37 @@ runningSessionsFor appEnv agentName wantedConversationId = do
 turnRoleIndex :: TurnRow -> (Text, Int)
 turnRoleIndex TurnRow {role, turnIndex} = (role, turnIndex)
 
+-- | Run resume passes until the conversation stops making progress.
+--
+-- Two passes is the ordinary number: one in which the resolved promise rotates
+-- the generation shut, and one in which the new generation runs its turn and
+-- parks. Draining rather than counting keeps the test about the outcome.
+drainConversationResumes :: AppEnv -> Conversation.ConversationEnv -> IO Int
+drainConversationResumes appEnv env = go (0 :: Int) (8 :: Int)
+  where
+    go total 0 = pure total
+    go total budget = do
+      summary <- runAppIO appEnv (resumeConversationOnce appEnv env)
+      case summary of
+        Right ResumeSummary {advanced} | advanced > 0 -> go (total + advanced) (budget - 1)
+        _ -> pure total
+
+-- | One resume pass over the conversation registry, configured the way
+-- production configures it.
+--
+-- __The options are not incidental.__ 'defaultWorkflowResumeOptions' carries an
+-- empty active patch set, so a generation that a rotation created — and whose
+-- patch decision has therefore not been journaled yet — reads
+-- @shikigami-conversation-rotation-v1@ as 'False', takes the legacy branch, and
+-- crashes on a body whose journal was written under the rotating one. That is
+-- ADR 0004's whole point, and it is why every durable run goes through
+-- 'shikigamiWorkflowResumeOptions'.
+resumeConversationOnce :: AppEnv -> Conversation.ConversationEnv -> Eff AppEffects ResumeSummary
+resumeConversationOnce _appEnv env =
+  resumeWorkflowsOnce
+    (shikigamiWorkflowResumeOptions (secondsToNominalDiffTime 300))
+    (Conversation.conversationRegistry env)
+
 -- | Fire a due conversation idle-timeout timer through the same one loop the
 -- runtime uses. Returns whether a row fired.
 -- | Drain due timers until the conversation idle timer is the one that fires.
@@ -1585,6 +1712,21 @@ conversationMessageNumbered n =
       embellishmentId = "emb_rotation_" <> Text.pack (show n),
       mentionedBy = "part_human_test",
       occurredAt = UTCTime (fromGregorian 2026 6 27) (fromIntegral n)
+    }
+
+-- | A third human message in the same thread as 'firstAddressedMessage'.
+thirdAddressedMessage :: AddressedMessage
+thirdAddressedMessage =
+  AddressedMessage
+    { conversationId = "conv_thread_1",
+      messageId = "msg_human_3",
+      parentMessageId = Just "msg_human_2",
+      author = "part_human_test",
+      content = "third question",
+      agentParticipantId = "part_agent_test",
+      embellishmentId = "emb_human_3",
+      mentionedBy = "part_human_test",
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 2
     }
 
 permanentConversationMessage :: AddressedMessage

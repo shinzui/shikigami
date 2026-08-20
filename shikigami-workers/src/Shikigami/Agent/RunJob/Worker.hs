@@ -213,6 +213,21 @@ runConversationAgent env job addressed =
               "reason" Aeson..= ("terminal_conversation_failure" :: Text)
             ]
           pure ()
+        -- Info, not error. A message arriving while the agent is still answering
+        -- the previous one is the routine shape of a busy conversation, not a
+        -- fault; it is redelivered by the queue's retry policy as backpressure.
+        -- Logging it at error level -- which is what happened before this arm
+        -- existed, because a busy conversation was indistinguishable from a
+        -- transient failure -- makes the ordinary case look like an incident.
+        Left (Conversation.ConversationBusy detail) ->
+          jobLog
+            env
+            job
+            Log.Info
+            "worker.conversation.redelivered"
+            [ "detail" Aeson..= detail,
+              "reason" Aeson..= ("conversation_busy" :: Text)
+            ]
         Right _ -> do
           jobLog env job Log.Info "worker.conversation.completed" []
       pure (conversationJobOutcome result)
@@ -307,6 +322,10 @@ agentJobOutcome agent = \case
 conversationJobOutcome :: Either Conversation.ConversationTurnFailure a -> JobOutcome
 conversationJobOutcome = \case
   Left (Conversation.ConversationTransientFailure _) -> RetryDefault
+  -- Same disposition as a transient failure, different meaning: the queue's
+  -- retry is the backpressure that hands this message to the conversation once
+  -- it is free.
+  Left (Conversation.ConversationBusy _) -> RetryDefault
   Left (Conversation.ConversationPermanentFailure detail) ->
     deadOutcome "permanent_conversation_failure" detail
   Left (Conversation.ConversationTerminalFailure detail) ->

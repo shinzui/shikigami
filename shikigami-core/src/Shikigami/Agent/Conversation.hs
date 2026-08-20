@@ -51,8 +51,9 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
-import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, signalAwakeable)
+import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, cancelAwakeable, signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable)
+import Keiro.Workflow.Instance (WorkflowInstanceRow (..), WorkflowStatus (..), lookupInstance)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects, AppEnv (..), runAppIO)
 import Kioku.Distill.Timer (l1TimerScheduleProjection)
@@ -120,6 +121,12 @@ data ConversationTurnFailure
   = ConversationPermanentFailure !Text
   | ConversationTransientFailure !Text
   | ConversationTerminalFailure !Text
+  | -- | The conversation is alive and mid-turn, so this message could not be
+    -- handed to it yet. Not a failure of anything — it is backpressure, and the
+    -- distinction matters because the other three arms are worth an error-level
+    -- log and this one is the routine consequence of a human typing while the
+    -- agent is still answering.
+    ConversationBusy !Text
   deriving stock (Eq, Show)
 
 conversationTurnFailureDetail :: ConversationTurnFailure -> Text
@@ -127,6 +134,7 @@ conversationTurnFailureDetail = \case
   ConversationPermanentFailure detail -> detail
   ConversationTransientFailure detail -> detail
   ConversationTerminalFailure detail -> detail
+  ConversationBusy detail -> detail
 
 data ConversationStart = ConversationStart
   { agentName :: !Text,
@@ -281,8 +289,39 @@ runConversationTurn env decl msg@AddressedMessage {conversationId = msgConversat
     Left err -> pure (Left (ConversationTransientFailure (Text.pack (show err))))
     Right epoch -> do
       delivered <- deliverConversationInput env msg
-      driveConversationTurn env epoch msg conversationDriveBudget $
-        if delivered then Nothing else Just (ConversationStart (name decl) msg)
+      if delivered
+        then driveConversationTurn env epoch msg conversationDriveBudget Nothing
+        else do
+          -- Nothing accepted the message. Two very different situations look
+          -- identical from here, and conflating them is what made the routine
+          -- case run down an error path: either this conversation has never run
+          -- (so it needs starting), or it is alive and mid-turn between
+          -- journaled steps (so it needs a moment, not a restart).
+          live <- liveConversationInstance env epoch msg
+          if live
+            then
+              pure
+                ( Left
+                    ( ConversationBusy
+                        ("conversation is mid-turn; redelivering " <> messageId msg)
+                    )
+                )
+            else driveConversationTurn env epoch msg conversationDriveBudget (Just (ConversationStart (name decl) msg))
+
+-- | Is there a workflow instance for this epoch that could still accept work?
+--
+-- 'Keiro.Workflow.Instance.lookupInstance' is asked directly rather than
+-- inferred from the journal, because "has a journal" and "can still accept
+-- work" are different questions: a failed or cancelled instance has a journal
+-- and would be reported busy forever, which would turn a permanent problem into
+-- an unbounded retry.
+liveConversationInstance :: ConversationEnv -> Int -> AddressedMessage -> IO Bool
+liveConversationInstance env epoch msg = do
+  looked <- runKioku env (lookupInstance conversationWorkflowName (conversationWorkflowId epoch msg))
+  pure case looked of
+    Right (Just WorkflowInstanceRow {status = WfRunning}) -> True
+    Right (Just WorkflowInstanceRow {status = WfSuspended}) -> True
+    _ -> False
 
 -- | How many times one call will re-enter a rotating workflow before handing the
 -- job back to the queue.
@@ -394,11 +433,30 @@ rotatingConversation env mStart = do
   seed <- restoreSeed emptyConversationSeed
   start <- step (StepName "ingest-start") (ingestStart seed mStart)
   decl <- resolveDeclStep env start
+  -- __The next turn's promise is armed before this turn's behavior runs.__
+  -- Allocating it after the turn would leave the whole turn -- a model call, on
+  -- the order of seconds -- as a window in which a message arriving for this
+  -- conversation finds nothing to signal and has to be bounced back to the
+  -- queue. Allocating it here shrinks that window to the few journaled steps
+  -- between a generation starting and this line. The allocation is itself a
+  -- journaled step (@awkid:next-message@), so it is replay-stable: a resumed
+  -- generation hands out the id it already handed out.
+  (aid, awaitWake) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
   turn <- processRotatingTurn env decl (initialMessage start)
   case turn of
-    Left err -> pure (Left err)
+    -- The promise was armed before we knew the turn would fail, so it is
+    -- withdrawn rather than left pending on a workflow that is about to end.
+    Left err -> do
+      _ <- cancelAwakeable aid
+      pure (Left err)
     Right result -> do
-      wake <- awaitConversationWake env
+      -- The idle window starts when the conversation goes quiet, so the timer is
+      -- armed here rather than beside the allocation -- otherwise the turn's own
+      -- duration would count against it. Arming immediately before the await is
+      -- also what satisfies keiro's obligation 3 for a custom wake source: the
+      -- arm re-runs on every resume until the awaited result is journaled.
+      armConversationIdleTimeout (conversationIdleTimeout env) aid
+      wake <- awaitWake
       case wake of
         NextMessage next -> continueAsNew (nextConversationSeed seed start next)
         IdleTimedOut -> completeEpoch env decl (initialMessage start) result
@@ -441,24 +499,6 @@ nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName 
       pendingMessage = Just next,
       lastMessageId = Just (messageId finished)
     }
-
--- | Park on the single declared await, with the idle timer armed against it.
---
--- Allocation goes through the generated 'ConversationGenerated.nextMessageAwait'
--- binding rather than a hand-built 'StepName', so the label the runtime awaits
--- is the label @domain\/shikigami-conversation.keiro@ declares, by construction
--- rather than by agreement.
---
--- The timer is armed __after__ the awakeable exists and __before__ the await
--- suspends, which is keiro's obligation 3 for a custom wake source: the arm
--- re-runs on every resume until the awaited result is journaled, so a delivery
--- stranded by a rotation is repaired by the next arm rather than lost.
--- 'scheduleTimerOnceTx' is first-arm-wins, so re-arming is a no-op.
-awaitConversationWake :: ConversationEnv -> Eff (Workflow : AppEffects) ConversationWake
-awaitConversationWake env = do
-  (aid, awaitAnswer) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
-  armConversationIdleTimeout (conversationIdleTimeout env) aid
-  awaitAnswer
 
 -- | End this epoch: close the kioku session, then let the workflow complete.
 --
