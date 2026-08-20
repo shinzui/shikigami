@@ -26,16 +26,17 @@ where
 import Control.Concurrent.Async (concurrently_)
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
-import Keiro.PGMQ (JobRuntime (..), defaultJobTuning, ensureJobQueue, jobProcessorWithContext, runJobEff, runJobWorkers)
+import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueue, jobProcessorWithContext, runJobEff, runJobWorkers)
 import Kioku.App (AppEnv (..))
-import Shibuya.App (SupervisionStrategy (IgnoreFailures), waitApp)
+import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, waitApp)
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
+import Shikigami.Health.Worker (LoopName (QueueLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Timer (runTimerWorker)
-import Shikigami.Workers.Config (WorkerEnv (..), envLogger)
+import Shikigami.Workers.Config (WorkerEnv (..), envHeartbeats, envLogger)
 
 -- | Start every worker loop and run until the process is stopped.
 runWorkers :: WorkerEnv -> IO ()
@@ -44,6 +45,16 @@ runWorkers env = do
   concurrently_
     (runQueueWorker env)
     (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
+
+-- | The id shibuya knows the run-job processor by.
+--
+-- Derived from 'runJob' rather than spelled out, because @jobProcessorWithContext@
+-- registers the processor under @ProcessorId job.jobName@ and the liveness probe
+-- looks it up by that id. Repeating the literal here would let the two drift,
+-- and the symptom would be a probe reporting the queue loop as missing while it
+-- ran perfectly.
+queueProcessorId :: ProcessorId
+queueProcessorId = ProcessorId (jobName runJob)
 
 -- | Drain @shikigami_run_jobs@ under shibuya's supervisor.
 --
@@ -76,7 +87,13 @@ runQueueWorker env = do
       Left err -> liftIO do
         Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)]
         ioError (userError ("run-job processor failed to start: " <> show err))
-      Right app -> waitApp app
+      Right app -> do
+        -- This loop reports its liveness through shibuya rather than beating,
+        -- because shibuya already tracks what the processor actually did. The
+        -- master is available only once the supervisor is running, which is why
+        -- the registry is filled here rather than at boot.
+        liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdict QueueLoop (getAppMaster app) queueProcessorId))
+        waitApp app
   case result of
     Left perr -> do
       Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]

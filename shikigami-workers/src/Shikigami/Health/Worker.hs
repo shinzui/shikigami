@@ -55,10 +55,13 @@ module Shikigami.Health.Worker
     newHeartbeats,
     beat,
     registerReport,
+    clearReport,
 
     -- * Checks
     loopLivenessCheck,
     loopLivenessAt,
+    supervisedLoopVerdict,
+    processorStateVerdict,
     postgresReadiness,
     mkWorkerHealthChecks,
 
@@ -90,6 +93,8 @@ import Servant.API.Generic ((:-))
 import Servant.Health (HealthApi, ProbeCheck, ProbeVerdict (Healthy, Unhealthy), healthServer)
 import Servant.Health.Check (boolCheck, newFailureTracker, safeCheck, sequenceChecks, withProbeTimeout)
 import Servant.Server.Generic (genericServe)
+import Shibuya.App (Master, ProcessorId, ProcessorMetrics (..), getProcessorMetricsIO)
+import Shibuya.Core.Metrics (ProcessorState (Failed, Idle, Processing, Stopped))
 import Shikigami.App.Config (Port, portNumber)
 import Shikigami.Health.Ping (databaseReachable, postgresCheckName)
 import Shikigami.Log qualified as Log
@@ -203,6 +208,18 @@ registerReport :: Heartbeats -> LoopName -> IO ProbeVerdict -> IO ()
 registerReport Heartbeats {reports} loop report =
   readIORef reports >>= atomicWriteIORef reports . Map.insert loop report
 
+-- | Hand a loop's liveness back to its heartbeat.
+--
+-- The counterpart to 'registerReport', for a loop whose reporter has gone away —
+-- a consumer between connections, whose supervisor died with the connection.
+-- Beat before clearing: the loop's heartbeat has not moved while the reporter
+-- was answering for it, so clearing first would strand a heartbeat as old as the
+-- registration and fail liveness on a loop that is demonstrably still going
+-- round.
+clearReport :: Heartbeats -> LoopName -> IO ()
+clearReport Heartbeats {reports} loop =
+  readIORef reports >>= atomicWriteIORef reports . Map.delete loop
+
 -- ── Checks ──────────────────────────────────────────────────────────────────
 
 -- | Is every loop in this process still making progress?
@@ -247,6 +264,55 @@ loopLivenessAt registry@Heartbeats {beats} now = do
               if now > deadline
                 then pure (Unhealthy (loopCheckName loop) deadline)
                 else go reported rest
+
+-- | Translate a shibuya-supervised processor's own state into a probe verdict.
+--
+-- Two of this repository's loops — the run-job queue processor and each Kafka
+-- consumer — run under shibuya's supervisor, which already records what the
+-- processor actually did. Reading that is strictly more truthful than a
+-- heartbeat, which records when Shikigami last remembered to call a function,
+-- and it reports a @Failed@ state carrying the error and its timestamp that no
+-- heartbeat could report at all.
+--
+-- The mapping:
+--
+--   * @Idle@ is healthy. A processor waiting for messages on a quiet topic is
+--     working correctly, and this is the case a heartbeat gets wrong: it cannot
+--     beat when there is nothing to process, so an idle consumer would look
+--     wedged.
+--   * @Processing@ is healthy while its last activity is within the loop's
+--     staleness bound, and unhealthy past it. A message in flight for ten
+--     minutes is a wedge, and this is the case a bare state check gets wrong.
+--   * @Failed@ is unhealthy, dated with the failure's own timestamp rather than
+--     the moment of observation.
+--   * @Stopped@ is unhealthy. Under @IgnoreFailures@ a stopped processor is a
+--     silent death; it is exactly the state this plan exists to surface.
+--   * A processor id the supervisor does not know is unhealthy: it means the
+--     processor never registered, so nothing is draining the queue.
+--
+-- The error text from @Failed@ deliberately does not reach the probe body, which
+-- carries only the check name. It belongs in the logs.
+supervisedLoopVerdict :: LoopName -> Master -> ProcessorId -> IO ProbeVerdict
+supervisedLoopVerdict loop master processorId = do
+  found <- getProcessorMetricsIO master processorId
+  now <- getCurrentTime
+  pure (processorStateVerdict loop now found)
+
+-- | The mapping itself, separated from reading it.
+--
+-- 'supervisedLoopVerdict' is a non-blocking read of a @TVar@ and a clock; every
+-- decision worth testing is here, and putting it behind a running supervisor
+-- would mean a test could only reach it by standing one up.
+processorStateVerdict :: LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
+processorStateVerdict loop now = \case
+  Nothing -> Unhealthy (loopCheckName loop) now
+  Just ProcessorMetrics {state} -> case state of
+    Idle -> Healthy
+    Processing _ lastActivity ->
+      let deadline = addUTCTime (loopStaleAfter loop) lastActivity
+       in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
+    Failed _ failedAt -> Unhealthy (loopCheckName loop) failedAt
+    Stopped -> Unhealthy (loopCheckName loop) now
 
 -- | Can this process reach PostgreSQL?
 --

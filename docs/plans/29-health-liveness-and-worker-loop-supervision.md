@@ -112,12 +112,15 @@ This section must always reflect the actual current state of the work.
       conformance suite plus eleven liveness cases in `Shikigami.Health.WorkerSpec`.
 - [x] (2026-08-20) M1 (config): `health.port` declared, with `defaultHealthPort` holding the
       per-role table 8091–8094 and `healthPortFor` applying it.
-- [ ] M2: each loop records a heartbeat through the worker registry on each successful iteration;
-      the worker-role liveness check reports the first stale loop and its `failingSince`.
-- [ ] M2: the queue processor's heartbeat comes from shibuya's own `ProcessorMetrics`, not from a
-      callback shikigami has to thread through `jobProcessorWithContext`.
-- [ ] M2: readiness wired to a PostgreSQL ping through the real application pool; `/health/ready`
-      returns 503 when it is unreachable, without probing Kafka or downstream HTTP services.
+- [x] (2026-08-20) M2: the outbox, timer, and scheduler loops beat at the bottom of each pass;
+      `loopLivenessAt` reports the first stale loop in `LoopName` order and dates `failingSince`
+      at the threshold crossing rather than the observation.
+- [x] (2026-08-20) M2: the queue processor reports through shibuya's `ProcessorMetrics` via
+      `supervisedLoopVerdict`, registered once `runQueueWorker` holds the `Master`. **Both**
+      consumers do the same rather than beating per record — see Surprises & Discoveries for why
+      the plan's per-record heartbeat would have failed an idle topic.
+- [x] (2026-08-20) M2: readiness pings PostgreSQL through the process's real pool on every worker
+      role; Kafka and downstream HTTP are not consulted.
 - [ ] M3: fail-fast supervision — any loop's termination, normal or exceptional, tears down the
       siblings and exits the process non-zero; proven by fault injection in the workers test suite.
 - [ ] M3: `runResumeWorker` (`Agent/Workflow/Resume.hs:36-42`) converted from
@@ -185,6 +188,45 @@ implementation. Provide concise evidence.
   Kafka error retries, a configuration error fails loudly, and a captured programming failure is
   rethrown. The *conclusion* of the old decision is unchanged and still right — Kafka stays out of
   readiness — but the reason "the loop currently dies on any `KafkaError`" is no longer true.
+
+- **(2026-08-20, implementation) The plan's consumer heartbeat would have failed an idle topic,
+  so both consumers report through shibuya instead.** M2 specified beating "after each successful
+  record disposition ... and also on each reconnect attempt". A consumer on a quiet topic does
+  neither: it holds one connection and processes no records, so it would have gone stale after
+  60 seconds and failed liveness for having no work — the exact false positive the staleness
+  bounds were chosen to avoid. The plan's own M2 text anticipated this ("beat on each poll
+  *attempt* rather than only on work"), but the poll is inside shibuya's Kafka adapter and
+  shikigami has no hook there.
+
+  What shibuya does expose is the same thing the queue loop uses. `runSubscription` already runs
+  its processor under `Shibuya.runApp` with `ProcessorId streamTopic`, so a consumer waiting on a
+  quiet topic reports `Idle` — healthy — and one stuck on a record reports `Processing info
+  lastActivity` with a `lastActivity` that stops advancing. `supervisedLoopVerdict` therefore
+  serves both loop families, and `Consumer.hs` gained one narrow callback
+  (`type OnSupervisor = Maybe (Master, ProcessorId) -> IO ()`) that reports what it has rather
+  than what it means; `Subscription.hs` translates. Between connections there is no supervisor to
+  ask, so the loop falls back to a heartbeat beaten on each reconnect attempt — which is what
+  keeps a broker outage looking like a loop retrying rather than a loop wedged.
+
+  This also improved the queue loop beyond what the plan asked for. `Processing` is not by itself
+  good news: a record in flight for ten minutes is a wedge, so `processorStateVerdict` treats a
+  `Processing` whose `lastActivity` is past the loop's bound as unhealthy. A bare state check
+  would have called it healthy.
+
+- **(2026-08-20, implementation) The server acquired a required database key.** Giving
+  `/health/ready` a real PostgreSQL ping means a server with no connection string can never report
+  ready. `roleRequiredKeys ServerRole` therefore gained `database.connection_string`, so the
+  failure is a named key at configuration time rather than a process that binds a socket and then
+  fails every probe forever. `AppConfigSpec`'s precedence helper — which deliberately used the
+  role with no required keys — moved to `AdminRole`.
+
+- **(2026-08-20, implementation) The Postgres ping could not live in either probe owner.**
+  `shikigami-server` and `shikigami-workers` both answer `/health/ready` and neither may depend on
+  the other, so a shared definition has to sit in `shikigami-core`. But core cannot depend on
+  `servant-health`, which pulls in `servant-server`, and `Shikigami.PackageArchitectureSpec`
+  fails the build when the domain library links HTTP route execution. `Shikigami.Health.Ping`
+  therefore stops at `databaseReachable :: Pool -> IO Bool` plus the operator-facing check name,
+  and each probe owner wraps that in its own `boolCheck`.
 
 - (Findings from implementation go below this line.)
 

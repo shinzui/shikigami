@@ -11,9 +11,18 @@ import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
+import Shikigami.Health.Worker
+  ( Heartbeats,
+    LoopName (ConsumerLoop),
+    beat,
+    clearReport,
+    newHeartbeats,
+    registerReport,
+    serveProbesWith,
+    supervisedLoopVerdict,
+  )
 import Shikigami.Log qualified as Log
-import Shikigami.Trigger.Consumer (EventHit (..), StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
+import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 
@@ -60,14 +69,14 @@ runConsumeStream config = do
         onHit StreamHit {agentName} = do
           let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
           Log.logInfo logger "stream.record.matched" matched
-    registry <- newHeartbeats []
+    registry <- newHeartbeats [ConsumerLoop]
     serveProbesWith
       logger
       (Config.httpHost config)
       (Config.healthPortFor StreamConsumerRole config)
       (pool st)
       registry
-      (subscribeActivityStream logger appEnv cfg include agents onHit)
+      (subscribeActivityStream logger (consumerSupervisor registry) appEnv cfg include agents onHit)
 
 -- | Consume public integration events and enqueue matching @Trigger.Event@
 -- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
@@ -114,11 +123,32 @@ runConsumeEvents config = do
                 ]
           Log.logInfo logger "events.record.matched" matched
           Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
-    registry <- newHeartbeats []
+    registry <- newHeartbeats [ConsumerLoop]
     serveProbesWith
       logger
       (Config.httpHost config)
       (Config.healthPortFor EventConsumerRole config)
       (pool st)
       registry
-      (subscribeIntegrationEventStream logger appEnv cfg agents onHit)
+      (subscribeIntegrationEventStream logger (consumerSupervisor registry) appEnv cfg agents onHit)
+
+-- | Turn the consumer's report of its own supervisor into a liveness verdict.
+--
+-- While a supervisor is running, its processor state is the honest answer, and
+-- it is the only one that distinguishes a consumer idling on a quiet topic from
+-- one wedged on a record it will never finish. A heartbeat cannot: there is
+-- nothing to beat about when no record arrives, so an idle consumer would look
+-- dead.
+--
+-- Between connections there is no supervisor to ask, so the loop falls back to
+-- its heartbeat. Beating on each attempt is what keeps a broker outage looking
+-- like a loop retrying rather than a loop wedged — and Kafka being unreachable
+-- is deliberately not a reason to fail this process's probes, since restarting
+-- it would not bring the broker back.
+consumerSupervisor :: Heartbeats -> OnSupervisor
+consumerSupervisor registry = \case
+  Nothing -> do
+    beat registry ConsumerLoop
+    clearReport registry ConsumerLoop
+  Just (master, processorId) ->
+    registerReport registry ConsumerLoop (supervisedLoopVerdict ConsumerLoop master processorId)

@@ -15,7 +15,7 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Flow (flowDeclarationErrors)
-import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
+import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), newHeartbeats, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
@@ -51,6 +51,13 @@ runWorkerCmd config = do
     behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
+      -- Registered before the loops start, so a loop that never gets going is a
+      -- stale heartbeat rather than an absent one the probe would skip.
+      --
+      -- The resume loop is deliberately absent: it is still a run-once action
+      -- rather than a loop, so it has no cadence to be stale against. It joins
+      -- this list when it becomes a loop.
+      registry <- newHeartbeats [QueueLoop, OutboxLoop, TimerLoop]
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
           env =
             WorkerEnv
@@ -83,12 +90,9 @@ runWorkerCmd config = do
                 -- The C11 gate reads shikigami.sink_grants over the same pool
                 -- the rest of the process uses, so a grant change is visible on
                 -- the next dispatch without a restart.
-                grants = DbGrants (StoreConnection.pool st)
+                grants = DbGrants (StoreConnection.pool st),
+                heartbeats = registry
               }
-      -- No loops registered yet: liveness answers for the process, the way the
-      -- server's does. Registering the four loops is what turns it into a report
-      -- about whether they are still making progress.
-      registry <- newHeartbeats []
       serveProbesWith
         logger
         (Config.httpHost config)

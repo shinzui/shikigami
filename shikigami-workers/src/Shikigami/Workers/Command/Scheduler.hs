@@ -24,7 +24,7 @@ import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
+import Shikigami.Health.Worker (LoopName (SchedulerLoop), beat, newHeartbeats, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
@@ -71,7 +71,7 @@ runSchedulerCmd config = do
               logger
             }
     armAll logger appEnv schedules
-    registry <- newHeartbeats []
+    registry <- newHeartbeats [SchedulerLoop]
     serveProbesWith
       logger
       (Config.httpHost config)
@@ -84,6 +84,9 @@ runSchedulerCmd config = do
         case result of
           Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
           Right _ -> pure ()
+        -- Beat on every pass, failed included: a store error is a dependency
+        -- being unavailable, not this loop being wedged.
+        beat registry SchedulerLoop
         threadDelay 1_000_000
 
 armAll :: Log.Logger -> AppEnv -> [(Text, CronSchedule)] -> IO ()

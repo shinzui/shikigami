@@ -18,6 +18,7 @@ module Shikigami.Workers.Config
     envLogger,
     envGrants,
     envCatchUpPolicy,
+    envHeartbeats,
     agentRunDeps,
     conversationEnv,
     schedulerSchedules,
@@ -38,6 +39,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Health.Worker (Heartbeats)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
@@ -75,7 +77,12 @@ data WorkerEnv = WorkerEnv
     -- | Where every loop's log lines go. Built once by the command that boots
     -- the process and shared by all four loops, so that one worker's output is
     -- one stream of JSON objects rather than four.
-    logger :: !Log.Logger
+    logger :: !Log.Logger,
+    -- | What each loop last said about its own progress, read by this process's
+    -- @\/health\/live@ probe. Shared by all four loops for the same reason the
+    -- logger is: one process answers with one registry, or the probe reports on
+    -- whichever copy it happens to hold.
+    heartbeats :: !Heartbeats
   }
 
 -- | The process-wide logger. Named rather than used as a bare selector
@@ -88,6 +95,11 @@ envLogger WorkerEnv {logger = l} = l
 -- carry a @grants@ field.
 envGrants :: WorkerEnv -> GrantSource
 envGrants WorkerEnv {grants = g} = g
+
+-- | Named for the same reason as 'envLogger': field access through a bare
+-- selector is ambiguous under @DuplicateRecordFields@.
+envHeartbeats :: WorkerEnv -> Heartbeats
+envHeartbeats WorkerEnv {heartbeats = h} = h
 
 envRunTimeout :: WorkerEnv -> NominalDiffTime
 envRunTimeout WorkerEnv {runTimeout = timeout} = timeout

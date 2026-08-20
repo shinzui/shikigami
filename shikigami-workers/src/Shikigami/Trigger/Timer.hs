@@ -20,10 +20,11 @@ import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (runAppIO)
+import Shikigami.Health.Worker (LoopName (TimerLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Scheduler qualified as Scheduler
-import Shikigami.Workers.Config (WorkerEnv (..), envLogger, schedulerEnv)
+import Shikigami.Workers.Config (WorkerEnv (..), envHeartbeats, envLogger, schedulerEnv)
 
 -- | Fire due timers until the process stops.
 --
@@ -38,4 +39,7 @@ runTimerWorker env = do
     case result of
       Left err -> Log.logError (envLogger env) "worker.timer.failed" ["error" Aeson..= Text.pack (show err)]
       Right _row -> pure ()
+    -- Beat on every pass, failed included: see the outbox publisher for why a
+    -- store error is not a wedge.
+    beat (envHeartbeats env) TimerLoop
     threadDelay 1_000_000

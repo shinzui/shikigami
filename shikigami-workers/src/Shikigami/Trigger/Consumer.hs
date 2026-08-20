@@ -4,7 +4,8 @@
 -- Shibuya owns polling and offset storage; application code establishes one of
 -- the explicit durable dispositions below and returns exactly one ack decision.
 module Shikigami.Trigger.Consumer
-  ( StreamConfig (..),
+  ( OnSupervisor,
+    StreamConfig (..),
     StreamHit (..),
     EventHit (..),
     DeadLetterId (..),
@@ -133,28 +134,46 @@ data RecordDisposition
   | TransientFailure !Text
   deriving stock (Eq, Show)
 
+-- | Told which shibuya supervisor is currently driving this consumer, and
+-- 'Nothing' whenever it is between connections.
+--
+-- The consumer reports what it has rather than what that means: this module owns
+-- the acknowledgement boundary and should not also own health vocabulary. The
+-- caller decides that a live supervisor's own processor state is the honest
+-- liveness signal, and that a consumer in backoff is alive and retrying.
+--
+-- 'Nothing' arrives before each connection attempt, including the first, so a
+-- consumer that can never reach its broker still says so on every attempt
+-- instead of falling silent.
+type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
+
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
-subscribeActivityStream :: Log.Logger -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger appEnv config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger "stream" appEnv config $ processActivityRecord logger appEnv deadLetterQueue include agents onHit
+subscribeActivityStream :: Log.Logger -> OnSupervisor -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger onSupervisor appEnv config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger onSupervisor "stream" appEnv config $ processActivityRecord logger appEnv deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
-subscribeIntegrationEventStream :: Log.Logger -> AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream logger appEnv config@StreamConfig {deadLetterQueue} agents onHit =
-  runSubscription logger "events" appEnv config $ processIntegrationEventRecord appEnv deadLetterQueue agents onHit
+subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream logger onSupervisor appEnv config@StreamConfig {deadLetterQueue} agents onHit =
+  runSubscription logger onSupervisor "events" appEnv config $ processIntegrationEventRecord appEnv deadLetterQueue agents onHit
 
 runSubscription ::
   Log.Logger ->
+  OnSupervisor ->
   Text ->
   AppEnv ->
   StreamConfig ->
   (KafkaInboundRecord -> IO RecordDisposition) ->
   IO ()
-runSubscription logger prefix AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
+runSubscription logger onSupervisor prefix AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
   reconnect 1
   where
     reconnect backoffSeconds = do
+      -- Announced before every attempt, so the stretch between a lost
+      -- connection and the next supervisor is visibly a retrying loop rather
+      -- than a silent one.
+      onSupervisor Nothing
       let props =
             brokersList [BrokerAddress streamBroker]
               <> groupId (ConsumerGroupId streamGroup)
@@ -192,6 +211,7 @@ runSubscription logger prefix AppEnv {tracer} StreamConfig {broker = streamBroke
             case appResult of
               Left err -> pure (Left err)
               Right app -> do
+                liftIO (onSupervisor (Just (Shibuya.getAppMaster app, Shibuya.ProcessorId streamTopic)))
                 Shibuya.waitApp app
                 Shibuya.stopApp app
                 failure <- liftIO (readIORef programmingFailure)

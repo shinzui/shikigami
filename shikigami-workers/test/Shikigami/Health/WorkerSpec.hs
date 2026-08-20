@@ -21,6 +21,12 @@ import Data.Time (UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
 import Network.Wai (Application)
 import Servant.Health (ProbeCheck, ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.TestKit (probeContractTests)
+import Shibuya.Core.Metrics
+  ( ProcessorMetrics (..),
+    ProcessorState (Failed, Idle, Processing, Stopped),
+    emptyInFlightInfo,
+    emptyProcessorMetrics,
+  )
 import Shikigami.Health.Worker
   ( LoopName (ConsumerLoop, OutboxLoop, QueueLoop, TimerLoop),
     beat,
@@ -29,6 +35,7 @@ import Shikigami.Health.Worker
     loopStaleAfter,
     newHeartbeats,
     probeApplication,
+    processorStateVerdict,
     registerReport,
   )
 import Test.Tasty (TestTree, testGroup)
@@ -39,7 +46,8 @@ tests =
   testGroup
     "worker health"
     [ probeContractTests "worker probe contract" mkProbeApplication,
-      livenessTests
+      livenessTests,
+      supervisedTests
     ]
 
 -- | The real probe application, with the checks supplied from outside.
@@ -151,7 +159,60 @@ livenessTests =
         loopLivenessAt registry now >>= assertHealthy
     ]
 
+-- | The shibuya-supervised loops — the run-job queue processor and each Kafka
+-- consumer — report through the supervisor's own state rather than a heartbeat.
+-- These are the cases that make that worth doing.
+supervisedTests :: TestTree
+supervisedTests =
+  testGroup
+    "supervised loop verdicts"
+    [ -- The case a heartbeat gets wrong. A processor waiting on a quiet topic
+      -- has nothing to beat about, so a heartbeat-only consumer would go stale
+      -- and be restarted for having no work.
+      testCase "an idle processor is healthy" do
+        now <- getCurrentTime
+        processorStateVerdict ConsumerLoop now (Just (metricsIn Idle now)) @?= Healthy,
+      testCase "a processor working within its bound is healthy" do
+        now <- getCurrentTime
+        let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop - 5)) now
+        processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity) now))
+          @?= Healthy,
+      -- The case a bare state check gets wrong. "Processing" is not by itself
+      -- good news: a record in flight for ten minutes is a wedge.
+      testCase "a processor stuck past its bound is unhealthy" do
+        now <- getCurrentTime
+        let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
+            verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity) now))
+        failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
+        onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) lastActivity),
+      -- What no heartbeat could report at all: the failure's own timestamp,
+      -- rather than whenever the probe next looked.
+      testCase "a failed processor is dated by its own failure, not the probe" do
+        now <- getCurrentTime
+        let failedAt = addUTCTime (negate 3600) now
+            verdict = processorStateVerdict QueueLoop now (Just (metricsIn (Failed "boom" failedAt) now))
+        failedCheckOf verdict >>= (@?= loopCheckName QueueLoop)
+        onsetOf verdict >>= (@?= failedAt),
+      -- Under IgnoreFailures a stopped processor is a silent death, which is the
+      -- hole this whole plan exists to close.
+      testCase "a stopped processor is unhealthy" do
+        now <- getCurrentTime
+        verdict <- pure (processorStateVerdict QueueLoop now (Just (metricsIn Stopped now)))
+        failedCheckOf verdict >>= (@?= loopCheckName QueueLoop),
+      -- A processor id the supervisor never registered means nothing is draining
+      -- the queue, which must not read as "no news is good news".
+      testCase "an unregistered processor is unhealthy" do
+        now <- getCurrentTime
+        verdict <- pure (processorStateVerdict QueueLoop now Nothing)
+        failedCheckOf verdict >>= (@?= loopCheckName QueueLoop)
+    ]
+
 -- ── Helpers ─────────────────────────────────────────────────────────────────
+
+-- | Metrics carrying a chosen state; the counters are irrelevant to the verdict.
+metricsIn :: ProcessorState -> UTCTime -> ProcessorMetrics
+metricsIn processorState startedAt =
+  (emptyProcessorMetrics startedAt) {state = processorState}
 
 assertHealthy :: ProbeVerdict -> IO ()
 assertHealthy verdict =
