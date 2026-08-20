@@ -101,7 +101,10 @@ workflow, not a durable node — so the declaration would be a generated artifac
 no runtime path consumes, which
 [ADR-0001](0001-declare-only-what-the-runtime-executes.md) forbids. The intent
 was met structurally instead: `flowRegistry` and `registeredFlowNames` are two
-projections of one unexported list in `Shikigami.Flow`.
+projections of one list in `Shikigami.Flow`. (That list was an unexported
+`FlowRegistration` when this was written; it is now `flowRegistry :: [FlowDef]`
+itself, with `registeredFlowNames` projecting from it. The invariant is
+unchanged — see [ADR-0013](0013-flow-bodies-reach-the-world-only-through-capabilities.md).)
 
 
 ## Consequences
@@ -150,6 +153,10 @@ served by code that no longer contains the new branch.
   grammar.
 * [ADR-0001](0001-declare-only-what-the-runtime-executes.md) — why the flow-name
   registry stayed out of the specification.
+* [ADR-0012](0012-a-declared-workflow-body-only-grows-behind-a-patch.md) — the
+  companion rule this record's Context gestured at and did not state: `keiro-dsl
+  diff` demands a patch guard for *any* change to a declared body, appends
+  included, so growing a workflow always allocates a patch id.
 * `mori://shinzui/keiro-runtime-patterns/docs/keiro-durable-workflows` — the
   fleet standard: "A journaled step result is permanent. Never change the type a
   step decodes into: rename the step so it runs fresh, or guard the change with a

@@ -256,6 +256,38 @@ nothing: FAIL`. It passed in isolation and passed on a re-run of the whole
 `shikigami-core-test` suite (311 tests). It touches the runtime grant store, not flow memory, and
 nothing in this plan goes near it. Recorded so a future reader does not attribute it here.
 
+**`supersedes` on a kioku record is lineage, not retirement.** The plan's Milestone 4 and its
+Validation item 6 both expected the superseding write to take the older memory out of the active
+set. It does not. `RecordMemory`'s transition
+(`kioku-core/src/Kioku/Memory/Domain.hs:335-357`) emits one `MemoryRecorded` event carrying
+`supersedes = d.supersedes` as a field on the *new* row and goes to `Active`; retiring a row is a
+separate command against that row's own stream (`SupersedeMemory`, reachable only `B.from Active`).
+kioku's own distillation does both explicitly — `Kioku.Distill.L1.mergeInto` calls
+`recordAtom context sid session atom decision winner (Just firstTarget)` and then a distinct
+`Memory.mergeWithContext context target stored` for every target it means to retire
+(`kioku-core/src/Kioku/Distill/L1.hs:459-470`). So the field means "this descends from that", and
+the plan's phrasing "supersede one of its own earlier memories" over-promised. Resolved by
+threading the field faithfully and asserting what kioku actually does; see the Decision Log.
+
+**The at-risk flow cannot demonstrate journaled recall, because its own `classify` step hides it.**
+Validation item 2 asks for a decoy memory inserted between a run and its replay, with the replayed
+output unchanged. Run against `atRiskCustomerFlow` that assertion passes whether or not `recall` is
+journaled, because the verdict comes from the journaled `classify` step either way — the recall
+result is never re-consulted on replay. The test is only meaningful with a flow whose output *is*
+the recall result and which has no step after it, plus a fresh-workflow-id run as the control
+proving the store really changed. Both halves are in
+"a replayed recall answers from the journal, not from the changed store".
+
+**The test battery is intermittently flaky under `cabal test all`, and it is not this plan's
+doing.** Three single-test failures appeared across the work, each in a different suite —
+`GrantStore > revoking something never granted reports that it changed nothing`,
+`worker-path heartbeat keeps one slow delivery leased`, and one unidentified case in
+`shikigami-core-test`. Each passed on an isolated re-run and on the next full run, none touches
+flow memory, and the final three consecutive `cabal test all` runs were entirely green. The common
+factor is `cabal test all` running suites concurrently against one Postgres cluster, each
+provisioning its own database. Recorded so a future reader does not attribute it to this change or
+assume a green single run proves the flakiness gone.
+
 
 ## Decision Log
 
@@ -394,13 +426,96 @@ Record every decision made while working on the plan.
   `cabal test keiro-shikigami-conformance` (`justfile:175-182`).
   Date: 2026-07-22 (gate name corrected 2026-08-19)
 
+- Decision: `rememberWith`'s `supersedes` records lineage only; the capability does not retire the
+  superseded memory, and the M4 spec asserts that both rows stay active.
+  Rationale: that is kioku's model rather than a shortcut — see the Surprises entry for the
+  transition and for `Kioku.Distill.L1` doing record-then-merge explicitly. Making one `remember`
+  call issue a second aggregate write would be a surprising capability, and choosing what that
+  write should be (supersede? merge? archive?) is a design decision this plan did not make and
+  does not need. The plan's Interfaces section only ever promised the `supersedes` *field*, which
+  is delivered; Validation item 6's "the superseded row leaves the active set" is corrected.
+  Date: 2026-08-19
+
+- Decision: The journaled-recall acceptance test uses a purpose-built spike flow rather than
+  `atRiskCustomerFlow`.
+  Rationale: the at-risk flow's `classify` step masks the property under test, so the plan's
+  version of item 2 would have passed against un-journaled recall. See Surprises. The spike flow
+  runs under `shikigami.flow.spike`, which no specification member declares, so its labels need
+  no declaration and this test costs no gate pass.
+  Date: 2026-08-19
+
+- Decision: Two ADRs distilled rather than one:
+  `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` and
+  `docs/adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md`.
+  Rationale: they are the two constraints a future contributor is most likely to violate without
+  knowing they exist. 0012 is the gate rule that broke this plan's assumption — someone adding a
+  step to a declared body will otherwise hit an opaque BREAKING verdict with no idea what to do.
+  0013 is the boundary that keeps `IOE` out of `FlowEffects` — someone will otherwise add it back
+  to make something compile. `docs/adr/0004` was updated with a cross-reference and with a
+  correction to its now-stale description of the flow registry, rather than being rewritten.
+  Date: 2026-08-19
+
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered, measured against the Purpose.** A flow's `remember` and `recall` are journaled keiro
+steps under stable, caller-supplied labels. A replayed flow returns its recorded recall results
+without touching the store, and a replayed `remember` is idempotent twice over — the journal
+short-circuits it, and a crash inside the step window re-derives the same deterministic id, which
+kioku answers as an idempotent success. The four labels a registered flow reaches are declared in
+`domain/shikigami-agent-run.keiro` and gated by `just keiro-gate`, making them the first flow-side
+journal names this service can actually gate. Flow authors can set priority, confidence, memory
+type, lineage, and extra tags. `FlowEffects` no longer grants `IOE` or `Store`, so the only way a
+flow reaches the world is through a replay-safe capability. The test that failed at the start —
+replaying a completed flow duplicated its memory, `expected: 1, but got: 2` — passes.
+
+**One promise was scaled back, and it is worth naming.** The Purpose said a flow gains control of
+"supersedes"; it does, but `supersedes` records *lineage* and does not retire the older memory,
+which is kioku's model rather than something this plan chose. A flow that wants an old memory to
+stop being recalled still has no way to say so. That is a real gap, not a technicality, and it is
+now visible in the capability's haddock and in an executable assertion rather than buried in an
+expectation nobody checked.
+
+**What this plan got wrong, and what that says.** The plan was unusually well-researched — it had
+read `classifyWorkflowBody`'s neighbourhood, cited the exact commit whose procedure it meant to
+follow, and correctly described that commit as adding "a patch block plus a step". It then
+concluded three sections later that no patch was needed, and made passing the gate an acceptance
+criterion, so it carried two requirements that could not both hold. The failure mode is worth
+noting because it is not carelessness: the runtime reasoning was *correct*, and correct reasoning
+about layer A is exactly what stops you from checking layer B. The rule that saved it was
+mechanical — run the gate early, before the Haskell exists, which the plan itself instructed and
+which is why the contradiction surfaced in minutes rather than at review.
+
+The same shape appeared twice more, smaller each time. `supersedes` was assumed to retire because
+the word says so; kioku's transition says otherwise. Validation item 2's test design would have
+passed against the defect it was written to catch, because the flow it named journals a step
+between the recall and the output. In all three cases the plan's *prose* was more confident than
+its evidence, and in all three the evidence was a short read away in a dependency's source. The
+generalisable lesson: when a plan asserts what a dependency does, the assertion is a hypothesis
+until something executes it — a gate run, a transition read, or a control assertion inside the
+test itself.
+
+**What a follow-up would take.** Retiring flow memories needs a decision about which kioku command
+expresses it (`supersede`, `merge`, or `archive`) and whether one capability call may issue two
+aggregate writes. Moving the flow write path off the deprecated `Kioku.Memory.record` is blocked
+on per-agent write contexts and belongs to IR-9
+(`docs/improvement-requests/key-agent-continuity-by-meibo-principal.md`). The `False` branch of
+`shikigami-flow-memory-steps-v1` should be deleted together with its patch id once the service has
+run long enough that no pre-change instance can resume; today that population is empty because
+shikigami has no users, which makes it cheap to do and easy to forget.
+
+**Durable context promoted.** Two ADRs:
+`docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` (the gate rule that broke
+this plan's assumption) and
+`docs/adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md` (the boundary that keeps
+`IOE` out of `FlowEffects`, plus the two contract properties a journaled step does not by itself
+deliver). `docs/adr/0004` gained a cross-reference and a correction to its now-stale description of
+the flow registry. `docs/workflow-versioning.md` rule 2 was rewritten, because it was the document
+that produced the wrong expectation.
 
 
 ## Context and Orientation
@@ -950,10 +1065,18 @@ just keiro-gate origin/master
 ```
 
 `keiro-scaffold` fails with `the committed generated layer is out of date; commit the
-regeneration` until the regenerated files are staged — that is the expected first result after
-editing `domain/`, not a problem to debug. `keiro-diff` classifies the change across six
-compatibility surfaces; adding a step label to a body should classify as compatible, and a
-`BREAKING` finding means a label was moved rather than added.
+regeneration` until the regenerated files are committed — that is the expected first result after
+editing `domain/`, not a problem to debug. Note that it checks `git diff --exit-code --
+shikigami-core/src`, so *any* uncommitted change under that path trips it, including hand-written
+Haskell; commit before running the gate.
+
+`keiro-diff` classifies the change across six compatibility surfaces. **Adding a step label does
+not classify as compatible unless it is wrapped in a new `patch` block** — an earlier draft of this
+plan claimed otherwise and was wrong. `keiro-dsl diff` treats any unguarded change to a declared
+body as `BREAKING [WorkflowBodyChanged]`, appends included, and offers no waiver. The expected
+green verdict is
+`ADDITIVE: AgentRun workflow-patch shikigami-flow-memory-steps-v1: new patch guard contains the
+entire body change`.
 
 After each milestone run the full battery:
 
@@ -978,22 +1101,42 @@ Accepted when the following behaviors are observable.
    the `runMemory` change makes it fail with a count of two.
 2. **Journaled recall.** After any flow run that recalls, `Keiro.Workflow.loadStepIndex` for that
    workflow contains `recall-<label>`, and a second invocation returns identical recall results
-   even after new memories are inserted between runs. The test inserts a decoy memory via
-   `Kioku.Memory.record` between run one and the replay, and asserts the replayed flow output is
-   unchanged.
+   even after new memories are inserted between runs.
+
+   The test must not use `atRiskCustomerFlow` for this. Its `classify` step is journaled, so a
+   replayed run returns the recorded verdict whether or not the recall was journaled, and the
+   assertion would pass against the very defect it is meant to catch. "a replayed recall answers
+   from the journal, not from the changed store" uses a spike flow whose output *is* the recall
+   result with no step after it, records a decoy memory between the run and its replay, and adds
+   the control the plan originally omitted: a run under a *fresh* workflow id must see the decoy,
+   proving the store really changed rather than the query simply never matching.
 3. **Crash-window idempotency, both directions.** Recording twice with the same deterministic id
    and the same payload yields one active row and `Right` both times; recording a third time with
    the same id and different content yields `Left (MemoryConflict ...)`.
-4. **The labels are gated, not merely stable.** `just keiro-gate origin/master` exits zero with
-   the four new labels present in `domain/shikigami-agent-run.keiro`, the regenerated layer
-   committed, and `cabal test keiro-shikigami-conformance` green. Deleting one label from the
-   specification while leaving the Haskell in place makes the gate fail — verify this once, by
-   attempt, and revert.
+4. **The labels are gated, not merely stable.** `just keiro-gate <merge-base>` exits zero with
+   the four new labels present in `domain/shikigami-agent-run.keiro` inside
+   `patch shikigami-flow-memory-steps-v1`, the regenerated layer committed, and
+   `cabal test keiro-shikigami-conformance` green. The verdict is
+   `ADDITIVE: AgentRun workflow-patch shikigami-flow-memory-steps-v1` plus `replay-neutral`.
+
+   The patch block is not optional: `keiro-dsl diff` classifies any unguarded change to a declared
+   body as BREAKING, appends included. Bare `step` lines produce
+   `BREAKING: ... [WorkflowBodyChanged]` and exit non-zero. See Surprises & Discoveries and
+   `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md`.
+
+   Deleting one label from the specification while leaving the Haskell in place makes the gate
+   fail — verified once, by attempt, and reverted: removing `step remember-declined` yields
+   `BREAKING: AgentRun workflow-body ... [WorkflowBodyChanged]`, `keiro-diff` exit 1.
 5. **Guardrail.** `FlowEffects` (`shikigami-core/src/Shikigami/Flow.hs:31`) no longer includes
    `IOE` or `Store`, and a scratch flow body with `liftIO` fails to compile.
-6. **Metadata.** The M4 spec observes priority, confidence, type, and supersedes as sent, and the
-   superseded row leaves the active set; existing flows still record priority 100,
-   `MediumConfidence`, `MemoryPattern`, and no supersession.
+6. **Metadata.** The M4 spec observes priority, confidence, type, and supersedes as sent, and
+   observes that `extraTags` union rather than replace. Existing flows still record priority 100,
+   `MediumConfidence`, `MemoryPattern`, and no supersession, which the same spec pins.
+
+   The superseded row does **not** leave the active set, and the spec asserts that instead. An
+   earlier draft of this item expected retirement; `supersedes` on a kioku record is lineage
+   metadata and retiring a row is a separate command. See Surprises & Discoveries and the
+   Decision Log.
 7. **Nothing else moved.** `cabal test all` green, including plan 24's
    `Shikigami.WorkflowVersioningSpec` deploy-simulation tests and the untouched
    `AgentWorkflowSpec` crash-resume dedup test.
@@ -1071,6 +1214,10 @@ data RememberOptions       -- priority, confidence, memoryType, supersedes, extr
 defaultRememberOptions    :: RememberOptions
 runMemory                 :: (Workflow :> es, IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
 deterministicFlowMemoryId :: WorkflowName -> WorkflowId -> Int -> Text -> MemoryId
+-- Exported so the crash window can be tested; there is no public API for
+-- losing a journal append, so a test calls this as a re-executed step would.
+recordFlowMemory          :: MemoryEnv -> MemoryId -> RememberOptions -> Value
+                          -> IO (Either MemoryWriteError MemoryId)
 
 -- shikigami-core/src/Shikigami/Flow/Acknowledgement.hs
 awaitAck           :: (Acknowledgement :> es) => StepName -> ApprovalRequest -> Eff es Ack
@@ -1082,19 +1229,29 @@ runAcknowledgement :: (Workflow :> es, Store :> es, IOE :> es)
 type FlowEffects es =
   (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es)
 
-flowRegistry :: [FlowDef]          -- loses its FlowRuntime parameter in M3
+flowRegistry :: [FlowDef]          -- lost its FlowRuntime parameter in M3
 lookupFlow   :: Text -> Maybe FlowDef
 ```
 
 Declared identities that must exist at the end, in `domain/shikigami-agent-run.keiro`'s
-`workflow AgentRun` body: `recall-risk-history`, `remember-acknowledged`, `remember-declined`,
-`remember-escalated`.
+`workflow AgentRun` body, inside `patch shikigami-flow-memory-steps-v1`:
+`recall-risk-history`, `remember-acknowledged`, `remember-declined`, `remember-escalated`. The
+patch id itself reaches Haskell through the generated `declaredPatches` and thence
+`shikigamiActivePatches`; nothing activates it by hand.
 
 Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs`,
 `shikigami-core/src/Shikigami/Agent/Workflow.hs` (`runFlowBehavior`'s interpreter stack),
-`shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`, and
+`shikigami-core/test/Shikigami/FlowLifecycleSpec.hs`,
+`shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs`,
+`shikigami-server/src/Shikigami/Server/Command/RenderLifecycle.hs`, and
 `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`
-(hand-edited to accept the new body fact).
+(hand-edited to accept the new body fact and the new patch id).
+
+The last two were not in the earlier draft's list. `WorkflowVersioningSpec` builds a `FlowRuntime`
+and runs the at-risk flow under explicit options, so M3 reaches it. `RenderLifecycle` minted a
+session id and a throwaway approval environment purely to satisfy `lookupFlow`, and M3 deletes
+that — it is the clearest evidence that threading a runtime through the registry was the wrong
+shape.
 
 
 ## Revision Notes
@@ -1140,3 +1297,18 @@ Consumers to keep compiling: `shikigami-core/src/Shikigami/Flow/AtRiskCustomer.h
   and Orientation, Plan of Work, Concrete Steps, Validation and Acceptance, Idempotence and
   Recovery, and Interfaces and Dependencies were all rewritten to match; the two duplicate
   `## Revision Notes` headings were merged into this one.
+
+- 2026-08-19 (implementation): Implemented end to end; all four milestones green. Three
+  substantive corrections to the plan, each recorded in Surprises & Discoveries and the Decision
+  Log rather than silently applied. (1) `keiro-dsl diff` classifies any unguarded change to a
+  declared workflow body as BREAKING, appends included and with no waiver, so the four memory
+  labels moved inside `patch shikigami-flow-memory-steps-v1` and `runMemory` now branches on that
+  guard — superseding the Decision Log entry that held no patch was needed, and correcting the
+  Concrete Steps claim that adding a step label classifies as compatible. Decided with the user.
+  (2) `supersedes` on a kioku record is lineage metadata and does not retire the older memory, so
+  Milestone 4's spec and Validation item 6 assert what kioku actually does. (3) Validation item
+  2's test could not be written against `atRiskCustomerFlow`, whose journaled `classify` step
+  would mask the property under test; it uses a spike flow plus a fresh-workflow-id control.
+  Interfaces and Dependencies gained `recordFlowMemory` and two consumers the earlier draft did
+  not name (`WorkflowVersioningSpec`, `RenderLifecycle`). Outcomes & Retrospective written;
+  durable context promoted to ADR-0012 and ADR-0013.
