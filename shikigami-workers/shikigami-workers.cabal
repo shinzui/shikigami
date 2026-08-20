@@ -25,6 +25,7 @@ library
     Shikigami.Agent.RunJob.Worker
     Shikigami.Agent.Workflow.Resume
     Shikigami.Flow.SinkOutbox.Publisher
+    Shikigami.Health.Worker
     Shikigami.Telemetry
     Shikigami.Trigger.Consumer
     Shikigami.Trigger.Scheduler
@@ -62,6 +63,9 @@ library
     , kiroku-store
     , optparse-applicative            >=0.19    && <0.20
     , pgmq-hasql
+    , servant                         >=0.20    && <0.21
+    , servant-health                  >=0.1     && <0.2
+    , servant-server                  >=0.20    && <0.21
     , settei                          ==0.2.0.0
     , settei-optparse-applicative     ==0.2.0.0
     , shibuya-core
@@ -70,6 +74,8 @@ library
     , text                            >=2.1
     , time                            >=1.12
     , uuid
+    , wai
+    , warp
 
 executable shikigami-worker
   import:         common
@@ -118,6 +124,7 @@ test-suite shikigami-workers-test
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.RunJob.WorkerSpec
+    Shikigami.Health.WorkerSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
     Shikigami.Workers.CommandSpec
@@ -137,6 +144,8 @@ test-suite shikigami-workers-test
     , kiroku-store
     , optparse-applicative
     , pgmq-hasql
+    , servant-health
+    , servant-health:testkit
     , settei-env
     , shibuya-core
     , shikigami-core
@@ -147,3 +156,4 @@ test-suite shikigami-workers-test
     , text
     , time
     , vector
+    , wai

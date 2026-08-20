@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
+import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
@@ -12,6 +13,7 @@ main =
     ( testGroup
         "shikigami-workers"
         [ CommandSpec.tests,
+          HealthWorkerSpec.tests,
           RunJobWorkerSpec.tests,
           SchedulerSpec.tests,
           StreamInboxSpec.tests

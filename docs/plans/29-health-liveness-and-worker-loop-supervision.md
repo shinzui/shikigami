@@ -101,16 +101,17 @@ This section must always reflect the actual current state of the work.
       `Shikigami.Server.Boot.newServerEnvWith` injects them for the conformance test; the OpenAPI
       artifact is generated from the served proxy by the `shikigami-openapi` executable and
       checked in at `docs/api/openapi.json`.
-- [ ] M1 (remaining, server): the readiness check is `sequenceChecks []`
-      (`Health/Handler.hs:67`) because `ServerEnv` holds no database handle
-      (`shikigami-server/src/Shikigami/Server/Seam.hs:44-49`). Add the pool and the PostgreSQL
-      ping.
-- [ ] M1 (remaining, workers): `Shikigami.Health.Worker` in `shikigami-workers` serves the same
-      two routes on the Settei `health.port` for each worker-role executable, depending on
-      `servant-health` directly and on no Shikigami sibling.
-- [ ] M1 (remaining, config): add `health.port` to `Shikigami.App.Config` with per-role defaults
-      8091–8094 so the four local processes coexist. `http.port` already exists
-      (`shikigami-core/src/Shikigami/App/Config.hs:320,611`); `health.port` does not.
+- [x] (2026-08-20) M1 (server): readiness pings PostgreSQL through the pool `runServer` now
+      brackets around the listener. The ping itself is `Shikigami.Health.Ping.databaseReachable`
+      in `shikigami-core`, shared with the worker probe because neither package may depend on the
+      other. `ServerRole` gained `database.connection_string` as a required key.
+- [x] (2026-08-20) M1 (workers): `shikigami-workers/src/Shikigami/Health/Worker.hs` owns the
+      loop-name type, the heartbeat registry, the checks, and the Warp listener, and depends on
+      `servant-health`/`servant-server`/`warp` and no Shikigami sibling. All four worker-role
+      executables serve it via `serveProbesWith`. Proved by `servant-health:testkit`'s
+      conformance suite plus eleven liveness cases in `Shikigami.Health.WorkerSpec`.
+- [x] (2026-08-20) M1 (config): `health.port` declared, with `defaultHealthPort` holding the
+      per-role table 8091–8094 and `healthPortFor` applying it.
 - [ ] M2: each loop records a heartbeat through the worker registry on each successful iteration;
       the worker-role liveness check reports the first stale loop and its `failingSince`.
 - [ ] M2: the queue processor's heartbeat comes from shibuya's own `ProcessorMetrics`, not from a

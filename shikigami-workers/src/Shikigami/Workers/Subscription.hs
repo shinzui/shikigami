@@ -8,9 +8,10 @@ import Data.Aeson qualified as Aeson
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
-import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Consumer (EventHit (..), StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
@@ -59,7 +60,14 @@ runConsumeStream config = do
         onHit StreamHit {agentName} = do
           let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
           Log.logInfo logger "stream.record.matched" matched
-    subscribeActivityStream logger appEnv cfg include agents onHit
+    registry <- newHeartbeats []
+    serveProbesWith
+      logger
+      (Config.httpHost config)
+      (Config.healthPortFor StreamConsumerRole config)
+      (pool st)
+      registry
+      (subscribeActivityStream logger appEnv cfg include agents onHit)
 
 -- | Consume public integration events and enqueue matching @Trigger.Event@
 -- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
@@ -106,4 +114,11 @@ runConsumeEvents config = do
                 ]
           Log.logInfo logger "events.record.matched" matched
           Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
-    subscribeIntegrationEventStream logger appEnv cfg agents onHit
+    registry <- newHeartbeats []
+    serveProbesWith
+      logger
+      (Config.httpHost config)
+      (Config.healthPortFor EventConsumerRole config)
+      (pool st)
+      registry
+      (subscribeIntegrationEventStream logger appEnv cfg agents onHit)

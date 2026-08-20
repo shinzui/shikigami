@@ -10,11 +10,12 @@ import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
-import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Flow (flowDeclarationErrors)
+import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
@@ -84,7 +85,17 @@ runWorkerCmd config = do
                 -- the next dispatch without a restart.
                 grants = DbGrants (StoreConnection.pool st)
               }
-      runWorkers env
+      -- No loops registered yet: liveness answers for the process, the way the
+      -- server's does. Registering the four loops is what turns it into a report
+      -- about whether they are still making progress.
+      registry <- newHeartbeats []
+      serveProbesWith
+        logger
+        (Config.httpHost config)
+        (Config.healthPortFor WorkerRole config)
+        (StoreConnection.pool st)
+        registry
+        (runWorkers env)
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.

@@ -21,9 +21,10 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
-import Shikigami.App.Config (AppConfig)
+import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Health.Worker (newHeartbeats, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
@@ -70,13 +71,20 @@ runSchedulerCmd config = do
               logger
             }
     armAll logger appEnv schedules
-    forever do
-      now <- getCurrentTime
-      result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
-      case result of
-        Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
-        Right _ -> pure ()
-      threadDelay 1_000_000
+    registry <- newHeartbeats []
+    serveProbesWith
+      logger
+      (Config.httpHost config)
+      (Config.healthPortFor SchedulerRole config)
+      (StoreConnection.pool st)
+      registry
+      $ forever do
+        now <- getCurrentTime
+        result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
+        case result of
+          Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
+          Right _ -> pure ()
+        threadDelay 1_000_000
 
 armAll :: Log.Logger -> AppEnv -> [(Text, CronSchedule)] -> IO ()
 armAll logger appEnv schedules =
