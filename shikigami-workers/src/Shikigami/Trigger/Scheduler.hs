@@ -30,6 +30,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -140,17 +141,23 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
 
 -- | Route one due timer row to the action that owns its kind.
 --
--- Both payloads this runtime writes carry a @kind@ discriminator, so the
--- dispatch reads it rather than trying the schedule action and falling through
--- on 'Nothing'. The observable behavior for a well-formed timer is unchanged;
--- what changes is that the code says which action owns which row, and that a row
+-- Every payload this runtime writes carries a @kind@ discriminator, so the
+-- dispatch reads it rather than trying each action and falling through on
+-- 'Nothing'. The observable behavior for a well-formed timer is unchanged; what
+-- changes is that the code says which action owns which row, and that a row
 -- carrying a kind nobody claims is reported instead of silently left to expire.
+--
+-- Three kinds now: a scheduled agent whose cron came round, an approval that
+-- waited too long, and a conversation that has been idle too long. All three go
+-- through this one loop rather than gaining loops of their own, because a timer
+-- table with two independent readers races -- see "Shikigami.Trigger.Timer".
 shikigamiTimerFallback :: (Store :> es, IOE :> es) => SchedulerEnv -> UTCTime -> TimerRow -> Eff es (Maybe EventId)
 shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = TimerId rowTimerId} =
   case timerPayloadKind timerPayload of
     Just kind
       | kind == scheduleTimerKind -> scheduleFireAction env now row
       | kind == Approval.approvalTimeoutKind -> Approval.approvalTimeoutFireAction row
+      | kind == Conversation.conversationIdleTimeoutKind -> Conversation.conversationIdleTimeoutFireAction row
     other -> do
       liftIO $
         Log.logError

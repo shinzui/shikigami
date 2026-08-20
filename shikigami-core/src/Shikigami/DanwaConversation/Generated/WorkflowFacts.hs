@@ -20,7 +20,7 @@ workflowFacts =
     { workflowFactName = "shikigami.danwa-conversation"
     , workflowFactIdVia = "conversationWorkflowId"
     , workflowFactIdField = "input"
-    , workflowFactBody = ["step:ingest-start", "step:lookup-agent", "step:resolve-session", "patch:shikigami-behavior-retry-v1()", "patch:shikigami-conversation-rotation-v1(step:record-user,step:run-behavior-v2,step:record-assistant-and-reply,step:turn-result,await:next-message)", "continueAsNew:ConversationSeed"]
+    , workflowFactBody = ["step:ingest-start", "step:lookup-agent", "step:resolve-session", "patch:shikigami-behavior-retry-v1()", "patch:shikigami-conversation-rotation-v1(step:record-user,step:run-behavior-v2,step:record-assistant-and-reply,step:turn-result,await:next-message,step:idle-timeout)", "continueAsNew:ConversationSeed"]
     , workflowFactAwaitLabels = ["next-message"]
     , workflowFactPatchIds = ["shikigami-behavior-retry-v1", "shikigami-conversation-rotation-v1"]
     }

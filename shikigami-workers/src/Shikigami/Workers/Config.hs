@@ -53,6 +53,10 @@ data WorkerEnv = WorkerEnv
     behaviorEnv :: !BehaviorEnv,
     runTimeout :: !NominalDiffTime,
     approvalDeadline :: !NominalDiffTime,
+    -- | How long a parked conversation waits for its next message before its
+    -- epoch ends and its kioku session is completed. Resolved from
+    -- @conversation.idle_timeout_seconds@.
+    conversationIdleTimeout :: !NominalDiffTime,
     -- | What the timer loop does about cron minutes that passed while the
     -- process was down. Resolved from @scheduler.catch_up@.
     catchUpPolicy :: !CatchUpPolicy,
@@ -96,6 +100,11 @@ envCatchUpPolicy WorkerEnv {catchUpPolicy = policy} = policy
 envApprovalDeadline :: WorkerEnv -> NominalDiffTime
 envApprovalDeadline WorkerEnv {approvalDeadline = deadline} = deadline
 
+-- | Named for the same reason as 'envLogger': 'Conversation.ConversationEnv'
+-- also carries a @conversationIdleTimeout@-shaped field.
+envConversationIdleTimeout :: WorkerEnv -> NominalDiffTime
+envConversationIdleTimeout WorkerEnv {conversationIdleTimeout = timeout} = timeout
+
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
@@ -128,6 +137,7 @@ conversationEnv env =
     { Conversation.appEnv = appEnv env,
       Conversation.behaviorEnv = behaviorEnv env,
       Conversation.runTimeout = envRunTimeout env,
+      Conversation.idleTimeout = envConversationIdleTimeout env,
       Conversation.danwa = danwa env,
       Conversation.agents = agents env,
       Conversation.grants = envGrants env

@@ -1,0 +1,24 @@
+-- Migration: conversation-session-epoch
+-- Created: 2026-08-20-18-20-29 UTC
+-- Write idempotent DDL (CREATE ... IF NOT EXISTS) so re-application is safe.
+--
+-- Which epoch of a conversation is live.
+--
+-- An epoch is one workflow instance: from a conversation's first message (or its
+-- first message after an idle timeout) until the next idle timeout. A
+-- conversation spans several, chained through kioku session lineage.
+--
+-- The column exists because a keiro workflow instance is identified by its
+-- workflow id, and a completed instance cannot be restarted under that id --
+-- running it again replays its recorded completion, which would silently drop
+-- the message that was meant to open the next epoch. So the next epoch needs a
+-- distinct workflow id, and the ingress path has to know which one is live
+-- before it can address the conversation at all. This is that answer, in one
+-- indexed read.
+--
+-- Epoch 0 keeps the historical workflow id verbatim
+-- ("danwa-conversation:" <> conversationId); only epoch 1 and later carry the
+-- ":e<n>" suffix. Every conversation that existed before this column is epoch 0,
+-- which is why the default is 0 rather than 1.
+ALTER TABLE shikigami.conversation_sessions
+  ADD COLUMN IF NOT EXISTS epoch INTEGER NOT NULL DEFAULT 0;

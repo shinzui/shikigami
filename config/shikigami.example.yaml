@@ -47,6 +47,14 @@ approval:
   # seconds, 1-86400.
   deadline_seconds: 900
 
+conversation:
+  # How long a parked danwa conversation waits for its next human message before
+  # its epoch ends: the workflow completes, its kioku session is closed, and the
+  # next message opens a fresh epoch chained to the closed one. This is the
+  # between-turns window; worker.run_timeout_seconds bounds a turn. Whole
+  # seconds, 1-86400.
+  idle_timeout_seconds: 1800
+
 kafka:
   broker: 127.0.0.1:9092
   activity:

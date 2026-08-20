@@ -142,13 +142,21 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-20) M2: rotation acceptance — five turns of one conversation produce generation 4,
       one `turn-result` and one `awkid:next-message` per generation, and all ten turns in one
       kioku session. Test "rotates onto a fresh generation after every turn".
-- [ ] M3: idle timeout — `ConversationWake` sum, the conversation timeout timer (generation- and
-      turn-pinned, modelled on `approvalTimeoutTimerId`), the fire action registered in the
-      worker's timer routing, kioku session completion through
-      `Shikigami.Memory.Access`, and the workflow returning `Completed`.
-- [ ] M3: new epoch after timeout — `resolveSession` finds the completed session and
-      `startSession` passes its id as `previousSessionId` (`Conversation.hs:364` passes `Nothing`
-      today).
+- [x] (2026-08-20) M3: idle timeout — the `ConversationWake` sum, the generation-pinned timer
+      (`conversationIdleTimeoutTimerId`, modelled on `approvalTimeoutTimerId`), the fire action
+      registered as the third `kind`-discriminated arm of `shikigamiTimerFallback`, kioku session
+      completion through `Session.completeWithContext` and a new
+      `Shikigami.Memory.Access.shikigamiWriteContext`, and the workflow returning `Completed`.
+      Settei key `conversation.idle_timeout_seconds` (default 1800) with its env binding and
+      example-config entry. Tests "completes the kioku session on idle timeout" and "ignores a
+      timer armed in a superseded generation".
+- [x] (2026-08-20) M3: new epoch after timeout — `resolveSession` finds the completed session and
+      `startSession` passes its id as `previousSessionId`. **This needed a design piece the plan
+      did not have: epoch-scoped workflow ids.** A completed keiro instance cannot be restarted
+      under its id, so the plan's "delivery fails and `runConversationTurn` runs a fresh
+      `ConversationStart` — the existing code path, unchanged" silently returned the *previous*
+      epoch's result and dropped the message. See Surprises & Discoveries. Test "opens a new epoch
+      after idle timeout, chaining session lineage".
 - [ ] M4: racing-message smoothing — next-turn awakeable allocated before the behavior runs;
       undelivered-but-live messages redelivered instead of restarting the conversation; the
       worker's `RetryDefault` demoted to a genuine-failure fallback.
@@ -297,6 +305,61 @@ implementation. Provide concise evidence.
   a payload it cannot decode. `pendingInputAids` therefore reads the *label* to decide:
   `awkid:next-message` exactly is the rotating shape, `awkid:next-message:` is the legacy one.
   This was not in the plan and is the sharpest edge in the two-shape arrangement.
+
+- **(2026-08-20, M3) the plan's new-epoch design does not work, because a completed keiro
+  instance cannot be restarted under its id.** The plan says: "A message arriving after an epoch
+  ended is delivered to a terminated workflow, so delivery fails and `runConversationTurn` runs a
+  fresh `ConversationStart` — the existing code path, unchanged." It is not unchanged, and it is
+  not a fresh anything. `conversationWorkflowId` was `"danwa-conversation:" <> conversationId`,
+  stable for the life of the conversation, so running it again after the epoch completed replays
+  the recorded completion. The message is swallowed and the caller gets the *previous* epoch's
+  turn result back:
+
+  ```text
+  opens a new epoch after idle timeout, chaining session lineage: FAIL
+    "the new epoch opens a different session"
+  ```
+
+  Ending an epoch is only coherent if the next epoch is a different workflow instance, so the
+  workflow id had to gain the epoch. Three constraints shaped how:
+
+  - **Epoch 0 keeps the historical id verbatim.** Only epoch 1 and later carry `:e<n>`. The id is
+    a durable identity and every instance that predates epochs is epoch 0, so nothing already
+    journaled moves.
+  - **The ingress path has to know the epoch before it can address the conversation at all**, so
+    it cannot come from inside the workflow. It lives in the index table this plan already owns:
+    `shikigami.conversation_sessions.epoch`, one indexed read.
+  - **The workflow learns its own epoch by parsing its own id** (`conversationEpochOfWorkflowId`)
+    rather than carrying a counter. `completeEpoch` needs it to say which epoch the conversation
+    is moving past, and a self-describing id cannot drift from a field somebody has to maintain.
+
+  The advance is written inside the journaled `idle-timeout` step and sets an *absolute* value
+  under `GREATEST` rather than incrementing. A journaled step is at-least-once, and an increment
+  run twice would not merely skip an epoch — it could move the live epoch past an instance ingress
+  had already started addressing, orphaning it.
+
+- **(2026-08-20, M3) shikigami writes kioku L1 distillation timers and has no consumer for them,
+  which is why a single-pass timer fire is not enough to reach the idle timer.** Recording an
+  assistant turn applies `l1TimerScheduleProjection` in the same transaction
+  (`Conversation.hs`, `recordAssistantTurnAndEnqueueReply`), which schedules a row with
+  `kind: "ramp"`. Nothing in shikigami claims it. The first idle-timeout test fired one timer and
+  got that one:
+
+  ```text
+  fire=["Object (fromList [(\"kind\",String \"ramp\"),
+                           (\"memorySpaceId\",String \"kioku_legacy\"),
+                           (\"turnCount\",Number 1.0)]) => Nothing"]
+  ```
+
+  **This is pre-existing and does not starve the idle timer**, which is worth stating precisely
+  because it looks like it should. `claimDueTimerStmt`
+  (`keiro/src/Keiro/Timer/Schema.hs:278-299`) selects `WHERE status = 'scheduled'`, and a row
+  whose fire action declines it is left in `firing` — a status the claim query skips. So an
+  unclaimed ramp row costs exactly one pass and is never re-claimed; it does not spin, and the
+  conversation timer is claimed on the next tick of the one-second loop. What it does cost is a
+  `scheduler.timer.unknown_kind` error log per ramp timer, which is noise an operator will
+  eventually ask about. Out of scope here — this plan does not own kioku distillation — but it
+  should not stay unrecorded.
 
 - **(2026-08-20, M1) the existing two Conversation cases passed unchanged after the M1 rewrite**,
   which is the evidence the plan asked for that the generation fix is behaviour-preserving before
@@ -512,6 +575,37 @@ Record every decision made while working on the plan.
   M2 instruction ("run `just keiro-check`, and let the checker decide") is the tie-breaker, and
   the checker's rule is already written down. The exact classification transcript is recorded in
   Surprises & Discoveries.
+  Date: 2026-08-20
+
+- Decision: **The workflow id gains an epoch, and epoch 0 keeps the historical literal.**
+  Rationale: forced by M3, not chosen. A completed keiro instance replays its completion rather
+  than accepting work, so "the workflow ends on idle timeout" and "the next message continues the
+  conversation" are only jointly satisfiable if the next message addresses a different instance.
+  The alternatives were both worse. Not ending the workflow — completing only the kioku session
+  and rotating into a dormant generation — keeps the instance immortal, which is defect one of the
+  four this plan exists to fix, and fails the plan's own acceptance 4
+  (`countPendingAwakeables` = 0). Asking keiro whether the current instance is terminal and
+  incrementing on the fly avoids the column but makes every message walk the epoch chain, and
+  still needs somewhere to write the answer.
+  Epoch 0 keeping the byte-identical historical id is the part that matters for durability: the
+  workflow id is a durable identity, `id from input via conversationWorkflowId` is declared, and
+  every instance that predates epochs is epoch 0. Only `:e1` and later are new names, and no
+  journal moves. The sink-intent id is pinned at epoch 0 for the same reason — it is an outbox
+  identity, not a workflow one, and the existing test asserts its prefix.
+  Date: 2026-08-20
+
+- Decision: **Add `Shikigami.Memory.Access.shikigamiWriteContext` rather than reusing
+  `shikigamiReadContext` or the deprecated wrapper.**
+  Rationale: the plan requires the idle-timeout completion to go through `completeWithContext`,
+  which needs a `MemoryAccessContext`. `Shikigami.Memory.Access` only had a *read* context, whose
+  actor is the service. Kioku's `underContext` refuses a write whose `actorPrincipal` disagrees
+  with the context's recorded actor (`Kioku/Memory.hs:138-139`), and the write records
+  `agentActor name`. So a read context would have been refused, and a fourth call to the
+  deprecated `Session.complete` would have added to the debt plan 54 owns. Building both the
+  recorded principal and the authorizing context from the same `agentPrincipal` makes their
+  agreement structural rather than a thing two call sites remember. The module's own doc comment
+  anticipated this — "the write path can move to Kioku's `*WithContext` surface at the same time"
+  — so this is the first step of that move, taken for one call site.
   Date: 2026-08-20
 
 ## Outcomes & Retrospective

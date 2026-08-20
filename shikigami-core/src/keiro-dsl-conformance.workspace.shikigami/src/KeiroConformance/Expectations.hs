@@ -10,7 +10,7 @@ expectedServiceConformanceFacts =
     ("workflow/AgentRun/name", "shikigami.agent-run"),
     ("workflow/AgentRun/patches", "[\"shikigami-resolve-profile-v1\",\"shikigami-behavior-retry-v1\",\"shikigami-flow-memory-steps-v1\",\"shikigami-emit-signal-labels-v1\"]"),
     ("workflow/DanwaConversation/awaits", "[\"next-message\"]"),
-    ("workflow/DanwaConversation/body", "[\"step:ingest-start\",\"step:lookup-agent\",\"step:resolve-session\",\"patch:shikigami-behavior-retry-v1()\",\"patch:shikigami-conversation-rotation-v1(step:record-user,step:run-behavior-v2,step:record-assistant-and-reply,step:turn-result,await:next-message)\",\"continueAsNew:ConversationSeed\"]"),
+    ("workflow/DanwaConversation/body", "[\"step:ingest-start\",\"step:lookup-agent\",\"step:resolve-session\",\"patch:shikigami-behavior-retry-v1()\",\"patch:shikigami-conversation-rotation-v1(step:record-user,step:run-behavior-v2,step:record-assistant-and-reply,step:turn-result,await:next-message,step:idle-timeout)\",\"continueAsNew:ConversationSeed\"]"),
     ("workflow/DanwaConversation/idField", "input"),
     ("workflow/DanwaConversation/idVia", "conversationWorkflowId"),
     ("workflow/DanwaConversation/name", "shikigami.danwa-conversation"),

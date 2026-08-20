@@ -59,6 +59,7 @@ runWorkerCmd config = do
                 behaviorEnv = behEnv,
                 runTimeout = Config.runTimeout config,
                 approvalDeadline = Config.approvalDeadline config,
+                conversationIdleTimeout = Config.conversationIdleTimeout config,
                 catchUpPolicy = Config.schedulerCatchUp config,
                 schedules,
                 kizashi =

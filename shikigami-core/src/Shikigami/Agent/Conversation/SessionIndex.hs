@@ -29,6 +29,8 @@
 module Shikigami.Agent.Conversation.SessionIndex
   ( lookupConversationSession,
     rememberConversationSession,
+    lookupConversationEpoch,
+    advanceConversationEpoch,
   )
 where
 
@@ -56,9 +58,36 @@ lookupConversationSession conversationId =
 -- An upsert rather than an insert because a conversation outlives any one
 -- session: after an idle timeout completes one session, the next epoch opens a
 -- new one under the same conversation id and this row moves to it.
+--
+-- The epoch is deliberately left alone. Which epoch is live is
+-- 'advanceConversationEpoch''s answer, and a new session inside an epoch must
+-- not disturb it.
 rememberConversationSession :: (Store :> es) => Text -> Text -> UTCTime -> Eff es ()
 rememberConversationSession conversationId sessionId now =
   runTransaction (Tx.statement (conversationId, sessionId, now) upsertConversationSessionStmt)
+
+-- | Which epoch of this conversation is live.
+--
+-- An /epoch/ is one workflow instance, from a conversation's first message (or
+-- its first message after an idle timeout) until the next idle timeout. Epoch 0
+-- is the answer for a conversation nobody has heard of, which is what keeps a
+-- first message addressing the historical workflow id.
+lookupConversationEpoch :: (Store :> es) => Text -> Eff es Int
+lookupConversationEpoch conversationId =
+  fromMaybe 0 <$> runTransaction (Tx.statement conversationId selectConversationEpochStmt)
+
+-- | Record that this conversation has moved on to @epoch@.
+--
+-- __Idempotent by construction, not by being called once.__ It sets the epoch to
+-- a value the caller computed (the completing epoch, plus one) under a
+-- @GREATEST@, rather than incrementing. The caller is a journaled workflow step,
+-- and a journaled step is at-least-once: an increment run twice would skip an
+-- epoch, and — worse — could move the live epoch past an instance that ingress
+-- had already started addressing, orphaning it. @GREATEST@ of an absolute value
+-- cannot do either.
+advanceConversationEpoch :: (Store :> es) => Text -> Int -> UTCTime -> Eff es ()
+advanceConversationEpoch conversationId epoch now =
+  runTransaction (Tx.statement (conversationId, epoch, now) advanceConversationEpochStmt)
 
 selectConversationSessionStmt :: Statement Text (Maybe Text)
 selectConversationSessionStmt =
@@ -70,6 +99,33 @@ selectConversationSessionStmt =
     """
     (Encoders.param (Encoders.nonNullable Encoders.text))
     (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.text)))
+
+selectConversationEpochStmt :: Statement Text (Maybe Int)
+selectConversationEpochStmt =
+  preparable
+    """
+    SELECT epoch
+    FROM shikigami.conversation_sessions
+    WHERE conversation_id = $1
+    """
+    (Encoders.param (Encoders.nonNullable Encoders.text))
+    (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))))
+
+advanceConversationEpochStmt :: Statement (Text, Int, UTCTime) ()
+advanceConversationEpochStmt =
+  preparable
+    """
+    INSERT INTO shikigami.conversation_sessions (conversation_id, session_id, updated_at, epoch)
+    VALUES ($1, '', $3, $2)
+    ON CONFLICT (conversation_id) DO UPDATE
+      SET epoch = GREATEST(shikigami.conversation_sessions.epoch, EXCLUDED.epoch),
+          updated_at = EXCLUDED.updated_at
+    """
+    ( ((\(c, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, e, _) -> fromIntegral e) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        <> ((\(_, _, t) -> t) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    )
+    Decoders.noResult
 
 upsertConversationSessionStmt :: Statement (Text, Text, UTCTime) ()
 upsertConversationSessionStmt =

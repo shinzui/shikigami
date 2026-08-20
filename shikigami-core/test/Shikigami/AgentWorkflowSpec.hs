@@ -14,6 +14,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
+import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
@@ -22,6 +23,7 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
+import Keiro.Timer (TimerRow (..))
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -40,6 +42,7 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Types (EventId)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
@@ -777,7 +780,137 @@ tests =
                       "five turns are recorded as five user/assistant pairs"
                       [(role, index) | index <- [0 .. 9], let role = if even index then "user" else "assistant"]
                       (turnRoleIndex <$> rows)
-                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other))
+                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other)),
+          -- The lifecycle claim. Before this, a conversation workflow never
+          -- ended and its kioku session stayed "running" forever -- a leak, and
+          -- a correctness hazard for a resolver that only ever reused running
+          -- sessions. The idle timer signals the same next-message awakeable the
+          -- next human message would have signalled, so the workflow ends
+          -- through its own await rather than being killed from outside.
+          testCase "completes the kioku session on idle timeout" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                sid <- case firstTurn of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("first turn should succeed, got " <> show err)
+
+                (runningStatus, _) <- conversationSessionState appEnv sid
+                assertEqual "the session is running while the conversation is parked" "running" runningStatus
+
+                fired <- fireDueConversationIdleTimer appEnv
+                assertBool "the idle timer fires" fired
+
+                -- Firing resolves the awakeable; driving the workflow is what
+                -- lets it observe the timeout and end.
+                resumed <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                assertBool ("the epoch should end cleanly, got " <> show resumed) (either (const False) (const True) resumed)
+
+                (completedStatus, _) <- conversationSessionState appEnv sid
+                assertEqual "the idle timeout completes the kioku session" "completed" completedStatus
+
+                pending <- runAppIO appEnv countPendingAwakeables
+                assertEqual "the ended epoch leaves no promise armed" (Right 0) pending,
+          -- A timer armed for turn N belongs to the generation turn N+1 closed.
+          -- Under one turn per generation the generation IS the staleness token,
+          -- so this is a property of the timer id rather than of a counter
+          -- somebody has to keep in step -- but it is only testable if the stale
+          -- timer is actually fired.
+          testCase "ignores a timer armed in a superseded generation" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                sid <- case firstTurn of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("first turn should succeed, got " <> show err)
+
+                -- The second message rotates generation 0 shut, which is what
+                -- makes generation 0's armed timer stale.
+                secondTurn <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
+                assertBool ("second turn should succeed, got " <> show secondTurn) (either (const False) (const True) secondTurn)
+
+                -- Fire every due timer, generation 0's included.
+                _ <- fireDueConversationIdleTimer appEnv
+                _ <- fireDueConversationIdleTimer appEnv
+
+                stale <- conversationStepKeys appEnv firstAddressedMessage 0
+                assertBool "the superseded generation records no terminal step" (not (Map.member "idle-timeout" stale))
+
+                (liveStatus, _) <- conversationSessionState appEnv sid
+                assertEqual "the live conversation's session is untouched" "running" liveStatus
+
+                -- And the conversation still works.
+                thirdTurn <- Conversation.runConversationTurn env conversationDecl (conversationMessageNumbered 3)
+                assertBool ("the conversation continues, got " <> show thirdTurn) (either (const False) (const True) thirdTurn),
+          -- The other half of ending an epoch: the next message opens a NEW
+          -- session that names the closed one, so a conversation's history stays
+          -- walkable across every epoch it has had. previousSessionId was
+          -- unconditionally Nothing before, which was the only honest answer
+          -- while nothing ever completed a session.
+          testCase "opens a new epoch after idle timeout, chaining session lineage" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
+
+                firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                firstSession <- case firstTurn of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("first turn should succeed, got " <> show err)
+
+                _ <- fireDueConversationIdleTimer appEnv
+                ended <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                assertBool ("the epoch should end, got " <> show ended) (either (const False) (const True) ended)
+
+                (closedStatus, _) <- conversationSessionState appEnv firstSession
+                assertEqual "the first epoch's session is closed" "completed" closedStatus
+
+                -- A message after the timeout finds a terminated workflow, so it
+                -- starts a fresh epoch.
+                nextEpoch <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
+                secondSession <- case nextEpoch of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("the next epoch's turn should succeed, got " <> show err)
+
+                assertBool "the new epoch opens a different session" (secondSession /= firstSession)
+
+                (openedStatus, openedPrevious) <- conversationSessionState appEnv secondSession
+                assertEqual "the new epoch's session is running" "running" openedStatus
+                assertEqual
+                  "the new epoch names the closed session as its predecessor"
+                  (Just (idText firstSession))
+                  openedPrevious
+
+                -- The index moved with the conversation, so the next turn
+                -- resolves the new session rather than the closed one.
+                indexed <- runAppIO appEnv (SessionIndex.lookupConversationSession "conv_thread_1")
+                assertEqual "the index follows the conversation into its new epoch" (Right (Just (idText secondSession))) indexed
+
+                -- The new epoch is a new workflow INSTANCE, which is the whole
+                -- reason the epoch exists: a completed keiro instance replays
+                -- its completion rather than accepting new work, so reusing the
+                -- id would have swallowed this message and returned the previous
+                -- epoch's result.
+                epochNow <- runAppIO appEnv (SessionIndex.lookupConversationEpoch "conv_thread_1")
+                assertEqual "the conversation advanced to epoch 1" (Right 1) epochNow
+
+                epoch0 <- conversationStepKeysAt 0 appEnv secondAddressedMessage 0
+                epoch1 <- conversationStepKeysAt 1 appEnv secondAddressedMessage 0
+                assertBool "epoch 0's journal holds the timeout that ended it" (Map.member "idle-timeout" epoch0)
+                assertBool "epoch 1 has a journal of its own" (Map.member "turn-result" epoch1)
+                assertBool "epoch 1 did not end" (not (Map.member "idle-timeout" epoch1))
         ],
       testGroup
         "Delegate"
@@ -1116,20 +1249,32 @@ childStatusText = \case
 -- Named rather than repeated per case because there are now several cases and
 -- the interesting differences between them are the agent list and the idle
 -- window, not the six fields they all share.
--- | One generation's step index for a conversation, or a test failure.
+-- | One generation's step index for the given epoch of a conversation.
 conversationStepKeys :: AppEnv -> AddressedMessage -> Int -> IO (Map Text Value)
-conversationStepKeys appEnv msg generation = do
-  loaded <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId msg) generation)
+conversationStepKeys = conversationStepKeysAt 0
+
+conversationStepKeysAt :: Int -> AppEnv -> AddressedMessage -> Int -> IO (Map Text Value)
+conversationStepKeysAt epoch appEnv msg generation = do
+  loaded <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId epoch msg) generation)
   case loaded of
     Right keys -> pure keys
     Left err -> assertFailure ("loadStepIndex failed: " <> show err)
 
 testConversationEnv :: AppEnv -> BehaviorEnv -> [AgentDecl] -> Conversation.ConversationEnv
 testConversationEnv appEnv behaviorEnv conversationAgents =
+  testConversationEnvIdle (secondsToNominalDiffTime 1800) appEnv behaviorEnv conversationAgents
+
+-- | As 'testConversationEnv', with the idle window under the test's control.
+--
+-- The idle cases arm a timer and then fire it by hand rather than waiting, so
+-- the window they pass is only what the armed row's fireAt records.
+testConversationEnvIdle :: NominalDiffTime -> AppEnv -> BehaviorEnv -> [AgentDecl] -> Conversation.ConversationEnv
+testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
   Conversation.ConversationEnv
     { Conversation.appEnv = appEnv,
       Conversation.behaviorEnv = behaviorEnv,
       Conversation.runTimeout = secondsToNominalDiffTime 300,
+      Conversation.idleTimeout = idleWindow,
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable
@@ -1183,6 +1328,48 @@ runningSessionsFor appEnv agentName wantedConversationId = do
 
 turnRoleIndex :: TurnRow -> (Text, Int)
 turnRoleIndex TurnRow {role, turnIndex} = (role, turnIndex)
+
+-- | Fire a due conversation idle-timeout timer through the same one loop the
+-- runtime uses. Returns whether a row fired.
+-- | Drain due timers until the conversation idle timer is the one that fires.
+--
+-- __Not a single pass, and the reason is worth knowing.__ Recording a turn also
+-- schedules a kioku L1 distillation timer (@kind: "ramp"@, written by
+-- @l1TimerScheduleProjection@ in the same transaction as the assistant turn), so
+-- a parked conversation has more than one due row. 'runWorkflowTimerWorker'
+-- claims exactly one per call, ordered by @fire_at@, and a row whose fire action
+-- declines it is left in @firing@ — which the claim query skips, so it costs one
+-- pass and does not spin. Draining is therefore how a test reaches its own timer
+-- without depending on which row sorted first.
+fireDueConversationIdleTimer :: AppEnv -> IO Bool
+fireDueConversationIdleTimer appEnv = go (8 :: Int)
+  where
+    go 0 = pure False
+    go budget = do
+      now <- getCurrentTime
+      ours <- newIORef False
+      claimed <-
+        runAppIO appEnv $
+          runWorkflowTimerWorker Nothing (addUTCTime 120 now) \row -> do
+            outcome <- Conversation.conversationIdleTimeoutFireAction row
+            unsafeEff_ (writeIORef ours (maybe False (const True) outcome))
+            pure outcome
+      wasOurs <- readIORef ours
+      case claimed of
+        Right (Just _) | not wasOurs -> go (budget - 1)
+        Right (Just _) -> pure True
+        _ -> pure False
+
+-- | One session's lifecycle status and lineage predecessor.
+--
+-- Returned as a pair rather than the whole row because @status@ is ambiguous
+-- under @DuplicateRecordFields@ here -- four imported records carry one.
+conversationSessionState :: AppEnv -> SessionId -> IO (Text, Maybe Text)
+conversationSessionState appEnv sid = do
+  loaded <- runAppIO appEnv (Session.getById shikigamiMemorySpace sid)
+  case loaded of
+    Right (Right (Just SessionRow {status = rowStatus, previousSessionId = rowPrevious})) -> pure (rowStatus, rowPrevious)
+    other -> assertFailure ("getById should return the session, got " <> show (first (const ("store-error" :: String)) other))
 
 fireDueApprovalTimer :: AppEnv -> IO ()
 fireDueApprovalTimer appEnv = do

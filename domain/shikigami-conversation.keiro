@@ -82,6 +82,12 @@ workflow DanwaConversation
       # timeout. Whichever arrives first wins and the loser is a no-op, because
       # signalAwakeable returns False on an already-completed awakeable.
       await next-message -> ConversationWake
+      # The epoch's terminal step, taken only on the timeout arm: it completes
+      # the conversation's kioku session and the workflow returns. Journaled
+      # rather than done on the way out, because closing the session is an
+      # external effect and a replay must return the recorded answer instead of
+      # re-issuing the command.
+      step idle-timeout -> SessionId
     }
     # Terminal, and therefore never inside a patch block: continueAsNew unwinds
     # the body, so it is the last thing the body can do.

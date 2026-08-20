@@ -3,6 +3,8 @@ module Shikigami.Agent.Conversation
     ConversationTurnFailure (..),
     conversationTurnFailureDetail,
     ConversationTurnResult (..),
+    conversationIdleTimeoutFireAction,
+    conversationIdleTimeoutKind,
     conversationRegistry,
     conversationWorkflowId,
     conversationWorkflowName,
@@ -21,39 +23,49 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
-import Data.Time (NominalDiffTime)
+import Data.Time (NominalDiffTime, addUTCTime)
+import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Projection (InlineProjection (InlineProjection, apply))
+import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow
   ( PatchId (..),
     StepName (..),
     Workflow,
     WorkflowId (..),
+    WorkflowJournalEvent (StepRecorded),
     WorkflowName (..),
     WorkflowOutcome (..),
+    appendJournalEntryReturningId,
     awakeableAllocStepPrefix,
+    awakeableStepPrefix,
     continueAsNew,
     currentGeneration,
+    currentRunGeneration,
+    currentWorkflow,
     loadStepIndex,
     patch,
     restoreSeed,
     runWorkflowWith,
     step,
   )
-import Keiro.Workflow.Awakeable (AwakeableId, signalAwakeable)
+import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, signalAwakeable)
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects, AppEnv (..), runAppIO)
 import Kioku.Distill.Timer (l1TimerScheduleProjection)
 import Kioku.Id (SessionId, genSessionId, idText, parseId)
 import Kioku.Session qualified as Session
-import Kioku.Session.Domain (RecordTurnData (..), SessionCommand (..), StartSessionData (..))
+import Kioku.Session.Domain (CompleteSessionData (..), RecordTurnData (..), SessionCommand (..), StartSessionData (..))
 import Kioku.Session.EventStream (sessionEventStream, sessionStream)
 import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..), sessionInlineProjection)
 import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -63,19 +75,26 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, runBehaviorAttempt, triggerOnly)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
-import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered), SinkResult (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
+import Text.Read (readMaybe)
 
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
     runTimeout :: !NominalDiffTime,
+    -- | How long a parked conversation waits for its next human message before
+    -- ending its epoch. This is the /between-turns/ window; 'runTimeout' bounds
+    -- a turn. There is deliberately no rotation cadence beside it: the journal
+    -- is bounded by construction, not by a tuning constant.
+    idleTimeout :: !NominalDiffTime,
     danwa :: !DanwaConfig,
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
@@ -84,6 +103,9 @@ data ConversationEnv = ConversationEnv
 
 conversationRunTimeout :: ConversationEnv -> NominalDiffTime
 conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout
+
+conversationIdleTimeout :: ConversationEnv -> NominalDiffTime
+conversationIdleTimeout ConversationEnv {idleTimeout = timeout} = timeout
 
 data ConversationTurnResult = ConversationTurnResult
   { sessionId :: !SessionId,
@@ -211,15 +233,56 @@ emptyConversationSeed =
 conversationWorkflowName :: WorkflowName
 conversationWorkflowName = ConversationGenerated.workflowName
 
-conversationWorkflowId :: AddressedMessage -> WorkflowId
-conversationWorkflowId AddressedMessage {conversationId} =
-  WorkflowId ("danwa-conversation:" <> conversationId)
+-- | The workflow instance one epoch of a conversation runs as.
+--
+-- __Epoch 0 keeps the historical id verbatim.__ That is a durable identity, and
+-- every instance that existed before epochs did is epoch 0; only epoch 1 and
+-- later carry the @:e\<n\>@ suffix, so nothing already journaled moves.
+--
+-- The epoch has to be here at all because a keiro workflow instance is
+-- identified by its workflow id, and a __completed instance cannot be
+-- restarted__: running it again replays its recorded completion. A conversation
+-- that ended on an idle timeout and then received another message would
+-- therefore return the /previous/ epoch's turn result and silently drop the new
+-- message. Ending an epoch and opening the next one is only coherent if the next
+-- one is a different instance.
+conversationWorkflowId :: Int -> AddressedMessage -> WorkflowId
+conversationWorkflowId epoch AddressedMessage {conversationId} =
+  WorkflowId (conversationWorkflowIdText epoch conversationId)
+
+conversationWorkflowIdText :: Int -> Text -> Text
+conversationWorkflowIdText epoch conversationId
+  | epoch <= 0 = base
+  | otherwise = base <> ":e" <> Text.pack (show epoch)
+  where
+    base = "danwa-conversation:" <> conversationId
+
+-- | Recover an epoch from a workflow id.
+--
+-- The id is self-describing, which is what lets the workflow body know its own
+-- epoch without a new journaled field: 'completeEpoch' needs it to say which
+-- epoch the conversation is moving past, and asking 'currentWorkflow' is exact
+-- where a carried counter would be one more thing to keep in step.
+conversationEpochOfWorkflowId :: WorkflowId -> Int
+conversationEpochOfWorkflowId (WorkflowId wid) =
+  case Text.breakOnEnd ":e" wid of
+    (prefix, suffix)
+      | not (Text.null prefix),
+        Just epoch <- readMaybe (Text.unpack suffix) ->
+          epoch
+    _ -> 0
 
 runConversationTurn :: ConversationEnv -> AgentDecl -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
-runConversationTurn env decl msg = do
-  delivered <- deliverConversationInput env msg
-  driveConversationTurn env msg conversationDriveBudget $
-    if delivered then Nothing else Just (ConversationStart (name decl) msg)
+runConversationTurn env decl msg@AddressedMessage {conversationId = msgConversationId} = do
+  -- Which epoch is live is resolved once, before anything addresses the
+  -- conversation, because the workflow id depends on it.
+  epochE <- runKioku env (SessionIndex.lookupConversationEpoch msgConversationId)
+  case epochE of
+    Left err -> pure (Left (ConversationTransientFailure (Text.pack (show err))))
+    Right epoch -> do
+      delivered <- deliverConversationInput env msg
+      driveConversationTurn env epoch msg conversationDriveBudget $
+        if delivered then Nothing else Just (ConversationStart (name decl) msg)
 
 -- | How many times one call will re-enter a rotating workflow before handing the
 -- job back to the queue.
@@ -249,24 +312,25 @@ conversationDriveBudget = 8
 -- own turn.
 driveConversationTurn ::
   ConversationEnv ->
+  Int ->
   AddressedMessage ->
   Int ->
   Maybe ConversationStart ->
   IO (Either ConversationTurnFailure ConversationTurnResult)
-driveConversationTurn env msg budget mStart = do
-  outcomeE <- runConversationWorkflow env mStart msg
+driveConversationTurn env epoch msg budget mStart = do
+  outcomeE <- runConversationWorkflow env epoch mStart msg
   case outcomeE of
     Left err -> pure (Left (ConversationTransientFailure (Text.pack (show err))))
     Right Failed -> pure (Left (ConversationTerminalFailure "conversation workflow failed"))
     Right Cancelled -> pure (Left (ConversationTerminalFailure "conversation workflow cancelled"))
     Right (Completed result) -> pure (first ConversationPermanentFailure result)
-    Right Suspended -> completedTurn env msg
+    Right Suspended -> completedTurn env epoch msg
     Right ContinuedAsNew -> do
-      loaded <- loadConversationResult env (conversationWorkflowId msg) (messageId msg)
+      loaded <- loadConversationResult env (conversationWorkflowId epoch msg) (messageId msg)
       case loaded of
         Just result -> pure (Right result)
         Nothing
-          | budget > 0 -> driveConversationTurn env msg (budget - 1) Nothing
+          | budget > 0 -> driveConversationTurn env epoch msg (budget - 1) Nothing
           | otherwise ->
               pure
                 ( Left
@@ -276,9 +340,9 @@ driveConversationTurn env msg budget mStart = do
                 )
 
 -- | Read back the turn this run journaled.
-completedTurn :: ConversationEnv -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
-completedTurn env msg = do
-  loaded <- loadConversationResult env (conversationWorkflowId msg) (messageId msg)
+completedTurn :: ConversationEnv -> Int -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
+completedTurn env epoch msg = do
+  loaded <- loadConversationResult env (conversationWorkflowId epoch msg) (messageId msg)
   pure case loaded of
     Just result -> Right result
     Nothing -> Left (ConversationTransientFailure ("conversation workflow recorded no turn result for " <> messageId msg))
@@ -334,13 +398,10 @@ rotatingConversation env mStart = do
   case turn of
     Left err -> pure (Left err)
     Right result -> do
-      wake <- awaitConversationWake
+      wake <- awaitConversationWake env
       case wake of
         NextMessage next -> continueAsNew (nextConversationSeed seed start next)
-        -- Nothing signals this yet -- the idle-timeout timer that does is the
-        -- next milestone. Ending the epoch is already the right answer to it;
-        -- what M3 adds in front of this is completing the kioku session.
-        IdleTimedOut -> pure (Right result)
+        IdleTimedOut -> completeEpoch env decl (initialMessage start) result
 
 -- | The pre-rotation shape: one immortal generation, suffixed labels.
 legacyConversation ::
@@ -381,16 +442,189 @@ nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName 
       lastMessageId = Just (messageId finished)
     }
 
--- | Park on the single declared await.
+-- | Park on the single declared await, with the idle timer armed against it.
 --
 -- Allocation goes through the generated 'ConversationGenerated.nextMessageAwait'
 -- binding rather than a hand-built 'StepName', so the label the runtime awaits
 -- is the label @domain\/shikigami-conversation.keiro@ declares, by construction
 -- rather than by agreement.
-awaitConversationWake :: Eff (Workflow : AppEffects) ConversationWake
-awaitConversationWake = do
-  (_aid, awaitAnswer) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
+--
+-- The timer is armed __after__ the awakeable exists and __before__ the await
+-- suspends, which is keiro's obligation 3 for a custom wake source: the arm
+-- re-runs on every resume until the awaited result is journaled, so a delivery
+-- stranded by a rotation is repaired by the next arm rather than lost.
+-- 'scheduleTimerOnceTx' is first-arm-wins, so re-arming is a no-op.
+awaitConversationWake :: ConversationEnv -> Eff (Workflow : AppEffects) ConversationWake
+awaitConversationWake env = do
+  (aid, awaitAnswer) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
+  armConversationIdleTimeout (conversationIdleTimeout env) aid
   awaitAnswer
+
+-- | End this epoch: close the kioku session, then let the workflow complete.
+--
+-- __The session is closed through 'Session.completeWithContext'__, not through
+-- the deprecated unsuffixed wrapper, which is confined to kioku's legacy memory
+-- space. Shikigami answers the space-and-principal question in exactly one
+-- module, "Shikigami.Memory.Access", and this plan does not add a call site that
+-- another one has to come back and fix.
+--
+-- Closing it is the point of the timeout. Nothing ever completed a conversation
+-- session before, so @status = "running"@ sessions accumulated forever, and
+-- session resolution — which only ever reused a running session — had a growing
+-- set to walk. A completed session with a stable @subjectRef@ also gives the
+-- next epoch a lineage to continue through kioku's @previousSessionId@.
+--
+-- The completion is journaled, so a replay of this generation returns the
+-- recorded answer rather than re-issuing the command; kioku's own completion is
+-- idempotent besides, which is what makes the at-least-once step safe.
+completeEpoch ::
+  ConversationEnv ->
+  AgentDecl ->
+  AddressedMessage ->
+  ConversationTurnResult ->
+  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
+completeEpoch env decl AddressedMessage {conversationId = msgConversationId} result@ConversationTurnResult {sessionId = sid} = do
+  (_, workflowId) <- currentWorkflow
+  let thisEpoch = conversationEpochOfWorkflowId workflowId
+  _ <- step (StepName "idle-timeout") (liftIO (requireRight =<< endConversationEpoch env decl msgConversationId thisEpoch sid))
+  pure (Right result)
+
+-- | Close the session and hand the conversation to its next epoch.
+--
+-- Two writes, in that order and for that reason. Closing the session is the
+-- point of the timeout. Advancing the epoch is what makes the /next/ message
+-- coherent: this workflow instance is about to complete, and a completed keiro
+-- instance cannot be restarted under its id — running it again replays this
+-- completion — so the next message must address a different instance or be
+-- silently swallowed.
+--
+-- Both are safe to repeat, which is what a journaled step needs: kioku's
+-- completion is idempotent on an already-completed session, and
+-- 'SessionIndex.advanceConversationEpoch' sets an absolute value under a
+-- @GREATEST@ rather than incrementing.
+endConversationEpoch :: ConversationEnv -> AgentDecl -> Text -> Int -> SessionId -> IO (Either Text Text)
+endConversationEpoch env decl conversationId thisEpoch sid = do
+  now <- getCurrentTime
+  outcome <-
+    runKioku env $
+      Session.completeWithContext
+        (shikigamiWriteContext (name decl))
+        CompleteSessionData
+          { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (name decl),
+            completedAt = now,
+            modelUsed = Nothing,
+            summary = Just "conversation idle timeout"
+          }
+  -- Both layers are bound, per
+  -- docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md:
+  -- an unreachable store is a different fact from a refused command, and only
+  -- the first is worth another attempt.
+  case outcome of
+    Left storeErr -> pure (Left ("conversation session completion could not reach the store: " <> Text.pack (show storeErr)))
+    Right (Left refusal) -> pure (Left ("conversation session completion was refused: " <> Text.pack (show refusal)))
+    Right (Right completed) -> do
+      advanced <- runKioku env (SessionIndex.advanceConversationEpoch conversationId (thisEpoch + 1) now)
+      pure case advanced of
+        Left storeErr -> Left ("conversation epoch could not be advanced: " <> Text.pack (show storeErr))
+        Right () -> Right (idText completed)
+
+-- | Arm the durable idle timer for this generation's awakeable.
+--
+-- Modelled on 'Shikigami.Agent.Approval.armApprovalDeadline', including the
+-- staleness property that matters most here: the timer id is derived from
+-- @(workflowName, workflowId, generation, label)@, and under one turn per
+-- generation __the generation is the turn token__. A timer armed for turn /n/
+-- belongs to a generation that turn /n+1/ has closed, so it cannot terminate a
+-- later turn. There is no second counter to keep in step.
+armConversationIdleTimeout ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  NominalDiffTime ->
+  AwakeableId ->
+  Eff es ()
+armConversationIdleTimeout deadline aid = do
+  (workflowName, workflowId) <- currentWorkflow
+  generation <- currentRunGeneration
+  now <- liftIO getCurrentTime
+  let request =
+        TimerRequest
+          { timerId = conversationIdleTimeoutTimerId workflowName workflowId generation,
+            processManagerName = unWorkflowName workflowName,
+            correlationId = unWorkflowId workflowId,
+            fireAt = addUTCTime deadline now,
+            payload = Aeson.toJSON (conversationIdleTimeoutPayload aid)
+          }
+  void (runTransaction (scheduleTimerOnceTx request))
+
+conversationIdleTimeoutTimerId :: WorkflowName -> WorkflowId -> Int -> TimerId
+conversationIdleTimeoutTimerId (WorkflowName workflowName) (WorkflowId workflowId) generation =
+  TimerId $
+    UUID.V5.generateNamed UUID.V5.namespaceURL $
+      nameBytes $
+        Text.intercalate ":" ["shikigami", conversationIdleTimeoutKind, workflowName, workflowId, Text.pack (show generation), "next-message"]
+
+data ConversationIdleTimeoutPayload = ConversationIdleTimeoutPayload
+  { kind :: !Text,
+    awakeableId :: !AwakeableId
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+conversationIdleTimeoutPayload :: AwakeableId -> ConversationIdleTimeoutPayload
+conversationIdleTimeoutPayload aid =
+  ConversationIdleTimeoutPayload
+    { kind = conversationIdleTimeoutKind,
+      awakeableId = aid
+    }
+
+-- | The discriminator that keeps one timer loop able to route three kinds of row.
+conversationIdleTimeoutKind :: Text
+conversationIdleTimeoutKind = "shikigami.conversation-idle-timeout"
+
+parseConversationIdleTimeoutPayload :: Value -> Maybe AwakeableId
+parseConversationIdleTimeoutPayload value = do
+  ConversationIdleTimeoutPayload {kind, awakeableId} <- parseMaybe Aeson.parseJSON value
+  if kind == conversationIdleTimeoutKind
+    then Just awakeableId
+    else Nothing
+
+-- | Fire a due conversation idle timer.
+--
+-- Returns 'Nothing' for a row that is not ours, which is what lets
+-- 'Shikigami.Trigger.Scheduler.shikigamiTimerFallback' route three kinds of
+-- timer through the one loop the timer table can safely have.
+--
+-- __A superseded timer settles without effect, and that is by construction
+-- rather than by a check alone.__ Its id belongs to a closed generation, and
+-- 'signalAwakeable' on an already-resolved or abandoned awakeable returns
+-- 'False' without changing the recorded value. The explicit staleness check is
+-- the awakeable lookup: an awakeable whose owning workflow has moved on has
+-- nothing to append to.
+--
+-- __A terminal journal refusal is not an error.__ Keiro's obligation 2 for a
+-- custom wake source is to expect the append to be declined when the workflow
+-- has already gone terminal; the right response is to settle the timer row and
+-- deliver nothing, which is what returning 'Nothing' after the signal does.
+conversationIdleTimeoutFireAction ::
+  (Store :> es, IOE :> es) =>
+  TimerRow ->
+  Eff es (Maybe EventId)
+conversationIdleTimeoutFireAction TimerRow {payload = timerPayload} =
+  case parseConversationIdleTimeoutPayload timerPayload of
+    Nothing -> pure Nothing
+    Just aid -> do
+      _ <- signalAwakeable aid IdleTimedOut
+      lookupAwakeable (awakeableIdToUuid aid) >>= \case
+        Nothing -> pure Nothing
+        Just AwakeableRow {ownerWorkflowName, ownerWorkflowId, payload = storedPayload} -> do
+          now <- liftIO getCurrentTime
+          let eventPayload = fromMaybe (toJSON IdleTimedOut) storedPayload
+          Just
+            <$> appendJournalEntryReturningId
+              (WorkflowName ownerWorkflowName)
+              (WorkflowId ownerWorkflowId)
+              (StepRecorded (awakeableStepPrefix <> awakeableIdText aid) eventPayload now)
 
 resolveDeclStep :: ConversationEnv -> ConversationStart -> Eff (Workflow : AppEffects) AgentDecl
 resolveDeclStep env ConversationStart {agentName} =
@@ -541,10 +775,11 @@ conversationRotationPatch = PatchId "shikigami-conversation-rotation-v1"
 
 runConversationWorkflow ::
   ConversationEnv ->
+  Int ->
   Maybe ConversationStart ->
   AddressedMessage ->
   IO (Either StoreError (WorkflowOutcome (Either Text ConversationTurnResult)))
-runConversationWorkflow env mStart msg =
+runConversationWorkflow env epoch mStart msg =
   let AppEnv {connectionSettings, tracer} = appEnv env
    in runEff
         . runTracing tracer
@@ -554,7 +789,7 @@ runConversationWorkflow env mStart msg =
         $ runWorkflowWith
           shikigamiWorkflowRunOptions
           conversationWorkflowName
-          (conversationWorkflowId msg)
+          (conversationWorkflowId epoch msg)
           (conversationWorkflow env mStart)
 
 deliverConversationInput :: ConversationEnv -> AddressedMessage -> IO Bool
@@ -570,9 +805,12 @@ deliverConversationInput env = deliverConversationInputFromApp (appEnv env)
 -- finds the previous generation's abandoned id and signals something nobody is
 -- awaiting.
 deliverConversationInputFromApp :: AppEnv -> AddressedMessage -> IO Bool
-deliverConversationInputFromApp appEnv' msg = do
+deliverConversationInputFromApp appEnv' msg@AddressedMessage {conversationId = msgConversationId} = do
   result <- runAppIO appEnv' do
-    let wid = conversationWorkflowId msg
+    -- The epoch decides which instance, the generation decides which journal
+    -- inside it. Both are resolved; neither is assumed.
+    epoch <- SessionIndex.lookupConversationEpoch msgConversationId
+    let wid = conversationWorkflowId epoch msg
     generation <- currentGeneration conversationWorkflowName wid
     stepIndex <- loadStepIndex conversationWorkflowName wid generation
     let aids = pendingInputAids stepIndex
@@ -722,7 +960,12 @@ turnPayload TurnRow {turnIndex, role, content} =
 --    index__ if it finds one. This is what repairs a session started before the
 --    index existed, and a session whose index write was lost to a crash between
 --    the two transactions.
--- 3. Nothing exists, so a session is started (which writes the index).
+-- 3. Nothing running exists, so a new session is started — __chained to the
+--    completed session of the previous epoch, when there is one.__ That is the
+--    other half of what the idle timeout buys: an epoch that ends closes its
+--    session, and the next message opens a session that names the closed one as
+--    its @previousSessionId@, so @Session.getChain@ can walk the whole
+--    conversation across every epoch it has had.
 resolveSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
 resolveSession env decl conversationId = do
   indexedE <- runKioku env (SessionIndex.lookupConversationSession conversationId)
@@ -732,7 +975,7 @@ resolveSession env decl conversationId = do
       confirmed <- maybe (pure Nothing) (confirmIndexedSession env conversationId) indexed
       case confirmed of
         Just sid -> pure (Right sid)
-        Nothing -> scanForConversationSession env decl conversationId
+        Nothing -> scanForConversationSession env decl conversationId indexed
 
 -- | Re-read an indexed pointer through kioku before trusting it.
 --
@@ -752,8 +995,13 @@ confirmIndexedSession env conversationId sidText =
         _ -> Nothing
 
 -- | The pre-index resolution path, kept as the repair arm behind an index miss.
-scanForConversationSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
-scanForConversationSession env decl conversationId = do
+--
+-- @indexed@ is what the index said, which is 'Nothing' only for a conversation
+-- that has never had a session. When it points at a /completed/ session — the
+-- shape an idle timeout leaves behind — that id becomes the new session's
+-- lineage predecessor.
+scanForConversationSession :: ConversationEnv -> AgentDecl -> Text -> Maybe Text -> IO (Either Text SessionId)
+scanForConversationSession env decl conversationId indexed = do
   let scope = agentScope (name decl)
   rowsE <- runKioku env (Session.getByScope shikigamiMemorySpace scope)
   case rowsE of
@@ -765,7 +1013,41 @@ scanForConversationSession env decl conversationId = do
           case parseId sidText of
             Left err -> pure (Left ("parse session id: " <> err))
             Right sid -> fmap (const sid) <$> rememberSession env conversationId sid
-        Nothing -> startSession env decl conversationId
+        Nothing -> do
+          previous <- previousEpochSession env conversationId indexed rows
+          startSession env decl conversationId previous
+
+-- | The completed session the next epoch continues from, if there is one.
+--
+-- Prefers the index, which points at the most recent session this conversation
+-- had, and falls back to the scan's rows for a conversation whose session
+-- predates the index. Only a /completed/ session is chained: a failed one is not
+-- a predecessor this conversation should claim continuity with, and a running
+-- one would have been reused rather than reaching here.
+previousEpochSession :: ConversationEnv -> Text -> Maybe Text -> [SessionRow] -> IO (Maybe SessionId)
+previousEpochSession env conversationId indexed rows = do
+  fromIndex <- maybe (pure Nothing) (completedSessionId env conversationId) indexed
+  pure case fromIndex of
+    Just sid -> Just sid
+    Nothing ->
+      listToMaybe
+        [ sid
+        | SessionRow {sessionId, subjectRef, status} <- rows,
+          subjectRef == Just conversationId,
+          status == "completed",
+          Right sid <- [parseId sessionId]
+        ]
+
+completedSessionId :: ConversationEnv -> Text -> Text -> IO (Maybe SessionId)
+completedSessionId env conversationId sidText =
+  case parseId sidText of
+    Left _ -> pure Nothing
+    Right sid -> do
+      rowE <- runKioku env (Session.getById shikigamiMemorySpace sid)
+      pure case rowE of
+        Right (Right (Just SessionRow {subjectRef, status}))
+          | subjectRef == Just conversationId && status == "completed" -> Just sid
+        _ -> Nothing
 
 -- | Point the index at this conversation's session.
 --
@@ -785,8 +1067,14 @@ isRunningConversationSession :: Text -> SessionRow -> Bool
 isRunningConversationSession conversationId (SessionRow {subjectRef = rowSubjectRef, status = rowStatus}) =
   rowSubjectRef == Just conversationId && rowStatus == "running"
 
-startSession :: ConversationEnv -> AgentDecl -> Text -> IO (Either Text SessionId)
-startSession env decl conversationId = do
+-- | Open a session for this conversation, chained to the previous epoch's.
+--
+-- @previousSessionId@ used to be unconditionally 'Nothing', which was the only
+-- honest answer while nothing ever completed a session — there was never a
+-- previous epoch to name. Now that an idle timeout closes one, naming it is what
+-- makes a conversation's history walkable across epochs.
+startSession :: ConversationEnv -> AgentDecl -> Text -> Maybe SessionId -> IO (Either Text SessionId)
+startSession env decl conversationId previousSession = do
   now <- getCurrentTime
   sid <- genSessionId
   result <-
@@ -801,7 +1089,7 @@ startSession env decl conversationId = do
             focus = "conversation",
             scope = agentScope (name decl),
             subjectRef = Just conversationId,
-            previousSessionId = Nothing,
+            previousSessionId = previousSession,
             parentSessionId = Nothing,
             delegationDepth = 0,
             startedAt = now
@@ -907,7 +1195,7 @@ prepareConversationReplySinkIntent ::
 prepareConversationReplySinkIntent grantSource decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
   AgentWorkflow.prepareSinkIntent
     grantSource
-    (conversationWorkflowId msg)
+    (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
     (name decl)
     (idText sid)

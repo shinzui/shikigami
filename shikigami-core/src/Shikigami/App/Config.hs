@@ -87,6 +87,7 @@ module Shikigami.App.Config
     httpPortKey,
     workerRunTimeoutSecondsKey,
     approvalDeadlineSecondsKey,
+    conversationIdleTimeoutSecondsKey,
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
@@ -276,6 +277,13 @@ data AppConfig = AppConfig
     runTimeout :: !NominalDiffTime,
     -- | Maximum duration an approval or flow acknowledgement may remain open.
     approvalDeadline :: !NominalDiffTime,
+    -- | How long a parked conversation waits for its next human message before
+    -- ending its epoch and completing its kioku session.
+    --
+    -- This is the /between-turns/ window, not a bound on a turn: a turn is
+    -- bounded by 'runTimeout'. A conversation that times out is not an error —
+    -- the next message opens a fresh epoch chained to the one that closed.
+    conversationIdleTimeout :: !NominalDiffTime,
     -- | Base URL of the kawa ingest doorway.
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
@@ -333,6 +341,7 @@ appConfig =
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
+    <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
@@ -528,6 +537,14 @@ approvalDeadlineSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
+conversationIdleTimeoutSecondsSetting :: Setting NominalDiffTime
+conversationIdleTimeoutSecondsSetting =
+  publicSettingWithRenderer
+    conversationIdleTimeoutSecondsKey
+    "Maximum seconds a parked conversation waits for its next message before completing (1-86400)"
+    positiveDurationDecoder
+    renderDurationSeconds
+
 -- | One day is well below @maxBound :: Int@ after conversion to microseconds on
 -- every 64-bit platform supported by this repository's deployment flake, while
 -- still allowing operational budgets far above the defaults.
@@ -655,6 +672,9 @@ workerRunTimeoutSecondsKey = stableKey "worker.run_timeout_seconds"
 approvalDeadlineSecondsKey :: Key
 approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
 
+conversationIdleTimeoutSecondsKey :: Key
+conversationIdleTimeoutSecondsKey = stableKey "conversation.idle_timeout_seconds"
+
 sinksKawaBaseUrlKey :: Key
 sinksKawaBaseUrlKey = stableKey "sinks.kawa.base_url"
 
@@ -741,6 +761,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
+          binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,

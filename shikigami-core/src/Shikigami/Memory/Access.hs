@@ -42,6 +42,7 @@ module Shikigami.Memory.Access
   ( shikigamiMemorySpace,
     agentActor,
     shikigamiReadContext,
+    shikigamiWriteContext,
   )
 where
 
@@ -105,6 +106,23 @@ agentPrincipal agentName =
 shikigamiReadContext :: MemoryAccessContext
 shikigamiReadContext =
   assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor shikigamiServicePrincipal)
+
+-- | The authorization context Shikigami writes an agent's memory under.
+--
+-- Distinct from 'shikigamiReadContext' in exactly one way, and the difference is the whole point:
+-- its actor is the /agent/, not the service. Kioku's @underContext@ refuses a write whose
+-- @actorPrincipal@ disagrees with the context's recorded actor, so a write that records
+-- @agentActor name@ must be authorized by a context built from the same ref. Building both from
+-- 'agentPrincipal' makes that agreement structural rather than a thing two call sites remember.
+--
+-- Use this with kioku's @*WithContext@ surface. The unsuffixed wrappers ('Kioku.Session.start'
+-- and friends) are deprecated and confined to the legacy space; they still appear in this
+-- repository, and retiring them is
+-- @docs\/plans\/54-key-durable-agent-state-by-meibo-principal.md@'s work — but no new call site
+-- should join them.
+shikigamiWriteContext :: Text -> MemoryAccessContext
+shikigamiWriteContext agentName =
+  assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor (agentPrincipal agentName))
 
 -- | The service's own principal. The name contains no @:@, so 'mkPrincipalRef' accepts it; the
 -- @error@ is unreachable and would fire at module load rather than mid-run if that ever changed.
