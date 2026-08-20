@@ -39,6 +39,7 @@ library
     Shikigami.App.Config.Load
     Shikigami.App.Role
     Shikigami.Attestation.Agent
+    Shikigami.Attestation.Compliance
     Shikigami.Attestation.Envelope
     Shikigami.Attestation.Evidence
     Shikigami.Attestation.Profile
@@ -149,6 +150,7 @@ library
     , settei-yaml                  ==0.2.0.0
     , shibuya-core
     , shikumi
+    , streamly-core
     , text                         >=2.1
     , time                         >=1.12
     , uuid
@@ -192,6 +194,7 @@ test-suite shikigami-core-test
     , directory
     , effectful
     , filepath
+    , generic-lens
     , handan-core
     , hasql
     , hasql-pool

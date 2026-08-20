@@ -59,29 +59,42 @@ remaining obstacle, which is a bound rather than a missing contract.
       non-conforming, incomplete, and failed terminal states. Completed 2026-08-19.
 - [x] M1: illegal transitions are rejected — a run cannot seal from `requested`, and an
       `attested` record cannot be reopened. Completed 2026-08-19.
-- [ ] M2: `Baikai.Evidence.ModelCallEvidence` collected through a deterministic seam, with a
+- [x] M2: `Baikai.Evidence.ModelCallEvidence` collected through a deterministic seam, with a
       fixture source in tests. **Import the type from baikai; do not define a local one.**
-- [ ] M2 (gate): `baikai 0.5.0.0` is in the cohort. Blocked as of 2026-08-10 by
-      `kioku-core 0.3.0.0`'s `baikai ^>=0.4.1.0` — see Surprises & Discoveries. Until it clears,
-      M1, M3, M4, and M5 proceed unchanged and M2 uses fixtures shaped to baikai's published
-      record rather than to an invented one.
-- [ ] M2: every call opts in by setting `Options.evidence` to an `EvidenceRequest` carrying the
+      Completed 2026-08-19.
+- [x] M2 (gate): `baikai 0.5.0.0` is in the cohort. The current `kioku-core` bound admits the
+      released evidence API; the stale 2026-08-10 blocker is corrected in Surprises &
+      Discoveries. Completed 2026-08-19.
+- [x] M2: every call opts in by setting `Options.evidence` to an `EvidenceRequest` carrying the
       run identifier, retry provenance, and required `EvidenceStrength`. A call that does not opt
-      in behaves exactly as before, so this is additive to plan 13's provider path.
-- [ ] M2: every call receives the run id and a unique call id, taken from the correlation
-      vocabulary rather than minted here.
-- [ ] M3: complete accounting — the two-call, retry, and delegated-child fixtures each produce one
-      roll-up accounting for every call exactly once.
-- [ ] M3: sealing waits for every relevant child; a run with a pending child stays `running` and
-      reports why.
-- [ ] M4: the compliance roll-up: all non-conforming reasons enumerated, deterministic steps
-      recorded as not-applicable, mixed-model runs listing each call.
-- [ ] M4: mutation tests — one fixture per reason in the taxonomy, each producing exactly that
-      reason.
+      in behaves exactly as before, so this is additive to plan 13's provider path. Completed
+      2026-08-19.
+- [x] M2: every call receives the run id and a unique Shikigami call-correlation id; Baikai's
+      independently generated provider-call id is preserved beside it for retry provenance.
+      Completed 2026-08-19.
+- [x] M3: complete accounting — the two-call, retry, and delegated-child fixtures each produce one
+      roll-up accounting for every call exactly once. Completed 2026-08-19.
+- [x] M3: sealing waits for every relevant child; a run with a pending child stays `running` and
+      reports why. Completed 2026-08-19.
+- [x] M4: the compliance roll-up: all non-conforming reasons enumerated, deterministic steps
+      recorded as not-applicable, mixed-model runs listing each call. Completed 2026-08-19.
+- [x] M4: mutation tests — one fixture per reason in the taxonomy, each producing exactly that
+      reason. Completed 2026-08-19.
 - [ ] M5: pg-migrate-managed evidence tables; read models reconciled; state queryable by run id.
 
 
 ## Surprises & Discoveries
+
+**The old cohort blocker no longer exists (verified 2026-08-19).** The repository's resolved
+cohort builds against `baikai 0.5.0.0`; the earlier `kioku-core 0.3.0.0` bound described below is
+historical, not a current constraint. Both the live trace collector and literal fixture codecs
+therefore exercise the released Baikai type directly.
+
+**Baikai owns its provider-call id (discovered 2026-08-19).** `EvidenceRequest` accepts the run id,
+attempt, and a prior Baikai call id, but not a caller-selected current call id. The collector must
+retain two identities: the provider-call id emitted by Baikai, which makes `supersedes` meaningful,
+and the deterministic `CallCorrelationId` from Shikigami's logging vocabulary, which joins audit
+records to local logs and child accounting.
 
 **The checked aggregate expands to 56 behavior obligations (discovered 2026-08-19).** Seven live
 transitions plus every reachable rejection cell are now covered by consumer-owned executable
@@ -147,6 +160,20 @@ needs to author its own encoder.
 
 
 ## Decision Log
+
+- Decision: Keep Baikai's generated call id and Shikigami's deterministic call-correlation id as
+  separate fields on each recorded call.
+  Rationale: Baikai does not offer a current-call-id input; forcing the two identifiers together
+  would either discard provider retry provenance or invent an API the dependency does not have.
+  Preserving both gives the roll-up stable local joins and lossless upstream evidence.
+  Date: 2026-08-19
+
+- Decision: Use Baikai's terminal trace event as the production evidence source while retaining
+  literal JSON fixtures at the accounting seam.
+  Rationale: the released source emits exactly one `CallEvidence` event for an opted-in terminal
+  call, including failures. Literal fixtures still pin the encode-only payload shape and make
+  retry, multi-call, child, and mutation tests deterministic without replacing the live path.
+  Date: 2026-08-19
 
 - Decision: Keep lifecycle events small and store Baikai evidence in the SQL projection rather
   than embedding it in the Keiro event codec.

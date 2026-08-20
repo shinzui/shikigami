@@ -15,18 +15,32 @@ where
 import Baikai.Api (Api (Custom))
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Evidence
-  ( ThinkingAdjustment (ThinkingDroppedUnsupportedHost),
+  ( CallStatus (CallSucceeded),
+    EndpointIdentity (..),
+    Observed (Observed),
+    ThinkingAdjustment (ThinkingDroppedUnsupportedHost),
     ThinkingMode (ThinkingModeUnsupported),
     ThinkingTranslation (..),
+    TransportKind (TransportAgentRun),
+    baseEvidence,
+    commitmentDigest,
+    configurationDigest,
+    newCallId,
     noThinkingRequested,
   )
 import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model (..), _Model)
+import Baikai.Model qualified as Model
 import Baikai.Options (Options (..))
+import Baikai.Options qualified as Options
 import Baikai.Provider.Registry (ApiProvider (..), registerApiProvider)
 import Baikai.Response (Response (..), _Response)
 import Baikai.Stream (liftCompleteToStream)
+import Control.Lens ((&), (.~))
+import Data.Aeson (object, toJSON, (.=))
+import Data.Generics.Labels ()
 import Data.Text (Text)
+import Data.Time (getCurrentTime)
 import Data.Vector qualified as V
 
 -- | The API tag the stub answers for. Using the @Custom@ escape hatch avoids
@@ -62,9 +76,49 @@ stubApiProvider :: ApiProvider
 stubApiProvider =
   ApiProvider
     { apiTag = stubApi,
-      stream = liftCompleteToStream (\_model _ctx _opts -> pure stubResponse),
-      complete = \_model _ctx _opts -> pure stubResponse,
+      stream = liftCompleteToStream completeStub,
+      complete = completeStub,
       describeThinking = stubThinking
+    }
+
+completeStub :: Model -> context -> Options -> IO Response
+completeStub model _context options =
+  case Options.evidence options of
+    Nothing -> pure stubResponse
+    Just request -> do
+      now <- getCurrentTime
+      callId <- newCallId
+      let requestEnvelope =
+            object
+              [ "provider" .= Model.provider model,
+                "model" .= Model.modelId model,
+                "options" .= toJSON options
+              ]
+          responseEnvelope = object ["reply" .= stubReplyText]
+          terminal =
+            baseEvidence
+              request
+              callId
+              stubEndpoint
+              (Model.modelId model)
+              (stubThinking model options)
+              now
+              now
+              CallSucceeded
+              (commitmentDigest requestEnvelope)
+              (configurationDigest requestEnvelope)
+              & #responseCommitment .~ Observed (commitmentDigest responseEnvelope)
+      pure (stubResponse & #evidence .~ Just terminal)
+
+stubEndpoint :: EndpointIdentity
+stubEndpoint =
+  EndpointIdentity
+    { provider = "stub",
+      api = "stub",
+      transport = TransportAgentRun,
+      endpoint = Nothing,
+      baikaiVersion = "0.5.0.0",
+      implementationVersion = Just "shikigami-stub-v1"
     }
 
 -- | What the stub would do with a reasoning-effort request: nothing, and it says so.
