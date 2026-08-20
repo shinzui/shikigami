@@ -8,6 +8,9 @@
 module Shikigami.Agent.RunJob.Worker
   ( runJob,
     handleRunJob,
+    agentJobOutcome,
+    conversationJobOutcome,
+    transientBehaviorJobOutcome,
     withVisibilityHeartbeat,
     withVisibilityHeartbeatEvery,
   )
@@ -59,7 +62,7 @@ handleRunJob env context job =
   withVisibilityHeartbeat context do
     attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
     case attemptResult of
-      Left (TransientBehaviorFailure {detail}) -> do
+      Left failure@(TransientBehaviorFailure {detail}) -> do
         liftIO $
           jobLog
             env
@@ -69,7 +72,7 @@ handleRunJob env context job =
             [ "error" Aeson..= detail,
               "reason" Aeson..= ("transient_behavior_failure" :: Text)
             ]
-        pure RetryDefault
+        pure (transientBehaviorJobOutcome failure)
       Right outcome -> pure outcome
 
 -- | Production heartbeat policy: after ten seconds, extend visibility to thirty
@@ -130,7 +133,7 @@ runConversationAgent env job addressed =
             [ "error" Aeson..= err,
               "reason" Aeson..= ("transient_conversation_failure" :: Text)
             ]
-          pure RetryDefault
+          pure ()
         Left (Conversation.ConversationPermanentFailure err) -> do
           jobLog
             env
@@ -140,7 +143,7 @@ runConversationAgent env job addressed =
             [ "error" Aeson..= err,
               "reason" Aeson..= ("permanent_conversation_failure" :: Text)
             ]
-          pure (deadOutcome "permanent_conversation_failure" err)
+          pure ()
         Left (Conversation.ConversationTerminalFailure err) -> do
           jobLog
             env
@@ -150,10 +153,10 @@ runConversationAgent env job addressed =
             [ "error" Aeson..= err,
               "reason" Aeson..= ("terminal_conversation_failure" :: Text)
             ]
-          pure (deadOutcome "terminal_conversation_failure" err)
+          pure ()
         Right _ -> do
           jobLog env job Log.Info "worker.conversation.completed" []
-          pure Done
+      pure (conversationJobOutcome result)
 
 -- | Run a resolved agent through the durable agent-run workflow and dispatch
 -- its sinks.
@@ -177,10 +180,10 @@ runOneAgent env job =
               [ "error" Aeson..= Text.pack (show err),
                 "reason" Aeson..= ("store_error" :: Text)
               ]
-            pure RetryDefault
+            pure ()
           Right (Completed (Right _result)) -> do
             jobLog env job Log.Info "worker.job.completed" []
-            pure Done
+            pure ()
           Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure err))) -> do
             jobLog
               env
@@ -190,7 +193,7 @@ runOneAgent env job =
               [ "error" Aeson..= err,
                 "reason" Aeson..= ("legacy_behavior_failure" :: Text)
               ]
-            pure RetryDefault
+            pure ()
           Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
             let err = AgentWorkflow.agentRunFailureDetail failure
             jobLog
@@ -201,31 +204,61 @@ runOneAgent env job =
               [ "error" Aeson..= err,
                 "reason" Aeson..= ("permanent_workflow_failure" :: Text)
               ]
-            pure (deadOutcome "permanent_workflow_failure" err)
+            pure ()
           Right Suspended -> do
             jobLog env job Log.Info "worker.job.suspended" []
-            pure Done
+            pure ()
           Right Cancelled -> do
-            let detail = "workflow cancelled for " <> agentName job
             jobLog
               env
               job
               Log.Warn
               "worker.job.dead_lettered"
               ["reason" Aeson..= ("workflow_cancelled" :: Text)]
-            pure (deadOutcome "workflow_cancelled" detail)
+            pure ()
           Right Failed -> do
-            let detail = "workflow failed for " <> agentName job
             jobLog
               env
               job
               Log.Error
               "worker.job.dead_lettered"
               ["reason" Aeson..= ("workflow_failed" :: Text)]
-            pure (deadOutcome "workflow_failed" detail)
+            pure ()
           Right ContinuedAsNew -> do
             jobLog env job Log.Info "worker.job.continued_as_new" []
-            pure Done
+            pure ()
+        pure (agentJobOutcome (agentName job) resE)
+
+-- | The complete agent-workflow outcome table. The store error is deliberately
+-- polymorphic: its value is diagnostic only, while every store failure is a
+-- transport retry.
+agentJobOutcome :: Text -> Either e (WorkflowOutcome (Either AgentWorkflow.AgentRunFailure a)) -> JobOutcome
+agentJobOutcome agent = \case
+  Left _storeError -> RetryDefault
+  Right (Completed (Right _result)) -> Done
+  Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure _))) -> RetryDefault
+  Right (Completed (Left (AgentWorkflow.PermanentAgentRunFailure detail))) ->
+    deadOutcome "permanent_workflow_failure" detail
+  Right Suspended -> Done
+  Right Cancelled -> deadOutcome "workflow_cancelled" ("workflow cancelled for " <> agent)
+  Right Failed -> deadOutcome "workflow_failed" ("workflow failed for " <> agent)
+  Right ContinuedAsNew -> Done
+
+-- | Conversation completion uses the same retry/permanent split as agent runs.
+conversationJobOutcome :: Either Conversation.ConversationTurnFailure a -> JobOutcome
+conversationJobOutcome = \case
+  Left (Conversation.ConversationTransientFailure _) -> RetryDefault
+  Left (Conversation.ConversationPermanentFailure detail) ->
+    deadOutcome "permanent_conversation_failure" detail
+  Left (Conversation.ConversationTerminalFailure detail) ->
+    deadOutcome "terminal_conversation_failure" detail
+  Right _result -> Done
+
+-- | A transient attempt exception is the initial-drive retry case. Kept as a
+-- named mapping so the outcome table can pin it without manufacturing a full
+-- worker environment.
+transientBehaviorJobOutcome :: TransientBehaviorFailure -> JobOutcome
+transientBehaviorJobOutcome _ = RetryDefault
 
 deadOutcome :: Text -> Text -> JobOutcome
 deadOutcome reason detail =

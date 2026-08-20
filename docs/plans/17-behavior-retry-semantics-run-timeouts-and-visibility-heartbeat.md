@@ -74,7 +74,9 @@ workflow failure budget instead of becoming a permanent step result.
       environments, and sized `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
 - [x] (2026-08-19) Registered focused core and worker test modules; passed the
       specification gate from baseline `664b5eb`, focused tests, `cabal build all`, and
-      `cabal test all -j1` inside `nix develop`.
+      `cabal test all -j1` inside `nix develop`. The final worker proof covers all typed
+      outcome branches, repeated queue reconciliation, heartbeat lease retention and
+      cancellation, and permanent-outcome delivery to the reconciled DLQ.
 
 
 ## Surprises & Discoveries
@@ -316,9 +318,13 @@ wire-compatible `aesonJobCodec`, startup main-queue/DLQ reconciliation, explicit
 `JobOutcome` mapping, and the released default five-delivery transport policy. A linked
 heartbeat renews visibility every 10 seconds to 30 seconds; the integration proof held a
 handler for 2.5 seconds under a one-second initial visibility timeout and observed one
-handler entry plus an empty queue. The released façade still represents application dead
-letters as Shibuya's `shibuya.poison_pill`; stable bounded `shikigami.<reason>:` detail is
-the one intentional operational deviation already recorded in this plan.
+handler entry plus an empty queue. The outcome-table proof covers every `WorkflowOutcome`
+constructor as well as store, legacy, transient, and permanent failures; a second integration
+proof sends a permanent result through the actual processor and observes it in the reconciled
+DLQ. Repeating startup reconciliation is also covered. The released façade still represents
+application dead letters as Shibuya's `shibuya.poison_pill`; stable bounded
+`shikigami.<reason>:` detail is the one intentional operational deviation already recorded in
+this plan.
 
 Settei now exposes `worker.run_timeout_seconds` (300 default) and
 `approval.deadline_seconds` (900 default), both bounded to 1-86400 whole seconds. The
@@ -329,8 +335,8 @@ Direct workflow runs continue to leave `WorkflowRunOptions.leaseHeartbeat` unset
 Validation completed with `just keiro-gate 664b5eb` (both patch additions additive and
 replay-neutral, all 12 conformance facts), `cabal build all`, and serialized
 `cabal test all -j1`. The full suite passed 8 agent, 15 API, 3 client, 259 core, 5
-migration, 20 server, and 22 worker tests in addition to conformance. The focused suites
-also passed 5 retry-semantics, 3 run-job/heartbeat, 34 configuration, 4 workflow-versioning,
+migration, 20 server, and 24 worker tests in addition to conformance. The focused suites
+also passed 5 retry-semantics, 5 run-job/heartbeat, 34 configuration, 4 workflow-versioning,
 and 15 worker-command cases.
 
 ADR review found no new record to create. The durable workflow-option and patch-set
@@ -787,3 +793,6 @@ patch is a journaled compatibility decision declared through the Keiro specifica
   patch additions as additive and replay-neutral, the all-target build passed, the full
   serialized suite passed, and ADR review confirmed ADR-0004 already owns the durable
   architecture decision.
+- 2026-08-19: Strengthened the final worker acceptance proof with a pure typed outcome table,
+  idempotent queue reconciliation, and a real processor-to-DLQ permanent-failure test. The
+  focused `RunJob` selection passed all 5 cases and the full worker suite passed all 24.
