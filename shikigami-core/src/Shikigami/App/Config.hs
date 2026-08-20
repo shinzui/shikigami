@@ -871,15 +871,21 @@ healthPortFor role config =
 -- @shikigami render-lifecycle@ read a manifest and never connect, so requiring a
 -- connection string for the whole command line would make an offline command
 -- fail. Its database-using subcommands ask for the value at the point of use.
+--
+-- @shikigami-server@ joined the list when its readiness probe started pinging
+-- PostgreSQL: a server that cannot reach its database can never report ready, so
+-- starting one without a connection string produces a process that binds a
+-- socket and then fails every probe. Failing at configuration time, naming the
+-- key, is the better outcome.
 roleRequiredKeys :: Role -> [Key]
 roleRequiredKeys = \case
+  ServerRole -> [databaseConnectionStringKey]
   WorkerRole -> [databaseConnectionStringKey]
   SchedulerRole -> [databaseConnectionStringKey]
   StreamConsumerRole -> [databaseConnectionStringKey]
   EventConsumerRole -> [databaseConnectionStringKey]
   AgentRunRole -> [databaseConnectionStringKey]
   MigrateRole -> [databaseConnectionStringKey]
-  ServerRole -> []
   AdminRole -> []
   RunBehaviorRole -> []
 

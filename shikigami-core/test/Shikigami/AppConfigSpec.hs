@@ -275,7 +275,7 @@ strictnessTests =
         runTimeout low @?= secondsToNominalDiffTime 1
         approvalDeadline high @?= secondsToNominalDiffTime 86_400,
       testCase "a source that could not be read exits with the source status" do
-        let run = appConfigRun ServerRole (optionsWith [] []) (Left "config.yaml: does not exist") (emptyEnvironment [])
+        let run = appConfigRun AdminRole (optionsWith [] []) (Left "config.yaml: does not exist") (emptyEnvironment [])
         exitCode run @?= sourceExitCode
         standardError run @?= "config.yaml: does not exist",
       testCase "a textual boolean from the environment decodes" do
@@ -298,11 +298,11 @@ requirementTests =
     [ testCase "roles that open a database report the connection string as missing" $
         mapM_
           (\role -> fmap renderKey (missingRequirements role defaultAppConfig) @?= ["database.connection_string"])
-          [WorkerRole, SchedulerRole, StreamConsumerRole, EventConsumerRole, AgentRunRole, MigrateRole],
+          [ServerRole, WorkerRole, SchedulerRole, StreamConsumerRole, EventConsumerRole, AgentRunRole, MigrateRole],
       testCase "roles that open no database require nothing" $
         mapM_
           (\role -> missingRequirements role defaultAppConfig @?= [])
-          [ServerRole, AdminRole, RunBehaviorRole],
+          [AdminRole, RunBehaviorRole],
       testCase "a supplied connection string satisfies the requirement" do
         config <- resolveOrFail (optionsWith [] []) [] [("PG_CONNECTION_STRING", "postgresql:///shikigami")]
         missingRequirements WorkerRole config @?= [],
@@ -317,6 +317,18 @@ requirementTests =
         assertBool
           ("the failure should name the binary and the key:\n" <> Text.unpack (standardError run))
           ( "shikigami-worker" `Text.isInfixOf` standardError run
+              && "database.connection_string" `Text.isInfixOf` standardError run
+          ),
+      -- The server joined the database list when its readiness probe started
+      -- pinging PostgreSQL. Without this, a server started with no connection
+      -- string binds its socket and then fails every readiness probe forever,
+      -- which reads as a broken deploy rather than a missing setting.
+      testCase "a server started without a connection string fails at configuration time" do
+        let run = appConfigRun ServerRole (optionsWith [] []) (Right []) (emptyEnvironment [])
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the failure should name the binary and the key:\n" <> Text.unpack (standardError run))
+          ( "shikigami-server" `Text.isInfixOf` standardError run
               && "database.connection_string" `Text.isInfixOf` standardError run
           ),
       -- The four worker processes routinely run on one host, so a shared probe
@@ -367,7 +379,7 @@ diagnosticTests =
       testCase "the schema diagnostics answer even when a source could not be read" $
         mapM_
           ( \mode -> do
-              let run = appConfigRun ServerRole (diagnosticOptions mode) (Left "unreadable") (emptyEnvironment [])
+              let run = appConfigRun AdminRole (diagnosticOptions mode) (Left "unreadable") (emptyEnvironment [])
               exitCode run @?= 0
               assertBool "schema output should not be empty" (not (Text.null (standardOutput run)))
           )
@@ -466,8 +478,10 @@ assertAbsent label rendered =
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 
--- | Resolve under the server role — the role with no required keys — so a
--- precedence test is not also a requirement test.
+-- | Resolve under the admin role — one of the two roles with no required keys —
+-- so a precedence test is not also a requirement test. This was the server role
+-- until @shikigami-server@'s readiness probe started pinging PostgreSQL and the
+-- server acquired a required connection string.
 resolveOrFail :: ConfigOptions -> [Source] -> [(Text, Text)] -> IO AppConfig
 resolveOrFail options files environment =
   case configOf run of
@@ -480,7 +494,7 @@ resolveOrFail options files environment =
 
 runWith :: ConfigOptions -> [Source] -> [(Text, Text)] -> ConfigRun
 runWith options files environment =
-  appConfigRun ServerRole options (Right files) (emptyEnvironment environment)
+  appConfigRun AdminRole options (Right files) (emptyEnvironment environment)
 
 -- | The environment source, built from an injected snapshot rather than the
 -- real process environment, so a test never depends on the developer's shell.

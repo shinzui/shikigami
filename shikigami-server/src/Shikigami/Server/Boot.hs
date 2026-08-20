@@ -20,11 +20,13 @@ where
 
 import Data.String (fromString)
 import Data.Text qualified as Text
+import Hasql.Pool (Pool)
+import Kiroku.Store.Connection qualified as StoreConnection
 import Network.Wai.Handler.Warp qualified as Warp
 import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
-import Shikigami.App.Config (AppConfig, Role (ServerRole))
-import Shikigami.App.Config.Load (runAppConfig)
+import Shikigami.App.Config (AppConfig, Role (ServerRole), revealSecretText)
+import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Health.Handler (mkHealthChecks)
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
@@ -43,9 +45,13 @@ runServerMain = do
   runServer config
 
 -- | Build the environment handlers read, creating the stateful probe checks once.
-newServerEnv :: AppConfig -> IO ServerEnv
-newServerEnv config = do
-  (livenessCheck, readinessCheck) <- mkHealthChecks
+--
+-- The pool is passed in rather than opened here because it has a lifetime:
+-- 'runServer' brackets it around the whole serving loop, so it is closed on
+-- shutdown instead of being leaked by whoever happened to build the environment.
+newServerEnv :: Pool -> AppConfig -> IO ServerEnv
+newServerEnv pool config = do
+  (livenessCheck, readinessCheck) <- mkHealthChecks pool
   pure (newServerEnvWith config livenessCheck readinessCheck)
 
 -- | Build the environment with probe checks supplied by the caller.
@@ -66,22 +72,31 @@ newServerEnvWith config livenessCheck readinessCheck =
 
 -- | Bind the socket and serve until the process is stopped.
 --
+-- The connection pool is opened before the listener and closed after it, because
+-- readiness pings PostgreSQL through the same pool the rest of the process uses.
+-- Opening it here rather than inside a handler is what lets a probe report
+-- \"the database is unreachable\" instead of \"this request could not get a
+-- connection\".
+--
 -- The startup line goes to stderr so that it survives being piped, and names
 -- both the bound address and the probe paths an operator will point a health
 -- check at.
 runServer :: AppConfig -> IO ()
 runServer config = do
-  env <- newServerEnv config
+  connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
   let serverConfig = serverConfigFrom config
-  hPutStrLn
-    stderr
-    ( "[shikigami.server] listening on "
-        <> Text.unpack (host serverConfig)
-        <> ":"
-        <> show (port serverConfig)
-        <> " (probes: GET /health/live, GET /health/ready)"
-    )
-  Warp.runSettings (warpSettings serverConfig) (shikigamiApplication env)
+      settings = StoreConnection.defaultConnectionSettings connStr
+  StoreConnection.withStore settings \st -> do
+    env <- newServerEnv (StoreConnection.pool st) config
+    hPutStrLn
+      stderr
+      ( "[shikigami.server] listening on "
+          <> Text.unpack (host serverConfig)
+          <> ":"
+          <> show (port serverConfig)
+          <> " (probes: GET /health/live, GET /health/ready)"
+      )
+    Warp.runSettings (warpSettings serverConfig) (shikigamiApplication env)
 
 warpSettings :: ServerConfig -> Warp.Settings
 warpSettings serverConfig =

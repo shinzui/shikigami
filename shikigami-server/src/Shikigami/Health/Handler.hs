@@ -1,12 +1,19 @@
 -- | The checks behind @GET \/health\/live@ and @GET \/health\/ready@.
 --
 -- The route shape comes from "Shikigami.Health.Api"; what \"healthy\" means is
--- decided here. Both probes currently pass unconditionally, which is honest for
--- a server that has no dependencies to be unhealthy about: it serves one static
--- route and holds no database handle. Real checks — database reachability,
--- queue depth, subscription lag — arrive with
--- @docs\/plans\/29-health-liveness-and-worker-loop-supervision.md@, and the
--- structure below is what they slot into.
+-- decided here.
+--
+-- Liveness passes unconditionally, which is the honest answer for this process:
+-- it runs no background loops, so \"the accept loop, the request parser, and the
+-- handler thread are alive\" is the whole of what liveness can mean. The worker
+-- roles, which do run loops, answer the same route from their own heartbeat
+-- registry in @Shikigami.Health.Worker@.
+--
+-- Readiness pings PostgreSQL. Deliberately nothing else: Kafka and the
+-- downstream HTTP sinks are not readiness dependencies, because a broker outage
+-- cannot be repaired by restarting this process or by taking it out of load
+-- balancing, and making it readiness-critical would amplify one upstream outage
+-- into a fleet-wide one.
 --
 -- Three hardening decisions are already baked in, because getting them wrong is
 -- silent:
@@ -28,19 +35,24 @@ module Shikigami.Health.Handler
   )
 where
 
+import Hasql.Pool (Pool)
 import Servant.Health (ProbeCheck, ProbeVerdict (Healthy))
-import Servant.Health.Check (newFailureTracker, safeCheck, sequenceChecks, withProbeTimeout)
+import Servant.Health.Check (boolCheck, newFailureTracker, safeCheck, sequenceChecks, withProbeTimeout)
+import Shikigami.Health.Ping (databaseReachable, postgresCheckName)
 
 -- | Build the liveness and readiness checks, in that order.
 --
 -- Call once at boot; the returned actions are run afresh on every probe request.
-mkHealthChecks :: IO (ProbeCheck, ProbeCheck)
-mkHealthChecks = do
+-- The pool is the one the rest of the process uses, so readiness reflects the
+-- same connection path real traffic would take rather than a private connection
+-- that could succeed while the application's own pool is exhausted.
+mkHealthChecks :: Pool -> IO (ProbeCheck, ProbeCheck)
+mkHealthChecks pool = do
   trackLiveness <- newFailureTracker
   trackReadiness <- newFailureTracker
   pure
     ( trackLiveness (withProbeTimeout livenessBudgetMicros "liveness" (safeCheck "liveness" livenessCheck)),
-      trackReadiness (safeCheck "readiness" readinessCheck)
+      trackReadiness (safeCheck "readiness" (readinessCheck pool))
     )
 
 -- | How long liveness may take before it is declared failed.
@@ -60,8 +72,15 @@ livenessCheck = pure Healthy
 
 -- | Can the process serve traffic right now?
 --
--- The empty list is the extension point: add one check per dependency the server
--- needs before it should receive traffic. @sequenceChecks@ runs them left to
--- right and reports the first failure, so order them cheapest-first.
-readinessCheck :: ProbeCheck
-readinessCheck = sequenceChecks []
+-- @sequenceChecks@ runs its list left to right and reports the first failure, so
+-- order additions cheapest-first. It stays a list of one rather than collapsing
+-- to the bare check because the next dependency this server acquires should be
+-- appended, not wrapped around.
+--
+-- No 'withProbeTimeout' here, unlike liveness. The timeout interrupts with an
+-- asynchronous exception, which the failure tracker cannot attribute to a named
+-- dependency; a slow database should report 503 through its own named check
+-- instead. The pool's own acquisition timeout is what bounds this in practice.
+readinessCheck :: Pool -> ProbeCheck
+readinessCheck pool =
+  sequenceChecks [boolCheck postgresCheckName (databaseReachable pool)]

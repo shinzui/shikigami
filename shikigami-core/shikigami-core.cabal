@@ -62,6 +62,7 @@ library
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.SinkOutbox
     Shikigami.Generated.Conformance
+    Shikigami.Health.Ping
     Shikigami.Id.Name
     Shikigami.Integration.Danwa
     Shikigami.Log
