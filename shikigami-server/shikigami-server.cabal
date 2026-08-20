@@ -26,6 +26,7 @@ library
     Shikigami.Server.App
     Shikigami.Server.Boot
     Shikigami.Server.Command
+    Shikigami.Server.Command.Agents
     Shikigami.Server.Command.DanwaSpike
     Shikigami.Server.Command.EnqueueRun
     Shikigami.Server.Command.Grants
@@ -48,6 +49,7 @@ library
     , danwa-api
     , danwa-client
     , effectful
+    , filepath
     , hasql-pool
     , http-types
     , hw-kafka-client

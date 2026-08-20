@@ -48,6 +48,7 @@ import Shikigami.App.Config.Load
     runAppConfig,
     usageExitCode,
   )
+import Shikigami.Server.Command.Agents (runAgentsList)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
@@ -103,8 +104,42 @@ adminSubcommands =
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
     ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
-    ("grants", command "grants" grantsInfo)
+    ("grants", command "grants" grantsInfo),
+    ("agents", command "agents" agentsInfo)
   ]
+
+-- | @agents@ is a group from the start, though it has one verb today.
+--
+-- @docs\/plans\/23-agent-lifecycle-control-with-meibo-principals.md@ extends
+-- this same group with principal and lifecycle state and adds @sync@, and
+-- @docs\/plans\/54-key-durable-agent-state-by-meibo-principal.md@ changes what
+-- the listing shows. A flat @agents-list@ would have to be renamed to admit
+-- either, and renaming an operator verb costs more than declaring the group
+-- once.
+agentsInfo :: ParserInfo AdminAction
+agentsInfo =
+  info
+    (subparser (foldMap snd agentsSubcommands) <**> helper)
+    (progDesc "Inspect the declared agents this deployment has loaded")
+
+agentsSubcommands :: [(String, Mod CommandFields AdminAction)]
+agentsSubcommands = [("list", command "list" agentsListInfo)]
+
+-- | @agents list [--json]@.
+--
+-- @--json@ is a flag rather than @--output json@ because the mounted
+-- @keiro-ops@ tree already spells this concept that way, and one binary with
+-- two spellings for one concept is a usability bug. It contributes no
+-- configuration sources: this verb reads the agents directory and nothing else.
+agentsListInfo :: ParserInfo AdminAction
+agentsListInfo =
+  info
+    (parser <**> helper)
+    (progDesc "List every declared agent, including manifests that failed to load")
+  where
+    parser =
+      (\asJson -> (runAgentsList asJson, []))
+        <$> switch (long "json" <> help "Emit machine-readable JSON")
 
 -- | @grants@ is a group rather than a flat command: list, grant, and revoke
 -- share the table but take different arguments, and a flat @grant-sink@ /

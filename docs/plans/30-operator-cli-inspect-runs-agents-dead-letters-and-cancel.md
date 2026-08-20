@@ -102,8 +102,14 @@ This section must always reflect the actual current state of the work.
       it is an ordinary library rather than an `extra-packages` toolchain entry.
       `nix develop --command cabal build all --dry-run` resolves and selects
       `keiro-ops-0.13.0.0`, adding no `allow-newer`.
-- [ ] M1: `shikigami agents list` — renders `loadAgentsReport` with name, behavior kind, trigger
-      summary, enabled state, and load state; `--json` for machine consumption.
+- [x] (2026-08-20) M1: `shikigami agents list [--json]` in
+      `shikigami-server/src/Shikigami/Server/Command/Agents.hs`, mounted as the `agents` group in
+      `adminSubcommands`. Renders `loadAgentsReport` with name, behavior kind, trigger summary,
+      enabled state, and load state; Dhall diagnostics print below the table rather than truncated
+      into a cell. Proven against the real `agents/` directory: `broken.dhall` renders `failed`
+      with its preserved diagnostic, and a temporary `enabled = False` manifest rendered `no`
+      where the others render `yes` (probe removed afterwards; there is no permanently disabled
+      manifest in the repository). `CommandSpec` extended and green.
 - [ ] M2: mount `Keiro.Ops.opsCommandTree` into the `shikigami` dispatcher, handing it the
       Settei-resolved database URL through `KEIRO_OPS_DATABASE_URL` (the only channel the
       abstract `OpsInvocation` leaves open), and decide (recording the reason) which `AppHooks`
@@ -354,6 +360,25 @@ implementation. Provide concise evidence.
   `--help` for every entry. Adding groups means updating that literal — which is the test doing
   its job, since a group added to the dispatcher but not to the list would otherwise go
   unexercised.
+
+- **(2026-08-20, M1) The preserved Dhall diagnostic carries ANSI colour codes, and `--json`
+  faithfully reproduces them.** `Shikigami.Agent.Loader.loadAgent` builds its `LoadError` as
+  `Text.pack (show err)` over Dhall's own exception
+  (`shikigami-core/src/Shikigami/Agent/Loader.hs:42-47`), and Dhall renders errors with terminal
+  escapes. So `agents list --json` emits `"error": "\n\u001b[1;31mError\u001b[0m: …"`. That is a
+  papercut for a `jq` consumer, and it is deliberately not fixed here: `agents list` renders what
+  the report preserved, and stripping the escapes would make this one surface disagree with every
+  other place the same diagnostic is printed. The fix belongs wherever the diagnostic is
+  constructed — the loader, which
+  `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md` owns —
+  not in a presentation module reformatting a value it does not own.
+
+- **(2026-08-20, M1) There is no permanently disabled manifest to prove the `enabled` column
+  with.** Every manifest under `agents/` sets `enabled` to its `True` default, so the acceptance
+  was run against a temporary probe manifest and the probe then removed. The column is proven, but
+  nothing in the tree keeps it proven. If plan 23 or plan 33 wants that guarded, the cheap way is a
+  fixture manifest under `agents/proof/` rather than a unit test, since the value being checked is
+  what an operator sees.
 
 - (Findings from implementation go below this line.)
 

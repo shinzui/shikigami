@@ -21,7 +21,7 @@ tests :: TestTree
 tests =
   testGroup
     "administrative command line"
-    [ testCase "the seven administrative commands are present" $
+    [ testCase "every administrative command is present" $
         fmap fst adminSubcommands
           @?= [ "validate",
                 "render-lifecycle",
@@ -29,7 +29,8 @@ tests =
                 "publish-fixture",
                 "stub-kawa",
                 "danwa-spike",
-                "grants"
+                "grants",
+                "agents"
               ],
       testCase "shikigami --help lists every command" do
         let rendered = helpTextOf ["--help"]
@@ -82,6 +83,11 @@ tests =
             let (message, _) = renderFailure failure "shikigami"
              in assertBool ("--describe-config alone did not parse:\n" <> message) False
           CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
+      -- `agents list` is the one verb that answers with no database, which is
+      -- what makes it usable when the database is the thing that is broken.
+      testCase "agents list offers --json and takes no target argument" do
+        let rendered = helpTextOf ["agents", "list", "--help"]
+        assertBool ("agents list help does not mention --json:\n" <> rendered) ("--json" `isInfixOf` rendered),
       testCase "a subcommand's downstream flags name the configuration keys they set" do
         assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
         assertMentions ["stub-kawa", "--help"] ["kafka.broker"]
