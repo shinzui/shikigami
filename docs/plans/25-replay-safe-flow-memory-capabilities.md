@@ -74,8 +74,15 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-19) M2: `docs/workflow-versioning.md` updated — the journal inventory gains
       `recall-<label>` / `remember-<label>` marked `declared`, and the "Undeclarable label
       families" section records why memory labels are deliberately declarable.
-- [ ] M2: `just keiro-gate origin/master` green (run after the commit, since
-      `keiro-scaffold` requires the regenerated layer to be committed).
+- [x] (2026-08-19) M2: The four labels moved inside a new
+      `patch shikigami-flow-memory-steps-v1` block, and `runMemory` now reads that guard once
+      per interpreted run and branches. Forced by `keiro-dsl diff`, which classifies any
+      unguarded change to a declared body as BREAKING; see Surprises & Discoveries and the
+      Decision Log entry that supersedes the earlier "no patch guard is needed" decision.
+- [x] (2026-08-19) M2: `just keiro-gate 860b680` green — `ADDITIVE: AgentRun workflow-patch
+      shikigami-flow-memory-steps-v1`, `replay-neutral`, exit 0. `cabal test all` green (311
+      tests in `shikigami-core-test`). Negative check performed and reverted: deleting
+      `step remember-declined` from the specification makes `keiro-diff` fail BREAKING.
 - [ ] M3: `Acknowledgement` capability added; `IOE` and `Store` removed from `FlowEffects`;
       `FlowRuntime` becomes the `runAcknowledgement` environment rather than a flow-body
       argument; `atRiskCustomerFlow`, `Shikigami.Flow`'s registry, and the specs compile
@@ -165,6 +172,70 @@ completed workflow) and by nothing earlier. That isolates the fault to the un-jo
 `Remember` rather than to the park-and-resume, and it is why the resume in the middle of the
 test is kept: without it the replay would not be replaying an acknowledged branch at all.
 
+**`keiro-dsl diff` rejects ANY unguarded change to a declared workflow body, appends included.**
+This is the plan's largest wrong assumption, and it only surfaced at the gate.
+`classifyWorkflowBody` (`keiro-dsl/src/Keiro/Dsl/Diff.hs:2905-2954`) has exactly two additive
+escapes — a change wholly contained in a *new* patch guard, or a terminal `continueAsNew` append
+— and falls through to `WorkflowBodyChanged` otherwise:
+
+```haskell
+safeAdditions =
+  (not (null newPatchIds) || isJust appendedSeed)
+    && comparableNewBody == oldBody
+```
+
+keiro-dsl's own suite pins the append case (`keiro-dsl/test/Main.hs:7642-7647`):
+
+```text
+it "classifies workflow relabeling and appends as WorkflowBodyChanged" $ do
+  ...
+  appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-stepadd.keiro"
+  [ckCode k | Breaking k <- appended] `shouldContain` [WorkflowBodyChanged]
+```
+
+The first attempt — four bare `step` lines beside `classify` — produced:
+
+```text
+BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or
+order changed without a new patch guard; wrap a cross-cutting change in patch, or rename
+the replay label for one changed step [WorkflowBodyChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking
+            snapshot-hydration=advisory rollout=stop-the-world
+```
+
+There is no waiver: `keiro-dsl diff`'s only policy flag is `--gate SURFACE`, which *adds*
+failures. Note the irony in the same output — the differ's own replay verdict was
+`replay-neutral: stored-data replay is unchanged by this diff`, which agrees with the plan's
+runtime reasoning. The body rule is structural and conservative on purpose, and it does not
+consult that verdict.
+
+After wrapping the four steps in one patch block, the same command reports:
+
+```text
+ADDITIVE: AgentRun workflow-patch shikigami-flow-memory-steps-v1: new patch guard contains
+the entire body change, so in-flight generations retain their journaled branch
+replay-neutral: stored-data replay is unchanged by this diff
+```
+
+**Both existing steps in this body arrived the same way, which the plan half-noticed.** The plan
+named commit `c159d80` as "the exact procedure M2 follows" and correctly described it as adding
+"a patch block plus `step run-behavior-v2`" — then concluded three sections later that no patch
+was needed. `resolve-profile` is likewise inside `patch shikigami-resolve-profile-v1`. Every step
+ever added to `domain/shikigami-agent-run.keiro` has been patch-guarded; there was no precedent
+for the unguarded append the plan assumed.
+
+**Activating the patch needs no hand-edit.** `shikigamiActivePatches`
+(`shikigami-core/src/Shikigami/Workflow/Versioning.hs`) is the union of each workflow's generated
+`declaredPatches`, and `keiro-scaffold` rewrote that set from the specification
+(`shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowRuntime.hs:43`). Declaring the block was
+the whole activation.
+
+**One flaky failure, unrelated to this work.** A full `cabal test all` run reported
+`GrantStore > runtime grant and revoke > revoking something never granted reports that it changed
+nothing: FAIL`. It passed in isolation and passed on a re-run of the whole
+`shikigami-core-test` suite (311 tests). It touches the runtime grant store, not flow memory, and
+nothing in this plan goes near it. Recorded so a future reader does not attribute it here.
+
 
 ## Decision Log
 
@@ -226,16 +297,43 @@ Record every decision made while working on the plan.
   green, which is exactly when a silent metadata regression is cheapest to introduce.
   Date: 2026-08-19
 
-- Decision: No `patch` guard is needed for journaling `remember`/`recall` as steps.
-  Rationale: the old interpreter journaled NOTHING for memory operations, so the change is
-  purely additive step insertion — an in-flight flow resumed under the new code finds no
+- Decision: SUPERSEDED — "No `patch` guard is needed for journaling `remember`/`recall` as
+  steps." The original entry is preserved below because its reasoning is still correct about
+  the runtime; it was wrong about the gate.
+  Original rationale: the old interpreter journaled NOTHING for memory operations, so the change
+  is purely additive step insertion — an in-flight flow resumed under the new code finds no
   journal entry for `remember-<label>`, runs it fresh (which the old code would also have done,
   minus the journaling), and proceeds. Per `docs/workflow-versioning.md` (plan 24), additive new
   step names are deploy-safe without a patch. The residual behavior change on
   replayed-but-already-completed instances (they stop re-writing memories) is the bug fix
   itself. Contrast `shikigami-emit-signal-labels-v1`, which *did* need a patch because it
   **renamed** an existing family rather than adding one.
-  Date: 2026-07-08 (re-affirmed 2026-08-19 against the delivered plan 24)
+  Date: 2026-07-08 (re-affirmed 2026-08-19 against the delivered plan 24; superseded the same
+  day at the gate)
+
+- Decision: The four memory labels are declared inside a new
+  `patch shikigami-flow-memory-steps-v1` block, and `runMemory` reads that guard once per
+  interpreted flow run and branches on it.
+  Rationale: this plan asked for three things that cannot all hold — declare the labels, add no
+  patch, and pass `just keiro-gate`. `keiro-dsl diff` classifies *any* change to a declared
+  workflow body as BREAKING unless the whole change sits inside a new patch guard, appends
+  included, and offers no waiver (`--gate` only adds failures). See Surprises & Discoveries for
+  the code and the differ's own test. Any two of the three requirements are satisfiable; the
+  choice was between dropping the declaration (memory labels join the ungated
+  `emit-signal:<label>` family, abandoning this plan's "first gateable flow-side labels" goal)
+  and adding the guard. The guard won: it is what both existing steps in this body did, and the
+  declaration is the durable half of the plan's value.
+  ADR-0001 (`docs/adr/0001-declare-only-what-the-runtime-executes.md`) then makes the runtime
+  branch mandatory rather than optional — a declared guard that guards nothing is precisely the
+  specification-describes-something-nobody-honours failure that ADR forbids. So the `False`
+  branch is the genuine pre-change behavior: an un-journaled recall and a `genMemoryId` write.
+  The cost is real and accepted: the code this plan exists to delete survives behind a guard,
+  exactly as `runSink`'s ordinal branch does, and is deletable on the same terms once no
+  pre-change flow can resume. Shikigami has no users, so that population is empty today.
+  The block sits after `await-ack` rather than beside `classify` because a patch block must
+  contain the entire change contiguously and the body is ordered for reading, not control flow.
+  Decided with the user, 2026-08-19.
+  Date: 2026-08-19
 
 - Decision: Deterministic memory ids are minted in shikigami by decorating a UUIDv5 (over
   workflow name, id, generation, and step label) into kioku's `MemoryId` KindID, using the

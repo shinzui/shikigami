@@ -169,10 +169,35 @@ and `just keiro-diff` classifies a rename as `BREAKING` with the code
 `WorkflowStableNameChanged`. A wholesale redesign of a workflow gets a *new*
 name, and the old one keeps running until its instances drain.
 
-**2. Prefer additive change.** A new step with a new name is always safe: no
-existing journal holds that name, so every in-flight instance simply runs it on
-its next replay. Reordering existing steps is safe too, because replay matches by
-name. These two cover most changes and need no ceremony.
+**2. Prefer additive change — but a *declared* body still needs a patch guard.**
+At run time a new step with a new name is safe: no existing journal holds that
+name, so every in-flight instance simply runs it on its next replay. Reordering
+existing steps is safe too, because replay matches by name.
+
+That is where this rule used to stop, and it was misleading. Run-time safety is
+not gate acceptance. **`keiro-dsl diff` classifies any change to a body declared
+in `domain/*.keiro` as `BREAKING` unless the entire change sits inside a *new*
+`patch` block**, and it treats a pure append exactly like a rename
+(`classifyWorkflowBody` in keiro-dsl's `Keiro.Dsl.Diff`; its own test is named
+"classifies workflow relabeling and appends as WorkflowBodyChanged"). The rule is
+structural: the differ does not consult its own replay verdict, which can say
+`replay-neutral` about the very same change. There is no waiver — `--gate` only
+adds failures.
+
+So adding a step to a declared workflow costs a patch id, and rule 4's mechanism
+applies even when rule 4's *reasoning* does not. Every step ever added to
+`domain/shikigami-agent-run.keiro` arrived that way: `resolve-profile` inside
+`shikigami-resolve-profile-v1`, `run-behavior-v2` inside
+`shikigami-behavior-retry-v1`, and the flow memory labels inside
+`shikigami-flow-memory-steps-v1`. Because ADR-0001 forbids declaring a guard the
+runtime does not honour, the guard also obliges a real `False` branch carrying
+the pre-change behavior — so budget for the branch, and delete it with the patch
+id once no pre-change instance can resume.
+
+An undeclared step name — one this specification cannot hold, such as anything
+carrying a colon — is genuinely free, because there is no declared body for the
+differ to compare. That is the only case where "additive needs no ceremony" still
+holds.
 
 **3. Rename a step to make exactly that step re-run.** When one step's meaning
 changes and you want in-flight instances to redo it under the new meaning,
@@ -403,8 +428,8 @@ conversation  (workflow "shikigami.danwa-conversation",
 flow capabilities  (run inside the agent-run workflow)
   classify                         Shikigami/Flow/AtRiskCustomer.hs:45
   await-ack                        Shikigami/Flow/AtRiskCustomer.hs:50
-  recall-<label>                   Shikigami/Flow/Capability.hs   -- declared
-  remember-<label>                 Shikigami/Flow/Capability.hs   -- declared
+  recall-<label>                   Shikigami/Flow/Capability.hs   -- declared; post-patch
+  remember-<label>                 Shikigami/Flow/Capability.hs   -- declared; post-patch
   <step>:notify                    Shikigami/Agent/Approval.hs:157
   emit-signal:<label>              Shikigami/Flow/Capability.hs   -- post-patch
   emit-signal:<ordinal>            (pre-patch; in-flight instances only)
@@ -413,6 +438,8 @@ written by keiro on this service's behalf, as of the first patch
   __workflow_patches__             every fresh agent-run and conversation journal
   patch:shikigami-emit-signal-labels-v1
                                    every agent-run that interprets a flow's sinks
+  patch:shikigami-flow-memory-steps-v1
+                                   every agent-run that interprets a flow's memory
 
 reserved by keiro  (keiro/src/Keiro/Workflow/Types.hs)
   __workflow_completed__           :318
@@ -436,6 +463,21 @@ caller's label, and the labels every *registered* flow reaches are declared in
 `remember-acknowledged`, `remember-declined`, and `remember-escalated`. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
+
+They are marked `post-patch` for a reason worth stating plainly, because it is
+the rule this document previously got wrong. **`keiro-dsl diff` classifies any
+change to a declared workflow body as `BREAKING` unless the entire change sits
+inside a *new* `patch` block — appends included.** It is not enough that a new
+step name is additive at run time and that the differ's own replay verdict says
+`replay-neutral`; the body rule is structural, conservative, and has no waiver
+flag. So `shikigami-flow-memory-steps-v1` guards the four labels, `runMemory`
+reads it once per interpreted flow run, and an instance already in flight keeps
+the un-journaled behavior its journal was written under. Every step ever added to
+`domain/shikigami-agent-run.keiro` arrived this way: `resolve-profile` inside
+`shikigami-resolve-profile-v1`, `run-behavior-v2` inside
+`shikigami-behavior-retry-v1`. Budget for a patch id whenever a declared body
+grows, and delete the guard and its `False` branch together once no pre-change
+instance can resume.
 
 Two ordinal-derived names remain, and this document does not fix them; it records
 that they are governed by rule 5 and names their owners.
