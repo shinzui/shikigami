@@ -662,10 +662,96 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+**Complete, 2026-08-20.** All five milestones landed across four commits, `just keiro-gate
+origin/master` is green with an ADDITIVE, replay-neutral classification, and `cabal test all -j1`
+passes across all eight suites (432 tests). The `Conversation` group went from 2 cases to 13.
 
-(To be filled during and after implementation.)
+### Against the original purpose
+
+The plan promised five things. Four are delivered as written; one is delivered by a mechanism the
+plan did not have.
+
+*A conversation ends cleanly when idle.* Delivered. The durable timer signals the same
+`next-message` awakeable a human message would, the workflow closes its kioku session through
+`completeWithContext` and returns `Completed`, and `countPendingAwakeables` for that conversation
+is 0.
+
+*The journal is bounded by construction rather than by a tuning constant.* Delivered, and this is
+the part that most exceeded the original design: `rotateEvery` never existed, because one turn per
+generation makes the bound structural. Five turns produce generation 4, with exactly one
+`turn-result` and one `awkid:next-message` per generation.
+
+*Every label is static, so the body is declarable.* Delivered. `domain/shikigami-conversation.keiro`
+went from three steps to the full inventory — five steps, one await, one `continueAsNew` — and is
+now the largest declared workflow body in the service. This discharged plan 39's largest
+undeclarable-label family.
+
+*Session resolution is a keyed lookup.* Delivered, via the documented fallback: kioku IR-2 has
+still not shipped, so the index is `shikigami.conversation_sessions` with a self-healing miss path
+rather than an upstream query.
+
+*A message arriving mid-turn is delivered smoothly.* Delivered, and the plan understated what it
+needed. Arming the promise before the behavior runs was the easy half. The other half is that the
+routine busy case had to stop being indistinguishable from a fault — `ConversationBusy` is a new
+outcome, mapped to the same retry as backpressure and logged at info.
+
+### What the plan got wrong, and what that cost
+
+Three things, all recorded in full in Surprises & Discoveries.
+
+**ADR 0012 landed the same day as the plan's refresh and contradicted its central decision.** The
+plan argued at length against a patch guard and was right about the *structure* of the argument
+(the guarded branch is the undeclarable one) and wrong about whether a guard was optional. It is a
+gate condition. Caught by reading the ADR corpus before implementing rather than at the gate — the
+cheaper of the two places, and only because `docs/adr/` was scanned first.
+
+**A rotation is progress, not an answer.** The plan said `ContinuedAsNew` "becomes the success
+path … load the result from that generation and return it." That is wrong about *which* turn:
+`continueAsNew` accepts the incoming message and unwinds, so at that moment the message has been
+accepted and not yet processed. Implemented as written, every turn after the first failed. Caught
+by the first test run.
+
+**A completed workflow instance cannot be restarted.** The plan's new-epoch design — "delivery
+fails and `runConversationTurn` runs a fresh `ConversationStart` — the existing code path,
+unchanged" — silently returned the previous epoch's result and dropped the message. This was the
+largest gap and the one that produced ADR 0018. Caught by the test the plan itself asked for,
+which is the argument for writing acceptance as observable behaviour rather than as internal
+attributes.
+
+The pattern across all three: the plan's *research* was sound and its *inferences about runtime
+behaviour it had not run* were not. Each was caught by a test the plan had already specified.
+
+### What remains
+
+Nothing in scope. Three things are recorded and deliberately left:
+
+- **The legacy branch is live code.** `shikigami-conversation-rotation-v1`'s `False` branch keeps
+  the immortal loop and its suffixed labels. Per ADR 0004's retirement rule, delete the guard, the
+  branch, and the specification block together once no pre-change instance can resume. Shikigami
+  has no users, so that population is empty today — which makes retirement cheap and easy to
+  forget.
+- **kioku's ramp timers have no consumer in shikigami.** Pre-existing, does not starve the idle
+  timer (the claim query skips `firing` rows), but logs `scheduler.timer.unknown_kind` per turn.
+  Not this plan's to fix; someone should own it.
+- **kioku IR-2 would retire `shikigami.conversation_sessions`' session pointer.** The epoch column
+  would still be needed, so the table survives IR-2 even though its original reason does not.
+
+### Lessons worth carrying
+
+*Removing the reason for a constraint beats satisfying it.* The per-message suffixes had one
+cause — several turns in one generation — and the whole declarable-labels win came from removing
+that cause rather than from finding a declarable spelling. ADR 0017 generalises it.
+
+*A patched, rotating body makes configuration load-bearing.* Before rotation, a resume with the
+wrong options mostly replayed already-journaled decisions and got away with it. After rotation it
+creates fresh generations, and a fresh generation is exactly where an empty active-patch set does
+damage. The test that caught this was using `defaultWorkflowResumeOptions`; production was already
+correct.
+
+*State what a document is wrong about in the same change that makes it wrong.*
+`docs/workflow-versioning.md` and `docs/architecture/shikigami-domain-inventory.md` were corrected
+with M2 rather than deferred to M5, because a document that describes the previous shape is worse
+than one that describes none.
 
 
 ## Context and Orientation
@@ -960,9 +1046,26 @@ the `kiroku` schema, so any older document naming `kiroku.kioku_sessions` is sta
   into new journals and requires them when reading old ones breaks replay. Binding on
   `ConversationSeed`'s codec.
 
-No ADR covers conversation lifecycle, idle timeouts, or journal rotation. If M2's
-one-turn-per-generation decision survives implementation, it is a durable architectural judgment
-and should be promoted to a new ADR during the distillation pass.
+Two more ADRs landed on 2026-08-19, after this plan's refresh, and one of them contradicts a
+decision the refresh made:
+
+- `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` — **binding on M2, and
+  the plan's Decision Log of 2026-08-19 was wrong about it.** `keiro-dsl diff` classifies any
+  change to a declared workflow body as `BREAKING` unless the whole change sits inside one new
+  `patch` block or is a terminal `continueAsNew`, and a declared guard obliges a real runtime
+  branch. So the restructure ships behind a guard after all; see the Decision Log entry of
+  2026-08-20.
+- `docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md` —
+  binding on M3's session completion (bind both failure layers) and on M2's
+  `record-assistant-and-reply` (a journaled step keeps the bytes it already wrote).
+
+This plan itself produced two ADRs during the distillation pass:
+
+- `docs/adr/0017-rotate-to-make-a-label-static-rather-than-computing-it.md` — the
+  one-turn-per-generation judgment, generalised: when a computed label suffix is forced by
+  "several of these happen in one generation", rotate rather than compute.
+- `docs/adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md` — a completed keiro instance
+  cannot be restarted, so a lifecycle that can end and resume is keyed by an epoch.
 
 
 ## Plan of Work
@@ -1320,19 +1423,46 @@ Iterate per milestone and finish with the full battery:
 cabal test all
 ```
 
-Expected final Conversation transcript shape:
+Run the full battery serialized. **`-j1` is not optional on this machine**: every
+database-backed case provisions its own ephemeral Postgres cluster, and eight suites in parallel
+exhaust the kernel's shared-memory segment limit so that `initdb` fails before any shikigami code
+runs. See Surprises & Discoveries for the transcript.
+
+```bash
+cabal test all -j1
+```
+
+Observed final Conversation transcript, 2026-08-20:
 
 ```text
 AgentWorkflow
   Conversation
-    parks and resumes a danwa conversation as one workflow session:  OK
-    conversation permanent v2 failure completes as a replayable typed failure: OK
-    resolves its own session and ignores a decoy in the same scope:  OK
-    rotates onto a fresh generation after every turn:                OK
-    completes the kioku session on idle timeout:                     OK
-    ignores a timer armed in a superseded generation:                OK
-    opens a new epoch after idle timeout, chaining session lineage:   OK
-    delivers a message arriving mid-turn to the same workflow:       OK
+    parks and resumes a danwa conversation as one workflow session:            OK (3.45s)
+    conversation permanent v2 failure completes as a replayable typed failure: OK (3.10s)
+    resolves its own session and ignores a decoy in the same scope:            OK (3.51s)
+    delivery resolves the live generation instead of assuming zero:            OK (3.45s)
+    rotates onto a fresh generation after every turn:                          OK (3.94s)
+    completes the kioku session on idle timeout:                               OK (3.21s)
+    ignores a timer armed in a superseded generation:                          OK (3.57s)
+    opens a new epoch after idle timeout, chaining session lineage:            OK (3.40s)
+    arms the next promise before running the behavior:                         OK (3.12s)
+    redelivers a message that finds no armed promise, rather than restarting:  OK (3.40s)
+
+All 13 tests passed (3.99s)
+```
+
+and the whole battery:
+
+```text
+Test suite conformance: PASS
+All 8 tests passed        Test suite shikigami-agent-test: PASS
+All 15 tests passed       Test suite shikigami-api-test: PASS
+All 3 tests passed        Test suite shikigami-client-test: PASS
+All 336 tests passed      Test suite shikigami-core-test: PASS
+All 2 tests passed        Test suite shikigami-migrations-smoke: PASS
+All 3 tests passed        Test suite shikigami-migrations-test: PASS
+All 20 tests passed       Test suite shikigami-server-test: PASS
+All 45 tests passed       Test suite shikigami-workers-test: PASS
 ```
 
 Every commit while working on this plan carries both trailers:
@@ -1543,3 +1673,26 @@ this plan must not change either without naming plan 17 in its Decision Log.
   documented `continueAsNew`-versus-`appendJournalEntry` rotation race was added as an obligation
   the idle timer must satisfy — it matters far more under per-turn rotation than it would have
   under a 20-turn cadence.
+
+- 2026-08-20: **Implemented.** All five milestones landed; see Progress, Surprises & Discoveries,
+  and Outcomes & Retrospective for what was built and what the plan got wrong.
+
+  *Three design changes were forced during implementation, each recorded in the Decision Log.*
+  The restructure ships behind `shikigami-conversation-rotation-v1` with the old loop as a live
+  `False` branch, because `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md`
+  landed the same day as this plan's refresh and makes a patch guard a gate condition rather than
+  a design preference — reversing the refresh's central "do not carry an old branch behind a
+  patch" decision. The workflow id gained an epoch, because a completed keiro instance replays its
+  completion rather than accepting work, so the plan's new-epoch design silently dropped the
+  message that was meant to open the next epoch. And M1 took the fallback index as a self-healing
+  cache rather than a co-transactional write, because writing into kioku's start transaction would
+  mean re-implementing its lineage validation and access gate in shikigami.
+
+  *Two ADRs were promoted during the distillation pass.*
+  `docs/adr/0017-rotate-to-make-a-label-static-rather-than-computing-it.md` generalises the
+  one-turn-per-generation judgment; `docs/adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md`
+  records the instance-identity constraint that forced the epoch.
+
+  *The acceptance transcript in Concrete Steps was replaced with the observed one*, and the
+  battery command now says `-j1` with the reason, because the parallel form fails on this machine
+  for a kernel shared-memory reason unrelated to this work.
