@@ -1,0 +1,269 @@
+# The operator command line
+
+Everything an operator can inspect or change from a terminal lives behind one
+binary, `shikigami`. This document maps questions to verbs, and records the
+handful of behaviours that are surprising enough to cost you an incident if you
+meet them for the first time at 3am.
+
+Run everything from the repository root inside the Nix dev shell:
+
+```bash
+nix develop
+cabal run shikigami -- <command>
+```
+
+An installed deployment runs `shikigami <command>` directly. Every verb except
+`agents list` needs `database.connection_string` resolved — from a config file,
+`--set database.connection_string=…`, or the `PG_CONNECTION_STRING` environment
+binding. `shikigami --explain-config` shows what it resolved and from where.
+
+
+## Where the verbs come from
+
+Two halves, and it matters which is which when something behaves unexpectedly.
+
+**Shikigami's own**: `agents`, `runs`, and the pre-existing `validate`,
+`render-lifecycle`, `enqueue-run`, `publish-fixture`, `stub-kawa`, `danwa-spike`,
+and `grants`. These are defined in this repository.
+
+**Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
+`snapshot`, and `stream`. These come from the `keiro-ops` package, whose command
+tree is mounted whole into this binary. They are documented by Keiro
+(`mori://shinzui/keiro/packages/keiro-ops`), and when one of them behaves in a
+way this repository did not define, that is where to look. Their global options —
+`--json`, `--force`, `--database-url`, `--allow-schema-drift` — belong to that
+tree and work across all of them.
+
+
+## Which verb answers which question
+
+**"Which agents are declared, and is any of them broken?"** — `agents list`.
+
+```bash
+cabal run shikigami -- agents list
+```
+
+One row per manifest under the configured agents directory. The `STATE` column
+distinguishes `loaded` from `failed`, and `ENABLED` distinguishes an agent that
+is loaded and running from one that is loaded and deliberately switched off — the
+three states that otherwise look identical from outside. A failed manifest's
+Dhall diagnostic prints below the table. `--json` gives the same data
+machine-readably.
+
+This is the only verb that opens no database. It answers when PostgreSQL is
+down, which is often exactly when you are asking.
+
+**"What is running right now?"** — `wf list`.
+
+```bash
+cabal run shikigami -- wf list --status running
+```
+
+`--status` may be repeated. `--name` filters to one workflow definition —
+`shikigami.agent-run` for agent runs, or the conversation workflow name. Paging
+is by keyset: pass the last row's name and id to `--after NAME ID`.
+
+**"What happened to this run?"** — `runs show`.
+
+```bash
+cabal run shikigami -- runs show shikigami.agent-run <workflow-id>
+```
+
+This is the one verb that shows both halves of a run. Keiro holds the workflow
+instance — status, generation, attempts, last error; kioku holds the session —
+which agent ran, its focus, summary, error, and turn count. Neither library
+knows about the other, so nothing but this command puts them side by side.
+
+Both arguments are required, because a workflow instance is keyed by
+`(workflow_name, workflow_id)`. The workflow id of an agent run is the run job's
+idempotency key, which `enqueue-run` prints when it enqueues.
+
+The session half reports one of four things, and they mean different things:
+
+- the session's own fields — the normal case;
+- **no session opened yet on this generation** — the run has not reached its
+  session step. It may still succeed;
+- **kioku refused to open a session** — the run is permanently over, and the
+  refusal detail says why;
+- **recorded by the run, but kioku has no session row for it** — the run
+  journaled a session id that kioku cannot find. That is a real inconsistency,
+  not a normal state.
+
+For the workflow half alone, `wf show` reports more — children and awakeables —
+and `wf journal` and `wf steps` decode what the run actually recorded.
+
+**"This run is stuck."** — first find out how.
+
+```bash
+cabal run shikigami -- wf show shikigami.agent-run <workflow-id>
+```
+
+If it is genuinely stuck and should stop, `wf cancel`. If a worker died holding
+its lease and the instance is not being picked up, `wf lease release`. If it
+failed terminally and should be retried from its journal rather than abandoned,
+`wf resurrect`. Cancel is not the answer to all three, and using it for the
+second loses the run.
+
+```bash
+cabal run shikigami -- wf cancel shikigami.agent-run <workflow-id>          # preview
+cabal run shikigami -- wf cancel shikigami.agent-run <workflow-id> --force  # do it
+```
+
+**"Jobs are disappearing."** — look in the dead-letter queue.
+
+```bash
+cabal run shikigami -- pgmq dlq read --queue shikigami_run_jobs
+```
+
+Each row carries the reason it was dead-lettered and the original payload. Once
+you have fixed whatever rejected them:
+
+```bash
+cabal run shikigami -- pgmq dlq redrive --queue shikigami_run_jobs --force
+```
+
+Read [the DLQ gotchas](#the-two-dlq-gotchas) before you do — both of them bite
+here.
+
+**"Sinks are not being delivered."** — `outbox backlog`, then `outbox list`.
+
+```bash
+cabal run shikigami -- outbox backlog
+cabal run shikigami -- outbox list --source shikigami --status pending
+```
+
+`outbox backlog` counts claimable rows; a number that only grows means the
+publisher loop is not running or not succeeding. `outbox show <id>` inspects one
+row. `outbox requeue-stuck` returns rows abandoned mid-publish by a dead worker,
+and `outbox maintenance-pass` runs the routine sweep.
+
+**"Timers are not firing."** — `timer stuck list`.
+
+```bash
+cabal run shikigami -- timer stuck list --min-age 5m
+```
+
+Timers left in `firing` by an interrupted worker show up here. `timer requeue`
+returns one to the scheduled queue, `timer cancel` withdraws it, and
+`timer dead-letter` abandons it with a recorded reason.
+
+
+## Nothing changes without `--force`
+
+Every mutating verb from the Keiro half previews by default: it prints what it
+would do, prints the exact command to run for real, and exits non-zero.
+
+```text
+$ shikigami wf cancel shikigami.agent-run heartbeat:evt:0aa8…
+preview only; re-run with --force: 'keiro-ops' 'wf' 'cancel' 'shikigami.agent-run' 'heartbeat:evt:0aa8…' '--force'
+operation  name                 id                  disposition       status
+---------  -------------------  ------------------  ----------------  ---------
+cancel     shikigami.agent-run  heartbeat:evt:0aa8…  already_terminal  completed
+```
+
+Two things to know about that message. It says **`keiro-ops`** because the
+mounted tree composes its own name; substitute `shikigami` and the rest of the
+line is correct as printed. And the non-zero exit is the contract, not a
+failure — scripts must not treat it as one.
+
+`pgmq dlq purge --force` additionally prompts on standard input for the queue
+name, unless `--json` is also passed, in which case it proceeds unprompted.
+Be careful automating it.
+
+Every invocation of a Keiro-half verb emits two JSON audit lines on stderr, one
+before and one after, sharing an `invocation` id:
+
+```json
+{"command":"pgmq dlq redrive --queue shikigami_run_jobs --force","event":"operator.ops.invoked","invocation":"c76fdbdd-…","level":"info","ts":"…"}
+{"command":"pgmq dlq redrive --queue shikigami_run_jobs --force","event":"operator.ops.finished","exit_code":0,"invocation":"c76fdbdd-…","level":"info","ts":"…"}
+```
+
+They name the command and the exit code, and deliberately claim nothing about
+the outcome — see [exit codes](#an-exit-code-is-not-an-outcome). Any
+`--database-url` value is redacted before the line is written.
+
+
+## The two DLQ gotchas
+
+**`--queue` names the live queue, not the dead-letter queue.** Pass
+`shikigami_run_jobs`; Keiro derives `shikigami_run_jobs_dlq` from it. Passing the
+DLQ's own name does not merely double the suffix — a queue name already ending in
+`_dlq` gets hashed, so you address a queue that does not exist.
+
+**`pgmq dlq read` hides for 30 seconds what it shows you.** The read takes a 30
+second visibility lease so concurrent inspections do not collide. A `redrive` or
+`archive` issued inside that window can only claim *visible* rows, so it reports
+`affected 0` — while the preview, which counts queue length including invisible
+rows, cheerfully said it would affect them all:
+
+```text
+$ shikigami pgmq dlq read --queue shikigami_run_jobs      # 1 row shown, now hidden for 30s
+$ shikigami pgmq dlq redrive --queue shikigami_run_jobs   # preview: available 1, would_affect 1
+$ shikigami pgmq dlq redrive --queue shikigami_run_jobs --force
+redrive    shikigami_run_jobs  0                          # <-- nothing moved
+```
+
+Nothing is wrong and nothing is lost. Wait out the window and redrive again.
+The failure mode to avoid is concluding that redrive is broken and reaching for
+`purge`.
+
+Redrive is at-least-once by design: a crash between re-enqueueing a payload and
+deleting the DLQ row leaves it in both places, so handlers must be idempotent.
+
+
+## Two refusals that look like bugs
+
+### Schema drift
+
+Every Keiro-half invocation checks the live schema against the one its binary was
+built for. Drift is reported as a warning on reads, and **refuses** any mutation:
+
+```text
+refusing mutation because the live schema differs from this binary; inspect the
+warnings or pass --allow-schema-drift
+```
+
+`--allow-schema-drift` is right there and is almost never the answer. Drift means
+the database has not been migrated to what this build expects; the fix is
+`just migrate`. Reach for the flag only when you have read the warnings and
+decided the difference is irrelevant to the command you are running.
+
+Relatedly, `keiro-migrations` requires **PostgreSQL 18**. On any other major
+version every one of these verbs fails before it runs, read-only ones included,
+with `schema verification failed: UnsupportedPostgresVersion N`. The dev shell
+pins PostgreSQL 18 for this reason.
+
+### An exit code is not an outcome
+
+`wf cancel --force` against an instance that has already finished reports
+`already_completed` and exits **zero**. It did not cancel anything — there was
+nothing left to cancel, and saying so is the honest answer. The same holds for
+the other mutating verbs: read the `outcome` or `disposition` column, not the
+exit status. This is why the audit lines record the command and exit code but do
+not claim a verb-specific outcome; nothing at that layer can observe one.
+
+
+## What is mounted but has no target here
+
+`outbox dead-letters list` requires `--dispatcher NAME`, naming a process-manager
+or router dispatcher. Shikigami has neither — it has no aggregate, read model,
+projection, router, or process manager of its own — so there is no dispatcher to
+name and nothing for this verb to report. It is present because the Keiro tree
+mounts whole, not because it answers a question here.
+
+The same caution applies generally to `projection`, `shard`, `snapshot`,
+`stream`, `inbox`, and `rebuild`: they operate Keiro machinery, and where this
+service does not use that machinery, they will have nothing to say. That is not a
+malfunction.
+
+
+## Related documents
+
+- [`configuration.md`](configuration.md) — every configuration key, including
+  `database.connection_string` and `agents.directory`.
+- `docs/adr/0001-declare-only-what-the-runtime-executes.md` — why this document
+  names what a verb cannot answer instead of quietly listing it.
+- `docs/adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md` — why inspecting a
+  conversation workflow inspects one epoch of it.
+- `docs/adr/0021-operator-verbs-wrap-the-owning-library.md` — why the substrate
+  verbs are mounted from Keiro rather than written here.

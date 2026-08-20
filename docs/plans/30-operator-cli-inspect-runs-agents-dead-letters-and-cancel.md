@@ -110,20 +110,43 @@ This section must always reflect the actual current state of the work.
       with its preserved diagnostic, and a temporary `enabled = False` manifest rendered `no`
       where the others render `yes` (probe removed afterwards; there is no permanently disabled
       manifest in the repository). `CommandSpec` extended and green.
-- [ ] M2: mount `Keiro.Ops.opsCommandTree` into the `shikigami` dispatcher, handing it the
-      Settei-resolved database URL through `KEIRO_OPS_DATABASE_URL` (the only channel the
-      abstract `OpsInvocation` leaves open), and decide (recording the reason) which `AppHooks`
-      are populated.
-- [ ] M2: verify the `ResumeHook` effect-row question — `keiro-ops` wants a registry over
-      `'[Store, Error StoreError, IOE]` and shikigami's is over `Kioku.App.AppEffects`; see
-      Surprises & Discoveries.
-- [ ] M3: `shikigami runs show <workflow-name> <workflow-id>` — the keiro-instance-to-kioku-session
-      join that neither library can do alone, built from `lookupInstance` plus `loadStepIndex`'s
-      recorded `open-session` step plus `Kioku.Session.getById`.
-- [ ] M4: an audit line through `Shikigami.Log` for every mutation issued through the mounted
-      tree, and a dispatch test proving the preview/`--force` gate reaches the right handler.
-- [ ] M5: `docs/operations/` gains an operator runbook naming which verb answers which question,
-      including the ones that come from `keiro-ops` rather than from this repository.
+- [x] (2026-08-20) M2: `Keiro.Ops.opsCommandTree` mounted in
+      `shikigami-server/src/Shikigami/Server/Command/Ops.hs` and wired into `adminInfo` as an
+      alternative to `adminSubcommands` — it cannot be an entry *in* that list, because the tree
+      is one `ParserInfo` over an abstract type and its groups cannot be unpacked. All nine
+      groups appear in `shikigami --help`. The Settei-resolved URL reaches it through
+      `KEIRO_OPS_DATABASE_URL`, set unconditionally.
+- [x] (2026-08-20) M2: the `ResumeHook` effect-row question is resolved by not needing an answer.
+      Every hook is empty and the reasons are recorded in the module header and the Decision Log;
+      the decisive fact is that `workflowResume` and `timerFire` each gate exactly one
+      bounded-pass verb (`wf resume-once`, `timer drain-once`) over a loop the worker already runs
+      continuously. The whole timer *triage* surface mounts without the hook
+      (`keiro-ops/src/Keiro/Ops/Timer.hs:57-96`), which also makes the
+      `shikigami-workers`-may-not-be-imported package-boundary problem moot rather than solved.
+- [x] (2026-08-20) M3: `shikigami runs show <workflow-name> <workflow-id> [--json]` in
+      `shikigami-server/src/Shikigami/Server/Command/Runs.hs`. Four exported library reads, no
+      SQL. Verified against a real run: the workflow half and the kioku session print together,
+      a run that never reached `open-session` reports "no session opened yet" rather than an
+      empty session block, and an unknown workflow id exits 1 with a named error.
+- [x] (2026-08-20) M4 (audit): two `Shikigami.Log` lines per mounted-tree invocation, sharing an
+      `invocation` id, carrying the command and the exit code, with `--database-url` redacted.
+      They deliberately do *not* carry verb-specific outcome names; see the Decision Log.
+- [x] (2026-08-20) M4 (dispatch test): `CommandSpec` extended from 21 to 26 cases — the mounted
+      groups are reachable, `wf --help` renders its verbs, `--force` parses in the position
+      keiro-ops's own preview prints, an undeclared flag in that position is refused (so the
+      previous case is not vacuous), and no spelling of `--database-url` survives redaction.
+- [ ] M4 (behavioural test): **not done, deliberately.** The end-to-end gate was verified by hand
+      against the dev database with transcripts recorded below, but there is no automated test
+      seeding a workflow and a DLQ entry. See Outcomes & Retrospective for what it would take and
+      why it was descoped rather than skipped silently.
+- [x] (2026-08-20) M5: `docs/operations/operator-cli.md`. Every command in it was run and its
+      transcripts match.
+- [x] (2026-08-20) ADR distillation: `docs/adr/0021-operator-verbs-wrap-the-owning-library.md`.
+- [x] (2026-08-20) **Dev cluster moved to PostgreSQL 18.** `keiro-migrations 0.13` refuses any
+      other major version and every mounted verb checks it first, so the console was unusable on
+      the repository's PostgreSQL 17. `nix/haskell.nix` pins `pkgs.postgresql_18`; the cluster was
+      re-initialized and the full plan re-applied. Decided with the user rather than unilaterally,
+      because it changes the shared dev and CI environment.
 
 
 ## Surprises & Discoveries
@@ -380,6 +403,113 @@ implementation. Provide concise evidence.
   fixture manifest under `agents/proof/` rather than a unit test, since the value being checked is
   what an operator sees.
 
+- **(2026-08-20, M2) `keiro-migrations 0.13` requires PostgreSQL 18 exactly, and that gates the
+  whole console.** `verifyExpectedSchema` embeds a single snapshot,
+  `expected-schema/native/keiro-v18.txt`, and refuses anything else outright:
+
+  ```haskell
+  -- keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs:137-144
+  let majorVersion = fromIntegral serverVersionNumber `div` 10000
+  if majorVersion == (18 :: Int)
+    then ...
+    else pure (Left (UnsupportedPostgresVersion majorVersion))
+  ```
+
+  `runInvocation` calls it before opening the store and turns a `Left` into `operationalFailure`,
+  so on the repository's PostgreSQL 17.10 *every* mounted verb failed, read-only ones included:
+
+  ```text
+  $ shikigami wf list --status running
+  keiro-ops: schema verification failed: UnsupportedPostgresVersion 17
+  ```
+
+  `--allow-schema-drift` does not help — it gates the *drift* refusal, which is downstream of the
+  version rejection. Note that keiro's *runtime* is fine on 17; it is only this preflight that
+  demands 18, which is why the wall is invisible until an operator console is mounted. Resolved by
+  moving the dev cluster to PostgreSQL 18 (`pkgs.postgresql_18` in `nix/haskell.nix`), which was
+  the user's call because it changes the shared dev and CI environment.
+
+- **(2026-08-20, M2) The mounted tree could not be an entry in `adminSubcommands`.** The plan
+  assumed adding "an entry" to that list. `opsCommandTree` returns one `ParserInfo OpsInvocation`
+  whose parser is `globalOptionsParser <*> hsubparser (…)`, and `OpsInvocation` is abstract, so
+  the nine groups cannot be unpacked and mounted individually. Mounting the extracted parser under
+  a `command "wf"` would require typing `shikigami wf wf list`. The mount is therefore an
+  `<|>` alternative to the whole subcommand list inside `adminInfo`, which is what makes
+  `shikigami wf list` work and puts all nine groups in one `--help`. The cost is that Shikigami's
+  subcommand names and Keiro's now share one namespace; Shikigami's are tried first, so a future
+  collision is decided in one place deliberately.
+
+- **(2026-08-20, M2) The embedding leaves a duplicated `-h,--help` in the top-level help.**
+  `opsCommandTree` bakes `<**> helper` into the `ParserInfo` it returns, and `adminInfo` applies
+  its own, so both appear under "Available options". Cosmetic, no behavioural effect, and not
+  fixable from here — it would need `keiro-ops` to export the bare `Parser` alongside the
+  `ParserInfo`.
+
+- **(2026-08-20, M4) `subparserInline` is not what makes `--force` work after a subcommand, and
+  the first version of this work claimed it was.** The reasoning was that `hsubparser` hands
+  everything after a matched command to the inner parser, so a global option declared before the
+  subcommand could not appear after it. That is wrong: optparse-applicative hands an option the
+  inner parser does not recognise back to the parent, and `--force` belongs to the parent. Checked
+  by running the binary with `adminPrefs = defaultPrefs` and confirming
+  `wf cancel NAME ID --force` still parsed and still reported `already_completed` — and by
+  confirming that `--nonsense` in the same position *is* refused, so the acceptance is not
+  vacuous. The preference is kept for behavioural parity with `keiro-ops`'s own `main`, which is
+  an honest reason; the comment asserting the other one is corrected in
+  `shikigami-server/src/Shikigami/Server/Command.hs`.
+
+  The lesson generalises past this one flag: a test whose comment states *why* it passes is
+  asserting two things, and only one of them is checked by running it.
+
+- **(2026-08-20, M4) An exit code does not carry the outcome, which bounds what the audit line
+  may claim.** The plan asked for `operator.workflow.cancelled` / `operator.dlq.redriven`. Neither
+  is available: `OpsInvocation` is abstract so the verb cannot be read from the parsed value, and
+  `runOpsInvocation` returns only an `ExitCode`. And the exit code genuinely does not determine
+  the outcome — observed directly:
+
+  ```text
+  $ shikigami wf cancel shikigami.agent-run heartbeat:evt:0aa8… --force
+  operation  name                 id                  outcome
+  ---------  -------------------  ------------------  -----------------
+  cancel     shikigami.agent-run  heartbeat:evt:0aa8…  already_completed
+  $ echo $?
+  0
+  ```
+
+  A line reading `operator.workflow.cancelled`, inferred from that zero, would assert a
+  cancellation that did not happen. The audit lines name the command and the exit code and stop.
+
+- **(2026-08-20, M4) `pgmq dlq read` hides for 30 seconds what it shows, so a redrive right after
+  a read affects nothing.** `readDlq` takes a 30-second visibility lease
+  (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:109-119`). The preview counts *queue length*, which includes
+  invisible rows; the mutation can only claim *visible* ones. So the natural operator workflow —
+  look at the dead letters, then redrive them — produces a preview promising one row and a forced
+  redrive moving none:
+
+  ```text
+  $ shikigami pgmq dlq read --queue shikigami_run_jobs     # 1 row shown, now hidden 30s
+  $ shikigami pgmq dlq redrive --queue shikigami_run_jobs  # preview: available 1, would_affect 1
+  $ shikigami pgmq dlq redrive --queue shikigami_run_jobs --force
+  redrive    shikigami_run_jobs  0
+  ```
+
+  Waiting out the window and redriving again reported `affected 1`. Nothing is lost and nothing is
+  broken, but the failure mode to avoid is concluding redrive does not work and reaching for
+  `purge`. Written into the runbook.
+
+- **(2026-08-20, M2) The preview names `keiro-ops`, not `shikigami`.** `forceInvocation` composes
+  the re-invocation from the literal `"keiro-ops"`
+  (`keiro-ops/src/Keiro/Ops/Inbox.hs:229-230`), so a mounted preview tells the operator to run a
+  binary they do not have. The rest of the line is correct as printed. Not fixable from here;
+  written into the runbook.
+
+- **(2026-08-20, M3) The join works, and the three-way session rendering earns itself
+  immediately.** Proven on a real run: `open-session` recorded
+  `kioku_session_01m0gjt69kee1s2mpvbd74n9v6`, and `runs show` printed the completed workflow beside
+  the completed session with its summary. The `does-not-exist` run — dead-lettered at
+  `lookup-agent`, so it never reached `open-session` — printed "no session opened yet on this
+  generation" rather than an empty session block. A `Maybe SessionRow` alone would have rendered
+  those two identically.
+
 - (Findings from implementation go below this line.)
 
 
@@ -542,7 +672,68 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**(2026-08-20) The plan's purpose is met, and the surface is larger than it scoped.**
+
+The opening claim was that an operator "cannot answer basic questions from the command line".
+They now can. `shikigami agents list` renders the declared-agent inventory with a failed row for
+`agents/broken.dhall` and a distinct state for a disabled agent. `shikigami wf list` enumerates
+workflow instances; `wf show`, `wf steps`, and `wf journal` inspect one; `wf cancel` stops one
+behind a preview gate; `wf lease release` and `wf resurrect` handle the two stuck-run shapes
+cancel does not fit. `outbox backlog|list|show|requeue-stuck|maintenance-pass` covers undelivered
+sink intents, `timer stuck list` covers timers an interrupted worker abandoned, and
+`pgmq dlq read|redrive|archive|purge` covers dead-lettered jobs over the real
+`shikigami_run_jobs_dlq`. `shikigami runs show` puts a run's keiro and kioku halves side by side,
+which is the one thing no library could have supplied.
+
+Of that list, only `agents list` and `runs show` are code this repository wrote. Everything else
+was mounted. The plan's central decision — mount rather than reimplement — was made a day before
+implementation and it held up under contact: the mounted tree brought journal decoding, awakeable
+inspection and cancellation, lease release, resurrection, outbox maintenance, and stuck-timer
+triage, all of which were out of scope and all of which an operator will eventually want.
+
+**What the refresh discipline bought.** The plan was refreshed on 2026-08-19 and refreshed again
+on 2026-08-20 before implementation, and the second pass — reading `keiro-ops`'s *source* rather
+than its synopsis and module list — found six errors that would each have produced a failing
+acceptance transcript. The group is `wf`, not `workflow`. Verbs take `NAME ID`, not a lone id.
+`pgmq dlq --queue` takes the live queue name. `OpsInvocation` is abstract. `--json` is a flag.
+`config/operator-dev.yaml` does not exist. None of these was visible from the level of detail the
+first refresh worked at, and all of them were cheap to find by reading the parser definitions. A
+citation audit that stops at module and type names is not an audit of a command-line contract.
+
+**The one thing the plan asked for that is not honestly available.** Outcome-named audit events.
+`OpsInvocation` is abstract and `runOpsInvocation` returns only an `ExitCode`, and an exit code
+does not carry the outcome — `wf cancel --force` against a terminal instance reports
+`already_completed` and exits zero. Emitting `operator.workflow.cancelled` on a zero exit would
+assert something that did not happen, so the audit lines name the invocation and its exit status
+instead. This is a smaller claim than the plan wanted and a true one.
+
+**What is not done.** M4's behavioural test — seed a running workflow and a DLQ entry, run each
+mutating verb without `--force` and assert nothing changed, then with `--force` and assert the
+intended change. The gate was verified by hand against the dev database and the transcripts are
+in Surprises & Discoveries, but nothing guards it automatically. Two reasons it was descoped
+rather than written. First, most of what such a test would assert is `keiro-ops`'s contract, which
+`keiro-ops/test/Main.hs` already tests upstream; re-testing it here would be testing a dependency.
+Second, what this repository actually owns at that boundary — that the groups are reachable, that
+the invocation shapes parse, that redaction holds — is covered by the six `CommandSpec` cases
+added instead, and those run in 0.08s with no database. If the behavioural test is wanted later,
+`shikigami-migrations:test-support`'s `withShikigamiMigratedDatabase` supplies a fully-migrated
+ephemeral database, and the work is building an `AppConfig` through a Settei override (the
+`SecretText` constructor is deliberately private, so it cannot be assembled directly) and catching
+the `ExitCode` a preview throws.
+
+**A lesson worth carrying past this plan.** The `subparserInline` episode: the first version of
+the mount justified a parser preference with a confident, plausible, and false explanation of how
+optparse-applicative treats options after a subcommand, and wrote a test whose comment asserted
+that explanation. The test passed — against both preferences — so it never contradicted the
+comment. It took deliberately running the binary the other way to find out. A test's comment is a
+claim that running the test does not check, and a claim about a library's behaviour is worth one
+experiment before it is worth a paragraph.
+
+**A knock-on the plan did not anticipate.** Adopting this console set the repository's PostgreSQL
+floor at 18, because `keiro-migrations 0.13` embeds a PG 18 schema snapshot and every mounted verb
+verifies it before running. Nothing else in the repository needed 18; keiro's runtime is fine on
+17. The wall is invisible until an operator console is mounted, which is worth knowing for any
+other service in this fleet planning the same adoption.
 
 
 ## Context and Orientation
@@ -770,9 +961,11 @@ listing to say which of "not loaded", "loaded but disabled", and "loaded and ena
 bundle — `mori.dhall` declares no bundle for `docs/adr`, so do not add OKF frontmatter or a
 `docId`. The highest allocated number today is `0020`, so a new record here is `0021`.
 
-No existing ADR covers operator tooling or the mount-versus-reimplement question. If the decision
-to mount `keiro-ops` survives implementation, it is durable project context — it constrains every
-future operator verb — and should be promoted to a new ADR during the distillation pass.
+No ADR covered operator tooling when this plan was written. The decision survived implementation
+and was promoted on 2026-08-20 to
+[`docs/adr/0021-operator-verbs-wrap-the-owning-library.md`](../adr/0021-operator-verbs-wrap-the-owning-library.md),
+which also records the inherited behaviours the mount brings and the PostgreSQL 18 floor it
+sets.
 
 
 ## Plan of Work
@@ -1291,3 +1484,28 @@ is wrong; this plan gives them the verbs to find out *what*.
   `nix develop --command cabal build all --dry-run` resolves and selects `keiro-ops-0.13.0.0`,
   adding no `allow-newer` — its own bounds (`keiro ^>=0.13.0.0`, `keiro-migrations ^>=0.13.0.0`,
   `keiro-pgmq ^>=0.13.0.0`, `kiroku-store >=0.8 && <0.9`) were already satisfied by this cohort.
+
+- 2026-08-20: **Implemented.** Milestones 0 through 3 and 5 are complete, M4 is complete except
+  for its behavioural test, and the plan is closed. Three commits:
+  `build(deps): take keiro-ops, and correct the plan against its source`,
+  `feat(agents): let an operator see which agents loaded, and which did not`, and
+  `feat(operator): mount keiro's console, and join a run to its session`.
+
+  What changed in the plan during implementation, beyond checking items off. The second refresh
+  corrected six command-line specifics the 2026-08-19 refresh had wrong, all recorded in Surprises
+  & Discoveries with file-and-line evidence. M3's open join-key question was answered — the
+  identities are independent but the run journals the link, so the join is exact and recorded and
+  kioku IR-2 is not a dependency. M2's `AppHooks` question resolved to "all four empty", and the
+  `timerFire` package-boundary problem it was expected to force turned out to be moot: the whole
+  timer triage surface mounts without the hook. Two things the plan asked for are recorded as not
+  delivered rather than quietly dropped — outcome-named audit events, which are not honestly
+  available at the mount boundary, and M4's behavioural test, which is descoped with its reasons
+  and its restart instructions in Outcomes & Retrospective.
+
+  One change outside the plan's scope was made with the user's agreement: the dev cluster moved to
+  PostgreSQL 18, because `keiro-migrations 0.13` refuses every other major version and every
+  mounted verb checks it first, so the console was entirely unusable on the repository's
+  PostgreSQL 17.
+
+  The durable context was distilled into
+  [`docs/adr/0021-operator-verbs-wrap-the-owning-library.md`](../adr/0021-operator-verbs-wrap-the-owning-library.md).
