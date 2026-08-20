@@ -154,15 +154,28 @@ entry point; the signal operation lands with it.
 
 | Identity | Value | Defined at |
 |---|---|---|
-| Queue name | `shikigami_run_jobs` | `Trigger/Enqueue.hs:29` |
-| Message body | `MessageBody (toJSON job)` — a bare `RunJob` | `Trigger/Enqueue.hs:51-58` |
-| Consumer | `Aeson.fromJSON` straight to `RunJob` | `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:62` |
+| Queue name | `shikigami_run_jobs` | `Trigger/Enqueue.hs` (`runQueueName`) |
+| Message body | `MessageBody (toJSON job)` — a bare `RunJob` | `Trigger/Enqueue.hs` (`enqueueRunJobTx`, `enqueueRunJob`) |
+| Consumer | `Aeson.fromJSON` straight to `RunJob` | `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` (`runJob`) |
 
-`RunJob` (`Agent/RunJob.hs:19-28`) has eight fields: `agentName :: Text`,
-`triggerKind :: TriggerKind` (a four-constructor sum), `occurredAt :: UTCTime`,
+`RunJob` (`Agent/RunJob.hs`) has nine fields: `agentName :: Text`,
+`triggerKind :: TriggerKind` (a four-constructor sum saying where the job came
+from, for audit and tracing), `routeKind :: RunRouteKind` (a three-constructor
+sum saying which workflow the producer meant), `occurredAt :: UTCTime`,
 `triggerPayload :: Data.Aeson.Value`, `idempotencyKey :: Text`, and three
 optionals — `parentSessionId :: Maybe Text`, `parentRunWorkflowId :: Maybe Text`,
 `delegationDepth :: Maybe Int`.
+
+`routeKind` is additive and hand-encoded per
+[ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md):
+its compatibility default `InferredLegacyRoute` emits no key at all, so a job
+enqueued or journaled before the field existed is byte-identical and still
+decodes. See
+[ADR 0014](../adr/0014-a-run-job-declares-its-route-rather-than-being-guessed.md).
+The keiro specification still inventories only the three fields it refers to
+(`agentName`, `idempotencyKey`, `occurredAt`) in
+`domain/shikigami-agent-run.keiro`, so adding the field needed no specification
+edit.
 
 Describing this as a Language 5 `workqueue` is *expressible*: the colon form
 `field -> "wire_key" : TypeExpr` accepts `Json`, `Optional Text`, `Optional Int`,

@@ -113,10 +113,21 @@ This section must always reflect the actual current state of the work.
       `shikigami-core/shikigami-core.cabal` and `shikigami-core/test/Main.hs` (the other suites
       extended already-registered modules, and `shikigami-workers`'s needed no new module).
       `nix develop -c cabal build all` and `nix develop -c cabal test all -j1` green.
-- [ ] `just keiro-gate` green; final documentation pass and ADR distillation.
-- [ ] Update `docs/operations/configuration.md`, `config/shikigami.example.yaml`, and
-      `docs/architecture/shikigami-domain-inventory.md` for the new keys and the new `RunJob`
-      field; write ADR 0012 for the route discriminator and its compatibility rule.
+- [x] (2026-08-20T09:20:00Z) `nix develop -c just keiro-gate` green on a clean tree — scaffold,
+      diff, and the conformance suite all pass. The gate's `keiro-scaffold` step runs
+      `git diff --exit-code -- shikigami-core/src`, so it must be run with the working tree
+      committed; an uncommitted edit anywhere under that directory reports a stale generated
+      layer that is not stale.
+- [x] (2026-08-20T09:30:00Z) `docs/operations/configuration.md` and
+      `config/shikigami.example.yaml` document `agents.strict` and `scheduler.catch_up`;
+      `docs/architecture/shikigami-domain-inventory.md` describes nine `RunJob` fields including
+      `routeKind`; MasterPlan 3's stale "two failing fixtures" note is corrected in place. ADRs
+      [0014](../adr/0014-a-run-job-declares-its-route-rather-than-being-guessed.md),
+      [0015](../adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md),
+      and [0016](../adr/0016-a-cron-agent-runs-about-now-not-once-per-missed-minute.md) record the
+      route discriminator, the two-layer kioku result plus the journaled-step-bytes rule, and the
+      catch-up default. (The plan named "ADR 0012" for the first of these; 0012 and 0013 were
+      allocated by other work before this plan came up, so the numbers moved.)
 
 
 ## Surprises & Discoveries
@@ -506,7 +517,36 @@ Compare the result against the original purpose.
   intent did. Four of its file paths, one of its dependency vocabularies, and one of its two
   headline bug claims were wrong by the time the work came up, while every user-visible outcome it
   promised is still worth delivering. Re-read the code before implementing a milestone, not after.
-- (Remaining outcomes to be filled as Milestones 1–4 land.)
+- 2026-08-20 (whole plan). All four milestones landed, and every user-visible outcome the
+  Purpose promised is now checkable. Routing is declared: `RunJob` carries a `routeKind` that all
+  five producers set, `routeRunJob` reads only that field, and a conversation route whose payload
+  will not decode reaches the reconciled DLQ as `invalid_route_payload` instead of silently
+  running the other workflow. The scheduler has a catch-up policy: waking a day late arms one
+  future tick under the new `skip_missed` default, and `SchedulerSpec` drives exactly that
+  scenario against a real database. Truth-bearing kioku failures reach the worker's existing
+  `RetryDefault`/`Dead` decisions instead of being discarded, with the one genuinely best-effort
+  write named for what it is. A manifest that will not load and a cron that will not parse are
+  both reported through the structured logger and both refusable at startup through
+  `agents.strict` — demonstrated end to end at exit code 1 with three JSON lines. And the
+  enqueue path is idempotent, total, and no longer backdates a run to 1970.
+- What is deliberately not here. The `agent.memory.best_effort_failed` line is verified by
+  reading rather than by driving: no declaration-level input makes just that memory write fail
+  while the session writes around it succeed (see Validation and Acceptance). The
+  `InferredLegacyRoute` constructor and its branch are transitional by design and are not deleted
+  by this plan; that waits on `worker.job.route_inferred` disappearing from production logs. And
+  Milestone 3's "log and count" is log-only, because there is still no metrics surface — plan 28's
+  M2 owns the counter.
+- Lesson, restated with evidence. The retrospective written before implementation said this
+  plan's premises had decayed faster than its intent. Implementation found three more:
+  `cabal test all` deadlocks unless run with `-j1`; a kioku write answers on two error layers,
+  not one, which changed Milestone 3's whole disposition table; and four of the writes Milestone 3
+  touches are journaled steps, so widening their result type was a wire change that needed ADR
+  0011's rule a second time. Every one of those was found by reading the code the milestone was
+  about, immediately before writing it. None would have been found by reading the plan.
+- Lesson for the next plan that touches this surface. The gate has an ordering constraint worth
+  knowing: `just keiro-gate` runs `git diff --exit-code -- shikigami-core/src`, so it must be run
+  with the tree committed. Running it mid-change reports a stale generated layer that is not
+  stale, which costs a confusing few minutes.
 
 
 ## Context and Orientation
@@ -930,7 +970,7 @@ nix develop -c cabal test shikigami-workers-test --test-show-details=streaming
 nix develop -c cabal test shikigami-core-test --test-show-details=streaming
 ```
 
-Expected transcript excerpt once all four milestones land:
+Observed transcript excerpt, 2026-08-20, with all four milestones landed:
 
 ```text
 RunJob
@@ -939,31 +979,58 @@ RunJob
   undecodable payload on a conversation route dead-letters:          OK
   a legacy job with no routeKind reproduces the old decision:        OK
   trigger kind does not affect any route:                            OK
+  a route error reaches the reconciled DLQ:                          OK (3.57s)
 Scheduler
-  waking a day late arms exactly one future run (SkipMissed):        OK
-  FireAll still arms from the tick that fired:                       OK
-  a failed schedule enqueue leaves the timer for requeue:            OK
-  an unknown timer kind is reported, not silently approved:          OK
+  waking a day late arms exactly one future run (SkipMissed):        OK (3.05s)
+  FireAll still arms from the tick that fired:                       OK (3.12s)
+  a failed schedule enqueue leaves the timer for requeue:            OK (3.20s)
+  an unknown timer kind is reported, not silently approved:          OK (3.09s)
+  an unparseable cron is reported, not dropped:                      OK
+  strict mode refuses to start on an unparseable cron:               OK
+  an approval-timeout payload still reaches the approval action:     OK (3.27s)
 wire compatibility
   a pre-upgrade run job decodes to the same value:                   OK
   the encoder still produces the pre-upgrade bytes:                  OK
   a legacy job decodes with the inferred route:                      OK
   an explicit route round-trips and adds exactly one key:            OK
+  a produced value encodes exactly as the bare value:                OK
+  a pre-refusal step value still decodes to the produced value:      OK
+  a refusal round-trips and is distinguishable from a value:         OK
+AgentRun
+  a refused session open fails the run instead of completing it:     OK (3.13s)
 AgentLoader
   loadAgentsLoud reports the broken manifest through the logger:     OK
   strict mode refuses to start when a manifest fails:                OK
+  strict mode starts when every manifest loads:                      OK
 EnqueueHardening
   runQueueName parses:                                               OK
+  a well-formed occurredAt is the run's occurrence:                  OK
   an unparseable occurredAt does not become the epoch:               OK
   the same logical event enqueues one stable idempotency key:        OK
-  UUIDv5 ids separate names that differ above U+00FF:                OK
+  different agents and payloads get different keys:                  OK
+  UUIDv5 name bytes separate names that differ above U+00FF:         OK
 ```
 
-Then the whole suite and the specification gate:
+Then the whole suite and the specification gate. Both must run on a committed tree, and the
+suite must be serialized — see Surprises & Discoveries for why `-j1` is not optional:
 
 ```bash
-nix develop -c cabal test all
+nix develop -c cabal test all -j1
 nix develop -c just keiro-gate
+```
+
+Observed 2026-08-20, exit code 0 from each:
+
+```text
+Test suite conformance: PASS
+All 328 tests passed (20.05s)   Test suite shikigami-core-test: PASS
+All 2 tests passed (1.72s)      Test suite shikigami-migrations-smoke: PASS
+All 3 tests passed (0.02s)      Test suite shikigami-migrations-test: PASS
+All 8 tests passed (0.00s)      Test suite shikigami-agent-test: PASS
+All 15 tests passed (0.01s)     Test suite shikigami-api-test: PASS
+All 45 tests passed (5.44s)     Test suite shikigami-workers-test: PASS
+All 20 tests passed (0.04s)     Test suite shikigami-server-test: PASS
+All 3 tests passed (0.00s)      Test suite shikigami-client-test: PASS
 ```
 
 Manual check of loud loading, using the checked-in broken manifest and no new config file:
@@ -1133,10 +1200,12 @@ Downstream, plan 30 renders `AgentLoadReport` in an operator `agents list` comma
 already built enabled-agent selection on it, and plan 23 will persist it against meibo principals.
 This plan reports and logs; it does not persist.
 
-One correction to propagate upward when this plan lands: MasterPlan 3's note that strict mode must
-expect two failing fixtures under `agents/` is wrong, because the traversal is not recursive and
-never reaches `agents/detectors/schema.dhall`. There is exactly one expected failure,
-`agents/broken.dhall`.
+One correction was propagated upward when this plan landed: MasterPlan 3's note that strict mode
+must expect two failing fixtures under `agents/` was wrong, because the traversal is not recursive
+and never reaches `agents/detectors/schema.dhall`. There is exactly one expected failure,
+`agents/broken.dhall`, and
+`docs/masterplans/3-correctness-and-delivery-semantics-stop-dropping-and-duplicating-work.md` now
+says so.
 
 
 ## Interfaces and Dependencies
@@ -1225,10 +1294,14 @@ Documentation and durable-context updates that ship with the code:
 `config/shikigami.example.yaml` gains both keys; and
 `docs/architecture/shikigami-domain-inventory.md:157-165` is corrected to describe nine `RunJob`
 fields including `routeKind`, noting that the specification still inventories only the three it
-refers to. Write `docs/adr/0012-*.md` recording the route discriminator and the rule that a job
-without one keeps its historical behavior — the corpus is plain Markdown with sequential
-`NNNN-kebab-slug.md` names and no OKF frontmatter, per `docs/adr/README.md`, and 0011 is the
-highest allocated number today.
+refers to. Three ADRs shipped with the code, in the corpus's plain-Markdown, sequentially numbered,
+no-OKF-frontmatter convention per `docs/adr/README.md`:
+[0014](../adr/0014-a-run-job-declares-its-route-rather-than-being-guessed.md) for the route
+discriminator and the rule that a job without one keeps its historical behavior,
+[0015](../adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md)
+for the two-layer kioku result and the constraint on widening a journaled step's value, and
+[0016](../adr/0016-a-cron-agent-runs-about-now-not-once-per-missed-minute.md) for the catch-up
+default. The plan predicted 0012; other work allocated 0012 and 0013 first, so the numbers moved.
 
 
 ## Revision Notes
@@ -1239,6 +1312,17 @@ highest allocated number today.
 - 2026-07-22: Replaced trigger-kind inference with an explicit route discriminator,
   made truth-bearing Kioku failures propagate, moved settings to Settei, and added the
   old-job compatibility gate.
+- 2026-08-20 (implementation): All four milestones implemented and committed. Six deviations from
+  the plan as written are recorded in the Decision Log with their reasons, and three new
+  discoveries are in Surprises & Discoveries. The most consequential: a kioku write answers on two
+  error layers rather than one, which split Milestone 3's disposition into a retrying arm and a
+  permanent arm; the four writes Milestone 3 touches are journaled steps, so `StepResult` follows
+  ADR 0011's omit-when-default rule a second time; and the scheduler fire actions take the claim
+  instant as a parameter rather than reading the clock again, which the Interfaces section now
+  reflects. The Validation and Acceptance section's kioku paragraph was rewritten because its
+  proposed method — an unavailable store — cannot work: the workflow journal reads the same
+  connection settings, so it would fail before any step ran. Documentation, the domain inventory,
+  MasterPlan 3's stale fixture-count note, and three ADRs (0014, 0015, 0016) shipped with the code.
 - 2026-08-20: Full refresh against the delivered tree. The plan's intent survived; most of its
   premises did not. Every file path was re-verified and corrected: the worker is
   `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`, the scheduler is

@@ -202,15 +202,19 @@ enabled-agent selection; plan 23 persists the report and annotates the existing 
 lifecycle state. EP-4 must not implement persistence, enabled filtering, or operator output.
 
 Plan 36 Milestone 4 already collapsed the four private copies of "list the directory, load
-every `*.dhall`, drop the ones that fail" into one `Shikigami.Agent.Loader.loadAgentsIn`
-(`shikigami-core/src/Shikigami/Agent/Loader.hs`). EP-4's Context still describes four
+every `*.dhall`, drop the ones that fail" into one function in
+`shikigami-core/src/Shikigami/Agent/Loader.hs`. EP-4's Context still describes four
 call sites in `shikigami-cli`; there is now exactly one function to change, and
 `loadAgent :: FilePath -> IO (Either LoadError AgentDecl)` beside it already returns the
-error that `loadAgentsIn` discards. EP-4's strict mode must also expect **two** failing
-fixtures under `agents/`, not one: `agents/broken.dhall` is the deliberate load-failure
-fixture, and `agents/detectors/schema.dhall` is a retired tombstone that is a record *type*
-rather than a manifest and has always failed the Dhall annotation. Treating the second as a
-regression, or making strict mode fail the repository's own fixture set, is the trap here.
+error the directory walk discarded.
+
+**Correction, 2026-08-20 (EP-4 landed).** This paragraph used to say strict mode must expect
+**two** failing fixtures under `agents/`. That is wrong, and following it would have made the
+strict-mode test assert a failure that never happens. `loadAgentsReport` does `listDirectory`
+and keeps top-level names ending in `.dhall`; the traversal is **not recursive**, so
+`agents/detectors/schema.dhall` is never opened. There is exactly one expected failure,
+`agents/broken.dhall`, and the delivered `AgentLoaderSpec` asserts `"failed":1`. The retired
+tombstone remains a record *type* rather than a manifest, and remains out of reach.
 
 
 ## Progress
