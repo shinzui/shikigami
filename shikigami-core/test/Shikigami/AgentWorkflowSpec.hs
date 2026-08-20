@@ -163,6 +163,39 @@ tests =
             assertBool ("first attempt is permanent: " <> show firstAttempt) (isPermanent firstAttempt)
             assertBool ("replay keeps the permanent value: " <> show replayed) (isPermanent replayed)
             assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts,
+      -- Before this, every kioku result on the agent-run path was discarded with
+      -- @_ <-@ or @void@, so a run whose session kioku refused to open still
+      -- reported Completed (Right ...) — a successful run with no durable record
+      -- of itself. A negative delegation depth is kioku's own lineage rejection,
+      -- so it exercises the refusal layer without breaking the store the journal
+      -- also needs.
+      testCase "a refused session open fails the run instead of completing it" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl]
+                refusedJob =
+                  job
+                    { idempotencyKey = "heartbeat:test-refused-session",
+                      delegationDepth = Just (-1)
+                    }
+
+            result <- runAgentRunWorkflow deps refusedJob
+            case result of
+              Right (Completed (Left (PermanentAgentRunFailure detail))) ->
+                assertBool
+                  ("the failure names the refused write: " <> Text.unpack detail)
+                  ("opening the run's kioku session was refused" `Text.isInfixOf` detail)
+              other -> assertFailure ("a refused session open must not complete successfully, got " <> show other)
+
+            -- The refusal is journaled, so a replay answers the same way rather
+            -- than opening a session on the second attempt.
+            replayed <- runAgentRunWorkflow deps refusedJob
+            case replayed of
+              Right (Completed (Left (PermanentAgentRunFailure _))) -> pure ()
+              other -> assertFailure ("replay must keep the refusal, got " <> show other),
       testCase "Never completes a successful session without recording memory" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do

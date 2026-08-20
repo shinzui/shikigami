@@ -21,6 +21,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.List qualified as List
+import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
 import Shikigami.Agent.Decl
@@ -30,7 +31,7 @@ import Shikigami.Agent.Decl
     Sink (..),
   )
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
-import Shikigami.Agent.Workflow (SinkIntent (..))
+import Shikigami.Agent.Workflow (SinkIntent (..), StepResult (..))
 import Shikigami.Flow.SinkOutbox qualified as FlowOutbox
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
@@ -46,8 +47,40 @@ tests =
   testGroup
     "wire compatibility"
     [ queueTests,
+      stepResultTests,
       outboxTests,
       deliveryAttemptTests
+    ]
+
+-- ---------------------------------------------------------------------------
+-- Journaled agent-run step values
+-- ---------------------------------------------------------------------------
+
+-- | The agent-run workflow journals its @open-session@, @record@, @complete@ and
+-- @fail-session@ steps, and those journals outlive the binary that wrote them.
+-- Teaching those steps to record a kioku refusal must not change what a step
+-- that succeeded writes, or a workflow parked before the change stops replaying.
+-- Per ADR 0011 the produced value keeps the bare encoding and only a refusal
+-- introduces a key.
+stepResultTests :: TestTree
+stepResultTests =
+  testGroup
+    "agent-run step values"
+    [ testCase "a produced value encodes exactly as the bare value" do
+        assertSameJson "session id" "\"ses_1\"" (encode (StepProduced ("ses_1" :: Text)))
+        assertSameJson "no memory id" "null" (encode (StepProduced (Nothing :: Maybe Text)))
+        assertSameJson "unit" "[]" (encode (StepProduced ())),
+      testCase "a pre-refusal step value still decodes to the produced value" do
+        decoded <- decodeOrFail @(StepResult Text) "\"ses_1\""
+        decoded @?= StepProduced "ses_1"
+        noMemory <- decodeOrFail @(StepResult (Maybe Text)) "null"
+        noMemory @?= StepProduced Nothing
+        unit <- decodeOrFail @(StepResult ()) "[]"
+        unit @?= StepProduced (),
+      testCase "a refusal round-trips and is distinguishable from a value" do
+        let refused = StepRefused "opening the run's kioku session was refused: SessionInvalidLineage" :: StepResult Text
+        decoded <- decodeOrFail @(StepResult Text) (LazyByteString.toStrict (encode refused))
+        decoded @?= refused
     ]
 
 -- ---------------------------------------------------------------------------

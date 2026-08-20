@@ -2,6 +2,10 @@ module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
     AgentRunFailure (..),
     agentRunFailureDetail,
+    -- | The journaled step value that carries a kioku refusal. Exported so
+    -- "Shikigami.WireCompatSpec" can pin that a produced value still encodes as
+    -- the bare value the step wrote before this shape existed.
+    StepResult (..),
     AgentRunHooks (..),
     defaultAgentRunHooks,
     agentRunWorkflowName,
@@ -20,8 +24,9 @@ module Shikigami.Agent.Workflow
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Key, Value)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
@@ -34,7 +39,7 @@ import Data.Time (NominalDiffTime, secondsToNominalDiffTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
-import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Error.Static (Error, runErrorNoCallStack, throwError_)
 import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), decodeJsonIntegrationEvent, encodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx)
@@ -296,12 +301,27 @@ runProfiledAgentWith ::
   RunJob ->
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgentWith deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} = do
+runProfiledAgentWith deps activeBehaviorEnv job decl = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
     addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
-  sid <- runStep deps (StepName "open-session") (openSession deps job decl)
+  opened <- runStep deps (StepName "open-session") (requireStore (openSession deps job decl))
+  case opened of
+    -- kioku refused to open the session. The same command will be refused on
+    -- every replay, so there is nothing to retry and the run is over.
+    StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
+    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv job decl sid
+
+-- | The rest of one agent run, once its kioku session is open.
+runSessionedAgent ::
+  AgentRunDeps ->
+  BehaviorEnv ->
+  RunJob ->
+  AgentDecl ->
+  SessionId ->
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
+runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
@@ -332,8 +352,16 @@ runProfiledAgentWith deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryP
                 <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv sid decl job prior)
   case behaviorE of
     Left err -> do
-      _ <- runStep deps (StepName "fail-session") (failSession deps decl sid (agentRunFailureDetail err))
-      pure (Left err)
+      failed <- runStep deps (StepName "fail-session") (requireStore (failSession deps decl sid (agentRunFailureDetail err)))
+      pure case failed of
+        StepProduced () -> Left err
+        -- The run failed either way; if the failure could not be recorded, say
+        -- both things rather than only the half that reached a store.
+        StepRefused detail ->
+          Left
+            ( PermanentAgentRunFailure
+                (agentRunFailureDetail err <> " (and " <> detail <> ")")
+            )
     Right output -> do
       approvedSinks <- approveSinks deps sid job decl output
       sinkResults <-
@@ -342,17 +370,21 @@ runProfiledAgentWith deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryP
           addAttribute traceSpan "sink.count" (length approvedSinks)
           enqueueSinkIntents (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
-      mem <- runStep deps (StepName "record") (recordLearning deps decl sid output)
-      _ <- runStep deps (StepName "complete") (completeSession deps activeBehaviorEnv decl sid)
-      pure
-        ( Right
-            AgentRunResult
-              { sessionId = sid,
-                recalledPrior = prior,
-                behaviorOutput = output,
-                recordedMemId = mem
-              }
-        )
+      recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps decl sid output))
+      case recorded of
+        StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
+        StepProduced mem -> do
+          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps activeBehaviorEnv decl sid))
+          pure case completed of
+            StepRefused detail -> Left (PermanentAgentRunFailure detail)
+            StepProduced () ->
+              Right
+                AgentRunResult
+                  { sessionId = sid,
+                    recalledPrior = prior,
+                    behaviorOutput = output,
+                    recordedMemId = mem
+                  }
 
 behaviorRetryPatch :: PatchId
 behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
@@ -370,6 +402,61 @@ resolveRequiredProfile deps AgentDecl {sanctionedProfile} =
           deps
           (ProfileId profileId)
           (ProfileVersion <$> version)
+
+-- | A journaled step value that may record a refusal instead of a result.
+--
+-- Kioku answers a write on two layers, and they mean different things. The outer
+-- @Either StoreError@ says whether the store could be reached at all; the inner
+-- @Either SessionWriteError@ (or @MemoryWriteError@) says whether the store
+-- accepted the command. A transport failure is retryable and is never journaled
+-- — 'requireStore' rethrows it. A refusal is not retryable: the same command
+-- built from the same job will be refused on every replay, so it belongs in the
+-- journal as what that step actually answered.
+--
+-- Per [ADR 0011](docs\/adr\/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md)
+-- an additive shape must leave the previous bytes untouched, so 'StepProduced'
+-- encodes as the bare value exactly as these steps already wrote it, and only
+-- 'StepRefused' introduces a key. That holds as long as @a@ never encodes as an
+-- object carrying @stepRefused@; the three uses here encode as a string, a
+-- string-or-null, and an empty array.
+data StepResult a
+  = StepProduced !a
+  | StepRefused !Text
+  deriving stock (Eq, Show, Functor)
+
+instance (ToJSON a) => ToJSON (StepResult a) where
+  toJSON = \case
+    StepProduced value -> Aeson.toJSON value
+    StepRefused detail -> Aeson.object [stepRefusedKey Aeson..= detail]
+
+instance (FromJSON a) => FromJSON (StepResult a) where
+  parseJSON value = case value of
+    Aeson.Object fields
+      | Just refusal <- KeyMap.lookup stepRefusedKey fields -> StepRefused <$> Aeson.parseJSON refusal
+    _ -> StepProduced <$> Aeson.parseJSON value
+
+stepRefusedKey :: Key
+stepRefusedKey = "stepRefused"
+
+-- | Classify one kioku write's two answers into the one journaled value.
+kiokuWrite :: (Show e) => Text -> IO (Either StoreError (Either e a)) -> IO (Either StoreError (StepResult a))
+kiokuWrite what written =
+  written >>= \case
+    Left storeError -> pure (Left storeError)
+    Right (Left refusal) -> pure (Right (StepRefused (what <> " was refused: " <> Text.pack (show refusal))))
+    Right (Right value) -> pure (Right (StepProduced value))
+
+-- | Fail the run rather than journal a step that did not happen.
+--
+-- When the store cannot be reached nothing durable was written, so there is no
+-- honest value to journal for that step. Rethrowing into the workflow driver's
+-- 'Error' 'StoreError' — which 'runAgentRunWorkflow' already runs outside
+-- 'runWorkflowWith' — surfaces the failure as its @Left storeError@, which the
+-- run-job worker's outcome table already maps to a retry. The alternative,
+-- discarding the result, is what let a run report success having opened no
+-- session and persisted no memory.
+requireStore :: (Error StoreError :> es) => Eff es (Either StoreError a) -> Eff es a
+requireStore action = action >>= either throwError_ pure
 
 runStep ::
   (Workflow :> es, IOE :> es, ToJSON a, FromJSON a) =>
@@ -412,7 +499,14 @@ approveSinks deps sid job decl output =
     approvalStepName ordinal kind =
       StepName ("approval:" <> sinkKindText kind <> ":" <> Text.pack (show ordinal))
 
-openSession :: (IOE :> es) => AgentRunDeps -> RunJob -> AgentDecl -> Eff es SessionId
+-- | Open the run's kioku session.
+--
+-- Neither of kioku's two answers is discarded any more. A run whose session was
+-- never opened has no durable record to attach memories or a completion to, and
+-- reporting success for it is a lie about what happened: an unreachable store
+-- becomes the workflow driver's retryable store-error arm, and a refused command
+-- becomes a journaled 'StepRefused' the caller turns into a permanent failure.
+openSession :: (IOE :> es) => AgentRunDeps -> RunJob -> AgentDecl -> Eff es (Either StoreError (StepResult SessionId))
 openSession deps job decl = liftIO do
   startedAt' <- getCurrentTime
   sid <- genSessionId
@@ -425,7 +519,9 @@ openSession deps job decl = liftIO do
         case parseId raw of
           Right parsed -> pure (Just parsed)
           Left err -> ioError (userError ("invalid parentSessionId on RunJob: " <> Text.unpack err))
-  _ <-
+  -- kioku answers with the session id it started, which is the one generated
+  -- above; taking it from the answer keeps the step value the store's word.
+  kiokuWrite "opening the run's kioku session" $
     Session.start
       StartSessionData
         { sessionId = sid,
@@ -442,7 +538,6 @@ openSession deps job decl = liftIO do
           startedAt = startedAt'
         }
       & runKioku deps
-  pure sid
 
 -- | Run the declared behavior on the trigger payload and the memories the
 -- @recall@ step returned.
@@ -552,27 +647,60 @@ runResearchSupervisor currentSession RunJob {triggerPayload, parentSessionId, pa
         ]
     )
 
-failSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Text -> Eff es ()
+-- | Mark the run's session failed, after one best-effort learning write.
+--
+-- The two writes are deliberately different in kind. Marking the session failed
+-- is truth-bearing: a run that reports a failure it never recorded leaves a
+-- session open forever and tells nobody. The learning write above it is the one
+-- genuinely optional write on this path — the run has already failed, and losing
+-- a note about /why/ does not make the recorded outcome wrong — so it is named
+-- for what it is and says so when it fails rather than vanishing.
+failSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Text -> Eff es (Either StoreError (StepResult ()))
 failSession deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid err = liftIO do
   when (recordPolicy == Always) $
-    void $
-      recordMemory
-        deps
-        decl
-        sid
-        ("run failed: " <> err)
-        (Set.fromList ["agent-run", "failure"])
+    recordFailureLearningBestEffort deps decl sid err
   failedAt' <- getCurrentTime
-  void $
-    Session.failSession
-      FailSessionData
-        { sessionId = sid,
-          memorySpaceId = shikigamiMemorySpace,
-          actorPrincipal = agentActor (agentDeclName decl),
-          failedAt = failedAt',
-          errorMessage = err
-        }
-      & runKioku deps
+  kiokuWrite "marking the run's kioku session failed" $
+    (fmap . fmap) void $
+      Session.failSession
+        FailSessionData
+          { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (agentDeclName decl),
+            failedAt = failedAt',
+            errorMessage = err
+          }
+        & runKioku deps
+
+-- | Write the "why did this run fail" learning, and carry on if the store will
+-- not take it.
+--
+-- Named @BestEffort@ because that is the whole contract: the caller is already
+-- on the failure path and must still mark the session failed, so this write may
+-- not decide the run's outcome. What it may not do is disappear, which is what
+-- the discarded result before it did.
+recordFailureLearningBestEffort :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> IO ()
+recordFailureLearningBestEffort deps decl sid err = do
+  recorded <-
+    recordMemory
+      deps
+      decl
+      sid
+      ("run failed: " <> err)
+      (Set.fromList ["agent-run", "failure"])
+  case recorded of
+    Right (StepProduced _) -> pure ()
+    Right (StepRefused detail) -> bestEffortFailed detail
+    Left storeError -> bestEffortFailed (Text.pack (show storeError))
+  where
+    bestEffortFailed detail =
+      Log.logError
+        (depsLogger deps)
+        "agent.memory.best_effort_failed"
+        [ "agent" Aeson..= agentDeclName decl,
+          "write" Aeson..= ("failure_learning" :: Text),
+          "error" Aeson..= detail
+        ]
 
 enqueueSinkIntents ::
   (Workflow :> es, Store :> es, IOE :> es) =>
@@ -786,13 +914,21 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
             Failed err -> PublishFailed err
             _ -> PublishSucceeded
 
-recordLearning :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Value -> Eff es (Maybe MemoryId)
+-- | Record the run's learning, if the declared policy asks for one.
+--
+-- A declaration that says @recordPolicy = Always@ and a run that reports success
+-- having persisted nothing disagree about what the agent did. The store result
+-- is therefore returned, not discarded; 'requireStore' at the call site fails the
+-- run instead.
+recordLearning :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Value -> Eff es (Either StoreError (StepResult (Maybe MemoryId)))
 recordLearning deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid output = liftIO do
   case recordPolicy of
-    Never -> pure Nothing
-    OnSuccess -> Just <$> recordSuccess
-    Always -> Just <$> recordSuccess
+    Never -> pure (Right (StepProduced Nothing))
+    OnSuccess -> recordedJust
+    Always -> recordedJust
   where
+    recordedJust = (fmap . fmap) (fmap Just) recordSuccess
+
     recordSuccess =
       recordMemory
         deps
@@ -801,11 +937,11 @@ recordLearning deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid ou
         (renderLearning output)
         (Set.fromList ["agent-run", behaviorKindText (behavior decl)])
 
-recordMemory :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO MemoryId
+recordMemory :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO (Either StoreError (StepResult MemoryId))
 recordMemory deps decl sid content' tags' = do
   mid <- genMemoryId
   recordedAt' <- getCurrentTime
-  _ <-
+  kiokuWrite "recording the run's learning" $
     Memory.record
       RecordMemoryData
         { memoryId = mid,
@@ -824,7 +960,6 @@ recordMemory deps decl sid content' tags' = do
           recordedAt = recordedAt'
         }
       & runKioku deps
-  pure mid
 
 -- | Close the kioku session, recording which model produced its output.
 --
@@ -836,20 +971,21 @@ recordMemory deps decl sid content' tags' = do
 -- This changes what the @complete@ step body writes, not the journal: the step
 -- name and its recorded result shape are untouched, so a workflow parked before
 -- this change still replays.
-completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> AgentDecl -> SessionId -> Eff es ()
+completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> AgentDecl -> SessionId -> Eff es (Either StoreError (StepResult ()))
 completeSession deps activeBehaviorEnv decl sid = liftIO do
   completedAt' <- getCurrentTime
-  void $
-    Session.complete
-      CompleteSessionData
-        { sessionId = sid,
-          memorySpaceId = shikigamiMemorySpace,
-          actorPrincipal = agentActor (agentDeclName decl),
-          completedAt = completedAt',
-          modelUsed = Just (behaviorModelId activeBehaviorEnv),
-          summary = Just "agent-run completed"
-        }
-      & runKioku deps
+  kiokuWrite "completing the run's kioku session" $
+    (fmap . fmap) void $
+      Session.complete
+        CompleteSessionData
+          { sessionId = sid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (agentDeclName decl),
+            completedAt = completedAt',
+            modelUsed = Just (behaviorModelId activeBehaviorEnv),
+            summary = Just "agent-run completed"
+          }
+        & runKioku deps
 
 runKioku :: AgentRunDeps -> Eff AppEffects a -> IO (Either StoreError a)
 runKioku deps action =

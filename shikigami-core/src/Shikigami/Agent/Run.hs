@@ -35,12 +35,14 @@ import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
+import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), RecallLimit, RecordPolicy (..), recallLimitInt)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
+import System.IO (hPutStrLn, stderr)
 
 -- | The result of an agent run with memory.
 data AgentRunResult = AgentRunResult
@@ -54,6 +56,12 @@ data AgentRunResult = AgentRunResult
 
 -- | Run an agent end to end with memory. The scope is keyed by the agent's stable
 -- name so memory accumulates across the agent's runs.
+--
+-- Every kioku result on this path is checked. This is the one-off harness that
+-- @shikigami-agent-run@ drives, so its contract is a human reading a terminal
+-- rather than a queue: a store failure becomes a 'Left' naming which write could
+-- not happen, instead of a run that prints a successful result having opened no
+-- session and persisted no memory.
 runAgentWithMemory ::
   AppEnv -> BehaviorEnv -> AgentDecl -> Value -> IO (Either Text AgentRunResult)
 runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = MemoryPolicy {recallLimit = declaredRecallLimit, recordPolicy = declaredRecordPolicy}} payload = do
@@ -62,7 +70,7 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = Mem
   startedAt' <- getCurrentTime
   sid <- genSessionId
   -- 1. open the session (replaces the spec's agent_runs insert)
-  _ <-
+  started <-
     runAppIO appEnv $
       Session.start
         StartSessionData
@@ -79,87 +87,118 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = Mem
             delegationDepth = 0,
             startedAt = startedAt'
           }
-  -- 2. recall what this agent already knows (empty on the first ever run)
-  prior <- recallPriorLearnings appEnv declaredRecallLimit scope' (recallQuery decl focusTxt payload)
-  -- 3. run the behavior, on what triggered it and what it already knows
-  behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
-  case behaviorE of
-    Left runErr -> do
-      let runErrText = Text.pack (show runErr)
-      when (declaredRecordPolicy == Always) $ do
-        void $
-          recordRunMemory
-            appEnv
-            agentName'
-            sid
-            scope'
-            ("run failed: " <> runErrText)
-            (Set.fromList ["agent-run", "failure"])
-      failedAt' <- getCurrentTime
-      _ <-
-        runAppIO appEnv $
-          Session.failSession
-            FailSessionData
-              { sessionId = sid,
-                memorySpaceId = shikigamiMemorySpace,
-                actorPrincipal = agentActor agentName',
-                failedAt = failedAt',
-                errorMessage = runErrText
-              }
-      pure (Left runErrText)
-    Right output -> do
-      -- 4. record this run's learning as a durable memory under the agent scope
-      recordedMemId <-
-        case declaredRecordPolicy of
-          Never -> pure Nothing
-          OnSuccess ->
-            Just
-              <$> recordRunMemory
-                appEnv
-                agentName'
-                sid
-                scope'
-                (renderLearning output)
-                (Set.fromList ["agent-run", focusTxt])
-          Always ->
-            Just
-              <$> recordRunMemory
-                appEnv
-                agentName'
-                sid
-                scope'
-                (renderLearning output)
-                (Set.fromList ["agent-run", focusTxt])
-      -- 5. complete the session
-      completedAt' <- getCurrentTime
-      _ <-
-        runAppIO appEnv $
-          Session.complete
-            CompleteSessionData
-              { sessionId = sid,
-                memorySpaceId = shikigamiMemorySpace,
-                actorPrincipal = agentActor agentName',
-                completedAt = completedAt',
-                -- Which model produced the output, so a stub run stays
-                -- distinguishable from a real one after the log has rotated.
-                modelUsed = Just (behaviorModelId behEnv),
-                summary = Just "agent-run completed"
-              }
-      pure
-        ( Right
-            AgentRunResult
-              { sessionId = sid,
-                recalledPrior = prior,
-                behaviorOutput = output,
-                recordedMemId
-              }
-        )
+  case kiokuAnswer "open the session" started of
+    Left detail -> pure (Left detail)
+    Right _ -> do
+      -- 2. recall what this agent already knows (empty on the first ever run)
+      prior <- recallPriorLearnings appEnv declaredRecallLimit scope' (recallQuery decl focusTxt payload)
+      -- 3. run the behavior, on what triggered it and what it already knows
+      behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
+      case behaviorE of
+        Left runErr -> do
+          let runErrText = Text.pack (show runErr)
+          when (declaredRecordPolicy == Always) $
+            recordFailureLearningBestEffort appEnv agentName' sid scope' runErrText
+          failedAt' <- getCurrentTime
+          failed <-
+            runAppIO appEnv $
+              Session.failSession
+                FailSessionData
+                  { sessionId = sid,
+                    memorySpaceId = shikigamiMemorySpace,
+                    actorPrincipal = agentActor agentName',
+                    failedAt = failedAt',
+                    errorMessage = runErrText
+                  }
+          -- The run failed either way; if the failure could not be recorded, say
+          -- both things rather than reporting only the half that reached a store.
+          pure case kiokuAnswer "mark the session failed" failed of
+            Left detail -> Left (runErrText <> " (and " <> detail <> ")")
+            Right _ -> Left runErrText
+        Right output -> do
+          -- 4. record this run's learning as a durable memory under the agent scope
+          recorded <-
+            case declaredRecordPolicy of
+              Never -> pure (Right Nothing)
+              OnSuccess -> fmap Just <$> recordLearningNow sid scope' focusTxt output
+              Always -> fmap Just <$> recordLearningNow sid scope' focusTxt output
+          case recorded of
+            Left detail -> pure (Left detail)
+            Right recordedMemId -> do
+              -- 5. complete the session
+              completedAt' <- getCurrentTime
+              completed <-
+                runAppIO appEnv $
+                  Session.complete
+                    CompleteSessionData
+                      { sessionId = sid,
+                        memorySpaceId = shikigamiMemorySpace,
+                        actorPrincipal = agentActor agentName',
+                        completedAt = completedAt',
+                        -- Which model produced the output, so a stub run stays
+                        -- distinguishable from a real one after the log has rotated.
+                        modelUsed = Just (behaviorModelId behEnv),
+                        summary = Just "agent-run completed"
+                      }
+              pure case kiokuAnswer "complete the session" completed of
+                Left detail -> Left detail
+                Right _ ->
+                  Right
+                    AgentRunResult
+                      { sessionId = sid,
+                        recalledPrior = prior,
+                        behaviorOutput = output,
+                        recordedMemId
+                      }
+  where
+    recordLearningNow sid scope' focusTxt output =
+      recordRunMemory
+        appEnv
+        agentName'
+        sid
+        scope'
+        (renderLearning output)
+        (Set.fromList ["agent-run", focusTxt])
 
-recordRunMemory :: AppEnv -> Text -> SessionId -> MemoryScope -> Text -> Set.Set Text -> IO MemoryId
+-- | Collapse kioku's two answers into one message naming the write that did not
+-- happen.
+--
+-- Kioku answers on two layers and both were discarded here: the outer
+-- @Either StoreError@ says whether the store could be reached, and the inner
+-- @Either SessionWriteError@ (or @MemoryWriteError@) says whether it accepted
+-- the command. This module's reader is a person at a terminal, so both collapse
+-- into prose rather than into a retry classification.
+kiokuAnswer :: (Show e) => Text -> Either StoreError (Either e a) -> Either Text a
+kiokuAnswer what = \case
+  Left storeError -> Left ("could not " <> what <> ": " <> Text.pack (show storeError))
+  Right (Left refusal) -> Left ("could not " <> what <> ", kioku refused it: " <> Text.pack (show refusal))
+  Right (Right value) -> Right value
+
+-- | Write the \"why did this run fail\" learning, and carry on if the store will
+-- not take it.
+--
+-- The caller is already on the failure path and must still mark the session
+-- failed, so this write may not decide the run's outcome. What it may not do is
+-- disappear. This module's reader is a person at a terminal, so it says so there.
+recordFailureLearningBestEffort :: AppEnv -> Text -> SessionId -> MemoryScope -> Text -> IO ()
+recordFailureLearningBestEffort appEnv agentName' sid scope' runErrText = do
+  recorded <-
+    recordRunMemory
+      appEnv
+      agentName'
+      sid
+      scope'
+      ("run failed: " <> runErrText)
+      (Set.fromList ["agent-run", "failure"])
+  case recorded of
+    Right _ -> pure ()
+    Left detail -> hPutStrLn stderr ("shikigami: best-effort failure learning was skipped: " <> Text.unpack detail)
+
+recordRunMemory :: AppEnv -> Text -> SessionId -> MemoryScope -> Text -> Set.Set Text -> IO (Either Text MemoryId)
 recordRunMemory appEnv agentName' sid scope' content' tags' = do
   mid <- genMemoryId
   recordedAt' <- getCurrentTime
-  _ <-
+  recordedE <-
     runAppIO appEnv $
       Memory.record
         RecordMemoryData
@@ -178,7 +217,7 @@ recordRunMemory appEnv agentName' sid scope' content' tags' = do
             supersedes = Nothing,
             recordedAt = recordedAt'
           }
-  pure mid
+  pure (mid <$ kiokuAnswer "record the run's learning" recordedE)
 
 -- | Map an @activity.v1@ Activity Envelope into a kioku memory under the agent
 -- scope: the envelope @payload@ becomes the memory content, and the envelope

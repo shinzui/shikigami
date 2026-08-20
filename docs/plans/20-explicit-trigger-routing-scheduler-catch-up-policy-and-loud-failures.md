@@ -83,10 +83,14 @@ This section must always reflect the actual current state of the work.
       replaces the try-then-fall-through composition; failed enqueues and unknown timer kinds are
       logged; `SchedulerSpec` gains five cases; `docs/operations/configuration.md` and
       `config/shikigami.example.yaml` document the key.
-- [ ] Milestone 3: truth-bearing kioku failures in `Shikigami.Agent.Workflow` propagate into the
-      existing `AgentRunFailure` / `JobOutcome` taxonomy; the best-effort writes that remain are
-      named as such and logged; the one-off harness path in `Shikigami.Agent.Run` gets the same
-      treatment at its own severity.
+- [x] (2026-08-20T07:05:00Z) Milestone 3: truth-bearing kioku failures in
+      `Shikigami.Agent.Workflow` propagate into the existing `AgentRunFailure` / `JobOutcome`
+      taxonomy — an unreachable store rethrows into the workflow driver's `Error StoreError`
+      (`RetryDefault`), a refused command journals a `StepRefused` that becomes
+      `PermanentAgentRunFailure` (`Dead`); the one best-effort write is renamed
+      `recordFailureLearningBestEffort` and logs `agent.memory.best_effort_failed`;
+      `Shikigami.Agent.Run` gets the same treatment at its own severity (a `Left` naming the write,
+      stderr for the best-effort one). `AgentWorkflowSpec` and `WireCompatSpec` gain cases.
 - [ ] Milestone 4 (remaining): thread `Shikigami.Log.Logger` through `loadAgentsLoud`, wire the
       new Settei `agents.strict` key, test strict refusal, and make an unparseable cron loud in
       `Shikigami.Workers.Config.schedulerEnv`.
@@ -188,6 +192,34 @@ implementation. Provide concise evidence.
   before this plan's other milestones were ready, so that independently useful slice landed first;
   `agents.strict` and cron handling remain here. `loadAgentsIn` survives as a thin wrapper
   (`Loader.hs:130-131`) with no remaining caller and should be deleted by Milestone 4.
+- 2026-08-20: **A kioku write answers on two layers, not one, and the plan only saw the outer
+  one.** The plan describes kioku operations as returning `Either StoreError _`. They return
+  `Eff es (Either SessionWriteError SessionId)` (`Kioku.Session.start`, `.complete`,
+  `.failSession`) and `Eff es (Either MemoryWriteError MemoryId)` (`Kioku.Memory.record`), which
+  `Shikigami.Agent.Workflow.runKioku` then wraps in its own `Either StoreError`. So the discarded
+  results were hiding *two* different facts: "the store could not be reached" and "the store
+  refused the command". They need opposite dispositions — the first is a transport retry, the
+  second is permanent, because the same command built from the same job will be refused on every
+  replay. `Kioku.Session.validateLineage`
+  (`kioku-core/src/Kioku/Session.hs:205-211`, in `mori://shinzui/kioku`) is the reachable proof:
+  a `RunJob` carrying `delegationDepth = Just (-1)` is rejected with `SessionInvalidLineage`
+  while the store stays perfectly healthy, which is what makes the refusal layer testable without
+  breaking the store the workflow journal also needs.
+- 2026-08-20: **These four writes are journaled steps, so widening their result type is a wire
+  change.** `open-session`, `record`, `complete`, and `fail-session` all go through `runStep`,
+  which journals the step's value and decodes it again on replay. Journaling
+  `Either Text SessionId` would encode as `{"Right":…}` and a workflow parked before the change,
+  whose `open-session` step holds a bare session-id string, would stop replaying. This is exactly
+  ADR 0011's situation a second time, so `StepResult` follows its rule: `StepProduced` encodes as
+  the bare value and only `StepRefused` adds a key. `WireCompatSpec` pins it:
+
+  ```text
+  agent-run step values
+    a produced value encodes exactly as the bare value:            OK
+    a pre-refusal step value still decodes to the produced value:  OK
+    a refusal round-trips and is distinguishable from a value:     OK
+  ```
+
 - 2026-08-20: **`cabal test all` must be run with `-j1`.** The default parallel build runs several
   database-backed suites at once against the one dev cluster, and `shikigami-workers-test` hung for
   over eleven minutes without finishing a single case; the same suite run alone finishes in about
@@ -321,6 +353,36 @@ Record every decision made while working on the plan.
   Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
   `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
   second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: A kioku transport failure and a kioku refusal get opposite dispositions. An
+  unreachable store rethrows into the workflow driver's `Error StoreError` and becomes
+  `runAgentRunWorkflow`'s `Left storeError`, which `agentJobOutcome` already maps to
+  `RetryDefault`. A refused command becomes a journaled `StepRefused` that the caller turns into
+  `PermanentAgentRunFailure`, which `agentJobOutcome` already maps to `Dead`.
+  Rationale: the plan anticipated one failure layer and assigned it to the retrying arm. There are
+  two (see Surprises & Discoveries), and retrying a refusal is pointless: the command is rebuilt
+  from the same journaled `RunJob` on every attempt, so it will be refused every time. Both arms
+  already exist in plan 17's taxonomy, so neither disposition needs a new outcome.
+  Date: 2026-08-20
+
+- Decision: `Shikigami.Agent.Workflow.StepResult` carries the refusal through the journal, with an
+  ADR-0011-style codec, rather than the step value becoming `Either Text a`.
+  Rationale: the four sites are `runStep` calls, and a step's value is journaled and decoded again
+  on replay. `Either`'s derived encoding (`{"Right":…}`) would break every workflow parked with a
+  bare session id in its `open-session` step. `StepProduced` therefore encodes as the bare value —
+  byte-identical to what those steps already wrote — and only `StepRefused` adds a `stepRefused`
+  key. The constraint this buys is that the produced type must never itself encode as an object
+  carrying that key; the three uses encode as a string, a string-or-null, and an empty array, and
+  the haddock says so.
+  Date: 2026-08-20
+
+- Decision: `Shikigami.Agent.Run` collapses both kioku layers into one `Text` through a local
+  `kiokuAnswer` helper rather than adopting `StepResult`.
+  Rationale: that module is the one-off harness `shikigami-agent-run` drives; it already returns
+  `IO (Either Text AgentRunResult)`, journals nothing, and its reader is a person at a terminal
+  rather than a retry classifier. A retry/permanent split there would be a distinction with no
+  consumer.
   Date: 2026-08-20
 
 - Decision: `scheduleFireAction` and `shikigamiTimerFallback` take `now` as a parameter rather
@@ -908,12 +970,26 @@ carrying a payload with an unrecognized `kind` returns `Nothing` and logs
 `scheduler.timer.unknown_kind`, and that an approval-timeout payload still reaches
 `approvalTimeoutFireAction`.
 
-**Kioku propagation** — fails before. Drive each truth-bearing write against an unavailable store
-(`withShikigamiMigratedDatabase` then close the pool, or point `connectionSettings` at a database
-that does not exist) and assert that `runAgentRunWorkflow` does not return
-`Completed (Right …)` and that `agentJobOutcome` over the result is `RetryDefault` rather than
-`Done`. Today the same scenario returns a completed, successful run. Separately, prove that the
-one explicitly best-effort write logs `agent.memory.best_effort_failed` and lets the run finish.
+**Kioku propagation** — fails before. The original wording here proposed driving the writes
+against an unavailable store. That cannot work: `runKioku` and the workflow journal read the same
+`connectionSettings`, so a store the kioku writes cannot reach is also one the journal cannot
+reach, and `runAgentRunWorkflow` would fail at `loadJournal` before any step ran — proving nothing
+about the writes. The refusal layer is what is drivable, and it is the layer that matters, because
+a refusal is the case a retry cannot fix. In `AgentWorkflowSpec`, run an ordinary agent with a
+`RunJob` carrying `delegationDepth = Just (-1)`; kioku's `validateLineage` refuses the session
+open while the store stays healthy. Assert the run does not return `Completed (Right …)` but
+`Completed (Left (PermanentAgentRunFailure detail))` whose detail names the refused write, and
+that a replay answers the same way rather than opening a session on the second attempt. Before
+this milestone the identical scenario returns a completed, successful run over a session that was
+never opened. `agentJobOutcome`'s mapping of both arms — `Left _storeError -> RetryDefault` and
+`PermanentAgentRunFailure -> Dead` — is already pinned by `WorkerSpec`'s outcome table.
+
+The one explicitly best-effort write is not driven end to end. It runs only inside `failSession`
+under `recordPolicy = Always`, after a session that kioku accepted, and no declaration-level input
+makes just that memory write fail while the surrounding session writes succeed. It has a single
+call site, it logs `agent.memory.best_effort_failed` on both failure layers, and it is the only
+kioku result on this path that does not decide the run's outcome — that is what is verified by
+reading it, and it is stated here rather than claimed as tested.
 
 **Loud loading** — fails before. Call `loadAgentsLoud logger "../agents" False` against a captured
 logger and assert the emitted JSON contains `agents.manifest.load_failed` with
@@ -1031,6 +1107,11 @@ Shikigami.Agent.RunJob.Worker.routeErrorJobOutcome :: Text -> JobOutcome
 
 -- shikigami-workers/src/Shikigami/Workers/Config.hs
 -- WorkerEnv gains: catchUpPolicy :: !CatchUpPolicy, read through envCatchUpPolicy
+
+-- shikigami-core/src/Shikigami/Agent/Workflow.hs
+data Shikigami.Agent.Workflow.StepResult a = StepProduced !a | StepRefused !Text
+-- The journaled value for open-session, record, complete, and fail-session.
+-- StepProduced encodes as the bare value (ADR 0011); only StepRefused adds a key.
 
 -- shikigami-core/src/Shikigami/Agent/Approval.hs
 Shikigami.Agent.Approval.approvalTimeoutKind :: Text   -- newly exported
