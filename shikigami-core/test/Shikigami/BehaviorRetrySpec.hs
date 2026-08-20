@@ -6,7 +6,7 @@ import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Behavior.Error
   ( FailureClass (..),
     RunError (..),
@@ -86,5 +86,8 @@ missingTaskAgent =
             enabledBy = Nothing
           },
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }

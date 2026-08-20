@@ -9,7 +9,7 @@ import Data.Foldable (traverse_)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Loader (loadAgentsIn)
+import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -37,7 +37,8 @@ import System.Exit qualified as Exit
 runWorkerCmd :: AppConfig -> IO ()
 runWorkerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  agents <- loadAgentsIn (Config.agentsDirectory config)
+  report <- loadAgentsLoud (Config.agentsDirectory config) False
+  agents <- enabledAgentsFromReport report
   Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
   refuseUndeployableAgents logger agents
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config

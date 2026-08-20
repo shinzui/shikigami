@@ -21,7 +21,7 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
-import Shikigami.Agent.Loader (loadAgentsIn)
+import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -37,7 +37,8 @@ import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerT
 runSchedulerCmd :: AppConfig -> IO ()
 runSchedulerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  agents <- loadAgentsIn (Config.agentsDirectory config)
+  report <- loadAgentsLoud (Config.agentsDirectory config) False
+  agents <- enabledAgentsFromReport report
   schedules <- traverse parseScheduleAgent (filter isSchedule agents)
   Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config

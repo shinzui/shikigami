@@ -36,7 +36,7 @@ import Kioku.Recall.Capability qualified as RecallCapability
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), RecallLimit, RecordPolicy (..), recallLimitInt)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext)
 import Shikigami.Memory.Scope (agentScope)
@@ -47,7 +47,7 @@ data AgentRunResult = AgentRunResult
   { sessionId :: !SessionId,
     recalledPrior :: ![MemoryRecord], -- what the agent remembered from earlier runs
     behaviorOutput :: !Value, -- the behavior's result value
-    recordedMemId :: !(Maybe MemoryId) -- the learning recorded this run (Nothing on failure)
+    recordedMemId :: !(Maybe MemoryId) -- the learning recorded this run (Nothing under Never)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -56,7 +56,7 @@ data AgentRunResult = AgentRunResult
 -- name so memory accumulates across the agent's runs.
 runAgentWithMemory ::
   AppEnv -> BehaviorEnv -> AgentDecl -> Value -> IO (Either Text AgentRunResult)
-runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
+runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = MemoryPolicy {recallLimit = declaredRecallLimit, recordPolicy = declaredRecordPolicy}} payload = do
   let scope' = agentScope agentName'
       focusTxt = behaviorKindText (behavior decl)
   startedAt' <- getCurrentTime
@@ -80,11 +80,21 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
             startedAt = startedAt'
           }
   -- 2. recall what this agent already knows (empty on the first ever run)
-  prior <- recallPriorLearnings appEnv scope' (recallQuery decl focusTxt payload)
+  prior <- recallPriorLearnings appEnv declaredRecallLimit scope' (recallQuery decl focusTxt payload)
   -- 3. run the behavior, on what triggered it and what it already knows
   behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
   case behaviorE of
     Left runErr -> do
+      let runErrText = Text.pack (show runErr)
+      when (declaredRecordPolicy == Always) $ do
+        void $
+          recordRunMemory
+            appEnv
+            agentName'
+            sid
+            scope'
+            ("run failed: " <> runErrText)
+            (Set.fromList ["agent-run", "failure"])
       failedAt' <- getCurrentTime
       _ <-
         runAppIO appEnv $
@@ -94,32 +104,32 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
                 memorySpaceId = shikigamiMemorySpace,
                 actorPrincipal = agentActor agentName',
                 failedAt = failedAt',
-                errorMessage = Text.pack (show runErr)
+                errorMessage = runErrText
               }
-      pure (Left (Text.pack (show runErr)))
+      pure (Left runErrText)
     Right output -> do
       -- 4. record this run's learning as a durable memory under the agent scope
-      mid <- genMemoryId
-      recordedAt' <- getCurrentTime
-      _ <-
-        runAppIO appEnv $
-          Memory.record
-            RecordMemoryData
-              { memoryId = mid,
-                memorySpaceId = shikigamiMemorySpace,
-                actorPrincipal = agentActor agentName',
-                ownerPrincipal = Nothing,
-                agentId = agentName',
-                sessionId = Just sid,
-                scope = scope',
-                memoryType = MemoryPattern,
-                content = renderLearning output,
-                priority = 100,
-                confidence = MediumConfidence,
-                tags = Set.fromList ["agent-run", focusTxt],
-                supersedes = Nothing,
-                recordedAt = recordedAt'
-              }
+      recordedMemId <-
+        case declaredRecordPolicy of
+          Never -> pure Nothing
+          OnSuccess ->
+            Just
+              <$> recordRunMemory
+                appEnv
+                agentName'
+                sid
+                scope'
+                (renderLearning output)
+                (Set.fromList ["agent-run", focusTxt])
+          Always ->
+            Just
+              <$> recordRunMemory
+                appEnv
+                agentName'
+                sid
+                scope'
+                (renderLearning output)
+                (Set.fromList ["agent-run", focusTxt])
       -- 5. complete the session
       completedAt' <- getCurrentTime
       _ <-
@@ -141,9 +151,34 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName'} payload = do
               { sessionId = sid,
                 recalledPrior = prior,
                 behaviorOutput = output,
-                recordedMemId = Just mid
+                recordedMemId
               }
         )
+
+recordRunMemory :: AppEnv -> Text -> SessionId -> MemoryScope -> Text -> Set.Set Text -> IO MemoryId
+recordRunMemory appEnv agentName' sid scope' content' tags' = do
+  mid <- genMemoryId
+  recordedAt' <- getCurrentTime
+  _ <-
+    runAppIO appEnv $
+      Memory.record
+        RecordMemoryData
+          { memoryId = mid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor agentName',
+            ownerPrincipal = Nothing,
+            agentId = agentName',
+            sessionId = Just sid,
+            scope = scope',
+            memoryType = MemoryPattern,
+            content = content',
+            priority = 100,
+            confidence = MediumConfidence,
+            tags = tags',
+            supersedes = Nothing,
+            recordedAt = recordedAt'
+          }
+  pure mid
 
 -- | Map an @activity.v1@ Activity Envelope into a kioku memory under the agent
 -- scope: the envelope @payload@ becomes the memory content, and the envelope
@@ -205,8 +240,8 @@ renderMemoryRecord :: MemoryRecord -> Text
 renderMemoryRecord (MemoryRecord {memoryId = mid, memoryType = mt, confidence = cf, content = c}) =
   mid <> " [" <> mt <> "/" <> cf <> "] " <> c
 
-recallPriorLearnings :: AppEnv -> MemoryScope -> Text -> IO [MemoryRecord]
-recallPriorLearnings appEnv scope' query = do
+recallPriorLearnings :: AppEnv -> RecallLimit -> MemoryScope -> Text -> IO [MemoryRecord]
+recallPriorLearnings appEnv limit scope' query = do
   cfg <- Embedding.resolveEmbeddingConfig
   -- Kioku 0.2 probes the vector path against the dimension count the process is
   -- configured with, so it can report a configured/declared mismatch instead of
@@ -226,7 +261,7 @@ recallPriorLearnings appEnv scope' query = do
             scope = scope',
             query,
             strategy = Recall.Hybrid,
-            maxResults = 10
+            maxResults = recallLimitInt limit
           }
   -- Two Eithers now: the outer one is runAppIO's, the inner one is recall's own
   -- "could not be asked" channel, which Kioku 0.4 added so an unrunnable query
@@ -235,13 +270,13 @@ recallPriorLearnings appEnv scope' query = do
   case recalled of
     Right (Right hits)
       | not (null hits) -> pure (Recall.memory <$> hits)
-    _ -> recallActiveByScope appEnv scope'
+    _ -> recallActiveByScope appEnv (recallLimitInt limit) scope'
 
-recallActiveByScope :: AppEnv -> MemoryScope -> IO [MemoryRecord]
-recallActiveByScope appEnv scope' = do
+recallActiveByScope :: AppEnv -> Int -> MemoryScope -> IO [MemoryRecord]
+recallActiveByScope appEnv limit scope' = do
   priorE <- runAppIO appEnv $ Recall.getActiveByScope shikigamiMemorySpace scope'
   pure $ case priorE of
-    Right (Right ms) -> ms
+    Right (Right ms) -> take limit ms
     _ -> []
 
 -- | The text a run recalls against: who is asking, what kind of behavior is

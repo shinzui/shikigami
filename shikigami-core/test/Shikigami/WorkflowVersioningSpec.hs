@@ -54,7 +54,7 @@ import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
@@ -443,7 +443,10 @@ flowAgentDecl =
       trigger = Event {eventType = "customer.risk_detected"},
       behavior = Deterministic {rule = "flow-test", params = mempty},
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 flowOccurredAt :: UTCTime

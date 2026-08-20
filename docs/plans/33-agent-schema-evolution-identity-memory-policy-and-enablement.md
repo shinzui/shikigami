@@ -46,14 +46,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `Identity`, `MemoryScope`, `RecordPolicy`, `MemoryPolicy` types and the `identity`/`memory`/`enabled` fields (with defaults) to schema/Agent.dhall; export the new names.
-- [ ] Prerequisites: plans 36 and 20 complete; record mirrors follow strict direct-field and Generic Lens conventions.
-- [ ] M1: prove byte-compatibility — `validate` over every existing manifest under `agents/` succeeds unchanged.
-- [ ] M2: mirror types in shikigami-api/src/Shikigami/Api/Agent.hs (`IdentityDecl`, `MemoryScopeDecl`, `RecordPolicy`, `MemoryPolicy`; three new `AgentDecl` fields); export them.
-- [ ] M2: proof manifest `agents/proof/declared-identity.dhall` exercising all three fields; loader unit test asserting the decoded values and the defaults.
-- [ ] M3: consume plan 20's `loadAgentsReport`; add enabled-agent selection with a loud skip line and keep plan 20's loud/strict failure behavior.
-- [ ] M3: validate `recallLimit` into a bounded `RecallLimit` (1–1000) before any `Natural`→`Int`/SQL conversion; enforce it server-side in both recall paths; enforce `recordPolicy`.
-- [ ] M4: update docs/user/writing-agents.md (field table + new sections) and docs/user/memory.md.
+- [x] (2026-08-20T03:25:00Z) M1: added `Identity`, `MemoryScope`, `RecordPolicy`, `MemoryPolicy` types and the `identity`/`memory`/`enabled` fields (with defaults) to schema/Agent.dhall; exported the new names.
+- [x] (2026-08-20T02:58:12Z) Prerequisites: plans 36 and 47 are complete; record mirrors follow the current `mori://shinzui/haskell-jitsurei/docs/core-record-patterns` strict direct-field and Generic Lens conventions.
+- [x] (2026-08-20T03:25:00Z) Prerequisite gap: implemented plan 20's narrowly required `AgentLoadReport`/`loadAgentsReport` and loud-loader slice before enabled-agent selection; the rest of plan 20 remains out of scope.
+- [x] (2026-08-20T02:58:12Z) Baseline: `nix develop --command cabal build all` succeeds on the clean pre-plan tree.
+- [x] (2026-08-20T03:25:00Z) M1: proved source compatibility — every live manifest under `agents/` validates unchanged; `agents/broken.dhall` and the retired detector-schema tombstone remain expected failures.
+- [x] (2026-08-20T03:25:00Z) M2: mirrored `IdentityDecl`, `MemoryScopeDecl`, `RecordPolicy`, `MemoryPolicy`, bounded `RecallLimit`, and the three new `AgentDecl` fields in `Shikigami.Agent.Decl`; exported the new API.
+- [x] (2026-08-20T03:25:00Z) M2: added `agents/proof/declared-identity.dhall` plus loader tests for explicit values, defaults, old JSON bytes, non-default JSON, and invalid recall bounds.
+- [x] (2026-08-20T03:25:00Z) M3: consumed the new load report in every worker role, added loud enabled-agent selection, and kept single-file validation/runs available for parked agents.
+- [x] (2026-08-20T03:25:00Z) M3: validated `recallLimit` into `RecallLimit` (1–1000) before conversion, capped vector and fallback recall, and enforced all three record-policy branches in direct and durable runs; `cabal test shikigami-core` passes all 309 tests.
+- [x] (2026-08-20T03:25:00Z) M4: updated docs/user/writing-agents.md and docs/user/memory.md with defaults, enforcement boundaries, and lifecycle semantics.
 - [ ] M4: full-suite regression `cabal test all`.
 
 
@@ -70,6 +72,29 @@ implementation. Provide concise evidence.
   requirement originally included consolidation. The 2026-07-22 portfolio audit assigned
   that consolidation and failure reporting to plan 20; this plan now extends its report with
   enabled-agent selection.
+- 2026-08-20: Plan 36 did centralize the old copies as
+  `Shikigami.Agent.Loader.loadAgentsIn`, but plan 20's report API and loud failure behavior
+  are still absent. Evidence: `Shikigami.Agent.Loader` exports only `loadAgent` and
+  `loadAgentsIn`, and all four worker-role load paths still call `loadAgentsIn`. This plan
+  must supply the report slice it consumes while leaving plan 20's unrelated routing,
+  scheduling, kioku-error, and enqueue hardening milestones untouched.
+- 2026-08-20: The repository instruction's old
+  `/haskell-jitsurei/core/record-patterns.md` path has moved. Mori resolves the current
+  guide as `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`, stored at
+  `patterns/core/record-patterns.md`; its direct, strict, unprefixed-field convention is
+  unchanged.
+- 2026-08-20: `AgentDecl` is itself a durable workflow value: the `lookup-agent` step
+  journals its JSON. Generic derivation after adding three fields would preserve Dhall
+  source compatibility but not old journal bytes or missing-key decoding. The mirror now
+  omits compatibility-default fields and restores them when absent; ADR 0011 records the
+  rule.
+- 2026-08-20: GHC rejects a strict field annotation on a `newtype` constructor. The plan's
+  allowed one-field `data` fallback for `IdentityDecl` therefore also satisfies the
+  repository's strict-field convention and decodes the Dhall record successfully.
+- 2026-08-20: The plan's manifest-validation loop also selects
+  `agents/detectors/schema.dhall`, an intentionally retired text-valued tombstone that
+  explicitly must not load as an agent. Compatibility validation excludes that file as
+  well as the intentional `agents/broken.dhall` negative fixture.
 
 
 ## Decision Log
@@ -148,6 +173,41 @@ Record every decision made while working on the plan.
   "currently not honored" marker while updating the same schema documentation.
   Rationale: duplicating plan 16's scope would create conflicting edits in the sink handlers.
   Date: 2026-07-22
+
+- Decision: Carry `RecallLimit` through `recallPriorLearnings` rather than converting it to
+  the plan's intermediate `Int` parameter at each caller; convert only at Kioku's
+  `RecallRequest.maxResults` and the local `take` boundary.
+  Rationale: the bounded type makes an invalid or overflowing value unrepresentable for the
+  entire application path instead of proving the bound and immediately discarding that
+  proof. Kioku 0.4.1.0 requires `Int`, so the total accessor remains at that dependency
+  boundary.
+  Date: 2026-08-20
+
+- Decision: Preserve the pre-evolution `AgentDecl` JSON bytes when `identity`, `memory`, and
+  `enabled` have their defaults, and restore those defaults when their keys are missing.
+  Rationale: `lookup-agent` journals the declaration in the durable agent workflow. Dhall
+  record completion protects source manifests, but a separate compatibility codec is
+  required for historical journals. The exact old bytes and missing-key round trip are
+  tested; non-default declarations still encode every effective value.
+  Date: 2026-08-20
+
+- Decision: Do not add a workflow patch for record-policy enforcement.
+  Rationale: old journaled declarations decode as `OnSuccess` and follow the identical
+  existing branches. The `record` step remains present and returns the same result shape;
+  `Always` failure recording occurs inside the existing `fail-session` step. `Always` and
+  `Never` could not appear in historical declarations, so there is no old execution that
+  needs a different branch. This conclusion is checked by `just keiro-gate` and documented
+  in ADR 0011.
+  Date: 2026-08-20
+
+- Decision: Implement only plan 20's canonical report and loud lenient-loading slice here;
+  leave its Settei `agents.strict`, cron strictness, routing, scheduling, and enqueue work
+  pending in that plan.
+  Rationale: plan 33 cannot enforce `enabled` once at the canonical selection boundary
+  without the report it hard-depends on, but absorbing the rest of plan 20 would conflate two
+  independently scoped ExecPlans. All current worker roles now report malformed manifests
+  and disabled agents; strict-startup configuration remains explicit plan 20 work.
+  Date: 2026-08-20
 
 
 ## Outcomes & Retrospective

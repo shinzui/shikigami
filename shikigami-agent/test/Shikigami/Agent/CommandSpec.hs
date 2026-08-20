@@ -25,7 +25,7 @@ import Shikigami.Agent.Command
     runBehaviorRoleInfo,
   )
 import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
-import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.App.Config (Role (..))
 import Test.Tasty (TestTree, testGroup)
@@ -85,7 +85,10 @@ testDecl sanctionedProfile =
       trigger = Event {eventType = "test"},
       behavior = Agent.Skill {path = "agents/skills/triage-note"},
       sinks = [],
-      sanctionedProfile
+      sanctionedProfile,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 requiredProfile :: ProfileRequirement

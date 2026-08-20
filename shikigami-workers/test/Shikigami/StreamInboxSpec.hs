@@ -17,7 +17,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQueue, parseQueueName, readMessage)
 import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Consumer
@@ -251,7 +251,10 @@ streamAgent =
           },
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 activityEvent :: IntegrationEvent

@@ -163,6 +163,7 @@ test-suite shikigami-core-test
   type:           exitcode-stdio-1.0
   main-is:        Main.hs
   other-modules:
+    Shikigami.AgentLoaderSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.AppConfigSpec
     Shikigami.AttestationContractsSpec

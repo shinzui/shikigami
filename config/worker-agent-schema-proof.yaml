@@ -1,0 +1,12 @@
+# Manual proof configuration for ExecPlan 33. The worker loads only the proof
+# directory, where declared-identity.dhall is deliberately disabled, and emits
+# its skip diagnostic before starting the queue loop.
+
+database:
+  connection_string: postgresql:///shikigami
+
+agents:
+  directory: agents/proof
+
+behavior:
+  provider: stub

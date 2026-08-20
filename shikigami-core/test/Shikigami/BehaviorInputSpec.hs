@@ -36,7 +36,7 @@ import Handan.Runtime (newRuntime)
 import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Run (newBehaviorEnv, programArgs, runBehavior, runProgramTask)
@@ -307,7 +307,10 @@ triageDecl =
       trigger = Event {eventType = "ticket.received"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 heartbeatDecl :: AgentDecl
@@ -324,7 +327,10 @@ heartbeatDecl =
             enabledBy = Nothing
           },
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 epoch :: UTCTime

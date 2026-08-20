@@ -61,6 +61,24 @@ let ProfileRequirement =
       , default = { version = None Text }
       }
 
+let Identity = { principal : Text }
+
+let MemoryScope = < AgentScope | Shared >
+
+let RecordPolicy = < Always | OnSuccess | Never >
+
+let MemoryPolicy =
+      { scope : MemoryScope
+      , recallLimit : Natural
+      , recordPolicy : RecordPolicy
+      }
+
+let defaultMemoryPolicy =
+      { scope = MemoryScope.AgentScope
+      , recallLimit = 10
+      , recordPolicy = RecordPolicy.OnSuccess
+      }
+
 let Agent =
       { Type =
           { name : Text
@@ -69,11 +87,17 @@ let Agent =
           , behavior : Behavior
           , sinks : List Sink
           , sanctionedProfile : Optional ProfileRequirement.Type
+          , identity : Optional Identity
+          , memory : MemoryPolicy
+          , enabled : Bool
           }
       , default =
           { description = ""
           , sinks = [] : List Sink
           , sanctionedProfile = None ProfileRequirement.Type
+          , identity = None Identity
+          , memory = defaultMemoryPolicy
+          , enabled = True
           }
       }
 
@@ -85,5 +109,9 @@ in  { SignalType
     , Behavior
     , Sink
     , ProfileRequirement
+    , Identity
+    , MemoryScope
+    , RecordPolicy
+    , MemoryPolicy
     , Agent
     }

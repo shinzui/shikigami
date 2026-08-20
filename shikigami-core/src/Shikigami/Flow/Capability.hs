@@ -33,7 +33,7 @@ import Kioku.Memory qualified as MemoryStore
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
 import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
@@ -106,10 +106,10 @@ currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
 currentActivity = send CurrentActivity
 
 runMemory :: (IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
-runMemory MemoryEnv {appEnv, agent = decl, sessionId} =
+runMemory MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}, sessionId} =
   interpret \_ -> \case
     Recall MemoryQuery {query} ->
-      liftIO (recallPriorLearnings appEnv (agentScope (name decl)) query)
+      liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query)
     Remember value -> liftIO do
       mid <- genMemoryId
       recordedAt <- getCurrentTime

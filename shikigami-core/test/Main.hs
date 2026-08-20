@@ -14,6 +14,7 @@ import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, 
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
+import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
@@ -62,6 +63,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+          AgentLoaderSpec.tests,
           AppConfigSpec.tests,
           AttestationContractsSpec.tests,
           BehaviorInputSpec.tests,

@@ -7,7 +7,7 @@ where
 import Data.Aeson qualified as Aeson
 import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Agent.Loader (loadAgentsIn)
+import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -30,7 +30,8 @@ runConsumeStream config = do
   let include = if Config.kafkaIncludeAgentActors config then IncludeAgentActors else ExcludeAgentActors
       broker = Config.kafkaBroker config
       topic = Config.kafkaActivityTopic config
-  agents <- loadAgentsIn (Config.agentsDirectory config)
+  report <- loadAgentsLoud (Config.agentsDirectory config) False
+  agents <- enabledAgentsFromReport report
   Log.logInfo
     logger
     "stream.consumer.started"
@@ -71,7 +72,8 @@ runConsumeEvents config = do
   logger <- Log.newStderrLogger Log.Info
   let broker = Config.kafkaBroker config
       topic = Config.kafkaEventsTopic config
-  agents <- loadAgentsIn (Config.agentsDirectory config)
+  report <- loadAgentsLoud (Config.agentsDirectory config) False
+  agents <- enabledAgentsFromReport report
   Log.logInfo
     logger
     "events.consumer.started"

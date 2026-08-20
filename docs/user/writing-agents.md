@@ -1,8 +1,9 @@
 # Writing Agents
 
 An agent is a value in the typed Dhall schema at [`schema/Agent.dhall`](../../schema/Agent.dhall).
-Every manifest imports that schema and produces one `Agent` record with four meaningful
-parts:
+Every manifest imports that schema and produces one `Agent` record. Its trigger, behavior,
+and sinks describe execution; identity, memory policy, and enablement describe how that
+execution is governed:
 
 ```dhall
 let A = ../schema/Agent.dhall
@@ -12,6 +13,13 @@ in  A.Agent::{
     , trigger  = A.Trigger.Schedule { cron = "* * * * *" }   -- WHEN it runs
     , behavior = A.Behavior.ShikumiProgram { … }             -- WHAT it does
     , sinks    = [ A.Sink.KawaDigest { … } ]                 -- WHAT it produces
+    , identity = Some { principal = "principal_my_agent" }   -- WHO authorizes it
+    , memory =
+        { scope = A.MemoryScope.AgentScope
+        , recallLimit = 25
+        , recordPolicy = A.RecordPolicy.OnSuccess
+        }
+    , enabled = True
     }
 ```
 
@@ -28,8 +36,23 @@ let Agent =
           , trigger : Trigger          -- one of three classes
           , behavior : Behavior         -- one of three arms
           , sinks : List Sink           -- zero or more producer outputs
+          , sanctionedProfile : Optional ProfileRequirement.Type
+          , identity : Optional Identity
+          , memory : MemoryPolicy
+          , enabled : Bool
           }
-      , default = { description = "", sinks = [] : List Sink }
+      , default =
+          { description = ""
+          , sinks = [] : List Sink
+          , sanctionedProfile = None ProfileRequirement.Type
+          , identity = None Identity
+          , memory =
+              { scope = MemoryScope.AgentScope
+              , recallLimit = 10
+              , recordPolicy = RecordPolicy.OnSuccess
+              }
+          , enabled = True
+          }
       }
 ```
 
@@ -40,10 +63,61 @@ let Agent =
 | `trigger` | `Trigger` | When the agent fires — see **[Triggers](./triggers.md)** | — (required) |
 | `behavior` | `Behavior` | What the agent does — see **[Behaviors](./behaviors.md)** | — (required) |
 | `sinks` | `List Sink` | What the agent produces — see **[Sinks](./sinks.md)** | `[]` |
+| `sanctionedProfile` | `Optional ProfileRequirement` | Execution profile the run must resolve and satisfy | `None` |
+| `identity` | `Optional Identity` | Stable meibo principal whose authority the agent will use | `None` |
+| `memory` | `MemoryPolicy` | Recall scope, recall bound, and automatic recording policy | agent scope, 10 results, record on success |
+| `enabled` | `Bool` | Whether long-running worker roles load the agent | `True` |
 
 Because `sinks` defaults to `[]`, an agent with no sinks is legal — it runs its behavior and
 records a session, producing nothing outward. That's useful for a behavior whose only job is
 to learn (record memory) for later runs.
+
+## Identity
+
+Declare an identity when the agent already has a stable principal in meibo:
+
+```dhall
+, identity = Some { principal = "principal_shikigami_heartbeat" }
+```
+
+The declaration is parsed and shown by `validate`, but principal verification and lifecycle
+control are not enforced yet; that integration belongs to
+[plan 23](../plans/23-agent-lifecycle-control-with-meibo-principals.md). Until it lands,
+`identity.principal` is carried as declared and must not be treated as proof of authority.
+
+## Memory policy
+
+The default preserves the behavior of manifests written before memory policy was declared:
+
+```dhall
+, memory =
+    { scope = A.MemoryScope.AgentScope
+    , recallLimit = 10
+    , recordPolicy = A.RecordPolicy.OnSuccess
+    }
+```
+
+`recallLimit` is enforced on vector recall and its scope-only fallback. It must be between 1
+and 1000 inclusive; invalid values fail declaration loading before they can become an `Int`
+or a database query bound. `recordPolicy` controls automatic run memories:
+
+- `OnSuccess` records the behavior output only after a successful run.
+- `Never` records no automatic run memory, while the successful session still completes.
+- `Always` behaves like `OnSuccess` on success and records a `failure`-tagged memory before a
+  failed session closes.
+
+An explicit `remember` operation inside a Flow is intentional and is not suppressed by
+`recordPolicy`. `AgentScope` is the currently enforced scope. `Shared` is accepted and
+inspectable so manifests can adopt the coordinated schema, but its shared-recall semantics
+belong to [plan 34](../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md)
+and are not active yet.
+
+## Enable or park an agent
+
+Set `enabled = False` to keep a manifest on disk while excluding it from workers,
+schedulers, and stream/event consumers. Each loader prints a stderr line naming the skipped
+agent and manifest. Single-agent commands still load disabled declarations deliberately, so
+you can validate or hand-run a parked agent; `validate` calls out its disabled state.
 
 ## The three axes
 

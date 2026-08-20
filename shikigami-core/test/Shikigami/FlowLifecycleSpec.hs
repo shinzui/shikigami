@@ -21,7 +21,7 @@ import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
 import Shikigami.Flow.Capability
@@ -385,7 +385,10 @@ flowAgentDecl flowAgent =
             params = mempty
           },
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 flowOccurredAt :: UTCTime

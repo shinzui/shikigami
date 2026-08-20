@@ -69,7 +69,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), ProfileRequirement (..), Sink, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
@@ -295,13 +295,13 @@ runProfiledAgentWith ::
   RunJob ->
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgentWith deps activeBehaviorEnv job decl = do
+runProfiledAgentWith deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
     addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
   sid <- runStep deps (StepName "open-session") (openSession deps job decl)
-  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
+  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
@@ -556,7 +556,15 @@ runResearchSupervisor currentSession RunJob {triggerPayload, parentSessionId, pa
     )
 
 failSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Text -> Eff es ()
-failSession deps decl sid err = liftIO do
+failSession deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid err = liftIO do
+  when (recordPolicy == Always) $
+    void $
+      recordMemory
+        deps
+        decl
+        sid
+        ("run failed: " <> err)
+        (Set.fromList ["agent-run", "failure"])
   failedAt' <- getCurrentTime
   void $
     Session.failSession
@@ -782,7 +790,22 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
             _ -> PublishSucceeded
 
 recordLearning :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Value -> Eff es (Maybe MemoryId)
-recordLearning deps decl sid output = liftIO do
+recordLearning deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid output = liftIO do
+  case recordPolicy of
+    Never -> pure Nothing
+    OnSuccess -> Just <$> recordSuccess
+    Always -> Just <$> recordSuccess
+  where
+    recordSuccess =
+      recordMemory
+        deps
+        decl
+        sid
+        (renderLearning output)
+        (Set.fromList ["agent-run", behaviorKindText (behavior decl)])
+
+recordMemory :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO MemoryId
+recordMemory deps decl sid content' tags' = do
   mid <- genMemoryId
   recordedAt' <- getCurrentTime
   _ <-
@@ -796,15 +819,15 @@ recordLearning deps decl sid output = liftIO do
           sessionId = Just sid,
           scope = agentScope (agentDeclName decl),
           memoryType = MemoryPattern,
-          content = renderLearning output,
+          content = content',
           priority = 100,
           confidence = MediumConfidence,
-          tags = Set.fromList ["agent-run", behaviorKindText (behavior decl)],
+          tags = tags',
           supersedes = Nothing,
           recordedAt = recordedAt'
         }
       & runKioku deps
-  pure (Just mid)
+  pure mid
 
 -- | Close the kioku session, recording which model produced its output.
 --

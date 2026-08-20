@@ -1,7 +1,7 @@
 module Shikigami.AgentWorkflowSpec (tests) where
 
 import Control.Exception (SomeException, throwIO, try)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
 import Data.Aeson (Result (..), Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
@@ -34,6 +34,7 @@ import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
+import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.ReadModel (TurnRow (..))
@@ -41,11 +42,11 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), ProfileRequirement (..), Sink (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultMemoryPolicy, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Attestation.Envelope (profileDigest)
@@ -162,6 +163,61 @@ tests =
             assertBool ("first attempt is permanent: " <> show firstAttempt) (isPermanent firstAttempt)
             assertBool ("replay keeps the permanent value: " <> show replayed) (isPermanent replayed)
             assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts,
+      testCase "Never completes a successful session without recording memory" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                neverDecl = withRecordPolicy Never decl
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [neverDecl]
+                neverJob = job {idempotencyKey = "heartbeat:test-record-never"}
+
+            result <- runAgentRunWorkflow deps neverJob
+            sid <- case result of
+              Right (Completed (Right AgentRunResult {sessionId, recordedMemId})) -> do
+                assertEqual "the record step returns no memory id" Nothing recordedMemId
+                pure sessionId
+              other -> assertFailure ("Never run should complete, got " <> show other)
+
+            memories <- runAppIO appEnv (Memory.getRowsBySession shikigamiMemorySpace sid)
+            case memories of
+              Right (Right rows) -> assertEqual "no memory row was written" 0 (length rows)
+              other -> assertFailure ("memory lookup should succeed, got " <> show other)
+
+            session <- runAppIO appEnv (Session.getById shikigamiMemorySpace sid)
+            case session of
+              Right (Right (Just SessionRow {status})) -> assertEqual "session still completes" "completed" status
+              other -> assertFailure ("session lookup should return a completed row, got " <> show other),
+      testCase "Always records a failure memory before failing the session" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                alwaysDecl = withRecordPolicy Always missingTaskDecl
+                deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [alwaysDecl]
+
+            result <- runAgentRunWorkflow deps permanentFailureJob
+            case result of
+              Right (Completed (Left _)) -> pure ()
+              other -> assertFailure ("Always run should fail permanently, got " <> show other)
+
+            memories <- runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "missing-task-agent"))
+            case memories of
+              Right (Right [MemoryRow {content, tags}]) -> do
+                assertBool "failure content is explicit" ("run failed: " `Text.isPrefixOf` content)
+                assertBool "failure tag is present" (Set.member "failure" tags)
+              other -> assertFailure ("expected one failure memory, got " <> show other),
+      testCase "recallLimit caps fallback recall" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            forM_ [1 .. 5 :: Int] (recordRecallFixture appEnv)
+            limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
+            recalled <- recallPriorLearnings appEnv limit (agentScope "recall-limit-agent") "recall fixture"
+            assertEqual "declared bound caps fallback rows" 3 (length recalled),
       testCase "replays completed lifecycle steps for the same run id" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -960,7 +1016,10 @@ decl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 missingTaskDecl :: AgentDecl
@@ -977,7 +1036,10 @@ missingTaskDecl =
             enabledBy = Nothing
           },
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 profiledDecl :: AgentDecl
@@ -999,7 +1061,10 @@ profiledDecl =
           ProfileRequirement
             { profileId = "sanctioned-review",
               version = Just "1"
-            }
+            },
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 profiledSkillDecl :: AgentDecl
@@ -1015,7 +1080,10 @@ profiledSkillDecl =
           ProfileRequirement
             { profileId = "sanctioned-review",
               version = Just "1"
-            }
+            },
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 flowDecl :: AgentDecl
@@ -1026,7 +1094,10 @@ flowDecl =
       trigger = Event {eventType = "test"},
       behavior = Flow {name = "at-risk-customer"},
       sinks = [],
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 conversationDecl :: AgentDecl
@@ -1034,6 +1105,20 @@ conversationDecl =
   decl
     { trigger = Event {eventType = addressedMessageEventType},
       sinks = [DanwaConversation {topic = "support"}]
+    }
+
+withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
+withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, sanctionedProfile, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
+  AgentDecl
+    { name,
+      description,
+      trigger,
+      behavior,
+      sinks,
+      sanctionedProfile,
+      identity,
+      memory = MemoryPolicy {scope, recallLimit, recordPolicy},
+      enabled
     }
 
 firstAddressedMessage :: AddressedMessage
@@ -1368,6 +1453,33 @@ recordPriorEscalation appEnv ticket = do
   case result of
     Right (Right _) -> pure ()
     other -> assertFailure ("seeding the prior escalation should succeed, got " <> show other)
+
+recordRecallFixture :: AppEnv -> Int -> IO ()
+recordRecallFixture appEnv ordinal = do
+  mid <- genMemoryId
+  recordedAt <- getCurrentTime
+  result <-
+    runAppIO appEnv $
+      Memory.record
+        RecordMemoryData
+          { memoryId = mid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor "recall-limit-agent",
+            ownerPrincipal = Nothing,
+            agentId = "recall-limit-agent",
+            sessionId = Nothing,
+            scope = agentScope "recall-limit-agent",
+            memoryType = MemoryPattern,
+            content = "recall fixture " <> Text.pack (show ordinal),
+            priority = 100,
+            confidence = MediumConfidence,
+            tags = Set.fromList ["agent-run", "fixture"],
+            supersedes = Nothing,
+            recordedAt
+          }
+  case result of
+    Right (Right _) -> pure ()
+    other -> assertFailure ("seeding recall fixture should succeed, got " <> show other)
 
 expectedFlowOutput :: Value
 expectedFlowOutput =

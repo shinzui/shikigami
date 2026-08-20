@@ -5,7 +5,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (sort)
 import Data.Text (Text)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Api.OpenApiSpec qualified as OpenApiSpec
 import Shikigami.Api.Problem
   ( ProblemCode (..),
@@ -50,7 +50,10 @@ packageBoundaryTests =
                   trigger = Schedule {cron = "* * * * *"},
                   behavior = Skill {path = "skills/none"},
                   sinks = [],
-                  sanctionedProfile = Nothing
+                  sanctionedProfile = Nothing,
+                  identity = Nothing,
+                  memory = defaultMemoryPolicy,
+                  enabled = True
                 }
         let AgentDecl {name = declaredName} = decl
         declaredName @?= ("boundary-probe" :: Text)

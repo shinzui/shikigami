@@ -36,7 +36,8 @@ This section must always reflect the actual current state of the work.
 - [ ] Milestone 1: add an explicit `RunRouteKind` discriminator to `RunJob`; producers set it; payload decode only validates the selected route; typed mismatch/decode failures dead-letter; compatibility test for old jobs.
 - [ ] Milestone 2: `CatchUpPolicy` in the scheduler; `armNextRun`/`scheduleFireAction` coalesce missed ticks; `scheduleFireAction` no longer falls through to the approval fallback on non-schedule payloads; tests.
 - [ ] Milestone 3: critical kioku open/record/complete/fail errors propagate to retry/failure; only explicitly best-effort operations may log/count and continue; tests cover both classes.
-- [ ] Milestone 4: canonical `AgentLoadReport`/`loadAgentsReport` plus loud/strict loading across the three CLI commands; unparseable-cron loudness in `Worker.hs` schedule extraction.
+- [x] (2026-08-20T03:25:00Z) Milestone 4 (report slice, landed through plan 33): canonical `AgentLoadReport`/`loadAgentsReport`, `loadedAgents`, and `loadAgentsLoud`; all four current long-running load paths use the loud lenient report before enabled-agent selection.
+- [ ] Milestone 4 (remaining): wire Settei `agents.strict`, test strict refusal and captured diagnostics, and add unparseable-cron loudness in schedule extraction.
 - [ ] Milestone 4 (hardening): enqueue-path fixes — idempotent addressed key, drop per-enqueue `createQueue`, epoch fallback, UUIDv5 non-ASCII bytes, partial `error` in `runQueueName`.
 - [ ] Register new/extended specs in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
 
@@ -46,7 +47,11 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-08-20: Plan 36 had already replaced the old CLI copies with
+  `Shikigami.Agent.Loader.loadAgentsIn`, so the report slice could stay in
+  `shikigami-core` and the four current worker-role call sites. Plan 33 needed the canonical
+  report for enabled filtering before this plan's other milestones were ready, so that
+  independently useful slice landed first; `agents.strict` and cron handling remain here.
 
 
 ## Decision Log

@@ -36,6 +36,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
     Trigger (..),
+    defaultMemoryPolicy,
   )
 import Shikigami.Log qualified as Log
 import Shikigami.Sink
@@ -184,7 +185,10 @@ agentWith sinks =
       trigger = Schedule {cron = "*/5 * * * *"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks,
-      sanctionedProfile = Nothing
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 signalWith :: RecipientFrom -> Maybe Text -> Sink
@@ -275,7 +279,7 @@ reiActionTests =
       testCase "a denied agent never reaches the handler at all" do
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
-          let ctx = (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) {identity = AgentIdentity "intruder"}
+          let ctx = ctxWithIdentity (AgentIdentity "intruder") (ReiConfig {baseUrl = Just (localBaseUrl port)})
           result <- dispatch ctx sampleReiSink sampleOutput
           case outcome result of
             DeniedOutcome _ -> pure ()
@@ -321,9 +325,12 @@ publishes = \case
 -- | @heartbeat@ is granted @SReiAction@ in the static grant table, so the
 -- permission gate is not what these cases are measuring.
 ctxWith :: ReiConfig -> SinkContext
-ctxWith rei =
+ctxWith = ctxWithIdentity (AgentIdentity "heartbeat")
+
+ctxWithIdentity :: AgentIdentity -> ReiConfig -> SinkContext
+ctxWithIdentity agentIdentity rei =
   SinkContext
-    { identity = AgentIdentity "heartbeat",
+    { identity = agentIdentity,
       runId = "run-1",
       ordinal = 0,
       kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient_default"},

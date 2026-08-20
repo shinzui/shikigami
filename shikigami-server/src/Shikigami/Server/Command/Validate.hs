@@ -3,6 +3,7 @@ module Shikigami.Server.Command.Validate
   )
 where
 
+import Control.Monad (when)
 import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
@@ -34,6 +35,7 @@ runValidate path = do
       exitFailure
     Right decl -> do
       print decl -- the Show-rendered manifest
+      when (not (enabled decl)) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
       case sinkDeclarationErrors decl of
         errors@(_ : _) -> do
           traverse_ (\err -> hPutStrLn stderr ("validate: sink error: " <> Text.unpack err)) errors
