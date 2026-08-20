@@ -16,14 +16,45 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Three classes of silent misbehavior make shikigami hard to trust. Routing is guessed, not declared: the worker decides whether a job is a conversation turn by trying to JSON-decode its payload as an addressed message, ignoring the `triggerKind` field the job already carries — so a schedule or stream job whose payload happens to look addressed is misrouted. The scheduler has no catch-up policy: after downtime it replays every missed cron minute in sequence, so a day of downtime on a `* * * * *` agent enqueues 1440 stale runs. And a family of errors is swallowed whole: kioku session/memory writes whose results are discarded with `_ <-`/`void`, agent manifests that fail to load and are dropped with no log, and crons that fail to parse and silently stop that agent's schedule forever.
+Shikigami is a declared-agent runtime. An agent is declared in a Dhall manifest under `agents/`;
+something fires its trigger (a cron minute, a Kafka `activity.v1` record, an addressed
+integration event, or a parent agent delegating); that firing becomes one JSON message called a
+`RunJob` on a Postgres queue named `shikigami_run_jobs`; and a worker process drains that queue
+and runs the agent. Three classes of silent misbehavior in that path still make the runtime hard
+to trust, and this plan removes all three.
 
-After this plan, every `RunJob` carries an explicit orchestration-route discriminator
-separate from its trigger/audit kind; payload decoding validates the selected route but
-never chooses it. The scheduler applies a Settei-configured catch-up policy, critical
-kioku failures propagate to the workflow/worker retry taxonomy, explicitly best-effort
-writes are logged/counted, and agent/cron load failures are loud with strict startup
-available.
+**Routing is guessed, not declared.** The worker decides whether a job is a *conversation turn*
+(a back-and-forth with a human through the danwa conversation service) or an *ordinary agent run*
+by trying to JSON-decode the job's payload as an addressed chat message and seeing whether it
+works — `dispatchRunJob` in `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:103-107`. The
+job already carries a `triggerKind` field saying where it came from, and the producer already
+knows which of the two workflows it meant; neither is consulted. A schedule or stream job whose
+payload happens to look like an addressed message is silently run as a conversation, and a
+genuinely addressed payload that fails to decode (a producer bug) is silently run as an ordinary
+agent run instead of being reported.
+
+**The scheduler has no catch-up policy.** After downtime it replays every missed cron minute one
+at a time. A `* * * * *` agent that was offline for a day produces 1440 stale runs, each with a
+distinct idempotency key, so nothing deduplicates them.
+
+**A family of errors is swallowed whole.** Kioku (the agent memory and session store) session
+opens, learning records, and session completions have their `Either StoreError _` results
+discarded with `_ <-` and `void` in the durable agent-run workflow, so a run can report success
+having opened no session and persisted no memory. An agent manifest with a bad cron expression
+loads fine and then never schedules, with nothing said. And nothing yet lets an operator say
+"refuse to start if any manifest failed to load".
+
+After this plan, every `RunJob` carries an explicit route discriminator that is separate from its
+trigger/audit kind; payload decoding validates the chosen route but never chooses it, and a
+mismatch dead-letters with a named reason instead of being run as the other kind of thing. The
+scheduler applies a configured catch-up policy, so waking a day late produces one run and not
+1440. Truth-bearing kioku failures propagate into the worker's existing retry/dead-letter
+taxonomy instead of being discarded. Manifest and cron load failures are reported through the
+structured logger, and a new `agents.strict` setting makes them fatal at startup.
+
+You can see each of these working: `cabal test` gates them, and the scheduler change is visible
+end-to-end by stopping the scheduler for several minutes against a `* * * * *` agent, restarting
+it, and counting rows in `pgmq.q_shikigami_run_jobs`.
 
 
 ## Progress
@@ -32,14 +63,39 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: plans 36/37 and plans 17/18 complete.
-- [ ] Milestone 1: add an explicit `RunRouteKind` discriminator to `RunJob`; producers set it; payload decode only validates the selected route; typed mismatch/decode failures dead-letter; compatibility test for old jobs.
-- [ ] Milestone 2: `CatchUpPolicy` in the scheduler; `armNextRun`/`scheduleFireAction` coalesce missed ticks; `scheduleFireAction` no longer falls through to the approval fallback on non-schedule payloads; tests.
-- [ ] Milestone 3: critical kioku open/record/complete/fail errors propagate to retry/failure; only explicitly best-effort operations may log/count and continue; tests cover both classes.
-- [x] (2026-08-20T03:25:00Z) Milestone 4 (report slice, landed through plan 33): canonical `AgentLoadReport`/`loadAgentsReport`, `loadedAgents`, and `loadAgentsLoud`; all four current long-running load paths use the loud lenient report before enabled-agent selection.
-- [ ] Milestone 4 (remaining): wire Settei `agents.strict`, test strict refusal and captured diagnostics, and add unparseable-cron loudness in schedule extraction.
-- [ ] Milestone 4 (hardening): enqueue-path fixes — idempotent addressed key, drop per-enqueue `createQueue`, epoch fallback, UUIDv5 non-ASCII bytes, partial `error` in `runQueueName`.
-- [ ] Register new/extended specs in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
+- [x] (2026-08-20T04:00:00Z) Prerequisites verified against the tree: plans 17, 18, 36, 47, and 33
+      are complete; plan 37 is complete for everything this plan touches (its one open item is
+      `shikigami-migrate`, handed to plan 38, and is unrelated here).
+- [x] (2026-08-20T03:25:00Z) Milestone 4 (report slice, landed through plan 33): canonical
+      `AgentLoadEntry`/`AgentLoadReport`, `loadAgentsReport`, `loadAgentsLoud`, and `loadedAgents`
+      in `shikigami-core/src/Shikigami/Agent/Loader.hs`; all four long-running worker roles call
+      `loadAgentsLoud … False` and then plan 33's `enabledAgentsFromReport`.
+- [ ] Milestone 1: add `RunRouteKind` to `RunJob` with an ADR-0011-style omit-when-legacy codec;
+      set it explicitly in all four producers; `routeRunJob` decides from the field alone;
+      `RouteError` dead-letters through `deadOutcome`; `WireCompatSpec` keeps its captured bytes
+      and gains a legacy-decode case.
+- [ ] Milestone 2: `CatchUpPolicy` in `Shikigami.Trigger.Schedule`; `SkipMissed` default wired
+      through `AppConfig` into `SchedulerEnv`; `scheduleFireAction` re-arms from `now` under
+      `SkipMissed`; explicit timer-kind dispatch replaces the try-then-fall-through composition;
+      failed enqueues and unknown timer kinds are logged.
+- [ ] Milestone 3: truth-bearing kioku failures in `Shikigami.Agent.Workflow` propagate into the
+      existing `AgentRunFailure` / `JobOutcome` taxonomy; the best-effort writes that remain are
+      named as such and logged; the one-off harness path in `Shikigami.Agent.Run` gets the same
+      treatment at its own severity.
+- [ ] Milestone 4 (remaining): thread `Shikigami.Log.Logger` through `loadAgentsLoud`, wire the
+      new Settei `agents.strict` key, test strict refusal, and make an unparseable cron loud in
+      `Shikigami.Workers.Config.schedulerEnv`.
+- [ ] Milestone 4 (hardening): idempotent addressed enqueue key, drop the per-enqueue
+      `createQueue` (adding `ensureRunQueue` to the two startup paths that relied on it), stop
+      backdating to the Unix epoch, encode UUIDv5 name bytes as UTF-8 at all six sites, and pin
+      `runQueueName`'s literal with a test.
+- [ ] Register new/extended specs in `shikigami-core/shikigami-core.cabal`,
+      `shikigami-workers/shikigami-workers.cabal`, `shikigami-core/test/Main.hs`, and
+      `shikigami-workers/test/Main.hs`; `cabal build all` and `cabal test all` green under
+      `nix develop`; `just keiro-gate` green.
+- [ ] Update `docs/operations/configuration.md`, `config/shikigami.example.yaml`, and
+      `docs/architecture/shikigami-domain-inventory.md` for the new keys and the new `RunJob`
+      field; write ADR 0012 for the route discriminator and its compatibility rule.
 
 
 ## Surprises & Discoveries
@@ -47,11 +103,90 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
+- 2026-08-20: **The plan's central scheduler bug claim was wrong, and the real defect is
+  narrower.** The plan asserted that a failed schedule enqueue is misread as an approval timeout
+  because `shikigamiTimerFallback` falls through on `Nothing`. Both timer payloads are guarded by
+  their own `kind` discriminator: `parseApprovalTimeoutPayload`
+  (`shikigami-core/src/Shikigami/Agent/Approval.hs:197-202`) returns `Nothing` for anything whose
+  `kind` is not `shikigami.approval-timeout`, and a schedule payload's kind is
+  `shikigami.schedule`. So `approvalTimeoutFireAction` on a schedule row returns `Nothing`
+  immediately and signals no awakeable. No approval is ever wrongly timed out. What is actually
+  wrong is that `scheduleFireAction`'s `Left _ -> pure Nothing`
+  (`shikigami-workers/src/Shikigami/Trigger/Scheduler.hs:99`) throws away the `UsageError` and
+  makes a failed enqueue indistinguishable, at the composition point, from "not a schedule
+  timer" — a silence, which is this plan's actual subject. Milestone 2 is re-scoped accordingly.
+- 2026-08-20: **`SkipMissed` needs no loop.** The plan proposed iterating `nextDue` from `now`
+  until the result is strictly future. `nextDue` already does exactly that: it starts at
+  `nextWholeMinute now` and steps one minute at a time until the cron matches, bounded to one leap
+  year (`shikigami-core/src/Shikigami/Trigger/Schedule.hs:32-47`). `nextDue cron now` *is* the
+  first strictly-future tick. The whole fix is to re-arm from `now` instead of from the fired
+  `dueAt` (`Scheduler.hs:101-102`).
+- 2026-08-20: **`RunJob` is journaled, and its bytes are pinned by a live test.** The agent-run
+  workflow records the job as the result of its `ingest-job` step
+  (`shikigami-core/src/Shikigami/Agent/Workflow.hs:218`), and `Shikigami.Agent.Delegate.delegate`
+  writes `Aeson.toJSON childJob` straight into a child workflow's journal
+  (`shikigami-core/src/Shikigami/Agent/Delegate.hs:64-72`). `Shikigami.WireCompatSpec` pins the
+  exact pre-upgrade bytes as a captured literal and asserts "the payload is the job itself"
+  (`shikigami-core/test/Shikigami/WireCompatSpec.hs:71-101`). Adding a field with a generic
+  codec would fail that test and change what replays. The fix is the pattern ADR 0011 already
+  established for `AgentDecl`: omit the field when it holds its compatibility default, and
+  restore that default when the key is absent.
+- 2026-08-20: **Plan 17 replaced the acknowledgement vocabulary this plan was written against.**
+  Run jobs no longer classify into shibuya's `AckDecision`/`DeadLetterReason`. The handler is a
+  `keiro-pgmq` job processor returning `Keiro.PGMQ.JobOutcome` (`Done | RetryDefault | Dead`),
+  with a local `deadOutcome` helper that prefixes a reason
+  (`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:235-265`). Shibuya's `AckDecision`
+  survives only on the Kafka consumer path
+  (`shikigami-workers/src/Shikigami/Trigger/Consumer.hs:420`). `RouteError` therefore produces a
+  `Dead` outcome, not an `AckDecision`.
+- 2026-08-20: **The conversation path is already honest about kioku errors.** Every
+  `runKioku` call in `shikigami-core/src/Shikigami/Agent/Conversation.hs` binds its result and
+  returns `Either Text …` (lines 335, 348-360, 376, 409, 488-500). Milestone 3 is scoped to
+  `Shikigami.Agent.Workflow` (the durable agent-run path) and `Shikigami.Agent.Run`.
+- 2026-08-20: **`Shikigami.Agent.Run` is no longer on the platform path.** Plan 36 and plan 55
+  moved one-off runs into the `shikigami-agent` package; `runAgentWithMemory` now has exactly one
+  caller, `shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs:70`. Its five discard sites
+  (`Run.hs:65,90,99,135,162`) are a developer-harness lie rather than a production one, which
+  changes their severity but not whether they get fixed.
+- 2026-08-20: **The loader's directory traversal is not recursive, so there is exactly one
+  expected failing fixture, not two.** `loadAgentsReport` does `listDirectory dir` and keeps
+  top-level names ending in `.dhall` (`shikigami-core/src/Shikigami/Agent/Loader.hs:52-54`), so
+  `agents/` yields `broken.dhall`, `danwa-heartbeat.dhall`, `heartbeat.dhall`, and
+  `triage-note.dhall`. `agents/detectors/schema.dhall` is never reached. MasterPlan 3's
+  "EP-4's strict mode must also expect **two** failing fixtures" note is stale and should be
+  corrected when this plan lands.
+- 2026-08-20: **The loader writes raw stderr lines, which contradicts plan 28's M1 rule.**
+  `loadAgentsLoud` and `enabledAgentsFromReport` use `hPutStrLn stderr`
+  (`Loader.hs:73,89,107`), while plan 28 M1 replaced every other stderr write in the
+  long-running processes with `Shikigami.Log`'s one-JSON-object-per-line logger. All four call
+  sites already build a `Log.Logger` before calling the loader
+  (`Workers/Command/Worker.hs:39-40`, `Workers/Command/Scheduler.hs:39-40`,
+  `Workers/Subscription.hs:29-33` and `:72-75`), so threading it in is mechanical.
+- 2026-08-20: **There are no metrics to count into yet.** Plan 28's M2 is unstarted and every
+  `AppEnv` in this repository is constructed with `metrics = Nothing`. Milestone 3's "log and
+  count" is therefore log-only; the counter lands with plan 28.
+- 2026-08-20: **Removing `createQueue` from `enqueueRunJob` has two exposed callers.** The
+  worker reconciles its queue through `Keiro.PGMQ.ensureJobQueue`
+  (`shikigami-workers/src/Shikigami/Workers/Registry.hs:62`) and both Kafka consumers call
+  `ensureRunQueue` at startup (`Workers/Subscription.hs:42,84`), but
+  `Shikigami.Workers.Command.Scheduler.runSchedulerCmd` and
+  `Shikigami.Server.Command.EnqueueRun.runEnqueueRun` do neither and rely on the per-send
+  `createQueue`. Both need an explicit `ensureRunQueue` before the removal.
+- 2026-08-20: **There are six `fromEnum`-per-`Char` UUIDv5 sites, not three**, and one of them
+  mints workflow ids. `Scheduler.hs:67,75`, `Workflow.hs:761`, `SinkOutbox.hs:187`,
+  `Approval.hs:186`, and `Delegate.hs:103`. The last builds a delegated child's `WorkflowId`. For
+  ASCII text `fromEnum` and UTF-8 agree byte for byte, so switching to `encodeUtf8` changes no id
+  any existing manifest produces; it only separates the non-ASCII names that currently collide.
 - 2026-08-20: Plan 36 had already replaced the old CLI copies with
-  `Shikigami.Agent.Loader.loadAgentsIn`, so the report slice could stay in
-  `shikigami-core` and the four current worker-role call sites. Plan 33 needed the canonical
-  report for enabled filtering before this plan's other milestones were ready, so that
-  independently useful slice landed first; `agents.strict` and cron handling remain here.
+  `Shikigami.Agent.Loader.loadAgentsIn`, so the report slice could stay in `shikigami-core` and
+  the four worker-role call sites. Plan 33 needed the canonical report for enabled filtering
+  before this plan's other milestones were ready, so that independently useful slice landed first;
+  `agents.strict` and cron handling remain here. `loadAgentsIn` survives as a thin wrapper
+  (`Loader.hs:130-131`) with no remaining caller and should be deleted by Milestone 4.
+- 2026-08-20: **`config/worker-strict.yaml`, referenced by the previous revision's manual check,
+  does not exist.** `config/` holds `shikigami.example.yaml` and
+  `worker-agent-schema-proof.yaml`. The strict-mode demonstration uses `--set` instead, which
+  needs no new checked-in file.
 
 
 ## Decision Log
@@ -65,6 +200,7 @@ Record every decision made while working on the plan.
   reusing trigger kind would preserve a subtler inference bug. A new optional/defaulted
   field preserves old queued-job decoding while producers become explicit.
   Date: 2026-07-22
+
 - Decision: Kioku session open/record/completion failures that affect run truth are
   critical and propagate into plan 17's retry/failure taxonomy. Only named best-effort
   enrichment writes may continue after structured logging/metrics.
@@ -72,13 +208,22 @@ Record every decision made while working on the plan.
   still a lie, not error handling.
   Date: 2026-07-22
 
-- Decision: Default scheduler catch-up policy is skip-missed (arm only the next future tick); make it configurable via `CatchUpPolicy` with a coalesce-to-latest alternative.
-  Rationale: A cron agent's value is "run about now", not "run once for every minute I was offline". Verified storm: `scheduleFireAction` re-arms from the fired `dueAt` (`Scheduler.hs:101-102` → `armNextRun cron agent dueAt`), and `nextDue` steps one interval, so a backlog drains one stale run per worker pass with distinct idempotency keys `agent:sched:<minute>` (`Enqueue.hs:101`). Skip-missed advances `nextDue` past `now` before arming.
+- Decision: Default scheduler catch-up policy is skip-missed (arm only the next future tick);
+  make it configurable.
+  Rationale: A cron agent's value is "run about now", not "run once for every minute I was
+  offline". Verified storm: `scheduleFireAction` re-arms from the fired `dueAt`
+  (`Scheduler.hs:101-102` → `armNextRun cron agent dueAt`), and `nextDue` steps one interval, so
+  a backlog drains one stale run per worker pass with distinct idempotency keys
+  `agent:sched:<minute>` (`Enqueue.hs:125`). Skip-missed advances `nextDue` past `now` before
+  arming.
   Date: 2026-07-08
 
 - Decision: Only stop the silence around agent/cron load failures here (per-file log, count,
   Settei `agents.strict` refusal to start); do not persist per-agent load state.
-  Rationale: Durable per-agent load/lifecycle state belongs to docs/plans/23-agent-lifecycle-control-with-meibo-principals.md (MasterPlan 4), which introduces the meibo principal model. Building a throwaway store here would create migration debt. This is a declared MasterPlan integration boundary.
+  Rationale: Durable per-agent load/lifecycle state belongs to
+  docs/plans/23-agent-lifecycle-control-with-meibo-principals.md (MasterPlan 4), which introduces
+  the meibo principal model. Building a throwaway store here would create migration debt. This is
+  a declared MasterPlan integration boundary.
   Date: 2026-07-08
 
 - Decision: This plan owns the canonical agent-directory traversal and load-report API;
@@ -88,13 +233,80 @@ Record every decision made while working on the plan.
   successfully loaded declarations to runtimes.
   Date: 2026-07-22
 
-- Decision: Fix `scheduleFireAction`'s fall-through into the approval-timeout fallback for non-schedule timer payloads by giving the timer worker an explicit dispatch on timer kind, not by relying on `parseSchedulePayload` returning `Nothing`.
-  Rationale: `shikigamiTimerFallback` (`Scheduler.hs:105-109`) tries the schedule action and, on `Nothing`, falls through to `approvalTimeoutFireAction`. A schedule timer whose enqueue fails also returns `Nothing` (`Scheduler.hs:99`), so a failed schedule fire is misinterpreted as an approval timeout. Dispatching on the timer payload's kind removes the ambiguity.
+- Decision: Bundle the small enqueue-path hardening (idempotent addressed key, no per-enqueue
+  `createQueue`, non-epoch occurredAt, UTF-8-correct UUIDv5 bytes, total `runQueueName`) into this
+  plan's Milestone 4 rather than a separate plan.
+  Rationale: They are one-to-few-line correctness fixes in the same trigger/enqueue surface this
+  plan already owns, too thin to be their own ExecPlan. `createQueue` removal coordinates with
+  docs/plans/18's `ensureRunQueue`, which has since landed.
   Date: 2026-07-08
 
-- Decision: Bundle the small enqueue-path hardening (idempotent addressed key, no per-enqueue `createQueue`, non-epoch occurredAt, UTF-8-correct UUIDv5 bytes, total `runQueueName`) into this plan's Milestone 4 rather than a separate plan.
-  Rationale: They are one-to-few-line correctness fixes in the same trigger/enqueue surface this plan already owns, too thin to be their own ExecPlan. `createQueue` removal coordinates with docs/plans/18's `ensureRunQueue` (MasterPlan integration point on `Shikigami/Trigger/Enqueue.hs`).
-  Date: 2026-07-08
+- Decision: `RunRouteKind` lives in `shikigami-core/src/Shikigami/Agent/RunJob.hs` beside
+  `RunJob`, not in `shikigami-api`.
+  Rationale: the previous revision named `shikigami-api/src/Shikigami/Api/RunJob.hs`, a path that
+  plan 36 never created. `shikigami-api` holds only the HTTP surface (`Shikigami.Api`,
+  `Shikigami.Api.Problem`, `Shikigami.Api.OpenApi`, `Shikigami.Health.Api`), and
+  `shikigami-workers` may not depend on it — `Shikigami.PackageArchitectureSpec` enforces exactly
+  that edge. The job contract has lived in `shikigami-core` since plan 36.
+  Date: 2026-08-20
+
+- Decision: `RunRouteKind` has a third constructor, `InferredLegacyRoute`. A `RunJob` with no
+  `routeKind` key decodes to it; a `RunJob` holding it encodes without the key; and the worker
+  handles it by reproducing today's duck-typed decode while logging
+  `worker.job.route_inferred` at warning level.
+  Rationale: `RunJob` crosses two durable boundaries — the PGMQ queue and the workflow journal —
+  and `Shikigami.WireCompatSpec` pins its bytes as a captured literal. ADR 0011 already settled
+  the rule for exactly this situation on `AgentDecl`, and reusing it keeps the fixtures valid.
+  Defaulting silently to `AgentWorkflowRoute` instead would quietly reroute any conversation job
+  queued before the deploy; a named legacy constructor makes the transitional branch greppable,
+  observable in the log, and deletable once the warning stops appearing.
+  Date: 2026-08-20
+
+- Decision: A `RouteError` produces `Keiro.PGMQ.Dead` through the handler's existing
+  `deadOutcome "invalid_route_payload"`, not a shibuya `AckDecision`.
+  Rationale: plan 17 moved run-job acknowledgement onto `keiro-pgmq`'s typed `Job`/`JobOutcome`
+  abstraction with a reconciled DLQ; shibuya's ack vocabulary now applies only to the Kafka
+  consumer. Constructing an `AckDecision` here would not type-check against the handler.
+  Date: 2026-08-20
+
+- Decision: The catch-up policy has two constructors, `SkipMissed` (default) and `FireAll`. The
+  previously proposed `CoalesceToLatest` is dropped.
+  Rationale: `nextDue` resolves to whole minutes, and `scheduleFireAction` enqueues the tick it
+  was fired for before re-arming. "Coalesce every missed tick into one" and "skip the missed ticks
+  and arm the next future one" therefore produce the identical observable result — one run for the
+  wake-up, then the normal cadence. Shipping two names for one behavior invites an operator to
+  believe there is a distinction to reason about.
+  Date: 2026-08-20
+
+- Decision: `CatchUpPolicy` is defined in `shikigami-core/src/Shikigami/Trigger/Schedule.hs`,
+  beside `CronSchedule` and `nextDue`.
+  Rationale: `AppConfig` must carry the resolved value and lives in `shikigami-core`, while the
+  scheduler that consumes it lives in `shikigami-workers`; core cannot depend on workers. Putting
+  the type next to the cron vocabulary it qualifies keeps `Shikigami.App.Config` importing a
+  domain type rather than defining one.
+  Date: 2026-08-20
+
+- Decision: Milestone 2's timer-kind dispatch is re-scoped from a correctness fix to an
+  explicitness-and-diagnostics fix, and gains logging of failed schedule enqueues.
+  Rationale: both timer payloads self-describe through a `kind` field and each parser rejects the
+  other's, so the current try-then-fall-through composition never actually mis-fires an approval
+  (see Surprises & Discoveries). The change still earns its place: it makes the dispatch say what
+  it means, and it converts `Left _ -> pure Nothing` into a logged failure, which is the silence
+  this plan exists to remove.
+  Date: 2026-08-20
+
+- Decision: Milestone 3 logs through `Shikigami.Log` and does not emit metrics.
+  Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
+  `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
+  second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: `loadAgentsLoud` takes a `Shikigami.Log.Logger` and emits structured events rather
+  than `hPutStrLn stderr`; `enabledAgentsFromReport` does the same.
+  Rationale: plan 28 M1 established that every line a long-running process writes is one JSON
+  object, and the loader is the last stderr writer in those processes. All four call sites already
+  have a logger in scope before they call the loader.
+  Date: 2026-08-20
 
 
 ## Outcomes & Retrospective
@@ -102,207 +314,685 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-08-20 (Milestone 4, report slice — delivered through plan 33). The canonical
+  `AgentLoadReport` seam exists and is the single directory traversal for the whole repository:
+  `loadAgentsReport` preserves every success and failure in filename order, `loadedAgents`
+  projects the successes, and `loadAgentsLoud` reports failures and a summary. All four
+  long-running worker roles use it. What this bought immediately is that a manifest typo is no
+  longer invisible — `agents/broken.dhall` now reports itself. What it did not buy, and what
+  remains here, is the ability to *refuse to start*: every call site passes `False` for strict
+  mode because there is no configuration key to read yet.
+- Lesson carried into the remaining milestones: this plan's premises decayed faster than its
+  intent did. Four of its file paths, one of its dependency vocabularies, and one of its two
+  headline bug claims were wrong by the time the work came up, while every user-visible outcome it
+  promised is still worth delivering. Re-read the code before implementing a milestone, not after.
+- (Remaining outcomes to be filled as Milestones 1–4 land.)
 
 
 ## Context and Orientation
 
-The worker drains the `shikigami_run_jobs` pgmq queue and, per job, dispatches to one of two orchestration paths. `handleRunJob` (`shikigami-core/src/Shikigami/Worker.hs:132-141`) decodes the `RunJob`, then chooses the path by attempting `Aeson.fromJSON (triggerPayload job)` as an `AddressedMessage`: on success it runs `runConversationAgent` (the danwa conversation loop), on failure `runOneAgent` (the ordinary agent-run workflow). `RunJob` (`shikigami-api/src/Shikigami/Api/RunJob.hs:19-30`) carries `triggerKind :: TriggerKind` where `TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation`. The duck-typed decode ignores this field entirely: a schedule or stream job whose payload coincidentally decodes as an `AddressedMessage` is misrouted into the conversation path; conversely a genuinely-addressed payload that fails to decode (a producer bug) silently falls through to the ordinary path instead of surfacing.
+Everything below names files by full repository-relative path from
+`/Users/shinzui/Keikaku/bokuno/shikigami`. Terms of art are defined where they first appear.
 
-The scheduler is a keiro durable-timer loop. `armNextRun` (`shikigami-core/src/Shikigami/Trigger/Scheduler.hs:79-90`) computes `nextDue cron now` and schedules a one-shot timer (`scheduleTimerOnceTx`) at that due time. When the timer fires, `scheduleFireAction` (Scheduler.hs:92-103) parses the schedule payload, enqueues a `TriggeredBySchedule` run via `enqueueScheduledRun` (`shikigami-core/src/Shikigami/Trigger/Enqueue.hs:87-105`), and re-arms from the just-fired `dueAt` (Scheduler.hs:101-102). Because `nextDue` advances exactly one interval (`Trigger/Schedule.hs`), a scheduler that was offline for a day wakes, fires the oldest missed tick, arms the next (still in the past), fires it, and so on — draining 1440 stale runs for a `* * * * *` agent, each with a distinct idempotency key `agent:sched:<iso8601 minute>` (Enqueue.hs:101) so the worker's dedupe does not collapse them. keiro's timer layer has no catch-up policy of its own (verified: a past-due timer is simply claimed and fired late, keiro `src/Keiro/Timer.hs`). `shikigamiTimerFallback` (Scheduler.hs:105-109) composes the schedule action with `approvalTimeoutFireAction` and, because both a non-schedule payload and a failed-enqueue schedule return `Nothing` (Scheduler.hs:95, 99), a failed schedule fire is misread as an approval-timeout fire.
+**The package layout.** Plan 36 split this repository into seven cabal packages.
+`shikigami-core` holds domain types and the durable workflows; `shikigami-workers` holds the
+long-running processes (the run-job worker, the scheduler, and two Kafka consumers);
+`shikigami-server` holds the HTTP API and the admin subcommands; `shikigami-agent` holds the
+one-off local agent harness; `shikigami-api`, `shikigami-client`, and `shikigami-migrations` hold
+the HTTP contract, its client, and schema evolution. `shikigami-cli` no longer exists. The
+allowed dependency arrows are enforced as a test in
+`shikigami-core/test/Shikigami/PackageArchitectureSpec.hs`: `shikigami-workers` may depend on
+`shikigami-core` and on nothing else in the repository, so anything the worker and the producers
+must share belongs in `shikigami-core`.
 
-Swallowed kioku errors: kioku session/memory calls return `Either StoreError _`, but the results are discarded at `Workflow.hs:261` (`Session.start`, via `_ <-`), `Workflow.hs:377` (`Session.failSession`, `void`), `Workflow.hs:589` (`Memory.record`, `_ <-`), `Workflow.hs:610` (`Session.complete`, `void`), and in the non-workflow path `Agent/Run.hs:63,97,115` (`Session.start`, `Memory.record`, `Session.complete`). A store failure there means a run reports success with no session opened or no memory persisted, and no one is told.
+**The run-job contract.** `RunJob` is defined in `shikigami-core/src/Shikigami/Agent/RunJob.hs:19-30`
+with nine fields: `agentName`, `triggerKind`, `occurredAt`, `triggerPayload` (an arbitrary
+`Data.Aeson.Value`), `idempotencyKey`, and the three delegation optionals `parentSessionId`,
+`parentRunWorkflowId`, `delegationDepth`. `TriggerKind` (line 14) is
+`TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation`. Both
+derive their JSON codecs generically today.
 
-Silent config loss: all three CLI loaders share the same `loadAgents` that drops failures — `[a | Right a <- loaded]` in `shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:45-49`, `.../Scheduler.hs:77-81`, and `.../ConsumeStream.hs:90-94`. `loadAgent :: FilePath -> IO (Either LoadError AgentDecl)` (`shikigami-core/src/Shikigami/Agent/Loader.hs:21`) does return the error; it is thrown away. The checked-in `agents/broken.dhall` (a manifest with a `behaviour`/`behavior` typo) demonstrates the drop: it vanishes with no log. Separately, the worker's schedule extraction `scheduleFor` (Worker.hs:215-219) drops agents whose cron fails `parseCron` with `Left _ -> Nothing`, silently — an agent with a bad cron loads fine but never schedules, and after the first (manually enqueued) fire never fires again.
+Four places produce a `RunJob`:
 
-Minor verified hardening targets in this surface: `enqueueAddressedRun` embeds `now` in its idempotency key (`Enqueue.hs:64-67`) so it is not idempotent (the `WithKey` variant at Enqueue.hs:70-84 is the correct one); `enqueueRunJob` calls `createQueue` on every send (Enqueue.hs:55); `runJobFromEnvelope` falls back to the Unix epoch on an unparseable `occurredAt` (Enqueue.hs:39,48), silently backdating runs; `deterministicOutboxIdForMessage`/`scheduleTimerId`/`scheduleFiredEventId` build UUIDv5 name bytes with `fromEnum`-per-`Char` (Workflow.hs:555-559, Scheduler.hs:66-69,74-77), truncating non-ASCII agent names to the low byte and risking id collisions; and `runQueueName` uses a partial `error` on an invalid literal (Enqueue.hs:29-31).
+* `Shikigami.Trigger.Enqueue.runJobFromEnvelope` (`shikigami-core/src/Shikigami/Trigger/Enqueue.hs:38-52`)
+  turns a matched Kafka `activity.v1` envelope into a `TriggeredByStream` job.
+* `eventInboxHandler` (`shikigami-workers/src/Shikigami/Trigger/Consumer.hs:463-482`) turns a
+  matched integration event into a `TriggeredByEvent` job. This is the only producer that can
+  legitimately mean "conversation": an agent declares `Trigger.Event { eventType = … }`, and the
+  conversation case is exactly `eventType == Shikigami.Integration.Danwa.addressedMessageEventType`
+  (`"danwa.message-addressed-to-agent"`). `agents/danwa-heartbeat.dhall` is the checked-in
+  example.
+* `Shikigami.Trigger.Enqueue.enqueueScheduledRun` (`Enqueue.hs:111-129`) produces a
+  `TriggeredBySchedule` job for a due minute.
+* `Shikigami.Agent.Delegate.delegate` (`shikigami-core/src/Shikigami/Agent/Delegate.hs:52-72`)
+  produces a `TriggeredByDelegation` job for a child agent.
 
-Test infrastructure: `Shikigami.SchedulerSpec` (`shikigami-core/test/Shikigami/SchedulerSpec.hs`) already exercises the scheduler against a real Postgres via `withShikigamiMigratedDatabase`; extend it. Routing is a pure decision over `RunJob`, testable without a database. `agents/broken.dhall` is a ready-made fixture for the loader tests.
+Plus one operator path: `shikigami enqueue-run <agent> [--payload <json>]`
+(`shikigami-server/src/Shikigami/Server/Command/EnqueueRun.hs`) calls
+`Shikigami.Trigger.Enqueue.enqueueAddressedRun`.
+
+**The worker.** `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` is a `keiro-pgmq` job
+processor. `runJob` (lines 48-55) declares the queue contract; `aesonJobCodec` keeps the wire a
+bare `RunJob` so decode failures dead-letter at the typed boundary before the handler runs.
+`handleRunJob` (lines 60-76) renews the message's visibility lease while working and maps a
+thrown `TransientBehaviorFailure` to a retry. `dispatchRunJob` (lines 103-107) is the defect:
+
+```haskell
+dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
+dispatchRunJob env job =
+  case Aeson.fromJSON (triggerPayload job) of
+    Aeson.Success addressed -> runConversationAgent env job addressed
+    Aeson.Error _ -> runOneAgent env job
+```
+
+The `Aeson.Success` branch runs a danwa conversation turn; the `Aeson.Error` branch runs the
+durable agent-run workflow. `triggerKind` is used only for a log field and a trace attribute
+(lines 168, 276). Every outcome is a `Keiro.PGMQ.JobOutcome` — `Done`, `RetryDefault`, or `Dead`
+carrying a bounded detail string — produced by `agentJobOutcome`/`conversationJobOutcome`
+(lines 235-255) and the `deadOutcome` helper (lines 263-265). This is plan 17's taxonomy, and it
+is what a routing error must join.
+
+**Why the field cannot just be added.** `RunJob` crosses two durable boundaries. It sits in a PGMQ
+queue as `toJSON job`, and it is written into keiro's workflow journal as the result of the
+`ingest-job` step (`shikigami-core/src/Shikigami/Agent/Workflow.hs:218`) and directly by
+`Shikigami.Agent.Delegate.delegate` (`Delegate.hs:64-72`). Journals outlive the binary that wrote
+them and are decoded again on replay. `shikigami-core/test/Shikigami/WireCompatSpec.hs:71-101`
+pins the exact byte string a `RunJob` encodes to, as a captured literal, and asserts the payload
+is the job itself and not a versioned envelope. [ADR
+0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md) settled the rule
+for this exact situation when plan 33 added `identity`, `memory`, and `enabled` to `AgentDecl`:
+an additive, defaulted field must preserve the previous JSON shape when it holds its
+compatibility default, and its decoder must restore that default when the key is absent. The
+implementation there (`shikigami-core/src/Shikigami/Agent/Decl.hs:197-226`) replaces the derived
+codec with hand-written instances that append `["enabled" .= False | not enabled]` and read
+`value .:? "enabled" .!= True`. Milestone 1 follows it exactly.
+
+[ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) is the other constraint worth
+knowing: the checked keiro-dsl specification under `domain/` deliberately does *not* declare the
+`shikigami_run_jobs` queue, because a scaffolded workqueue would impose keiro's `{v,t,data}`
+envelope on a payload this service sends bare. `domain/shikigami-agent-run.keiro:30-34`
+inventories only the three `RunJob` fields the specification refers to (`agentName`,
+`idempotencyKey`, `occurredAt`), so adding `routeKind` needs no specification edit — but
+`just keiro-gate` still runs, and `docs/architecture/shikigami-domain-inventory.md:157-165`
+describes the record's field list and must be updated to say nine fields, not eight.
+
+**The scheduler.** `shikigami-workers/src/Shikigami/Trigger/Scheduler.hs` drives keiro *durable
+timers* — rows in Postgres carrying a fire time and a JSON payload. `armNextRun` (lines 79-90)
+computes `nextDue cron now` and inserts a one-shot timer at that instant through
+`scheduleTimerOnceTx`. When a timer comes due, `scheduleFireAction` (lines 92-103) parses the
+schedule payload, enqueues a `TriggeredBySchedule` run, and re-arms — from the *fired* `dueAt`,
+not from `now`:
+
+```haskell
+      enqueued <- liftIO (enqueueScheduledRun (pool env) agent dueAt)
+      case enqueued of
+        Left _ -> pure Nothing
+        Right _ -> do
+          for_ (Map.lookup agent (schedules env)) \cron ->
+            armNextRun cron agent dueAt
+          pure (Just (scheduleFiredEventId agent dueAt))
+```
+
+`nextDue` (`shikigami-core/src/Shikigami/Trigger/Schedule.hs:32-47`) returns the first minute
+strictly after its argument that the cron matches. Feeding it a past `dueAt` therefore yields
+another past minute. Only one schedule timer exists at a time, so a backlog does not appear all at
+once; instead each pass of the timer loop claims the one stale timer, fires it, and arms the next
+still-stale one. The loop sleeps one second between passes
+(`shikigami-workers/src/Shikigami/Trigger/Timer.hs:41`), so a day of downtime on a `* * * * *`
+agent drains 1440 stale runs over roughly 24 minutes, each with a distinct idempotency key
+`agent:sched:<iso8601 minute>` (`Enqueue.hs:125`) so nothing deduplicates them. Keiro's timer
+layer has no catch-up policy of its own: a past-due timer is simply claimed and fired late
+(`claimAndFireOne`, keiro `keiro/src/Keiro/Timer.hs:159-188`).
+
+Two loops fire timers. The scheduler process
+(`shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs`) arms every scheduled agent at
+startup and then polls `runSchedulerTimerWorker`; the worker process runs the same fire action
+through `Shikigami.Trigger.Timer.runTimerWorker` over the `SchedulerEnv` derived by
+`Shikigami.Workers.Config.schedulerEnv` (`shikigami-workers/src/Shikigami/Workers/Config.hs:125-136`).
+Both go through `shikigamiTimerFallback` (`Scheduler.hs:105-109`), which tries the schedule action
+and falls through to `Shikigami.Agent.Approval.approvalTimeoutFireAction` on `Nothing`. Keiro
+treats a `Nothing` from the fire action as "not fired": the row stays in `Firing` and
+`requeueStuckTimers` returns it after the default 300-second TTL, with no attempt ceiling
+(`defaultTimerWorkerOptions`, keiro `keiro/src/Keiro/Timer.hs:90-91`).
+
+**Swallowed kioku errors.** Kioku is the session and memory store; its operations return
+`Either StoreError _`. In the durable agent-run workflow those results are discarded at five
+places in `shikigami-core/src/Shikigami/Agent/Workflow.hs`: `Session.start` at line 427 (`_ <-`,
+inside `openSession`), a best-effort failure-learning `recordMemory` at 561 (`void $`),
+`Session.failSession` at 569 (`void $`), `Memory.record` at 811 (`_ <-`, inside `recordMemory`),
+and `Session.complete` at 845 (`void $`). A store failure at any of them means the run reports
+success with no session opened, no learning persisted, or no completion recorded, and nobody is
+told. The same shape appears in the one-off harness path
+`shikigami-core/src/Shikigami/Agent/Run.hs` at lines 65, 90, 99, 135, and 162; that module's only
+caller is now `shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs:70`. The conversation path
+in `shikigami-core/src/Shikigami/Agent/Conversation.hs` already checks every result and needs no
+change.
+
+**Loading.** `shikigami-core/src/Shikigami/Agent/Loader.hs` is the single agent-manifest loader.
+`loadAgent` (line 42) type-checks one Dhall file into an `AgentDecl` and returns `Either LoadError`.
+`loadAgentsReport` (lines 51-63) is the sole directory traversal — non-recursive, filename-ordered
+— and preserves both successes and failures as `AgentLoadEntry` values. `loadAgentsLoud`
+(lines 67-89) reports each failure and a summary and exits non-zero under strict mode.
+`loadedAgents` (91-93) projects the successes; plan 33's `enabledAgentsFromReport` (97-115) filters
+by the declared `enabled` flag. All four long-running roles call `loadAgentsLoud dir False` then
+`enabledAgentsFromReport`. Two gaps remain. Strict mode has no configuration source, so every call
+site hard-codes `False`. And the loader still writes plain stderr text rather than
+`Shikigami.Log`'s JSON lines. `loadAgentsIn` (130-131) survives with no callers.
+
+`agents/broken.dhall` is the checked-in load-failure fixture: a manifest with a `behaviour`/
+`behavior` typo. It is the only failing file the traversal reaches.
+
+**Unparseable crons.** Two places turn a declared cron string into a schedule. The scheduler
+process is already loud: `parseScheduleAgent`
+(`shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs:72-78`) raises an `ioError` naming
+the agent. The worker process is not: `scheduleFor` inside
+`Shikigami.Workers.Config.schedulerEnv` (`Workers/Config.hs:132-136`) drops the agent with
+`Left _ -> Nothing`, and its own haddock names this plan as the owner of the fix. An agent with a
+bad cron therefore loads, logs nothing, and never fires from the worker's timer loop.
+
+**Configuration.** Plan 37 put every process on one strict Settei configuration.
+`shikigami-core/src/Shikigami/App/Config.hs` declares the accepted keys (`stableKey` values around
+lines 581-647), the `AppConfig` record, and the `appConfig` declaration that assembles it with
+`withDefault … (constant …)`. `kafka.include_agent_actors` (key at line 602, setting at 421-426,
+default at 317) is the existing boolean precedent to copy for `agents.strict`. Every key is
+documented in the table at `docs/operations/configuration.md:109-133` and exemplified in
+`config/shikigami.example.yaml`. `shikigami-core/test/Shikigami/AppConfigSpec.hs` asserts
+behaviors, not a key count, so adding keys is additive.
+
+**Enqueue-path hardening targets**, all in `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`:
+`runQueueName` (32-35) crashes with `error` on an invalid literal; `runJobFromEnvelope` (38-52)
+falls back to the Unix epoch when `occurredAt` will not parse, silently backdating the run;
+`enqueueRunJob` (76-85) calls `createQueue` on every single send; and `enqueueAddressedRun`
+(88-91) builds its idempotency key from `getCurrentTime`, so it is not idempotent — two calls for
+the same logical event produce two runs. Plan 18 already added the correct pieces beside them:
+`enqueueRunJobTx` (59-67) for transactional sends and `ensureRunQueue` (71-72) for one-time
+startup reconciliation.
+
+**Test infrastructure.** `shikigami-workers/test/Shikigami/SchedulerSpec.hs` exercises the
+scheduler against a real Postgres through `Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase`
+and already reads the run-job queue with pgmq helpers; extend it.
+`shikigami-workers/test/Shikigami/Agent/RunJob/WorkerSpec.hs` covers the codec and the outcome
+table without a database and is the natural home for routing cases.
+`shikigami-core/test/Shikigami/WireCompatSpec.hs` owns the captured `RunJob` bytes.
+`shikigami-core/test/Shikigami/AgentLoaderSpec.hs` owns loader behavior over `agents/`. Both test
+suites are registered by hand: `other-modules` in the package's `.cabal` and a `tests` entry in
+the suite's `Main.hs`.
 
 
 ## Plan of Work
 
-Milestone 1 — explicit routing. Scope: the public `RunJob` DTO and worker package. At
-the end, producers set `RunRouteKind`, the worker selects only from that field, and an
-incompatible/undecodable payload is dead-lettered rather than silently misrouted. Old
-rows decode via an explicit compatibility default and are covered by a golden fixture.
+**Milestone 1 — explicit routing.** Scope: `shikigami-core/src/Shikigami/Agent/RunJob.hs`, the
+four producers, `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`, and the two test suites.
+At the end, every newly produced job says which workflow it is for, the worker selects only from
+that field, an incompatible payload dead-letters with a named reason instead of silently running
+the other workflow, and a job queued before the deploy still decodes and still behaves exactly as
+it does today.
 
-Add a pure decision:
+Add the discriminator beside `RunJob`, and replace `RunJob`'s derived JSON instances with
+hand-written ones following [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md):
 
 ```haskell
-data RunRoute = ConversationRoute !AddressedMessage | AgentRunRoute | RouteError !Text
+-- | Which orchestration path the producer meant. Separate from 'TriggerKind',
+-- which records where the job came from for audit and tracing.
+data RunRouteKind
+  = AgentWorkflowRoute
+  | ConversationWorkflowRoute
+  | -- | No producer sets this. It is what a job enqueued before the
+    -- discriminator existed decodes to, and it is handled by reproducing the
+    -- old duck-typed decision. Delete it once the queue has drained and
+    -- @worker.job.route_inferred@ has stopped appearing.
+    InferredLegacyRoute
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+```
+
+`RunJob` gains `routeKind :: !RunRouteKind`. Its `toJSON` emits the eight existing keys unchanged
+and appends `["routeKind" .= routeKind | routeKind /= InferredLegacyRoute]`; its `parseJSON` reads
+`value .:? "routeKind" .!= InferredLegacyRoute`. That keeps `WireCompatSpec`'s captured literal
+byte-identical for a legacy job and keeps every parked workflow's `ingest-job` step replayable.
+
+Add the pure decision to the worker:
+
+```haskell
+data RunRoute
+  = ConversationRoute !AddressedMessage
+  | AgentRunRoute
+  | RouteError !Text
 
 routeRunJob :: RunJob -> RunRoute
 routeRunJob job = case routeKind job of
+  AgentWorkflowRoute -> AgentRunRoute
   ConversationWorkflowRoute ->
     case Aeson.fromJSON (triggerPayload job) of
       Aeson.Success addressed -> ConversationRoute addressed
       Aeson.Error err -> RouteError (Text.pack err)
-  AgentWorkflowRoute -> AgentRunRoute
+  InferredLegacyRoute ->
+    case Aeson.fromJSON (triggerPayload job) of
+      Aeson.Success addressed -> ConversationRoute addressed
+      Aeson.Error _ -> AgentRunRoute
 ```
 
-Rework `handleRunJob` (Worker.hs:132-141) to `case routeRunJob job of` → `ConversationRoute a -> runConversationAgent env job a`; `AgentRunRoute -> runOneAgent env job`; `RouteError e ->` route through plan 17's `classifyOutcome`/ack taxonomy. A conversation agent whose addressed payload does not decode is a permanent invalid-payload error; do not construct an ad-hoc `AckDecision` because plan 17 is a hard dependency.
+Rework `dispatchRunJob` to `case routeRunJob job of`: `ConversationRoute a -> runConversationAgent
+env job a`; `AgentRunRoute -> runOneAgent env job`; `RouteError detail -> jobLog … Log.Error
+"worker.job.dead_lettered" ["reason" .= ("invalid_route_payload" :: Text), "error" .= detail] >>
+pure (deadOutcome "invalid_route_payload" detail)`. Log `worker.job.route_inferred` at
+`Log.Warn` on the `InferredLegacyRoute` branch, carrying the resolved route, so an operator can
+watch the legacy branch fall out of use.
 
-Milestone 2 — scheduler catch-up policy. Scope: `shikigami-core/src/Shikigami/Trigger/Scheduler.hs`. At the end, waking late arms exactly one future tick, and a failed schedule fire is not misread as an approval timeout.
+Set the route explicitly in every producer. `runJobFromEnvelope`, `enqueueScheduledRun`, and
+`Shikigami.Agent.Delegate.delegate` all set `AgentWorkflowRoute`. `eventInboxHandler` sets
+`ConversationWorkflowRoute` when the matched agent's declared `eventType` equals
+`Shikigami.Integration.Danwa.addressedMessageEventType` and `AgentWorkflowRoute` otherwise — the
+declared event type is the honest source of the distinction, and it is available where the job is
+built. `enqueueAddressedRunWithKey` takes the route as a parameter so its callers state it;
+`shikigami enqueue-run` gains a `--conversation` flag that selects `ConversationWorkflowRoute`,
+defaulting to `AgentWorkflowRoute`.
 
-Add `data CatchUpPolicy = SkipMissed | CoalesceToLatest | FireAll` and a field on `SchedulerEnv` (default `SkipMissed`). Change `armNextRun` (Scheduler.hs:79-90) to advance to the first strictly-future due time under `SkipMissed`/`CoalesceToLatest`: iterate `nextDue` from `now` until the result is `> now` (bounded loop; `nextDue` is strictly increasing), and arm that. Under `FireAll`, keep today's behavior. In `scheduleFireAction` (Scheduler.hs:92-103), re-arm using the policy: `SkipMissed` arms the next future tick from `now` (not from the fired `dueAt`), so a backlog collapses to a single future run; `CoalesceToLatest` fires the current tick once and arms the next future one (same result at minute granularity, but explicit). Fix the fallback ambiguity: replace `shikigamiTimerFallback` (Scheduler.hs:105-109) with an explicit dispatch on the timer payload's `kind` — if it parses as a schedule payload, run the schedule action and treat its `Nothing` (enqueue failure) as a genuine failure to retry (return `Nothing` so keiro leaves the timer `Firing` for requeue), never falling through to approval; only a payload whose kind is the approval-timeout kind runs `approvalTimeoutFireAction`. This preserves the existing `runWorkflowTimerWorker` wiring (`Worker.hs:119`, `Scheduler.hs:117-118`).
+**Milestone 2 — scheduler catch-up policy and explicit timer dispatch.** Scope:
+`shikigami-core/src/Shikigami/Trigger/Schedule.hs`,
+`shikigami-core/src/Shikigami/App/Config.hs`,
+`shikigami-workers/src/Shikigami/Trigger/Scheduler.hs`,
+`shikigami-workers/src/Shikigami/Workers/Config.hs`,
+`shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs`, and `SchedulerSpec`. At the end,
+waking late arms exactly one future tick, the timer worker says out loud which kind of timer it is
+handling, and a failed schedule enqueue is a logged event rather than a discarded `Left`.
 
-Milestone 3 — kioku errors stop vanishing. Scope: the core workflow/run modules. At
-the end, critical writes propagate as typed transient/permanent failures and only
-documented best-effort enrichment may log/count and continue.
-
-Classify session open, required learning record, fail-session, and completion updates as
-truth-bearing. Convert `Left StoreError` into the typed failure path consumed by plan 17
-so the run cannot report success without its durable session/memory outcome. If a call
-is genuinely best-effort, name that policy in the function/type and emit structured
-error metrics/logs. There are no bare `_ <-`/`void` discard sites.
-
-Milestone 4 — loud loading and enqueue hardening. Scope: the three CLI loaders, `Worker.hs` schedule extraction, `Shikigami/Trigger/Enqueue.hs`, plus the UUIDv5 helpers. At the end, load failures are visible and refuseable, and the enqueue path is idempotent and total.
-
-Add the canonical report to `Shikigami.Agent.Loader`:
+Add to `Shikigami.Trigger.Schedule`:
 
 ```haskell
-data AgentLoadEntry
-  = AgentLoaded { path :: !FilePath, declaration :: !AgentDecl }
-  | AgentLoadFailed { path :: !FilePath, error :: !LoadError }
-newtype AgentLoadReport = AgentLoadReport { entries :: ![AgentLoadEntry] }
-
-loadAgentsReport :: FilePath -> IO AgentLoadReport
-loadAgentsLoud :: FilePath -> Bool -> IO AgentLoadReport
-loadedAgents :: AgentLoadReport -> [AgentDecl]
+-- | What the scheduler does about cron minutes that passed while it was down.
+data CatchUpPolicy
+  = -- | Arm the first tick strictly after now. Waking a day late produces the
+    -- one run for the timer that was already due, then the normal cadence.
+    SkipMissed
+  | -- | Arm from the tick that just fired, so every missed minute runs. This is
+    -- the pre-policy behavior.
+    FireAll
+  deriving stock (Eq, Show)
 ```
 
-`loadAgentsReport` is the sole directory traversal and preserves every success and failure.
-`loadAgentsLoud` calls it, logs `[load] FAILED <file>: <err>` per failure plus the summary,
-and exits non-zero under strict mode when any failure exists. Replace the three private
-copies with this function and pass `loadedAgents report` to the runtime, wiring the validated
-Settei `agents.strict` setting (default `false`) through all long-running commands. Plans 30,
-33, and 23 consume the report
-rather than walking the directory again. In the worker's schedule extraction `scheduleFor`
-and the scheduler CLI's `parseScheduleAgent`, make an unparseable cron loud and make strict
-mode refuse startup.
+Add `schedulerCatchUp :: !CatchUpPolicy` to `AppConfig` under the stable key
+`scheduler.catch_up`, decoded from the strings `skip_missed` and `fire_all`, defaulting to
+`skip_missed`, bound to the environment variable `SHIKIGAMI_SCHEDULER_CATCH_UP`. Follow the
+`kafka.include_agent_actors` precedent for the setting, the key, the default, and the binding.
 
-Enqueue hardening in `Shikigami/Trigger/Enqueue.hs`: make `runQueueName` total (return via a top-level `let`/`case` that is proven at the call site, or keep `error` but only as an unreachable-by-construction with a comment — prefer a `parseQueueName` on a known-good literal wrapped so the partiality is confined; simplest acceptable fix: keep it but add a test asserting it is `Right`). Remove the per-enqueue `createQueue` from `enqueueRunJob` (Enqueue.hs:55), relying on plan 18's `ensureRunQueue` called once at startup; plan 18 is a hard dependency, so do not define a second queue-initialization helper here. Make `enqueueAddressedRun` idempotent or delete it in favor of `enqueueAddressedRunWithKey`: its `now`-bearing key (Enqueue.hs:66-67) means two calls for the same logical event produce two runs; the only caller is the `enqueue-run` CLI (`EnqueueRun.hs:29`), so change that caller to pass a stable key (e.g. derived from the agent and a payload hash) and drop the non-deterministic variant. In `runJobFromEnvelope` (Enqueue.hs:34-48), stop silently backdating: on unparseable `occurredAt`, log and use `getCurrentTime` (or reject the envelope), not the Unix epoch. Fix the UUIDv5 name bytes in `deterministicOutboxIdForMessage` (Workflow.hs:555-559), `scheduleTimerId` and `scheduleFiredEventId` (Scheduler.hs:66-69,74-77) to encode the text as UTF-8 (`Data.Text.Encoding.encodeUtf8` then `ByteString.unpack`) instead of `fmap (fromIntegral . fromEnum) . Text.unpack`, which truncates each `Char` to its low byte and can collide for non-ASCII agent names.
+Add `catchUpPolicy :: !CatchUpPolicy` to `SchedulerEnv` (`Scheduler.hs:36-39`) and populate it in
+both construction sites — `runSchedulerCmd` and `Shikigami.Workers.Config.schedulerEnv`. Change
+`scheduleFireAction` to re-arm from `now` under `SkipMissed` and from the fired `dueAt` under
+`FireAll`; `armNextRun` itself is already correct, because `nextDue` returns the first strictly
+future match. Convert the discarded enqueue failure into a logged
+`scheduler.schedule.enqueue_failed` event naming the agent, the due minute, and the error, still
+returning `Nothing` so keiro leaves the timer for requeue.
+
+Replace `shikigamiTimerFallback`'s try-then-fall-through with an explicit dispatch on the timer
+payload's `kind` field: `shikigami.schedule` runs the schedule action, `shikigami.approval-timeout`
+runs `Shikigami.Agent.Approval.approvalTimeoutFireAction`, and anything else logs
+`scheduler.timer.unknown_kind` with the payload's kind and returns `Nothing`. Keep the exported
+name and type so `Shikigami.Trigger.Timer` and `runSchedulerTimerWorker` need no change beyond the
+new `SchedulerEnv` field. This is deliberately not a behavior change for well-formed timers; it is
+a change from "the second action happens to reject what the first one rejected" to "the code says
+which action owns which row", plus the diagnostics.
+
+**Milestone 3 — kioku errors stop vanishing.** Scope:
+`shikigami-core/src/Shikigami/Agent/Workflow.hs` and `shikigami-core/src/Shikigami/Agent/Run.hs`.
+At the end there is no bare `_ <-` or `void` over a kioku result, truth-bearing failures reach the
+worker's existing `Dead`/`RetryDefault` decisions, and every write that is allowed to continue
+after a failure says so in its own name and logs when it does.
+
+Classify each site. `openSession` (`Workflow.hs:414-444`), `failSession` (558-578), the required
+learning record inside `recordMemory` (807-830), and `completeSession` (842-855) are
+truth-bearing: a run that reports success without them is lying about its own durable record. Give
+`openSession` and `recordMemory` a failing return (`Either StoreError`) and thread it into the
+existing `AgentRunFailure` sum, which the workflow already returns and which
+`agentJobOutcome` already maps onto `Dead`/`RetryDefault`. A `StoreError` is a transport failure,
+so it maps to the retrying arm — the same treatment `agentJobOutcome`'s `Left _storeError ->
+RetryDefault` already gives a store failure raised from the workflow driver. The failure-path
+learning at line 561 is the one genuinely best-effort write: rename it to say so
+(`recordFailureLearningBestEffort`) and log `agent.memory.best_effort_failed` when it fails rather
+than discarding.
+
+Apply the same treatment in `Shikigami.Agent.Run` at its own severity: `runAgentWithMemory`
+already returns `IO (Either Text AgentRunResult)`, so a failed session open or completion becomes
+a `Left` with the store error rendered, and the failure-path learning becomes an explicit
+best-effort write with a message on stderr. This module is the one-off harness that
+`shikigami-agent-run` drives, so its contract is a human reading a terminal, not a queue.
+
+**Milestone 4 — loud loading, strict startup, loud crons, and enqueue hardening.** Scope:
+`shikigami-core/src/Shikigami/Agent/Loader.hs`, `shikigami-core/src/Shikigami/App/Config.hs`, the
+four worker roles, `shikigami-workers/src/Shikigami/Workers/Config.hs`,
+`shikigami-core/src/Shikigami/Trigger/Enqueue.hs`, and the five other UUIDv5 helpers. At the end,
+load failures are visible in the structured log and refusable at startup, a bad cron cannot hide,
+and the enqueue path is idempotent, total, and honest about time.
+
+Change `loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport` and
+`enabledAgentsFromReport :: Log.Logger -> AgentLoadReport -> IO [AgentDecl]` to emit
+`agents.manifest.load_failed`, `agents.manifest.loaded` (with loaded and failed counts), and
+`agents.manifest.disabled` through `Shikigami.Log` instead of `hPutStrLn stderr`. Keep the
+strict-mode `exitFailure` after the report, so an operator sees every failure before the process
+dies. Delete `loadAgentsIn`, which has no callers.
+
+Add the stable key `agents.strict` (boolean, default `false`, environment variable
+`SHIKIGAMI_AGENTS_STRICT`) to `AppConfig` and pass `Config.agentsStrict config` at all four
+`loadAgentsLoud` call sites in place of the hard-coded `False`. Default `false` so upgrading does
+not suddenly refuse to start a deployment that has been tolerating a broken manifest.
+
+Make an unparseable cron loud in the worker. `Shikigami.Workers.Config.schedulerEnv` is a pure
+function today, which is why it can only drop. Split the parse out into
+`schedulerSchedules :: Log.Logger -> Bool -> [AgentDecl] -> IO (Map Text CronSchedule)` that logs
+`scheduler.cron.invalid` per offender and, under strict mode, exits; have the worker's composition
+root call it once and store the result. The scheduler process's `parseScheduleAgent` already
+raises on a bad cron; convert its `ioError` into the same structured event followed by
+`exitFailure` so both processes report the same way.
+
+Enqueue hardening in `Shikigami.Trigger.Enqueue`:
+
+* Delete `enqueueAddressedRun`. Its `getCurrentTime`-bearing idempotency key (`Enqueue.hs:88-91`)
+  means two invocations for one logical event produce two runs. Its only caller is
+  `shikigami enqueue-run`, which changes to call `enqueueAddressedRunWithKey` with a stable key
+  derived from the agent name and a hash of the payload, and gains an optional `--key` flag for an
+  operator who wants to supply one.
+* Remove the per-send `createQueue` from `enqueueRunJob` (`Enqueue.hs:79`) and add
+  `ensureRunQueue` to the two startup paths that were relying on it:
+  `Shikigami.Workers.Command.Scheduler.runSchedulerCmd` and
+  `Shikigami.Server.Command.EnqueueRun.runEnqueueRun`. The worker and both consumers already
+  reconcile the queue at startup.
+* Stop backdating in `runJobFromEnvelope` (`Enqueue.hs:38-52`). An envelope whose `occurredAt`
+  will not parse must not silently become 1970-01-01. Make the function `IO RunJob`, use
+  `getCurrentTime` for the fallback, and log `stream.envelope.occurred_at_invalid` with the
+  activity id and the raw value. The call site is
+  `shikigami-workers/src/Shikigami/Trigger/Consumer.hs:455`, inside a Hasql transaction, so
+  compute the timestamp before the transaction and pass it in — the same shape
+  `eventInboxHandler` already uses with its `receivedAt` parameter.
+* Fix the UUIDv5 name bytes at all six sites — `Scheduler.hs:67,75`, `Workflow.hs:761`,
+  `SinkOutbox.hs:187`, `Approval.hs:186`, `Delegate.hs:103` — replacing
+  `fmap (fromIntegral . fromEnum) . Text.unpack` with
+  `ByteString.unpack . Data.Text.Encoding.encodeUtf8`. `fromEnum` truncates each `Char` to its low
+  byte, so `"café"` and any name differing only above U+00FF collide. For ASCII the two encodings
+  are identical byte for byte, so no id any checked-in manifest produces moves; only the
+  currently-colliding non-ASCII cases separate. This matters most at `Delegate.hs:103`, which
+  mints a child `WorkflowId`.
+* Keep `runQueueName`'s `error` but confine the partiality with a test asserting
+  `parseQueueName "shikigami_run_jobs"` is `Right`. The literal is a compile-time constant; a test
+  that would catch a future edit is proportionate, and threading an `Either` through every caller
+  is not.
 
 
 ## Concrete Steps
 
-All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami` inside `nix develop`.
+All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami`. The database
+tests need the in-repo Postgres cluster from the dev shell, so prefix commands with
+`nix develop -c` (or run them inside `nix develop`).
 
-Edit per Plan of Work in milestone order; after each:
+Edit per Plan of Work in milestone order. After each milestone:
 
 ```bash
 nix develop -c cabal build all
 ```
 
-Create `shikigami-core/test/Shikigami/RoutingAndLoadingSpec.hs` exporting `tests :: TestTree`; extend `shikigami-core/test/Shikigami/SchedulerSpec.hs` with catch-up cases. Add `Shikigami.RoutingAndLoadingSpec` to `other-modules` of `test-suite shikigami-core-test` in `shikigami-core/shikigami-core.cabal`, and register it in `shikigami-core/test/Main.hs` (SchedulerSpec is already registered).
+Milestone 1 adds cases to two existing modules rather than new files:
+`shikigami-workers/test/Shikigami/Agent/RunJob/WorkerSpec.hs` gains a `routeRunJob` table, and
+`shikigami-core/test/Shikigami/WireCompatSpec.hs` gains the legacy-decode and unchanged-encode
+cases. Both modules are already registered, so no `.cabal` or `Main.hs` edit is needed for them.
+
+Milestone 2 extends `shikigami-workers/test/Shikigami/SchedulerSpec.hs`, also already registered.
+
+Milestone 4's enqueue and loader cases go into a new
+`shikigami-core/test/Shikigami/EnqueueHardeningSpec.hs` exporting `tests :: TestTree`, and into
+the existing `shikigami-core/test/Shikigami/AgentLoaderSpec.hs`. Register the new module in
+`other-modules` of `test-suite shikigami-core-test` in
+`shikigami-core/shikigami-core.cabal:165-183` and add it to the `testGroup` list in
+`shikigami-core/test/Main.hs`.
+
+Run each suite as you go:
 
 ```bash
+nix develop -c cabal test shikigami-workers-test --test-show-details=streaming
 nix develop -c cabal test shikigami-core-test --test-show-details=streaming
 ```
 
-Expected transcript excerpt:
+Expected transcript excerpt once all four milestones land:
 
 ```text
-RoutingAndLoading
-  schedule job with addressed-looking payload routes to agent-run:  OK
-  event job with addressed payload routes to conversation:          OK
-  undecodable event payload for a conversation agent dead-letters:  OK
-  loadAgentsLoud reports and counts the broken manifest:            OK
-  strict mode fails when a manifest fails to load:                  OK
+RunJob
+  schedule job with addressed-looking payload routes to agent-run:   OK
+  event job on the danwa event type routes to conversation:          OK
+  undecodable payload on a conversation route dead-letters:          OK
+  a legacy job with no routeKind reproduces the old decision:        OK
+  trigger kind does not affect any route:                            OK
 Scheduler
-  ...
-  waking a day late arms exactly one future run (SkipMissed):       OK
-  failed schedule enqueue is not treated as an approval timeout:    OK
+  waking a day late arms exactly one future run (SkipMissed):        OK
+  FireAll still arms from the tick that fired:                       OK
+  a failed schedule enqueue leaves the timer for requeue:            OK
+  an unknown timer kind is reported, not silently approved:          OK
+wire compatibility
+  a pre-upgrade run job decodes to the same value:                   OK
+  the encoder still produces the pre-upgrade bytes:                  OK
+  a legacy job decodes with the inferred route:                      OK
+  an explicit route round-trips and adds exactly one key:            OK
+AgentLoader
+  loadAgentsLoud reports the broken manifest through the logger:     OK
+  strict mode refuses to start when a manifest fails:                OK
+EnqueueHardening
+  runQueueName parses:                                               OK
+  an unparseable occurredAt does not become the epoch:               OK
+  the same logical event enqueues one stable idempotency key:        OK
+  UUIDv5 ids separate names that differ above U+00FF:                OK
 ```
 
-Then the full suite:
+Then the whole suite and the specification gate:
 
 ```bash
 nix develop -c cabal test all
+nix develop -c just keiro-gate
 ```
 
-Manual check of loud loading (uses the checked-in broken manifest):
+Manual check of loud loading, using the checked-in broken manifest and no new config file:
 
 ```bash
-cabal run shikigami-worker -- --config config/worker-strict.yaml 2>&1 | head
-# expect: "[load] FAILED agents/broken.dhall: ..." then "[load] loaded N of M ... (1 failed)"
-# and a non-zero exit because agents.strict=true in the checked config
+nix develop -c cabal run shikigami-worker -- --set agents.strict=true 2>&1 | head
 ```
+
+Expect one JSON line per failure and a summary line, then a non-zero exit:
+
+```text
+{"level":"error","event":"agents.manifest.load_failed","path":"agents/broken.dhall","error":"..."}
+{"level":"error","event":"agents.manifest.loaded","loaded":3,"total":4,"failed":1}
+```
+
+Manual check of scheduler catch-up, against the dev cluster:
+
+```bash
+nix develop -c just create-database
+nix develop -c cabal run shikigami-scheduler        # let it arm agents/heartbeat.dhall, then Ctrl-C
+# wait five minutes
+nix develop -c cabal run shikigami-scheduler        # let it run one poll, then Ctrl-C
+psql -h "$PGHOST" -d "$PGDATABASE" -c 'SELECT count(*) FROM pgmq.q_shikigami_run_jobs;'
+```
+
+Expect a count of one rather than five. Repeating with `--set scheduler.catch_up=fire_all`
+reproduces the old behavior and is the fails-before demonstration.
 
 
 ## Validation and Acceptance
 
-Routing (fails before): table-drive every `RunRouteKind`/payload combination. An agent
-route with addressed-looking payload remains `AgentRunRoute`; a conversation route with
-invalid addressed payload is `RouteError`; trigger kind does not affect either result.
-Decode a golden old job without the discriminator and prove the compatibility policy.
+**Routing** — fails before the change. Table-drive every `RunRouteKind`/payload combination and
+assert that `triggerKind` never affects the result: an `AgentWorkflowRoute` job whose payload
+decodes cleanly as an `AddressedMessage` still yields `AgentRunRoute`; a `ConversationWorkflowRoute`
+job whose payload is not an addressed message yields `RouteError`; a `ConversationWorkflowRoute`
+job with a valid payload yields `ConversationRoute`. Today the first of those runs a conversation
+turn, which is the bug. Prove the dead-letter path end-to-end by extending the existing "permanent
+outcome reaches the reconciled DLQ" case in `WorkerSpec` with a route-error job and asserting the
+DLQ depth. In `WireCompatSpec`, assert that the captured `preUpgradeRunJob` literal still decodes,
+that re-encoding it produces the identical bytes, that its decoded `routeKind` is
+`InferredLegacyRoute`, and that a job carrying an explicit route encodes with exactly one
+additional key.
 
-Scheduler catch-up (fails before): in `SchedulerSpec`, arm an agent on `* * * * *` with `now` set to a fixed instant, then invoke the fire action with a `TimerRow` whose `dueAt` is 24 hours in the past under `SkipMissed`. Assert exactly one run job is enqueued and the newly-armed timer's `fireAt` is `> now`. The fails-before counterpart drives the current `FireAll`-equivalent path and observes many enqueues draining across passes. Read the queue with the pgmq test helpers the suite already uses. Also assert: a schedule fire whose `enqueueScheduledRun` fails (point the pool at a closed connection or use a fire action stub) leaves the timer for requeue and does not invoke `approvalTimeoutFireAction` — before the change the `Nothing` fell through to the approval path.
+**Scheduler catch-up** — fails before. In `SchedulerSpec`, arm an agent on `* * * * *` at a fixed
+instant, then invoke the fire action with a `TimerRow` whose `dueAt` is 24 hours in the past under
+`SkipMissed`. Assert that exactly one run job is enqueued and that the newly armed timer's
+`fireAt` is strictly greater than `now`. The fails-before counterpart runs the same scenario under
+`FireAll` and observes the newly armed timer still in the past. Read the queue with the pgmq
+helper `readRunJobs` the spec already has. Separately assert that a schedule fire whose
+`enqueueScheduledRun` fails leaves the timer unfired — point the pool at a closed connection — and
+that the failure produced a `scheduler.schedule.enqueue_failed` log line; capture the logger output
+with `Shikigami.Log.newHandleLogger` over a temporary handle. Finally, assert that a `TimerRow`
+carrying a payload with an unrecognized `kind` returns `Nothing` and logs
+`scheduler.timer.unknown_kind`, and that an approval-timeout payload still reaches
+`approvalTimeoutFireAction`.
 
-Loud loading (fails before): call `loadAgentsLoud "agents" False` and assert the report contains an `AgentLoadFailed` entry for `broken`, `loadedAgents` excludes it, and captured stderr contains `FAILED agents/broken.dhall`; call with strict `True` and assert it exits. Before this plan, `loadAgents` returns only the filtered list with no diagnostic or preserved failure entry.
+**Kioku propagation** — fails before. Drive each truth-bearing write against an unavailable store
+(`withShikigamiMigratedDatabase` then close the pool, or point `connectionSettings` at a database
+that does not exist) and assert that `runAgentRunWorkflow` does not return
+`Completed (Right …)` and that `agentJobOutcome` over the result is `RetryDefault` rather than
+`Done`. Today the same scenario returns a completed, successful run. Separately, prove that the
+one explicitly best-effort write logs `agent.memory.best_effort_failed` and lets the run finish.
 
-Kioku propagation: drive each truth-bearing write against an unavailable store and
-assert the run does not complete successfully and plan 17 returns the expected retry/
-failure decision. Separately prove an explicitly best-effort fixture logs/counts and
-continues.
+**Loud loading** — fails before. Call `loadAgentsLoud logger "../agents" False` against a captured
+logger and assert the emitted JSON contains `agents.manifest.load_failed` with
+`"path":"../agents/broken.dhall"`, that the report retains an `AgentLoadFailed` entry for it, and
+that `loadedAgents` excludes it. Call with strict `True` in a subprocess and assert a non-zero
+exit. Before this plan the strict path is unreachable because nothing supplies the flag.
 
-Enqueue hardening: unit tests asserting `runQueueName` is a valid queue (no partial crash), that `runJobFromEnvelope` on an envelope with a bogus `occurredAt` does not produce the epoch, that the addressed enqueue for one logical event twice yields one stable idempotency key, and that `scheduleTimerId "café" t` differs from `scheduleTimerId "caf\9" t`-style near-collisions (UTF-8 bytes, not truncated `fromEnum`).
+**Loud crons** — fails before. Build an `AgentDecl` with `trigger = Schedule { cron = "not a
+cron" }`, run it through the worker's schedule extraction, and assert `scheduler.cron.invalid`
+names the agent; under strict mode assert the process refuses. Today the agent is dropped with
+nothing logged.
 
-Operationally: run the scheduler, stop it for several minutes on a `* * * * *` agent, restart it, and observe exactly one enqueued run rather than one per missed minute (`SELECT count(*) FROM pgmq.q_shikigami_run_jobs`).
+**Enqueue hardening** — fails before, except the queue-name case which is a regression guard.
+Assert `parseQueueName "shikigami_run_jobs"` is `Right`. Assert `runJobFromEnvelope` on an envelope
+with a bogus `occurredAt` produces a timestamp near `getCurrentTime` and not
+`1970-01-01T00:00:00Z`. Assert two calls of the addressed-enqueue path for one logical event yield
+one identical idempotency key. Assert `scheduleTimerId "café" t` differs from
+`scheduleTimerId "caf\xE9\&" t`-style near-collisions and that `scheduleTimerId "heartbeat" t` is
+unchanged from the value the current code produces, proving ASCII ids did not move.
+
+**Operationally**, the scheduler check in Concrete Steps is the human-visible acceptance: stop the
+scheduler for several minutes on a `* * * * *` agent, restart it, and observe one enqueued run
+rather than one per missed minute.
 
 
 ## Idempotence and Recovery
 
-All changes are code-only; no migrations. Re-running builds and tests is safe (each DB-backed test gets a fresh database). The routing and scheduler changes are safe to deploy while jobs and timers are in flight: existing queued jobs still decode and route (now correctly), and existing armed timers fire once and re-arm under the new policy — a one-time drain of any pre-existing stale backlog may occur on first upgrade unless operators clear it, which is noted here as expected. The loud-loading default stays lenient (`agents.strict = false`), so upgrading does not suddenly refuse to start. Enqueue-key changes affect only newly produced jobs; in-flight jobs with old keys are unaffected. Rolling back reintroduces the silences but is otherwise clean.
+All changes are code-only; there are no migrations. Re-running builds and tests is safe, and each
+database-backed test gets a fresh database through `withShikigamiMigratedDatabase`.
+
+The routing change is safe to deploy while jobs are in flight. A job enqueued by the old code has
+no `routeKind` key, decodes to `InferredLegacyRoute`, and is handled by the same duck-typed
+decision it would have received before, with a warning line naming it. A parked workflow whose
+`ingest-job` step was journaled before the deploy replays identically, because the codec omits the
+field when it holds the legacy default — the property `WireCompatSpec` pins. Once
+`worker.job.route_inferred` stops appearing in production logs, the constructor and its branch can
+be deleted in a follow-up; that deletion is not part of this plan.
+
+The scheduler change is safe with timers armed. Each armed timer fires once and re-arms under the
+new policy. On the first start after the upgrade, any pre-existing stale backlog collapses to a
+single run rather than draining — that is the point — but the one stale tick already armed does
+still fire, so expect exactly one catch-up run per scheduled agent. Rolling back re-arms from the
+fired `dueAt` again and resumes the old behavior; no state is left behind that the old code cannot
+read.
+
+The loud-loading default stays lenient (`agents.strict = false`), so upgrading never turns a
+tolerated broken manifest into a failed deploy without an explicit configuration change. The
+catch-up default does change behavior on upgrade, deliberately and in the safe direction; setting
+`scheduler.catch_up=fire_all` restores the old behavior without a rollback.
+
+Enqueue-key changes affect only newly produced jobs; jobs already queued under old keys are
+unaffected and still process. The UUIDv5 encoding change moves no id for any ASCII name, so
+in-flight timers, outbox rows, and delegated child workflows keyed by ASCII agent names are
+untouched; a non-ASCII agent name would get a new id, which is the collision this fixes, and any
+in-flight timer for such a name should be drained before the deploy.
+
+Each milestone leaves the tree building and the suite green, so a partially completed plan is a
+safe stopping point.
 
 
-## Portfolio Reconciliation (2026-07-30)
+## Portfolio Reconciliation (revised 2026-08-20)
 
-This plan hard-depends on plans 17, 18, 37, and 47. Consume Shibuya 0.8's public
-`Message`/`AckDecision` surface and the final zero-based attempt taxonomy from plan 17. Do not
-recreate queue setup, raw environment configuration, or a second agent loader.
+Every plan this one hard-depended on has landed. Plan 17 delivered the retry/timeout/heartbeat
+semantics and moved run-job acknowledgement onto `keiro-pgmq`'s `Job`/`JobOutcome`; plan 18
+delivered `enqueueRunJobTx` and `ensureRunQueue` and the atomic inbox-to-queue boundary; plan 36
+delivered the seven-package split and the single agent loader; plan 37 delivered the Settei
+configuration surface; plan 47 and plan 53 delivered the current dependency cohort; plan 33
+delivered this plan's own `AgentLoadReport` slice.
+
+Consume those surfaces rather than recreating them. Do not construct a shibuya `AckDecision` for a
+run job, do not add a second queue-initialization helper, do not add a second agent-directory
+traversal, and do not read the process environment directly from scheduler or loader code — every
+setting arrives through `AppConfig`.
+
+Downstream, plan 30 renders `AgentLoadReport` in an operator `agents list` command, plan 33 has
+already built enabled-agent selection on it, and plan 23 will persist it against meibo principals.
+This plan reports and logs; it does not persist.
+
+One correction to propagate upward when this plan lands: MasterPlan 3's note that strict mode must
+expect two failing fixtures under `agents/` is wrong, because the traversal is not recursive and
+never reaches `agents/detectors/schema.dhall`. There is exactly one expected failure,
+`agents/broken.dhall`.
 
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36/37, 17, and 18. Catch-up/strict settings are Settei values;
-no scheduler or loader code reads the environment directly.
+Hard dependencies, all satisfied: plans 17, 18, 33, 36, 37, and 47. Catch-up and strict settings
+are Settei values resolved into `AppConfig`; no scheduler or loader code reads the environment
+directly.
 
-Libraries and why: aeson (`fromJSON` for the routing decision), keiro (`Keiro.Timer` — `TimerRow`, `scheduleTimerOnceTx`, and the timer worker used by the scheduler; a past-due timer fires late with no built-in catch-up, verified keiro `src/Keiro/Timer.hs`), shibuya-core (`Shibuya.Core.Ack.AckDecision`/`DeadLetterReason (InvalidPayload, PoisonPill)` for route-error dead-lettering), `base`/`text` (`Data.Text.Encoding.encodeUtf8` for the UUIDv5 fix; `System.Exit.exitFailure` for strict mode), plan 37's Settei configuration, and the existing `Shikigami.Agent.Loader.loadAgent`.
+Libraries and why. `aeson` supplies `fromJSON` for the route validation and the hand-written
+`RunJob` codec. `keiro` supplies `Keiro.Timer` — `TimerRow`, `TimerRequest`, `scheduleTimerOnceTx`
+— and `Keiro.Workflow.Sleep.runWorkflowTimerWorker`, whose fire action returns
+`Maybe EventId` and treats `Nothing` as "not fired, leave it for requeue" (verified in keiro
+`keiro/src/Keiro/Timer.hs:159-188` and `keiro/src/Keiro/Workflow/Sleep.hs:390-433`). `keiro-pgmq`
+supplies `JobOutcome`, the typed `Job`, and the reconciled DLQ that a `RouteError` lands in.
+`cron`, through `Shikigami.Trigger.Schedule`, supplies `nextDue`. `text` supplies
+`Data.Text.Encoding.encodeUtf8` for the UUIDv5 fix, and `base` supplies `System.Exit.exitFailure`
+for strict mode. `settei` supplies the configuration declaration. `dhall`, through
+`Shikigami.Agent.Loader.loadAgent`, supplies manifest loading.
 
-Signatures that must exist at the end (full module paths):
+Signatures that must exist at the end, with full module paths:
 
 ```haskell
--- shikigami-core/src/Shikigami/Worker.hs
-data Shikigami.Worker.RunRoute = ConversationRoute !AddressedMessage | AgentRunRoute | RouteError !Text
-Shikigami.Worker.routeRunJob :: RunJob -> RunRoute
+-- shikigami-core/src/Shikigami/Agent/RunJob.hs
+data RunRouteKind = AgentWorkflowRoute | ConversationWorkflowRoute | InferredLegacyRoute
+-- RunJob gains routeKind :: !RunRouteKind, with hand-written ToJSON/FromJSON that
+-- omit the key for InferredLegacyRoute and restore it when the key is absent.
 
--- shikigami-api/src/Shikigami/Api/RunJob.hs
-data RunRouteKind = AgentWorkflowRoute | ConversationWorkflowRoute
--- RunJob gains routeKind with explicit backward-compatible decoding.
+-- shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs
+data Shikigami.Agent.RunJob.Worker.RunRoute
+  = ConversationRoute !AddressedMessage | AgentRunRoute | RouteError !Text
+Shikigami.Agent.RunJob.Worker.routeRunJob :: RunJob -> RunRoute
 
--- shikigami-core/src/Shikigami/Trigger/Scheduler.hs
-data Shikigami.Trigger.Scheduler.CatchUpPolicy = SkipMissed | CoalesceToLatest | FireAll
--- SchedulerEnv gains: catchUpPolicy :: !CatchUpPolicy
-Shikigami.Trigger.Scheduler.armNextRun ::
-  (Store :> es, IOE :> es) => CatchUpPolicy -> CronSchedule -> Text -> UTCTime -> Eff es ()
+-- shikigami-core/src/Shikigami/Trigger/Schedule.hs
+data Shikigami.Trigger.Schedule.CatchUpPolicy = SkipMissed | FireAll
+
+-- shikigami-core/src/Shikigami/App/Config.hs
+-- AppConfig gains: schedulerCatchUp :: !CatchUpPolicy   -- key scheduler.catch_up
+-- AppConfig gains: agentsStrict     :: !Bool            -- key agents.strict
+
+-- shikigami-workers/src/Shikigami/Trigger/Scheduler.hs
+-- SchedulerEnv gains: catchUpPolicy :: !CatchUpPolicy, logger :: !Log.Logger
+Shikigami.Trigger.Scheduler.shikigamiTimerFallback ::
+  (Store :> es, IOE :> es) => SchedulerEnv -> TimerRow -> Eff es (Maybe EventId)
 
 -- shikigami-core/src/Shikigami/Agent/Loader.hs
-Shikigami.Agent.Loader.loadAgentsReport :: FilePath -> IO AgentLoadReport
-Shikigami.Agent.Loader.loadAgentsLoud :: FilePath -> Bool -> IO AgentLoadReport
-Shikigami.Agent.Loader.loadedAgents :: AgentLoadReport -> [AgentDecl]
+Shikigami.Agent.Loader.loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport
+Shikigami.Agent.Loader.enabledAgentsFromReport :: Log.Logger -> AgentLoadReport -> IO [AgentDecl]
+-- loadAgentsIn is removed.
 
 -- shikigami-core/src/Shikigami/Trigger/Enqueue.hs
--- enqueueRunJob no longer calls createQueue; runJobFromEnvelope no longer backdates to epoch;
--- enqueueAddressedRun removed or made deterministic. Coordinate ensureRunQueue with docs/plans/18.
+Shikigami.Trigger.Enqueue.runJobFromEnvelope :: Log.Logger -> AgentDecl -> ActivityEnvelope -> IO RunJob
+Shikigami.Trigger.Enqueue.enqueueAddressedRunWithKey ::
+  Pool -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
+-- enqueueAddressedRun is removed; enqueueRunJob no longer calls createQueue.
 ```
 
-Hard dependencies: plan 17 owns the ack/retry taxonomy consumed by `RouteError`; plan 18
-owns `enqueueRunJobTx`/`ensureRunQueue`, which this plan's hardened IO helpers consume.
-Downstream consumers of `AgentLoadReport`: plan 30 (operator inspection), plan 33
-(enabled-agent selection), and plan 23 (durable load state/lifecycle). This plan only
-reports and logs; plan 23 owns persistence.
+Documentation and durable-context updates that ship with the code:
+`docs/operations/configuration.md` gains rows for `scheduler.catch_up` and `agents.strict`;
+`config/shikigami.example.yaml` gains both keys; and
+`docs/architecture/shikigami-domain-inventory.md:157-165` is corrected to describe nine `RunJob`
+fields including `routeKind`, noting that the specification still inventories only the three it
+refers to. Write `docs/adr/0012-*.md` recording the route discriminator and the rule that a job
+without one keeps its historical behavior — the corpus is plain Markdown with sequential
+`NNNN-kebab-slug.md` names and no OKF frontmatter, per `docs/adr/README.md`, and 0011 is the
+highest allocated number today.
 
 
 ## Revision Notes
@@ -313,3 +1003,26 @@ reports and logs; plan 23 owns persistence.
 - 2026-07-22: Replaced trigger-kind inference with an explicit route discriminator,
   made truth-bearing Kioku failures propagate, moved settings to Settei, and added the
   old-job compatibility gate.
+- 2026-08-20: Full refresh against the delivered tree. The plan's intent survived; most of its
+  premises did not. Every file path was re-verified and corrected: the worker is
+  `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs`, the scheduler is
+  `shikigami-workers/src/Shikigami/Trigger/Scheduler.hs`, `RunJob` is
+  `shikigami-core/src/Shikigami/Agent/RunJob.hs` (the previously named
+  `shikigami-api/src/Shikigami/Api/RunJob.hs` never existed), and `shikigami-cli` is gone. Plan
+  17's landing replaced the shibuya `AckDecision` vocabulary this plan was written against with
+  `keiro-pgmq`'s `JobOutcome`, so `RouteError` now dead-letters through the handler's existing
+  `deadOutcome`. Two claims were found to be wrong and are corrected rather than carried forward:
+  the approval-timeout fall-through does not misfire, because both timer payloads are
+  kind-guarded, so Milestone 2's dispatch change is re-scoped to explicitness and diagnostics; and
+  `SkipMissed` needs no bounded loop, because `nextDue` already returns the first strictly-future
+  tick. Three constraints that did not exist at authoring time are now honored: `RunJob` is
+  journaled and its bytes are pinned by `WireCompatSpec`, so the new field follows ADR 0011's
+  omit-when-default codec and gains an `InferredLegacyRoute` compatibility constructor;
+  `CatchUpPolicy` must live in `shikigami-core` because `AppConfig` carries it and core cannot
+  depend on workers; and metrics do not exist yet, so Milestone 3 logs only. `CoalesceToLatest`
+  was dropped as indistinguishable from `SkipMissed` at minute granularity. Milestone 4 grew the
+  two follow-through items the `createQueue` removal exposes (`ensureRunQueue` in the scheduler
+  and in `enqueue-run`), three more UUIDv5 sites than the plan listed, and the loader's move onto
+  `Shikigami.Log`. Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective
+  were all brought in line with what has actually landed, including the report slice plan 33
+  delivered.
