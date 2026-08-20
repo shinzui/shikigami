@@ -121,13 +121,17 @@ This section must always reflect the actual current state of the work.
       the plan's per-record heartbeat would have failed an idle topic.
 - [x] (2026-08-20) M2: readiness pings PostgreSQL through the process's real pool on every worker
       role; Kafka and downstream HTTP are not consulted.
-- [ ] M3: fail-fast supervision — any loop's termination, normal or exceptional, tears down the
-      siblings and exits the process non-zero; proven by fault injection in the workers test suite.
-- [ ] M3: `runResumeWorker` (`Agent/Workflow/Resume.hs:36-42`) converted from
-      run-once-and-return-on-error into restart-with-backoff, so a transient store blip does not
-      require a full process restart while a persistent failure still exits after a ceiling.
-- [ ] M3: `runQueueWorker` (`Workers/Registry.hs:52-84`) treats a clean `waitApp` return as fatal
-      rather than falling through to `pure ()`.
+- [x] (2026-08-20) M3: `Shikigami.Workers.Supervision.superviseLoops` replaces the nested
+      `concurrently_`. Any loop ending — by throwing or by returning — cancels the siblings and
+      propagates, so the process exits non-zero. Proven by four cases in
+      `Shikigami.Workers.SupervisionSpec` over injected loop actions rather than by a private
+      fault-injection hook on `WorkerEnv`; see the Decision Log.
+- [x] (2026-08-20) M3: `runResumeWorker` restarts its runner with capped backoff
+      (1s→30s, ceiling 5) and exits with `LoopExited ResumeLoop` once exhausted. A run that lasted
+      long enough resets the tally. The plan's premise about this loop was wrong — see Surprises &
+      Discoveries.
+- [x] (2026-08-20) M3: `runQueueWorker` logs the full shibuya metrics map and throws
+      `LoopExited QueueLoop` when `waitApp` returns, instead of falling through to `pure ()`.
 
 
 ## Surprises & Discoveries
@@ -227,6 +231,39 @@ implementation. Provide concise evidence.
   fails the build when the domain library links HTTP route execution. `Shikigami.Health.Ping`
   therefore stops at `databaseReachable :: Pool -> IO Bool` plus the operator-facing check name,
   and each probe owner wraps that in its own `boolCheck`.
+
+- **(2026-08-20, implementation) The resume loop's headline defect was not what the plan said,
+  and the correct fix is narrower.** The plan calls `runResumeWorker` "the worst of them": it
+  "calls keiro's resume worker *once*, and on a `Left` store error it logs one line and returns —
+  permanently ... There is no surrounding `forever`."
+
+  There is a `forever` — it is one level down.
+  `Keiro.Workflow.Resume.runWorkflowResumeWorkerWith` (keiro's
+  `keiro/src/Keiro/Workflow/Resume.hs:675-684`) is itself
+  `forever $ do resumeWorkflowsOnce ... \`catchError\` logPass \`catchSync\` logPass;
+  threadDelay (pollInterval opts)`. A transient store error during a pass is caught by keiro,
+  logged as `ResumePassFailed`, and the loop continues. It never reached shikigami's `Left` arm.
+
+  What does reach that arm is a failure of the runner *as a whole* — the store resource failing
+  to acquire, for instance — returned as `Left` by `runAppIO`. That case was exactly as bad as
+  the plan described: one log line, a return, and three loops running on with nothing resuming
+  workflows. A `Right ()` return is equally wrong, because a `forever` loop returning normally
+  means something ended it.
+
+  So the fix is restart-with-backoff around the whole runner rather than around a single pass,
+  and both return shapes are treated as "the runner stopped".
+
+- **(2026-08-20, implementation) The resume loop cannot have a heartbeat, so it is covered by
+  fail-fast alone.** Because its passes happen inside keiro's `forever`, shikigami never gets
+  control per pass. The one hook available, `WorkflowResumeOptions.logEvent`, receives only
+  `ResumeLogEvent` values, and every constructor is a failure — `ResumeUnknownName`,
+  `ResumeTransientError`, `ResumeWorkflowCrashed`, `ResumeCrashRecordSkipped`,
+  `ResumeWorkflowMarkedFailed`, `ResumePassFailed`. There is no per-pass success event to beat
+  on, so a healthy quiet resume loop would beat nothing and a registered staleness bound would
+  fail liveness on a perfectly working loop. `ResumeLoop` is therefore deliberately absent from
+  every heartbeat registry. Its coverage is complete anyway: the only way the loop can stop is by
+  returning, and returning now exits the process. A per-pass success event in keiro would let
+  this loop join the others; that is a reasonable upstream ask but not one this plan needs.
 
 - (Findings from implementation go below this line.)
 
@@ -350,6 +387,61 @@ Record every decision made while working on the plan.
   one anyway. Consumer-loop death is still surfaced through the in-process heartbeat and
   fail-fast supervision.
   Date: 2026-07-22, amended 2026-08-19
+
+
+- Decision: Prove fail-fast with injected loop actions rather than a fault-injection hook on
+  `WorkerEnv`.
+  Rationale: the plan specified "a private test hook that makes one loop body `throwIO` after N
+  iterations". Extracting `superviseLoops :: Log.Logger -> [(LoopName, IO ())] -> IO ()` reaches
+  the same proof without putting a test seam on a production record — a test supplies whatever
+  loop actions it wants, including throwing and returning ones. It is also a better design
+  independently: the nested `concurrently_` it replaced had no name, no place to log which loop
+  died, and no way to treat a clean return as fatal. The same reasoning produced
+  `runResumeLoopWith` (the retry policy over an injected runner and sleeper),
+  `loopLivenessAt` (the liveness verdict at an injected instant), and `processorStateVerdict`
+  (the supervisor-state mapping without a running supervisor). All four are ordinary parameters,
+  not flags, so no production path can select test behavior.
+  Date: 2026-08-20
+
+- Decision: Both Kafka consumers report liveness through shibuya's `ProcessorMetrics` rather than
+  beating per record, and a `Processing` state whose `lastActivity` is past the loop's bound is
+  unhealthy.
+  Rationale: a consumer on a quiet topic processes no records, so the plan's per-record heartbeat
+  would have gone stale and failed liveness for having no work. Shibuya reports that consumer as
+  `Idle`, which is the honest answer. Reading the supervisor also catches the opposite error a
+  bare state check would miss: `Processing` is not by itself good news, since a record in flight
+  for ten minutes is a wedge. `Consumer.hs` gained one narrow callback
+  (`type OnSupervisor = Maybe (Master, ProcessorId) -> IO ()`) reporting what it has rather than
+  what that means, so the acknowledgement boundary keeps no health vocabulary; `Subscription.hs`
+  translates. Between connections the loop falls back to a heartbeat beaten on each reconnect
+  attempt, which keeps a broker outage looking like a loop retrying.
+  Date: 2026-08-20
+
+- Decision: The PostgreSQL ping lives in `shikigami-core` as `Shikigami.Health.Ping`, stopping at
+  `IO Bool` rather than producing a `ProbeCheck`.
+  Rationale: `shikigami-server` and `shikigami-workers` both answer `/health/ready` and neither
+  may depend on the other, so one definition of "reachable" has to sit in core. But core cannot
+  depend on `servant-health`, which pulls in `servant-server`, and
+  `Shikigami.PackageArchitectureSpec` fails the build when the domain library links HTTP route
+  execution. Each probe owner wraps the `Bool` in its own `boolCheck` under the shared operator-
+  facing name `postgres`.
+  Date: 2026-08-20
+
+- Decision: `roleRequiredKeys ServerRole` gains `database.connection_string`.
+  Rationale: giving `/health/ready` a real PostgreSQL ping means a server with no connection
+  string can never report ready. Failing at configuration time with a named key beats a process
+  that binds a socket and then fails every probe forever. `AppConfigSpec`'s precedence helper,
+  which deliberately used the role with no required keys, moved to `AdminRole`.
+  Date: 2026-08-20
+
+- Decision: `health.port` is declared optional with a per-role default table
+  (`defaultHealthPort`) rather than a single Settei `withDefault`.
+  Rationale: the four worker processes routinely run on one host, so a shared default would make
+  three of them fail to bind; and one `Config AppConfig` declaration cannot express four
+  role-dependent defaults. Roles with no probe listener of their own map to `Nothing`, so
+  `shikigami-server` keeps answering on its `http.port` listener instead of opening a second
+  socket.
+  Date: 2026-08-20
 
 
 ## Outcomes & Retrospective

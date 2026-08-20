@@ -70,14 +70,10 @@ module Shikigami.Health.Worker
     probeApplication,
     runProbeListener,
     serveProbesWith,
-
-    -- * Loop death
-    LoopExited (..),
   )
 where
 
 import Control.Concurrent.Async (concurrently_)
-import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
 import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import Data.Map.Strict (Map)
@@ -416,17 +412,3 @@ serveProbesWith logger bindHost maybePort pool registry work =
     Just bindPort -> do
       (livenessCheck, readinessCheck) <- mkWorkerHealthChecks pool registry
       concurrently_ (runProbeListener logger bindHost bindPort livenessCheck readinessCheck) work
-
--- ── Loop death ──────────────────────────────────────────────────────────────
-
--- | A loop stopped when it was supposed to run forever.
---
--- Thrown so that the exception escapes into the @concurrently_@ that composes
--- the loops, which cancels the siblings and takes the process down with a
--- non-zero exit. That is the whole supervision strategy: a dead loop must not
--- leave the other three running around a corpse, and an external supervisor
--- restarts a clean process better than this one could restart part of itself.
-newtype LoopExited = LoopExited LoopName
-  deriving stock (Eq, Show)
-
-instance Exception LoopExited

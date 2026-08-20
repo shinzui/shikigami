@@ -5,6 +5,7 @@ import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
+import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -16,6 +17,7 @@ main =
           HealthWorkerSpec.tests,
           RunJobWorkerSpec.tests,
           SchedulerSpec.tests,
-          StreamInboxSpec.tests
+          StreamInboxSpec.tests,
+          SupervisionSpec.tests
         ]
     )

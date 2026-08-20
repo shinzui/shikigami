@@ -23,28 +23,39 @@ module Shikigami.Workers.Registry
   )
 where
 
-import Control.Concurrent.Async (concurrently_)
+import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueue, jobProcessorWithContext, runJobEff, runJobWorkers)
 import Kioku.App (AppEnv (..))
-import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, waitApp)
+import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, getAppMetrics, waitApp)
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
-import Shikigami.Health.Worker (LoopName (QueueLoop), registerReport, supervisedLoopVerdict)
+import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, ResumeLoop, TimerLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envHeartbeats, envLogger)
+import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 
 -- | Start every worker loop and run until the process is stopped.
+--
+-- 'superviseLoops' rather than nested @concurrently_@: all four are infinite
+-- loops, so any one of them ending — by throwing /or/ by returning — must take
+-- the process down. Nested @concurrently_@ propagates the first but treats the
+-- second as a branch that finished, which is how this process used to end up
+-- running three loops around a corpse.
 runWorkers :: WorkerEnv -> IO ()
 runWorkers env = do
-  Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
-  concurrently_
-    (runQueueWorker env)
-    (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
+  Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= jobName runJob]
+  superviseLoops
+    (envLogger env)
+    [ (QueueLoop, runQueueWorker env),
+      (ResumeLoop, runResumeWorker env),
+      (OutboxLoop, runOutboxPublisher env),
+      (TimerLoop, runTimerWorker env)
+    ]
 
 -- | The id shibuya knows the run-job processor by.
 --
@@ -94,6 +105,19 @@ runQueueWorker env = do
         -- the registry is filled here rather than at boot.
         liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdict QueueLoop (getAppMaster app) queueProcessorId))
         waitApp app
+        -- Reaching here means the supervisor stopped. Under @IgnoreFailures@ a
+        -- processor that died takes its supervisor with it without raising
+        -- anything, so this is a silent death and not a clean shutdown. Report
+        -- what each processor was doing before throwing: which one stopped, and
+        -- in what state, is the one line an operator will want.
+        metrics <- getAppMetrics app
+        liftIO do
+          -- The whole metrics map, keyed by processor id: which processor
+          -- stopped, in what state, and with what counters behind it. Shibuya's
+          -- own codecs render it, so this line cannot drift from the states the
+          -- probe reads.
+          Log.logError (envLogger env) "worker.queue.stopped" ["processors" Aeson..= metrics]
+          throwIO (LoopExited QueueLoop)
   case result of
     Left perr -> do
       Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
