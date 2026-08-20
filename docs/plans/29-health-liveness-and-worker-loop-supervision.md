@@ -13,381 +13,654 @@ master_plan: "docs/masterplans/6-operations-and-observability-run-shikigami-as-a
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
+**This plan was refreshed on 2026-08-19 against the delivered tree, and it got materially
+smaller.** Its upstream blocker is discharged, roughly half of Milestone 1 has already shipped
+inside another plan, and two of its starting-state claims are no longer true of the code. See the
+Revision Note of 2026-08-19.
+
 
 ## Purpose / Big Picture
 
-Shikigami's `worker` command runs four concurrent loops — the pgmq queue processor, the keiro
-workflow-resume worker, the keiro outbox publisher, and the keiro timer worker
-(`shikigami-core/src/Shikigami/Worker.hs:70`). Today any one of them can die while the process
-stays alive and healthy-looking: the queue processor runs under shibuya's `IgnoreFailures`
-strategy (`Worker.hs:78`), which explicitly does not restart or propagate a failed processor;
-the resume loop returns permanently on the first store error (`Worker.hs:98-101`, no retry
-loop); and the outbox and timer loops catch every error, log it, and spin again
-(`Worker.hs:110,121`). A silently dead loop means runs stop being resumed, sinks stop being
-delivered, or timers stop firing — with no signal to any operator or supervisor. There is no
-HTTP health endpoint anywhere in the runtime; nothing can be probed by process-compose,
-systemd, or a load balancer.
+The `shikigami-worker` executable runs four concurrent loops — the run-job queue processor, the
+keiro workflow-resume worker, the sink outbox publisher, and the keiro timer worker. They are
+composed with nested `concurrently_` in
+`shikigami-workers/src/Shikigami/Workers/Registry.hs:41-46`. Three of the four can still die, or
+wedge, while the process stays alive and looks fine.
 
-After this plan, each loop records a heartbeat timestamp when it makes progress, and the
-plan-36 server package exposes typed Servant `NamedRoutes` for exact `GET /health/live` and
-`GET /health/ready`, and any loop's death terminates the process with a non-zero exit so
-a supervisor restarts it. `/health/live` returns 200 only when the process is up and every
-loop's heartbeat is recent; `/health/ready` returns 200 only when PostgreSQL is reachable.
-Kafka and downstream HTTP services are deliberately not readiness dependencies: an outage
-there must not cascade by removing otherwise healthy pods. These endpoints are what
-`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md` wires
-its readiness probes to.
+The resume loop is the worst of them: `runResumeWorker`
+(`shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs:36-42`) calls keiro's resume worker
+*once*, and on a `Left` store error it logs one line and returns — permanently. There is no
+surrounding `forever`. From that moment on, no suspended workflow in the process is ever resumed
+again, and nothing anywhere says so. The outbox publisher
+(`shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs:36-52`) and the timer worker
+(`shikigami-workers/src/Shikigami/Trigger/Timer.hs:32-41`) each `forever` { do one pass; log a
+`Left`; sleep a second }, which is right for a transient store fault and wrong for a programming
+exception — any exception their bodies throw escapes into `concurrently_` and takes the process
+down, which is actually the behaviour we want, but nothing distinguishes that from a clean exit.
+The queue processor runs under shibuya's `IgnoreFailures` strategy
+(`Registry.hs:72`), which by definition never restarts or propagates a failed child; if it stops,
+`waitApp` returns, `runQueueWorker` falls through to `pure ()` (`Registry.hs:84`), and the
+remaining three loops keep running around a corpse.
+
+A silently dead loop means runs stop being resumed, sinks stop being delivered, or timers stop
+firing — with no signal to any operator or supervisor. And while the HTTP server now answers
+`GET /health/live` and `GET /health/ready`, its liveness check is "we answered the request" and
+its readiness check is an empty list (`shikigami-server/src/Shikigami/Health/Handler.hs:58-67`).
+No worker-role process serves a probe at all, so there is nothing for process-compose, systemd,
+or a load balancer to poll for the loops that do the actual work.
+
+After this plan, three things are true.
+
+Each loop records a heartbeat timestamp when it makes progress, and the worker-role processes
+serve the same `GET /health/live` and `GET /health/ready` contract the server already serves —
+using the released external `servant-health` package directly, so no worker package acquires a
+dependency on a Shikigami sibling. `/health/live` returns 200 only when every loop's heartbeat is
+recent; `/health/ready` returns 200 only when PostgreSQL is reachable. Kafka and downstream HTTP
+services are deliberately not readiness dependencies: an outage there must not cascade by removing
+otherwise healthy pods.
+
+Any loop's death terminates the process with a non-zero exit, so a supervisor restarts a clean
+process rather than letting a partial one limp.
+
+And the server's own readiness check stops being a placeholder.
+
+These endpoints are what
+`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md` wires its
+readiness probes to.
 
 The user-visible proof: start the worker, `curl -s localhost:8091/health/live` returns 200 with
-`{"status":"ok","check":"all","failingSince":null}`; point the process at an unreachable
-Postgres and watch `/health/ready` return 503 naming the failed `postgres` check and when it
-began failing; and fault-inject a loop crash and watch the whole process exit non-zero (which
-under process-compose or systemd triggers a restart) instead of limping along with a dead loop.
+`{"status":"ok","check":"all","failingSince":null}`; point the process at an unreachable Postgres
+and watch `/health/ready` return 503 naming the failed `postgres` check and when it began failing;
+and fault-inject a loop crash and watch the whole process exit non-zero instead of limping along
+with a dead loop.
 
 
 ## Progress
 
-- [ ] Upstream prerequisite: a released `shibuya-metrics` probe surface exposes injectable
-      `ProbeCheck`s through exact `NamedRoutes`/terminal `MultiVerb` `/health/live` and
-      `/health/ready` routes, the standard `ProbeStatus` wire shape, and same-proxy OpenAPI;
-      verify the release through Mori, Hackage, and upstream tags before selecting bounds.
-- [ ] M1: the Shikigami server extends its plan-36 umbrella API with the same exact health
-      contract; worker-role executables use the released Shibuya probe surface without a
-      dependency on `shikigami-api` or `shikigami-server`.
-- [ ] Prerequisites: plans 36/37 and the upstream Shibuya probe contract complete;
-      server/API ownership and Settei port settings are settled.
-- [ ] M1: plan 36's dedicated OpenAPI executable regenerates from the extended served API
-      proxy; artifact and response-schema conformance checks pass.
-- [ ] M2: each worker loop records a heartbeat through the worker registry on each successful
-      iteration; the worker-role liveness check reports the first stale loop and its
-      `failingSince` timestamp.
-- [ ] M2: readiness checks wired — PostgreSQL ping for every DB-backed process;
-      `/health/ready` returns 503 when that required dependency is unreachable, without
-      probing Kafka or downstream HTTP services.
-- [ ] M3: fail-fast supervision — any loop's termination (normal or exceptional) tears down the
-      siblings and exits the process non-zero; proven by fault injection.
-- [ ] M3: the resume loop's permanent-return-on-store-error (`Worker.hs:98-101`) converted to a
-      restart-with-backoff iteration so a transient store blip does not require a full process
-      restart, while a persistent failure still surfaces via `/health/live` staleness and (after the
-      backoff ceiling) fail-fast.
+Use a checklist to summarize granular steps. Every stopping point must be documented here,
+even if it requires splitting a partially completed task into two ("done" vs. "remaining").
+This section must always reflect the actual current state of the work.
+
+- [x] (2026-08-19) Prerequisite audit. Plans 36, 37, 47, and 53 have landed; plan 28's Milestone 1
+      (`Shikigami.Log`) has landed, so the "soft dependency" on structured logging is now a real
+      module every loop already uses; plan 17 has landed through Milestone 4; plan 18's Kafka
+      reconnect work has landed.
+- [x] (2026-08-19) Citation audit. Every `shikigami-core/src/Shikigami/Worker.hs:NN` pointer in
+      this plan referred to a file plan 36 deleted. All are re-resolved against
+      `shikigami-workers/`; see Context and Orientation.
+- [x] (2026-08-19) **Upstream prerequisite discharged in substance.** Shibuya IR-1 asked for two
+      things and both are now available from released packages: `shibuya-core 0.9.0.0` exports a
+      public non-blocking processor snapshot, and `servant-health 0.1.0.0` is a released external
+      probe surface a worker executable may depend on directly. Evidence in Surprises &
+      Discoveries; the residual ask is recorded there too.
+- [x] (2026-08-19, delivered by plan 36) **M1, server half.** `Shikigami.Health.Api`
+      (`shikigami-api/src/Shikigami/Health/Api.hs`) mounts `servant-health`'s `HealthApi` under
+      `health` on the umbrella route; `Shikigami.Health.Handler`
+      (`shikigami-server/src/Shikigami/Health/Handler.hs`) builds the two checks once at boot with
+      failure-onset tracking, an outside-in probe timeout, and exception containment;
+      `Shikigami.Server.Boot.newServerEnvWith` injects them for the conformance test; the OpenAPI
+      artifact is generated from the served proxy by the `shikigami-openapi` executable and
+      checked in at `docs/api/openapi.json`.
+- [ ] M1 (remaining, server): the readiness check is `sequenceChecks []`
+      (`Health/Handler.hs:67`) because `ServerEnv` holds no database handle
+      (`shikigami-server/src/Shikigami/Server/Seam.hs:44-49`). Add the pool and the PostgreSQL
+      ping.
+- [ ] M1 (remaining, workers): `Shikigami.Health.Worker` in `shikigami-workers` serves the same
+      two routes on the Settei `health.port` for each worker-role executable, depending on
+      `servant-health` directly and on no Shikigami sibling.
+- [ ] M1 (remaining, config): add `health.port` to `Shikigami.App.Config` with per-role defaults
+      8091–8094 so the four local processes coexist. `http.port` already exists
+      (`shikigami-core/src/Shikigami/App/Config.hs:320,611`); `health.port` does not.
+- [ ] M2: each loop records a heartbeat through the worker registry on each successful iteration;
+      the worker-role liveness check reports the first stale loop and its `failingSince`.
+- [ ] M2: the queue processor's heartbeat comes from shibuya's own `ProcessorMetrics`, not from a
+      callback shikigami has to thread through `jobProcessorWithContext`.
+- [ ] M2: readiness wired to a PostgreSQL ping through the real application pool; `/health/ready`
+      returns 503 when it is unreachable, without probing Kafka or downstream HTTP services.
+- [ ] M3: fail-fast supervision — any loop's termination, normal or exceptional, tears down the
+      siblings and exits the process non-zero; proven by fault injection in the workers test suite.
+- [ ] M3: `runResumeWorker` (`Agent/Workflow/Resume.hs:36-42`) converted from
+      run-once-and-return-on-error into restart-with-backoff, so a transient store blip does not
+      require a full process restart while a persistent failure still exits after a ceiling.
+- [ ] M3: `runQueueWorker` (`Workers/Registry.hs:52-84`) treats a clean `waitApp` return as fatal
+      rather than falling through to `pure ()`.
 
 
 ## Surprises & Discoveries
 
-- (Review-time) The six-package standard forbids `shikigami-workers` from depending on
-  `shikigami-api` or `shikigami-server`, so the original idea of importing the service route
-  tree into every worker executable was architecturally impossible. Mori showed that the
-  current `shibuya-metrics` already owns worker HTTP health serving, but its implementation is
-  a handwritten `pathInfo` router, accepts paths without an exact-method guard, and returns
-  older `alive`/`ready` bodies rather than the standard `ProbeStatus`. This plan therefore
-  requires an additive released Shibuya probe API before consuming it; it does not punch a
-  forbidden sibling dependency through plan 36.
+Document unexpected behaviors, bugs, optimizations, or insights discovered during
+implementation. Provide concise evidence.
+
+- **(Review-time, 2026-07-22)** The six-package standard forbids `shikigami-workers` from
+  depending on `shikigami-api` or `shikigami-server`, so the original idea of importing the
+  service route tree into every worker executable was architecturally impossible.
+
+- **(2026-08-19, refresh) Shibuya IR-1 is discharged in substance, and this plan is no longer
+  blocked.** The IR is `mori://shinzui/shibuya/okf/improvement-requests/concepts/IR-1`, "Expose a
+  public worker probe contract", still `status: proposed`. It asked for two separable things.
+
+  Its first ask — "a narrow public probe/snapshot contract for a running `App`… distinguish at
+  least not-started, healthy/running, stopping, stopped, and unexpected loop exit/failure, and
+  include enough stable identity to attribute the failed worker… reading it must be non-blocking"
+  — is satisfied by `shibuya-core 0.9.0.0`. `Shibuya.App` exports `getAppMetrics :: AppHandle es
+  -> Eff es MetricsMap`, `getAllMetrics`/`getAllMetricsIO`, and
+  `getProcessorMetrics`/`getProcessorMetricsIO`, keyed by `ProcessorId`
+  (`shibuya-core/src/Shibuya/App.hs:12-39`). `ProcessorMetrics` carries
+  `{state, stats, batch, startedAt}` and `ProcessorState` is
+  `Idle | Processing !InFlightInfo !UTCTime | Failed !Text !UTCTime | Stopped`
+  (`shibuya-core/src/Shibuya/Core/Metrics.hs:94-103,179-190`). That is a non-blocking read
+  distinguishing running, idle, failed-with-reason-and-time, and stopped, attributed by processor
+  id. It is exactly what M2's queue-loop heartbeat needs, and it is better than a heartbeat
+  callback because it reports *last activity* rather than *last time we remembered to call `beat`*.
+
+  Its second ask — an injectable generic WAI `probeApplication` in `shibuya-metrics` — is moot
+  rather than satisfied. `servant-health 0.1.0.0` is published on Hackage
+  (`mori://shinzui/servant-health`; the repository already consumes it from `shikigami-api`,
+  `shikigami-server`, and `shikigami-client`). It is an *external* package, not a Shikigami
+  sibling, so a worker executable depending on it violates nothing in the six-package standard —
+  which was the entire reason the IR routed the request through shibuya. The worker probe can be
+  built today.
+
+  What remains genuinely un-provided upstream: nothing this plan needs. Leave the IR open — a
+  generic probe application still belongs in shibuya for consumers that do not want servant — but
+  stop treating it as this plan's gate.
+
+- **(2026-08-19, refresh) `Shikigami.Log` exists, so the loop-lifecycle events this plan wanted
+  to add are already structured.** Plan 28's Milestone 1 landed. Every loop already emits JSON
+  lines through it: `worker.loop.started` (`Workers/Registry.hs:43`), `worker.queue.reconciled`
+  (`Registry.hs:64-69`), `worker.queue.failed` (`Registry.hs:82`), `worker.loop.failed`
+  (`Registry.hs:77`), `worker.resume.started`/`worker.resume.failed`
+  (`Agent/Workflow/Resume.hs:38,41`), `worker.outbox.started`/`worker.outbox.failed`
+  (`Flow/SinkOutbox/Publisher.hs:38,50`), `worker.timer.started`/`worker.timer.failed`
+  (`Trigger/Timer.hs:34,39`). The MasterPlan's IP-B ("soft consumption, not a compile dependency")
+  is now a plain fact: use the logger, do not invent a second one.
+
+- **(2026-08-19, refresh) The Kafka consumer no longer dies on a `KafkaError`, so this plan's
+  2026-07-22 readiness rationale needs correcting rather than repeating.** Plan 18's work landed
+  (commits `bb13a23`, `b1f2a60`, and `docs/adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md`).
+  `runSubscription` (`shikigami-workers/src/Shikigami/Trigger/Consumer.hs:153-209`) is now a
+  `reconnect backoffSeconds` loop with capped exponential backoff (`min 30 (backoffSeconds * 2)`),
+  logging `<prefix>.consumer.reconnecting` and retrying, and it distinguishes three outcomes: a
+  Kafka error retries, a configuration error fails loudly, and a captured programming failure is
+  rethrown. The *conclusion* of the old decision is unchanged and still right — Kafka stays out of
+  readiness — but the reason "the loop currently dies on any `KafkaError`" is no longer true.
+
+- (Findings from implementation go below this line.)
 
 
 ## Decision Log
 
-- Decision: Adopt fail-fast at the process boundary (any loop death exits the process
-  non-zero), with bounded restart-with-backoff only *inside* individual loops for transient
-  errors.
+Record every decision made while working on the plan.
+
+- Decision: Adopt fail-fast at the process boundary (any loop death exits the process non-zero),
+  with bounded restart-with-backoff only *inside* individual loops for transient errors.
   Rationale: shibuya offers no processor-level restart — its only two strategies are
   `IgnoreFailures` and `StopAllOnFailure`
   (`/Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya/shibuya-core/src/Shibuya/App.hs:89-98`),
-  neither of which restarts a failed child; shibuya's retry story is per-message
-  (`AckRetry`/`RetryDelay`), not per-loop. The four loops are combined with `concurrently_`
-  (`Worker.hs:70`), which already propagates an exception from any branch by cancelling the
-  others — but the loops currently swallow their errors before `concurrently_` can see them.
-  The simplest correct supervisor is therefore: let a genuinely dead loop throw, let
-  `concurrently_` tear the process down, and let the external supervisor (process-compose
-  `restart: on_failure`, systemd `Restart=always`—both defined by
-  `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`)
-  restart a clean process. Restart-with-backoff *per loop* is added only for the resume loop's
-  transient store errors, because a momentary connection blip should not cause a full cold
-  restart; a persistent failure still trips the backoff ceiling and exits. Alternative rejected:
-  in-process per-loop restart supervision (a home-grown supervisor tree) — more code, duplicates
-  what an external supervisor does better, and risks masking a genuine fault as an infinite
-  restart loop.
+  neither of which restarts a failed child; shibuya's retry story is per-message, not per-loop.
+  The four loops are combined with `concurrently_`, which already propagates an exception from any
+  branch by cancelling the others — but the loops currently swallow their errors before
+  `concurrently_` can see them. The simplest correct supervisor is therefore: let a genuinely dead
+  loop throw, let `concurrently_` tear the process down, and let the external supervisor
+  (process-compose `restart: on_failure`, systemd `Restart=always`, both defined by
+  `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`) restart
+  a clean process. Restart-with-backoff *per loop* is added only for the resume loop's transient
+  store errors, because a momentary connection blip should not cause a full cold restart; a
+  persistent failure still trips the backoff ceiling and exits. Alternative rejected: in-process
+  per-loop restart supervision — more code, duplicates what an external supervisor does better,
+  and risks masking a genuine fault as an infinite restart loop.
   Date: 2026-07-08
+  Re-verified 2026-08-19: `SupervisionStrategy` at `shibuya-core 0.9.0.0` is still exactly
+  `IgnoreFailures | StopAllOnFailure` (`Shibuya/App.hs:89-98`). The rationale stands unchanged.
+  The composition point moved from `Shikigami/Worker.hs:70` to
+  `shikigami-workers/src/Shikigami/Workers/Registry.hs:44-46`, and it is still nested
+  `concurrently_`.
 
 - Decision: Host the typed health routes with Warp in plan 36's server package rather than
   representing health as an OTLP-only signal.
-  Rationale: probes require a pull-based HTTP GET. Warp is the server runtime beneath the
-  typed Servant API; route declaration and dispatch remain in `NamedRoutes`, not a parallel
-  handwritten WAI application.
+  Rationale: probes require a pull-based HTTP GET. Warp is the server runtime beneath the typed
+  Servant API; route declaration and dispatch remain in `NamedRoutes`, not a parallel handwritten
+  WAI application.
   Date: 2026-07-08
-- Decision: Health is part of the typed server API: `NamedRoutes`, terminal `MultiVerb`
-  with handwritten `AsUnion`, and OpenAPI generated by a dedicated executable from the
-  exact served proxy. No handwritten WAI dispatcher is permitted.
-  Rationale: server behavior, status variants, schema, and contract tests must share one
-  route tree. Health response bodies are the deliberate exception to RFC 7807 because
-  probe clients require a small stable status document.
-  Date: 2026-07-22
-- Decision: Health routes are the standard exact `GET /health/live` and `GET /health/ready`,
-  unauthenticated, redirect-free, excluded from
-  production request logs, and return only documented 200/503 variants. OTel metrics and
-  Kubernetes/systemd events remain the probe-failure observability surfaces.
-  Other JSON API errors use RFC 7807 `application/problem+json`.
-  Rationale: probes must be cheap and deterministic while the rest of the API retains a
-  uniform machine-readable error contract.
-  Date: 2026-07-22
+  Status 2026-08-19: **done.** `Shikigami.Server.Boot.runServer` binds Warp and serves
+  `shikigamiApplication`; there is no handwritten health router anywhere.
 
-- Decision: The HTTP server and worker roles expose the same standard probe wire contract
-  through different package owners. `shikigami-server` serves `Shikigami.Health.Api` from the
-  plan-36 umbrella route. Worker-role executables consume a released injectable probe
-  application from external `shibuya-metrics`; they never import the sibling
-  `shikigami-api` or `shikigami-server` packages. The upstream route must use exact
-  `NamedRoutes`/terminal `MultiVerb` dispatch and derive its own OpenAPI artifact from its
-  served proxy.
-  Rationale: the six-package architecture deliberately prevents workers from acquiring a
-  sibling HTTP application dependency. Shibuya already owns worker metrics and health
-  serving, so completing that public surface upstream preserves the package boundary while
-  still applying the API standard to every process role.
+- Decision: Health is part of the typed server API: `NamedRoutes`, terminal `MultiVerb` with
+  handwritten `AsUnion`, and OpenAPI generated by a dedicated executable from the exact served
+  proxy. No handwritten WAI dispatcher is permitted.
+  Rationale: server behavior, status variants, schema, and contract tests must share one route
+  tree. Health response bodies are the deliberate exception to RFC 7807 because probe clients
+  require a small stable status document.
   Date: 2026-07-22
+  Status 2026-08-19: **done, and by a better route than this plan imagined.** Rather than
+  hand-writing the `MultiVerb` union in `shikigami-api`, plan 36 adopted `servant-health`, which
+  owns `HealthApi`, `ProbeResponses`, `ProbeResult`, the `AsUnion` instance, `ProbeStatus` with a
+  non-orphan `ToSchema` derived from the same `Options` value as its codec, and a `testkit`
+  sublibrary for conformance. `Shikigami.Health.Api` is a thin re-export that gives the fleet type
+  a Shikigami-owned name. Do not reinstate a hand-written union.
+
+- Decision: Health routes are the standard exact `GET /health/live` and `GET /health/ready`,
+  unauthenticated, redirect-free, excluded from production request logs, and returning only
+  documented 200/503 variants. OTel metrics and Kubernetes/systemd events remain the probe-failure
+  observability surfaces. Other JSON API errors use RFC 7807 `application/problem+json`.
+  Rationale: probes must be cheap and deterministic while the rest of the API retains a uniform
+  machine-readable error contract.
+  Date: 2026-07-22
+  Status 2026-08-19: paths and exemption are done —
+  `Servant.Health.Paths` supplies `healthMountSegment`, `liveRawPath`, `readyRawPath`, and
+  `healthRawPaths`, and `Shikigami.Health.Api`'s header records the RFC 7807 exemption and why.
+  Request-log exclusion belongs to plan 28's request-logging work and is not yet done.
+
+- Decision: The HTTP server and worker roles expose the same standard probe wire contract through
+  different package owners, and worker-role executables never import `shikigami-api` or
+  `shikigami-server`.
+  Rationale: the six-package architecture deliberately prevents workers from acquiring a sibling
+  HTTP application dependency.
+  Date: 2026-07-22
+  **Amended 2026-08-19: the owner changed, the boundary did not.** The 2026-07-22 form of this
+  decision named `shibuya-metrics` as the worker-side owner and made a released Shibuya probe
+  application a hard prerequisite. That is no longer the cheapest correct answer.
+  `servant-health 0.1.0.0` is a released *external* package; `shikigami-workers` depending on it —
+  together with `servant-server` and `warp` — introduces no sibling dependency and satisfies the
+  boundary exactly as intended, while giving both process families the identical route type,
+  identical wire body, and identical conformance testkit rather than two implementations of one
+  contract. The worker probe therefore lives in `Shikigami.Health.Worker` inside
+  `shikigami-workers` and serves `servant-health`'s `HealthApi` on its own listener. Shibuya IR-1
+  stays open on its merits for non-servant consumers, but it is no longer this plan's gate.
 
 - Decision: Both 200 and 503 use the standard strict `ProbeStatus` document with direct fields
-  `status`, `check`, and `failingSince`. A passing probe is `("ok", "all", Nothing)`; a
-  failing probe is `("failed", <stable-check-name>, Just <first-failure-time>)`.
-  Rationale: a probe is a status report rather than an RFC 7807 error, but operators still
-  need the failed check and the start of the incident. Detailed loop ages belong in metrics,
-  not an expanding probe payload.
+  `status`, `check`, and `failingSince`. A passing probe is `("ok", "all", Nothing)`; a failing
+  probe is `("failed", <stable-check-name>, Just <first-failure-time>)`.
+  Rationale: a probe is a status report rather than an RFC 7807 error, but operators still need
+  the failed check and the start of the incident. Detailed loop ages belong in metrics, not an
+  expanding probe payload.
   Date: 2026-07-22
+  Status 2026-08-19: **done, and owned upstream.** `Servant.Health.ProbeStatus` is exactly those
+  three fields with `probeJsonOptions = defaultOptions` driving both the codec and the schema.
+  `ProbeVerdict = Healthy | Unhealthy {failedCheck, since}` is the check seam.
 
 - Decision: Heartbeats are per-loop `IORef UTCTime` timestamps updated on each successful
   iteration; `/health/live` fails a loop whose heartbeat is older than a per-loop staleness bound.
   Rationale: a boolean "alive" flag cannot distinguish a wedged loop (blocked forever inside one
-  iteration) from a healthy idle loop. A timestamp does, and the outbox/timer loops already
-  iterate on a 1-second `threadDelay` (`Worker.hs:112,123`), giving a natural heartbeat cadence;
-  the queue processor's cadence is shibuya's poll interval. Staleness bounds are generous
-  multiples of each loop's expected period so an idle-but-healthy loop is not flagged.
+  iteration) from a healthy idle loop. A timestamp does, and the outbox and timer loops already
+  iterate on a 1-second `threadDelay`, giving a natural heartbeat cadence. Staleness bounds are
+  generous multiples of each loop's expected period so an idle-but-healthy loop is not flagged.
   Date: 2026-07-08
+  Amended 2026-08-19 for the queue loop only. The three `forever` loops keep the `IORef UTCTime`
+  design; their `threadDelay 1_000_000` bottoms are still the natural beat points
+  (`Flow/SinkOutbox/Publisher.hs:52`, `Trigger/Timer.hs:41`, and the scheduler's
+  `Workers/Command/Scheduler.hs:57`). The queue processor does **not** get a threaded `beat`
+  callback: shibuya already tracks its own liveness, and `getAppMetrics` on the `AppHandle` that
+  `runJobWorkers` returns gives `ProcessorState` with a `Processing … lastActivity` timestamp and
+  a `Failed err ts` variant. Reading that is strictly more truthful than a callback, because a
+  callback reports when shikigami last remembered to call it and the metrics report what the
+  processor actually did. It also removes the awkward question of where to hook `beat` inside
+  `jobProcessorWithContext`.
 
-- Decision: `/health/ready` does not check Kafka or downstream HTTP services. Consumer-loop
-  failure is surfaced through the in-process heartbeat and fail-fast supervision instead.
-  Rationale: the consume loop currently dies on any `KafkaError`
-  (`shikigami-core/src/Shikigami/Trigger/Consumer.hs:84-87` and `:111-114` — the error is logged
-  and the loop returns), and the proper fix (reconnect/backoff, atomic offset+inbox+enqueue)
-  belongs to
-  `docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`
-  (MasterPlan 3). This plan makes that death observable through liveness/fail-fast so a
-  supervisor restarts the consumer; it does not duplicate plan 18's in-loop recovery. A broker
-  outage cannot be repaired by restarting this pod, so making it readiness-critical would
-  amplify an upstream outage across the fleet.
-  Date: 2026-07-22
+- Decision: `/health/ready` does not check Kafka or downstream HTTP services.
+  Rationale (2026-07-22, corrected 2026-08-19): a broker outage cannot be repaired by restarting
+  this pod, so making it readiness-critical would amplify an upstream outage across the fleet.
+  The original rationale also said the consume loop dies on any `KafkaError` and that in-loop
+  recovery belonged to plan 18; plan 18 has landed and the loop now reconnects with capped
+  backoff (`Trigger/Consumer.hs:153-209`), so that half of the reasoning is obsolete. The
+  conclusion is unchanged and now rests only on the blast-radius argument, which is the stronger
+  one anyway. Consumer-loop death is still surfaced through the in-process heartbeat and
+  fail-fast supervision.
+  Date: 2026-07-22, amended 2026-08-19
 
 
 ## Outcomes & Retrospective
+
+Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
+Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
 
-Shikigami is a declared-agent runtime whose long-running CLI subcommands form the runtime. The
-one that matters most here is `worker`
-(`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` → `Shikigami.Worker.runWorker`,
-`shikigami-core/src/Shikigami/Worker.hs:67-70`), which composes four loops with nested
-`concurrently_`:
+All shikigami paths are repository-relative to `/Users/shinzui/Keikaku/bokuno/shikigami`.
+Dependency sources are given as absolute paths into the local checkouts so the reader can open
+them; the canonical references are `mori://shinzui/shibuya`, `mori://shinzui/servant-health`, and
+`mori://shinzui/keiro`.
+
+### Terms
+
+A **loop** is one of the long-running `IO ()` actions a worker-role process runs concurrently,
+each an infinite iteration over a unit of substrate work. A **probe** is an HTTP GET a supervisor
+polls. **Liveness** answers "is this process still working?" and its failure means restart the
+process. **Readiness** answers "can this process serve traffic right now?" and its failure means
+take it out of load balancing but leave it running. Collapsing them into one route throws that
+distinction away, which is why there are two and no combined one.
+
+### The package layout, and what moved
+
+`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` split the
+repository into seven packages and **deleted `shikigami-core/src/Shikigami/Worker.hs` and the
+whole `shikigami-cli` package**. Every `Worker.hs:NN` citation in the 2026-07-08 draft of this
+plan pointed at that file. The current map:
+
+| Was | Is now |
+|---|---|
+| `Worker.hs:67-70` (`runWorker`, four loops) | `shikigami-workers/src/Shikigami/Workers/Registry.hs:41-46` (`runWorkers`) |
+| `Worker.hs:72-84` (`runQueueWorker`) | `Workers/Registry.hs:52-84` |
+| `Worker.hs:86-101` (`runResumeWorker`) | `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs:36-42` |
+| `Worker.hs:103-112` (`runOutboxPublisher`) | `shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs:36-52` |
+| `Worker.hs:114-123` (`runTimerWorker`) | `shikigami-workers/src/Shikigami/Trigger/Timer.hs:32-41` |
+| `shikigami-cli/.../ConsumeStream.hs` | `shikigami-workers/src/Shikigami/Trigger/Consumer.hs` plus the `shikigami-consume-stream` and `shikigami-consume-events` executables |
+| `shikigami-cli/.../Scheduler.hs` | `shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs` and `Shikigami/Trigger/Scheduler.hs` |
+| `shikigami-core/src/Shikigami/Sink/KawaStub.hs` | `shikigami-server/src/Shikigami/Sink/KawaStub.hs` |
+
+`shikigami-workers` builds four executables: `shikigami-worker`, `shikigami-scheduler`,
+`shikigami-consume-stream`, and `shikigami-consume-events`
+(`shikigami-workers/shikigami-workers.cabal:74-107`). Each is a separate process and each needs
+its own probe listener.
+
+### What already exists for health
+
+`docs/plans/36-...` did not stop at moving files; it shipped the probe surface this plan's
+Milestone 1 was going to build. Read these three files before writing anything:
+
+`shikigami-api/src/Shikigami/Health/Api.hs` is a thin re-export module. It gives Shikigami-owned
+names to `servant-health`'s `HealthApi`, `ProbeResponses`, `ProbeResult`, `ProbeStatus`,
+`probeJsonOptions`, `ProbeCheck`, `ProbeVerdict`, and the path constants
+(`healthMountSegment`, `liveRawPath`, `readyRawPath`, `healthRawPaths`). Its header explains why
+there are two routes and why probe bodies are exempt from
+`Shikigami.Api.Problem`'s RFC 7807 rule — worth reading, because the same reasoning governs the
+worker probe.
+
+`shikigami-server/src/Shikigami/Health/Handler.hs` decides what healthy *means*, and it already
+bakes in three things that are easy to get silently wrong. Every check is wrapped in `safeCheck`,
+so an exception escaping a check becomes a probe report naming the failed dependency instead of a
+500 with a stack trace. `withProbeTimeout` sits *outside* `safeCheck` on liveness, because the
+timeout interrupts with an asynchronous exception and `safeCheck` deliberately lets those through
+— nested the other way round, a deadlocked process would hang its liveness probe instead of
+failing it. And each probe gets its own `newFailureTracker`, so `failingSince` reports when a
+failure began rather than when it was last observed, which is why the checks are built once at
+boot and stored in the environment rather than rebuilt per request. **The worker probe must
+reproduce all three.**
+
+`shikigami-server/src/Shikigami/Server/Boot.hs:46-66` builds the checks at boot
+(`newServerEnv`) and offers `newServerEnvWith` so the conformance test can fail liveness and
+readiness independently — that indirection exists because both probe routes have the same handler
+type, so an umbrella record that swapped them would still compile.
+
+What is *not* done: `readinessCheck = sequenceChecks []`
+(`Health/Handler.hs:67`). Its Haddock calls the empty list "the extension point". The server holds
+no database handle at all — `ServerEnv` is `{config, appConfig, liveness, readiness}`
+(`shikigami-server/src/Shikigami/Server/Seam.hs:44-49`) — so adding the PostgreSQL ping means
+adding a pool to `ServerEnv` and opening it in `newServerEnv`.
+
+### `servant-health`
+
+Pinned at `0.1.0.0`, canonical `mori://shinzui/servant-health/packages/servant-health` (local
+checkout `/Users/shinzui/Keikaku/bokuno/servant-health`), and already a dependency of `shikigami-api`,
+`shikigami-server` (including `servant-health:testkit` in its test stanza), and
+`shikigami-client`.
+
+`Servant.Health` exports the wire contract (`ProbeStatus {status, check, failingSince}`,
+`probeJsonOptions`), the check seam (`type ProbeCheck = IO ProbeVerdict`,
+`ProbeVerdict = Healthy | Unhealthy {failedCheck, since}`), the routes (`HealthApi`,
+`ProbeResponses`, `ProbeResult`), and the server (`healthServer`, `runProbe`).
+`Servant.Health.Check` exports `boolCheck`, `sequenceChecks`, `safeCheck`, `withProbeTimeout`, and
+`newFailureTracker`. The `testkit` sublibrary keeps `tasty`, `warp`, and `http-client` out of
+production builds.
+
+### Shibuya's processor snapshot
+
+Pinned at `shibuya-core 0.9.0.0`, local checkout
+`/Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya`.
+
+`Shibuya.App` exports `runApp`, `waitApp`, `stopApp`, `stopAppGracefully`, `ShutdownConfig`,
+`SupervisionStrategy (IgnoreFailures | StopAllOnFailure)`, `AppHandle`, `getAppMetrics`,
+`getAppMaster`, `getAllMetrics`, `getAllMetricsIO`, `getProcessorMetrics`,
+`getProcessorMetricsIO`, `ProcessorId`, and `ProcessorMetrics`
+(`shibuya-core/src/Shibuya/App.hs:2-40`).
 
 ```haskell
-runWorker env = do
-  hPutStrLn stderr "[shikigami.worker] starting; draining shikigami_run_jobs"
-  concurrently_ (runQueueWorker env)
-    (concurrently_ (runResumeWorker env)
-      (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
+-- shibuya-core/src/Shibuya/Core/Metrics.hs:94-103, 179-190
+data ProcessorState
+  = Idle
+  | Processing !InFlightInfo !UTCTime   -- in-flight info, last activity
+  | Failed !Text !UTCTime               -- error message, timestamp
+  | Stopped
+
+data ProcessorMetrics = ProcessorMetrics
+  { state     :: !ProcessorState,
+    stats     :: !StreamStats,
+    batch     :: !BatchStats,
+    startedAt :: !UTCTime
+  }
+
+type MetricsMap = Map ProcessorId ProcessorMetrics
 ```
 
-Term of art: a *loop* here is one of these four `IO ()` actions, each an infinite iteration over
-a unit of substrate work. `runQueueWorker` (`Worker.hs:72-84`) builds a shibuya
-`QueueProcessor` over the `shikigami_run_jobs` pgmq queue and runs it under
-`runApp IgnoreFailures 100 [...]` then `waitApp`. `runResumeWorker` (`Worker.hs:86-101`) calls
-keiro's `runWorkflowResumeWorker` once and returns — on a `Left` store error it logs and returns
-permanently (there is no surrounding `forever`). `runOutboxPublisher` (`Worker.hs:103-112`) and
-`runTimerWorker` (`Worker.hs:114-123`) each `forever` { do one pass; on `Left` log;
-`threadDelay 1_000_000` }.
+`getAppMetrics :: (IOE :> es) => AppHandle es -> Eff es MetricsMap` (`Shibuya/App.hs:261-262`).
 
-Why "any loop can die while the process stays up": shibuya's supervision strategy at
-`Worker.hs:78` is `IgnoreFailures`, which — per shibuya's own definition
-(`Shibuya/App.hs:89-98`) — keeps running and never restarts or propagates a child failure. The
-resume loop simply returns on error. The outbox and timer loops catch `Left` and continue, so a
-*store-level* fault is retried forever but any exception their bodies throw would escape;
-critically, none of the four surfaces its stopped state anywhere.
+The queue loop reaches this because `Keiro.PGMQ.runJobWorkers` is a thin wrapper over
+`Shibuya.App.runApp`: its type is
+`SupervisionStrategy -> Int -> [Eff es (ProcessorId, QueueProcessor es)] -> Eff es (Either AppError (AppHandle es))`
+(`/Users/shinzui/Keikaku/bokuno/keiro/keiro-pgmq/src/Keiro/PGMQ/Job.hs:767-775`), and
+`runQueueWorker` already binds the handle as `Right app` before calling `waitApp app`
+(`Workers/Registry.hs:75-79`).
 
-There is no HTTP server in the runtime except `stub-kawa`
-(`shikigami-core/src/Shikigami/Sink/KawaStub.hs`, a `warp` app serving
-`POST /v1/sources/{source}/events`, booted with `Warp.run (port opts)` at KawaStub.hs:91). `wai`
-and `warp` are already dependencies (`shikigami-core.cabal:113-114`). This is starting-state
-evidence only, not a template: plan 36 moves production HTTP ownership to
-`shikigami-server`, and health extends its typed Servant application rather than copying the
-stub's handwritten `pathInfo`/`requestMethod` dispatcher.
+### The four loops as they stand
 
-The consumers (`shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`,
-`shikigami-core/src/Shikigami/Trigger/Consumer.hs`) run a Kafka poll loop
-(`Consumer.hs:89-97` and `:116-124`); on a `KafkaError` the `runError` wrapper yields `Left`,
-which is logged (`Consumer.hs:86`, `:113`) and the loop ends. The scheduler
-(`shikigami-cli/src/Shikigami/Cli/Commands/Scheduler.hs`) is a single `forever` timer loop
-(`Scheduler.hs:42-48`).
+`runWorkers` (`Workers/Registry.hs:41-46`):
 
-Two sibling plans matter. `docs/plans/28-structured-logging-metrics-and-trace-propagation.md`
-(EP-1) introduces `Shikigami.Log`; if it has landed, emit loop-lifecycle events through it,
-otherwise the health server can ship first and adopt structured logging later (soft dependency,
-not blocking).
-`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
-(EP-4) consumes the endpoints this plan creates as its
-process-compose/systemd readiness probes.
+```haskell
+runWorkers env = do
+  Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
+  concurrently_
+    (runQueueWorker env)
+    (concurrently_ (runResumeWorker env) (concurrently_ (runOutboxPublisher env) (runTimerWorker env)))
+```
+
+`runQueueWorker` (`Registry.hs:52-84`) is the one plan 17 improved. It reconciles the main queue
+and its policy-enabled DLQ with `ensureJobQueue runJob`, refusing to start unless both are
+available, and it already converts two failure modes into `ioError`: a processor that fails to
+start (`:76-78`) and a reconciliation failure (`:81-83`). The remaining hole is `Right () -> pure
+()` at `:84` — a clean return from `waitApp` under `IgnoreFailures` is a silent death, and it
+falls straight through.
+
+`runResumeWorker` (`Agent/Workflow/Resume.hs:36-42`) calls
+`runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions runTimeout) (workflowRegistry env)`
+once. `Left err` logs `worker.resume.failed` and returns. `Right ()` returns. There is no loop.
+
+`runOutboxPublisher` (`Flow/SinkOutbox/Publisher.hs:36-52`) and `runTimerWorker`
+(`Trigger/Timer.hs:32-41`) are each `forever { one pass; log a Left; threadDelay 1_000_000 }`.
+Both headers say a store error is logged and the loop continues because the rows and timers are
+durable — that reasoning is right and this plan preserves it; what it adds is that a *non*-store
+exception must not be swallowed.
+
+The consumers (`Trigger/Consumer.hs:153-209`) reconnect with capped exponential backoff and
+rethrow captured programming failures. The scheduler
+(`Workers/Command/Scheduler.hs:51-57`) is a single `forever` timer pass with a 1-second delay.
+
+### Configuration
+
+`docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md` landed. One resolved
+`Shikigami.App.Config.AppConfig` reaches every process; command modules read no environment and
+define no precedence. `Role` is
+`ServerRole | AdminRole | WorkerRole | SchedulerRole | StreamConsumerRole | EventConsumerRole |
+RunBehaviorRole | AgentRunRole | MigrateRole` (`Shikigami/App/Config.hs:724-734`).
+
+A `Port` newtype exists, range-checked at decode time by `mkPort`/`portDecoder`
+(`Shikigami/App/Config.hs:143-158,464-479`), with `portNumber` to hand a listener the plain
+number. `http.port` is a stable key defaulting to `Port 8080`
+(`Shikigami/App/Config.hs:320,611`). **`health.port` does not exist yet** — this plan adds it.
+
+### Relevant ADRs
+
+- `docs/adr/0009-kafka-offsets-advance-only-after-durable-dispositions.md` — why the consumer's
+  acknowledgement path is shaped the way it is. Read it before touching `Trigger/Consumer.hs`; the
+  heartbeat this plan adds must not move where an offset is committed.
+- `docs/adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md` — the package-boundary
+  reasoning that also governs which packages a worker may depend on.
+
+No ADR covers process supervision or probe ownership. If the fail-fast boundary decision survives
+implementation, it is durable project context and should be promoted to a new ADR during the
+distillation pass.
 
 
 ## Plan of Work
 
-### Milestone 1 — the typed health API and generated contract
+### Milestone 1 — finish the probe surface
 
-Scope: one standard probe contract with package-correct execution. The Shikigami application
-server extends its umbrella route; worker, scheduler, and consumer executables run the released
-external Shibuya probe application. `/health/live` and `/health/ready` answer exact GETs with
-typed 200/503 `MultiVerb` variants before per-loop heartbeats are wired in M2.
+Scope: one probe contract, served by every process role. The server half exists; this milestone
+gives it a real readiness check and gives the four worker-role executables the same two routes.
 
-In `shikigami-api`, add the concept vertical `Shikigami.Health.Api` and mount its record under
-`health` on `Shikigami.Api`. In `shikigami-server`, add `Shikigami.Health.Handler`. Both response
-variants carry the same strict direct-field document:
+**The server's readiness check.** Add a `Hasql.Pool.Pool` to `ServerEnv`
+(`shikigami-server/src/Shikigami/Server/Seam.hs:44-49`), open it in `newServerEnv`
+(`Shikigami/Server/Boot.hs:46-49`) from the resolved `AppConfig`'s database settings, and replace
+`sequenceChecks []` (`Health/Handler.hs:67`) with one check that runs `select 1` through it. Name
+the check `postgres` — the name appears verbatim in the 503 body, so it is an operator-facing
+string. Keep it inside `safeCheck "readiness"`, and keep `withProbeTimeout` off readiness: a slow
+database should report 503 through the check's own failure, not be interrupted by an asynchronous
+exception the tracker cannot attribute.
 
-```haskell
-data ProbeStatus = ProbeStatus
-  { status :: !Text,
-    check :: !Text,
-    failingSince :: !(Maybe UTCTime)
-  }
+`mkHealthChecks` currently takes no arguments; it becomes
+`mkHealthChecks :: Pool -> IO (ProbeCheck, ProbeCheck)`. Thread the pool from `newServerEnv`, not
+from a handler.
 
-data ProbeVerdict
-  = Healthy
-  | Unhealthy {failedCheck :: !Text, since :: !UTCTime}
+**The worker probe.** Create `shikigami-workers/src/Shikigami/Health/Worker.hs` — a concept
+vertical, not a bare cross-cutting `Shikigami.Health` technical module. It owns the loop-name
+type, the heartbeat registry (M2), and the small Warp application that serves `servant-health`'s
+`HealthApi`. Add `servant-health`, `servant-server`, and `warp` to
+`shikigami-workers/shikigami-workers.cabal`, and `servant-health:testkit` to its test stanza. Add
+**no** dependency on `shikigami-api` or `shikigami-server`; the package-boundary test in
+`shikigami-api-test` exists to catch that and should be extended to cover the reverse direction if
+it does not already.
 
-type ProbeCheck = IO ProbeVerdict
+Reproduce the three hardening decisions from `Shikigami.Health.Handler` verbatim — `safeCheck`
+inside, `withProbeTimeout` outside on liveness only, one `newFailureTracker` per probe built once
+at boot. The temptation to skip them because "it is only a worker" is exactly how a wedged process
+ends up passing its own liveness probe.
 
-healthServer :: ProbeCheck -> ProbeCheck -> HealthApi (AsServerT AppM)
-```
+Each worker-role executable runs the probe application concurrently with its work. Its readiness
+action is a PostgreSQL ping through the real application pool the process already holds
+(`StoreConnection.pool st` in `Workers/Command/Worker.hs:52`), so readiness reflects the same
+connection path the work uses. Do not add Kafka metadata fetches or downstream HTTP calls.
 
-`HealthApi mode` and `HealthApi (AsServerT AppM)` own application-server dispatch; terminal
-200/503 results use a handwritten `AsUnion`. The server turns that typed route tree into one
-WAI `Application`.
-Plan 36's dedicated `shikigami-openapi` executable runs `toOpenApi` on this same extended
-top-level proxy, writes the checked artifact, and tests validate both example response
-variants against it; this plan does not add a second generator.
+**The port.** Add `health.port` to `Shikigami.App.Config` following exactly the pattern
+`httpPortSetting`/`httpPortKey` establishes (`Shikigami/App/Config.hs:320,464-479,611`), with
+per-role defaults so the four processes coexist on one host: 8091 worker, 8092 scheduler, 8093
+stream consumer, 8094 event consumer. The server keeps serving health on its existing `http.port`
+listener; it does not open a second socket. Thread the validated port through each composition
+root.
 
-The typed handler responds to exact `GET /health/live` with 200 and
-`ProbeStatus "ok" "all" Nothing` when its in-process check makes progress within the bounded
-liveness timeout, else 503 with the stable failed check and the time failure began.
-`GET /health/ready` runs the PostgreSQL check and selects 200/503 the same way. Unsupported
-paths/methods use the server's normal typed/RFC-7807 handling; health 200/503 bodies remain
-explicit status reports.
-Register the routes under plan 36's existing server-level error-formatting and narrow 405
-rewrite boundary so framework-generated JSON 400/404/405 responses remain RFC 7807
-`application/problem+json`; do not add a health-local renderer or limit the contract to
-errors explicitly returned by handlers.
+**Acceptance.** `cabal test all` passes, including a new worker-probe test using
+`servant-health:testkit` that asserts exact `GET /health/live` → 200 with the passing body and,
+with a check forced to fail, → 503 naming the check. Start the worker and
+`curl -sS -o /dev/null -w '%{http_code}\n' localhost:8091/health/live` prints `200`; with Postgres
+up, `/health/ready` prints `200`.
 
-For worker roles, first land and release the additive upstream Shibuya contract described in
-Progress. It must export `ProbeStatus`, `ProbeVerdict`, `ProbeCheck`, a `HealthApi` using
-`NamedRoutes` and terminal `MultiVerb`, an injectable `probeApplication`, and a same-proxy
-OpenAPI generator/test. It must enforce exact GETs and preserve the status-report exemption.
-Locate the implementation with `mori registry show shinzui/shibuya --full`, read its source,
-and verify the chosen released version on Hackage and against upstream tags; do not consume a
-developer checkout or the current handwritten router as if it satisfied this contract.
+### Milestone 2 — real heartbeats and real readiness
 
-The application server mounts health on its existing main listener configured by plan 37's
-stable `http.port`; it does not open a second health-only socket. Worker roles use plan 37's
-stable `health.port` Settei setting, with explicit compatibility bindings and per-process
-defaults 8091–8094 so the four local processes coexist. Thread each validated port through its
-composition root; command modules do not read environment or define precedence.
-Each worker-role executable runs `probeApplication` concurrently with its work, but
-`shikigami-workers` gains no sibling-package dependency. Its readiness action is a PostgreSQL
-ping through the real application pool (`Hasql.Pool.use pool` over a `select 1` session).
-Do not add Kafka metadata fetches or downstream HTTP calls to readiness.
+Scope: make `/health/live` reflect actual loop progress rather than "the process answered".
 
-Acceptance: start the worker; `curl -sS localhost:8091/health/live` returns 200; `curl -sS
-localhost:8091/health/ready` returns 200 while Postgres is up.
+Define in `Shikigami.Health.Worker` a `LoopName` sum covering the loops each role runs
+(`ResumeLoop`, `OutboxLoop`, `TimerLoop`, `ConsumerLoop`, `SchedulerLoop`), a strict registry
+with direct fields, and exactly two exported operations: `beat :: LoopName -> IO ()` and
+`loopLivenessCheck :: ProbeCheck`. Consumers accept the narrow `beat` callback, never an HTTP or
+server type.
 
-### Milestone 2 — per-loop heartbeats and real readiness
+Call `beat` at the bottom of each `forever` body, before the `threadDelay`:
+`Flow/SinkOutbox/Publisher.hs:52`, `Trigger/Timer.hs:41`, `Workers/Command/Scheduler.hs:57`. For
+the consumers, beat after each successful record disposition inside `runSubscription`
+(`Trigger/Consumer.hs:167-176`) — being careful not to move where the offset is committed, per
+`docs/adr/0009-...` — and also on each reconnect attempt, so a broker outage keeps the loop
+visibly alive while it retries rather than looking wedged. For the resume loop, beat after each
+`runWorkflowResumeWorkerWith` return once M3 has made it a loop.
 
-Scope: make `/health/live` reflect actual loop progress and `/health/ready` reflect actual dependency
-state.
+The queue processor gets no `beat` call. Instead, `loopLivenessCheck` reads the shibuya
+`AppHandle` that `runQueueWorker` holds and derives the queue loop's verdict from
+`ProcessorMetrics`: `Failed err ts` is unhealthy with `failingSince = ts` and the error in the
+log (not in the probe body — the body carries only the check name); `Stopped` is unhealthy; `Idle`
+and `Processing _ lastActivity` are healthy. This requires passing the handle out of
+`runQueueWorker` into the registry, which is a small change to `Workers/Registry.hs` and worth it
+for the honesty gained.
 
-Define the worker-only heartbeat registry in the `Shikigami.Health.Worker` concept vertical;
-do not introduce a bare cross-cutting `Shikigami.Health` technical module. Give it strict
-direct fields and expose only
-`beat :: LoopName -> IO ()` plus `loopLivenessCheck :: ProbeCheck`. Call `beat <LoopName>` at
-the point each loop completes a unit of work: after a successful queue-job path (inside
-`runJobHandler` or the shibuya processor callback), after each `runWorkflowResumeWorker` return
-in the resume loop, at the bottom of each `forever` body in `runOutboxPublisher`
-(`Worker.hs:111`) and `runTimerWorker` (`Worker.hs:122`), before the `threadDelay`. For the
-consumers, `beat state ConsumerLoop` after each `commitOffsetMessage` (`Consumer.hs:96`,
-`:123`); for the scheduler, after each timer pass (`Scheduler.hs:47`).
+The liveness check deterministically selects the *first* stale loop in a fixed order, reports a
+stable name such as `loop.outbox`, and sets `failingSince` to the instant its last heartbeat
+crossed the threshold — not the moment of observation. It never performs network or database IO.
 
-The liveness check deterministically selects the first stale loop, reports a stable name such
-as `loop.outbox`, and sets `since` to the instant its last heartbeat crossed the configured
-staleness threshold. It never performs network or database IO. Set each loop's staleness bound relative to its cadence: the outbox and timer loops poll every
-1 s, so a 10 s bound flags a wedged loop quickly without false positives; the queue processor
-and consumers may idle legitimately when there is no work, so give them longer bounds (e.g.
-60 s) and, if idleness makes bounds unreliable, have the loop `beat` on each poll *attempt*
-(including empty polls) rather than only on work — the empty-poll heartbeat is the honest "loop
-is alive" signal. Record which choice was made.
+Set each staleness bound relative to that loop's cadence. The outbox, timer, and scheduler loops
+poll every second, so a 10-second bound flags a wedged loop quickly without false positives. The
+consumers and the queue processor may idle legitimately when there is no work, so give them
+longer bounds — 60 seconds — and beat on each poll *attempt* rather than only on work, because
+the empty-poll heartbeat is the honest "loop is alive" signal. Record which choice each loop got
+and why.
 
-Acceptance: with the worker idle, `/health/live` stays 200 (empty-poll heartbeats keep loops
-fresh). A forced stale outbox heartbeat returns 503 with `check = "loop.outbox"` and the exact
-threshold-crossing `failingSince`. Pointing the worker at unreachable Postgres makes
-`/health/ready` return 503 naming `postgres`. Stopping Kafka does not change readiness; if it
-kills or wedges a consumer loop, liveness/fail-fast surfaces that condition.
+**Acceptance.** With the worker idle, `/health/live` stays 200 for at least two minutes. A test
+that forces one loop's heartbeat stale returns 503 with `check = "loop.outbox"` and the exact
+threshold-crossing `failingSince`. Pointing the worker at an unreachable Postgres makes
+`/health/ready` return 503 naming `postgres`. Stopping Kafka does not change readiness.
 
 ### Milestone 3 — fail-fast supervision and bounded loop retry
 
 Scope: make a genuinely dead loop take the process down, and make the resume loop tolerate a
 transient store blip.
 
-First, stop the loops from swallowing fatal errors. The outbox and timer loops should keep
-retrying *store* errors (transient) but must not catch and hide a programming exception; keep
-the `Left`-logs-and-continues path for `StoreError`, but let any other exception propagate out
-of `forever` so `concurrently_` (`Worker.hs:70`) cancels the siblings and `runWorker` throws,
-exiting the process non-zero. The queue processor already returns from `waitApp` when shibuya
-stops; wrap `runQueueWorker` so that a *return* from `waitApp` (the processor stopped) is
-treated as fatal — re-throw a `LoopExited QueueLoop` exception rather than letting
-`runQueueWorker` fall through to `pure ()` (`Worker.hs:84`), because under `IgnoreFailures` a
-stopped processor is a silent death.
+**Stop swallowing fatal errors.** The outbox and timer loops keep retrying `StoreError`s — that
+is deliberate and their headers explain why — but any *other* exception must propagate out of
+`forever` so `concurrently_` (`Workers/Registry.hs:44-46`) cancels the siblings and `runWorkers`
+throws. Today the `case result of Left err -> log` arms only catch the `Either StoreError` the
+effect runner returns, so this is mostly already true; verify it with a test rather than assuming
+it, because an added `catch` anywhere in the chain would silently undo it.
 
-Second, convert the resume loop (`runResumeWorker`, `Worker.hs:86-101`) from run-once-and-return
-into a bounded retry: wrap it in a loop that, on a `Left` store error, logs, sleeps a backoff
-interval (start 1 s, cap at, say, 30 s, reset on success), beats the worker heartbeat
-registry, and retries;
-on repeated failure past a ceiling count, throw `LoopExited ResumeLoop` to trip fail-fast. A
-clean return (no more work) simply loops again after a short delay, exactly like the
-outbox/timer loops.
+**Close the queue processor's silent-death hole.** `runQueueWorker` (`Registry.hs:75-84`) treats a
+return from `waitApp` as success. Under `IgnoreFailures` a stopped processor is a silent death, so
+re-throw a `LoopExited QueueLoop` exception instead of falling through to `pure ()`. Before
+throwing, read `getAppMetrics` and log which processor stopped and in what state — that is the one
+line an operator will want.
 
-Prove it by fault injection in the workers test harness. Construct `WorkerEnv` with a private
-test hook that makes one loop body `throwIO (userError "fault-injected loop death")` after N
-iterations; do not add a production flag or raw environment read. Run that composition under
-an `async`, assert that it terminates with `LoopExited`, and separately exercise the packaged
-binary under the external supervisor's restart policy.
+**Make the resume loop a loop.** Convert `runResumeWorker`
+(`Agent/Workflow/Resume.hs:36-42`) from run-once-and-return into a bounded retry: on a `Left`
+store error, log `worker.resume.failed` as it does now, sleep a backoff interval (start 1 s, cap
+30 s, reset on success), beat the heartbeat registry, and retry; past a ceiling count of
+consecutive failures, throw `LoopExited ResumeLoop` to trip fail-fast. A clean return (no more
+work) simply loops again after a short delay, exactly like the outbox and timer loops. Note that
+this changes the loop's relationship to `shikigamiWorkflowResumeOptions`' lease TTL, which plan 17
+sized above the behavior timeout — do not shorten the backoff below the point where a retry could
+contend with a lease the previous pass still holds.
 
-Acceptance: fault-injected loop death exits the process non-zero (visible as a process-compose
-restart or `echo exited $?` printing non-zero); a transient store error in the resume loop is
-retried with backoff and does not exit; a persistent one exits after the ceiling.
+**Prove it by fault injection.** Construct `WorkerEnv` with a private test hook that makes one
+loop body `throwIO (userError "fault-injected loop death")` after N iterations. Do not add a
+production flag and do not read an environment variable — plan 37 removed every environment read
+and this must not reintroduce one. Run that composition under an `async`, assert it terminates
+with `LoopExited`, and separately exercise the packaged binary under the external supervisor's
+restart policy.
+
+**Acceptance.** A fault-injected loop death exits the process non-zero (visible as `echo "exited
+$?"` printing non-zero, and as a process-compose restart when run under the stack). A transient
+store error in the resume loop is retried with backoff and does not exit. A persistent one exits
+after the ceiling.
 
 
 ## Concrete Steps
 
-All commands run from the repo root inside `nix develop`. A running Postgres described by the
-checked config source is assumed (use the stack from
-`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`, or a manual
-Postgres).
+All commands run from `/Users/shinzui/Keikaku/bokuno/shikigami` inside the Nix dev shell. A bare
+`cabal build all` outside it fails at link with `ld: library not found for -lrdkafka`.
 
-Build and unit-test the health app (M1):
+```bash
+nix develop
+just create-database
+```
+
+Build and unit-test the probe surface (M1):
 
 ```bash
 cabal build all
 cabal test all
 ```
 
-Expected: the server and worker test suites pass. Their health-app unit tests use `wai`'s test
-helpers (`Network.Wai.Test`) to assert exact GET `/health/live` → 200 and, with a stale
-heartbeat injected, → 503, needing no server socket. The upstream Shibuya same-proxy
-OpenAPI/conformance suite also passes at its selected released version.
+Expected: the server and worker test suites pass. Their probe tests use `servant-health:testkit`
+to assert exact `GET /health/live` → 200 and, with a check forced to fail, → 503, needing no
+external socket.
 
-Probe a live worker (M1/M2):
+Probe a live worker (M1/M2). The `--config` file is a Settei source; see plan 37's configuration
+surface for its shape.
 
 ```bash
 cabal run shikigami-worker -- --config config/worker-health.yaml &
@@ -421,110 +694,188 @@ Expected:
 503
 ```
 
-Fail-fast (M3) — run the private test-harness injection and confirm the supervised worker
-terminates rather than limping:
+Fail-fast (M3) — run the private test-harness injection:
 
 ```bash
-cabal test shikigami-workers --test-options='--pattern "loop failure cancels siblings"'
+cabal test shikigami-workers-test --test-options='--pattern "loop failure cancels siblings"'
 ```
 
 Expected:
 
 ```text
-1 tests passed
+1 test passed
+```
+
+Every commit while working on this plan carries both trailers:
+
+```text
+ExecPlan: docs/plans/29-health-liveness-and-worker-loop-supervision.md
+Intention: intention_01kx1tyx3yehmsq9eyywdcf5c7
 ```
 
 
 ## Validation and Acceptance
 
-Acceptance is observable behavior:
+Acceptance is observable behavior.
 
-1. Liveness: `curl -s -o /dev/null -w '%{http_code}' localhost:8091/health/live` prints `200` for a
-   healthy worker and the body is the standard passing `ProbeStatus`. Injecting a stale
-   heartbeat yields `503` with the stable loop check and threshold-crossing `failingSince`.
-2. Readiness: `/health/ready` returns `200` when PostgreSQL is reachable and `503` naming it
-   otherwise. Kafka and downstream HTTP outages do not flip readiness.
-3. Fail-fast: a fault-injected loop death exits the whole process with a non-zero status (shown
-   by the `echo "exited $?"` transcript, and by a process-compose restart when run under the
-   stack), instead of the current silent-dead-loop behavior. A transient store error in the
-   resume loop is retried with backoff and does not exit.
-4. Regression: `cabal build all` and `cabal test all` pass; all four commands still start and do
-   their existing work; the health port is configurable and defaults are distinct so the full
-   stack can run every command on one host.
-5. API contract: only exact unauthenticated GETs succeed; 200/503 bodies conform to the
-   OpenAPI artifact generated from each served proxy; no redirect or handwritten WAI route
-   exists in either Shikigami or the required Shibuya surface; non-health JSON errors use RFC
-   7807; request logs omit health paths.
+1. **Liveness.** `curl -s -o /dev/null -w '%{http_code}' localhost:8091/health/live` prints `200`
+   for a healthy worker and the body is the passing `ProbeStatus`. Injecting a stale heartbeat
+   yields `503` with the stable loop check name and the threshold-crossing `failingSince`. A
+   shibuya processor in the `Failed` state yields `503` for the queue loop without any heartbeat
+   being involved.
+2. **Readiness.** `/health/ready` returns `200` when PostgreSQL is reachable and `503` naming
+   `postgres` otherwise, on both the server and every worker role. Kafka and downstream HTTP
+   outages do not flip readiness.
+3. **Fail-fast.** A fault-injected loop death exits the whole process with a non-zero status. A
+   transient store error in the resume loop is retried with backoff and does not exit; a
+   persistent one exits after the ceiling.
+4. **The silent-death hole is closed.** A test that stops the shibuya app out from under
+   `runQueueWorker` makes the process exit rather than continue with three loops.
+5. **Package boundary.** `shikigami-workers` depends on `servant-health` and on no Shikigami
+   sibling API or server package; the boundary test proves it.
+6. **API contract.** Only exact unauthenticated GETs succeed on both listeners; 200/503 bodies
+   conform to the artifact generated from the served proxy; no handwritten WAI route exists;
+   non-health JSON errors still use RFC 7807.
+7. **Regression.** `cabal build all` and `cabal test all` pass; all four worker executables and the
+   server still start and do their existing work; health ports are configurable and their defaults
+   are distinct so the whole stack runs on one host.
 
 
 ## Idempotence and Recovery
 
-The endpoints are read-only and safe to poll at any frequency. All local code changes are
-additive (concept-vertical modules, one Settei setting consumed from plan 37, extra
-`concurrently_` branches) except the M3 change to loop
-error-handling, which is the point of the plan; each milestone leaves `cabal test all` green, so
-work can stop at a milestone boundary. If the fail-fast change proves too aggressive in practice
-(e.g. a loop that legitimately returns is misread as a death), the fix is local — widen what
-counts as "clean return" for that loop — and does not affect the health server or heartbeats.
-The health server binding to a busy port fails loudly at boot; choosing distinct per-command
-defaults (and honoring Settei's `health.port`) avoids collisions. No database or schema changes are
-made, so there is nothing to roll back on the data side.
+The endpoints are read-only and safe to poll at any frequency. Nearly every change is additive —
+a new concept-vertical module in `shikigami-workers`, one new Settei setting, a pool added to
+`ServerEnv`, extra `concurrently_` branches — except M3's change to loop error handling, which is
+the point of the plan. Each milestone leaves `cabal test all` green, so work can stop at a
+milestone boundary.
 
+Two specific recoveries are worth naming. If the fail-fast change proves too aggressive in
+practice — a loop that legitimately returns misread as a death — the fix is local: widen what
+counts as a clean return for that loop, in that loop's module. It does not affect the probe server
+or the heartbeats. And if reading `ProcessorMetrics` for the queue loop turns out to be awkward to
+thread out of `runQueueWorker`, fall back to the original design (a threaded `beat` callback
+inside the job handler) and record the reason in the Decision Log; the probe contract does not
+change either way.
 
-## Portfolio Reconciliation (2026-07-30)
-
-This plan hard-depends on plans 36, 37, and 47. Its Shibuya worker-probe slice is blocked
-on Shibuya IR-1 at
-`mori://shinzui/shibuya/docs/improvement-requests/expose-a-public-worker-probe-contract.md`.
-The typed health API, local loop-heartbeat abstraction, and fail-fast supervision can proceed, but
-no plan may import Shibuya `Internal` modules or couple worker packages to the HTTP server.
+A health listener binding to a busy port fails loudly at boot, which is the desired behaviour;
+distinct per-role defaults plus the Settei `health.port` override are what avoid the collision in
+the first place. No database or schema change is owned by this plan, so there is nothing to roll
+back on the data side.
 
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36 and 37 plus the released upstream Shibuya probe contract described
-above. Use the coherent released `openapi-hs`/`servant-openapi-hs` cohort selected by plan 36
-and obtain listener settings from Settei.
+**Hard dependencies, all landed:** plans 36 and 37. Plan 28's Milestone 1 (`Shikigami.Log`) has
+landed and is now a real dependency rather than a soft one — emit loop-lifecycle and fail-fast
+events through it. Plan 17 has landed and shaped `runQueueWorker`; do not undo its queue and DLQ
+reconciliation while adding supervision. Plan 18 has landed and shaped the consumer's reconnect
+loop; the heartbeat must not move where an offset is committed.
 
-Dependencies: `wai`, `warp`, and Servant server packages stay at the `shikigami-server`
-boundary; `shikigami-workers` adds the coherent released `shibuya-metrics` package but no
-Shikigami sibling API/server dependency. `hasql`/`hasql-pool` provide the PostgreSQL readiness
-ping. Shibuya's
-supervision types are consumed as-is (`Shibuya.App (SupervisionStrategy (IgnoreFailures),
-runApp, waitApp)`, already imported at `Worker.hs:34`); this plan does not change the shibuya
-call, only what happens when `waitApp` returns.
+**No blocking upstream prerequisite.** Shibuya IR-1
+(`mori://shinzui/shibuya/okf/improvement-requests/concepts/IR-1`) remains open on its merits but is
+not this plan's gate; see Surprises & Discoveries.
 
-Signatures that must exist at the end of each milestone (full module paths):
+**Libraries.** `servant-health 0.1.0.0` (`Servant.Health`, `Servant.Health.Check`,
+`Servant.Health.Paths`, and `servant-health:testkit` for tests) — new to `shikigami-workers`,
+already present in `shikigami-api`, `shikigami-server`, and `shikigami-client`. `servant-server`
+and `warp` — new to `shikigami-workers`, already present in `shikigami-server`. `shibuya-core
+0.9.0.0` (`Shibuya.App`: `getAppMetrics`, `ProcessorId`, `ProcessorMetrics`, `ProcessorState`,
+`SupervisionStrategy`, `waitApp`) — already a transitive dependency via `keiro-pgmq`.
+`hasql`/`hasql-pool` for the readiness ping — already present.
 
-- M1: `Shikigami.Health.Api` in `shikigami-api`, `Shikigami.Health.Handler` in
-  `shikigami-server`, typed 200/503 `MultiVerb` unions, the top-level served `Proxy`, and the
-  plan-36 OpenAPI generator. Upstream `shibuya-metrics` supplies the equivalent injectable
-  worker `ProbeCheck`/`probeApplication` contract and its own same-proxy artifact. Settei
-  `http.port` is present for the application server, and `health.port` listener settings are
-  present for all four worker-role processes.
-- M2: `Shikigami.Health.Worker` in `shikigami-workers` owns `LoopName`, the strict heartbeat registry,
-  `beat :: LoopName -> IO ()`, and `loopLivenessCheck :: ProbeCheck`; consumers accept the
-  narrow `beat` callback rather than an HTTP/server type.
-- M3: a `LoopExited` exception type in `Shikigami.Health.Worker` (or the owning concept
-  worker) thrown when a
-  loop dies; `runResumeWorker` becomes a bounded-backoff retry loop; `runQueueWorker` treats a
-  `waitApp` return as fatal.
+**Signatures that must exist at the end**, with full paths:
 
-Cross-plan contracts (mirrored in the MasterPlan's Integration Points): `/health/ready` and `/health/live`
-and the Settei `http.port`/`health.port` settings are consumed by
-`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md` as
-process-compose `http_get` probes and systemd health config — that plan must add both settings
-to the configuration reference. The Kafka consume-loop reconnect fix is owned by
-`docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`; this
-plan only surfaces the death via liveness and fail-fast. If
-`docs/plans/28-structured-logging-metrics-and-trace-propagation.md` has landed, loop-lifecycle
-and fail-fast events should be emitted through `Shikigami.Log` (soft dependency).
+```haskell
+-- shikigami-server/src/Shikigami/Health/Handler.hs (changed)
+mkHealthChecks :: Pool -> IO (ProbeCheck, ProbeCheck)
+
+-- shikigami-server/src/Shikigami/Server/Seam.hs (changed)
+data ServerEnv = ServerEnv
+  { config    :: !ServerConfig,
+    appConfig :: !AppConfig,
+    pool      :: !Pool,          -- new: what readiness pings
+    liveness  :: !ProbeCheck,
+    readiness :: !ProbeCheck
+  }
+
+-- shikigami-workers/src/Shikigami/Health/Worker.hs (new)
+data LoopName = QueueLoop | ResumeLoop | OutboxLoop | TimerLoop | ConsumerLoop | SchedulerLoop
+data LoopExited = LoopExited !LoopName        -- Exception instance
+
+newHeartbeats     :: [LoopName] -> IO Heartbeats
+beat              :: Heartbeats -> LoopName -> IO ()
+loopLivenessCheck :: Heartbeats -> Maybe (AppHandle es) -> ProbeCheck
+postgresReadiness :: Pool -> ProbeCheck
+runProbeListener  :: Port -> ProbeCheck -> ProbeCheck -> IO ()
+
+-- shikigami-core/src/Shikigami/App/Config.hs (extended)
+healthPortKey     :: Key                       -- stableKey "health.port"
+-- with per-role defaults 8091 worker / 8092 scheduler / 8093 stream / 8094 events
+```
+
+**Cross-plan contracts** (mirrored in MasterPlan 6's Integration Points).
+`docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md` consumes
+`/health/live`, `/health/ready`, and the `http.port`/`health.port` settings as its process-compose
+`http_get` probes and systemd health configuration, and owns
+`docs/operations/configuration.md`, which must gain the `health.port` row.
+`docs/plans/28-structured-logging-metrics-and-trace-propagation.md` owns the observability
+vocabulary (IP-A) and the request-log exclusion of the two health paths; the loop-lifecycle and
+fail-fast events this plan emits follow its `component.subject.verb` naming and reuse the existing
+`worker.*` event names rather than inventing parallel ones.
+`docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md` owns the
+consumer's acknowledgement boundary; this plan adds a heartbeat beside it and moves nothing.
+`docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md` gives an operator the
+inspection verbs that answer "why is it unhealthy" once a probe says it is.
 
 
 ## Revision Notes
 
-- 2026-07-22: Rebased on plans 36/37 and completed the API pass: typed
-  `NamedRoutes`/`MultiVerb`, same-proxy OpenAPI, health-specific status documents,
-  RFC-7807 non-health errors, exact probe behavior, Settei ports, and request-log exclusion.
-- 2026-07-22: Aligned probe paths and readiness semantics with the API standard:
-  `/health/live`, `/health/ready`, and no Kafka/downstream readiness dependency.
+- 2026-07-22: Rebased on plans 36/37 and completed the API pass: typed `NamedRoutes`/`MultiVerb`,
+  same-proxy OpenAPI, health-specific status documents, RFC-7807 non-health errors, exact probe
+  behavior, Settei ports, and request-log exclusion.
+
+- 2026-07-22: Aligned probe paths and readiness semantics with the API standard: `/health/live`,
+  `/health/ready`, and no Kafka/downstream readiness dependency.
+
+- 2026-08-19: **Full refresh against the delivered tree.** Superseded by this note: the 2026-07-30
+  "Portfolio Reconciliation" section, which named Shibuya IR-1 as a blocker.
+
+  *Why the refresh was needed.* `docs/architecture/implementation-order.md` records a standing
+  requirement to audit a plan's citations immediately before implementing it, and names this plan
+  among the 19 open plans citing `shikigami-core/src/Shikigami/Worker.hs` — a file plan 36
+  deleted. Every `Worker.hs:NN` pointer in this plan was wrong. All are re-resolved, and Context
+  and Orientation now carries the was/is table so a reader who finds an old citation elsewhere can
+  translate it.
+
+  *The blocker is gone.* Shibuya IR-1 asked for two things. `shibuya-core 0.9.0.0` delivers the
+  first — a public, non-blocking `ProcessorMetrics` snapshot distinguishing idle, processing with
+  last-activity, failed with reason and time, and stopped, keyed by `ProcessorId`. The second, a
+  generic WAI probe application, is moot: `servant-health 0.1.0.0` is a released *external*
+  package, so a worker executable depending on it introduces no sibling dependency — which was the
+  whole reason the request was routed through shibuya. The IR stays open on its merits; it is no
+  longer this plan's gate, and the "Upstream prerequisite" progress item is closed.
+
+  *Half of Milestone 1 already shipped.* Plan 36 delivered `Shikigami.Health.Api`,
+  `Shikigami.Health.Handler`, `newServerEnvWith`, and the generated OpenAPI artifact, by adopting
+  `servant-health` instead of hand-writing the `MultiVerb` union this plan specified. The plan now
+  records that as done, names the three hardening decisions already baked into the handler
+  (`safeCheck` inside, `withProbeTimeout` outside on liveness, one failure tracker per probe) as
+  requirements the worker probe must reproduce, and reduces the server-side remainder to one
+  concrete gap: `readinessCheck = sequenceChecks []`, which is empty because `ServerEnv` holds no
+  pool.
+
+  *Two starting-state claims were no longer true.* The Kafka consumer does not die on a
+  `KafkaError` any more — plan 18 gave it capped exponential reconnect — so the readiness decision
+  was re-argued on blast radius alone, which was always the stronger half of it. And the queue
+  processor is no longer a bare `runApp`; plan 17 made it reconcile the queue and its DLQ and
+  already converts two failure modes into `ioError`, leaving one hole (`waitApp` returning
+  cleanly) rather than three.
+
+  *One design change.* The queue loop's heartbeat is no longer a `beat` callback threaded into
+  the job handler. It reads shibuya's own `ProcessorMetrics` instead, which reports what the
+  processor actually did rather than when shikigami last remembered to call a function, and which
+  reports a `Failed` state with its error and timestamp that no callback could report at all.
+
+  *One addition.* `Shikigami.Log` landed with plan 28's Milestone 1, so every loop already emits
+  structured lifecycle events. MasterPlan 6's IP-B is no longer a soft consumption; the plan now
+  lists the existing event names so this work extends them rather than inventing a parallel set.
