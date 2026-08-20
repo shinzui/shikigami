@@ -123,6 +123,7 @@ nested under `kafka`.
 | `kafka.include_agent_actors` | `false` | `SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS` | Whether the stream consumer matches agent-produced activities. Leaving it off is the feedback guard that stops an agent triggering itself. |
 | `http.host` | `127.0.0.1` | `SHIKIGAMI_HTTP_HOST` | Interface the API binds. `*` binds every interface. |
 | `http.port` | `8080` | `SHIKIGAMI_HTTP_PORT` | Port the API binds. Must be 1–65535; checked at resolution, not at bind. |
+| `health.port` | per role — see below | `SHIKIGAMI_HEALTH_PORT` | Port the probe listener binds on a worker-role process. Must be 1–65535; checked at resolution, not at bind. |
 | `sinks.kawa.base_url` | `http://localhost:8088` | `SHIKIGAMI_SINKS_KAWA_BASE_URL` | Base URL of the kawa ingest doorway. |
 | `sinks.kawa.source_segment` | `shinzui/shikigami` | `SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT` | Source segment kawa attributes ingested activity to. |
 | `sinks.kizashi.base_url` | `http://localhost:8089` | `SHIKIGAMI_SINKS_KIZASHI_BASE_URL` | Base URL of the kizashi signal service. |
@@ -210,9 +211,14 @@ the binary you ran it on.
 | `shikigami-consume-stream` | `database.connection_string` |
 | `shikigami-consume-events` | `database.connection_string` |
 | `shikigami-agent-run` | `database.connection_string` |
-| `shikigami-server` | nothing |
+| `shikigami-server` | `database.connection_string` |
 | `shikigami-run-behavior` | nothing |
 | `shikigami` | nothing at the top level |
+
+`shikigami-server` is on the database list because its readiness probe pings PostgreSQL. A
+server started without a connection string could never report ready, so it would bind its
+socket and then fail every probe forever; failing at configuration time with the key named
+is the better outcome.
 
 `shikigami` is deliberately absent from the database list: `shikigami validate` and
 `shikigami render-lifecycle` read a manifest and never connect, so requiring a connection
@@ -223,6 +229,54 @@ same key name if it is missing.
 ```text
 $ shikigami-worker
 shikigami-worker: database.connection_string is required by this process but no source supplied it
+```
+
+
+## Health probe ports
+
+Every worker-role process serves `GET /health/live` and `GET /health/ready` on its own
+listener, answering the same contract and the same body shape the server answers on its
+`http.port` listener. `shikigami-server` does **not** open a second socket, so `health.port`
+does nothing on it.
+
+`health.port` has no single default, because the four worker processes routinely run on one
+host and a shared default would leave three of them unable to bind. Each role has its own:
+
+| Binary | Default probe port |
+|---|---|
+| `shikigami-worker` | `8091` |
+| `shikigami-scheduler` | `8092` |
+| `shikigami-consume-stream` | `8093` |
+| `shikigami-consume-events` | `8094` |
+| `shikigami-server` | none — probes are served on `http.port` |
+
+Setting `health.port` overrides the role default. Because one declaration serves every
+binary, setting it in a shared file gives every worker the *same* port, which is what the
+per-role defaults exist to avoid — override it per process, not fleet-wide.
+
+The listener binds the interface named by `http.host`, so the same setting decides whether a
+development process stays on loopback or a deployed one is reachable by a probe from outside
+its container.
+
+`/health/live` reports whether this process's loops are still making progress; its failure
+means restart the process. `/health/ready` reports whether PostgreSQL is reachable; its
+failure means take the process out of load balancing but leave it running. Kafka and the
+downstream HTTP sinks are deliberately **not** readiness dependencies: an outage there cannot
+be repaired by restarting a pod, so making it readiness-critical would amplify one upstream
+outage across the fleet.
+
+```bash
+$ curl -sS -o /dev/null -w '%{http_code}\n' localhost:8091/health/live
+200
+$ curl -sS localhost:8091/health/ready
+{"check":"all","failingSince":null,"status":"ok"}
+```
+
+A failing probe names the check that failed and when it began failing, so a dashboard shows
+one incident rather than a fresh one on every scrape:
+
+```text
+{"check":"postgres","failingSince":"2026-08-20T20:34:46.985935Z","status":"failed"}
 ```
 
 

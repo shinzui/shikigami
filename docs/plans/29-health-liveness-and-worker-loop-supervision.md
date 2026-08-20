@@ -132,6 +132,14 @@ This section must always reflect the actual current state of the work.
       Discoveries.
 - [x] (2026-08-20) M3: `runQueueWorker` logs the full shibuya metrics map and throws
       `LoopExited QueueLoop` when `waitApp` returns, instead of falling through to `pure ()`.
+- [x] (2026-08-20) Live acceptance. All four worker roles and the server started together on
+      distinct ports and answered both probes; readiness flipped to 503 naming `postgres` with a
+      stable `failingSince`; a Kafka outage moved neither probe for 100 seconds; killing
+      PostgreSQL under the worker exited the process `1`. Transcript in Outcomes & Retrospective.
+- [x] (2026-08-20) `docs/operations/configuration.md` gained the `health.port` row, a probe-port
+      section with the per-role table, and the corrected `shikigami-server` requirement.
+- [x] (2026-08-20) Distillation: `docs/adr/0019-a-loop-that-stops-stops-the-process.md` and
+      `docs/adr/0020-readiness-covers-only-what-restarting-can-fix.md`.
 
 
 ## Surprises & Discoveries
@@ -491,10 +499,105 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+### Against the original purpose
 
-(To be filled during and after implementation.)
+The Purpose section promised three things. All three hold.
+
+*Every loop records progress and every worker-role process serves the probe contract.* The four
+worker executables answer `GET /health/live` and `GET /health/ready` on their own listeners at
+8091–8094, using `servant-health` directly and depending on no Shikigami sibling — the boundary
+test passes unchanged. `/health/live` returns 200 only when every registered loop is making
+progress; `/health/ready` returns 200 only when PostgreSQL is reachable, and neither Kafka nor
+the downstream HTTP sinks are consulted.
+
+*Any loop's death terminates the process with a non-zero exit.* Verified with a real fault
+rather than a fixture — see the transcript below.
+
+*The server's readiness check stops being a placeholder.* `sequenceChecks []` is now a
+PostgreSQL ping through the pool `runServer` brackets around the listener.
+
+### The user-visible proof the plan asked for
+
+```text
+$ curl -sS -o /dev/null -w '%{http_code}\n' localhost:8091/health/live
+200
+$ curl -sS localhost:8091/health/live
+{"check":"all","failingSince":null,"status":"ok"}
+```
+
+Readiness failing, on the server (see the caveat below for why not the worker), with the
+database stopped underneath a running process:
+
+```text
+before ready: 200 {"check":"all","failingSince":null,"status":"ok"}
+during ready: 503 {"check":"postgres","failingSince":"2026-08-20T20:34:46.985935Z","status":"failed"}
+during live:  200 {"check":"all","failingSince":null,"status":"ok"}
+later  ready: 503 {"check":"postgres","failingSince":"2026-08-20T20:34:46.985935Z","status":"failed"}
+```
+
+Three things worth reading twice: liveness stayed 200 while readiness failed, so the two probes
+are genuinely independent; `failingSince` is byte-for-byte identical across probes four seconds
+apart, so the tracker reports onset rather than observation; and the failed check is named.
+
+Fail-fast, with PostgreSQL killed under a running `shikigami-worker`:
+
+```text
+{"event":"worker.queue.stopped","level":"error","processors":{},"ts":"..."}
+shikigami-worker: Uncaught exception ...Shikigami.Workers.Supervision.LoopExited:
+LoopExited QueueLoop
+$ echo "exited $?"
+exited 1
+```
+
+Before this plan the same fault fell through to `pure ()` and left three loops running around a
+dead queue processor.
+
+### Where the delivered result differs from the plan
+
+Four differences, each recorded in Surprises & Discoveries or the Decision Log with its reason.
+
+1. **The consumers report through shibuya rather than beating per record.** The plan's
+   per-record heartbeat would have failed an idle topic at 60 seconds. Verified: a consumer
+   pointed at an unreachable broker held both probes at 200 for 100 seconds.
+2. **The resume loop's defect was narrower than the plan stated.** Keiro's runner is already a
+   `forever` loop with a per-pass catch, so transient store errors never reached shikigami. The
+   real hole was a whole-runner return, and the retry is built around that.
+3. **The resume loop has no heartbeat**, because keiro exposes no per-pass success event to
+   beat on. Fail-fast covers it completely instead — the only way it can stop is by returning.
+4. **Fail-fast is proved by injected loop actions, not a `WorkerEnv` test hook.** Extracting
+   `superviseLoops`, `runResumeLoopWith`, `loopLivenessAt`, and `processorStateVerdict` reaches
+   the same proof with ordinary parameters, so no production path can select test behavior.
+
+### Gaps and caveats
+
+**A worker will rarely serve a readiness 503 for its own database.** Losing PostgreSQL trips
+fail-fast and the process exits within about a second, and a worker pointed at a dead database
+does not start at all — the kiroku notifier connects eagerly. The check is still right and still
+reachable for partial faults (pool exhaustion, a refused connection against a live server), and
+the 503 is fully demonstrable on the server. But the plan's phrasing — "point the process at an
+unreachable Postgres and watch `/health/ready` return 503" — describes the server, not a worker.
+
+**`worker.queue.stopped` logs an empty processor map when the whole master shuts down**, because
+shibuya clears its metrics on shutdown. The line still earns its place for the case of one failed
+processor under a live master, and an empty map is itself the signal that the supervisor went.
+
+**Liveness catches a loop that wedges; fail-fast catches a loop that stops.** Neither catches a
+loop wedged inside keiro's or shibuya's internals in a way those libraries report as healthy. A
+per-pass success event in `Keiro.Workflow.Resume.ResumeLogEvent` would close the resume loop's
+share of that; it is a reasonable upstream ask and not this plan's business.
+
+**Request-log exclusion of the two health paths is not done.** It belongs to plan 28's
+request-logging work; `Servant.Health.Paths.healthRawPaths` is there for it.
+
+### The lesson worth keeping
+
+The one real bug shipped in this plan was caught by `curl`, not by the test suite.
+`databaseReachable` decoded `select 1` as `int8` — it is `int4` — so it reported every healthy
+database as unreachable while all 74 worker tests and all 342 core tests passed, because the
+conformance kit injects its own checks and nothing in the suite ever ran the query. Probe work
+is exactly the kind whose tests can be green while the thing does not work, because the seam
+that makes it testable is the seam that skips the real dependency. Acceptance for a probe has to
+include running the process and asking it.
 
 
 ## Context and Orientation
@@ -678,9 +781,14 @@ number. `http.port` is a stable key defaulting to `Port 8080`
 - `docs/adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md` — the package-boundary
   reasoning that also governs which packages a worker may depend on.
 
-No ADR covers process supervision or probe ownership. If the fail-fast boundary decision survives
-implementation, it is durable project context and should be promoted to a new ADR during the
-distillation pass.
+No ADR covered process supervision or probe ownership when this plan began. Both survived
+implementation and were promoted on 2026-08-20:
+
+- `docs/adr/0019-a-loop-that-stops-stops-the-process.md` — the fail-fast boundary, why shibuya's
+  two supervision strategies force it, and what a deployment now owes these binaries.
+- `docs/adr/0020-readiness-covers-only-what-restarting-can-fix.md` — the readiness boundary, the
+  liveness/readiness split, and how two packages serve one probe contract without a sibling
+  dependency.
 
 
 ## Plan of Work
@@ -1016,6 +1124,17 @@ inspection verbs that answer "why is it unhealthy" once a probe says it is.
 
 - 2026-07-22: Aligned probe paths and readiness semantics with the API standard: `/health/live`,
   `/health/ready`, and no Kafka/downstream readiness dependency.
+
+- 2026-08-20: **Implemented.** All three milestones delivered and committed; Progress, Surprises
+  & Discoveries, Decision Log, and Outcomes & Retrospective updated as the work proceeded. Four
+  substantive departures from the plan as written, each with its reason recorded: the consumers
+  report liveness through shibuya rather than beating per record (the plan's design would have
+  failed an idle topic); the resume loop's defect was narrower than the plan described, because
+  keiro's runner already loops with a per-pass catch; the resume loop gets no heartbeat because
+  keiro exposes no per-pass success event, and is covered by fail-fast alone; and fail-fast is
+  proved by injected loop actions rather than by a private test hook on `WorkerEnv`. Two ADRs
+  distilled. `docs/operations/configuration.md` gained the `health.port` surface. One bug found
+  by live probing that the whole test suite missed — see the Outcomes section.
 
 - 2026-08-19: **Full refresh against the delivered tree.** Superseded by this note: the 2026-07-30
   "Portfolio Reconciliation" section, which named Shibuya IR-1 as a blocker.
