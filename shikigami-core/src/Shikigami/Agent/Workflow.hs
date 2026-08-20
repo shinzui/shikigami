@@ -80,6 +80,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, r
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttempt)
 import Shikigami.Flow qualified as Flow
+import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -479,21 +480,17 @@ runFlowBehavior ::
   Text ->
   Eff es (Either Text Value)
 runFlowBehavior deps sid decl job flowName =
-  case Flow.lookupFlow runtime flowName of
+  case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
       output <-
         FlowCapability.runActivity (activityFromJob job)
           . FlowCapability.runMemory memoryEnv
           . FlowCapability.runSink sinkEnv
+          . runAcknowledgement (approval deps sid) (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
           $ run (triggerPayload job)
       pure (Right output)
   where
-    runtime =
-      Flow.FlowRuntime
-        { Flow.approval = approval deps sid,
-          Flow.acknowledgementDeadline = fromMaybe (secondsToNominalDiffTime 900) (deadline deps)
-        }
     memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
     sinkEnv =
       FlowCapability.SinkEnv

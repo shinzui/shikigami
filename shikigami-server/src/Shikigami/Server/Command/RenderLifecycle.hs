@@ -6,9 +6,6 @@ where
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
-import Data.Time (secondsToNominalDiffTime)
-import Kioku.Id (genSessionId)
-import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Flow qualified as Flow
@@ -29,15 +26,15 @@ runRenderLifecycle path = do
           hPutStrLn stderr ("render-lifecycle: expected Flow behavior, found " <> show other)
           exitFailure
 
+-- | Print one registered flow's lifecycle diagram.
+--
+-- This used to mint a session id and a throwaway approval environment purely to
+-- satisfy 'Flow.lookupFlow', which took a @FlowRuntime@ because a flow body
+-- closed over one. Acknowledgement is a capability now, so asking a flow for its
+-- diagram no longer requires the machinery for running it.
 renderFlow :: Text -> IO ()
-renderFlow flowName = do
-  sid <- genSessionId
-  let runtime =
-        Flow.FlowRuntime
-          { Flow.approval = Approval.defaultApprovalEnv sid,
-            Flow.acknowledgementDeadline = secondsToNominalDiffTime 900
-          }
-  case Flow.lookupFlow runtime flowName of
+renderFlow flowName =
+  case Flow.lookupFlow flowName of
     Nothing -> do
       hPutStrLn stderr ("render-lifecycle: unknown flow " <> Text.unpack flowName)
       exitFailure

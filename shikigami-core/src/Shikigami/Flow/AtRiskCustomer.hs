@@ -11,17 +11,15 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (NominalDiffTime)
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import GHC.Generics (Generic)
 import Keiro.Workflow (StepName (..), Workflow, step)
 import Kioku.Api.Types (MemoryRecord (..))
-import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
-import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalEnv, ApprovalRequest (..))
+import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert), Sink (..))
-import Shikigami.Flow.Acknowledgement (Ack (..), awaitAcknowledgement)
+import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 
@@ -34,12 +32,10 @@ data RiskVerdict = RiskVerdict
   deriving anyclass (ToJSON, FromJSON)
 
 atRiskCustomerFlow ::
-  (Workflow :> es, Store :> es, IOE :> es, Memory :> es, Capability.Sink :> es, Activity :> es) =>
-  ApprovalEnv ->
-  NominalDiffTime ->
+  (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es, Acknowledgement :> es) =>
   Value ->
   Eff es Value
-atRiskCustomerFlow approval deadline payload = do
+atRiskCustomerFlow payload = do
   activity <- currentActivity
   prior <- recall "risk-history" (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))
@@ -47,7 +43,7 @@ atRiskCustomerFlow approval deadline payload = do
     then pure (toJSON verdict)
     else do
       _ <- emitSignal "alert" (alertFor verdict activity) (toJSON verdict)
-      ack <- awaitAcknowledgement approval (StepName "await-ack") (ackRequest verdict activity) deadline
+      ack <- awaitAck (StepName "await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
           _ <- remember "acknowledged" (acknowledgedNote verdict answer)

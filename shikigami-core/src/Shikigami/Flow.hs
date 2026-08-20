@@ -19,17 +19,43 @@ import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import Keiro.Workflow (Workflow)
-import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 
-type FlowEffects es = (Workflow :> es, Store :> es, IOE :> es, Memory :> es, Sink :> es, Activity :> es)
+-- | Everything a flow body may do, and therefore everything it may not.
+--
+-- The absence of 'Effectful.IOE' and 'Kiroku.Store.Effect.Store' is the point of
+-- this alias, not an oversight. A durable workflow replays its body, answering
+-- journaled steps from the journal and re-running everything else; an effect
+-- with an external footprint that is not wrapped in a step therefore happens an
+-- unpredictable number of times. While a flow body could @liftIO@, nothing
+-- prevented that, and no reviewer could prove a flow had not done it.
+--
+-- So every way a flow reaches the world is a capability with a replay-safe
+-- interpreter: 'Memory' journals its recalls and writes, 'Sink' journals its
+-- emissions, 'Acknowledgement' parks through the approval machinery, and
+-- 'Activity' is pure data. 'Workflow' stays so a flow can still name a pure
+-- checkpoint with 'Keiro.Workflow.step' — without 'IOE' that step body cannot
+-- smuggle IO in.
+--
+-- Adding an effect here widens what every flow may do. Add a capability instead.
+type FlowEffects es =
+  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es)
 
+-- | What 'Shikigami.Flow.Acknowledgement.runAcknowledgement' needs to interpret
+-- a flow's parks.
+--
+-- This used to be threaded into the flow body itself, because
+-- 'Shikigami.Flow.Acknowledgement.awaitAcknowledgement' was a direct call and
+-- needed both values in scope where the flow made it. Now the interpreter holds
+-- them, so a flow body closes over nothing and 'flowRegistry' is a plain list
+-- rather than a function of deployment configuration.
 data FlowRuntime = FlowRuntime
   { approval :: !ApprovalEnv,
     acknowledgementDeadline :: !NominalDiffTime
@@ -57,53 +83,39 @@ atRiskCustomerLifecycleDiagram =
       validationWarnings = Text.pack . show <$> atRiskCustomerValidationWarnings
     }
 
--- | One flow this build knows how to run.
---
--- Only 'build' needs a 'FlowRuntime' (a flow's body closes over the approval
--- environment and the acknowledgement deadline); a flow's name and lifecycle
--- diagram do not. Splitting them is what lets 'registeredFlowNames' answer
--- \"which flows exist\" without constructing an approval environment, which is
--- what the @validate@ command and worker boot need.
---
--- Deliberately not exported: it exists so 'flowRegistry' and
--- 'registeredFlowNames' are two projections of __one__ list rather than two
--- lists that can disagree. A flow that were runnable but missing from the name
--- list would be rejected at boot despite working; one that were listed but not
--- registered would pass validation and then fail mid-run — the exact failure
--- 'registeredFlowNames' exists to close.
-data FlowRegistration = FlowRegistration
-  { name :: !Text,
-    lifecycle :: !LifecycleDiagram,
-    build :: FlowRuntime -> (forall es. (FlowEffects es) => Value -> Eff es Value)
-  }
-
 -- | Every flow this build registers. Add a flow here and nowhere else.
-flowRegistrations :: [FlowRegistration]
-flowRegistrations =
-  [ FlowRegistration
+--
+-- This is __one__ list, and 'registeredFlowNames' is a projection of it rather
+-- than a second list beside it. A flow that were runnable but missing from the
+-- name list would be rejected at boot despite working; one that were listed but
+-- not registered would pass validation and then fail mid-run — the exact failure
+-- 'registeredFlowNames' exists to close.
+--
+-- It is a plain value now. It used to be a function of a 'FlowRuntime', because
+-- a flow body closed over the approval environment and the acknowledgement
+-- deadline; a caller that only wanted to know a flow's /name/ or /diagram/ still
+-- had to mint an approval environment to ask. Acknowledgement is a capability
+-- now, so the body closes over nothing and the question is answerable directly.
+flowRegistry :: [FlowDef]
+flowRegistry =
+  [ FlowDef
       { name = "at-risk-customer",
         lifecycle = atRiskCustomerLifecycleDiagram,
-        build = \runtime -> atRiskCustomerFlow (approval runtime) (acknowledgementDeadline runtime)
+        run = atRiskCustomerFlow
       }
   ]
 
-flowRegistry :: FlowRuntime -> [FlowDef]
-flowRegistry runtime =
-  [ FlowDef {name, lifecycle, run = build runtime}
-  | FlowRegistration {name, lifecycle, build} <- flowRegistrations
-  ]
-
--- | The name of every registered flow, resolvable without a 'FlowRuntime'.
+-- | The name of every registered flow.
 --
 -- This is what an agent manifest's @Behavior.Flow { name }@ must match. Before
 -- it existed the only check happened inside a running workflow, so a typo in a
 -- manifest became a failed agent run rather than a refused deployment.
 registeredFlowNames :: [Text]
-registeredFlowNames = [name | FlowRegistration {name} <- flowRegistrations]
+registeredFlowNames = [name | FlowDef {name} <- flowRegistry]
 
-lookupFlow :: FlowRuntime -> Text -> Maybe FlowDef
-lookupFlow runtime requested =
-  find (\FlowDef {name} -> name == requested) (flowRegistry runtime)
+lookupFlow :: Text -> Maybe FlowDef
+lookupFlow requested =
+  find (\FlowDef {name} -> name == requested) flowRegistry
 
 -- | Every declaration error in an agent's behavior that this build can decide
 -- without running it, in declaration order. An empty list means the behavior is

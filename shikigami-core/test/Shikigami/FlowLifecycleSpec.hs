@@ -8,10 +8,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
-import Effectful (Eff, runEff)
+import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
@@ -22,14 +22,14 @@ import Kioku.Memory (MemoryWriteError (..))
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
-import Kiroku.Store.Effect (runStoreResource)
+import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
-import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision)
+import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
     MemoryQuery (..),
@@ -73,24 +73,22 @@ tests =
         let LifecycleDiagram {mermaid, validationWarnings} = atRiskCustomerLifecycleDiagram
         assertEqual "registry diagram has no validation warnings" [] validationWarnings
         assertBool "registry diagram includes AwaitingAck" ("AwaitingAck" `Text.isInfixOf` mermaid),
+      -- No FlowRuntime is constructed here any more, and that is the assertion:
+      -- asking which flows exist no longer requires the machinery for running one.
       testCase "flow registry resolves at-risk-customer and misses unknown flows" do
-        session <- genSessionId
-        let runtime = FlowRuntime {approval = Approval.defaultApprovalEnv session, acknowledgementDeadline = secondsToNominalDiffTime 1}
-        case lookupFlow runtime "at-risk-customer" of
+        case lookupFlow "at-risk-customer" of
           Just FlowDef {name = flowName} -> assertEqual "registered flow name" "at-risk-customer" flowName
           Nothing -> assertFailure "expected at-risk-customer flow to be registered"
-        case lookupFlow runtime "unknown-flow" of
+        case lookupFlow "unknown-flow" of
           Nothing -> pure ()
           Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
       -- registeredFlowNames is what `shikigami validate` and worker boot consult,
       -- and they must never disagree with what the runtime can actually run. The
       -- two are projections of one list in Shikigami.Flow, and this pins that.
       testCase "registeredFlowNames names exactly the flows the registry builds" do
-        session <- genSessionId
-        let runtime = FlowRuntime {approval = Approval.defaultApprovalEnv session, acknowledgementDeadline = secondsToNominalDiffTime 1}
         assertEqual
           "registered names match the built registry"
-          [flowName | FlowDef {name = flowName} <- flowRegistry runtime]
+          [flowName | FlowDef {name = flowName} <- flowRegistry]
           registeredFlowNames
         assertBool "at least one flow is registered" (not (null registeredFlowNames)),
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
@@ -110,7 +108,7 @@ tests =
         outcome <- runFlowWorkflow completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
       testCase "sleeping flow suspends through keiro runWorkflowWith" do
-        outcome <- runFlowWorkflow sleepingFlow (WorkflowId "flow-sleeping-spike")
+        outcome <- runSleepSpike (WorkflowId "flow-sleeping-spike")
         assertEqual "sleeping flow suspends" (Right Suspended) outcome,
       testCase "currentActivity exposes the triggering activity envelope" do
         outcome <- runFlowWorkflow activityFlow (WorkflowId "flow-activity-spike")
@@ -134,9 +132,9 @@ tests =
           other -> assertFailure ("denied sink flow should complete, got " <> show other)
         assertEqual "denied sink does not enqueue an outbox message" (Right 0) count,
       testCase "registered at-risk-customer flow parks then completes when acknowledged" do
-        withAtRiskFlow \appEnv aidRef flow -> do
+        withAtRiskFlow \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-ack"
-          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
 
           pending <- runAppIO appEnv countPendingAwakeables
@@ -148,30 +146,30 @@ tests =
           resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
           assertBool "approval signal resolves the awakeable" resolved
 
-          resumed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          resumed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "acknowledged flow completes" (Right (Completed acknowledgedOutput)) resumed
           afterOutbox <- outboxCount appEnv
           assertEqual "acknowledged branch does not enqueue escalation" (Right 1) afterOutbox,
       testCase "registered at-risk-customer flow escalates after acknowledgement timeout" do
-        withAtRiskFlow \appEnv _aidRef flow -> do
+        withAtRiskFlow \appEnv runtime _aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-timeout"
-          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement deadline" (Right Suspended) parked
 
           fireDueApprovalTimer appEnv
-          resumed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          resumed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "timed-out flow completes escalated" (Right (Completed escalatedOutput)) resumed
           afterOutbox <- outboxCount appEnv
           assertEqual "timeout branch enqueues alert plus escalation" (Right 2) afterOutbox,
       testCase "registered at-risk-customer flow replays parked alert without duplicating outbox" do
-        withAtRiskFlow \appEnv aidRef flow -> do
+        withAtRiskFlow \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-crash-replay"
-          first <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          first <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "first run parks" (Right Suspended) first
           firstOutbox <- outboxCount appEnv
           assertEqual "first run enqueues alert once" (Right 1) firstOutbox
 
-          replayed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          replayed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "replayed run remains parked" (Right Suspended) replayed
           replayedOutbox <- outboxCount appEnv
           assertEqual "replay does not enqueue another alert" (Right 1) replayedOutbox
@@ -179,7 +177,7 @@ tests =
           aid <- readCapturedAwakeable aidRef
           resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
           assertBool "approval signal resolves after replay" resolved
-          completed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          completed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "replayed flow can still complete" (Right (Completed acknowledgedOutput)) completed,
       -- Replay is the regime a durable workflow exists to survive: re-invoking a
       -- completed workflow under the same id re-runs its body with every
@@ -188,21 +186,21 @@ tests =
       -- again -- and a `remember` that mints a fresh memory id each time turns
       -- that into one extra memory row per replay.
       testCase "replaying a completed flow does not duplicate its memory" do
-        withAtRiskFlow \appEnv aidRef flow -> do
+        withAtRiskFlow \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-memory-replay"
-          parked <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
 
           aid <- readCapturedAwakeable aidRef
           resolved <- Approval.resolveApproval appEnv aid (Approval.Approved (object ["by" .= ("relationship-owner" :: Text)]))
           assertBool "approval signal resolves the awakeable" resolved
 
-          completed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          completed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "acknowledged flow completes" (Right (Completed acknowledgedOutput)) completed
           afterFirst <- acknowledgedMemoryCount appEnv
           assertEqual "the acknowledged branch records its note once" 1 afterFirst
 
-          replayed <- runFlowInAppEnv appEnv "at-risk-customer" flow workflowId highRiskPayload
+          replayed <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "replaying the completed flow returns the journaled value" (Right (Completed acknowledgedOutput)) replayed
           afterReplay <- acknowledgedMemoryCount appEnv
           assertEqual "replay does not record the note a second time" 1 afterReplay
@@ -261,14 +259,6 @@ completedFlow =
       run = twoStepFlow
     }
 
-sleepingFlow :: FlowDef
-sleepingFlow =
-  FlowDef
-    { name = "sleeping-spike",
-      lifecycle = atRiskCustomerLifecycleDiagram,
-      run = sleepFlow
-    }
-
 activityFlow :: FlowDef
 activityFlow =
   FlowDef
@@ -303,7 +293,14 @@ twoStepFlow _payload = do
   _ <- step (StepName "a") (pure (String "a"))
   step (StepName "b") (pure (toJSON (2 :: Int)))
 
-sleepFlow :: (FlowEffects es) => Value -> Eff es Value
+-- | Proof that a flow body can suspend and resume through keiro.
+--
+-- It carries its own constraint rather than 'FlowEffects' because 'sleepNamed'
+-- needs 'Store' and 'IOE', which are exactly what 'FlowEffects' stopped granting
+-- a flow body. This is a harness-level spike and is never registered, so it is
+-- allowed the wider row; a registered flow would have to reach suspension
+-- through a capability instead.
+sleepFlow :: (Workflow :> es, Store :> es, IOE :> es) => Value -> Eff es Value
 sleepFlow _payload = do
   _ <- step (StepName "before-wait") (pure (String "before-wait"))
   sleepNamed (StepName "wait") 300
@@ -325,29 +322,60 @@ runFlowWorkflowWithAgent flowAgent flow workflowId =
   withShikigamiMigratedDatabase \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
+      session <- genSessionId
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-      outcome <- runFlowBody appEnv flowAgent flow workflowId (object [])
+      outcome <- runFlowBody appEnv (spikeRuntime session) flowAgent flow workflowId (object [])
       count <- outboxCount appEnv
       pure (outcome, count)
 
+-- | An acknowledgement environment for a flow that never parks.
+--
+-- 'runAcknowledgement' needs one even when the body under it never calls
+-- 'Shikigami.Flow.Acknowledgement.awaitAck', because the interpreter is applied
+-- to the whole row rather than to the calls inside it.
+spikeRuntime :: SessionId -> FlowRuntime
+spikeRuntime session =
+  FlowRuntime
+    { approval = Approval.defaultApprovalEnv session,
+      acknowledgementDeadline = secondsToNominalDiffTime 1
+    }
+
+-- | The sleeping spike's runner. It bypasses the capability interpreters
+-- entirely: 'sleepFlow' is not a 'FlowDef' because it needs 'Store' and 'IOE',
+-- which a flow body no longer gets.
+runSleepSpike :: WorkflowId -> IO (Either StoreError (WorkflowOutcome Value))
+runSleepSpike workflowId =
+  withShikigamiMigratedDatabase \connStr ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore ->
+      runEff
+        . runErrorNoCallStack
+        . withKirokuStore (defaultConnectionSettings connStr)
+        . runStoreResource
+        $ runWorkflowWith
+          shikigamiWorkflowRunOptions
+          (WorkflowName "shikigami.flow.spike")
+          workflowId
+          (sleepFlow (object []))
+
 runFlowInAppEnv ::
   AppEnv ->
+  FlowRuntime ->
   Text ->
   FlowDef ->
   WorkflowId ->
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
-runFlowInAppEnv appEnv flowAgent flow workflowId input =
-  runFlowBody appEnv flowAgent flow workflowId input
+runFlowInAppEnv = runFlowBody
 
 runFlowBody ::
   AppEnv ->
+  FlowRuntime ->
   Text ->
   FlowDef ->
   WorkflowId ->
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
-runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
+runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
   runEff
     . runErrorNoCallStack
     . withKirokuStore (connectionSettings appEnv)
@@ -374,9 +402,13 @@ runFlowBody appEnv flowAgent FlowDef {run} workflowId input =
       runActivity sampleActivity
         . runMemory memoryEnv
         . runSink sinkEnv
+        . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
         $ run input
 
-withAtRiskFlow :: (AppEnv -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
+-- | The runtime is handed to the test rather than consumed by 'lookupFlow',
+-- because 'lookupFlow' no longer takes one: it configures
+-- 'runAcknowledgement' inside 'runFlowBody' instead.
+withAtRiskFlow :: (AppEnv -> FlowRuntime -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
 withAtRiskFlow action =
   withShikigamiMigratedDatabase \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -389,8 +421,8 @@ withAtRiskFlow action =
               { approval = approvalEnv aidRef session,
                 acknowledgementDeadline = secondsToNominalDiffTime 1
               }
-      case lookupFlow runtime "at-risk-customer" of
-        Just flow -> action appEnv aidRef flow
+      case lookupFlow "at-risk-customer" of
+        Just flow -> action appEnv runtime aidRef flow
         Nothing -> assertFailure "at-risk-customer flow should be registered"
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> Approval.ApprovalEnv

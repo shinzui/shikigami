@@ -57,6 +57,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
+import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
@@ -302,10 +303,10 @@ emitSignalSchemeIsPinnedPerInstance =
       tracer <- noopTracer
       session <- genSessionId
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-      flow <- requireAtRiskFlow session
+      flow <- requireAtRiskFlow
 
       -- Pre-deploy: empty patch set, so the flow names emissions by ordinal.
-      parked <- runFlow appEnv preLabelsOptions flow inFlightFlowId
+      parked <- runFlow appEnv (atRiskRuntime session) preLabelsOptions flow inFlightFlowId
       assertEqual "the high-risk flow parks for acknowledgement" (Right Suspended) parked
       afterAlert <- loadStepNames appEnv flowWorkflowName inFlightFlowId
       assertEqual
@@ -316,7 +317,7 @@ emitSignalSchemeIsPinnedPerInstance =
 
       -- The deploy happens here: same flow code, labels patch now active.
       fireDueApprovalTimer appEnv
-      resumed <- runFlow appEnv postLabelsOptions flow inFlightFlowId
+      resumed <- runFlow appEnv (atRiskRuntime session) postLabelsOptions flow inFlightFlowId
       assertEqual "the timed-out flow completes escalated" (Right (Completed escalatedOutput)) resumed
 
       afterEscalation <- loadStepNames appEnv flowWorkflowName inFlightFlowId
@@ -334,7 +335,7 @@ emitSignalSchemeIsPinnedPerInstance =
         =<< outboxCount appEnv
 
       -- A flow started after the deploy uses labels.
-      freshParked <- runFlow appEnv postLabelsOptions flow freshFlowId
+      freshParked <- runFlow appEnv (atRiskRuntime session) postLabelsOptions flow freshFlowId
       assertEqual "the fresh flow parks for acknowledgement" (Right Suspended) freshParked
       fresh <- loadStepNames appEnv flowWorkflowName freshFlowId
       assertEqual
@@ -371,27 +372,34 @@ preLabelsOptions = defaultWorkflowRunOptions
 postLabelsOptions :: WorkflowRunOptions
 postLabelsOptions = defaultWorkflowRunOptions {activePatches = Set.singleton emitSignalLabelsPatch}
 
-requireAtRiskFlow :: SessionId -> IO FlowDef
-requireAtRiskFlow session =
-  let runtime =
-        FlowRuntime
-          { approval = Approval.defaultApprovalEnv session,
-            acknowledgementDeadline = secondsToNominalDiffTime 1
-          }
-   in case lookupFlow runtime "at-risk-customer" of
-        Just flow -> pure flow
-        Nothing -> assertFailure "at-risk-customer flow should be registered"
+requireAtRiskFlow :: IO FlowDef
+requireAtRiskFlow =
+  case lookupFlow "at-risk-customer" of
+    Just flow -> pure flow
+    Nothing -> assertFailure "at-risk-customer flow should be registered"
+
+-- | The acknowledgement environment the at-risk flow parks through.
+--
+-- It moved out of 'requireAtRiskFlow' when acknowledgement became a capability:
+-- looking a flow up no longer needs it, running one still does.
+atRiskRuntime :: SessionId -> FlowRuntime
+atRiskRuntime session =
+  FlowRuntime
+    { approval = Approval.defaultApprovalEnv session,
+      acknowledgementDeadline = secondsToNominalDiffTime 1
+    }
 
 -- | Run a registered flow's body under explicit options — the way
 -- "Shikigami.FlowLifecycleSpec" does, but with the options as a parameter, which
 -- is the whole point here.
 runFlow ::
   AppEnv ->
+  FlowRuntime ->
   WorkflowRunOptions ->
   FlowDef ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value))
-runFlow appEnv options FlowDef {run} workflowId =
+runFlow appEnv runtime options FlowDef {run} workflowId =
   runEff
     . runErrorNoCallStack
     . withKirokuStore (connectionSettings appEnv)
@@ -412,6 +420,7 @@ runFlow appEnv options FlowDef {run} workflowId =
       runActivity sampleActivity
         . runMemory memoryEnv
         . runSink sinkEnv
+        . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
         $ run highRiskPayload
 
 fireDueApprovalTimer :: AppEnv -> IO ()

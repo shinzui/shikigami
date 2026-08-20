@@ -83,10 +83,19 @@ This section must always reflect the actual current state of the work.
       shikigami-flow-memory-steps-v1`, `replay-neutral`, exit 0. `cabal test all` green (311
       tests in `shikigami-core-test`). Negative check performed and reverted: deleting
       `step remember-declined` from the specification makes `keiro-diff` fail BREAKING.
-- [ ] M3: `Acknowledgement` capability added; `IOE` and `Store` removed from `FlowEffects`;
-      `FlowRuntime` becomes the `runAcknowledgement` environment rather than a flow-body
-      argument; `atRiskCustomerFlow`, `Shikigami.Flow`'s registry, and the specs compile
-      against the narrowed constraint.
+- [x] (2026-08-19) M3: `Acknowledgement` capability added in
+      `shikigami-core/src/Shikigami/Flow/Acknowledgement.hs`; `IOE` and `Store` removed from
+      `FlowEffects`; `FlowRuntime` is now the `runAcknowledgement` environment;
+      `FlowRegistration` deleted and `flowRegistry :: [FlowDef]` is the single list with
+      `registeredFlowNames` projecting from it; `lookupFlow` loses its `FlowRuntime`.
+      Consumers updated: `runFlowBehavior`, `Shikigami.Server.Command.RenderLifecycle` (a
+      consumer the plan did not name — it minted a session id and a throwaway approval env
+      purely to render a diagram, and now does not), `FlowLifecycleSpec`, and
+      `WorkflowVersioningSpec`. `sleepFlow` carries its own
+      `(Workflow :> es, Store :> es, IOE :> es)` and its own runner. Guardrail verified by
+      attempt and reverted: a flow body with `liftIO` fails with
+      `Could not deduce 'IOE :> es' arising from a use of 'liftIO' from the context:
+      FlowEffects es`.
 - [ ] M4: `rememberWith` exported, metadata threaded into `RecordMemoryData`, supersession
       spec green; defaults preserve today's values; docs updated.
 
