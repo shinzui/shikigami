@@ -23,7 +23,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaul
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Trigger.Enqueue (runQueueName)
+import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
 import Shikigami.Workers.Config (schedulerSchedules)
@@ -57,6 +57,10 @@ tests =
                 firstDue = atMinute 1
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
 
+            -- enqueueRunJob no longer reconciles the queue on every send, so the
+            -- startup step every real producer now performs happens here too.
+            ensureQueue pool
+
             armed <- runAppIO appEnv (armNextRun cron "heartbeat" (atSecond 30))
             assertEqual "initial arm succeeds" (Right ()) armed
 
@@ -88,6 +92,7 @@ tests =
                 pool = StoreConnection.pool kirokuStore
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) SkipMissed Log.silentLogger
 
+            ensureQueue pool
             fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
             assertEqual "the stale tick fired" (Right True) (fmap (maybe False (const True)) fired)
 
@@ -117,6 +122,7 @@ tests =
                 pool = StoreConnection.pool kirokuStore
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
 
+            ensureQueue pool
             fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
             assertEqual "the stale tick fired" (Right True) (fmap (maybe False (const True)) fired)
 
@@ -319,6 +325,12 @@ parseCronOrFail expr =
   case parseCron expr of
     Right cron -> pure cron
     Left err -> assertFailure ("parse failed: " <> show err)
+
+ensureQueue :: Pool.Pool -> IO ()
+ensureQueue pool =
+  ensureRunQueue pool >>= \case
+    Left err -> assertFailure ("run-job queue reconciliation failed: " <> show err)
+    Right () -> pure ()
 
 readRunJobs :: Pool.Pool -> IO [RunJob]
 readRunJobs pool = do

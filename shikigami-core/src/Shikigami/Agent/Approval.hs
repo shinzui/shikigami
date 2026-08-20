@@ -47,6 +47,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind)
 
@@ -184,9 +185,8 @@ approvalTimeoutTimerId :: WorkflowName -> WorkflowId -> Int -> StepName -> Timer
 approvalTimeoutTimerId (WorkflowName workflowName) (WorkflowId workflowId) generation (StepName stepName) =
   TimerId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["shikigami", "approval-timeout", workflowName, workflowId, Text.pack (show generation), stepName]
+      nameBytes $
+        Text.intercalate ":" ["shikigami", "approval-timeout", workflowName, workflowId, Text.pack (show generation), stepName]
 
 approvalTimeoutPayload :: AwakeableId -> ApprovalTimeoutPayload
 approvalTimeoutPayload aid =

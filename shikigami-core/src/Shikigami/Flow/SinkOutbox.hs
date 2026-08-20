@@ -33,6 +33,7 @@ import Keiro.Workflow
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (Sink)
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaTarget, GrantSource, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))
@@ -184,5 +185,4 @@ deterministicOutboxIdForMessage :: Text -> OutboxId
 deterministicOutboxIdForMessage messageId =
   OutboxId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack ("shikigami:sink:" <> messageId)
+      nameBytes ("shikigami:sink:" <> messageId)

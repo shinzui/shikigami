@@ -87,6 +87,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId,
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability qualified as FlowCapability
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -883,8 +884,7 @@ deterministicOutboxIdForMessage :: Text -> OutboxId
 deterministicOutboxIdForMessage messageId =
   OutboxId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack ("shikigami:sink:" <> messageId)
+      nameBytes ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
 publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants} row =

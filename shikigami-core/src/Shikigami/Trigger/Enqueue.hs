@@ -3,11 +3,12 @@
 -- drains the same queue. Reuses a hasql 'Pool' (e.g. the kioku store's pool).
 module Shikigami.Trigger.Enqueue
   ( runQueueName,
+    envelopeOccurredAt,
     runJobFromEnvelope,
     enqueueRunJobTx,
     ensureRunQueue,
     enqueueRunJob,
-    enqueueAddressedRun,
+    addressedRunKey,
     enqueueAddressedRunWithKey,
     enqueueScheduledRun,
   )
@@ -15,9 +16,12 @@ where
 
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Text qualified as Text
-import Data.Time (UTCTime (..), fromGregorian)
+import Data.Text.Encoding qualified as Text.Encoding
 import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction qualified as Tx
@@ -26,6 +30,7 @@ import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 -- | The IP-7 queue name (shared with the worker).
@@ -34,14 +39,31 @@ runQueueName = case parseQueueName "shikigami_run_jobs" of
   Right q -> q
   Left e -> error ("invalid run-queue name: " <> show e)
 
+-- | When an envelope says it happened, if it says so in ISO-8601.
+--
+-- 'Nothing' is a producer bug, and the caller is expected to say so and
+-- substitute its own clock. The previous behavior — falling back to
+-- @1970-01-01T00:00:00Z@ inside 'runJobFromEnvelope' — silently backdated the
+-- run by decades, which is the kind of quiet wrong answer this is a queue
+-- contract to avoid: the run's kioku session and every memory it records sort
+-- before every real one, and nothing anywhere says why.
+envelopeOccurredAt :: ActivityEnvelope -> Maybe UTCTime
+envelopeOccurredAt ActivityEnvelope {occurredAt = envOccurredAt} =
+  iso8601ParseM (Text.unpack envOccurredAt)
+
 -- | Build a stream-trigger run job from a matched agent + the matching envelope.
-runJobFromEnvelope :: AgentDecl -> ActivityEnvelope -> RunJob
-runJobFromEnvelope decl env =
+--
+-- The occurrence instant is a parameter because deciding it may need a clock and
+-- a log line, and this function is called inside the inbox transaction. The
+-- caller resolves it with 'envelopeOccurredAt' before the transaction opens —
+-- the same shape @eventInboxHandler@ already uses with its @receivedAt@.
+runJobFromEnvelope :: UTCTime -> AgentDecl -> ActivityEnvelope -> RunJob
+runJobFromEnvelope resolvedOccurredAt decl env =
   RunJob
     { agentName = name decl,
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
-      occurredAt = fromMaybe epoch (iso8601ParseM (Text.unpack envOccurredAt)),
+      occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
       idempotencyKey = name decl <> ":" <> envActivityId,
       parentSessionId = Nothing,
@@ -49,8 +71,7 @@ runJobFromEnvelope decl env =
       delegationDepth = Nothing
     }
   where
-    ActivityEnvelope {activityId = envActivityId, occurredAt = envOccurredAt} = env
-    epoch = UTCTime (fromGregorian 1970 1 1) 0
+    ActivityEnvelope {activityId = envActivityId} = env
 
 -- | Enqueue a run job inside a caller-owned Postgres transaction.
 --
@@ -72,12 +93,14 @@ enqueueRunJobTx job =
 ensureRunQueue :: Pool -> IO (Either UsageError ())
 ensureRunQueue pool = Pool.use pool (createQueue runQueueName)
 
--- | Enqueue a run job: ensure the queue exists (idempotent), then send. The pgmq
--- schema itself is installed by the @pgmq-schema@ migration (shikigami-migrations).
+-- | Enqueue a run job.
+--
+-- The queue must already exist; call 'ensureRunQueue' once at process startup.
+-- This used to reconcile the queue on every single send, which is a round trip
+-- per message to answer a question that cannot change while the process runs.
 enqueueRunJob :: Pool -> RunJob -> IO (Either UsageError MessageId)
 enqueueRunJob pool job =
-  Pool.use pool $ do
-    createQueue runQueueName -- idempotent
+  Pool.use pool $
     sendMessage
       SendMessage
         { queueName = runQueueName,
@@ -85,11 +108,22 @@ enqueueRunJob pool job =
           delay = Nothing
         }
 
--- | Enqueue an addressed (event-trigger) run for a named agent with a payload.
-enqueueAddressedRun :: Pool -> Text -> RunRouteKind -> Value -> IO (Either UsageError MessageId)
-enqueueAddressedRun pool agent route payload = do
-  now <- getCurrentTime
-  enqueueAddressedRunWithKey pool agent route payload (agent <> ":evt:" <> Text.pack (iso8601Show now))
+-- | A stable idempotency key for one addressed run.
+--
+-- Derived from the agent and the payload, so two invocations for the same
+-- logical event produce the same key and therefore one run. The key this
+-- replaced was built from 'getCurrentTime', which made the addressed producer
+-- the one producer in the runtime that could not deduplicate anything: retrying
+-- @shikigami enqueue-run@ after a timeout ran the agent twice.
+addressedRunKey :: Text -> Value -> Text
+addressedRunKey agent payload =
+  agent
+    <> ":evt:"
+    <> UUID.toText
+      ( UUID.V5.generateNamed
+          UUID.V5.namespaceURL
+          (nameBytes (agent <> ":" <> Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode payload))))
+      )
 
 -- | Enqueue an addressed run with a caller-supplied stable idempotency key.
 --

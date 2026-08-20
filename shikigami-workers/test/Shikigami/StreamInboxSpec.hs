@@ -19,6 +19,7 @@ import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Consumer
   ( DeadLetterId (..),
@@ -45,6 +46,7 @@ tests =
           hitCount <- newIORef (0 :: Int)
           disposition <-
             processDecodedActivity
+              Log.silentLogger
               appEnv
               ExcludeAgentActors
               [streamAgent]
@@ -63,8 +65,8 @@ tests =
       testCase "redelivered event is InboxDuplicate and enqueues nothing" do
         withFixture \appEnv pool -> do
           ensureQueue pool
-          first <- processDecodedActivity appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
-          second <- processDecodedActivity appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
+          first <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
+          second <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
           assertEqual "first delivery" Enqueued first
           assertEqual "redelivery" Duplicate second
           jobs <- readRunJobs pool
@@ -78,14 +80,14 @@ tests =
             Right False -> assertFailure "run queue did not exist before rollback test"
             Right True -> pure ()
 
-          failed <- processDecodedActivity appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
+          failed <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
           case failed of
             TransientFailure _ -> pure ()
             other -> assertFailure ("expected transient failure, got " <> show other)
           assertEqual "failed transaction left no inbox row" Nothing =<< readInbox appEnv
 
           ensureQueue pool
-          retried <- processDecodedActivity appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
+          retried <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
           assertEqual "redelivery succeeds" Enqueued retried
           jobs <- readRunJobs pool
           assertEqual "redelivery enqueued once" 1 (length jobs),
@@ -93,7 +95,7 @@ tests =
         tracer <- noopTracer
         let settings = defaultConnectionSettings "host=127.0.0.1 port=1 dbname=unavailable connect_timeout=1"
             appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
-        disposition <- processDecodedActivity appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
+        disposition <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
         case disposition of
           TransientFailure _ -> pure ()
           other -> assertFailure ("expected transient store failure, got " <> show other),
@@ -102,6 +104,7 @@ tests =
           ensureDeadQueue pool
           disposition <-
             processActivityRecord
+              Log.silentLogger
               appEnv
               deadLetterQueueName
               ExcludeAgentActors
@@ -132,6 +135,7 @@ tests =
             other -> assertFailure ("drop dead-letter queue failed: " <> show other)
           disposition <-
             processActivityRecord
+              Log.silentLogger
               appEnv
               deadLetterQueueName
               ExcludeAgentActors

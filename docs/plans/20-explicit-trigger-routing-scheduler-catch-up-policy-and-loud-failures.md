@@ -100,14 +100,20 @@ This section must always reflect the actual current state of the work.
       offender and refuses under the same strict switch — the scheduler process's `ioError` is
       gone, so both processes report identically. Tested in `AgentLoaderSpec` and `SchedulerSpec`,
       documented in `docs/operations/configuration.md` and `config/shikigami.example.yaml`.
-- [ ] Milestone 4 (hardening): idempotent addressed enqueue key, drop the per-enqueue
-      `createQueue` (adding `ensureRunQueue` to the two startup paths that relied on it), stop
-      backdating to the Unix epoch, encode UUIDv5 name bytes as UTF-8 at all six sites, and pin
-      `runQueueName`'s literal with a test.
-- [ ] Register new/extended specs in `shikigami-core/shikigami-core.cabal`,
-      `shikigami-workers/shikigami-workers.cabal`, `shikigami-core/test/Main.hs`, and
-      `shikigami-workers/test/Main.hs`; `cabal build all` and `cabal test all` green under
-      `nix develop`; `just keiro-gate` green.
+- [x] (2026-08-20T08:45:00Z) Milestone 4 (hardening): `enqueueAddressedRun` is gone and
+      `shikigami enqueue-run` derives a stable key with the new
+      `Shikigami.Trigger.Enqueue.addressedRunKey` (or takes one through `--key`); the per-enqueue
+      `createQueue` is gone and `runSchedulerCmd` and `runEnqueueRun` reconcile the queue at
+      startup; `runJobFromEnvelope` takes the resolved occurrence and the stream consumer logs
+      `stream.envelope.occurred_at_invalid` before substituting its own clock; all six UUIDv5 sites
+      hash through the new `Shikigami.Id.Name.nameBytes`; a new
+      `shikigami-core/test/Shikigami/EnqueueHardeningSpec.hs` covers all of it including the
+      `runQueueName` literal.
+- [x] (2026-08-20T08:45:00Z) Registered `Shikigami.EnqueueHardeningSpec` in
+      `shikigami-core/shikigami-core.cabal` and `shikigami-core/test/Main.hs` (the other suites
+      extended already-registered modules, and `shikigami-workers`'s needed no new module).
+      `nix develop -c cabal build all` and `nix develop -c cabal test all -j1` green.
+- [ ] `just keiro-gate` green; final documentation pass and ADR distillation.
 - [ ] Update `docs/operations/configuration.md`, `config/shikigami.example.yaml`, and
       `docs/architecture/shikigami-domain-inventory.md` for the new keys and the new `RunJob`
       field; write ADR 0012 for the route discriminator and its compatibility rule.
@@ -359,6 +365,25 @@ Record every decision made while working on the plan.
   Rationale: `Shikigami.Telemetry.Metrics` does not exist; plan 28's M2 is unstarted and every
   `AppEnv` in the tree is built with `metrics = Nothing`. Inventing a counter here would be a
   second metrics surface for plan 28 to reconcile.
+  Date: 2026-08-20
+
+- Decision: The UUIDv5 name encoding lives in one new module,
+  `shikigami-core/src/Shikigami/Id/Name.hs`, exporting `nameBytes :: Text -> [Word8]`, rather than
+  the same `ByteString.unpack . encodeUtf8` being written six times.
+  Rationale: the six sites were six copies of one convention and had drifted into one wrong answer
+  together; a named function with the explanation attached is what stops the seventh copy being
+  written by hand. It has to be in `shikigami-core` because both `shikigami-core` and
+  `shikigami-workers` mint ids, and workers may depend only on core.
+  Date: 2026-08-20
+
+- Decision: `runJobFromEnvelope` takes the resolved occurrence as a parameter and stays pure;
+  `envelopeOccurredAt` exposes the parse, and the stream consumer resolves and logs before opening
+  the inbox transaction. `inboxHandler`, `processActivity`, `processDecodedActivity`, and
+  `processActivityRecord` gain the parameters that requires.
+  Rationale: the plan proposed making `runJobFromEnvelope` an `IO` action taking a logger, but it
+  is called from inside a Hasql transaction, where neither a clock read nor a log write belongs.
+  Resolving before the transaction is the shape `eventInboxHandler` already uses with `receivedAt`,
+  and it keeps the job builder a pure function of its inputs.
   Date: 2026-08-20
 
 - Decision: An unparseable cron is governed by `agents.strict`, not by a second key of its own.
@@ -1037,12 +1062,18 @@ that under strict mode the call raises `ExitFailure 1` after reporting it. Today
 dropped with nothing logged.
 
 **Enqueue hardening** — fails before, except the queue-name case which is a regression guard.
-Assert `parseQueueName "shikigami_run_jobs"` is `Right`. Assert `runJobFromEnvelope` on an envelope
-with a bogus `occurredAt` produces a timestamp near `getCurrentTime` and not
-`1970-01-01T00:00:00Z`. Assert two calls of the addressed-enqueue path for one logical event yield
-one identical idempotency key. Assert `scheduleTimerId "café" t` differs from
-`scheduleTimerId "caf\xE9\&" t`-style near-collisions and that `scheduleTimerId "heartbeat" t` is
-unchanged from the value the current code produces, proving ASCII ids did not move.
+`shikigami-core/test/Shikigami/EnqueueHardeningSpec.hs` asserts `parseQueueName
+"shikigami_run_jobs"` is `Right` and that `runQueueName` renders back to that literal; that
+`envelopeOccurredAt` returns `Nothing` for a bogus timestamp and that the job built from the
+caller's clock lands within a second of `getCurrentTime` rather than in 1970; that
+`addressedRunKey` agrees with itself across two calls for one logical event and disagrees across
+agents and payloads; and that `nameBytes` separates two names differing above U+00FF while an
+ASCII name still hashes to its ASCII bytes — the latter is what proves no id any checked-in
+manifest produces has moved.
+
+Removing the per-send `createQueue` has an observable consequence that is itself the proof: three
+`SchedulerSpec` cases failed with `relation "pgmq.q_shikigami_run_jobs" does not exist` until they
+called `ensureRunQueue` first, exactly as the two production startup paths now do.
 
 **Operationally**, the scheduler check in Concrete Steps is the human-visible acceptance: stop the
 scheduler for several minutes on a `* * * * *` agent, restart it, and observe one enqueued run
@@ -1177,8 +1208,13 @@ Shikigami.Workers.Config.schedulerSchedules ::
   Log.Logger -> Bool -> [AgentDecl] -> IO (Map Text CronSchedule)
 -- WorkerEnv also gains: schedules :: !(Map Text CronSchedule), resolved once at boot.
 
+-- shikigami-core/src/Shikigami/Id/Name.hs
+Shikigami.Id.Name.nameBytes :: Text -> [Word8]   -- the UTF-8 bytes UUIDv5 hashes
+
 -- shikigami-core/src/Shikigami/Trigger/Enqueue.hs
-Shikigami.Trigger.Enqueue.runJobFromEnvelope :: Log.Logger -> AgentDecl -> ActivityEnvelope -> IO RunJob
+Shikigami.Trigger.Enqueue.envelopeOccurredAt :: ActivityEnvelope -> Maybe UTCTime
+Shikigami.Trigger.Enqueue.runJobFromEnvelope :: UTCTime -> AgentDecl -> ActivityEnvelope -> RunJob
+Shikigami.Trigger.Enqueue.addressedRunKey :: Text -> Value -> Text
 Shikigami.Trigger.Enqueue.enqueueAddressedRunWithKey ::
   Pool -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
 -- enqueueAddressedRun is removed; enqueueRunJob no longer calls createQueue.

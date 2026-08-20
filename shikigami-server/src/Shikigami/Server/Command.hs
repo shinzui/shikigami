@@ -180,10 +180,11 @@ enqueueRunInfo =
     (progDesc "Enqueue an addressed run job for a named agent")
   where
     parser =
-      (\agent payload conversation -> (runEnqueueRun agent payload conversation, []))
+      (\agent payload conversation key -> (runEnqueueRun agent payload conversation key, []))
         <$> argument str (metavar "AGENT")
         <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Addressed run payload as JSON"))
         <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
+        <*> optional (strOption (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
 
 publishFixtureInfo :: ParserInfo AdminAction
 publishFixtureInfo =

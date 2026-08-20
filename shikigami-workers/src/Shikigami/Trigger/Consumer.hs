@@ -76,7 +76,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (Trig
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Trigger.Enqueue (enqueueRunJobTx, runJobFromEnvelope)
+import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
@@ -136,7 +136,7 @@ data RecordDisposition
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
 subscribeActivityStream :: Log.Logger -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
 subscribeActivityStream logger appEnv config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger "stream" appEnv config $ processActivityRecord appEnv deadLetterQueue include agents onHit
+  runSubscription logger "stream" appEnv config $ processActivityRecord logger appEnv deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
@@ -263,6 +263,7 @@ decodeHeaders = fmap (bimap decode decode)
 -- | Process a raw activity delivery. Any envelope or payload decode failure is
 -- persisted before a terminal disposition is returned.
 processActivityRecord ::
+  Log.Logger ->
   AppEnv ->
   QueueName ->
   IncludeAgentActors ->
@@ -270,13 +271,13 @@ processActivityRecord ::
   (StreamHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processActivityRecord appEnv queue include agents onHit record =
+processActivityRecord logger appEnv queue include agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right activity -> processActivity appEnv include agents onHit event (Just delivery) activity
+        Right activity -> processActivity logger appEnv include agents onHit event (Just delivery) activity
 
 -- | Process one raw public integration-event delivery.
 processIntegrationEventRecord ::
@@ -298,6 +299,7 @@ processIntegrationEventRecord appEnv queue agents onHit record =
 -- transient here because this broker-free entry point has no raw delivery to
 -- preserve; the raw-record entry point above durably dead-letters it.
 processDecodedActivity ::
+  Log.Logger ->
   AppEnv ->
   IncludeAgentActors ->
   [AgentDecl] ->
@@ -305,12 +307,36 @@ processDecodedActivity ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivity appEnv include agents onHit event kafka =
+processDecodedActivity logger appEnv include agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right activity -> processActivity appEnv include agents onHit event kafka activity
+    Right activity -> processActivity logger appEnv include agents onHit event kafka activity
+
+-- | When the envelope says it happened, or this moment plus a line saying the
+-- envelope did not say.
+--
+-- An unparseable @occurredAt@ used to become @1970-01-01T00:00:00Z@ silently,
+-- which backdated the run's whole durable record by decades. Substituting the
+-- receive time is the honest fallback — it is what the event-inbox path already
+-- does with its @receivedAt@ — and the log line is what stops the substitution
+-- from being another silence.
+resolveOccurredAt :: Log.Logger -> ActivityEnvelope -> IO UTCTime
+resolveOccurredAt logger activity =
+  case envelopeOccurredAt activity of
+    Just parsed -> pure parsed
+    Nothing -> do
+      now <- getCurrentTime
+      Log.logError
+        logger
+        "stream.envelope.occurred_at_invalid"
+        [ "activity_id" Aeson..= (activity ^. #activityId),
+          "occurred_at" Aeson..= (activity ^. #occurredAt),
+          "substituted" Aeson..= now
+        ]
+      pure now
 
 processActivity ::
+  Log.Logger ->
   AppEnv ->
   IncludeAgentActors ->
   [AgentDecl] ->
@@ -319,11 +345,14 @@ processActivity ::
   Maybe KafkaDeliveryRef ->
   ActivityEnvelope ->
   IO RecordDisposition
-processActivity appEnv include agents onHit event kafka activity = do
+processActivity logger appEnv include agents onHit event kafka activity = do
+  -- Resolved before the transaction opens, because deciding it may need a clock
+  -- and a log line and the handler runs inside Hasql.
+  resolvedOccurredAt <- resolveOccurredAt logger activity
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
-        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler include agents activity)
+        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler resolvedOccurredAt include agents activity)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
     Right result -> classifyInboxResult event onHit result
@@ -445,15 +474,15 @@ logDisposition logger prefix = \case
   TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" Aeson..= err]
 
 -- | Matching and queue sends run inside the inbox transaction.
-inboxHandler :: IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IntegrationEvent -> Tx.Transaction [StreamHit]
-inboxHandler include agents activity _event = do
+inboxHandler :: UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IntegrationEvent -> Tx.Transaction [StreamHit]
+inboxHandler resolvedOccurredAt include agents activity _event = do
   let matched =
         [ agent
         | agent <- agents,
           Just streamMatch <- [streamMatchOf agent],
           matchesStreamWith include streamMatch activity
         ]
-  traverse_ (enqueueRunJobTx . (`runJobFromEnvelope` activity)) matched
+  traverse_ (\agent -> enqueueRunJobTx (runJobFromEnvelope resolvedOccurredAt agent activity)) matched
   pure [StreamHit {agentName = agent ^. #name, envelope = activity} | agent <- matched]
 
 streamMatchOf :: AgentDecl -> Maybe StreamMatch

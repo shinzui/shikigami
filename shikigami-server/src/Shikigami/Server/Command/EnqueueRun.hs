@@ -10,12 +10,12 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Trigger.Enqueue (enqueueAddressedRun)
+import Shikigami.Trigger.Enqueue (addressedRunKey, enqueueAddressedRunWithKey, ensureRunQueue)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
--- | @enqueue-run <agent> [--payload <json>] [--conversation]@: the addressed
--- (event-trigger) producer. Enqueues a RunJob onto the shared
+-- | @enqueue-run <agent> [--payload <json>] [--conversation] [--key <text>]@:
+-- the addressed (event-trigger) producer. Enqueues a RunJob onto the shared
 -- @shikigami_run_jobs@ pgmq queue (which the worker, EP-5, drains). Reuses the
 -- kioku store's hasql pool.
 --
@@ -23,12 +23,17 @@ import System.IO (hPutStrLn, stderr)
 -- durable agent-run workflow, and with it the job is a danwa conversation turn
 -- whose payload must decode as an addressed message.
 --
+-- The idempotency key is derived from the agent and the payload unless @--key@
+-- supplies one, so invoking this twice for the same logical event produces one
+-- run. It used to be derived from the wall clock, which made a retried
+-- invocation a second run.
+--
 -- The connection string comes from the resolved configuration under
 -- @database.connection_string@. It is demanded here rather than by the whole
 -- @shikigami@ command line because sibling subcommands such as @validate@ run
 -- entirely offline.
-runEnqueueRun :: String -> Maybe String -> Bool -> AppConfig -> IO ()
-runEnqueueRun agent mpayload conversation config = do
+runEnqueueRun :: String -> Maybe String -> Bool -> Maybe String -> AppConfig -> IO ()
+runEnqueueRun agent mpayload conversation mkey config = do
   payload <- case mpayload of
     Nothing -> pure (Aeson.object [])
     Just raw -> case Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)) of
@@ -38,10 +43,27 @@ runEnqueueRun agent mpayload conversation config = do
         exitFailure
   connStr <- revealSecretText <$> requireDatabaseUrl "enqueue-run" config
   withStore (defaultConnectionSettings connStr) $ \st -> do
+    -- This is one of the two startup paths that used to rely on the per-send
+    -- createQueue inside enqueueRunJob, so it reconciles the queue itself now.
+    queueResult <- ensureRunQueue (pool st)
+    case queueResult of
+      Left e -> do
+        hPutStrLn stderr ("enqueue-run: run-job queue reconciliation failed: " <> show e)
+        exitFailure
+      Right () -> pure ()
     let route = if conversation then ConversationWorkflowRoute else AgentWorkflowRoute
-    res <- enqueueAddressedRun (pool st) (Text.pack agent) route payload
+        key = maybe (addressedRunKey (Text.pack agent) payload) Text.pack mkey
+    res <- enqueueAddressedRunWithKey (pool st) (Text.pack agent) route payload key
     case res of
       Left e -> do
         hPutStrLn stderr ("enqueue-run: " <> show e)
         exitFailure
-      Right mid -> putStrLn ("enqueued run job " <> show mid <> " for agent " <> agent)
+      Right mid ->
+        putStrLn
+          ( "enqueued run job "
+              <> show mid
+              <> " for agent "
+              <> agent
+              <> " with idempotency key "
+              <> Text.unpack key
+          )

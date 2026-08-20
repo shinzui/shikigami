@@ -22,6 +22,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..),
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
@@ -101,8 +102,7 @@ delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent ordinal =
     Text.pack $
       UUID.toString $
         UUID.V5.generateNamed UUID.V5.namespaceURL $
-          fmap (fromIntegral . fromEnum) $
-            Text.unpack $
-              Text.intercalate
-                ":"
-                ["shikigami", "delegate", parentWorkflowId, childAgent, Text.pack (show ordinal)]
+          nameBytes $
+            Text.intercalate
+              ":"
+              ["shikigami", "delegate", parentWorkflowId, childAgent, Text.pack (show ordinal)]

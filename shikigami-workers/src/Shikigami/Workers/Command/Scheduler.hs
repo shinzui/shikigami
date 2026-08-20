@@ -25,9 +25,11 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
 import Shikigami.Workers.Config (schedulerSchedules)
+import System.Exit (exitFailure)
 
 -- | Arm every scheduled agent and drive keiro timer firing.
 --
@@ -48,6 +50,16 @@ runSchedulerCmd config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
   StoreConnection.withStore settings \st -> do
+    -- The other startup path that used to rely on the per-send createQueue
+    -- inside enqueueRunJob. A timer that fires into a queue that does not exist
+    -- is a run that never happens.
+    queueResult <- ensureRunQueue (StoreConnection.pool st)
+    case queueResult of
+      Left err -> do
+        Log.logError logger "scheduler.queue.failed" ["error" Aeson..= Text.pack (show err)]
+        exitFailure
+      Right () ->
+        Log.logInfo logger "scheduler.queue.reconciled" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
     tracer <- noopTracer
     let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
         env =

@@ -30,6 +30,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueScheduledRun)
@@ -76,17 +77,15 @@ scheduleTimerId :: Text -> UTCTime -> TimerId
 scheduleTimerId agent dueAt =
   TimerId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["shikigami", "schedule", agent, Text.pack (iso8601Show dueAt)]
+      nameBytes $
+        Text.intercalate ":" ["shikigami", "schedule", agent, Text.pack (iso8601Show dueAt)]
 
 scheduleFiredEventId :: Text -> UTCTime -> EventId
 scheduleFiredEventId agent dueAt =
   EventId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["shikigami", "schedule-fired", agent, Text.pack (iso8601Show dueAt)]
+      nameBytes $
+        Text.intercalate ":" ["shikigami", "schedule-fired", agent, Text.pack (iso8601Show dueAt)]
 
 armNextRun :: (Store :> es, IOE :> es) => CronSchedule -> Text -> UTCTime -> Eff es ()
 armNextRun cron agent now =

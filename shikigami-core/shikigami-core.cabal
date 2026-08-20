@@ -61,6 +61,7 @@ library
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.SinkOutbox
     Shikigami.Generated.Conformance
+    Shikigami.Id.Name
     Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
@@ -171,6 +172,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
     Shikigami.DelegateContextSpec
+    Shikigami.EnqueueHardeningSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
