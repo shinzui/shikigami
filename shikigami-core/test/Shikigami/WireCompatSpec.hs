@@ -219,16 +219,11 @@ preUpgradeStubbed =
 -- 'maxBound' and every first delivery looks like the most-retried message the
 -- system has ever seen.
 --
--- Shikigami cannot make that mistake, and the reason is structural rather than
--- careful: @Shikigami.Agent.RunJob.Worker.runJobHandler@ projects
--- @Message {envelope = Envelope {payload}}@ and hands the payload to
--- @handleRunJob :: WorkerEnv -> Value -> IO AckDecision@, which has no way to
--- see the attempt. These cases pin the adapter contract that makes that safe,
--- and the underflow that would follow from breaking it.
---
--- @docs\/plans\/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md@
--- owns making the worker actually use the attempt count; when it does, it
--- inherits an already-zero-based number and must not re-normalize it.
+-- The typed consumer now receives that value as 'Keiro.PGMQ.JobContext.attempt'.
+-- It deliberately leaves delivery counting to @defaultRetryPolicy@ instead of
+-- maintaining an application counter, but any future diagnostic use inherits
+-- an already-zero-based number and must not re-normalize it. These cases pin the
+-- adapter contract and the underflow that would follow from breaking it.
 deliveryAttemptTests :: TestTree
 deliveryAttemptTests =
   testGroup

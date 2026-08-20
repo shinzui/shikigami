@@ -29,6 +29,7 @@ import Data.ByteString (ByteString)
 import Data.List (sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (secondsToNominalDiffTime)
 import Settei
   ( Key,
     ResolveResult (..),
@@ -68,6 +69,7 @@ surfaceTests =
     [ testCase "the declaration accepts exactly these keys" $
         fmap renderKey declaredKeys
           @?= [ "agents.directory",
+                "approval.deadline_seconds",
                 "behavior.model",
                 "behavior.provider",
                 "credentials.providers.anthropic.api_key",
@@ -86,7 +88,8 @@ surfaceTests =
                 "sinks.kawa.source_segment",
                 "sinks.kizashi.base_url",
                 "sinks.kizashi.default_recipient",
-                "sinks.rei.base_url"
+                "sinks.rei.base_url",
+                "worker.run_timeout_seconds"
               ],
       -- Forcing the validated binding list here is the point: an invalid edit
       -- becomes a test failure instead of a failure in every deployed process.
@@ -96,6 +99,7 @@ surfaceTests =
             [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
               ("PG_CONNECTION_STRING", "database.connection_string"),
               ("SHIKIGAMI_AGENTS_DIRECTORY", "agents.directory"),
+              ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "approval.deadline_seconds"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
@@ -112,7 +116,8 @@ surfaceTests =
               ("SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT", "sinks.kawa.source_segment"),
               ("SHIKIGAMI_SINKS_KIZASHI_BASE_URL", "sinks.kizashi.base_url"),
               ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
-              ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url")
+              ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url"),
+              ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "worker.run_timeout_seconds")
             ],
       testCase "every declared key can be set from the environment" $
         sort (fmap snd boundVariables) @?= sort (fmap renderKey declaredKeys),
@@ -120,6 +125,8 @@ surfaceTests =
         agentsDirectory defaultAppConfig @?= "agents"
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
+        runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300
+        approvalDeadline defaultAppConfig @?= secondsToNominalDiffTime 900
         kafkaBroker defaultAppConfig @?= "127.0.0.1:9092"
         kafkaActivityTopic defaultAppConfig @?= "activity.v1"
         kafkaEventsTopic defaultAppConfig @?= "danwa.message-addressed.v1"
@@ -194,7 +201,25 @@ precedenceTests =
       testCase "an unset key keeps its declared default even when its neighbours are set" do
         config <- resolveOrFail (optionsWith [] []) [yaml "file" "kafka:\n  broker: only-this:9092\n"] []
         kafkaBroker config @?= "only-this:9092"
-        kafkaActivityTopic config @?= "activity.v1"
+        kafkaActivityTopic config @?= "activity.v1",
+      testCase "duration budgets resolve in YAML, environment, then CLI precedence" do
+        config <-
+          resolveOrFail
+            ( optionsWith
+                []
+                [ cliOverride workerRunTimeoutSecondsKey "240",
+                  cliOverride approvalDeadlineSecondsKey "840"
+                ]
+            )
+            [ yaml
+                "file"
+                "worker:\n  run_timeout_seconds: 120\napproval:\n  deadline_seconds: 600\n"
+            ]
+            [ ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "180"),
+              ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "720")
+            ]
+        runTimeout config @?= secondsToNominalDiffTime 240
+        approvalDeadline config @?= secondsToNominalDiffTime 840
     ]
 
 -- ── Strictness ──────────────────────────────────────────────────────────────
@@ -221,6 +246,15 @@ strictnessTests =
       testCase "the boundary port is accepted" do
         config <- resolveOrFail (optionsWith [] [cliOverride httpPortKey "65535"]) [] []
         portNumber (httpPort config) @?= 65535,
+      testCase "duration budgets reject non-positive and unsafe values" $
+        mapM_
+          (\bad -> exitCode (runWith (optionsWith [] [cliOverride workerRunTimeoutSecondsKey bad]) [] []) @?= resolutionExitCode)
+          ["0", "86401", "-1", "1.5"],
+      testCase "duration budget boundaries are accepted" do
+        low <- resolveOrFail (optionsWith [] [cliOverride workerRunTimeoutSecondsKey "1"]) [] []
+        high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
+        runTimeout low @?= secondsToNominalDiffTime 1
+        approvalDeadline high @?= secondsToNominalDiffTime 86_400,
       testCase "a source that could not be read exits with the source status" do
         let run = appConfigRun ServerRole (optionsWith [] []) (Left "config.yaml: does not exist") (emptyEnvironment [])
         exitCode run @?= sourceExitCode
@@ -297,6 +331,15 @@ diagnosticTests =
         assertBool
           ("the explanation should name the variable:\n" <> Text.unpack (standardOutput run))
           ("SHIKIGAMI_KAFKA_BROKER" `Text.isInfixOf` standardOutput run),
+      testCase "schema and explanation expose both duration policies" do
+        let schema = renderSchemaText appConfigSchema
+            explained = standardOutput (runWith (diagnosticOptions ExplainText) [] [])
+        mapM_
+          ( \key -> do
+              assertBool (Text.unpack key <> " missing from schema") (key `Text.isInfixOf` schema)
+              assertBool (Text.unpack key <> " missing from explanation") (key `Text.isInfixOf` explained)
+          )
+          ["worker.run_timeout_seconds", "approval.deadline_seconds"],
       testCase "with no diagnostic, a valid configuration lets the process continue" do
         let run = runWith (optionsWith [] []) [] []
         exitCode run @?= 0

@@ -34,9 +34,9 @@ workflowRegistry env =
 
 -- | Run the resume loop until the process stops.
 runResumeWorker :: WorkerEnv -> IO ()
-runResumeWorker env = do
+runResumeWorker env@WorkerEnv {runTimeout} = do
   Log.logInfo (envLogger env) "worker.resume.started" []
-  result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith shikigamiWorkflowResumeOptions (workflowRegistry env))
+  result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions runTimeout) (workflowRegistry env))
   case result of
     Left err -> Log.logError (envLogger env) "worker.resume.failed" ["error" Aeson..= Text.pack (show err)]
     Right () -> pure ()

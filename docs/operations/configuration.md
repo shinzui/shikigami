@@ -110,6 +110,8 @@ nested under `kafka`.
 |---|---|---|---|
 | `database.connection_string` | *(none — secret)* | `PG_CONNECTION_STRING` | PostgreSQL connection string, libpq URI or key/value form. |
 | `agents.directory` | `agents` | `SHIKIGAMI_AGENTS_DIRECTORY` | Directory holding the `.dhall` agent manifests. |
+| `worker.run_timeout_seconds` | `300` | `SHIKIGAMI_RUN_TIMEOUT_SECONDS` | Maximum duration of one synchronous external behavior attempt. |
+| `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
 | `kafka.broker` | `127.0.0.1:9092` | `SHIKIGAMI_KAFKA_BROKER` | Bootstrap broker, `HOST:PORT`. |
 | `kafka.activity.topic` | `activity.v1` | `SHIKIGAMI_KAFKA_ACTIVITY_TOPIC` | Topic carrying `activity.v1` envelopes. |
 | `kafka.events.topic` | `danwa.message-addressed.v1` | `SHIKIGAMI_KAFKA_EVENTS_TOPIC` | Topic carrying public integration events. |
@@ -128,6 +130,14 @@ nested under `kafka`.
 | `behavior.provider` | `stub` | `SHIKIGAMI_BEHAVIOR_PROVIDER` | Which model runs a `Skill` behavior: `stub` calls no model, `anthropic` calls a real one. |
 | `behavior.model` | `claude-sonnet-4-6` | `SHIKIGAMI_BEHAVIOR_MODEL` | Anthropic model id. Only consulted when the provider is `anthropic`; decoded against baikai's catalog, so an unknown id is rejected here. |
 | `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |
+
+Both duration settings are whole seconds in the range 1–86400. The upper bound keeps
+conversion to the microsecond timeout representation safe on the 64-bit platforms
+supported by the deployment flake. `worker.run_timeout_seconds` bounds each synchronous
+provider or program attempt; it does not time an entire durable workflow or a suspended
+approval. The resume worker derives its workflow-instance lease as the run timeout plus a
+30-second scheduling/database margin. Queue delivery visibility is a separate 10/30-second
+heartbeat policy and is not configured by either key.
 
 Environment bindings are explicit, one variable to one key. Nothing scans for a prefix, so
 a typo is a variable that does nothing rather than a value landing on the wrong key.
@@ -265,6 +275,12 @@ database:
 
 agents:
   directory: /srv/shikigami/agents
+
+worker:
+  run_timeout_seconds: 300
+
+approval:
+  deadline_seconds: 900
 
 kafka:
   broker: kafka.internal:9092

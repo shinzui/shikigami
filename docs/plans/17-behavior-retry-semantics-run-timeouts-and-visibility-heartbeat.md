@@ -69,9 +69,9 @@ workflow failure budget instead of becoming a permanent step result.
       workflow result to a deliberate `JobOutcome`.
 - [x] (2026-08-19) Milestone 3: ran queue work with a supervised PGMQ visibility heartbeat
       and proved lease renewal through the actual `jobProcessorWithContext` path.
-- [ ] Milestone 4: add `worker.run_timeout_seconds` and
-      `approval.deadline_seconds` to Settei, thread both values through the worker
-      environments, and size `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
+- [x] (2026-08-19) Milestone 4: added `worker.run_timeout_seconds` and
+      `approval.deadline_seconds` to Settei, threaded both values through the worker
+      environments, and sized `WorkflowResumeOptions.leaseTtl` above the behavior timeout.
 - [ ] Register focused core and worker test modules; run the specification gate, focused
       tests, `cabal build all`, and `cabal test all -j1` inside `nix develop`.
 
@@ -172,6 +172,11 @@ workflow failure budget instead of becoming a permanent step result.
   `ConcUnlift Persistent (Limited 2)` around `async`'s `race`; a sequential unlift would
   reject or unsafely share the effect environment across the work and renewal threads.
 
+- The Settei registry has no curated documents for `shinzui/settei`; the repository's
+  existing `Port` decoder is therefore the authoritative local pattern for a public,
+  rendered, bounded integral setting. The two duration settings share that shape and
+  accept native YAML integers plus textual environment/CLI values.
+
 
 ## Decision Log
 
@@ -249,7 +254,8 @@ workflow failure budget instead of becoming a permanent step result.
 
 - Decision: `worker.run_timeout_seconds` is a positive duration with a 300-second default
   and bounds each synchronous external behavior attempt, not an entire durable workflow.
-  `approval.deadline_seconds` is a positive duration with a 900-second default.
+  `approval.deadline_seconds` is a positive duration with a 900-second default. Both are
+  whole seconds bounded to 1-86400.
   Rationale: A durable workflow may legitimately remain suspended for hours or continue
   through children; timing the whole queue handler would neither survive resumption nor
   distinguish waiting from hanging. The key name is retained because plan 37 and the
@@ -735,3 +741,8 @@ patch is a journaled compatibility decision declared through the Keiro specifica
   `JobOutcome` mapping, and a linked 10/30-second visibility heartbeat. Added a wire
   compatibility test, a real `jobProcessorWithContext` slow-handler test, and a renewal
   failure cancellation test; the focused `RunJob` selection passed all three cases.
+- 2026-08-19: Implemented milestone 4. Declared and documented the two Settei duration
+  settings, replaced worker boot constants with resolved values, wired the approval
+  deadline into approvals and acknowledgements, and derived the Keiro resume lease as
+  the behavior timeout plus 30 seconds. The focused configuration suite passed 34 cases,
+  workflow versioning passed 4, and worker command configuration passed 15.

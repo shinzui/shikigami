@@ -25,6 +25,16 @@ agents:
   # Where the .dhall agent manifests live, relative to the working directory.
   directory: agents
 
+worker:
+  # Bounds one synchronous provider or program attempt, not the lifetime of a
+  # durable workflow. Whole seconds, 1-86400.
+  run_timeout_seconds: 300
+
+approval:
+  # Bounds ordinary approval waits and flow acknowledgement waits. Whole
+  # seconds, 1-86400.
+  deadline_seconds: 900
+
 kafka:
   broker: 127.0.0.1:9092
   activity:

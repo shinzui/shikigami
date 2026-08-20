@@ -82,6 +82,8 @@ module Shikigami.App.Config
     kafkaIncludeAgentActorsKey,
     httpHostKey,
     httpPortKey,
+    workerRunTimeoutSecondsKey,
+    approvalDeadlineSecondsKey,
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
@@ -101,6 +103,7 @@ import Baikai.Model (Model, api, modelId, provider)
 import Baikai.Models.Generated (allModels, anthropic_claude_sonnet_4_6)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
 import GHC.Generics (Generic)
 import Settei
 import Settei.Env
@@ -254,6 +257,10 @@ data AppConfig = AppConfig
     httpHost :: !Text,
     -- | Port the public HTTP API binds.
     httpPort :: !Port,
+    -- | Maximum duration of one synchronous external behavior attempt.
+    runTimeout :: !NominalDiffTime,
+    -- | Maximum duration an approval or flow acknowledgement may remain open.
+    approvalDeadline :: !NominalDiffTime,
     -- | Base URL of the kawa ingest doorway.
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
@@ -306,6 +313,8 @@ appConfig =
     <*> withDefault kafkaIncludeAgentActorsSetting (constant "feedback-guard" "Ignore agent-produced activities so an agent cannot trigger itself" False)
     <*> withDefault httpHostSetting (constant "loopback" "Keep a development server off the network" "127.0.0.1")
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
+    <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
+    <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
@@ -441,6 +450,45 @@ portDecoder =
           Right value -> either (const (Left (decodeFailure key portExpectation))) Right (mkPort value)
     )
 
+workerRunTimeoutSecondsSetting :: Setting NominalDiffTime
+workerRunTimeoutSecondsSetting =
+  publicSettingWithRenderer
+    workerRunTimeoutSecondsKey
+    "Maximum seconds for one synchronous external behavior attempt (1-86400)"
+    positiveDurationDecoder
+    renderDurationSeconds
+
+approvalDeadlineSecondsSetting :: Setting NominalDiffTime
+approvalDeadlineSecondsSetting =
+  publicSettingWithRenderer
+    approvalDeadlineSecondsKey
+    "Maximum seconds to wait for an approval or flow acknowledgement (1-86400)"
+    positiveDurationDecoder
+    renderDurationSeconds
+
+-- | One day is well below @maxBound :: Int@ after conversion to microseconds on
+-- every 64-bit platform supported by this repository's deployment flake, while
+-- still allowing operational budgets far above the defaults.
+positiveDurationDecoder :: Decoder NominalDiffTime
+positiveDurationDecoder =
+  decoder
+    ( \key raw ->
+        case runDecoder (boundedIntegralDecoder @Int) key raw of
+          Right seconds
+            | seconds >= 1 && seconds <= maxDurationSeconds -> Right (secondsToNominalDiffTime (fromIntegral seconds))
+          _ -> Left (decodeFailure key durationExpectation)
+    )
+
+maxDurationSeconds :: Int
+maxDurationSeconds = 86_400
+
+durationExpectation :: Text
+durationExpectation = "a whole number of seconds between 1 and 86400"
+
+renderDurationSeconds :: NominalDiffTime -> Text
+renderDurationSeconds duration =
+  Text.pack (show (floor (nominalDiffTimeToSeconds duration) :: Integer))
+
 sinksKawaBaseUrlSetting :: Setting Text
 sinksKawaBaseUrlSetting = publicSettingWithRenderer sinksKawaBaseUrlKey "Base URL of the kawa ingest doorway" textDecoder id
 
@@ -530,6 +578,12 @@ httpHostKey = stableKey "http.host"
 httpPortKey :: Key
 httpPortKey = stableKey "http.port"
 
+workerRunTimeoutSecondsKey :: Key
+workerRunTimeoutSecondsKey = stableKey "worker.run_timeout_seconds"
+
+approvalDeadlineSecondsKey :: Key
+approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
+
 sinksKawaBaseUrlKey :: Key
 sinksKawaBaseUrlKey = stableKey "sinks.kawa.base_url"
 
@@ -611,6 +665,8 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS") kafkaIncludeAgentActorsKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
+          binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
+          binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,

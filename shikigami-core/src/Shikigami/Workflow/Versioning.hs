@@ -34,6 +34,7 @@ module Shikigami.Workflow.Versioning
 where
 
 import Data.Set (Set)
+import Data.Time (NominalDiffTime)
 import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptions)
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
@@ -67,6 +68,9 @@ shikigamiWorkflowRunOptions =
 
 -- | The options the resume worker uses, carrying 'shikigamiWorkflowRunOptions'
 -- so a resumed run is configured exactly as its first run was.
-shikigamiWorkflowResumeOptions :: WorkflowResumeOptions
-shikigamiWorkflowResumeOptions =
-  defaultWorkflowResumeOptions {runOptions = shikigamiWorkflowRunOptions}
+shikigamiWorkflowResumeOptions :: NominalDiffTime -> WorkflowResumeOptions
+shikigamiWorkflowResumeOptions timeout =
+  defaultWorkflowResumeOptions
+    { runOptions = shikigamiWorkflowRunOptions,
+      leaseTtl = timeout + 30
+    }

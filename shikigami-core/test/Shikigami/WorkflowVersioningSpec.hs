@@ -44,6 +44,7 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
+import Keiro.Workflow.Resume (WorkflowResumeOptions (..))
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId)
@@ -60,7 +61,7 @@ import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, run
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (defaultGrantTable)
-import Shikigami.Workflow.Versioning (shikigamiActivePatches)
+import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowResumeOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -68,7 +69,15 @@ tests :: TestTree
 tests =
   testGroup
     "WorkflowVersioning"
-    [ testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
+    [ testCase "resume lease exceeds the synchronous behavior timeout" do
+        let timeout = secondsToNominalDiffTime 300
+            WorkflowResumeOptions
+              { leaseTtl,
+                runOptions = WorkflowRunOptions {leaseHeartbeat}
+              } = shikigamiWorkflowResumeOptions timeout
+        assertEqual "resume lease includes the scheduling margin" (secondsToNominalDiffTime 330) leaseTtl
+        assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
+      testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
       testCase "behavior retry patch pins agent and conversation labels per deploy" behaviorRetryLabelsArePinned,
       testCase "emitSignal ordinals preserved in flight, labels when fresh" emitSignalSchemeIsPinnedPerInstance
     ]
