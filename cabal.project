@@ -38,6 +38,7 @@ constraints:
   , keiro-core              ==0.13.0.0
   , keiro-dsl               ==0.13.0.0
   , keiro-migrations        ==0.13.0.0
+  , keiro-ops               ==0.13.0.0
   , keiro-pgmq              ==0.13.0.0
   , kioku-api               ==0.4.1.0
   , kioku-core              ==0.4.1.0

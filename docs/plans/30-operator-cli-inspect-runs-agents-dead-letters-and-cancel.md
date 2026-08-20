@@ -36,12 +36,12 @@ shikigami can *issue* a cancel.
 After this plan, an operator has a read-mostly, safe-by-default surface with two halves.
 
 The **substrate half** comes from `keiro-ops`, mounted into the `shikigami` binary as a command
-group. That is where `workflow list|show|steps|journal|awakeable|cancel|resurrect|lease|gc` lives,
-where `outbox backlog|list|show|requeue-stuck|gc-sent|maintenance-pass|dead-letters list` lives,
-and where `pgmq dlq read|redrive|archive|purge` lives — over the real
-`shikigami_run_jobs_dlq` that plan 17 configured. Every one of those is a thin adapter over an
-exported Keiro operation, every mutating one previews by default and acts only under `--force`,
-and none of them is code this repository has to write, test, or keep in step with Keiro's schema.
+group. That is where `wf list|show|steps|journal|awakeable|cancel|resurrect|lease|gc` lives,
+where `outbox backlog|list|show|requeue-stuck|gc-sent|maintenance-pass` lives, and where
+`pgmq dlq read|redrive|archive|purge` lives — over the real `shikigami_run_jobs_dlq` that plan 17
+configured. Every one of those is a thin adapter over an exported Keiro operation, every mutating
+one previews by default and acts only under `--force`, and none of them is code this repository
+has to write, test, or keep in step with Keiro's schema.
 
 The **Shikigami half** is what `keiro-ops` cannot know: `shikigami agents list`, which renders the
 declared-agent load report including manifests that failed to parse and agents that are disabled;
@@ -50,13 +50,17 @@ operator sees the agent, the session status, and the summary next to the workflo
 because keiro knows nothing about kioku and kioku knows nothing about keiro.
 
 The user-visible proof: `shikigami agents list` prints one row per manifest including a `failed`
-row for `agents/broken.dhall`; with a run in flight, `shikigami workflow list --status running`
-prints its workflow id and status, `shikigami workflow cancel <id>` prints what it *would* do and
-exits non-zero, `shikigami workflow cancel <id> --force` records the cancellation, and
-`shikigami runs show <id>` reports the workflow as `cancelled` alongside its kioku session; a
-poison job drained into the DLQ appears in `shikigami pgmq dlq read --queue shikigami_run_jobs_dlq`
-and `shikigami pgmq dlq redrive --queue shikigami_run_jobs_dlq --force` puts it back on the live
-queue.
+row for `agents/broken.dhall`; with a run in flight, `shikigami wf list --status running` prints
+its workflow name, id, and status, `shikigami wf cancel shikigami.agent-run <id>` prints what it
+*would* do and exits non-zero, the same command with `--force` records the cancellation, and
+`shikigami runs show shikigami.agent-run <id>` reports the workflow as `cancelled` alongside its
+kioku session; a poison job drained into the dead-letter queue appears in
+`shikigami pgmq dlq read --queue shikigami_run_jobs` and
+`shikigami pgmq dlq redrive --queue shikigami_run_jobs --force` puts it back on the live queue.
+
+A note on that last pair, because it is the one command shape in this plan that reads wrong:
+`--queue` names the *live* queue, and `keiro-ops` derives the dead-letter queue from it. Passing
+`shikigami_run_jobs_dlq` does not address the DLQ; see Surprises & Discoveries.
 
 
 ## Progress
@@ -79,20 +83,37 @@ This section must always reflect the actual current state of the work.
       dead letters, projections, snapshots, streams, shards, replay audit, and rebuild. Keiro
       ADR-28 makes wrapping those exported operations mandatory and ad hoc operator SQL
       forbidden. Milestones 2, 3, and 4 are rewritten around it; see the Decision Log.
-- [ ] M0: add `keiro-ops ==0.13.0.0` to `cabal.project`'s constraints block and record the row in
-      `docs/dependency-cohort.md`; confirm `cabal build all --dry-run` still resolves with no
-      `allow-newer` between co-developed packages.
+- [x] (2026-08-20) **Second refresh, against the `keiro-ops` source rather than its synopsis.** The
+      2026-08-19 refresh got the shape right — mount the tree — and six specifics wrong. The
+      command group is `wf`, not `workflow`; its subcommands take *two* positional arguments
+      (`NAME ID`), not one workflow id; `pgmq dlq --queue` takes the *logical job queue*
+      (`shikigami_run_jobs`), not the DLQ name; `OpsInvocation` is an abstract type, so the
+      Settei-resolved database URL cannot be written into the parsed value; `--json` is a global
+      flag placed before the subcommand; and `config/operator-dev.yaml` does not exist. All
+      corrected below and in Surprises & Discoveries.
+- [x] (2026-08-20) **M3's open question is answered, and the answer is better than either
+      branch the plan anticipated.** The workflow id and the session id are independent, but the
+      run *journals* the link: `StepName "open-session"` records the `SessionId` as its step
+      result, and `loadStepIndex` reads it back. The join is exact, recorded, and library-only.
+      Kioku IR-2 is not needed. See Surprises & Discoveries.
+- [x] (2026-08-20) M0: `keiro-ops ==0.13.0.0` added to `cabal.project`'s constraints block and to
+      `shikigami-server`'s `build-depends` (with `keiro` and `kioku-core`, which M3 needs);
+      `docs/dependency-cohort.md` gained its release-matrix row and the prose paragraph saying why
+      it is an ordinary library rather than an `extra-packages` toolchain entry.
+      `nix develop --command cabal build all --dry-run` resolves and selects
+      `keiro-ops-0.13.0.0`, adding no `allow-newer`.
 - [ ] M1: `shikigami agents list` — renders `loadAgentsReport` with name, behavior kind, trigger
       summary, enabled state, and load state; `--json` for machine consumption.
-- [ ] M2: mount `Keiro.Ops.opsCommandTree` into the `shikigami` dispatcher with the Settei
-      database URL supplied from `AppConfig`, and decide (recording the reason) which `AppHooks`
+- [ ] M2: mount `Keiro.Ops.opsCommandTree` into the `shikigami` dispatcher, handing it the
+      Settei-resolved database URL through `KEIRO_OPS_DATABASE_URL` (the only channel the
+      abstract `OpsInvocation` leaves open), and decide (recording the reason) which `AppHooks`
       are populated.
 - [ ] M2: verify the `ResumeHook` effect-row question — `keiro-ops` wants a registry over
       `'[Store, Error StoreError, IOE]` and shikigami's is over `Kioku.App.AppEffects`; see
       Surprises & Discoveries.
-- [ ] M3: `shikigami runs show <workflow-id>` — the keiro-instance-to-kioku-session join that
-      neither library can do alone, built from `listWorkflowInstances`/`lookupInstance` plus
-      `Kioku.Session.getById`, after verifying how the two identities actually relate.
+- [ ] M3: `shikigami runs show <workflow-name> <workflow-id>` — the keiro-instance-to-kioku-session
+      join that neither library can do alone, built from `lookupInstance` plus `loadStepIndex`'s
+      recorded `open-session` step plus `Kioku.Session.getById`.
 - [ ] M4: an audit line through `Shikigami.Log` for every mutation issued through the mounted
       tree, and a dispatch test proving the preview/`--force` gate reaches the right handler.
 - [ ] M5: `docs/operations/` gains an operator runbook naming which verb answers which question,
@@ -115,13 +136,17 @@ implementation. Provide concise evidence.
   (`keiro-ops/src/Keiro/Ops/Embed.hs:1-9`).
 
   Its command tree is `Workflow | Timer | Outbox | Inbox | Pgmq | Projection | Shard | Snapshot |
-  Stream | ReplayAudit | Rebuild` (`Keiro/Ops.hs:62-73`). The three that matter here:
+  Stream | ReplayAudit | Rebuild` (`Keiro/Ops.hs:62-73`), mounted under the command *names*
+  `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`, `snapshot`, `stream`, and
+  — only when their hooks are supplied — `replay-audit` and `rebuild` (`Keiro/Ops.hs:86-141`).
+  Note `wf`, not `workflow`; the constructor name and the command name differ. The three that
+  matter here:
 
-  - `workflow list|show|steps|journal|awakeable|cancel|resurrect|lease|gc` (plus `resume-once`
-    when the hook is supplied) — `keiro-ops/src/Keiro/Ops/Workflow.hs:120-159`.
+  - `wf list|show|steps|journal|awakeable|cancel|resurrect|lease|gc` (plus `resume-once`
+    when the hook is supplied) — `keiro-ops/src/Keiro/Ops/Workflow.hs:134-160`.
   - `outbox backlog|list|show|requeue-stuck|gc-sent|maintenance-pass|dead-letters list` —
-    `keiro-ops/src/Keiro/Ops/Outbox.hs:45-67`.
-  - `pgmq dlq read|redrive|archive|purge` — `keiro-ops/src/Keiro/Ops/Pgmq.hs:30-62`.
+    `keiro-ops/src/Keiro/Ops/Outbox.hs:55-67`.
+  - `pgmq dlq read|redrive|archive|purge` — `keiro-ops/src/Keiro/Ops/Pgmq.hs:39-56`.
 
   That covers Milestone 2's `runs list`, Milestone 3's `runs cancel`, and all of Milestone 4
   except the Shikigami-specific rendering.
@@ -190,6 +215,146 @@ implementation. Provide concise evidence.
   leave `workflowResume` unmounted, because the worker process already runs the resume loop and an
   operator-triggered `resume-once` is a convenience rather than a capability.
 
+- **(2026-08-20) The mounted group is `wf`, and its verbs take two positional arguments.** Every
+  acceptance transcript in the 2026-08-19 refresh said `workflow …`. The tree mounts it as
+  `command "wf"` (`keiro-ops/src/Keiro/Ops.hs:88`), and a target is a
+  `WorkflowRef { workflowName, workflowId }` parsed as two bare arguments:
+
+  ```haskell
+  -- keiro-ops/src/Keiro/Ops/Workflow.hs:184-188
+  workflowRefParser :: Parser WorkflowRef
+  workflowRefParser =
+    WorkflowRef
+      <$> (Text.pack <$> argument str (metavar "NAME"))
+      <*> (Text.pack <$> argument str (metavar "ID"))
+  ```
+
+  So the real invocation is `shikigami wf cancel shikigami.agent-run <id>`, not
+  `shikigami workflow cancel <id>`. That is not a spelling quibble: keiro keys a workflow
+  instance by `(workflow_name, workflow_id)`, and an operator who supplies only the id has not
+  named an instance.
+
+- **(2026-08-20) `pgmq dlq --queue` wants the live queue name, not the dead-letter queue name.**
+  The refresh's transcripts all said `--queue shikigami_run_jobs_dlq`. That is wrong twice over.
+  `Keiro.Ops.Pgmq` builds a synthetic job from whatever `--queue` names and lets the queue
+  reference derive the DLQ:
+
+  ```haskell
+  -- keiro-ops/src/Keiro/Ops/Pgmq.hs:158-165
+  rawJob queue = Job { jobName = queue, jobQueue = queueRef queue, ... }
+  -- keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:111-119
+  readDlq job n = Pgmq.readMessage ReadMessage { queueName = job.jobQueue.dlqName, ... }
+  -- keiro-pgmq/src/Keiro/PGMQ/Runtime.hs:92-98
+  queueRef logical = QueueRef { ..., dlqName = forceQueueName (base <> "_dlq") }
+  ```
+
+  So `--queue shikigami_run_jobs` is what reaches `shikigami_run_jobs_dlq`. And passing the DLQ
+  name does not merely double the suffix: `physicalBase` hashes any base already ending in
+  `_dlq` (`Runtime.hs:109-113`), so `--queue shikigami_run_jobs_dlq` addresses a hashed queue
+  that does not exist. It fails loudly rather than quietly, which is the one mercy here.
+
+- **(2026-08-20) `OpsInvocation` is abstract, so the database URL cannot be injected into the
+  parsed value.** `Keiro.Ops` exports the type without its constructor
+  (`keiro-ops/src/Keiro/Ops.hs:1-11`), and `runInvocation` reads
+  `globalOptions.databaseUrl` from inside. The 2026-08-19 M2 instruction — "supply the
+  Settei-resolved value as the default and let `--database-url` override it" — has no field to
+  set. The channel that is open is the fallback chain:
+
+  ```haskell
+  -- keiro-ops/src/Keiro/Ops/Env.hs:56-61
+  resolveConnectionString explicit = do
+    keiroOpsDatabaseUrl <- fmap Text.pack <$> lookupEnv "KEIRO_OPS_DATABASE_URL"
+    databaseUrl         <- fmap Text.pack <$> lookupEnv "DATABASE_URL"
+    pure (selectConnectionString explicit keiroOpsDatabaseUrl databaseUrl)
+  ```
+
+  So the mount sets `KEIRO_OPS_DATABASE_URL` in its own process from the Settei-resolved
+  `AppConfig` immediately before `runOpsInvocation`. That yields exactly the intended
+  precedence — an explicit `--database-url` still wins — without shikigami reading an
+  environment variable to configure itself: Settei remains the only thing that decides the
+  value, and the environment is merely the wire it travels down into a library that cannot be
+  told any other way. Set it unconditionally, so a stray `DATABASE_URL` in the operator's shell
+  cannot silently point the console at a different database than the one `--explain-config`
+  reports.
+
+- **(2026-08-20) Every invocation runs a schema-agreement check, and a mutation refuses under
+  drift.** `runInvocation` calls `verifyExpectedSchema` before opening the store, warns on each
+  drift, and then refuses any mutating command unless `--allow-schema-drift` is passed
+  (`keiro-ops/src/Keiro/Ops.hs:143-160`). Shikigami composes `keiro-migrations` at the same
+  `0.13.0.0`, so agreement is the expected state; a drift warning here means the database is
+  behind the binary and the fix is to migrate, not to pass the flag. Worth stating in the
+  runbook, because the flag is right there and looks like the answer.
+
+- **(2026-08-20) `--json` is a global flag, before the subcommand.** It is
+  `flag HumanTable Json (long "json")` on `GlobalOptions`
+  (`keiro-ops/src/Keiro/Ops/Env.hs:46`), so it is `shikigami wf list --json`, and shikigami's own
+  `agents list` and `runs show` spell it the same way rather than inventing `--output json`. Same
+  reasoning as the `--force`/`--confirm` correction: one binary, one spelling.
+
+- **(2026-08-20) `outbox dead-letters list` has no target in this repository.** It requires
+  `--dispatcher NAME`, a process-manager or router dispatcher name
+  (`keiro-ops/src/Keiro/Ops/Outbox.hs:85-88`). `docs/architecture/shikigami-domain-inventory.md`
+  established that shikigami has no process manager and no router, so there is no dispatcher to
+  name. The verb mounts because the tree mounts whole; the runbook must not list it as an answer
+  to any question, per `docs/adr/0001-declare-only-what-the-runtime-executes.md`.
+
+- **(2026-08-20) `pgmq dlq purge --force` prompts on stdin.** It reads a line and compares it to
+  the queue name, unless `--json` is set, in which case it proceeds unprompted
+  (`keiro-ops/src/Keiro/Ops/Pgmq.hs:129-137`). Relevant to M4's behavioural test — drive purge
+  with `--json` or not at all — and to anyone scripting against the mount.
+
+- **(2026-08-20) The keiro workflow id and the kioku session id are independent, and the run
+  journals the link between them.** The 2026-07-08 hypothesis that they are equal is false:
+
+  ```haskell
+  -- shikigami-core/src/Shikigami/Agent/Workflow.hs:245
+  (WorkflowId (jobIdempotencyKey job))
+  -- shikigami-core/src/Shikigami/Agent/Workflow.hs:513
+  sid <- genSessionId
+  ```
+
+  But neither of the refresh's two fallbacks — infer the session from scope and time, or admit
+  shikigami must record the linkage — is needed, because shikigami already records it. The run's
+  first journaled step *is* the session id:
+
+  ```haskell
+  -- shikigami-core/src/Shikigami/Agent/Workflow.hs:310
+  opened <- runStep deps (StepName "open-session") (requireStore (openSession deps job decl))
+  ```
+
+  and keiro exposes the recorded step results as an ordinary library read:
+
+  ```haskell
+  -- keiro/src/Keiro/Workflow/Schema.hs:134
+  loadStepIndex :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es (Map Text Value)
+  ```
+
+  So `runs show` is: `lookupInstance` for the workflow half (which also supplies the
+  `generation` to read at), `loadStepIndex` for the `open-session` entry, decode it as
+  `StepResult SessionId` — the type is exported from `Shikigami.Agent.Workflow` and its
+  `FromJSON` reads a bare value as `StepProduced` and `{"stepRefused": …}` as `StepRefused`
+  (`Workflow.hs:423-440`) — then `Kioku.Session.getById` for the kioku half. Every read is an
+  exported operation of the library that owns the state, so Keiro ADR-28 is satisfied without
+  qualification, the join is exact rather than inferred, and kioku IR-2 is not a dependency of
+  this plan after all.
+
+  The `StepRefused` arm is not a curiosity to swallow: it is a run whose session kioku declined
+  to open, so there is no session to show, and `runs show` must say that rather than print an
+  empty kioku half that reads like a missing session.
+
+- **(2026-08-20) `config/operator-dev.yaml` does not exist.** The refresh's M1 acceptance names
+  it. `config/` holds `shikigami.example.yaml` and `worker-agent-schema-proof.yaml`. Since
+  `agents.directory` defaults to `agents` relative to the working directory
+  (`shikigami-core/src/Shikigami/App/Config.hs:340`), `agents list` needs no configuration file
+  at all when run from the repository root; only the database-backed verbs need one.
+
+- **(2026-08-20) `CommandSpec` pins the subcommand list by name.** Its first case asserts
+  `fmap fst adminSubcommands == ["validate", …, "grants"]`
+  (`shikigami-server/test/Shikigami/Server/CommandSpec.hs:22-33`), and its later cases drive
+  `--help` for every entry. Adding groups means updating that literal — which is the test doing
+  its job, since a group added to the dispatcher but not to the list would otherwise go
+  unexercised.
+
 - (Findings from implementation go below this line.)
 
 
@@ -235,8 +400,11 @@ Record every decision made while working on the plan.
   `shikigami_run_jobs_dlq` as a policy-enabled keiro-pgmq DLQ, reconciled at worker startup by
   `ensureJobQueue runJob` (`shikigami-workers/src/Shikigami/Workers/Registry.hs:60-69`).
   `keiro-ops` operates exactly that shape with `pgmq dlq read|redrive|archive|purge`
-  (`keiro-ops/src/Keiro/Ops/Pgmq.hs:30-62`). The `pgmq.a_*` archive is still not an operator
-  contract, and `keiro-ops` does not touch it.
+  (`keiro-ops/src/Keiro/Ops/Pgmq.hs:39-56`), addressed by the *live* queue name
+  `shikigami_run_jobs` rather than by the DLQ's own name. The `pgmq.a_*` archive is still not an
+  operator contract; `keiro-ops` writes it only when an operator explicitly runs
+  `pgmq dlq archive`, which is the retain half of Keiro's documented archive-then-purge retention
+  model, and never reads it back.
 
 - Decision: Read-only by default; every destructive subcommand requires an explicit flag and
   prints what it will do first.
@@ -259,7 +427,7 @@ Record every decision made while working on the plan.
   Status 2026-08-19: **satisfied upstream, and the bespoke types are struck.**
   `WorkflowInstanceFilter` carries `afterKey :: Maybe (Text, Text)` and `pageSize :: Int`, orders
   by `(workflow_name, workflow_id)`, and returns an empty page for a non-positive size
-  (`keiro/src/Keiro/Workflow/Instance.hs:106-118,221-237`); `keiro-ops`'s `workflow list` exposes
+  (`keiro/src/Keiro/Workflow/Instance.hs:106-118,221-237`); `keiro-ops`'s `wf list` exposes
   it. This plan defines no `PageSize`, `PageRequest`, `RunCursor`, or `StepCursor`. The rule still
   binds anything Shikigami adds: `agents list` reads a directory, which is bounded by the
   filesystem, and `runs show` reads one instance and one session.
@@ -296,7 +464,7 @@ Record every decision made while working on the plan.
   Date: 2026-08-19
 
 - Decision: **Keep `runs show` as a Shikigami verb, and verify the join before relying on it.**
-  Rationale: `keiro-ops workflow show` reports the instance, its children, and its awakeables — all
+  Rationale: `keiro-ops wf show` reports the instance, its children, and its awakeables — all
   keiro state. It cannot report the agent name, the session status, the summary, or the recorded
   turns, because those are kioku's and keiro has no business knowing about them. A Shikigami
   operator asking "what happened to this run" wants both halves in one place, and joining them is
@@ -306,6 +474,42 @@ Record every decision made while working on the plan.
   are independent, `runs show` looks the session up through kioku's own indexed queries — by
   scope, or by subject reference once kioku IR-2 lands — and records the finding.
   Date: 2026-08-19
+  **Resolved 2026-08-20, and the instruction to verify first is why the answer is a good one.**
+  The identities are independent — the workflow id is the run job's idempotency key, the session
+  id is freshly generated — so the equality branch is out. But the inference branch is out too,
+  and that is the part worth recording: shikigami does not need to *infer* the session, because
+  the run journals it. `StepName "open-session"` records the `SessionId` as its step result, and
+  `Keiro.Workflow.loadStepIndex` reads recorded step results back as `Map Text Value`. So
+  `runs show` performs an exact, recorded join through three exported library operations —
+  `lookupInstance`, `loadStepIndex`, `Kioku.Session.getById` — with no inference to disclose in
+  help text and no hand-written SQL. The 2026-08-19 note that kioku IR-2 might gate this
+  milestone is withdrawn: it does not.
+
+- Decision: **The Settei-resolved database URL reaches the mounted tree through
+  `KEIRO_OPS_DATABASE_URL`, set unconditionally in-process.**
+  Rationale: `Keiro.Ops` exports `OpsInvocation` abstractly, so there is no field to write the
+  resolved value into, and `runOpsInvocation` resolves the connection string itself from
+  `--database-url`, then `KEIRO_OPS_DATABASE_URL`, then `DATABASE_URL`. Setting the first
+  environment variable from `AppConfig` before the call is the only mechanism that preserves the
+  intended precedence, and it does not weaken plan 37's rule: shikigami still reads nothing from
+  the environment to decide its own configuration; it writes a value Settei already decided into
+  the one channel the library offers. Setting it unconditionally — rather than only when
+  `AppConfig` has a URL — matters, because leaving it unset would let a stray `DATABASE_URL` in
+  the operator's shell point the console somewhere `shikigami --explain-config` does not report.
+  The alternative, asking Keiro to export the constructor, is upstream work this plan does not
+  need; if the mount later wants to pass other global options programmatically, that is the
+  improvement request to file.
+  Date: 2026-08-20
+
+- Decision: **Shikigami's own operator verbs adopt `keiro-ops`'s spellings wholesale: `--json`
+  as a flag, `--force` as the mutation gate, and `NAME ID` as the way a workflow is named.**
+  Rationale: the 2026-08-19 entry already made this argument for `--force` versus `--confirm`;
+  reading the source turned up two more places where the same argument applies and the plan had
+  drifted. `--json` is a global `flag HumanTable Json`, not `--output json`. And a keiro workflow
+  instance is keyed by `(workflow_name, workflow_id)`, so `runs show` takes both arguments too —
+  a `runs show <id>` that guessed `shikigami.agent-run` would be a convenience that lies the
+  moment conversation workflows are inspected the same way.
+  Date: 2026-08-20
 
 
 ## Outcomes & Retrospective
@@ -532,10 +736,18 @@ listing to say which of "not loaded", "loaded but disabled", and "loaded and ena
   reports, not a derived figure it declined to define.
 - `docs/adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md` — the package-boundary
   reasoning that decides where a new command module may live.
+- `docs/adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md` — a conversation workflow id
+  carries an epoch, so an operator inspecting one is inspecting one epoch of a conversation, not
+  the whole thing. `runs show` must not imply otherwise.
 
-No ADR covers operator tooling or the mount-versus-reimplement question. If the decision to mount
-`keiro-ops` survives implementation, it is durable project context — it constrains every future
-operator verb — and should be promoted to a new ADR during the distillation pass.
+`docs/adr/README.md` records this corpus's conventions: plain Markdown, one decision per file,
+`NNNN-kebab-slug.md`, numbered sequentially and never renumbered, and deliberately *not* an OKF
+bundle — `mori.dhall` declares no bundle for `docs/adr`, so do not add OKF frontmatter or a
+`docId`. The highest allocated number today is `0020`, so a new record here is `0021`.
+
+No existing ADR covers operator tooling or the mount-versus-reimplement question. If the decision
+to mount `keiro-ops` survives implementation, it is durable project context — it constrains every
+future operator verb — and should be promoted to a new ADR during the distillation pass.
 
 
 ## Plan of Work
@@ -585,25 +797,40 @@ second `agents list` is exactly what that division exists to prevent.
 **Acceptance.**
 
 ```bash
-cabal run shikigami -- agents list --config config/operator-dev.yaml
+cabal run shikigami -- agents list
 ```
 
 prints one row per manifest, including a `failed` row for `agents/broken.dhall` and a visibly
-different state for any agent whose manifest sets `enabled = False`.
+different state for any agent whose manifest sets `enabled = False`. No `--config` is needed and
+no database is opened: `agents.directory` defaults to `agents` relative to the working directory
+(`shikigami-core/src/Shikigami/App/Config.hs:340`), and this verb reads the filesystem only.
 
 ### Milestone 2 — mount the `keiro-ops` command tree
 
 Scope: give the operator the whole substrate surface without writing it.
 
-Add an entry to `adminSubcommands` that mounts `Keiro.Ops.opsCommandTree`. The mechanical
+Add entries to `adminSubcommands` that mount `Keiro.Ops.opsCommandTree`. The mechanical
 question is how `keiro-ops`'s parser composes with Shikigami's, since both want to own global
 options. `keiro-ops`'s `GlobalOptions` carries its own `--database-url`, and Shikigami resolves the
 connection string from Settei (`Shikigami.App.Config.Load.requireDatabaseUrl`, used at
-`shikigami-workers/src/Shikigami/Workers/Command/Worker.hs:44`). Resolve this by supplying the
-Settei-resolved value as the default and letting `--database-url` override it, exactly as plan 37's
-"a flag is a Settei source aimed at a declared key" convention does for `--broker`. Do not read an
-environment variable, and do not let the mounted tree open a connection before configuration
-resolves — `runAdmin` guarantees resolution happens first, and that guarantee must survive.
+`shikigami-workers/src/Shikigami/Workers/Command/Worker.hs:44`).
+
+The 2026-08-19 text said to supply the Settei-resolved value as `--database-url`'s default. There
+is no way to do that: `Keiro.Ops` exports `OpsInvocation` without its constructor, so the parsed
+value is opaque and its `globalOptions.databaseUrl` cannot be written. What `runOpsInvocation`
+does instead is resolve the string itself, preferring `--database-url`, then
+`KEIRO_OPS_DATABASE_URL`, then `DATABASE_URL` (`keiro-ops/src/Keiro/Ops/Env.hs:56-61`). So the
+mount sets `KEIRO_OPS_DATABASE_URL` in its own process, from `AppConfig`, immediately before the
+call. Set it **unconditionally**, including when `AppConfig` carries no URL — otherwise a stray
+`DATABASE_URL` in the operator's shell silently aims the console at a database that
+`shikigami --explain-config` does not name. An explicit `--database-url` still wins, which is the
+precedence the original text wanted.
+
+This does not weaken plan 37's rule. Shikigami still reads nothing from the environment to decide
+its own configuration; Settei decides the value and the environment is only the wire it travels
+down into a library that offers no other entry point. And the ordering guarantee survives:
+`runAdmin` resolves configuration before it runs any action, so the variable is set — and the
+mounted tree's first connection is opened — strictly after resolution.
 
 Decide, and record with reasons, which `AppHooks` are populated:
 
@@ -625,52 +852,84 @@ Decide, and record with reasons, which `AppHooks` are populated:
   would be declaring something the runtime does not do, which is the mistake
   `docs/adr/0001-declare-only-what-the-runtime-executes.md` exists to prevent.
 
-**Acceptance.** `shikigami --help` lists the mounted group. With a run in flight:
+**Acceptance.** `shikigami --help` lists the mounted groups. With a run in flight, and writing
+`shikigami.agent-run` for the workflow name (import the constant; do not hard-code it in code,
+though an operator of course types it):
 
 ```bash
-cabal run shikigami -- workflow list --status running
-cabal run shikigami -- workflow show <workflow-id>
-cabal run shikigami -- workflow cancel <workflow-id>            # previews, exits non-zero
-cabal run shikigami -- workflow cancel <workflow-id> --force    # records the cancellation
+cabal run shikigami -- wf list --status running
+cabal run shikigami -- wf show shikigami.agent-run <workflow-id>
+cabal run shikigami -- wf cancel shikigami.agent-run <workflow-id>          # previews, exits 1
+cabal run shikigami -- wf cancel shikigami.agent-run <workflow-id> --force  # records it
 cabal run shikigami -- outbox backlog
-cabal run shikigami -- pgmq dlq read --queue shikigami_run_jobs_dlq
+cabal run shikigami -- pgmq dlq read --queue shikigami_run_jobs
 ```
 
 and each behaves as `keiro-ops` documents. A cancel of an already-terminal instance reports
-`WorkflowAlreadyTerminal` rather than pretending to succeed.
+`WorkflowAlreadyTerminal` rather than pretending to succeed. The preview path exits `1` and
+prints `preview only; re-run with --force: …` on stderr, naming the exact re-invocation
+(`keiro-ops/src/Keiro/Ops.hs:207-212`), so the non-zero exit is a documented contract rather than
+an incidental failure.
 
 ### Milestone 3 — `shikigami runs show`
 
 Scope: the one inspection verb `keiro-ops` structurally cannot provide — the join across the two
 libraries.
 
-**First, verify the join key.** Read `shikigami-core/src/Shikigami/Agent/Workflow.hs` and
-establish how the workflow id and the session id are actually minted for an agent run. The
-2026-07-08 hypothesis was that the workflow id is the job's idempotency key and the session id is
-independently generated, in which case they are *not* equal and a `workflow_id = session_id` join
-is wrong. Record what you find in Surprises & Discoveries before writing the command, because the
-command's shape depends on the answer:
+**The join key was verified on 2026-08-20, and the answer shapes the command.** The workflow id
+is the run job's idempotency key (`shikigami-core/src/Shikigami/Agent/Workflow.hs:245`) and the
+session id is freshly generated (`:513`), so they are *not* equal and a `workflow_id = session_id`
+join is wrong. But shikigami does not have to infer anything, because the run journals the link:
+the first step of every agent run is `StepName "open-session"`, and its recorded result is the
+`SessionId` (`:310`, `:528`). Keiro reads recorded step results back with
+`loadStepIndex :: WorkflowName -> WorkflowId -> Int -> Eff es (Map Text Value)`
+(`keiro/src/Keiro/Workflow/Schema.hs:134`).
 
-- If they are equal, `runs show <id>` reads the instance with `lookupInstance` and the session
-  with `Session.getById`, and prints both.
-- If they are independent, the command reads the instance, extracts the agent name and time
-  window, and finds the session through kioku's indexed reads (`getByScope` for the agent's scope,
-  narrowed by `startedAt`). Say so in the help text: an inferred join is not a guaranteed one, and
-  an operator must be able to tell.
-- If neither is reliable, the honest outcome is that shikigami needs to record the linkage, and
-  that is a design change belonging in its own plan — not a guess in a listing.
+So `runs show <workflow-name> <workflow-id>` is four exported library reads and no SQL:
 
-Build the command from library reads only. `Keiro.Workflow`'s `lookupInstance` and `loadStepIndex`
-for the workflow half; `Kioku.Session.getById` and `getTurns` for the session half, through
-`Shikigami.Memory.Access`'s space. No hasql `Statement` is written by this plan.
+1. `lookupInstance` for the workflow row — status, generation, attempts, last error, timestamps.
+   Its `generation` field is what step 2 reads at; do not call `currentGeneration` separately.
+2. `loadStepIndex name id generation`, then look up the step that carries the session id. There
+   are **two** such step names, because there are two workflows. An agent run records
+   `open-session` (`Shikigami/Agent/Workflow.hs:310`); a danwa conversation records
+   `resolve-session` (`Shikigami/Agent/Conversation.hs:695,769`). Try `open-session`, then
+   `resolve-session`. Do not branch on the workflow name to decide which to look for — the step
+   name is what the journal actually records, and reading the map for either keeps `runs show`
+   working for both kinds without the command knowing which workflows exist.
+3. Decode that `Value` as `StepResult SessionId`. The type is exported from
+   `Shikigami.Agent.Workflow`, and its `FromJSON` reads a bare value as `StepProduced` and an
+   object carrying `stepRefused` as `StepRefused` (`Workflow.hs:423-440`). That decode is correct
+   for both steps: `open-session` records a `StepResult SessionId` whose produced arm encodes as
+   the bare id, and `resolve-session` records a bare `SessionId` directly, which the same
+   instance reads as `StepProduced`.
+4. `Kioku.Session.getById` and `getTurns` for the session half, under
+   `Shikigami.Memory.Access.shikigamiMemorySpace` — never `legacyMemorySpaceId` by name.
 
-Render: workflow id, workflow name, status, generation, attempts, last error, timestamps; then
-agent id, session status, summary, error message, and turn count. `--json` emits both halves as
-one object.
+A conversation workflow id is re-keyed by epoch
+(`docs/adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md`), so an operator inspecting one is
+inspecting a single epoch rather than the whole conversation, and each epoch has its own session.
+`runs show` reports the epoch it was given and does not attempt to walk the chain; kioku's
+`getChain` is the read that would, and following it is not scoped here.
 
-**Acceptance.** With a run in flight, `shikigami runs show <id>` prints the workflow as `running`
-alongside its kioku session; after `shikigami workflow cancel <id> --force`, the same command
-reports `cancelled`, and a direct `keiro-ops workflow show` agrees about the workflow half.
+Three cases must render differently, because collapsing them would make the command lie:
+
+- **A session id was recorded.** Print both halves.
+- **The `open-session` key is absent.** The run has not opened its session yet — it is queued, or
+  it failed at `ingest-job` or `lookup-agent`. Say "no session opened yet", not "session not
+  found".
+- **The step decodes as `StepRefused detail`.** Kioku declined to open the session and the run is
+  permanently over. Print the refusal detail. An empty kioku half here would read like a lookup
+  miss, which is the opposite of what happened.
+
+Render: workflow name, workflow id, status, generation, attempts, last error, timestamps; then
+agent id, session status, focus, summary, error message, and turn count. `--json` — the flag, not
+`--output json` — emits both halves as one object.
+
+**Acceptance.** With a run in flight,
+`shikigami runs show shikigami.agent-run <workflow-id>` prints the workflow as `running` alongside
+its kioku session; after `shikigami wf cancel shikigami.agent-run <workflow-id> --force`, the same
+command reports `cancelled`, and `shikigami wf show shikigami.agent-run <workflow-id>` agrees
+about the workflow half. A workflow id that names no instance reports that, and exits non-zero.
 
 ### Milestone 4 — audit and the dispatch test
 
@@ -697,13 +956,20 @@ Scope: a short operator document, because a mounted third-party tree is discover
 someone says it is there.
 
 Write `docs/operations/operator-cli.md` mapping questions to verbs: "which agents are declared and
-are any broken?" → `agents list`; "what is running right now?" → `workflow list --status running`;
-"what happened to this run?" → `runs show`; "this run is stuck" → `workflow cancel … --force`, and
-the `workflow lease`/`workflow resurrect` verbs for the cases cancel does not fit; "jobs are
-disappearing" → `pgmq dlq read` then `redrive --force`; "sinks are not being delivered" →
-`outbox backlog` and `outbox list`. Name which verbs come from `keiro-ops` and link its
-documentation, so an operator knows where to look when a verb behaves in a way this repository did
-not define.
+are any broken?" → `agents list`; "what is running right now?" → `wf list --status running`;
+"what happened to this run?" → `runs show <name> <id>`; "this run is stuck" →
+`wf cancel <name> <id> --force`, and the `wf lease release`/`wf resurrect` verbs for the cases
+cancel does not fit; "jobs are disappearing" → `pgmq dlq read --queue shikigami_run_jobs` then
+`redrive --force`; "sinks are not being delivered" → `outbox backlog` and `outbox list`. Name
+which verbs come from `keiro-ops` and link its documentation, so an operator knows where to look
+when a verb behaves in a way this repository did not define.
+
+Three things the runbook must state because they are surprising rather than discoverable: that
+`--queue` names the live queue and `keiro-ops` derives the dead-letter queue from it; that a
+mutating verb refuses under schema drift and the fix is to migrate rather than to pass
+`--allow-schema-drift`; and that `outbox dead-letters list` mounts but has no target in this
+deployment, because shikigami has no process manager or router to name with `--dispatcher`. Do
+not list any verb this deployment cannot answer with.
 
 Add the `keiro-ops` row to whatever configuration reference plan 31 owns, if the mount introduces
 a setting.
@@ -732,7 +998,7 @@ cabal test all
 M1:
 
 ```bash
-cabal run shikigami -- agents list --config config/operator-dev.yaml
+cabal run shikigami -- agents list
 ```
 
 Expected (columns; `broken.dhall` shows a failed load state):
@@ -744,38 +1010,41 @@ triage-note       task       event ...               yes      loaded
 broken            -          -                       -        failed
 ```
 
-M2 (with a worker draining in another terminal and a job enqueued):
+M2 (with a worker draining in another terminal and a job enqueued). `shikigami.agent-run` is the
+workflow name; the id is the run job's idempotency key, which `enqueue-run` reports:
 
 ```bash
 cabal run shikigami -- enqueue-run heartbeat
-cabal run shikigami -- workflow list --status running
-cabal run shikigami -- workflow cancel heartbeat:<activity-id>
-cabal run shikigami -- workflow cancel heartbeat:<activity-id> --force
+cabal run shikigami -- wf list --status running
+cabal run shikigami -- wf cancel shikigami.agent-run heartbeat:<activity-id>
+cabal run shikigami -- wf cancel shikigami.agent-run heartbeat:<activity-id> --force
 ```
 
-Expected: the third command previews and exits non-zero; the fourth records the cancellation.
+Expected: the third command previews and exits non-zero, printing
+`preview only; re-run with --force: …` on stderr; the fourth records the cancellation.
 Cross-check through the library rather than by hand:
 
 ```bash
-cabal run shikigami -- workflow show heartbeat:<activity-id>
+cabal run shikigami -- wf show shikigami.agent-run heartbeat:<activity-id>
 ```
 
 M3:
 
 ```bash
-cabal run shikigami -- runs show heartbeat:<activity-id>
+cabal run shikigami -- runs show shikigami.agent-run heartbeat:<activity-id>
 ```
 
 Expected: the workflow half reports `cancelled`, and the kioku half reports the agent id and
 session status beside it.
 
-M4 (dead letters, with a poison job drained by the worker):
+M4 (dead letters, with a poison job drained by the worker). `--queue` names the **live** queue;
+`keiro-ops` derives `shikigami_run_jobs_dlq` from it:
 
 ```bash
 cabal run shikigami -- enqueue-run does-not-exist
-cabal run shikigami -- pgmq dlq read --queue shikigami_run_jobs_dlq
-cabal run shikigami -- pgmq dlq redrive --queue shikigami_run_jobs_dlq
-cabal run shikigami -- pgmq dlq redrive --queue shikigami_run_jobs_dlq --force
+cabal run shikigami -- pgmq dlq read --queue shikigami_run_jobs
+cabal run shikigami -- pgmq dlq redrive --queue shikigami_run_jobs
+cabal run shikigami -- pgmq dlq redrive --queue shikigami_run_jobs --force
 cabal run shikigami -- outbox backlog
 ```
 
@@ -794,13 +1063,15 @@ Acceptance is behavior an operator can observe.
 1. `shikigami agents list` enumerates every manifest with its trigger summary, its enabled state,
    and a `failed` row for `agents/broken.dhall`.
 2. The mounted `keiro-ops` groups appear in `shikigami --help` and work against the dev database:
-   `workflow list|show|cancel`, `outbox backlog|list`, `pgmq dlq read|redrive`, and `timer` if its
+   `wf list|show|cancel`, `outbox backlog|list`, `pgmq dlq read|redrive`, and `timer` if its
    hook was populated.
-3. `shikigami workflow cancel <id> --force` moves a running instance to `cancelled`, verified by
-   `workflow show`; without `--force` it previews and changes nothing; against an already-terminal
-   instance it reports `WorkflowAlreadyTerminal` rather than succeeding.
-4. `shikigami runs show <id>` prints the keiro instance and the kioku session together, and its
-   help text states whether the join is exact or inferred.
+3. `shikigami wf cancel <name> <id> --force` moves a running instance to `cancelled`, verified by
+   `wf show`; without `--force` it previews, changes nothing, and exits non-zero; against an
+   already-terminal instance it reports `WorkflowAlreadyTerminal` rather than succeeding.
+4. `shikigami runs show <name> <id>` prints the keiro instance and the kioku session together,
+   sourcing the link from the run's recorded `open-session` step; a run that has not opened a
+   session and a run whose session kioku refused render as distinct, named states rather than as
+   an empty kioku half.
 5. Every mutation emits one `Shikigami.Log` audit line naming the verb, target, outcome, and
    correlation id.
 6. **No hand-written operator SQL exists in this repository.** `rg 'keiro_workflows|keiro_outbox|
@@ -858,18 +1129,25 @@ generated `workflowName` constants, and `Shikigami.App.Config`.
 
 ```haskell
 -- shikigami-server/src/Shikigami/Server/Command/Agents.hs (new)
-runAgentsList :: AppConfig -> OutputMode -> IO ()
+runAgentsList :: Bool -> AppConfig -> IO ()          -- Bool is --json
 
 -- shikigami-server/src/Shikigami/Server/Command/Runs.hs (new)
-runRunsShow :: AppConfig -> Text -> OutputMode -> IO ()
+runRunsShow :: Text -> Text -> Bool -> AppConfig -> IO ()  -- workflow name, workflow id, --json
 
--- shikigami-server/src/Shikigami/Server/Command/Ops.hs (new — the keiro-ops mount)
+-- shikigami-server/src/Shikigami/Server/Command/Ops.hs (new -- the keiro-ops mount)
 shikigamiOpsHooks :: AppConfig -> IO AppHooks
-runOps           :: AppConfig -> OpsInvocation -> IO ()
+runOps            :: AppConfig -> OpsInvocation -> IO ()
 
 -- shikigami-server/src/Shikigami/Server/Command.hs (extended)
--- adminSubcommands gains "agents", "runs", and the mounted keiro-ops group
+-- adminSubcommands gains "agents", "runs", and one entry per mounted keiro-ops group
 ```
+
+The argument order puts `AppConfig` last because `AdminAction` is
+`(AppConfig -> IO (), [Source])`: every existing command module in this package already reads
+that way (see `Shikigami.Server.Command.Grants`), and a parser builds its action by partially
+applying the flags it parsed. `--json` is a `Bool` rather than a re-exported
+`Keiro.Ops.Env.OutputMode` so that `agents list`, which opens no database and links nothing from
+the ops tree, does not take a dependency on that module's type for a two-valued choice.
 
 There is deliberately **no** `Shikigami.Operator.Query`, no `PageSize`/`PageRequest`/`RunCursor`/
 `StepCursor`, and no `runRunsList`/`runRunsCancel`/`runDlq*`/`runOutboxStatus`. Those were the
@@ -943,3 +1221,48 @@ is wrong; this plan gives them the verbs to find out *what*.
   unpopulated; the worker already runs the resume loop). `TimerFire` has no such problem, but its
   Shikigami implementation lives in `shikigami-workers`, which `shikigami-server` may not import —
   a package-boundary question Milestone 2 must answer before promising the verb.
+
+- 2026-08-20: **Second refresh, read against the `keiro-ops` source rather than its synopsis, plus
+  Milestone 0 delivered.**
+
+  *Why a second refresh one day later.* The 2026-08-19 refresh made the right structural call and
+  cited `keiro-ops` accurately at the level of module and type. It did not check the command
+  *names* or the argument *shapes*, and those are exactly what an implementer types. Six things
+  were wrong, each of which would have produced a plan whose acceptance transcripts fail: the
+  group is `wf`, not `workflow`; workflow verbs take `NAME ID`, not a lone id; `pgmq dlq --queue`
+  takes the live queue name, so the plan's `--queue shikigami_run_jobs_dlq` addressed a hashed
+  queue that does not exist; `OpsInvocation` is abstract, so M2's "supply the Settei value as the
+  default" had no field to write; `--json` is a global flag, not `--output json`; and
+  `config/operator-dev.yaml`, named in M1's acceptance, is not in the repository. Every transcript
+  and signature in the plan is corrected, and the findings are in Surprises & Discoveries with
+  file-and-line evidence so the next reader can check them rather than trust them.
+
+  *The open question is closed, better than expected.* M3's join key is resolved. The keiro
+  workflow id and the kioku session id are independent, so the 2026-07-08 equality hypothesis is
+  dead — but the inference fallback the 2026-08-19 refresh prepared is not needed either, because
+  the run journals the link. `open-session` (agent runs) and `resolve-session` (conversations)
+  record the `SessionId` as their step result, and `Keiro.Workflow.loadStepIndex` reads recorded
+  step results back. So `runs show` is an exact recorded join over three exported library reads,
+  Keiro ADR-28 is satisfied without qualification, no help text has to disclose an inferred join,
+  and kioku IR-2 is not a dependency of this plan. M3 also gained the three render cases the
+  journal makes visible — session recorded, no session opened yet, session refused by kioku — that
+  a `Maybe SessionRow` alone would have flattened into one misleading empty half.
+
+  *Two operational facts the runbook needs.* Every `keiro-ops` invocation verifies schema
+  agreement and refuses a *mutation* under drift unless `--allow-schema-drift` is passed; and
+  `pgmq dlq purge --force` prompts on stdin for the queue name unless `--json` is set. Both are
+  recorded in Surprises & Discoveries, the first because the flag looks like the answer when
+  migrating is.
+
+  *One verb that mounts but has no target here.* `outbox dead-letters list` requires
+  `--dispatcher NAME`, and shikigami has no process manager and no router to name. It mounts
+  because the tree mounts whole; M5's runbook must not offer it as the answer to any question, per
+  `docs/adr/0001-declare-only-what-the-runtime-executes.md`.
+
+  *Milestone 0 is done.* `keiro-ops ==0.13.0.0` is in `cabal.project`'s constraints block and in
+  `shikigami-server`'s `build-depends`, alongside `keiro` and `kioku-core` which M3 needs;
+  `docs/dependency-cohort.md` gained its release-matrix row and a paragraph on why it is an
+  ordinary linked library rather than an `extra-packages` toolchain entry like `keiro-dsl`.
+  `nix develop --command cabal build all --dry-run` resolves and selects `keiro-ops-0.13.0.0`,
+  adding no `allow-newer` — its own bounds (`keiro ^>=0.13.0.0`, `keiro-migrations ^>=0.13.0.0`,
+  `keiro-pgmq ^>=0.13.0.0`, `kiroku-store >=0.8 && <0.9`) were already satisfied by this cohort.

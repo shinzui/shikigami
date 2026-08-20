@@ -64,6 +64,7 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 | `keiro-core` | 0.4.0.1 | **0.13.0.0** | `keiro-core-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-dsl` | — | **0.13.0.0** | `keiro-dsl-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-migrations` | 0.4.0.1 | **0.13.0.0** | `keiro-migrations-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
+| `keiro-ops` | — | **0.13.0.0** | `keiro-ops-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `keiro-pgmq` | — | **0.13.0.0** | `keiro-pgmq-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
 | `kioku-api` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
 | `kioku-core` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
@@ -86,6 +87,14 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 nothing now that kioku composes its migrations through `pg-migrate`.
 `keiro-pgmq`, by contrast, is linked by `shikigami-workers` for the typed
 run-job consumer and is pinned with the rest of the Keiro family.
+
+`keiro-ops` is new to this cohort and is an ordinary library: `shikigami-server`
+links it so the `shikigami` administrative binary can mount Keiro's operator
+command tree instead of hand-writing one. Its own bounds are
+`keiro ^>=0.13.0.0`, `keiro-migrations ^>=0.13.0.0`, `keiro-pgmq ^>=0.13.0.0`,
+and `kiroku-store >=0.8 && <0.9`, all of which this cohort already satisfies, so
+it resolved without moving anything else. Adopted by
+`docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md`.
 
 `keiro-dsl` is new to this cohort and is the one row that is not a library this
 service links against. It is the build-time specification toolchain that checks
