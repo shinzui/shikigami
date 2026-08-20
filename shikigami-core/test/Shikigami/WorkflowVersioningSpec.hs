@@ -240,6 +240,13 @@ behaviorRetryLabelsArePinned =
         "the deployed patch set contains the behavior retry id"
         (Set.member behaviorRetryPatch shikigamiActivePatches)
   where
+    -- The conversation entry is the LEGACY branch's label family. Fresh
+    -- conversations run the rotating shape, whose behavior label is the static
+    -- `run-behavior-v2` with no message id, guarded by
+    -- shikigami-conversation-rotation-v1 rather than by the retry patch; that
+    -- one is covered by the Conversation cases in "Shikigami.AgentWorkflowSpec".
+    -- Both label sets are live, because which one an instance is on is a durable
+    -- property of that instance.
     labelFamilies =
       [ (WorkflowName "shikigami.agent-run", "run-behavior", "run-behavior-v2"),
         (WorkflowName "shikigami.danwa-conversation", "run-behavior:msg-versioning", "run-behavior-v2:msg-versioning")

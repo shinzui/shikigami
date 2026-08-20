@@ -104,23 +104,48 @@ suffixes are runtime values:
 
 ### Conversation journal labels
 
-Only three of this workflow's labels are static. The rest are keyed by Danwa
-message id or by turn ordinal.
+This workflow has two label sets, chosen by `patch
+shikigami-conversation-rotation-v1` once per interpreted run. Which one an
+instance is on is a durable property of that instance, so both are inventoried.
 
-| Label | Kind | Defined at | Declared |
+The **rotating** shape is what every fresh conversation runs. One journal
+generation holds exactly one turn, so no label is ever written twice in a
+generation and none of them needs a computed suffix. All of it is declared in
+`domain/shikigami-conversation.keiro` and gated by `just keiro-gate`.
+
+| Label | Kind | Defined in | Declared |
 |---|---|---|---|
-| `ingest-start` | step | `Agent/Conversation.hs:127` | yes |
-| `lookup-agent` | step | `Agent/Conversation.hs:139` | yes |
-| `resolve-session` | step | `Agent/Conversation.hs:161` | yes |
-| `record-user:<messageId>` | step | `Agent/Conversation.hs:163` | no — colon |
-| `run-behavior:<messageId>` | step | `Agent/Conversation.hs:168` | no — colon |
-| `record-assistant-and-reply:<messageId>` | step | `Agent/Conversation.hs:178,256-258` | no — colon |
-| `turn-result:<messageId>` | step | `Agent/Conversation.hs:193,252-254` | no — colon |
-| `danwa-reply:<messageId>` | step | `Agent/Conversation.hs:260-262,419` | no — colon |
-| `next-message:<ordinal>` | await | `Agent/Conversation.hs:151,248-250` | no — colon |
+| `ingest-start` | step | `rotatingConversation` | yes |
+| `lookup-agent` | step | `resolveDeclStep` | yes |
+| `resolve-session` | step | `processRotatingTurn` | yes |
+| `record-user` | step | `processRotatingTurn` | yes |
+| `run-behavior-v2` | step | `processRotatingTurn` | yes |
+| `record-assistant-and-reply` | step | `processRotatingTurn` | yes |
+| `turn-result` | step | `processRotatingTurn` | yes |
+| `next-message` | await | `awaitConversationWake` | yes |
+| `danwa-reply:<messageId>` | sink-intent id | `replySinkStepName` | no — not a journal step |
 
-Making this journal declarable is
-`docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md`.
+The **legacy** shape is the `False` branch, kept so that an instance parked
+before rotation shipped replays the shape its journal was written under. It ran
+every turn of a conversation in one immortal generation, which is exactly why
+each per-turn label needed a `:<messageId>` or `:<ordinal>` suffix — and why
+none of them could be declared.
+
+| Label | Kind | Defined in | Declared |
+|---|---|---|---|
+| `record-user:<messageId>` | step | `processTurn` | no — colon |
+| `run-behavior:<messageId>` | step | `processTurn` (pre behavior-retry-v1) | no — colon |
+| `run-behavior-v2:<messageId>` | step | `processTurn` (post behavior-retry-v1) | no — colon |
+| `record-assistant-and-reply:<messageId>` | step | `assistantReplyStepName` | no — colon |
+| `turn-result:<messageId>` | step | `turnResultStepName` | no — colon |
+| `next-message:<ordinal>` | await | `nextMessageStepName` | no — colon |
+
+Making this journal declarable was
+`docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md`,
+which did it by removing the reason for the suffixes rather than by finding a
+declarable spelling of them. Retiring the legacy set — deleting the guard, the
+`False` branch, and the patch block together — follows
+`docs/adr/0004-one-options-value-and-a-checked-patch-set.md`.
 
 ### Child workflows
 

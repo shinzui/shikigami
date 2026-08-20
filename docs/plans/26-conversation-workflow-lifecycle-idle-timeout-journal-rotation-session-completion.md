@@ -124,13 +124,24 @@ This section must always reflect the actual current state of the work.
       the live generation instead of assuming zero" is green, and the two pre-existing
       Conversation cases pass unchanged — which is the proof the change is behaviour-preserving
       before rotation exists.
-- [ ] M2: one-turn-per-generation restructure — `ConversationSeed`, `restoreSeed` at the top of
-      the body, `continueAsNew` as the final body item, every label static, `ContinuedAsNew`
-      handled as success rather than as an error (`Conversation.hs:137`).
-- [ ] M2: the declared body — `domain/shikigami-conversation.keiro` gains the full step/await/
-      continueAsNew inventory; `just keiro-scaffold` regenerated; the hand-owned conformance
-      expectations accepted; `just keiro-gate <merge-base>` green and its `keiro-diff`
-      classification recorded in Surprises & Discoveries.
+- [x] (2026-08-20) M2: one-turn-per-generation restructure — `ConversationSeed` (hand-written
+      field-defaulting codec per ADR 0011), `restoreSeed` at the top of `rotatingConversation`,
+      `continueAsNew` as the final body item, every label static, and `ContinuedAsNew` handled as
+      success. **Two things the plan did not anticipate, both recorded in Surprises &
+      Discoveries:** the restructure ships behind `shikigami-conversation-rotation-v1` with the
+      old loop as a live `False` branch (ADR 0012), and a rotation is *progress rather than an
+      answer*, so `runConversationTurn` drives the workflow through the rotation instead of
+      returning at it.
+- [x] (2026-08-20) M2: the declared body — `domain/shikigami-conversation.keiro` now declares
+      `record-user`, `run-behavior-v2`, `record-assistant-and-reply`, `turn-result`, the
+      `next-message` await, and the `ConversationSeed` rotation. `just keiro-scaffold`
+      regenerated (`nextMessageAwait` binding, `awaitLabels = ["next-message"]`, the new patch id);
+      the three hand-owned conformance expectations accepted; `just keiro-diff origin/master`
+      classified the change **ADDITIVE and replay-neutral**, transcript in Surprises &
+      Discoveries.
+- [x] (2026-08-20) M2: rotation acceptance — five turns of one conversation produce generation 4,
+      one `turn-result` and one `awkid:next-message` per generation, and all ten turns in one
+      kioku session. Test "rotates onto a fresh generation after every turn".
 - [ ] M3: idle timeout — `ConversationWake` sum, the conversation timeout timer (generation- and
       turn-pinned, modelled on `approvalTimeoutTimerId`), the fire action registered in the
       worker's timer routing, kioku session completion through
@@ -145,9 +156,14 @@ This section must always reflect the actual current state of the work.
       `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs:536-614` with idle-timeout, new-epoch,
       rotation, and racing cases; update the two existing cases for the label change; `cabal test
       all` green.
-- [ ] M5: `docs/workflow-versioning.md` updated — its "What Shikigami journals today" table and
-      its "Undeclarable label families" section both name the conversation families, and both are
-      wrong once this plan lands.
+- [x] (2026-08-20) M5 (done early, with M2, because M2 is what invalidated them):
+      `docs/workflow-versioning.md` — the journal table now lists both conversation shapes, the
+      ordinal-derived-names paragraph records that `next-message:<ordinal>` survives only on the
+      `False` branch, and "Undeclarable label families" now explains that the conversation family
+      left the list by removing the *reason* for the suffixes rather than by finding a declarable
+      spelling of them. `docs/architecture/shikigami-domain-inventory.md`'s conversation table was
+      rewritten as two tables, one per shape, which also fixes the pre-existing omission of
+      `run-behavior-v2:<messageId>` noted in Surprises & Discoveries on 2026-08-19.
 
 
 ## Surprises & Discoveries
@@ -227,6 +243,60 @@ implementation. Provide concise evidence.
   awakeable, exactly as the hard-coded `0` did. The new test
   "delivery resolves the live generation instead of assuming zero" pins that cold-start arm
   alongside the parked and already-consumed arms.
+
+- **(2026-08-20, M2) `just keiro-diff origin/master` classified the declared body ADDITIVE, which
+  is the M2 acceptance the plan asked to be pasted here verbatim:**
+
+  ```text
+  ADDITIVE: DanwaConversation workflow-patch shikigami-conversation-rotation-v1: new patch guard contains the entire body change, so in-flight generations retain their journaled branch
+      declared: shikigami-conversation.keiro:39
+      use-site: DanwaConversation.workflow-patch.shikigami-conversation-rotation-v1 (shikigami-conversation.keiro:39)
+  ADDITIVE: DanwaConversation workflow-continue-as-new ConversationSeed: terminal continueAsNew is additive; old generations carry no rotation marker
+      declared: shikigami-conversation.keiro:39
+      use-site: DanwaConversation.workflow-continue-as-new.ConversationSeed (shikigami-conversation.keiro:39)
+  replay-neutral: stored-data replay is unchanged by this diff
+  ```
+
+  Both of `classifyWorkflowBody`'s escapes are taken at once — a new patch block holding the five
+  steps and the await, and a terminal `continueAsNew` — and `stripNewPatches` plus
+  `dropTerminalContinue` reduce the new body to the old one exactly. No `BREAKING` finding.
+
+- **(2026-08-20, M2) a rotation is progress, not an answer — this is the defect the plan's design
+  would have shipped.** The plan says `ContinuedAsNew` "becomes the success path: the workflow
+  rotated, the turn's work is journaled on the generation that just closed, so load the result
+  from that generation and return it." That is wrong about *which* turn. `continueAsNew` accepts
+  the incoming message and seeds it onto the next generation, then unwinds — so at the moment the
+  run returns `ContinuedAsNew`, the message has been accepted and **not yet processed**; the
+  generation that just closed holds the *previous* turn's result. Implemented as written, every
+  turn after the first failed:
+
+  ```text
+  parks and resumes a danwa conversation as one workflow session: FAIL
+    (Right (ConversationTurnResult {... userTurnId = "danwa:user:msg_human_1" ...}),
+     Left (ConversationTransientFailure "conversation workflow recorded no turn result for msg_human_2"))
+  ```
+
+  The repair is `driveConversationTurn`: a rotation means *re-enter*, because the work this call
+  owes is the next generation's turn. It consults the journal before re-entering, so a rotation
+  that followed this call's own turn (possible under concurrent delivery) is recognised rather
+  than driven again, and it carries a budget so a pathological pattern becomes queue backpressure
+  instead of a spin.
+
+- **(2026-08-20, M2) static labels break `loadConversationResult`'s identification of a turn, and
+  the fix is the turn id rather than the label.** With `turn-result:<messageId>` the label *was*
+  the identity. With the bare `turn-result` it is not: "the turn-result step" no longer answers
+  "the result for this message". `ConversationTurnResult.userTurnId` is `danwa:user:<messageId>`,
+  so it restores an exact match with no type change and no new journaled field — which is what
+  let the plan's suggestion of journaling the generation into `turn-result` be avoided, and with
+  it a change to a step type that is also the workflow's declared `out` type.
+
+- **(2026-08-20, M2) the ingress path has to know which shape armed the promise it is signalling.**
+  The rotating body awaits a `ConversationWake` so the idle timer can signal the same awakeable;
+  the legacy body awaits a bare `AddressedMessage`. Signalling the wrong encoding would succeed —
+  `signalAwakeable` journals whatever it is given — and surface later as a conversation wedged on
+  a payload it cannot decode. `pendingInputAids` therefore reads the *label* to decide:
+  `awkid:next-message` exactly is the rotating shape, `awkid:next-message:` is the legacy one.
+  This was not in the plan and is the sharpest edge in the two-shape arrangement.
 
 - **(2026-08-20, M1) the existing two Conversation cases passed unchanged after the M1 rewrite**,
   which is the evidence the plan asked for that the generation fix is behaviour-preserving before

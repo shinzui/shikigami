@@ -3,6 +3,7 @@ module Shikigami.DanwaConversation.Generated.WorkflowRuntime
   ( workflowName
   , AwaitBinding
   , allocateDeclaredAwait
+  , nextMessageAwait
   , awaitLabels
   , declaredPatches
   , declaredPatchStepNames
@@ -32,11 +33,14 @@ allocateDeclaredAwait
   -> Eff es (AwakeableId, Eff es a)
 allocateDeclaredAwait (AwaitBinding label) = awakeableNamed label
 
+nextMessageAwait :: AwaitBinding
+nextMessageAwait = AwaitBinding (StepName "next-message")
+
 awaitLabels :: [Text]
-awaitLabels = []
+awaitLabels = ["next-message"]
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList [PatchId "shikigami-behavior-retry-v1"]
+declaredPatches = Set.fromList [PatchId "shikigami-behavior-retry-v1", PatchId "shikigami-conversation-rotation-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

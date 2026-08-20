@@ -602,17 +602,31 @@ tests =
                     pending <- runAppIO appEnv countPendingAwakeables
                     assertEqual "workflow parks again after the second reply" (Right 1) pending
 
-                    stepKeys <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId firstAddressedMessage) 0)
-                    case stepKeys of
-                      Right keys -> do
-                        assertBool "first turn result is journaled" (Map.member "turn-result:msg_human_1" keys)
-                        assertBool "second turn result is journaled after resume" (Map.member "turn-result:msg_human_2" keys)
-                        assertBool "first assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply:msg_human_1" keys)
-                        assertBool "second assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply:msg_human_2" keys)
-                        assertBool "first reply is not journaled as a separate sink step" (not (Map.member "danwa-reply:msg_human_1" keys))
-                        assertBool "second reply is not journaled as a separate sink step" (not (Map.member "danwa-reply:msg_human_2" keys))
-                        assertBool "first park allocated an input awakeable" (any (Text.isPrefixOf "awkid:next-message:1") (Map.keys keys))
-                      Left err -> assertFailure ("loadStepIndex failed: " <> show err)
+                    -- One turn per generation, so the two turns are on two
+                    -- generations and each label appears once in its own -- not
+                    -- twice in one under two different computed suffixes.
+                    firstKeys <- conversationStepKeys appEnv firstAddressedMessage 0
+                    secondKeys <- conversationStepKeys appEnv firstAddressedMessage 1
+
+                    assertBool "the first turn's result is journaled in generation 0" (Map.member "turn-result" firstKeys)
+                    assertBool "the second turn's result is journaled in generation 1" (Map.member "turn-result" secondKeys)
+                    assertBool "the first assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply" firstKeys)
+                    assertBool "the second assistant turn and reply are one durable step" (Map.member "record-assistant-and-reply" secondKeys)
+
+                    -- The label carries no message id any more, so "one
+                    -- turn-result per generation" is the property that replaces
+                    -- "one turn-result per message".
+                    assertEqual "generation 0 holds exactly one turn result" 1 (length (filter (== "turn-result") (Map.keys firstKeys)))
+                    assertEqual "generation 1 holds exactly one turn result" 1 (length (filter (== "turn-result") (Map.keys secondKeys)))
+
+                    -- danwa-reply names the outbox row, not a journal step.
+                    assertBool "the first reply is not journaled as a separate sink step" (not (any ("danwa-reply" `Text.isPrefixOf`) (Map.keys firstKeys)))
+                    assertBool "the second reply is not journaled as a separate sink step" (not (any ("danwa-reply" `Text.isPrefixOf`) (Map.keys secondKeys)))
+
+                    -- The await label lost its ordinal with everything else: a
+                    -- generation arms exactly one next-message promise.
+                    assertEqual "generation 0 armed the static next-message promise" ["awkid:next-message"] (filter ("awkid:" `Text.isPrefixOf`) (Map.keys firstKeys))
+                    assertEqual "generation 1 armed the static next-message promise" ["awkid:next-message"] (filter ("awkid:" `Text.isPrefixOf`) (Map.keys secondKeys))
                   other -> assertFailure ("conversation turns should succeed, got " <> show other),
           testCase "conversation permanent v2 failure completes as a replayable typed failure" do
             withShikigamiMigratedDatabase \connStr ->
@@ -628,9 +642,9 @@ tests =
                   ("first turn returns the permanent detail: " <> show firstFailure)
                   (either (Text.isInfixOf "unknown task" . Conversation.conversationTurnFailureDetail) (const False) firstFailure)
                 assertEqual "replay returns the same typed failure" firstFailure replayed
-                stepIndex <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId permanentConversationMessage) 0)
-                assertEqual "conversation journals the dynamic v2 label" (Right True) (Map.member "run-behavior-v2:msg_permanent" <$> stepIndex)
-                assertEqual "conversation never journals the legacy label" (Right False) (Map.member "run-behavior:msg_permanent" <$> stepIndex),
+                stepIndex <- conversationStepKeys appEnv permanentConversationMessage 0
+                assertBool "conversation journals the static v2 label" (Map.member "run-behavior-v2" stepIndex)
+                assertBool "conversation never journals the legacy label" (not (Map.member "run-behavior" stepIndex)),
           -- Session resolution used to be a linear scan over every session the
           -- agent had ever had, filtered on subjectRef. It is now a keyed read
           -- of shikigami.conversation_sessions, confirmed against kioku. The
@@ -705,7 +719,65 @@ tests =
 
                 -- Signalling the same promise twice must not resolve it twice.
                 again <- Conversation.deliverConversationInputFromApp appEnv secondAddressedMessage
-                assertEqual "the promise is consumed once" False again
+                assertEqual "the promise is consumed once" False again,
+          -- The bounded-journal claim, stated as something that can fail. The
+          -- old body ran every turn of a conversation in one immortal
+          -- generation, so replay cost grew with the conversation and never
+          -- recovered. Five turns now means five generations, each holding one
+          -- turn's worth of labels -- and all five turns still land in ONE kioku
+          -- session, because rotation bounds the journal, not the conversation.
+          testCase "rotates onto a fresh generation after every turn" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = testConversationEnv appEnv behaviorEnv [conversationDecl]
+                    messages = [conversationMessageNumbered n | n <- [1 .. 5]]
+
+                results <- traverse (Conversation.runConversationTurn env conversationDecl) messages
+                sessions <-
+                  traverse
+                    ( \(n, result) -> case result of
+                        Right turnResult -> pure (Conversation.sessionId turnResult)
+                        Left err -> assertFailure ("turn " <> show (n :: Int) <> " should succeed, got " <> show err)
+                    )
+                    (zip [1 ..] results)
+
+                conversationSession <- case sessions of
+                  [] -> assertFailure "five turns should produce five results"
+                  firstSession : rest -> do
+                    assertBool "all five turns are recorded in one kioku session" (all (== firstSession) rest)
+                    pure firstSession
+
+                -- Generation 4 exists, which is the rotation claim: turn N ran
+                -- in generation N-1.
+                generation4 <- conversationStepKeys appEnv (conversationMessageNumbered 1) 4
+                assertBool "the fifth turn ran in generation 4" (Map.member "turn-result" generation4)
+
+                -- No generation holds two turns. This is the property the
+                -- static labels depend on and the one that bounds replay.
+                forM_ [0 .. 4] \generation -> do
+                  keys <- conversationStepKeys appEnv (conversationMessageNumbered 1) generation
+                  assertEqual
+                    ("generation " <> show generation <> " holds exactly one turn result")
+                    1
+                    (length (filter (== "turn-result") (Map.keys keys)))
+                  assertEqual
+                    ("generation " <> show generation <> " armed exactly one next-message promise")
+                    ["awkid:next-message"]
+                    (filter ("awkid:" `Text.isPrefixOf`) (Map.keys keys))
+
+                -- Ten turns in one session, in order, is what proves rotation
+                -- bounded the journal without fragmenting the conversation.
+                turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace conversationSession)
+                case turns of
+                  Right (Right rows) ->
+                    assertEqual
+                      "five turns are recorded as five user/assistant pairs"
+                      [(role, index) | index <- [0 .. 9], let role = if even index then "user" else "assistant"]
+                      (turnRoleIndex <$> rows)
+                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other))
         ],
       testGroup
         "Delegate"
@@ -1044,6 +1116,14 @@ childStatusText = \case
 -- Named rather than repeated per case because there are now several cases and
 -- the interesting differences between them are the agent list and the idle
 -- window, not the six fields they all share.
+-- | One generation's step index for a conversation, or a test failure.
+conversationStepKeys :: AppEnv -> AddressedMessage -> Int -> IO (Map Text Value)
+conversationStepKeys appEnv msg generation = do
+  loaded <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId msg) generation)
+  case loaded of
+    Right keys -> pure keys
+    Left err -> assertFailure ("loadStepIndex failed: " <> show err)
+
 testConversationEnv :: AppEnv -> BehaviorEnv -> [AgentDecl] -> Conversation.ConversationEnv
 testConversationEnv appEnv behaviorEnv conversationAgents =
   Conversation.ConversationEnv
@@ -1303,6 +1383,21 @@ secondAddressedMessage =
       embellishmentId = "emb_human_2",
       mentionedBy = "part_human_test",
       occurredAt = UTCTime (fromGregorian 2026 6 27) 1
+    }
+
+-- | The Nth human message of one long conversation.
+conversationMessageNumbered :: Int -> AddressedMessage
+conversationMessageNumbered n =
+  AddressedMessage
+    { conversationId = "conv_rotation",
+      messageId = "msg_rotation_" <> Text.pack (show n),
+      parentMessageId = if n == 1 then Nothing else Just ("msg_rotation_" <> Text.pack (show (n - 1))),
+      author = "part_human_test",
+      content = "question " <> Text.pack (show n),
+      agentParticipantId = "part_agent_test",
+      embellishmentId = "emb_rotation_" <> Text.pack (show n),
+      mentionedBy = "part_human_test",
+      occurredAt = UTCTime (fromGregorian 2026 6 27) (fromIntegral n)
     }
 
 permanentConversationMessage :: AddressedMessage

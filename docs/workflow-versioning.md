@@ -415,15 +415,29 @@ agent run  (workflow "shikigami.agent-run",
 
 conversation  (workflow "shikigami.danwa-conversation",
                shikigami-core/src/Shikigami/Agent/Conversation.hs)
-  ingest-start                     :132
-  lookup-agent                     :144
-  resolve-session                  :166
-  record-user:<messageId>          :168
-  run-behavior:<messageId>         :173
-  record-assistant-and-reply:<messageId>  :263
-  turn-result:<messageId>          :259
-  danwa-reply:<messageId>          :267
-  next-message:<ordinal>           :255       -- ordinal-derived; see below
+
+  rotating shape (patch shikigami-conversation-rotation-v1 = True; declared)
+  ingest-start                     rotatingConversation
+  lookup-agent                     resolveDeclStep
+  resolve-session                  processRotatingTurn
+  record-user                      processRotatingTurn
+  run-behavior-v2                  processRotatingTurn
+  record-assistant-and-reply       processRotatingTurn
+  turn-result                      processRotatingTurn
+  next-message                     awaitConversationWake
+  danwa-reply:<messageId>          replySinkStepName -- sink-intent id, not a journal step
+
+  legacy shape (patch shikigami-conversation-rotation-v1 = False; undeclarable)
+  ingest-start                     legacyConversation
+  lookup-agent                     resolveDeclStep
+  resolve-session                  processTurn
+  record-user:<messageId>          processTurn
+  run-behavior:<messageId>         processTurn -- pre behavior-retry-v1
+  run-behavior-v2:<messageId>      processTurn -- post behavior-retry-v1
+  record-assistant-and-reply:<messageId>  assistantReplyStepName
+  turn-result:<messageId>          turnResultStepName
+  danwa-reply:<messageId>          replySinkStepName -- sink-intent id, not a journal step
+  next-message:<ordinal>           nextMessageStepName -- ordinal-derived; see below
 
 flow capabilities  (run inside the agent-run workflow)
   classify                         Shikigami/Flow/AtRiskCustomer.hs:45
@@ -483,7 +497,9 @@ Two ordinal-derived names remain, and this document does not fix them; it record
 that they are governed by rule 5 and names their owners.
 `approval:<SinkKind>:<ordinal>` counts approvals within one run, so inserting a
 sink into an agent declaration shifts the names of every later approval.
-`next-message:<ordinal>` counts conversation turns and is owned by plan 26. A
+`next-message:<ordinal>` counted conversation turns; it survives only on the
+`False` branch of `shikigami-conversation-rotation-v1`, because the rotating
+shape holds one turn per generation and so awaits the bare `next-message`. A
 third instance is not a step name but has the same shape: `delegate` derives a
 child workflow id from `freshOrdinal "delegate"`
 (`shikigami-core/src/Shikigami/Agent/Delegate.hs:46-48`), and the child's journal
@@ -497,9 +513,28 @@ The checked specification cannot hold every name in the table above. A keiro-dsl
 workflow label is a compile-time wire word matching `[A-Za-z0-9][A-Za-z0-9_-]*`,
 so a label that carries a colon or is computed at run time cannot be declared —
 which means `just keiro-diff` cannot gate a change to it. Those families are
-`approval:<SinkKind>:<ordinal>`, `<step>:notify`, `emit-signal:<label>`, and
-every per-message conversation label; the census with per-family owners is
+`approval:<SinkKind>:<ordinal>`, `<step>:notify`, `emit-signal:<label>`, and the
+conversation's legacy per-message labels; the census with per-family owners is
 `docs/architecture/shikigami-domain-inventory.md`.
+
+**The conversation family is no longer on that list for fresh instances, and how
+it left is the transferable lesson.** Its labels carried a `:<messageId>` suffix
+for one reason: a keiro journal matches records to steps by label, and the old
+body ran every turn of a conversation in a single immortal generation, so two
+turns could not both write `record-user`. The fix was not to find a declarable
+spelling of the suffix — it was to remove the reason for the suffix.
+`docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md`
+rotates onto a fresh generation after every turn, so a generation holds exactly
+one turn, every label is written at most once, and `record-user`,
+`run-behavior-v2`, `record-assistant-and-reply`, `turn-result`, and
+`next-message` are all plain wire words the specification can hold. That is now
+the largest declared workflow body in the service. The suffixed labels remain as
+the `False` branch of `shikigami-conversation-rotation-v1`, which is why they
+still appear in the table above.
+
+Before reaching for a computed suffix, ask what forces it. If the answer is
+"several of these happen in one generation", rotation may remove the question
+entirely — and a bounded journal is worth having on its own.
 
 Flow memory labels are deliberately *not* in that list, and the contrast is the
 point. `recall-<label>` and `remember-<label>` use a hyphen where the sink family
