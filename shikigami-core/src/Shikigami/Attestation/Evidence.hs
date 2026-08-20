@@ -34,6 +34,7 @@ module Shikigami.Attestation.Evidence
     parseRunEvidenceId,
     runEvidenceIdText,
     requestEvidence,
+    evidenceTransitionCommand,
     transitionEvidence,
   )
 where
@@ -423,7 +424,7 @@ requestEvidence runEvidenceId runId agentVersion artifacts reviewed profile revi
 -- used.
 transitionEvidence :: RunEvidence -> EvidencePhase -> Either TransitionError RunEvidence
 transitionEvidence evidence@RunEvidence {phase = currentPhase} target = do
-  command <- maybe (Left illegal) Right (commandFor evidence target)
+  command <- evidenceTransitionCommand evidence target
   let (vertex, registers) = seedFor evidence
   case Keiki.stepDetailedEither runEvidenceTransducer (vertex, registers) command of
     Left _ -> Left illegal
@@ -433,6 +434,17 @@ transitionEvidence evidence@RunEvidence {phase = currentPhase} target = do
       | otherwise -> Left illegal
   where
     illegal = IllegalTransition currentPhase target
+
+-- | Select the generated command for the same transition executed by
+-- 'transitionEvidence'. Persistence uses this value with Keiro's command
+-- runner, so the pure facade and the durable stream cannot choose different
+-- lifecycle operations.
+evidenceTransitionCommand :: RunEvidence -> EvidencePhase -> Either TransitionError Generated.RunEvidenceCommand
+evidenceTransitionCommand evidence@RunEvidence {phase = currentPhase} target =
+  maybe
+    (Left (IllegalTransition currentPhase target))
+    Right
+    (commandFor evidence target)
 
 seedFor :: RunEvidence -> (Generated.RunEvidenceVertex, RegFile Generated.RunEvidenceRegs)
 seedFor evidence =

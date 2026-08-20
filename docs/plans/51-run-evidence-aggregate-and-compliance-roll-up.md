@@ -80,7 +80,10 @@ remaining obstacle, which is a bound rather than a missing contract.
       recorded as not-applicable, mixed-model runs listing each call. Completed 2026-08-19.
 - [x] M4: mutation tests — one fixture per reason in the taxonomy, each producing exactly that
       reason. Completed 2026-08-19.
-- [ ] M5: pg-migrate-managed evidence tables; read models reconciled; state queryable by run id.
+- [x] M5: pg-migrate-managed evidence tables; no Kioku read model was added, so no registry
+      reconciliation is required; lifecycle, verdict, reasons, and calls are queryable by run id.
+      The migration applied with zero pending or unknown entries, and restart/replay tests pass.
+      Completed 2026-08-19.
 
 
 ## Surprises & Discoveries
@@ -109,6 +112,14 @@ stale relative to the released source. Production collection can therefore use a
 sink now; the fixture seam remains valuable for deterministic accounting and mutation tests, but
 is no longer a stand-in for missing provider integration.
 
+**The transactional projection does not need a Kioku read-model registration (decided
+2026-08-19).** It is updated inline with the accepted aggregate event through Keiro's
+`runCommandWithSqlEvents`, not rebuilt or served through Kioku's registered projection API. The
+operator query is a direct Hasql lookup over the run primary key and its call rows, so the existing
+`reconcileShikigamiReadModels` remains unchanged. The restart test closes and recreates the store
+between transitions and again before querying, which exercises both event hydration and SQL
+durability rather than relying on process-local state.
+
 **Baikai IR-3 landed the same day this plan was written, and nobody noticed for five days
 (discovered 2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, adds the exposed module
 `Baikai.Evidence` — "the vocabulary for verifiable model-call evidence — a record of what actually
@@ -134,19 +145,15 @@ identifier, retry provenance, and required strictness. A call whose `evidence` i
 is, every call that does not opt in — behaves exactly as it did before. So wiring this into
 shikigami's provider path is additive and cannot regress plan 13's behavior.
 
-Baikai's changelog is explicit that "nothing constructs a `ModelCallEvidence` from a real call
-yet". The vocabulary and the opt-in field exist; the provider-side population does not. That is
-the correct reading of the seam's status: the *type* is settled and must be adopted, the *live
-source* is still pending, and the fixture source in tests remains the right way to prove
-Milestones 3 and 4.
+Baikai's changelog said that "nothing constructs a `ModelCallEvidence` from a real call yet". The
+released 0.5.0.0 source inspected on 2026-08-19 supersedes that stale statement: the terminal trace
+path does construct and emit it. Literal fixtures remain the right way to pin the encode-only JSON
+shape and prove Milestones 3 and 4 deterministically; they no longer stand in for a missing live
+source.
 
-**The remaining obstacle is a bound, not a missing contract.** `kioku-core 0.3.0.0` declares
-`baikai ^>=0.4.1.0`, which caps below 0.5, so the cohort cannot take `baikai 0.5.0.0` today. The
-release that lifts it is a kioku version admitting `baikai ^>=0.5`, requested by
-`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`. This blocks Milestone
-2 only. Milestones 1, 3, 4, and 5 — the aggregate lifecycle, complete accounting, the
-non-conformance taxonomy, and the tables — never needed a real provider observation and still do
-not.
+**The old dependency-bound obstacle was historical by implementation time.** The current cohort
+pins `kioku-core 0.4.1.0` and `baikai 0.5.0.0`, so the direct imports, live collector, and fixtures
+all compile together. No compatibility workaround or deferred import remains.
 
 **Also relevant to Milestone 4, and to plan 52.** `Baikai.Evidence` ships the canonical hashing
 core: `canonicalEncode` gives a JSON value exactly one byte representation, `commitmentDigest`
@@ -160,6 +167,20 @@ needs to author its own encoder.
 
 
 ## Decision Log
+
+- Decision: Append lifecycle events and update the run/call projection in one PostgreSQL
+  transaction, as recorded permanently in
+  `docs/adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md`.
+  Rationale: separate commits admit either a sealed aggregate with missing call evidence or a
+  terminal SQL verdict the checked aggregate never accepted. Keiro's transactional command runner
+  already supplies the correct boundary, and `(run_id, call_id)` upserts make replay converge.
+  Date: 2026-08-19
+
+- Decision: Query the evidence tables directly with Hasql rather than add a Kioku read model.
+  Rationale: this is an inline transactional projection, not an independently rebuilt projection.
+  Direct queries preserve the atomic boundary and avoid a read-model registry identity whose
+  reconciliation would add machinery without changing recovery semantics.
+  Date: 2026-08-19
 
 - Decision: Keep Baikai's generated call id and Shikigami's deterministic call-correlation id as
   separate fields on each recorded call.
@@ -217,7 +238,8 @@ needs to author its own encoder.
   rather than against locally invented equivalents.
   Date: 2026-08-10
 
-- Decision: Do not treat the missing live evidence source as a reason to delay Milestones 1, 3, 4,
+- Decision (superseded 2026-08-19 by the verified live trace source): Do not treat the missing
+  live evidence source as a reason to delay Milestones 1, 3, 4,
   or 5, and do not treat the `baikai ^>=0.4.1.0` cap as a reason to delay Milestone 2's design.
   Rationale: baikai's changelog states plainly that "nothing constructs a `ModelCallEvidence` from
   a real call yet" — the vocabulary and the `Options.evidence` opt-in exist, the provider-side
@@ -581,9 +603,10 @@ is a no-op because `shikigami-migrate` tracks what it applied. Rolling code back
 tables in place is harmless. To back out mid-milestone, remove the migration file and its manifest
 line together; one without the other fails the plan's completeness check, which is intended.
 
-The stub `EvidenceSource` is test-only. When baikai IR-3 lands, the live source replaces the stub
-behind the same record, and the fixtures stay as regression tests. Do not delete the fixtures at
-that point — they are the only thing that will tell you the live source changed shape.
+The fixture `EvidenceSource` is test-only. Production uses Baikai's terminal trace event behind the
+same record, while fixtures stay as regression tests. Do not delete the fixtures — they pin the
+encode-only payload shape and make accounting mutations deterministic even when the live source
+changes additively.
 
 
 ## Interfaces and Dependencies
@@ -604,13 +627,10 @@ Upstream: `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` was `pr
 carrying the run identifier, retry provenance, and required strictness; a call that leaves it
 `Nothing` behaves exactly as before, so adopting this cannot regress plan 13's provider path.
 
-Remaining gate, and it is a bound rather than a contract: `kioku-core 0.3.0.0` declares
-`baikai ^>=0.4.1.0`, which excludes 0.5, so the cohort cannot take the module yet. A kioku release
-admitting `baikai ^>=0.5` lifts it, and
-`docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` owns requesting it.
-This blocks Milestone 2's import only. Note also that baikai's changelog states nothing
-constructs a `ModelCallEvidence` from a real call yet, so the live source is still pending even
-after the bound clears — the fixture source remains how Milestones 3 and 4 are proven.
+The historical dependency gate is discharged: this repository now pins `kioku-core 0.4.1.0` and
+`baikai 0.5.0.0`. The released Baikai trace source also constructs terminal evidence in live code.
+Fixtures remain how the exact JSON shape and the accounting/compliance matrix are pinned, not a
+compatibility workaround.
 
 Coordination, not blocking: `docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md`
 sets the additive-only discipline every journaled or persisted value here follows, and
@@ -700,6 +720,42 @@ reasoning effort was clamped, collapsed, or dropped on the wire is described exa
 `EvidenceStrength` rather than a boolean. Reasons that have no baikai counterpart — a missing
 delegated child, an artifact digest mismatch, a call that no roll-up accounted for — stay
 shikigami's own.
+
+
+## Outcomes & Retrospective
+
+All five milestones are implemented. `RunEvidence` is Shikigami's first checked event-sourced
+aggregate, with seven legal transitions and 56 generated behavior obligations exercised by the
+ordinary suite. The facade executes the generated transducer, and durable transitions execute the
+generated event stream, so there is one lifecycle authority in both pure and persisted code.
+
+Baikai evidence remains upstream-owned. An opted-in live stub call proves the released terminal
+trace source, while literal two-call, retry, and child JSON fixtures pin the encode-only payload
+shape. Complete accounting converges on Shikigami call-correlation ids, preserves Baikai's separate
+provider-call ids, refuses a pending child, and folds a terminal child's calls into its parent's
+closure exactly once.
+
+The compliance evaluator covers every `NonConformingReason` constructor, does not short-circuit,
+keeps deterministic steps as `NotApplicable`, and accepts mixed permitted models. Thirty-nine
+focused tests cover lifecycle, collection, accounting, one isolated mutation per reason,
+multi-reason accumulation, finalization, and durable restart/replay behavior.
+
+Migration `2026-08-20-01-53-56-run-evidence-and-call-records` adds the run and call projections.
+It applied successfully to the development database; status reported 58 applied, zero pending,
+zero unknown, and zero issues. A fresh ephemeral database, event hydration across recreated
+stores, sanctioned and rejected run-id queries, and lost-response replay all pass. No Kioku read
+model was added, so the existing reconciliation function correctly remains unchanged.
+
+The durable binding still requires the caller-supplied opaque review-request identity and reviewed
+artifact specified by this plan and the master plan. The implementation does not fabricate those
+facts or change the bare `RunJob` wire contract; the approval/review caller remains responsible for
+constructing `RunEvidence`. Signing, serving, and offline verification remain exclusively with
+`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md`.
+
+Final validation on 2026-08-19: `nix develop -c cabal test all` passed every suite (including 299
+core tests), `nix fmt` was clean after formatting, `just migrate` applied the new migration, and
+`just migrate-status` reported no drift. The Keiro aggregate gate passed at its milestone commit;
+the final gate is recorded with the closing commit.
 
 
 ## Revision Notes

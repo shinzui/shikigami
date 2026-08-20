@@ -42,6 +42,7 @@ library
     Shikigami.Attestation.Compliance
     Shikigami.Attestation.Envelope
     Shikigami.Attestation.Evidence
+    Shikigami.Attestation.EvidenceStore
     Shikigami.Attestation.Profile
     Shikigami.Attestation.Resolve
     Shikigami.Attestation.Reviewed

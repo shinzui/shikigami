@@ -10,10 +10,15 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
+import Effectful (Eff)
+import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Agent
 import Shikigami.Attestation.Compliance
+import Shikigami.Attestation.Compliance qualified as Compliance
 import Shikigami.Attestation.Evidence
+import Shikigami.Attestation.EvidenceStore
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Reviewed
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
@@ -24,6 +29,7 @@ import Shikigami.Log.Correlation
     renderCallCorrelationId,
     runCorrelationId,
   )
+import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Prelude
 import Shikigami.RunEvidence.Conformance (runEvidenceBehaviorConformancePassed)
 import Test.Tasty (TestTree, testGroup)
@@ -310,8 +316,157 @@ tests =
               Right (finalized, rollUp) -> do
                 assertEqual "non-conforming phase" NonConforming (runPhase finalized)
                 assertEqual "not sanctioned" False (rollSanctioned rollUp)
+        ],
+      testGroup
+        "durability"
+        [ testCase "events and operator rows survive restarts and replay converges" do
+            withShikigamiMigratedDatabase \connectionString -> do
+              profiledResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store sampleEvidence ProfileResolved Nothing
+              profiled <- assertPersisted profiledResult
+
+              runningResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store profiled Running Nothing
+              running <- assertPersisted runningResult
+              missingRollUp <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store running EvidenceSealed Nothing
+              assertEqual
+                "terminal persistence requires a compliance judgement"
+                (Left (MissingComplianceRollUp EvidenceSealed))
+                missingRollUp
+
+              let withExpectedCalls =
+                    running
+                      & expectCall (ExpectedCall parentCall0 RootCall 1)
+                      & expectCall (ExpectedCall parentCall1 (RetryOf parentCall0) 2)
+                      & expectDelegatedChild fixtureChildRunId
+                      & recordCall retryOriginal
+                      & recordCall retryAttempt
+              closed <-
+                case prepareEvidenceClosure withExpectedCalls BehaviorSucceeded [terminalChild] of
+                  Left refusal -> assertFailure ("closure failed before persistence: " <> show refusal)
+                  Right evidence -> pure evidence
+              let rollUp = evaluateCompliance baselineProfile closed
+              assertEqual "fixture is sanctioned" True (rollSanctioned rollUp)
+
+              sealedResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store closed EvidenceSealed (Just rollUp)
+              sealed <- assertPersisted sealedResult
+              assertEqual "persisted transition sealed" EvidenceSealed (runPhase sealed)
+
+              stored <- queryStoredEvidence connectionString
+              assertStoredClosure stored
+
+              replayedResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store closed EvidenceSealed (Just rollUp)
+              replayed <- assertPersisted replayedResult
+              assertEqual "lost-response replay converges" EvidenceSealed (runPhase replayed)
+              assertStoredClosure =<< queryStoredEvidence connectionString
+
+              rejectedProfiledResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store rejectedSampleEvidence ProfileResolved Nothing
+              rejectedProfiled <- assertPersisted rejectedProfiledResult
+              rejectedRunningResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store rejectedProfiled Running Nothing
+              rejectedRunning <- assertPersisted rejectedRunningResult
+              let rejectedEvidence = recordCall rejectedWrongModelCall rejectedRunning
+                  rejectedRollUp = evaluateCompliance baselineProfile rejectedEvidence
+                  expectedRejection = ModelNotPermitted rejectedCall0Text "model-x"
+              assertEqual "rejected fixture accumulates its reason" [expectedRejection] (Compliance.reasons rejectedRollUp)
+              rejectedResult <-
+                withEvidenceRuntime connectionString \store ->
+                  persistEvidenceTransition store rejectedEvidence NonConforming (Just rejectedRollUp)
+              _rejected <- assertPersisted rejectedResult
+              StoredRunEvidence {status = rejectedStatus, verdict = rejectedVerdict, reasons = rejectedReasons, calls = rejectedCalls} <-
+                queryStoredEvidenceFor connectionString rejectedRunId
+              assertEqual "rejected phase survives restart" NonConforming rejectedStatus
+              assertEqual "rejected verdict survives restart" (Just VerdictNotSanctioned) rejectedVerdict
+              assertEqual "rejection reasons survive restart" [expectedRejection] rejectedReasons
+              assertEqual "rejected call survives restart" 1 (length rejectedCalls)
         ]
     ]
+
+withEvidenceRuntime :: Text -> (EvidenceStore -> Eff AppEffects a) -> IO a
+withEvidenceRuntime connectionString action =
+  withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
+    tracer <- noopTracer
+    let appEnv =
+          AppEnv
+            { connectionSettings = defaultConnectionSettings connectionString,
+              tracer,
+              metrics = Nothing
+            }
+        store = postgresEvidenceStore (pool kirokuStore)
+    result <- runAppIO appEnv (action store)
+    either (assertFailure . show) pure result
+
+assertPersisted :: Either EvidencePersistenceError RunEvidence -> IO RunEvidence
+assertPersisted = \case
+  Left err -> assertFailure ("evidence persistence failed: " <> show err)
+  Right evidence -> pure evidence
+
+queryStoredEvidence :: Text -> IO StoredRunEvidence
+queryStoredEvidence connectionString =
+  queryStoredEvidenceFor connectionString parentRunId
+
+queryStoredEvidenceFor :: Text -> RunCorrelationId -> IO StoredRunEvidence
+queryStoredEvidenceFor connectionString requestedRunId =
+  withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
+    found <- findRunEvidence (postgresEvidenceStore (pool kirokuStore)) requestedRunId
+    case found of
+      Nothing -> assertFailure "run evidence was absent after restart"
+      Just stored -> pure stored
+
+assertStoredClosure :: StoredRunEvidence -> IO ()
+assertStoredClosure
+  StoredRunEvidence
+    { runEvidenceId,
+      runId,
+      status,
+      verdict,
+      reasons,
+      expectedCallCount,
+      recordedCallCount,
+      calls
+    } = do
+    assertEqual "aggregate id" (runEvidenceIdText sampleAggregateId) runEvidenceId
+    assertEqual "run id" "run-evidence-m1" runId
+    assertEqual "stored phase" EvidenceSealed status
+    assertEqual "stored verdict" (Just VerdictSanctioned) verdict
+    assertEqual "stored reasons" [] reasons
+    assertEqual "expected calls" 2 expectedCallCount
+    assertEqual "recorded calls" 3 recordedCallCount
+    assertEqual "query returns every call" 3 (length calls)
+    retry <- storedCall parentCall1 calls
+    assertEqual "retry relationship" "retry" (storedRelationship retry)
+    assertEqual "retry target" (Just parentCall0Text) (storedRelatedCallId retry)
+    child <- storedCall childCall0 calls
+    assertEqual "child source run" "run-evidence-child" (storedSourceRunId child)
+    assertEqual "child relationship" "child" (storedRelationship child)
+    assertEqual "child parent call" (Just parentCall0Text) (storedRelatedCallId child)
+
+storedCall :: CallCorrelationId -> [StoredCallEvidence] -> IO StoredCallEvidence
+storedCall expected = \case
+  [] -> assertFailure ("stored call not found: " <> Text.unpack (renderCallCorrelationId expected))
+  call@StoredCallEvidence {callId} : rest
+    | callId == renderCallCorrelationId expected -> pure call
+    | otherwise -> storedCall expected rest
+
+storedRelationship :: StoredCallEvidence -> Text
+storedRelationship StoredCallEvidence {relationship} = relationship
+
+storedRelatedCallId :: StoredCallEvidence -> Maybe Text
+storedRelatedCallId StoredCallEvidence {relatedCallId} = relatedCallId
+
+storedSourceRunId :: StoredCallEvidence -> Text
+storedSourceRunId StoredCallEvidence {sourceRunId} = sourceRunId
 
 assertTarget :: RunEvidence -> EvidencePhase -> IO ()
 assertTarget evidence target = do
@@ -350,6 +505,37 @@ sampleEvidence =
 sampleAggregateId :: RunEvidenceId
 sampleAggregateId =
   either (error . show) id (parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02q")
+
+rejectedSampleEvidence :: RunEvidence
+rejectedSampleEvidence =
+  sampleEvidence
+    & #runEvidenceId
+    .~ rejectedAggregateId
+    & #runId
+    .~ rejectedRunId
+    & #idempotencyKey
+    .~ "review-request-2:attempt-1"
+
+rejectedAggregateId :: RunEvidenceId
+rejectedAggregateId =
+  either (error . show) id (parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02r")
+
+rejectedRunId :: RunCorrelationId
+rejectedRunId = runCorrelationId "run-evidence-rejected"
+
+rejectedCall0 :: CallCorrelationId
+rejectedCall0 = callCorrelationId rejectedRunId "run-behavior-v2" 0
+
+rejectedCall0Text :: Text
+rejectedCall0Text = renderCallCorrelationId rejectedCall0
+
+rejectedWrongModelCall :: RecordedCallEvidence
+rejectedWrongModelCall =
+  fixtureRecorded
+    rejectedCall0
+    RootCall
+    Nothing
+    (fixtureEvidence "run-evidence-rejected" "baikai-rejected-model" 1 Nothing "model-x")
 
 sampleAgentVersion :: AgentVersionRef
 sampleAgentVersion =
