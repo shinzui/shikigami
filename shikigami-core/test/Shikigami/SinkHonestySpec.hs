@@ -342,6 +342,7 @@ ctxWithIdentity agentIdentity rei =
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
+      receipts = Nothing,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable
     }

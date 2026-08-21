@@ -36,7 +36,8 @@ import Shikigami.Agent.Decl (Sink)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaTarget, GrantSource, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
-import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..))
+import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), SinkKind, sinkKindText)
 
 -- | The flow path's copy of "Shikigami.Agent.Workflow"'s @SinkIntent@.
 --
@@ -69,7 +70,8 @@ sinkIntentOptions = defaultOptions {omitNothingFields = True}
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
-    outboxMessage :: !(Maybe OutboxMessage)
+    outboxMessage :: !(Maybe OutboxMessage),
+    deliveryReceipt :: !(Maybe Delivery.DeliveryReceipt)
   }
 
 enqueueSinkIntentStep ::
@@ -131,7 +133,8 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
     Left (Denied reason) ->
       PreparedSinkIntent
         { sinkResult = deniedResult reason,
-          outboxMessage = Nothing
+          outboxMessage = Nothing,
+          deliveryReceipt = Nothing
         }
     Right () ->
       let intent =
@@ -146,26 +149,46 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
                 output
               }
           event = sinkIntentEvent messageId runIdText now intent
+          receipt = pendingDeliveryReceipt messageId kind now intent
        in PreparedSinkIntent
             { sinkResult = enqueuedResult,
-              outboxMessage = Just (OutboxMessage outboxId event)
+              outboxMessage = Just (OutboxMessage outboxId event),
+              deliveryReceipt = Just receipt
             }
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult
 
 enqueuePreparedSinkIntentTx :: PreparedSinkIntent -> Tx.Transaction ()
-enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage} =
+enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage, deliveryReceipt} = do
   traverse_ enqueueOutboxTx outboxMessage
+  traverse_ Delivery.recordDeliveryTx deliveryReceipt
 
+pendingDeliveryReceipt :: Text -> SinkKind -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+pendingDeliveryReceipt messageId kind now SinkIntent {agent, runId, ordinal} =
+  Delivery.DeliveryReceipt
+    { Delivery.receiptKey = Delivery.deliveryReceiptKey messageId,
+      Delivery.outboxMessageId = messageId,
+      Delivery.runId = runId,
+      Delivery.agent = agent,
+      Delivery.ordinal = ordinal,
+      Delivery.sinkKind = sinkKindText kind,
+      Delivery.status = Delivery.Pending,
+      Delivery.detail = Nothing,
+      Delivery.updatedAt = now
+    }
+
+-- | Flow emits are step-shaped and may be consecutive replies in one durable
+-- flow, so they intentionally retain the shared per-run ordering key. The
+-- agent run's independent @dispatch-sinks@ fan-out uses per-ordinal keys.
 sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
-sinkIntentEvent messageId runId occurredAt intent =
+sinkIntentEvent messageId orderingKey occurredAt intent =
   encodeJsonIntegrationEvent
     IntegrationEvent
       { messageId,
         source = "shinzui/shikigami",
         destination = "shikigami.sink.v1",
-        key = Just runId,
+        key = Just orderingKey,
         eventType = "shikigami.sink.dispatch-requested",
         schemaVersion = 1,
         contentType = ApplicationJson,

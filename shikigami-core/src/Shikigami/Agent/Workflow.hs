@@ -21,6 +21,7 @@ module Shikigami.Agent.Workflow
     prepareSinkIntent,
     preparedSinkResult,
     publishSinkIntent,
+    reconcilePublishedSinkIntent,
   )
 where
 
@@ -40,8 +41,10 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError_)
+import Hasql.Pool (Pool)
 import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), decodeJsonIntegrationEvent, encodeJsonIntegrationEvent)
+import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
@@ -93,8 +96,9 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
-import Shikigami.Sink (DanwaConfig, DanwaTarget, GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
-import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), sinkKindText)
+import Shikigami.Sink (DanwaConfig, DanwaTarget, DeliveryGuard (..), GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
+import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), SinkKind, sinkKindText)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
@@ -113,6 +117,10 @@ data AgentRunDeps = AgentRunDeps
     -- | Which grant source the enqueue-time C11 check consults, and the one
     -- handed to every 'SinkContext' this run builds.
     grants :: !GrantSource,
+    -- | The Shikigami receipt store used only by the asynchronous publisher.
+    -- Production always supplies it; focused workflow tests may opt out because
+    -- they never cross the publisher boundary.
+    deliveryPool :: !(Maybe Pool),
     -- | Where this run's log lines go. A workflow runs in whichever process
     -- picked the job up, so the logger arrives with the dependencies rather
     -- than being reached for globally.
@@ -184,7 +192,8 @@ sinkIntentOptions = defaultOptions {omitNothingFields = True}
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
-    outboxMessage :: !(Maybe OutboxMessage)
+    outboxMessage :: !(Maybe OutboxMessage),
+    deliveryReceipt :: !(Maybe Delivery.DeliveryReceipt)
   }
 
 defaultAgentRunHooks :: AgentRunHooks
@@ -715,15 +724,16 @@ enqueueSinkIntents grantSource job decl sid output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (traverse (buildSinkIntent workflowId) (zip [0 ..] (sinks decl)))
+  prepared <- liftIO (traverse (buildSinkIntent workflowId now) (zip [0 ..] (sinks decl)))
   let results = fst <$> prepared
-      messages = mapMaybe snd prepared
+      enqueued = mapMaybe snd prepared
       encoded = Aeson.toJSON results
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName dispatchSinksStep) encoded now)
   txResult <- runTransaction do
     appendTx >>= \case
       JournalAppended {} -> do
-        traverse_ enqueueOutboxTx messages
+        traverse_ (enqueueOutboxTx . fst) enqueued
+        traverse_ (Delivery.recordDeliveryTx . snd) enqueued
         pure (Right results)
       JournalAlreadyPresent stored ->
         case parseEither Aeson.parseJSON stored of
@@ -738,7 +748,7 @@ enqueueSinkIntents grantSource job decl sid output = do
     dispatchSinksStep = StepName "dispatch-sinks"
     runIdText = idText sid
 
-    buildSinkIntent workflowId (ordinal, sink) = do
+    buildSinkIntent workflowId now (ordinal, sink) = do
       let RunJob {occurredAt = jobOccurredAt} = job
       let kind = sinkKindOf sink
       checkGrant grantSource (AgentIdentity (agentName job)) kind <&> \case
@@ -759,9 +769,11 @@ enqueueSinkIntents grantSource job decl sid output = do
                     output
                   }
               messageId = sinkMessageId workflowId ordinal
-              event = sinkIntentEvent messageId runIdText jobOccurredAt intent
+              orderingKey = runIdText <> ":" <> Text.pack (show ordinal)
+              event = sinkIntentEvent messageId orderingKey jobOccurredAt intent
               outboxId = deterministicOutboxId workflowId ordinal
-           in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event))
+              receipt = pendingDeliveryReceipt messageId kind now intent
+           in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
@@ -822,7 +834,8 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
     Left (Denied reason) ->
       PreparedSinkIntent
         { sinkResult = deniedResult reason,
-          outboxMessage = Nothing
+          outboxMessage = Nothing,
+          deliveryReceipt = Nothing
         }
     Right () ->
       let intent =
@@ -837,26 +850,49 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
                 output
               }
           event = sinkIntentEvent messageId runIdText now intent
+          receipt = pendingDeliveryReceipt messageId kind now intent
        in PreparedSinkIntent
             { sinkResult = enqueuedResult,
-              outboxMessage = Just (OutboxMessage outboxId event)
+              outboxMessage = Just (OutboxMessage outboxId event),
+              deliveryReceipt = Just receipt
             }
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult
 
 enqueuePreparedSinkIntentTx :: PreparedSinkIntent -> Tx.Transaction ()
-enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage} =
+enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage, deliveryReceipt} = do
   traverse_ enqueueOutboxTx outboxMessage
+  traverse_ Delivery.recordDeliveryTx deliveryReceipt
+
+deliveryReceiptFor :: Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+deliveryReceiptFor messageId kind = deliveryReceiptForKey (Delivery.deliveryReceiptKey messageId) messageId kind
+
+deliveryReceiptForKey :: Text -> Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkIntent {agent, runId, ordinal} =
+  Delivery.DeliveryReceipt
+    { Delivery.receiptKey = key,
+      Delivery.outboxMessageId = messageId,
+      Delivery.runId = runId,
+      Delivery.agent = agent,
+      Delivery.ordinal = ordinal,
+      Delivery.sinkKind = sinkKindText kind,
+      Delivery.status = receiptStatus,
+      Delivery.detail = receiptDetail,
+      Delivery.updatedAt = now
+    }
+
+pendingDeliveryReceipt :: Text -> SinkKind -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+pendingDeliveryReceipt messageId kind = deliveryReceiptFor messageId kind Delivery.Pending Nothing
 
 sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
-sinkIntentEvent messageId runId occurredAt intent =
+sinkIntentEvent messageId orderingKey occurredAt intent =
   encodeJsonIntegrationEvent
     IntegrationEvent
       { messageId,
         source = "shinzui/shikigami",
         destination = "shikigami.sink.v1",
-        key = Just runId,
+        key = Just orderingKey,
         eventType = "shikigami.sink.dispatch-requested",
         schemaVersion = 1,
         contentType = ApplicationJson,
@@ -887,34 +923,190 @@ deterministicOutboxIdForMessage messageId =
       nameBytes ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
-          result <-
-            dispatch
-              SinkContext
-                { identity = AgentIdentity agent,
-                  runId = runId,
-                  ordinal = ordinal,
-                  kizashi = depsKizashi,
-                  kawa = depsKawa,
-                  danwa = depsDanwa,
-                  rei = depsRei,
-                  danwaTarget = danwaTarget,
-                  recipientOverride = resolvedRecipient,
-                  occurredAt = occurredAt,
-                  grants = intentGrants,
-                  logger = intentLogger
-                }
-              sink
-              output
-          pure $ case outcome result of
-            Failed err -> PublishFailed err
-            PermanentFailure err -> PublishFailed err
-            Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
-            _ -> PublishSucceeded
+        Right intent@SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
+          let messageId = Integration.messageId integrationEvent
+              kind = sinkKindOf sink
+              sinkContext =
+                SinkContext
+                  { identity = AgentIdentity agent,
+                    runId = runId,
+                    ordinal = ordinal,
+                    kizashi = depsKizashi,
+                    kawa = depsKawa,
+                    danwa = depsDanwa,
+                    rei = depsRei,
+                    danwaTarget = danwaTarget,
+                    recipientOverride = resolvedRecipient,
+                    occurredAt = occurredAt,
+                    receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
+                    grants = intentGrants,
+                    logger = intentLogger
+                  }
+              send = dispatch sinkContext sink output
+          case deliveryPool of
+            Nothing -> publishUntracked <$> send
+            Just pool -> publishTracked intentLogger pool messageId kind intent send
+
+publishUntracked :: SinkResult -> PublishOutcome
+publishUntracked result = case outcome result of
+  Failed err -> PublishFailed err
+  PermanentFailure err -> PublishFailed err
+  Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
+  _ -> PublishSucceeded
+
+publishTracked :: Log.Logger -> Pool -> Text -> SinkKind -> SinkIntent -> IO SinkResult -> IO PublishOutcome
+publishTracked logger pool messageId kind intent send = do
+  existing <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey messageId)
+  case existing of
+    Left err -> do
+      logReceiptError logger "sink.delivery.lookup_failed" messageId kind err
+      pure (PublishFailed ("delivery receipt lookup failed: " <> err))
+    Right (Just Delivery.DeliveryReceipt {Delivery.status = Delivery.Delivered}) -> do
+      Log.logInfo
+        logger
+        "sink.delivery.skipped"
+        [ "outbox_message_id" Aeson..= messageId,
+          "sink_kind" Aeson..= sinkKindText kind,
+          "reason" Aeson..= ("proven-delivered" :: Text)
+        ]
+      pure PublishSucceeded
+    Right _ -> do
+      attempting <- recordReceipt Delivery.Attempting Nothing
+      case attempting of
+        Left err -> do
+          logReceiptError logger "sink.delivery.attempt_refused" messageId kind err
+          pure (PublishFailed ("delivery receipt attempt write failed: " <> err))
+        Right () -> do
+          result <- send
+          finish result
+  where
+    recordReceipt receiptStatus receiptDetail = do
+      now <- getCurrentTime
+      Delivery.recordDelivery pool (deliveryReceiptFor messageId kind receiptStatus receiptDetail now intent)
+
+    finish result = case outcome result of
+      Delivered downstreamId -> do
+        recordReceipt Delivery.Delivered (Just downstreamId) >>= \case
+          Right () -> pure PublishSucceeded
+          Left err -> do
+            unknownResult <- recordReceipt Delivery.Unknown (Just ("downstream acknowledged, receipt commit failed: " <> err))
+            Log.logError
+              logger
+              "sink.delivery.unknown"
+              [ "outbox_message_id" Aeson..= messageId,
+                "sink_kind" Aeson..= sinkKindText kind,
+                "downstream_id" Aeson..= downstreamId,
+                "receipt_error" Aeson..= err,
+                "unknown_write" Aeson..= either id (const ("recorded" :: Text)) unknownResult
+              ]
+            -- A retry here would knowingly repeat an acknowledged downstream
+            -- effect. Keiro may publish the outbox row; the critical unknown
+            -- event is the operator-visible repair target.
+            pure PublishSucceeded
+      Failed err -> recordRetryableFailure err
+      PermanentFailure err -> do
+        recordReceipt Delivery.Dead (Just err) >>= reportReceiptWrite "sink.delivery.dead_write_failed"
+        -- Keiro plan 165 owns terminal publication rejection. Until its release
+        -- is consumed, preserve failure rather than falsely publishing success.
+        pure (PublishFailed err)
+      Enqueued detail -> recordRetryableFailure ("dispatcher returned enqueue-only outcome during publish: " <> detail)
+      DeniedOutcome reason -> recordTerminalNonSend ("permission denied at publish: " <> reason)
+      Stubbed -> recordTerminalNonSend "deprecated stubbed sink outcome"
+
+    recordRetryableFailure err = do
+      recordReceipt Delivery.Failed (Just err) >>= reportReceiptWrite "sink.delivery.failed_write_failed"
+      pure (PublishFailed err)
+
+    recordTerminalNonSend reason = do
+      recorded <- recordReceipt Delivery.Dead (Just reason)
+      case recorded of
+        Left err -> do
+          logReceiptError logger "sink.delivery.terminal_write_failed" messageId kind err
+          pure (PublishFailed ("terminal non-send receipt write failed: " <> err))
+        Right () -> pure PublishSucceeded
+
+    reportReceiptWrite eventName = \case
+      Right () -> pure ()
+      Left err -> logReceiptError logger eventName messageId kind err
+
+logReceiptError :: Log.Logger -> Text -> Text -> SinkKind -> Text -> IO ()
+logReceiptError logger eventName messageId kind err =
+  Log.logError
+    logger
+    eventName
+    [ "outbox_message_id" Aeson..= messageId,
+      "sink_kind" Aeson..= sinkKindText kind,
+      "error" Aeson..= err
+    ]
+
+deliveryGuard :: Pool -> Text -> SinkKind -> SinkIntent -> DeliveryGuard
+deliveryGuard pool messageId kind intent =
+  DeliveryGuard
+    { lookupReceipt = \substep -> do
+        lookedUp <- Delivery.lookupDelivery pool (Delivery.subReceiptKey messageId substep)
+        case lookedUp of
+          Left err -> receiptIoError "lookup" err
+          Right (Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just recorded}) -> pure (Just recorded)
+          Right _ -> pure Nothing,
+      recordReceipt = \substep recorded -> do
+        now <- getCurrentTime
+        let receipt =
+              deliveryReceiptForKey
+                (Delivery.subReceiptKey messageId substep)
+                messageId
+                kind
+                Delivery.ConversationStarted
+                (Just recorded)
+                now
+                intent
+        Delivery.recordDelivery pool receipt >>= \case
+          Left err -> receiptIoError "write" err
+          Right () -> pure ()
+    }
+  where
+    receiptIoError operation err =
+      ioError (userError (Text.unpack ("delivery sub-receipt " <> operation <> " failed: " <> err)))
+
+-- | Repair the receipt side after Keiro has durably accepted a successful
+-- publication outcome. Ordinarily 'publishTracked' already wrote 'Delivered' or
+-- 'Dead'. The only expected gap is a downstream acknowledgement followed by a
+-- database failure; this second pass materializes the uncertainty once the
+-- outbox transaction proves the row itself reached a terminal state.
+reconcilePublishedSinkIntent :: AgentRunDeps -> OutboxRow -> IO ()
+reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Nothing} _ = pure ()
+reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row = do
+  let OutboxRow {event = integrationEvent} = row
+      messageId = Integration.messageId integrationEvent
+  case decodeJsonIntegrationEvent integrationEvent of
+    Left err ->
+      Log.logError
+        logger
+        "sink.delivery.reconciliation_decode_failed"
+        [ "outbox_message_id" Aeson..= messageId,
+          "error" Aeson..= Text.pack (show err)
+        ]
+    Right intent@SinkIntent {sink} -> do
+      let kind = sinkKindOf sink
+      Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey messageId) >>= \case
+        Left err -> logReceiptError logger "sink.delivery.reconciliation_lookup_failed" messageId kind err
+        Right (Just Delivery.DeliveryReceipt {Delivery.status = receiptStatus})
+          | receiptStatus `elem` [Delivery.Delivered, Delivery.Dead, Delivery.Unknown] -> pure ()
+        Right _ -> do
+          now <- getCurrentTime
+          let detail = Just "outbox published without a terminal delivery receipt"
+          Delivery.recordDelivery pool (deliveryReceiptFor messageId kind Delivery.Unknown detail now intent) >>= \case
+            Left err -> logReceiptError logger "sink.delivery.reconciliation_write_failed" messageId kind err
+            Right () ->
+              Log.logError
+                logger
+                "sink.delivery.reconciled_unknown"
+                [ "outbox_message_id" Aeson..= messageId,
+                  "sink_kind" Aeson..= sinkKindText kind
+                ]
 
 -- | Record the run's learning, if the declared policy asks for one.
 --

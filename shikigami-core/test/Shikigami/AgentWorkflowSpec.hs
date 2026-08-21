@@ -1248,6 +1248,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       runTimeout = secondsToNominalDiffTime 300,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
+      deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
 
@@ -1271,6 +1272,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       runTimeout = secondsToNominalDiffTime 300,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
+      deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
 

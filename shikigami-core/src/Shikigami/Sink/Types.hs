@@ -2,6 +2,7 @@
 -- reference @SinkContext@ without importing the dispatcher — avoids an import cycle).
 module Shikigami.Sink.Types
   ( SinkContext (..),
+    DeliveryGuard (..),
     DanwaTarget (..),
     SinkOutcome (..),
     SinkResult (..),
@@ -25,6 +26,14 @@ data DanwaTarget = DanwaTarget
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- | Receipt operations a sink may need while performing a multi-step
+-- downstream effect. The publisher closes these functions over its database
+-- pool and outbox message id; direct dispatch tests use 'Nothing'.
+data DeliveryGuard = DeliveryGuard
+  { lookupReceipt :: !(Text -> IO (Maybe Text)),
+    recordReceipt :: !(Text -> Text -> IO ())
+  }
+
 -- | Everything one sink dispatch needs: the agent identity, the run id and the sink's
 -- ordinal (for the deterministic @source_event_id@), the endpoint configs, and the
 -- run timestamp.
@@ -43,6 +52,9 @@ data SinkContext = SinkContext
     -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
     recipientOverride :: !(Maybe Text),
     occurredAt :: !(Maybe UTCTime),
+    -- | Durable intermediate effects within this delivery, when publication is
+    -- running under the receipt-aware outbox transport.
+    receipts :: !(Maybe DeliveryGuard),
     -- | Which grant source the publish-time C11 check consults. Carried on the
     -- context because a sink is dispatched from two different processes — inline
     -- during a run, and later from the outbox publisher — and each builds its own.

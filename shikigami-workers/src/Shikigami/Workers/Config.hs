@@ -134,6 +134,7 @@ agentRunDeps env =
       AgentWorkflow.runTimeout = envRunTimeout env,
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
+      AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime
         Profile.resolveProfile (Profile.postgresProfileStore (envPool env)) now profileId version

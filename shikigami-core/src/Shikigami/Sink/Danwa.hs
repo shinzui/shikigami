@@ -7,6 +7,7 @@ module Shikigami.Sink.Danwa
   )
 where
 
+import Control.Exception (IOException, try)
 import Danwa.Client qualified as Danwa
 import Danwa.Conversation.Api qualified as Conv
 import Danwa.Message.Api qualified as Msg
@@ -19,7 +20,7 @@ import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Permission (AgentIdentity (..))
-import Shikigami.Sink.Types (DanwaTarget (..))
+import Shikigami.Sink.Types (DanwaTarget (..), DeliveryGuard (..))
 
 -- | Post the behavior output into danwa.
 --
@@ -33,13 +34,13 @@ import Shikigami.Sink.Types (DanwaTarget (..))
 -- has real declarative value — a human opening the thread sees what it is about
 -- — and because rejecting it would invalidate manifests that are otherwise
 -- correct. What was not an option was continuing to accept it and do nothing.
-runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)
-runDanwa cfg identity target sink output =
+runDanwa :: DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either Text Text)
+runDanwa cfg identity receipts target sink output =
   case sink of
     DanwaConversation {topic} ->
       case target of
         Just t -> postReply cfg t (renderDanwaContent output)
-        Nothing -> postToFreshConversation cfg identity sink (withTopicLine topic (renderDanwaContent output))
+        Nothing -> postToFreshConversation cfg identity receipts sink (withTopicLine topic (renderDanwaContent output))
     _ -> pure (Left "runDanwa: not a DanwaConversation sink")
 
 -- | Prefix the opening message with the declared topic, if there is one.
@@ -77,40 +78,56 @@ postReply cfg (DanwaTarget {conversationId = cid, parentMessageId = parent}) con
       let Msg.MessageResponse {Msg.messageId = mid} = response
        in Right mid
 
-postToFreshConversation :: DanwaConfig -> AgentIdentity -> Sink -> Text -> IO (Either Text Text)
-postToFreshConversation cfg (AgentIdentity _agentName) sink content =
+postToFreshConversation :: DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either Text Text)
+postToFreshConversation cfg (AgentIdentity _agentName) receipts sink content =
   case sink of
     DanwaConversation {} -> do
-      result <-
-        Danwa.runDanwa (Text.unpack (baseUrl cfg)) do
-          conversation <-
-            Danwa.startConversation
-              Conv.StartConversationRequest
-                { Conv.startedBy = agentParticipant cfg,
-                  Conv.kind = "thread",
-                  Conv.parentConversationId = Nothing
-                }
-          let Conv.ConversationResponse {Conv.conversationId = cid} = conversation
-          _ <-
-            Danwa.joinConversation
-              cid
-              Conv.JoinConversationRequest
-                { Conv.participantId = agentParticipant cfg,
-                  Conv.participantType = "agent"
-                }
-          response <-
-            Danwa.postMessage
-              cid
-              Msg.PostMessageRequest
-                { Msg.author = agentParticipant cfg,
-                  Msg.content = content
-                }
-          let Msg.MessageResponse {Msg.messageId = mid} = response
-          pure mid
-      pure $ case result of
-        Left err -> Left (Text.pack (show err))
-        Right mid -> Right mid
+      guardedConversation >>= \case
+        Left err -> pure (Left err)
+        Right cid -> postReply cfg DanwaTarget {conversationId = cid, parentMessageId = Nothing} content
     _ -> pure (Left "postToFreshConversation: not a DanwaConversation sink")
+  where
+    guardedConversation = case receipts of
+      Nothing -> startJoinAndRemember Nothing
+      Just deliveryGuard -> do
+        lookedUp <- tryIO (lookupReceipt deliveryGuard "conv")
+        case lookedUp of
+          Left err -> pure (Left ("danwa conversation receipt lookup failed: " <> Text.pack (show err)))
+          Right (Just cid) -> pure (Right cid)
+          Right Nothing -> startJoinAndRemember (Just deliveryGuard)
+
+    startJoinAndRemember deliveryGuard = do
+      started <-
+        Danwa.runDanwa (Text.unpack (baseUrl cfg)) $
+          Danwa.startConversation
+            Conv.StartConversationRequest
+              { Conv.startedBy = agentParticipant cfg,
+                Conv.kind = "thread",
+                Conv.parentConversationId = Nothing
+              }
+      case started of
+        Left err -> pure (Left (Text.pack (show err)))
+        Right Conv.ConversationResponse {Conv.conversationId = cid} -> do
+          joined <-
+            Danwa.runDanwa (Text.unpack (baseUrl cfg)) $
+              Danwa.joinConversation
+                cid
+                Conv.JoinConversationRequest
+                  { Conv.participantId = agentParticipant cfg,
+                    Conv.participantType = "agent"
+                  }
+          case joined of
+            Left err -> pure (Left (Text.pack (show err)))
+            Right _ -> rememberConversation deliveryGuard cid
+
+    rememberConversation Nothing cid = pure (Right cid)
+    rememberConversation (Just deliveryGuard) cid =
+      tryIO (recordReceipt deliveryGuard "conv" cid) <&> \case
+        Left err -> Left ("danwa conversation receipt write failed: " <> Text.pack (show err))
+        Right () -> Right cid
+
+tryIO :: IO a -> IO (Either IOException a)
+tryIO = try
 
 renderDanwaContent :: Value -> Text
 renderDanwaContent v = case v of

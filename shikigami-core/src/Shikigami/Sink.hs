@@ -96,5 +96,5 @@ runSink ctx sink output = case sink of
     r <- runReiAction (rei ctx) ctx sink output
     pure (either Failed Delivered r)
   DanwaConversation {} -> do
-    r <- runDanwa (danwa ctx) (identity ctx) (danwaTarget ctx) sink output
+    r <- runDanwa (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
     pure (either Failed Delivered r)

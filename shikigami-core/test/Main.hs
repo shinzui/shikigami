@@ -48,6 +48,7 @@ import Shikigami.Sink
   )
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
@@ -79,6 +80,7 @@ main =
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,
           RunEvidenceSpec.tests,
+          SinkDeliverySpec.tests,
           SinkHonestySpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
@@ -222,6 +224,7 @@ ctxFor ident kz kw =
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
+      receipts = Nothing,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable
     }

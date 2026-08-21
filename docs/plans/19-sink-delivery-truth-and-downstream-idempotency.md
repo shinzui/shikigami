@@ -40,13 +40,27 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-21T15:10:14Z) Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete. Plan 28 M1 landed
       2026-08-05 and plan 38's schema gate is released, so the repository-side prerequisites are
       met; only the Keiro gate above remains, and it constrains one half of one milestone.
-- [ ] Milestone 2: pg-migrate-managed `sink_deliveries` change; `publishSinkIntent` records explicit pending/attempting/delivered/failed/dead/unknown states and skips only proven delivered messages.
-- [ ] Milestone 2: tests — receipt row recorded with downstream id; second publish of a delivered message does not re-POST.
-- [ ] Milestone 3: danwa fresh-conversation retry reuses the recorded conversation id.
-- [ ] Milestone 3: test — post-failure retry does not start a second conversation.
-- [ ] Milestone 4: per-sink outbox keys (`runId:ordinal`) on the dispatch-sinks path; conversation replies keep per-run key.
-- [ ] Milestone 4: test — sink 0 failing does not block sink 1 within one publish pass.
-- [ ] Register `Shikigami.SinkDeliverySpec` in `shikigami-core.cabal` and `shikigami-core/test/Main.hs`; `cabal build all` and `cabal test all` green under `nix develop`.
+- [x] (2026-08-21T15:41:33Z) Milestone 2: added the pg-migrate-managed
+      `shikigami.sink_deliveries` ledger; enqueue records `pending` atomically with the
+      journal/outbox; publication records attempting/delivered/failed/dead/unknown states,
+      retains downstream ids, reconciles successful outbox commits, and skips only proven
+      delivered messages.
+- [x] (2026-08-21T15:41:33Z) Milestone 2 tests: a delivered receipt retains the downstream
+      id, a second publish does not re-POST, and terminal reconciliation materializes an
+      `unknown` receipt when delivery cannot be proved.
+- [x] (2026-08-21T15:41:33Z) Milestone 3: the Danwa fresh-conversation path records and
+      reuses its conversation-id sub-receipt across retries.
+- [x] (2026-08-21T15:41:33Z) Milestone 3 test: a failed first message post followed by a
+      retry starts one conversation and posts twice into that same conversation.
+- [x] (2026-08-21T15:41:33Z) Milestone 4: dispatch fan-out uses per-sink ordering keys
+      (`runId:ordinal`); prepared conversation replies and the Flow step path retain their
+      shared per-run key.
+- [x] (2026-08-21T15:41:33Z) Milestone 4 test: sink 0 retries while sink 1 publishes in the
+      same Keiro pass (`retried = 1`, `published = 1`).
+- [x] (2026-08-21T15:41:33Z) Registered `Shikigami.SinkDeliverySpec`; the full repository
+      `cabal test all` run passed, the post-reconciliation focused run passed 348 core and
+      74 worker tests, the migration manifest check passed, and `just keiro-gate` reported
+      replay-neutral workflow storage with all conformance tests passing.
 
 
 ## Surprises & Discoveries
@@ -90,6 +104,25 @@ must know a publication is terminally rejected, and a local approximation would 
 deleted when the real one arrives.
 
 - Planning research (2026-07-08): neither kizashi nor danwa accepts any client-supplied id or idempotency key. kizashi's `CreateSignalReq` (kizashi repo, `kizashi-api/src/Kizashi/Api/Signal.hs:102-117`) has no dedupe field and its handler mints a fresh `SignalId` per call (`kizashi-core/src/Kizashi/Signal/Http.hs:205-222`); danwa's `StartConversationRequest`/`PostMessageRequest` (danwa repo, `danwa-api/src/Danwa/Conversation/Api.hs:139-148`, `danwa-api/src/Danwa/Message/Api.hs:42-47`) mint server-side TypeIDs, and danwa has no lookup-by-external-key (conversations are listable by status only). Downstream idempotency in this plan is therefore entirely client-side; upstream API additions are recorded as follow-ups in the Decision Log.
+
+- `AgentRunDeps.appEnv` no longer owns the Hasql pool described by the original plan. The
+  worker environment owns it, so implementation adds an explicit optional `deliveryPool`
+  seam: production always supplies the worker pool, while focused workflow tests that never
+  publish may use `Nothing`.
+
+- The current pg-migrate authoring interface is
+  `new --manifest … --name … --description …`, and the service wrapper requires
+  `DATABASE_URL` even for this author-only command. The generated exact-byte manifest is the
+  migration authority; no separate lock file exists in this repository.
+
+- The sink intent's `runId` is the Kioku session id, not the RunJob idempotency key. The
+  ordering acceptance test exposed that stale assumption and now checks the actual invariant:
+  both keys share one session prefix and end in distinct ordinals.
+
+- `just keiro-gate` compares generated workflow scaffolding with the worktree, so unstaged
+  production workflow edits appear as scaffold drift. Staging the implementation before the
+  gate isolated the generated artifacts; the gate then reported that stored-data replay is
+  unchanged and no patch declaration is required.
 
 
 ## Decision Log
@@ -141,13 +174,49 @@ Record every decision made while working on the plan.
   modifying the user's Keiro checkout or inventing a temporary framework behavior.
   Date: 2026-08-21
 
+- Decision: Insert the initial `pending` receipt in the same transaction as the journal append
+  and outbox insert, for every Shikigami enqueue path.
+  Rationale: An asynchronous ledger created after enqueue could itself be missing after a crash,
+  recreating the truth gap this plan removes. One transaction establishes the delivery intent
+  before the publisher can claim it.
+  Date: 2026-08-21
+
+- Decision: Add `deliveryPool :: Maybe Pool` as a narrow publisher dependency; worker
+  construction always supplies `Just envPool`, and only focused non-publisher tests use
+  `Nothing`.
+  Rationale: The current `AppEnv` does not expose the pool. Making the seam optional avoids
+  coupling workflow-only fixtures to a live receipt store without weakening production tracking.
+  Date: 2026-08-21
+
+- Decision: Reconcile only rows whose callback returned `PublishSucceeded`, and only after
+  `publishClaimedOutbox` successfully commits. Capture those batch outcomes at the worker
+  boundary, then use the public Shikigami receipt API to materialize `unknown` when no terminal
+  receipt exists.
+  Rationale: This follows Keiro's transaction boundary without querying or mutating its schema,
+  avoids unbounded scans, and does not label retryable failures as terminal uncertainty.
+  Date: 2026-08-21
+
+- Decision: Do not add a workflow patch for this implementation.
+  Rationale: The workflow step names and stored step shapes remain replay-compatible; the
+  additive `SinkOutcome` change already preserves old values, and `just keiro-gate` classified
+  the final diff as replay-neutral.
+  Date: 2026-08-21
+
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+As of 2026-08-21, all Shikigami-owned work is implemented. The journal stops at `Enqueued`;
+the new receipt ledger becomes the queryable delivery truth and stores downstream ids; proven
+delivery suppresses another send; Danwa retries reuse their recorded conversation; and fan-out
+sinks no longer share a head-of-line key. Reconciliation explicitly records the irreducible
+acknowledgement/receipt crash window as `unknown` after Keiro commits a successful publication.
 
-(To be filled during and after implementation.)
+The one remaining gap is deliberately upstream-owned: `PermanentFailure` must map to a released
+Keiro `PublishRejected` rather than the current retryable `PublishFailed`. Until
+`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` is released
+as a coherent dependency cohort, Shikigami does not pretend that permanent transport rejection
+is terminal. The receipt records it as `dead`, but Keiro may retry it; closing that integration
+is the only unchecked item in this plan.
 
 
 ## Context and Orientation
@@ -166,8 +235,8 @@ Consumers of `Delivered` you must not break: `Shikigami.Agent.Conversation.sinkR
 
 Infrastructure facts: one pg-migrate component, exact-byte manifest, complete application
 plan, CLI, and public test support already exist (see plan 38). This plan adds its receipt
-change only through that component. `AgentRunDeps.appEnv`
-gives `publishSinkIntent` access to the kiroku store pool.
+change only through that component. The worker's `AgentRunDeps.deliveryPool` gives
+`publishSinkIntent` access to the same Hasql pool in production.
 
 
 ## Plan of Work
@@ -186,7 +255,8 @@ plan-38 pg-migrate change, a delivery store module, and `publishSinkIntent`. At 
 every publish attempt has an explicit state, and only a proven `delivered` receipt
 suppresses a repeat send.
 
-Create the pg-migrate change with `shikigami-migrate new sink-deliveries`, add it to the
+Create the pg-migrate change with `shikigami-migrate new --manifest … --name sink-deliveries
+--description …`, add it to the
 exact manifest/application plan, and define:
 
 ```sql
@@ -257,6 +327,7 @@ SinkDelivery
   workflow journals Enqueued (not Delivered) at enqueue time:        OK
   publish records a delivered receipt with the downstream id:        OK
   re-publish of a delivered message does not re-POST kizashi:        OK
+  terminal reconciliation materializes an unknown receipt:           OK
   danwa post-failure retry reuses the started conversation:          OK
   failing sink 0 does not block sink 1 in one publish pass:          OK
 ```
@@ -363,10 +434,6 @@ Mori. If absent, this plan owns the upstream addition/release before Shikigami c
 - 2026-07-22: Added an additive permanent-failure path backed by Keiro-owned
   `PublishRejected`, so stable 4xx failures dead-letter once without raw table mutation or
   repeated HTTP calls.
-
-
-## Revision Notes
-
 - 2026-08-10: Split Milestone 1 into a startable half and an upstream-blocked half, and recorded
   the evidence for the block so it is not re-derived.
 
@@ -393,3 +460,10 @@ Mori. If absent, this plan owns the upstream addition/release before Shikigami c
 - 2026-08-21: Recorded completion of Milestone 1's Shikigami-owned half and the parallel ownership
   boundary for Keiro plan 165. The released 0.13 cohort still lacks `PublishRejected`, so the
   blocked half remains open while Milestones 2-4 proceed independently.
+
+- 2026-08-21: Implemented Milestones 2-4, including atomic pending receipts, publisher state
+  transitions and reconciliation, the proven-delivery guard, Danwa conversation sub-receipts,
+  and per-sink ordering keys. Added ADR 0022 and six database-backed acceptance tests. Validation
+  passed the exact migration manifest check, workflow replay/conformance gate, focused core and
+  worker suites, and the full test suite. The plan remains open only for consumption of the
+  released Keiro Plan 165 cohort.

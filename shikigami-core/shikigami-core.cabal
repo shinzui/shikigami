@@ -77,6 +77,7 @@ library
     Shikigami.Sink
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
+    Shikigami.Sink.Delivery
     Shikigami.Sink.GrantStore
     Shikigami.Sink.Http
     Shikigami.Sink.KawaClient
@@ -184,6 +185,7 @@ test-suite shikigami-core-test
     Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.RunEvidenceSpec
+    Shikigami.SinkDeliverySpec
     Shikigami.SinkHonestySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec
