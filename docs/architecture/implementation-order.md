@@ -1,636 +1,628 @@
 # Shikigami implementation order
 
-Reviewed **2026-08-19**, superseding the 2026-08-18 review. Goal of this revision: record that
-plan 39 is complete, re-read the order now that Stage B's widest unblocker has landed, and
-record a portfolio-wide finding the plan-39 work surfaced — **19 open plans cite file paths that
-plan 36 deleted**, which is latent rework nobody had counted.
+Reviewed **2026-08-21**, superseding the 2026-08-20 review. Goal of this revision: absorb the
+largest single movement this portfolio has seen — **thirteen plans landed across two days** — and
+re-cut what remains around one explicit objective: **land shared types and seams before their
+consumers so the sequence minimizes rewrites**.
 
-The 2026-08-18 revision's three standing facts still hold, with one addition.
+The first is that **seventeen MasterPlan registry rows now call a complete plan "Not Started"**,
+which breaks the status-precedence rule this document has carried since it was written. The second
+is that the audit-before-implement instruction adopted on 2026-08-19 **paid for itself and caught
+more than it was aimed at**: it was written for stale `file:line` citations, and what it kept
+catching was wrong premises.
+
+The standing facts, with two additions.
 
 **Shikigami has no users.** No database's history needs preserving, no workflow instance is in
 flight across a deploy, and no wire payload has an external consumer. Every "preserve this
 byte-for-byte", "import the old ledger", "survive the upgrade" obligation written into these plans
-is therefore *not* v1 work. It is deferrable to the first plan that lands after real traffic
-exists. This deletes a large amount of scheduled effort — see [Compatibility work that v1 does not
-owe](#compatibility-work-that-v1-does-not-owe).
+is therefore *not* v1 work. This now has a second, sharper consequence: the thirteen landings
+installed **five patch guards whose legacy branches are unreachable code** — see
+[Compatibility work that v1 does not owe](#compatibility-work-that-v1-does-not-owe).
 
-**The cohort is current and has no exclusions.** This is new as of 2026-08-18 and it is the
-single biggest change since the last review. Every co-developed package sits at its newest Hackage
-release with no `allow-newer` between any two of them. The previous two revisions were both
-organised around dependency drift; this one is not.
+**The cohort is current and has no exclusions.** Re-verified 2026-08-20 against the upstream
+working trees: nothing released past what `cabal.project` pins. Three packages *joined* the cohort
+during the landings without moving anyone's version — `keiro-pgmq` and `keiro-ops` at 0.13.0.0, and
+`shibuya-kafka-adapter` at 0.9.0.0.
 
-**Three upstream gates closed at once, and they were not independent.** Plan 53 landing took
-`shibuya-core 0.9` and `baikai 0.5` with it, which released plan 17 and plans 48/51/52
-simultaneously. The portfolio has more startable work today than at any previous review.
+**New — the MasterPlan registries are no longer the authority on status.** Every one of the thirteen
+plans that landed still reads `Not Started` in its registry row, as do plans 21, 39, 53, and 55,
+which this document has listed as complete for two revisions. See
+[Registry rot](#registry-rot-seventeen-stale-rows). The precedence rule is therefore amended: **the
+plan file's own Progress and Outcomes sections win on status**, this document is the cross-plan
+reading of them, and a registry row is evidence only when it is newer than both. Where this
+document and a registry disagree about *order*, this document is still the newer cross-MasterPlan
+reading.
 
-**New 2026-08-19 — a plan's citations rot faster than its reasoning.** Plan 39's implementation
-found that plan 24, written 2026-07-08, had 21 of its 59 `file:line` citations pointing at
-deleted packages or drifted line numbers, while every argument in it remained sound. The cause
-is two landed plans, not neglect: plan 36 split the tree into six packages and deleted
-`shikigami-cli`, and plan 53 moved keiro from 0.4.0.1 to 0.13.0.0. Both are mechanical to detect
-and cheap to fix; neither is visible from reading a plan. See
-[Citation rot](#citation-rot-19-open-plans).
+**New — a plan's premises rot faster than its citations, and its citations faster than its
+reasoning.** The 2026-08-19 review found 21 of plan 24's 59 citations pointing at deleted paths and
+concluded that pointers rot while arguments survive. Thirteen implementations later, that is
+half right. Each of the thirteen was refreshed against the delivered tree before implementing, and
+four of them found something worse than a bad path: plan 25 carried two acceptance criteria that could not both hold, plan 26's
+central decision was contradicted by an ADR written the previous day, plan 30's whole shape was
+obsoleted by a released `keiro-ops`, and plan 20 found three more decayed premises during
+implementation than its own pre-implementation refresh had caught. The instruction stands and is
+widened in [Citation rot](#citation-rot-re-measured).
 
-Where this document and a MasterPlan registry disagree about a plan's *status*, the registry wins.
-Where they disagree about *order*, this document is the cross-MasterPlan reading and is newer.
-`docs/architecture/implementation-order.html` renders the 2026-08-05 state and is **stale** as of
-this revision.
+`docs/architecture/implementation-order.html` renders the 2026-08-05 state and is **stale**.
 
 
 ## The open set
 
-55 ExecPlans across 10 MasterPlans. **17 are complete**; 38 have open work.
+55 ExecPlans across 10 MasterPlans. **30 are complete**; 25 have open work.
 
-Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, 21, 36, **39**, 47, 53, **55**.
-
-Plan 55 was created and implemented on 2026-08-19, registered as F4 under MasterPlan 2. See
-[the seventh package](#the-seventh-package-plan-55).
+Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, **17**, **18**, **20**, 21, **24**, **25**, **26**,
+**29**, **30**, **33**, 36, 39, **43**, 47, **49**, **50**, **51**, 53, 55. The thirteen in bold
+landed on 2026-08-19 and 2026-08-20; see
+[what landed](#what-landed-and-what-it-changes-for-everyone-else). Plan 30 counts as complete
+because its Outcomes section says the purpose is met; its one unchecked behavioral test was
+explicitly descoped in favor of the upstream `keiro-ops` coverage plus Shikigami-owned parser,
+dispatch, and redaction tests.
 
 Open with a small remainder (5 plans, ~1 session each):
 
 | Plan | Remainder |
 |---|---|
-| 8 | Build/test run after the Danwa bridge removal, plus one manual verification against a live Danwa worker. Substantively done. |
-| 13 | Live Anthropic smoke transcript. Never performed — no credential was available. Now a precondition of plan 52's positive conformance case. |
-| 16 | One optional live observation of the outbox retrying a real sink. Not a gate on anything. |
-| 37 | M3: `shikigami-migrate` still uses codd's `CODD_*` contract instead of Settei. Blocked by a Cabal package cycle. Reassigned to plan 38. |
-| 38 | M4: the same `shikigami-migrate` Settei unification, plus `just migrate` still passing `DATABASE_URL`. |
+| 8 | One manual verification against a live Danwa worker. Its other open box — "run the full build and test suite after the bridge removal" — has been satisfied incidentally many times over; the last recorded full-suite run is plan 26's on 2026-08-20 (432 tests green). |
+| 13 | Live Anthropic smoke transcript. Never performed — no credential was available. Still a precondition of plan 52's positive conformance case. |
+| 16 | One optional live observation of the outbox retrying a real sink. Not a gate on anything. It also still owns the `emit-signal:<label>` family, which plan 24 made *stable* without making it *declarable*. |
+| 37 | M3, **and its description was stale**: the `CODD_*` contract is gone. `shikigami-migrate` now reads `DATABASE_URL` itself through `pg-migrate`, with the reason written into `shikigami-migrations/app/Main.hs:1-25`. What remains is Settei unification, still blocked by the package cycle (`shikigami-core`'s test suite depends on `shikigami-migrations:test-support`). Reassigned to plan 38. |
+| 38 | M4: the same Settei unification, plus `just migrate` and `just migrate-status` still passing `DATABASE_URL` (`justfile:27-39`). |
 
-Open and substantial (33 plans): 12, 14, 17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28 (10 of 14
-items), 29, 30, 31, 32, 33, 34, 35, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 52, 54.
+Open and substantial (20 plans): 12, 14, 19, 22, 23, 27, 28 (M2–M4), 31, 32, 34, 35, 40, 41,
+42, 44, 45, 46, 48, 52, 54.
+
+
+## What landed, and what it changes for everyone else
+
+Thirteen plans, four groups. Each entry is what shipped, then what it costs or saves someone else.
+
+### Correctness and delivery — plans 17, 18, 20
+
+**Plan 17** put the retry boundary before the journal: a transient behavior error or timeout
+escapes before Keiro can append a step result, while a permanent one is bounded, redacted, and
+journaled once. Both durable families run under patch `shikigami-behavior-retry-v1`. The run-job
+consumer moved onto **`keiro-pgmq` 0.13.0.0**'s typed `Job RunJob` surface with startup
+main-queue/DLQ reconciliation and a linked visibility heartbeat (10s renew against a 30s lease).
+Settei gained `worker.run_timeout_seconds` (300) and `approval.deadline_seconds` (900).
+
+**Plan 18** closed the loss windows: Kafka offsets advance only after durable dispositions
+(ADR 0009), inbox matches enqueue atomically, and application code no longer imports a Kafka
+client — `shibuya-kafka-adapter 0.9.0.0` entered the cohort to make that true.
+
+**Plan 20** made routing declared rather than guessed: `RunJob` carries a `routeKind` every
+producer sets, `routeRunJob` reads only that field (ADR 0014), and an undecodable conversation
+payload reaches the reconciled DLQ as `invalid_route_payload` instead of silently running the other
+workflow. The scheduler gained a catch-up policy — `skip_missed` by default, so waking a day late
+arms one future tick (ADR 0016) — and a broken manifest or unparseable cron is now loud and
+refusable at startup through `agents.strict`.
+
+*For everyone else:* do not construct a Shibuya `AckDecision` for a run job, do not add a second
+queue-initialization helper, do not add a second agent-directory traversal, and do not read the
+process environment from scheduler or loader code. Plan 20 left two things named and unfinished:
+its `InferredLegacyRoute` branch is transitional and waits on `worker.job.route_inferred`
+disappearing from logs, and its "log and count" is log-only because **plan 28 M2 still owns the
+counter**.
+
+### Durable evolution — plans 24, 25, 26
+
+**Plan 24** wrote the discipline (`docs/workflow-versioning.md`, nine rules, every journaled step
+name inventoried) and proved `patch` end to end against a constructed in-flight instance.
+`Shikigami.Workflow.Versioning` is the single construction site for `WorkflowRunOptions`
+(ADR 0004). Its M4 was delivered differently and honestly: flow names stay in Haskell because
+keiro-dsl has no node kind for them, and declaring one would have violated ADR 0001; `flowRegistry`
+and `registeredFlowNames` became two projections of one list instead.
+
+**Plan 25** made flow memory replay-safe: `remember` and `recall` are journaled steps under stable
+labels declared in `domain/shikigami-agent-run.keiro`, and `FlowEffects` no longer grants `IOE` or
+`Store`, so a flow reaches the world only through a capability (ADR 0013). The test that opened the
+plan — replaying a completed flow duplicated its memory, `expected: 1, but got: 2` — passes.
+
+**Plan 26** is the one that most exceeded its design. `rotateEvery` was never built, because **one
+turn per generation makes the journal bound structural** rather than a tuning constant. The
+conversation workflow ends an idle epoch, closes its kioku session, and re-keys the next epoch
+(ADR 0018); every label is now static, which **discharged plan 39's largest undeclarable-label
+family** and made `domain/shikigami-conversation.keiro` the largest declared body in the service —
+five steps, one await, one `continueAsNew`. Session resolution uses a local index,
+`shikigami.conversation_sessions`, with a self-healing miss path, because kioku IR-2 has not
+shipped.
+
+*For everyone else:* ADR 0012 — a declared workflow body only grows behind a patch — is a **gate
+condition, not a style preference**, and it is the rule most likely to surprise the next plan that
+adds a journaled step. Plan 26 argued at length that it did not need a patch and was wrong; plan 25
+made passing the gate an acceptance criterion while concluding no patch was needed, and carried the
+contradiction into implementation. Run `just keiro-gate` against a scratch copy of `domain/`
+*before* writing Haskell. And run it with the tree committed: the gate does
+`git diff --exit-code -- shikigami-core/src`, so a mid-change run reports a stale generated layer
+that is not stale.
+
+### Attestation — plans 49, 50, 51
+
+**Plan 49** shipped five contract modules (`Shikigami.Attestation.{Profile,Agent,Reviewed,Strength,Envelope}`)
+and froze the attestation payload encoding as a wire format (ADR 0006), with two evidence-strength
+scales deliberately named apart (ADR 0005).
+
+**Plan 50** made profile resolution fail closed: immutable versioned profiles in PostgreSQL, five
+typed refusals, `resolve-profile` journaled under `shikigami-resolve-profile-v1` before
+`open-session`, and — the correction that matters downstream — **the journal holds the complete
+`ResolvedProfile`, not a reference to it** (ADR 0007), because a reference could not enforce the
+original policy after the store mutated. Skill dispatch checks the actual Baikai model/options
+tuple before any provider request.
+
+**Plan 51** introduced **Shikigami's first checked aggregate**. `RunEvidence` has seven legal
+transitions and 56 generated behavior obligations, `domain/shikigami-run-evidence.keiro` is the
+workspace's third member, and migration `2026-08-20-01-53-56-run-evidence-and-call-records` adds
+the run and call projections under one atomic lifecycle boundary (ADR 0010). The 2026-08-19 review
+predicted this plan would turn on most of keiro-dsl's checked surface; it did.
+`docs/architecture/shikigami-domain-inventory.md` is kept current with each landing and is the
+reference for what the specification does and does not cover — its 2026-08-19 census of "no
+aggregate, no read model, no projection" is now one aggregate and two projections out of date.
+
+*For everyone else:* plans 51 and 52 must treat the journaled snapshot as the one policy identity
+and **must not resolve a second copy from the store**. And plan 51 deliberately did not fabricate
+the review-request identity or the reviewed artifact — MasterPlan 10 assigns that to **plan 14**,
+which is now the definer of a stable typed review-request identifier as well as an approval plan.
+That makes plan 14 part of the attestation path, not only the egress path.
+
+### Operations and schema — plans 29, 30, 33, 43
+
+**Plan 29** gave all four worker roles a real probe surface on their own listeners (8091–8094),
+serving `servant-health` with no Shikigami sibling dependency. Liveness reports **loop progress**,
+readiness reports **PostgreSQL reachability and nothing else** (ADR 0020), a dead loop takes the
+process down with a non-zero exit (ADR 0019), and `failingSince` reports onset rather than
+observation. Its lesson is worth repeating in full: the one real bug it shipped —
+`databaseReachable` decoding `select 1` as `int8` — passed 74 worker and 342 core tests and was
+caught by `curl`. **Acceptance for a probe has to include running the process and asking it.**
+
+**Plan 30** mounted `keiro-ops`'s embeddable command tree instead of rebuilding another operator
+layer. `shikigami agents list` renders the canonical load report, `shikigami runs show` joins a
+Keiro workflow to the Kioku session id journaled by `open-session` or `resolve-session`, and the
+mounted tree supplies workflow, journal, awakeable, timer, outbox, lease, resurrection, and PGMQ
+dead-letter operations. That exact journaled join discharges the plan's possible Kioku IR-2
+dependency. The mount also raised the repository's development floor to PostgreSQL 18 because
+`keiro-migrations 0.13` refuses other major versions (ADR 0021).
+
+*For everyone else:* plan 23 is now unblocked and should extend the existing `agents` command
+rather than introduce a second inventory. Operator verbs over Keiro state stay mounted from
+`keiro-ops`; Shikigami writes only joins or views that no owning library can provide.
+
+**Plan 33** delivered declared identity, memory policy, and enablement, with defaulted fields
+preserving the journal codec byte-for-byte (ADR 0011). It also delivered **plan 20's
+`AgentLoadReport`** as a side effect of hard-depending on it.
+
+**Plan 43** defined the practice-review contracts and, more usefully, promoted repository
+provenance to shared domain vocabulary (`Shikigami.Repository`, ADR 0008) so plans 44, 49, and 52
+cite one revision type rather than three.
+
+### Two repository-level facts
+
+Plans 20, 26, and 33 observed `cabal test all` hangs and serialized the suite with `-j1`. Plan 30
+isolated at least one repeat of that failure to a `shikigami-worker` left running from manual
+acceptance; after stopping it, all nine suites passed without the earlier failure. **Before
+diagnosing or serializing the suite, stop locally running Shikigami processes; use `-j1` as the
+capacity fallback, not as an architectural requirement.**
+
+The ADR corpus went from 3 records to **21** in two days. Reading `docs/adr/` is now part of
+pre-implementation audit, not optional context — plan 26 caught its gate contradiction by scanning
+the corpus first, which was the cheaper of the two places to find it.
 
 
 ## The cohort, as pinned
 
-Verified 2026-08-18 against Hackage and against `cabal.project` at commit `9991032`. The matrix,
-tag commits, and evidence live in `docs/dependency-cohort.md`, which is the contract; this table
-is the summary.
+Re-verified 2026-08-20 against `cabal.project` and the upstream working trees; no cohort member has
+released past its pin. `docs/dependency-cohort.md` is the contract; this is the summary.
 
 | Package | Pinned | Latest released | Current? |
 |---|---|---|---|
 | `keiki`, `keiki-codec-json` | 0.9.0.0 | 0.9.0.0 | ✅ |
-| `keiro`, `-core`, `-migrations` | 0.13.0.0 | 0.13.0.0 | ✅ |
+| `keiro`, `-core`, `-migrations`, `-dsl` | 0.13.0.0 | 0.13.0.0 | ✅ |
+| `keiro-pgmq` | 0.13.0.0 | 0.13.0.0 | ✅ **new — plan 17** |
+| `keiro-ops` | 0.13.0.0 | 0.13.0.0 | ✅ **new — plan 30** |
 | `kioku-*` | 0.4.1.0 | 0.4.1.0 | ✅ |
 | `shikumi` (+ family) | 0.3.0.2 | 0.3.0.2 | ✅ |
 | `baikai`, `baikai-claude` | 0.5.0.0 | 0.5.0.0 | ✅ |
 | `pgmq-*` | 0.5.0.0 | 0.5.0.0 | ✅ |
 | `shibuya-core` | 0.9.0.0 | 0.9.0.0 | ✅ |
+| `shibuya-kafka-adapter` | 0.9.0.0 | 0.9.0.0 | ✅ **new — plan 18** |
 | `shibuya-pgmq-adapter` | 0.14.0.0 | 0.14.0.0 | ✅ |
 | `kiroku-store` / `-migrations` | 0.8.0.0 / 0.4.0.0 | same | ✅ |
 | `shibuya-kiroku-adapter` | 0.5.1.1 | 0.5.1.1 | ✅ |
 | `pg-migrate`, `settei`, `servant-health` | 1.1.0.0 / 0.2.0.0 / 0.1.0.0 | unchanged | ✅ |
 
-`keiro-dsl` **is** pinned as of 2026-08-19, at `0.13.0.0`, by plan 39's Milestone 0. It is the
-one cohort row that is not a library this service links against: it is the build-time
-specification toolchain, so it is declared as `extra-packages: keiro-dsl` in `cabal.project`
-rather than as a `build-depends` of any component. A `constraints:` row alone would not have
-worked — nothing links it, so nothing would pull it in and `cabal run keiro-dsl` would have no
-target.
-
-**Two things the last revision predicted, and how they actually resolved.** The 2026-08-10 review
-named two upstream releases as gating five plans, and asked for both to be requested. Neither
-request was ever filed and both were satisfied anyway, by different releases than the ones
-predicted:
-
-- `keiro 0.12` was expected to lift the `shibuya-core <0.9` cap. **`keiro 0.13.0.0` did**, on
-  2026-08-17. The 0.12 request is moot.
-- A `kioku` admitting `baikai ^>=0.5` was expected to unblock plans 48, 51, and 52.
-  **`kioku 0.4.1.0` delivered it**, on 2026-08-18.
-
-The lesson worth carrying is narrow but real: this document twice scheduled around a *specific*
-predicted release number. Both times the predicted version was wrong and the underlying gate
-cleared anyway. Track the bound, not the version that will lift it.
+Three of these arrived *because a plan went looking*, which is the pattern worth keeping: plan 17
+found `keiro-pgmq` rather than hand-rolling a typed consumer, plan 18 found `shibuya-kafka-adapter`
+rather than keeping a Kafka client in application code, and plan 30's refresh found `keiro-ops`
+already shipping the command tree it had budgeted three milestones to build. **Check whether the
+cohort already ships it before implementing a milestone** — three times in two days, it did.
 
 
-## What upstream now ships that plans were scheduled to invent
+## Registry rot: seventeen stale rows
 
-Unchanged in substance from the 2026-08-10 reading, except that all three are now **pinned and
-usable rather than gated**. This remains the largest rework saving in the portfolio.
+Reconciled 2026-08-21 across `docs/masterplans/`. Thirty-six registry rows read `Not Started`.
+**Seventeen of them name a plan that is complete**: 17, 18, 20, 21, 24, 25, 26, 29, 30, 33, 39,
+43, 49, 50, 51, 53, 55. An eighteenth, plan 28, is also wrong in the other direction — its M1 landed
+2026-08-05.
 
-**`baikai 0.5.0.0` ships `Baikai.Evidence`** — `ModelCallEvidence`, `evidenceSchemaVersion`,
-`Observed`, `EndpointIdentity`, `CallStatus`, `EvidenceStrength`, and the canonical hashing core:
-`canonicalEncode` (sorted keys, normalised numbers, a hand-written string escaper specifically so
-an aeson upgrade cannot invalidate a recorded digest), `commitmentDigest`, and
-`configurationDigest` over an allow-list `configurationProjection`. `Options` gains an `evidence`
-field. This is, almost line for line, what MasterPlan 10 assigned to **plan 51** (real call
-evidence, previously stubbed behind a deterministic reader seam) and **plan 52** (canonical
-attestation encoding and hashing). Plans 51 and 52 must bind to these types rather than define
-parallel ones. Plan 51 can retire its stub now.
+This matters more than a bookkeeping nit, because this document has told readers since it was
+written that *"where this document and a MasterPlan registry disagree about a plan's status, the
+registry wins."* Following that rule today would re-schedule seventeen finished plans. The rule is
+amended at the top of this document: the plan file's own Progress and Outcomes sections are the
+authority on status.
 
-**`baikai 0.5.0.0` also ships `Baikai.Agent` and a `baikai-agent` package** — `AgentRunRequest`
-(required `workingDir`), `AgentRunResult`, the `AgentCapability` profile
-(`read-only` / `edit-workspace` / `full-access`), `AgentSafety`, `AgentOutputMode`,
-`AgentCommand`'s renderer/runner boundary, the `AgentRenderError` / `AgentRunFailure` taxonomies,
-and the operator policy ceiling (`AgentCeiling`, `applyAgentCeiling`, which reports every violation
-rather than silently clamping). That is the vocabulary **plan 48** was written to invent from
-scratch. Plan 48 becomes a *consumer* of `Baikai.Agent`, which likely more than halves it.
-
-**`shibuya-core 0.9.0.0` ships application-defined dead-letter codes** — `DeadLetterReason` gains
-`ApplicationFailure DeadLetterCode Text`, with opaque validated codes, total adapter-facing
-projections, a canonical renderer, and a stable `shibuya.dead_letter.reason.code` span attribute.
-**Plan 17** owns Shikigami's failure taxonomy and imports `DeadLetterReason (..)` at
-`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs:35`. The 2026-08-10 review called starting
-plan 17 early "the largest avoidable rework in the portfolio" — inventing a private code taxonomy
-and renderer, then deleting both. **That risk is now gone**; 0.9 is pinned, and plan 17 is the
-safest it will ever be to implement.
+The cause is mechanical and forgivable — a plan's implementer updates the plan file, and updating
+the parent registry is a second edit in a different directory that nothing enforces. The fix is
+equally mechanical: seventeen row edits, plus the corresponding MasterPlan checklist boxes.
+**That is the cheapest outstanding piece of work in the portfolio, and it should be done before
+the next planning session rather than during it.** It is not on any critical path and is not
+scheduled below; it is one sitting.
 
 
-## What plan 39 delivered, and what it changes for everyone else
+## Citation rot: re-measured
 
-Landed 2026-08-19 across seven commits. `domain/shikigami.keiro-workspace` and its two members —
-`shikigami-agent-run.keiro` and `shikigami-conversation.keiro` — are the checked source of truth
-for Shikigami's durable workflow identities; `just keiro-gate` is the pre-merge gate; and both
-workflow names now come from the specification rather than from Haskell literals, so
-`Agent/Workflow/Name.hs` and `Agent/Conversation.hs` read them from generated modules and a
-rename is `BREAKING [WorkflowStableNameChanged]`.
+Re-measured 2026-08-20 over the then-26 open plans. Seventeen cited `shikigami-cli` or
+`shikigami-core/src/Shikigami/Worker.hs`, but plan 30's hits were its own audit and correction
+table. With plan 30 complete, **sixteen of the 25 open plans still carry unfixed pointers**: 8, 12,
+13, 14, 16, 19, 22, 23, 27, 28, 31, 32, 34, 37, 40, and 48. Four open plans (14, 19, 28, 35)
+additionally carry line-numbered `keiro/src/...` citations predating keiro 0.13.
 
-**Its census is the part that changes other plans, and it is mostly negative.** Shikigami has
-**no aggregate, no read model, no projection, no router, and no process manager**. The single
-`runCommandWithSqlEvents` call in the repository targets *kioku's* session stream, and
-`Shikigami.Flow.Lifecycle.AtRiskCustomer` is a Keiki transducer that renders a Mermaid diagram
-rather than an event source. The evidence is in
-`docs/architecture/shikigami-domain-inventory.md`, which is now the reference for what the
-specification does and does not cover.
-
-Four consequences reach scheduled work:
-
-- **Plan 51 introduces Shikigami's first aggregate**, and therefore turns on most of keiro-dsl's
-  checked surface: `behavior-obligations` stops reporting `required: 0`, the warning table
-  becomes reachable (which is why `--deny-warnings` passes today with nothing to justify),
-  golden payloads acquire an owner, and `WorkspaceDuplicateDeclaration` gets a declaration to
-  refuse. It should also add its own workspace member.
-- **Plan 27's premise was wrong and is corrected in that plan.** Its Decision Log said "Plan 39's
-  generated module owns the `SinkIntent` structural wire type and codec". There is no such
-  module: an unconsumed `mapped structural` declaration generates a shape, a binding, and
-  conformance assertions but **no codec**, so declaring it would certify a JSON policy nothing
-  executes. Plan 27's Milestone 1 is now ordinary Haskell consolidation.
-- **A workflow label is a wire word** — `[A-Za-z0-9][A-Za-z0-9_-]*`. Six of Shikigami's journaled
-  label families carry a colon and a runtime-computed suffix and are therefore undeclarable:
-  the approval awaits and their `:notify` steps (plan 14), `emit-signal:<ordinal>` (plan 16), and
-  every per-message conversation label (plan 26). Plans 14, 16, and 26 carry reconciliation notes
-  saying so. Note that plan 24's M3 makes `emit-signal` *stable* without making it *declarable* —
-  `emit-signal:alert` still has a colon.
-- **Four surfaces are deliberately undeclared** because declaring them would certify a codec the
-  runtime does not execute: the `shikigami_run_jobs` queue, the Kafka inbox, the Danwa contract,
-  and the sink outbox. That rule is now
-  [ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md), and it binds every plan that
-  later wants to declare one of them — each move is a wire change with its own commit, decision,
-  and fixture, not a documentation change.
-
-Two repository-level facts also came out of it. Generated keiro-dsl output is excluded from
-`treefmt` ([ADR 0002](../adr/0002-generated-code-is-not-formatted.md)), because fourmolu and
-cabal-fmt rewrite it and that breaks the firewall and scaffold determinism together. And
-`docs/adr/` now exists, plain Markdown, no OKF bundle — the repository had no ADR corpus before.
-
-
-## The seventh package: plan 55
-
-Added 2026-08-19, and it corrects a plan this document has been treating as finished.
-
-Plan 36 deleted `shikigami-cli` on 2026-07-30 as an umbrella dispatcher. That was right on the
-architecture: the package depended on `shikigami-api`, `shikigami-core`, `shikigami-server`, and
-`shikigami-workers` at once, so a single binary linked the HTTP server, the Kafka consumers, the
-OTel exporter, and the worker loops. What plan 36 did not know is that the package also carried a
-**product intent** — a one-off agent runner for consumers who are *not* running the Kikan
-platform, which Kikan itself does not use, and which is what makes Shikigami versatile to
-simpler consumers. That intent appears nowhere in plan 36, in `docs/architecture/packages.md`, in
-any MasterPlan, or in `docs/improvement-requests/`. Because it was never written down, the
-package read as pure architecture and was removed as such.
-
-The capability survived and got expensive. `shikigami-run-behavior` and `shikigami-agent-run`
-now live in `shikigami-workers`, whose library links `hw-kafka-client`, `kafka-effectful`,
-`pgmq-effectful`, `shibuya-pgmq-adapter`, `hs-opentelemetry-sdk`,
-`hs-opentelemetry-exporter-otlp`, `baikai-trace-otel`, and `async` — and every executable there
-is `build-depends: base, optparse-applicative, shikigami-workers`, so all of it links into all
-of them. `shikigami-run-behavior` is documented in `packages.md` as running "with deterministic
-stubs (no database, no key)" and links `librdkafka`.
-
-**Neither command is actually coupled to the platform.** `Workers/Command/RunBehavior.hs`
-imports only `shikigami-core`; `AgentRun.hs` adds only kioku/kiroku, which it needs. The
-coupling is `Shikigami.Workers.Command`, one composition module importing the two light commands
-alongside the scheduler, worker, and Kafka subscription. That is the same umbrella shape plan 36
-deleted — moved down one level, from between packages to inside one, where it stopped being
-visible. `Shikigami.PackageArchitectureSpec` cannot see it either: it checks which *siblings* a
-library declares, not what an *executable* drags in.
-
-**Implemented 2026-08-19.** `shikigami-agent` exists, depends only on `shikigami-core`, and owns
-`shikigami-run-behavior` and `shikigami-agent-run`; `cabal build shikigami-agent --dry-run`
-names none of the eight platform packages. `RoleInfo`/`runRole` moved to `Shikigami.App.Role` in
-core so both packages share one configuration-resolution order.
-`Shikigami.PackageArchitectureSpec` now expects seven packages, applies the light-package
-forbidden list to `shikigami-agent`, and adds the rule that **every executable links only its
-own package's library** — the check that would have caught the original regression, since the
-old sibling-edge rule could not see coupling inside a package. All three assertions were
-mutation-tested. `docs/architecture/packages.md` gains a "Two ways to use Shikigami" section
-stating the one-off mode as a constraint, and
-[ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md) is the durable
-record. It is a deliberate divergence from the fleet's "exactly six cabal packages" standard
-(`mori://shinzui/keiro-runtime-patterns/docs/architecture-service-packages`), recorded as such:
-the standard's objection is to edges *between* existing packages, and this adds a lighter leaf
-under core.
-
-**Sequencing: plan 55 landed before plan 48**, and plan 48 is revised to match. Plan 48's Purpose says its `shikigami-run` command
-"never dispatches the declaration's sinks, never starts a trigger, and never opens Kioku or
-PostgreSQL", and then assigns its executable to "the post-plan-36 workers package" — which would
-ship a binary linking PGMQ and Kafka to prove it does not use them. Plan 55 gives it an honest
-home. Plan 48 remains unregistered under any MasterPlan; that is still open.
-
-**A general lesson worth carrying.** Plan 36's reasoning was sound and its outcome removed a
-capability, because the capability's rationale lived in someone's head rather than in the
-repository. An architecture document that lists what each package *is* does not, by itself,
-protect what a package is *for*. Plan 55's Milestone 3 writes the use case into `packages.md` as
-a requirement for that reason.
-
-
-## Citation rot: 19 open plans
-
-Found 2026-08-19 while implementing plan 24, and measured across the corpus afterwards.
-
-**32 of 54 plans cite `shikigami-cli`, `shikigami-cli.cabal`, or
-`shikigami-core/src/Shikigami/Worker.hs` — a package and a module that plan 36 deleted.** Of
-those, **19 are plans with open work**: 8, 12, 13, 14, 16, 17, 18, 19, 20, 22, 23, 26, 27, 28,
-29, 30, 31, 40, 48. Separately, **7 plans carry line-numbered `keiro/src/...` citations** that
-all predate keiro 0.13: 14, 19, 24 (fixed), 25, 26, 28, 53.
-
-The corrected destinations are mechanical:
+The correction table is unchanged:
 
 | Retired | Current |
 |---|---|
-| `shikigami-cli/src/Shikigami/Cli/Commands/*.hs` | `shikigami-server/src/Shikigami/Server/Command/*.hs` for `validate` / `render-lifecycle` / `grants`; the worker, scheduler, consumer, and run-behavior entry points are executables in `shikigami-workers` |
+| `shikigami-cli/src/Shikigami/Cli/Commands/*.hs` | `shikigami-server/src/Shikigami/Server/Command/*.hs` for `validate` / `render-lifecycle` / `grants`; the worker, scheduler, consumer, and run-behavior entry points are executables in `shikigami-workers` and `shikigami-agent` |
 | `shikigami-core/src/Shikigami/Worker.hs` (resume loop) | `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs` |
 | `shikigami-core/src/Shikigami/Worker.hs` (run-job ack) | `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` |
 | `shikigami-cli.cabal` | `shikigami-server/shikigami-server.cabal` or `shikigami-workers/shikigami-workers.cabal` |
 
-**This is not a reason to reschedule anything.** In plan 24 the arguments, milestones, and
-acceptance criteria all survived; only the pointers were wrong. But a novice following an
-unfixed plan opens a missing file at nearly every step, which is exactly what the
-self-containment rule exists to prevent. So the standing instruction is: **audit a plan's
-citations immediately before implementing it, not as a batch.** Resolving every
-`` `path:line` `` against the working tree and against the pinned keiro tag takes a few minutes
-and is the cheapest possible pre-flight. Plan 24's was done this way and is recorded in its
-Decision Log.
+**The standing instruction is widened.** Audit immediately before implementing — not as a batch —
+and audit four things, not one:
+
+1. Every `` `path:line` `` against the working tree and the pinned keiro tag.
+2. **`docs/adr/`**, which now holds 21 records and grew by 18 in two days. Plan 26's central
+   decision was contradicted by an ADR that had landed the previous day.
+3. **What the cohort already ships.** Three plans in two days found a released package doing work
+   they had scheduled.
+4. **The plan's premises about runtime behaviour it has not run.** This is the expensive one. Plan
+   26's research was sound and three of its inferences about behaviour it had not executed were
+   wrong; each was caught by a test the plan itself had specified. Plan 25 put it best: when a plan
+   asserts what a dependency does, the assertion is a hypothesis until something executes it.
 
 
 ## Drift each plan must still absorb
 
-- **Resolved by plan 53 — `keiki 0.9`'s sealed `InCtor`.** The four hand-built values in
-  `AtRiskCustomer.hs` now use `mkInCtorVia`, with `Generic` on `AtRiskCustomerCommand`.
-  `unavailableInCtor` was rejected deliberately: it carries no trusted structural evidence and
-  would have degraded `validateTransducer` to `UnverifiedOpaque`. Any *new* keiki state machine
-  must make the same choice; the reasoning is in `docs/dependency-cohort.md`.
-- **New, and it reaches several later plans — `kioku 0.4` made memory spaces and principals
-  mandatory.** Every session/memory command record carries `memorySpaceId` and `actorPrincipal`;
-  every read takes a leading `MemorySpaceId`. Shikigami answers both in one module,
-  `shikigami-core/src/Shikigami/Memory/Access.hs`, with `legacyMemorySpaceId` and a
-  `KnownPrincipal` over a self-asserted `shikigami.agent.<name>` ref. **Plans 23, 34, 50, and 51 should treat
-  that module as the seam they change, not as settled.** It is also the retirement point for
-  IR-9 (`key-agent-continuity-by-meibo-principal`), planned as
-  `docs/plans/54-key-durable-agent-state-by-meibo-principal.md` — when agents resolve to real Meibo
-  principals, `agentActor` takes its ref from Meibo instead of minting one.
-- **Related debt with an announced expiry.** Shikigami calls kioku's deprecated legacy write
-  surface (`Session.start`, `complete`, `failSession`, `recordTurn`, `Memory.record`,
-  `Recall.legacyRecall`) — about 24 `-Wdeprecations` warnings. The `*WithContext` replacements
-  require a real `PrincipalRef` *and* a context, which is a larger change than the value swap
-  already made. Kioku confirmed on 2026-08-18 that **no removal is scheduled** — no plan, no
-  version in the pragmas, and ADR-8 gates deletion on every dependent Mori report compiling
-  against `RecallTarget`. So this is unforced debt, and **plan 54 owns clearing it** as part of
-  moving the write path to `*WithContext`.
-- **`keiro-dsl` Language 5 — discharged.** The 2026-08-10 review told plan 39 to pin
-  `--min-language 4`; the 2026-08-18 review reversed that. Plan 39 landed on 2026-08-19 authored
-  onto Language 5, and `just keiro-inspect` asserts every member reports `"languageSupport":
-  "stable"` at effective version 5. Nothing further is owed here. A future language move is one
-  change across the whole workspace, never per member: composition compares versions before
-  merging and refuses a disagreement with `WorkspaceLanguageVersionMismatch`.
-- **New — `baikai 0.5` added `ApiProvider.describeThinking`.** A strict field, so every
-  implementor gets a compile error. `Shikigami.Behavior.StubProvider` is the only `ApiProvider` in
-  the tree and now reports `ThinkingModeUnsupported` honestly. Any plan that adds a second provider
-  must implement it by calling the same function that builds its request translation — baikai's own
-  guidance — because two descriptions of one mapping diverge silently.
-- **New — `keiro 0.13` corrected kiroku migration `0010`'s payload, changing its checksum.** A
-  database that applied `0010` under `kiroku-store-migrations` 0.3.2.x must have its ledger row
-  re-baselined once or every `up`/`verify` fails with `MigrationChecksumMismatch`. Shikigami was on
-  0.3.0.0 and applied `0010` fresh, so **no shikigami database is affected** — recorded here
-  because any *other* database that sees this cohort might be.
-- **New — `keiro 0.13` publishes a Seihou blueprint, `blueprints/keiro-upgrade/`.** One
-  agent-guided edge per version window, run with `seihou agent migrate keiro-upgrade`, entailing
-  `kiroku-upgrade` so a Keiro-only consumer still crosses Kiroku's edge exactly once. Future keiro
-  upgrades should go through it rather than being hand-derived the way plan 53 was.
-- **`pgmq 0.5` narrows `parseQueueName` to `[a-z0-9_]{1,47}`.** `shikigami_run_jobs`
-  (`shikigami-core/src/Shikigami/Trigger/Enqueue.hs:29`) conforms. No action. ✅
-- **`kioku`'s projection-schema relocation is applied**, not pending. Migrations `0011`
-  (memory-space partition and backfill) and `0012` (`kiroku.kioku_memories` → `kioku.memories`)
-  are in the composed plan and applied on the dev cluster.
-- **`keiro` still has not shipped `PublishRejected`.** Re-verified at `keiro-0.13.0.0`:
-  `PublishOutcome` in `Keiro.Outbox` is still `PublishSucceeded | PublishFailed` only, and keiro
-  plan `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` remains
-  unimplemented. **Plan 19 M1 remains blocked**; M2–M4 are not.
-- **Plan 12's upstream contracts are still absent.** Re-verified at `baikai-0.5.0.0` and
-  `shikumi-0.3.0.2`: neither ships MCP *source*. Both now carry MCP *plans* — baikai MasterPlan 6
-  with plans 30–32, shikumi plan 30 — so the status improved from "proposed IR" to "planned
-  upstream", but nothing is consumable. Plan 12 M1–M2 startable; M3–M5 not.
+- **`kioku 0.4`'s mandatory memory spaces and principals.** Every session/memory command record
+  carries `memorySpaceId` and `actorPrincipal`. Shikigami answers both in
+  `shikigami-core/src/Shikigami/Memory/Access.hs` with `legacyMemorySpaceId` and a
+  `KnownPrincipal` over a self-asserted `shikigami.agent.<name>` ref. **Plans 23, 34, and 54 should
+  treat that module as the seam they change.** Plans 50 and 51 have landed and went through it.
+- **The kioku deprecation debt has one more consumer and one clear owner.** Shikigami still calls
+  kioku's deprecated legacy write surface (~24 `-Wdeprecations`), and plan 25's flow-memory
+  capability added `Kioku.Memory.record` to that list — concentrated behind one seam rather than
+  scattered, which is the good version of this outcome. Moving to `*WithContext` needs a real
+  `PrincipalRef`, so **plan 54 owns clearing it**. Kioku confirmed 2026-08-18 that no removal is
+  scheduled.
+- **`keiro` still has not shipped `PublishRejected`.** Re-verified 2026-08-20 by reading
+  `keiro/src/Keiro/Outbox.hs:266-271` in the keiro tree: `PublishOutcome` is still
+  `PublishSucceeded | PublishFailed`, and keiro's `Unreleased` section is empty. **Plan 19's
+  M1 blocked half stays blocked**; nothing else in plan 19 needs it, and plan 22 does not need it
+  either — see [the order](#the-order).
+- **Plan 12's upstream contracts are still absent.** Re-verified 2026-08-20: no `Baikai.Mcp.*`
+  source in baikai 0.5.0.0, no MCP adapter in shikumi 0.3.0.2. Both carry upstream *plans*
+  (baikai MasterPlan 6 plans 30–32; shikumi plan 30). Plan 12 M1–M2 startable; M3–M5 not.
+- **Kioku IR-2 is still `proposed`** (re-verified 2026-08-20). Plans 26 and 30 no longer wait on
+  it: plan 26 shipped its own index with a self-healing miss path, while plan 30 reads the exact
+  session id from the workflow journal. It now touches only plan 34.
+- **`keiro 0.13` publishes a Seihou blueprint, `blueprints/keiro-upgrade/`.** Future keiro upgrades
+  should go through `seihou agent migrate keiro-upgrade` rather than being hand-derived.
+- **Additive-only journaled-value versioning as a hard constraint** on plans 19, 23, 27, 34, and
+  35. Prefer the right shape now over an additive shape that costs a later cleanup — but note that
+  ADR 0011 and ADR 0012 have made the *mechanics* routine: plan 33 changed the declaration record
+  with no codec change, and four plans added journaled steps behind patches without incident.
+- **`pgmq 0.5`'s `parseQueueName` narrowing** and **kioku's projection-schema relocation** are both
+  applied and settled. ✅
 
 
 ## Plans that must be updated before implementation
 
-**Discharged since 2026-08-10:** plan 53 was implemented and its Revision Notes record what was
-actually taken (keiro 0.13 and kioku 0.4.1.0, not the keiro 0.11 / kioku 0.3 it was re-baselined
-onto on 2026-08-10). Its title and filename still say "0.11"; that is deliberate, because
-`mori://` references to plan 53 are durable.
+**Discharged since 2026-08-19:** plans 17, 24, 48 (its package re-point), 50, and 51 all consumed
+their updates and landed. Plan 30 was refreshed twice, changed shape rather than detail, and then
+landed on 2026-08-20.
 
 | Plan | Required update |
 |---|---|
-| 39 | ✅ **Implemented 2026-08-19.** No longer a plan needing an update; see [what it delivered](#what-plan-39-delivered-and-what-it-changes-for-everyone-else). |
-| 24 | ✅ **Discharged 2026-08-19.** Citations refreshed against the working tree and keiro 0.13 (21 of 59 were wrong), two quoted keiro signatures corrected, the `enqueueSinkIntentStep` sketch brought up to its current arity, and the "workflow names are Haskell constants" claim replaced — plan 39 moved both into the specification. It also gained the plan-39 reconciliation section. **Ready to implement as written.** |
-| every open plan | **New standing requirement.** Audit `file:line` citations immediately before implementing, per [Citation rot](#citation-rot-19-open-plans). 19 open plans cite deleted paths. |
-| 48 | ✅ **Discharged 2026-08-19.** Its `shikigami-run` executable is re-pointed at `shikigami-agent`, and it gained a reconciliation section covering the enforced package boundary and the shared `Shikigami.App.Role.runRole`. Registration under a MasterPlan is still open. |
-| 17 | Gate cleared. Re-author against `shibuya-core 0.9`'s `ApplicationFailure DeadLetterCode Text`, the total reason projections, the canonical renderer, and the `shibuya.dead_letter.reason.code` span attribute. Delete any privately defined code taxonomy or renderer. Its M0 checklist item can be closed. |
-| 48 | Gate cleared. Rewrite as a consumer of `Baikai.Agent` / `baikai-agent`: `AgentRunRequest`, `AgentCapability`, `AgentSafety`, `AgentCommand`, `AgentCeiling`/`applyAgentCeiling`. Drop the invented vocabulary. |
-| 49 | Cite `Baikai.Evidence`'s `evidenceSchemaVersion` and digest split (`commitmentDigest` binds a record to a request; `configurationDigest` compares across runs). Do not define a second canonical encoder. |
-| 51 | Gate cleared. Replace the stubbed deterministic evidence seam with real `ModelCallEvidence` via `Options.evidence`. Its "baikai IR-3 pending" and "kioku admitting baikai 0.5" notes are both discharged. |
-| 52 | Gate cleared for evidence. Bind the canonical attestation encoding to `canonicalEncode` and `commitmentDigest` instead of freezing a bespoke one. Kikan IR-6 still ratifies the *envelope*, not the *encoder*. |
-| 23 | **New requirement.** Note that it is now a hard dependency of plan 54 (`IR-9`), which consumes its declaration-to-principal join. Plan 23 supplies the directory; plan 54 re-keys durable state and retires the kioku deprecation debt. |
-| 34, 50, 51 | **New requirement.** Each records or reads memory-scoped facts; each must go through `Shikigami.Memory.Access` rather than naming `legacyMemorySpaceId` directly. |
-| 12 | Re-verify its three upstream contracts before scheduling M3–M5; all three still absent as of 2026-08-18, though baikai and shikumi now have plans. Keep M1–M2 startable. |
-| 19 | M1 stays upstream-gated; re-verified against keiro 0.13. M2–M4 unaffected. |
-| 27, 25, 26 | Strike the byte-for-byte wire-preservation and in-flight-survival obligations (see next section); keep the machinery, drop the compatibility proofs. Verified 2026-08-19: plans 24 and 27 have already absorbed this; 25 and 26 still carry the plan-39 reconciliation section only. |
-| 27 | **New requirement.** Its Decision Log entry "Plan 39's generated module owns the `SinkIntent` structural wire type and codec" is corrected in place; M1 is a Haskell consolidation, not a regeneration. Already applied 2026-08-19. |
-| 33, 43 | Re-point at post-plan-36 package placement. Domain types are `shikigami-core/src/Shikigami/Agent/{RunJob,Decl}.hs`; `shikigami-api` holds only `OpenApi.hs` and `Problem.hs`. Plan 33's note extends the substitution to plans 12, 32, 35, and 40. |
-| every MasterPlan-3 child | Still outstanding. Their Context sections name pre-split paths; MasterPlan 3 records the corrected file map. |
-| all | Refresh any Context section quoting a pinned version, module path, or upstream gate. Most were written 2026-07-30 and the cohort has moved twice since. |
+| every open plan | **Standing.** Audit citations, `docs/adr/`, what the cohort already ships, and any premise about unexecuted runtime behaviour — immediately before implementing, per [Citation rot](#citation-rot-re-measured). Sixteen open plans still carry deleted paths. |
+| 19 | Re-point its `shikigami-cli` citations. Its keiro citations predate 0.13 and its M1 gate is re-verified absent. **Nothing else in it is blocked**, and its unblocked half is now the widest unblocker in the portfolio. |
+| 22 | Re-point two `shikigami-cli` citations. Confirm against plan 19's delivered `SinkOutcome` rather than the sketch. It now owns **two** downstream vocabularies, not one: the sink credential surface *and* MasterPlan 10's signing credential class for plan 52. |
+| 14 | **New requirement, and it enlarges the plan.** MasterPlan 10 makes plan 14 the definer of the stable typed review-request identifier that plan 51 currently accepts as an opaque caller-supplied value and plan 52's read API serves by. Say so in the plan, and keep the identifier typed and stable from the first commit. Also re-point its four deleted paths and two stale keiro citations. |
+| 27 | Its Milestone 1 is ordinary Haskell consolidation — plan 39's specification cannot own the `SinkIntent` wire type, because no declared node consumes it (ADR 0001). Already corrected in the plan. Re-point four deleted paths. |
+| 28 | **Now has three named consumers waiting.** Plan 20's Milestone 3 is log-only until M2 supplies the counter; plan 29 left health-path exclusion from request logging to M4 and pointed it at `Servant.Health.Paths.healthRawPaths`; M3's trace propagation still waits on plan 22's `postJSONWithHeaders`. It also carries the largest citation debt in the corpus — 11 deleted paths and 3 stale keiro citations. |
+| 30 | ✅ **Landed 2026-08-20.** It mounts `keiro-ops 0.13.0.0`, adds only the agent inventory and Keiro-to-Kioku journal join Shikigami owns, and removes Kioku IR-2 from its dependency set. Plan 23 is now unblocked. |
+| 34, 23, 54 | Route memory access through `Shikigami.Memory.Access`; do not name `legacyMemorySpaceId` directly. Plan 23 supplies the directory that plan 54 consumes. |
+| 35 | **Entry rules met.** Plans 24, 33, and 39 have all landed. Re-check its two keiro citations, and note that plan 24 left `delegate`'s `freshOrdinal`-derived child id in its inventory as this plan's to fix. |
+| 40 | **Not entry-ready until plan 35 lands.** Its own Progress and Context sections correctly make plan 35's `delegates` and `delegationBudget` fields prerequisites; the previous revision's claim that plan 33 was its only dependency was wrong. Re-point one deleted path after consuming plan 35's final schema. |
+| 44, 45 | Plan 43 landed and `Shikigami.Repository` is the shared revision vocabulary; cite it rather than defining a second one. **Plan 45's entry rules are met** (43 ✅ + 25 ✅). Plan 44 still needs Kikan IR-5. |
+| 48 | Rewrite as a consumer of `Baikai.Agent` / `baikai-agent` — `AgentRunRequest`, `AgentCapability`, `AgentSafety`, `AgentCommand`, `AgentCeiling`. Its package home (`shikigami-agent`) is settled. **Registration under a MasterPlan is still open.** |
+| 52 | Bind to `canonicalEncode` / `commitmentDigest`; do not define a second encoder. Its dependency set is now precise: plan 22 (signing credential class), plan 14 (review-request identity), plan 44 (content plane), Kikan IR-5 and IR-6. |
+| 12 | Re-verify its three upstream contracts before scheduling M3–M5; all absent as of 2026-08-20. Keep M1–M2 startable. Five deleted paths. |
+| 31 | Genuinely last, and its surface grew: plans 17, 20, and 29 each added Settei keys (`worker.run_timeout_seconds`, `approval.deadline_seconds`, `agents.strict`, the scheduler catch-up policy, `health.port` per role). Six deleted paths. |
+| every MasterPlan-3 child | Their Context sections name pre-split paths; MasterPlan 3 records the corrected file map — and plan 20 corrected one of its claims when it landed (there is exactly one expected strict-mode failure, `agents/broken.dhall`, not two). |
 
 
 ## Compatibility work that v1 does not owe
 
-Because nothing consumes Shikigami yet, the following scheduled work is **not** v1 scope. Each
-should be struck from its plan with a note that it returns when the first real consumer exists.
+Because nothing consumes Shikigami yet, the following is **not** v1 scope, and should be struck
+from its plan with a note that it returns when the first real consumer exists.
 
-- **Codd-ledger import** (plan 38 M3) — already cancelled 2026-08-05, for exactly this reason.
-- **Byte-for-byte `SinkIntent` wire preservation** across plan 27's consolidation. Consolidate
-  freely; assert the shape you want, not the shape you had. Note the separate 2026-08-19 finding:
-  the specification cannot own that shape yet either, because no declared node consumes it — so
-  plan 27's consolidation is plain Haskell, and `WireCompatSpec` stays the guard until it lands.
-- **In-flight workflow survival across a deploy** — plans 24, 25, 26. The `activePatches` /
-  `WorkflowRunOptions` machinery is still worth building, because plan 39's checked topology gate
-  and every later journaled value depend on the discipline existing. But "an in-flight conversation
-  must survive this deploy" is not a v1 acceptance criterion. Build the mechanism; skip the proofs.
-- **Replay and queue codec compatibility fixtures** (plan 47's pattern, inherited by plan 53). Old
-  wire data does not exist.
-- **Database remediation on upstream schema moves.** Still not owed — but worth recording that the
-  forward path was exercised rather than avoided: plan 53 applied 16 migrations, including kioku's
-  `0011` partition backfill and `0012` schema relocation, cleanly on the dev cluster (57 applied, 0
-  pending, tests green). So "recreate the database" remains the cheap option, not the only one. A
-  database that ever *does* hold real data is the `cohort-migrate` skill's job, never `just migrate`.
-- **Additive-only journaled-value versioning discipline** as a hard constraint on plans 17, 19, 23,
-  35 and 50. Prefer the right shape now over an additive shape that costs a later cleanup.
+- **Byte-for-byte `SinkIntent` wire preservation** across plan 27's consolidation. Assert the shape
+  you want, not the shape you had; `WireCompatSpec` stays the guard until it lands.
+- **In-flight workflow survival across a deploy.** Plans 24, 25, and 26 all built the mechanism and
+  none owed the proof — though plan 24 shipped one anyway, and it is the reason the other two could
+  trust `patch` without re-deriving it.
+- **Replay and queue codec compatibility fixtures.** Old wire data does not exist.
+- **Codd-ledger import** (plan 38 M3) — cancelled 2026-08-05.
+- **Database remediation on upstream schema moves.** Not owed; the forward path keeps being
+  exercised anyway. Recreating the database stays the cheap option, and a database that ever *does*
+  hold real data is the `cohort-migrate` skill's job, never `just migrate`.
 
-Everything else in those plans stands.
+**New — five patch guards now carry dead legacy branches.** The landings installed
+`shikigami-behavior-retry-v1` (plan 17), `shikigami-emit-signal-labels-v1` (plan 24),
+`shikigami-flow-memory-steps-v1` (plan 25), `shikigami-conversation-rotation-v1` (plan 26), and
+`shikigami-resolve-profile-v1` (plan 50). Every `False` branch exists to serve workflow instances
+that started before the patch, and **that population is empty, because Shikigami has no users**.
+Plans 25 and 26 each recorded this in their own retrospectives, in near-identical words: cheap to
+retire, easy to forget. Per ADR 0004's retirement rule, deleting a guard means deleting the branch
+and its specification block together, and it is a gated wire change like any other. This is not
+urgent and it is not free forever — each guard that survives to the first real deploy becomes
+permanent. **One plan should sweep all five**, and it does not exist yet; the natural home is plan
+27, which is already the consolidation plan.
 
 
 ## The order
 
-Stages are entry rules, not a schedule. Work inside a stage is parallel unless stated otherwise.
-
+Stages are entry rules, not calendar promises. The ordering rule is now explicit: **a plan that
+owns a shared type, capability, schema field, or client seam lands before plans that consume it.**
+A soft dependency is promoted in this sequence when taking it early would install a temporary
+adapter that a later plan replaces. Parallel work is safe only across lanes with disjoint edit
+surfaces; “startable” by itself is not a reason to start a downstream plan.
 
 ### Stage A — Re-baseline the cohort · ✅ complete 2026-08-18
 
 Retired. Delivered by commit `9991032`.
 
-- **A1 · Plan 53** ✅ — landed against a larger cohort than scoped: keiro 0.13, keiki 0.9,
-  kioku 0.4.1.0, kiroku-store 0.8, shibuya-core 0.9, shibuya-pgmq-adapter 0.14, pgmq 0.5,
-  baikai 0.5, shikumi 0.3.0.2. Code fallout was wider than predicted — kioku 0.4's mandatory
-  memory spaces reached five files, which its changelog did not document.
-- **A2 · `docs/dependency-cohort.md`** ✅ — rewritten as the August matrix with tag commits, the
-  source cost, the deprecation debt, and the migration consequence.
-- **A3 · The two upstream requests** ✅ discharged without being filed; see
-  [the cohort section](#the-cohort-as-pinned). One request remains worth filing and is *not* a
-  gate: kioku 0.4.0.0's changelog omits the mandatory memory-space and principal fields entirely.
+### Stage B — Foundation · ✅ complete 2026-08-19
 
-### Stage B — Foundation · mostly discharged; the remainder is parallel with Stage C
+Plans 18, 21, 36, 39, 43, 49, and 55 have all landed. What was listed here and is *not* done moved
+to where it actually belongs: plan 28's M2–M4 is a stage-D item because plan 20 and plan 29 are now
+waiting on it, and the cleanup batch (8, 13, 16, 37 M3 / 38 M4) is unstaged — it is a session each,
+takes no dependency, and blocks only plan 52's positive conformance case (via 13).
 
-Plan 21 was listed here through the 2026-08-18 revision and is **complete** — it has been in the
-complete list since that revision, and the entry bullet was stale. Plan 39 is complete as of
-2026-08-19.
+### Stage C — Core semantics · ✅ substantially complete 2026-08-20
 
-- **Plan 39** ✅ **complete 2026-08-19.** The checked keiro DSL and evolution gate, on Language 5.
-  It was the widest unblocker in the portfolio and it released 24, 25, 26, 27, 35, 50, and 51 —
-  which is what opens Stage C.
-- **Plan 18** — atomic offsets, inbox, and enqueue in one boundary. No upstream gate.
-- **Plan 43** — practice-review contracts. Contract-only, no dependencies.
-- **Plan 55** ✅ **complete 2026-08-19.** The seventh package for one-off agent runs. It
-  unblocked plan 48, which now targets `shikigami-agent`.
-- **Plan 49** — attestation vocabulary, citing `Baikai.Evidence`. Contract-only. Worth landing
-  early: nine plans (12, 14, 22, 28, 33, 35, 39, 43, 44, 48) are each about to name an agent
-  version, a repository revision, a correlation id, a review id, or a tool-catalog digest, and
-  landing the vocabulary first turns nine future reconciliations into nine citations.
-- **Plan 28 M2–M4** — metrics and tracing. M1 landed 2026-08-05. M3's HTTP trace propagation waits
-  for plan 22's `postJSONWithHeaders`; M2 and M4 do not.
-- **Cleanup batch** — plans 8, 16, and 37 M3 / 38 M4 (one Cabal package cycle to break, shared by
-  the last two). Cheap, and 38's remainder is the only thing plan 31 waits on.
-- **Plan 13's live smoke** — needs a credential, not engineering time. A precondition of plan 52's
-  positive conformance case, so unblock it now rather than at stage F.
+- **Plan 17** ✅, **plan 24** ✅, **plan 50** ✅, **plan 29** ✅.
+- **Plan 19** — the one substantial remainder, and the reason this stage is not closed.
+  M1's additive half plus M2–M4 need nothing from anyone; only M1's `PublishRejected` consumption
+  is blocked, re-verified 2026-08-20.
+- **Plan 12 M1–M2** — the `mcpServers` declaration and its validation. M3–M5 upstream-gated.
+  Under the rewrite-minimizing rule, do not schedule the partial implementation unless another
+  plan needs the declaration before the three upstream contracts land; otherwise it creates a
+  plan that must be reopened for M3–M5.
 
-### Stage C — Core semantics · **the current entry stage**, opened by plan 39
+### Stage D — Shared seams · **the current entry stage**
 
-- **Plan 17** — ✅ *gate cleared.* `shibuya-core 0.9` is pinned. Previously the highest-rework-risk
-  plan in the portfolio; now the safest time it will ever be to implement. The contingency advice
-  about isolating a private taxonomy behind one module is obsolete — do not do it.
-- **Plan 24** — versioning discipline. After 39 ✅. Build the mechanism; skip the in-flight proofs.
-  **This is the recommended next plan:** it is the first node on the longer of the two critical
-  paths, both its hard dependencies are complete, and its citations were refreshed on 2026-08-19
-  so it needs no pre-implementation update. It is also the first change that *exercises* plan
-  39's gate rather than installing it — `AgentRun.patches` is `[]` in the committed conformance
-  expectations, and this plan declares the first patch id.
-- **Plan 50** — fail-closed profile resolution and run pinning. After 39 ✅ + 49. It adds a
-  journaled workflow step, which is precisely what 39 governs — declaring it is two lines in
-  `domain/shikigami-agent-run.keiro`, and `resolve-profile` is already a valid wire word. Route
-  memory access through `Shikigami.Memory.Access`. **Plan 49 is the thing to land first if you
-  want the attestation pole moving in parallel with 24**; it is contract-only and unblocks
-  50 → 51 → 52.
-- **Plan 19 M2–M4** — sink delivery truth. After 16 ✅ and 28 M1 ✅. **M1 stays blocked** on keiro
-  `PublishRejected`, re-verified absent at 0.13.
-- **Plan 12 M1–M2** — the `mcpServers` declaration and its validation. M3–M5 stay upstream-gated.
-- **Plan 29 (local half)** — health and liveness. The worker probe waits on Shibuya IR-1;
-  **re-checked against `shibuya-core 0.9` and it is not addressed** — 0.9's only feature is the
-  dead-letter code vocabulary. Treat the probe as still gated.
+- **Plan 19's unblocked milestones** define truthful `SinkOutcome`, delivery receipts,
+  idempotency, and per-sink ordering. They need nothing from the missing Keiro
+  `PublishRejected`; leave only that terminal-constructor integration open.
+- **Plan 22**, strictly after plan 19's local work, owns `HttpEnv`, `TokenSource`,
+  `postJSONWithHeaders`, and the signing-credential class. Plans 14, 28 M3, 32, and 52 consume
+  those seams and must not grow local substitutes first.
+- **Plan 35** is the declaration and durable-delegation seam. It adds `delegates`,
+  `delegationBudget`, lineage, the shared budget ledger, and the Flow capability. It must precede
+  plan 40; plan 40's own plan says so even though the previous roadmap missed the dependency.
+- **Plan 23** is unblocked by plan 30 ✅. Land its directory and Meibo lifecycle view before plan
+  41, so plan 41 implements the real lifecycle adapter once instead of landing `local-enabled`
+  and replacing it later. It also releases plan 54.
+- **Plan 28 M2–M4**, after plan 22. M2 and M4 are independently startable, but waiting for M3's
+  `postJSONWithHeaders` dependency lets the remaining observability work land in one pass. Plans
+  20 and 29 already name the counters and health-path exclusion it must absorb.
+- **Plan 30** ✅ mounted `keiro-ops`, shipped the journaled workflow-to-session join, and removed
+  Kioku IR-2 from the operator path. **Plans 25, 26, 33, and 51** are also complete.
 
-### Stage D — Shared seams · after C
+### Stage E — Consolidation, then consumers · after D
 
-- **Plan 20** — explicit trigger routing and catch-up policy. After 17 + 18. Releases 30 and 33.
-- **Plan 22** — outbound authentication. After 19 (terminal delivery taxonomy) and preferably after
-  13 ✅ / 16 ✅. Sole owner of `HttpEnv`, `TokenSource`, `postJSONWithHeaders`; releases 14, 28 M3,
-  32, 52.
-- **Plans 25, 26** — replay-safe flow memory, conversation lifecycle. After 24 + 39.
-- **Plans 30, 33** — operator CLI, agent schema evolution. Both after 20's `AgentLoadReport`.
-- **Plan 51** — run evidence and compliance roll-up. After 49 + 50 + 39. Its real-evidence
-  milestone is **no longer upstream-gated**; bind to `Baikai.Evidence` and retire the stub.
-
-### Stage E — Feature completion · after D
-
-- **Plan 23** — agent lifecycle with Meibo principals. After 30 + 33, preferably 21. **Now also
-  establishes** the directory and the declaration-to-principal join that **plan 54** then consumes.
-- **Plan 54** — key durable agent state by Meibo principal (`IR-9`). Strictly after 23. Re-keys
-  memory scopes, grant subjects, run lineage, and outbound authorship onto the principal, and
-  retires the kioku deprecation debt by moving writes to `*WithContext`.
-- **Plan 27** — consolidate sink intent and run lifecycle. After 19 + 24 + 28. Consolidate freely.
-- **Plan 14** — approval and human-in-the-loop. After 17 + 22.
-- **Plan 32** — channel egress through Kanmon. After 19 + 22, preferably 21 + 27.
-- **Plan 34** — memory lifecycle. Distillation and retention can start earlier; the shared-scope
-  milestone waits for 33. Kioku IR-2 (indexed sessions, bounded reads) gates part of it.
-- **Plan 35** — delegation as a declared capability. After 24 + 33 + 39.
-- **Plan 48** — repository agent harness on `Baikai.Agent`. **No longer upstream-gated**; it could
-  move earlier than stage E now that its vocabulary exists, subject to its own dependencies.
-- **Plan 52** — signed attestation read API. After 51 + 22 + 44. Kikan IR-6 still ratifies the
-  envelope.
+- **Plan 27**, after plans 19, 28, and preferably 35. It consolidates the final sink-intent and
+  run-lifecycle shapes only after delivery, tracing, and `RunJob` lineage have stopped moving. It
+  is also the natural home for the five-patch-guard sweep.
+- **Plan 40**, after plan 35. It adds expertise and routing policy on top of plan 35's one
+  authoritative `delegates` list; doing 40 first would force its schema, loader, fixtures, and
+  validation tests to be reopened.
+- **Plan 41**, after plans 40 and 23. Plan 23 is nominally a soft dependency, but taking it first
+  avoids replacing the temporary local-enabled lifecycle adapter.
+- **Plan 54**, strictly after plan 23, keys durable state by the final principal identity and
+  retires the Kioku deprecation debt. **Plan 34 follows 54** so distillation, retention, and shared
+  scope are written against the final memory-access identity seam; its Kioku IR-2-dependent part
+  remains gated.
+- **Plans 14 and 32**, after plan 27 as well as their declared plan-19/22 gates. Their hard plans
+  allow an earlier start, but both touch sink/workflow surfaces that plan 27 consolidates; taking
+  the consolidation first is the lower-rewrite order. Plan 14 also owns the stable typed
+  review-request identifier.
+- **Plan 42**, after plans 35, 40, and 41 and after the plan-27 lifecycle consolidation in this
+  sequence. It is the first consumer that actually routes and delegates, so every policy,
+  lifecycle, budget, and replay seam should be final before it lands.
+- **Plan 45** is independently ready (43 ✅ + 25 ✅) and already consumes final contracts. It is
+  safe filler work when the shared-seam lane is blocked, but it does not unblock the current
+  bottleneck.
+- **Plan 48** is independently startable on `Baikai.Agent`, but register it under a MasterPlan
+  before implementation so its ownership does not need a second documentation pass.
 
 ### Stage F — Closure · last
 
-- **Plans 40 → 41 → 42** (strictly serial) — router declaration, catalog, replay-safe execution.
-  After 33; 42 additionally after 35.
-- **Plans 44, 45 → 46** — practice-review evidence and memory, then orchestration. After 43; 44
-  needs Kikan IR-5; 45 needs 25.
-- **Plan 31** — deployable stack. Genuinely last: it documents the configuration surfaces that
-  plans 13, 22, 29, and 32 own, and publishing it earlier means publishing placeholders.
+- **Plans 44 → 46** — 44 needs Kikan IR-5; 46 after 44 and 45.
+- **Plan 52** — after 51 ✅ + 22 + 14 + 44. It consumes plan 22's signing credential class, plan
+  14's review-request identity, plan 44's content plane, and plan 49's canonical encoder.
+- **Plan 31** — deployable stack. Genuinely last: it documents configuration surfaces that plans
+  13, 22, 29, and 32 own, and three of those grew this week.
 
 
 ## Critical path to v1
 
-```
-53 ✅ → 39 ✅ → 24 → 25/26/27/35 → 42
-               ↘ 49 → 50 → 51 → 52
-17 ✅gate → 20 → 30/33 → 23, 40→41→42
-18 ───────↗
-19 M2–M4 → 22 → 14, 32, 28 M3, 52
-                                  → 31
+```text
+Delivery:   19 → 22 → 28 ─┐
+                           ├→ 27 → 14 ─┐
+Delegation: 24 ✅ + 33 ✅  │        ↘ 32│
+            + 39 ✅ → 35 ─┘            │
+                                        ├→ 52 → 31
+Attestation: 49 ✅ → 50 ✅ → 51 ✅ ─────┤
+             43 ✅ → 44 ────────────────┘
+             43 ✅ → 45 ─┐
+                    44 ──┴→ 46
+
+Router:     35 → 40 ─┐
+            30 ✅ → 23 ┴→ 41 → 42
+Memory:             23 → 54 → 34
 ```
 
-The long pole is **24 → 35 → 42** on the feature side and **49 → 50 → 51 → 52** on the
-attestation side. Both used to start at plan 39; with 39 complete, the feature pole starts at
-**plan 24** (startable now, no update needed) and the attestation pole at **plan 49**
-(contract-only, no dependencies). They are independent and can run in parallel. **Nothing on the
-critical path waits on another repository** except plan 19 M1 (keiro `PublishRejected`), which is
-not a long-pole item.
+**The two poles from the last revision are both discharged.** The feature pole (24 → 25/26/27/35 →
+42) has lost its first three nodes; the attestation pole (49 → 50 → 51 → 52) has lost its first
+three too. What replaced them is a single bottleneck: **plan 19 → plan 22**, which now gates the
+attestation pole as well as egress, because plan 22 owns the signing credential class and plan 14 —
+which sits behind it — owns the review-request identity plan 51 left open.
 
-If a v1 cut smaller than "all 38 plans" becomes attractive, the natural line is **after stage D**:
-that yields a service with a real provider, honest sinks, correct delivery semantics, checked
-durable topology, authenticated egress, operator CLI, health, and observability. Stage E adds
-platform features and stage F adds two whole initiatives (router agents, practice reviews) plus
-packaging. Cutting there would defer MasterPlans 8, 9, and 10 rather than shipping them
-half-built.
+The immediate queue is therefore three seam definers, then their direct dependents:
+
+1. **Plan 19's unblocked milestones.** This is still the widest delivery unblocker.
+2. **Plan 35.** It must precede plan 40 and should precede plan 27 so both consume its final
+   declaration and `RunJob` shape.
+3. **Plan 23.** Plan 30 has released it; taking it now prevents plan 41 from shipping a temporary
+   lifecycle adapter and gives plan 54 its final directory/principal seam.
+4. **Plan 22**, after plan 19. This opens 28, 14, 32, and 52 without any of them inventing HTTP,
+   authentication, header, or signing vocabulary.
+5. **Plan 40**, after plan 35, and then **plan 41** after plan 23. This is the no-rewrite route into
+   the router initiative.
+6. **Plan 28 M2–M4**, after plan 22, as one pass rather than two partial implementations.
+7. **Plan 27**, after plans 19, 28, and 35, before sink/workflow consumers 14 and 32.
+8. **Plan 54**, after plan 23, before plan 34. It closes the temporary memory principal seam.
+
+Plan 45 is the safest independent filler if one of those lanes is blocked. Plans 12 M1–M2 and 34's
+ungated milestones are technically startable, but postponing them until their upstream contracts
+are available avoids deliberately reopening the same plan.
+
+Two nodes still wait on another repository: plan 19 M1's blocked half (Keiro
+`PublishRejected`) and plan 44 (Kikan IR-5). Neither justifies a local placeholder: plan 19's
+remaining milestones are independent, and the other lanes can advance while plan 44 waits.
+
+If a v1 cut smaller than "all 25 remaining plans" becomes attractive, the natural line has moved:
+**after stage D plus plans 14 and 27** yields a service with a real provider, honest sinks, correct
+delivery semantics, checked durable topology and versioning, fail-closed profile resolution, run
+evidence, authenticated egress, approvals, an operator CLI, health, and observability. Stage E's
+remainder adds identity and memory features; stage F adds two whole initiatives (router agents,
+practice reviews) plus packaging.
 
 
 ## Upstream gates, current status
 
-| Gate | Blocks | Status 2026-08-18 |
+| Gate | Blocks | Status 2026-08-20 |
 |---|---|---|
 | Kioku IR-1 | plan 47 | ✅ Closed. |
 | kioku 0.3.0.0 | plan 53 M0 | ✅ Closed; superseded by kioku 0.4.1.0. |
-| Baikai IR-3 | plans 51, 52 | ✅ **Closed.** `Baikai.Evidence` shipped in baikai 0.5.0.0 and baikai 0.5.0.0 is now pinned. |
-| keiro 0.12 | plan 17; improved 19, 29 | ✅ **Moot.** `keiro 0.13.0.0` lifted the `shibuya-core <0.9` cap instead; 0.9.0.0 is pinned. |
-| kioku admitting `baikai ^>=0.5` | plans 48, 51, 52 | ✅ **Closed 2026-08-18** by `kioku 0.4.1.0`. Never filed as a request. |
-| Keiro IR-3 / keiro plan 165 | plan 19 M1 | ❌ Re-verified at keiro 0.13: `PublishOutcome` is still `PublishSucceeded \| PublishFailed`. Plan 165 unimplemented. |
-| Kioku IR-2 | plans 26, 34 | ❌ Proposed. |
-| Shibuya IR-1 | plan 29's worker probe | ❌ Re-checked against `shibuya-core 0.9`: **not addressed.** 0.9 ships only the dead-letter code vocabulary. |
-| Baikai IR-2 | plan 12 M3–M5 | ❌ No `Baikai.Mcp.*` source in baikai 0.5. Now planned upstream (baikai MasterPlan 6, plans 30–32). |
-| Shikumi IR-1 | plan 12 | ❌ No MCP adapter in shikumi 0.3.0.2. Now planned upstream (shikumi plan 30). |
-| Kikan-En IR-3 | plan 12 | ❌ Proposed. |
-| Kikan IR-5 | plans 44, 46, 52 | ❌ Proposed. |
-| Kikan IR-6 | plan 52 | ❌ Proposed. Scope shrinks: it ratifies the envelope, not the encoder. |
-| Shikigami IR-9 | plans 34, 50, 51 | ⏳ Real but **not urgent**, and now planned: `docs/plans/54-key-durable-agent-state-by-meibo-principal.md` (after plan 23). Until it lands, `Shikigami.Memory.Access` mints self-asserted refs and the kioku deprecation debt stands. Kioku confirmed 2026-08-18 that no wrapper removal is scheduled. |
+| Baikai IR-3 | plans 51, 52 | ✅ **Closed and consumed.** Plan 51 landed on `Baikai.Evidence`. |
+| keiro 0.12 | plan 17 | ✅ **Moot and consumed.** keiro 0.13 lifted the cap; plan 17 landed. |
+| kioku admitting `baikai ^>=0.5` | plans 48, 51, 52 | ✅ Closed by `kioku 0.4.1.0`. |
+| Shibuya IR-1 | plan 29's worker probe | ✅ **Discharged in substance.** `shibuya-core 0.9.0.0` exports `getAppMetrics` / `ProcessorMetrics` / `ProcessorState` — a non-blocking read distinguishing idle, processing, failed-with-reason-and-time, and stopped, attributed by processor id. Plan 29 shipped on it and reports *last activity* rather than *last time we remembered to beat*. The IR is still `proposed` upstream and its second ask is unmet; it gates nothing here. |
+| Keiro IR-3 / keiro plan 165 | plan 19 M1's blocked half | ❌ Re-verified 2026-08-20 at `keiro-0.13.0.0`: `PublishOutcome` is two constructors and `Unreleased` is empty. Do **not** approximate a local terminal rejection. |
+| Kioku IR-2 | plan 34 | ❌ Still `proposed`. Plans 26 and 30 stopped waiting on it. |
+| Baikai IR-2 | plan 12 M3–M5 | ❌ No `Baikai.Mcp.*` source in baikai 0.5.0.0. Planned upstream. |
+| Shikumi IR-1 | plan 12 | ❌ No MCP adapter in shikumi 0.3.0.2. Planned upstream. |
+| Kikan-En IR-3 | plan 12 | ❌ Proposed; not re-verified this revision. |
+| Kikan IR-5 | plans 44, 46, 52 | ❌ Proposed; not re-verified this revision. |
+| Kikan IR-6 | plan 52 | ❌ Proposed. Scope shrinks further: it ratifies the envelope, and plan 49 has now frozen the encoder locally as a wire format (ADR 0006). |
+| Shikigami IR-9 | plans 23, 34, 54 | ⏳ Planned as plan 54, after plan 23. Until it lands, `Shikigami.Memory.Access` mints self-asserted refs and the kioku deprecation debt stands. |
+| **Shikigami IR-8 — outbound** | **`mori://shinzui/mori` plan 150, M4b** | ❌ **Shikigami is now somebody else's gate.** Mori's Agent automation action is written, its stage 4a is unblocked against a stub, and its stage 4b explicitly waits on Shikigami implementing IR-8. There is no plan here. See [Coverage gaps](#coverage-gaps). |
 
 The pattern to keep using where a contract is pending: define a reader or source record of function
 fields, satisfy it with a stub plus fixtures in tests, and let the live client replace the stub.
-Plan 44 does this for the content plane; plan 51 did it for call evidence — and plan 51 can now
-retire its stub.
-
-**One request worth filing outward.** kioku 0.4.0.0's changelog documents only the projection-schema
-relocation and says nothing about making `memorySpaceId` / `actorPrincipal` mandatory across its
-command and query API. That undocumented break was the largest single cost in plan 53 and was found
-by compiling, not by reading release notes. It gates nothing, but the next consumer deserves better.
+Plan 44 does this for the content plane; plan 51 did it for call evidence and has now exercised the
+seam against the released terminal trace source rather than fixtures alone.
 
 
 ## Coverage gaps
 
-Carried forward from the 2026-08-05 audit; none has closed.
+**Four inbound requests have no plan, and one of them blocks another repository.** IR-2 (authorized
+cross-cluster diagnostic tools), IR-5 (governed agent evolution), IR-6 (A2A cross-runtime
+interoperability), and — newly counted here — **IR-8 (expose addressed agent runs over the public
+HTTP API)** appear in no MasterPlan or ExecPlan.
 
-**Three inbound requests have no plan.** Of the requests in `docs/improvement-requests/`, IR-2
-(authorized cross-cluster diagnostic tools), IR-5 (governed agent evolution), and IR-6 (A2A
-cross-runtime interoperability) appear in no MasterPlan or ExecPlan. IR-5 is the consequential one —
-declaration revision, behavior artifact identity, run pinning, baseline-to-candidate relation,
-rollout policy — and plan 33 covers only `identity`, `memory`, and `enabled`. Plan 49's
-`AgentVersionRef` / `AgentArtifactSet` are deliberately shaped so a governed-evolution plan extends
-them additively. IR-6's upstream counterpart
-`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-4` is `accepted`, which makes an
-unplanned request here the most awkward of the three. **These three need a decision before v1 is
-declared feature-complete** — either plans, or an explicit post-v1 deferral.
+IR-8 is the urgent one and this document has never named it. It was filed 2026-08-07, after the
+2026-08-05 audit this section was carried forward from, so it fell through the gap between reviews.
+It has a waiting external consumer:
+`mori://shinzui/mori/plans/150-add-an-agent-automation-action-that-invokes-shikigami-agents-from-reactions`
+has re-architected itself around an HTTP call to Shikigami, split its Milestone 4 so that stage 4a
+proves the reaction against a stub, and recorded stage 4b as externally gated on Shikigami. **A
+sibling repository has restructured a plan around a request we have not scheduled.** That deserves
+either a plan or an explicit, communicated deferral — not silence.
 
-**IR-9 now has a plan.** `docs/plans/54-key-durable-agent-state-by-meibo-principal.md`, registered
-as EP-4 under MasterPlan 4, closes what was a coverage gap through 2026-08-18. It hard-depends on
-plan 23 — plan 23 implements `IR-1` and builds the Meibo-backed directory, and `IR-1` deliberately
-leaves Kioku memory scopes keyed by declaration name, which is precisely the gap `IR-9` closes.
+IR-5 remains the consequential one on the merits (declaration revision, artifact identity, run
+pinning, baseline-to-candidate relation, rollout policy), and plan 33's landing sharpens rather
+than closes it: plan 33 covers `identity`, `memory`, and `enabled`, and plan 49's `AgentVersionRef`
+/ `AgentArtifactSet` are shaped so a governed-evolution plan extends them additively. IR-6's
+upstream counterpart `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-4` is `accepted`.
 
-The deadline scare that made this look urgent is resolved. The working assumption on 2026-08-18
-was that kioku's deprecated write wrappers were about to be removed, forcing principal resolution
-ahead of schedule. Kioku confirmed the opposite: no removal is planned, the pragmas name no
-version, and ADR-8 gates deletion on every dependent Mori report compiling against `RecallTarget`,
-which is not close — kioku also found a **second consumer, `rei`**, still on kioku 0.1.0.0 and
-missing from Mori's dependent list entirely. A correction was applied in the meantime:
-`Shikigami.Memory.Access` records `KnownPrincipal` over a self-asserted ref rather than
-`LegacyPrincipal`, because the latter is decode-side only and falsely asserted that new events
-predate memory spaces.
+**Five plans belong to no MasterPlan.** Plans 7, 9, 10, 11 (complete) and plan 48 (open). Register
+48 now that its vocabulary (`Baikai.Agent`) and its package home (`shikigami-agent`) are both
+settled.
 
-So plan 54 inherits plan 23's stage-E position rather than needing to be pulled forward. It also
-owns retiring the ~24 kioku `-Wdeprecations` warnings, since the `*WithContext` surface needs the
-principals plan 54 supplies.
+**Seventeen registry rows are stale.** See [Registry rot](#registry-rot-seventeen-stale-rows). This is
+the cheapest open item in the portfolio and the one most likely to mislead the next reader.
 
-**Five plans belong to no MasterPlan.** Plans 7, 9, 10, 11 (complete) and plan 48 (open,
-unregistered). Register 48 under MasterPlan 7 or as its own initiative now that it is being
-rewritten on `Baikai.Agent` — and note that plan 55 gives it a package home first, so the two
-should be registered together. Plan 55 itself is registered as F4 under MasterPlan 2, because it
-corrects F1's output.
+**Five patch guards have unreachable legacy branches** and no owning plan. See
+[Compatibility work that v1 does not owe](#compatibility-work-that-v1-does-not-owe).
 
-**A capability was deleted because its purpose was undocumented.** Recorded here as a coverage
-gap in its own right: `shikigami-cli` served consumers not running the Kikan platform, and that
-requirement existed in no plan, MasterPlan, improvement request, or architecture document. It is
-worth asking which *other* capabilities are held only by intent. The three unplanned inbound
-requests above are the known unknowns; this was an unknown one.
-
-**Stale package placement — measured 2026-08-19 and wider than this entry said.** It is not just
-plans 43 and 33 and the MasterPlan-3 children: **19 plans with open work** cite `shikigami-cli` or
-`shikigami-core/src/Shikigami/Worker.hs`, neither of which exists. The full list, the corrected
-destinations, and the standing instruction are in [Citation rot](#citation-rot-19-open-plans).
-MasterPlan 3 still holds the corrected map for its own children.
+**A capability was once deleted because its purpose was undocumented** — `shikigami-cli` served
+consumers not running the Kikan platform, and that requirement existed in no plan or architecture
+document until plan 55 wrote it into `packages.md`. The question it raised is still open: which
+*other* capabilities are held only by intent? The four unplanned inbound requests above are the
+known unknowns.
 
 
-## Revision note (2026-08-19)
+## Revision note (2026-08-20)
 
-Plan 39 is complete, which moves the entry stage from B to C and re-points both critical paths.
-The feature pole now starts at **plan 24** and the attestation pole at **plan 49**; they are
-independent. Plan 24 is the recommended next plan, and unlike most of the corpus it needs no
-pre-implementation update — its citations were refreshed the same day.
+Twelve plans landed in two days: 17, 18, 20, 24, 25, 26, 29, 33, 43, 49, 50, and 51. The entry
+stage moves from C to D, and both of the previous revision's critical-path poles are discharged at
+their first three nodes. What replaced them is a single bottleneck — **plan 19 → plan 22** — which
+now gates the attestation pole as well as egress, because plan 22 owns the signing credential class
+and plan 14 behind it owns the review-request identity plan 51 deliberately left open. Plans 30,
+40, 35, and 45 are entry-ready in parallel.
 
-Two sections are new. [What plan 39 delivered](#what-plan-39-delivered-and-what-it-changes-for-everyone-else)
-records the census that reshaped it: Shikigami has no aggregate, no read model, no projection, no
-router, and no process manager, so the specification declares two durable workflows and nothing
-else, and four surfaces are deliberately undeclared because declaring them would certify a codec
-the runtime does not execute. That rule is now ADR 0001. Plans 14, 16, 26, 27, and 51 each
-acquired obligations from it, and plan 27's premise was wrong and is corrected in that plan.
+Two findings are new. [Registry rot](#registry-rot-seventeen-stale-rows) records that sixteen
+MasterPlan rows call a complete plan "Not Started", which is why the status-precedence rule at the
+top of this document is amended: the plan file wins, not the registry. And the
+audit-before-implement instruction from 2026-08-19 is widened from citations to four things —
+citations, the ADR corpus (3 records to 20 in two days), what the cohort already ships (three plans
+found a released package doing work they had scheduled), and any premise about runtime behaviour
+the plan has not executed. That last one is where the real cost was: plan 26's research was sound
+and three of its unexecuted inferences were wrong.
 
-[Citation rot](#citation-rot-19-open-plans) is the finding this document did not have before.
-Implementing plan 24 required fixing 21 of its 59 `file:line` citations, none of which its author
-got wrong — plan 36 deleted `shikigami-cli` and plan 53 moved keiro's line numbers underneath
-them. Measured across the corpus, 32 of 54 plans cite a deleted path and 19 of those are open.
-The standing instruction is to audit citations immediately before implementing a plan rather than
-batching the fix, because the corpus will rot again the next time a package moves.
+Smaller corrections. Plan 37 M3's description was stale — the `CODD_*` contract is gone and only
+the Settei unification remains, still blocked by the package cycle. Plan 8's build-and-test box is
+satisfied incidentally; only the live Danwa observation remains. Shibuya IR-1 is discharged in
+substance and no longer gates plan 29's worker probe. Kioku IR-2 no longer touches plan 26.
+`keiro-pgmq`, `keiro-ops`, and `shibuya-kafka-adapter` joined the cohort table. And **IR-8 is
+counted as a coverage gap for the first time**, which makes four unplanned inbound requests rather
+than three — the one that matters most, because mori has already restructured a plan around it.
 
-Smaller corrections: `keiro-dsl` is now pinned at `0.13.0.0` via `extra-packages`, where the
-cohort table said it was not pinned; the Stage B bullet for plan 21 was stale (21 has been
-complete since the 2026-08-18 revision); the Language-5 advice is discharged rather than
-outstanding; and the coverage-gap entry on stale package placement now carries a measured number
-instead of naming two plans.
 
-**Addendum (2026-08-19).** Plan 55 created, registered as MasterPlan 2's F4, and **implemented**
-the same day; the open set is 55 plans, 17 complete. See
-[the seventh package](#the-seventh-package-plan-55) for why plan 36's deletion of
-`shikigami-cli` needed correcting, and the coverage-gap note on capabilities held only by
-intent. The recommended next plan is unchanged: **plan 24** on the feature pole, **plan 49** on
-the attestation pole.
+## Revision note (2026-08-21)
+
+Plan 30 landed after the previous review. The portfolio is now 30 complete and 25 open. Its
+operator surface mounts `keiro-ops`, its Shikigami-owned run view joins Keiro to the exact Kioku
+session id stored in the workflow journal, and Kioku IR-2 is no longer an operator dependency.
+That releases plan 23. It also makes the stale MasterPlan count seventeen, adds ADR 0021, and
+corrects the test-suite advice: stop any manually started Shikigami processes before treating a
+hang as inherent parallel-suite deadlock.
+
+The larger correction is ordering. The previous revision called plan 40 entry-ready, but plan
+40's own Progress and Context sections hard-depend on plan 35's `delegates` and
+`delegationBudget`. This revision makes rewrite minimization the explicit sequencing rule and
+promotes two other soft preferences for the same reason: plan 23 precedes plan 41 so the catalog
+ships with the Meibo lifecycle adapter once, and plan 27 precedes plans 14 and 32 so those consumers
+land on the consolidated sink/workflow surface. The immediate queue is plan 19, plan 35, plan 23,
+then plan 22 and plan 40 as their respective prerequisites land.
