@@ -126,7 +126,7 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
-      deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
+      enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
   checkGrant grantSource (AgentIdentity agentName') kind <&> \case
     Left (Denied reason) ->
       PreparedSinkIntent
@@ -147,7 +147,7 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
               }
           event = sinkIntentEvent messageId runIdText now intent
        in PreparedSinkIntent
-            { sinkResult = deliveredResult,
+            { sinkResult = enqueuedResult,
               outboxMessage = Just (OutboxMessage outboxId event)
             }
 

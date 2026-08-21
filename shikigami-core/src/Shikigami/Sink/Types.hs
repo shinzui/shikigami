@@ -58,6 +58,10 @@ data SinkContext = SinkContext
 -- gate's @Denied@ newtype.
 data SinkOutcome
   = Delivered !Text -- a detail string (e.g. the returned id)
+  | -- | The sink intent was durably written to Keiro's outbox. This says only
+    -- that asynchronous delivery may now happen; it is deliberately distinct
+    -- from 'Delivered', which is reserved for a downstream acknowledgement.
+    Enqueued !Text
   | -- | __Deprecated: never produced.__ A stub handler ran and the dispatch was
     -- counted as a success, which is the lie
     -- @docs\/plans\/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md@
@@ -72,6 +76,11 @@ data SinkOutcome
     Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
   | Failed !Text -- the send errored (the worker decides retry)
+  | -- | The transport classified a failure as permanent. Until Keiro exposes
+    -- its terminal publication-rejection outcome, the publisher preserves this
+    -- as a failure rather than claiming success; see
+    -- @mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes@.
+    PermanentFailure !Text
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

@@ -18,10 +18,10 @@ module Shikigami.Flow.SinkOutbox.Publisher
 where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad (forever)
+import Control.Monad (forever, when)
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
-import Keiro.Outbox (defaultPublishOptions, publishClaimedOutbox)
+import Keiro.Outbox (OutboxPublishSummary (..), defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Outbox.Types (OutboxRow (..))
 import Kioku.App (runAppIO)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -49,10 +49,29 @@ runOutboxPublisher env = do
     result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
     case result of
       Left err -> Log.logError (envLogger env) "worker.outbox.failed" ["error" Aeson..= Text.pack (show err)]
-      Right _summary -> pure ()
+      Right summary -> logPublishSummary (envLogger env) summary
     -- Beat on every pass, including a failed one: a store error is a dependency
     -- being unavailable, not this loop being wedged, and the loop is
     -- demonstrably still going round. Beating only on success would restart the
     -- process for a database outage that readiness already reports.
     beat (envHeartbeats env) OutboxLoop
     threadDelay 1_000_000
+
+-- | Report only passes that claimed work, so an idle one-second polling loop
+-- does not fill the log. A dead-lettered row is an error, a retry is a warning,
+-- and a wholly successful pass is informational.
+logPublishSummary :: Log.Logger -> OutboxPublishSummary -> IO ()
+logPublishSummary logger OutboxPublishSummary {claimed, published, retried, dead} =
+  when (claimed > 0) do
+    let fields =
+          [ "claimed" Aeson..= claimed,
+            "published" Aeson..= published,
+            "retried" Aeson..= retried,
+            "dead" Aeson..= dead
+          ]
+    if dead > 0
+      then Log.logError logger "worker.outbox.dead_lettered" fields
+      else
+        if retried > 0
+          then Log.logWarn logger "worker.outbox.retried" fields
+          else Log.logInfo logger "worker.outbox.published" fields

@@ -761,7 +761,7 @@ enqueueSinkIntents grantSource job decl sid output = do
               messageId = sinkMessageId workflowId ordinal
               event = sinkIntentEvent messageId runIdText jobOccurredAt intent
               outboxId = deterministicOutboxId workflowId ordinal
-           in (SinkResult kind (Delivered ("outbox:" <> messageId)), Just (OutboxMessage outboxId event))
+           in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event))
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
@@ -817,7 +817,7 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
-      deliveredResult = SinkResult kind (Delivered ("outbox:" <> messageId))
+      enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
   checkGrant grantSource (AgentIdentity agentName') kind <&> \case
     Left (Denied reason) ->
       PreparedSinkIntent
@@ -838,7 +838,7 @@ prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal o
               }
           event = sinkIntentEvent messageId runIdText now intent
        in PreparedSinkIntent
-            { sinkResult = deliveredResult,
+            { sinkResult = enqueuedResult,
               outboxMessage = Just (OutboxMessage outboxId event)
             }
 
@@ -912,6 +912,8 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
               output
           pure $ case outcome result of
             Failed err -> PublishFailed err
+            PermanentFailure err -> PublishFailed err
+            Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
             _ -> PublishSucceeded
 
 -- | Record the run's learning, if the declared policy asks for one.
@@ -1022,22 +1024,27 @@ logSinkResult logger job result =
   where
     levelFor = \case
       Failed _ -> Log.Error
+      PermanentFailure _ -> Log.Error
       DeniedOutcome _ -> Log.Warn
       _ -> Log.Info
     outcomeText :: SinkOutcome -> Text
     outcomeText = \case
       Delivered _ -> "delivered"
+      Enqueued _ -> "enqueued"
       Stubbed -> "stubbed"
       DeniedOutcome _ -> "denied"
       Failed _ -> "failed"
+      PermanentFailure _ -> "permanent_failure"
     -- The detail rides under a key that says what kind of detail it is, so that
     -- a query for failures can read @error@ without also matching the returned
     -- id of a successful delivery.
     detailField = \case
       Delivered detail -> ["detail" Aeson..= detail]
+      Enqueued detail -> ["detail" Aeson..= detail]
       Stubbed -> []
       DeniedOutcome reason -> ["reason" Aeson..= reason]
       Failed err -> ["error" Aeson..= err]
+      PermanentFailure err -> ["error" Aeson..= err]
 
 triggerKindText :: Trigger -> Text
 triggerKindText = \case

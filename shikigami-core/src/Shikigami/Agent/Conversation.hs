@@ -83,7 +83,7 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
-import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered), SinkResult (..))
+import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered, Enqueued), SinkResult (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Text.Read (readMaybe)
 
@@ -1289,4 +1289,5 @@ requireRight = \case
 
 sinkResultDetail :: SinkResult -> Text
 sinkResultDetail SinkResult {outcome = Delivered detail} = detail
+sinkResultDetail SinkResult {outcome = Enqueued detail} = detail
 sinkResultDetail SinkResult {outcome = other} = Text.pack (show other)

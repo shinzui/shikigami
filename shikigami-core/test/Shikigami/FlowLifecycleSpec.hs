@@ -57,7 +57,7 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
-import Shikigami.Sink.Types (SinkOutcome (Delivered, DeniedOutcome), SinkResult (..))
+import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -123,7 +123,7 @@ tests =
         (outcome, count) <- runFlowWorkflowWithAgent "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
-          (Right (Completed (toJSON (SinkResult SKizashiSignal (Delivered "outbox:flow-sink-spike:emit-signal:alert")))))
+          (Right (Completed (toJSON (SinkResult SKizashiSignal (Enqueued "outbox:flow-sink-spike:emit-signal:alert")))))
           outcome
         assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do

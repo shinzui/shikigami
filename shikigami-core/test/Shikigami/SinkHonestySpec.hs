@@ -318,6 +318,8 @@ outcomeMappingTests =
 publishes :: SinkOutcome -> Bool
 publishes = \case
   Failed _ -> False
+  PermanentFailure _ -> False
+  Enqueued _ -> False
   _ -> True
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────

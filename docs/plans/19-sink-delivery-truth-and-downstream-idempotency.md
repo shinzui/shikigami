@@ -27,17 +27,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1 (startable half): additive `Enqueued` and `PermanentFailure` constructors in
-      `SinkOutcome`; enqueue sites tell the truth; logging/tests updated.
+- [x] (2026-08-21T15:10:14Z) Milestone 1 (startable half): additive `Enqueued` and
+      `PermanentFailure` constructors in `SinkOutcome`; enqueue sites tell the truth;
+      structured publisher summaries expose retries and dead letters; all 342 core tests pass.
 - [ ] Milestone 1 (blocked half): consume a released Keiro `PublishRejected` terminal outcome.
-      **Still blocked as of 2026-08-10.** `PublishOutcome` in `keiro/src/Keiro/Outbox.hs:266-271`
-      remains `PublishSucceeded | PublishFailed`, and the implementing plan
+      **Still blocked as of 2026-08-21, with the user implementing the upstream plan in
+      parallel.** The released Keiro 0.13 cohort still exposes only
+      `PublishSucceeded | PublishFailed`, and the implementing plan
       `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has
-      none of its four milestones done. Re-verified on 2026-08-10 against the `keiro-0.11.0.0`
-      tree; the keiro 0.11 upgrade does **not** move this, and neither will the pending 0.12,
-      whose `Unreleased` notes say nothing about it. Split out so the rest of this plan can
-      proceed — see Surprises & Discoveries.
-- [ ] Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete. Plan 28 M1 landed
+      not yet produced a released cohort Shikigami can consume. Split out so the rest of this
+      plan can proceed — see Surprises & Discoveries.
+- [x] (2026-08-21T15:10:14Z) Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete. Plan 28 M1 landed
       2026-08-05 and plan 38's schema gate is released, so the repository-side prerequisites are
       met; only the Keiro gate above remains, and it constrains one half of one milestone.
 - [ ] Milestone 2: pg-migrate-managed `sink_deliveries` change; `publishSinkIntent` records explicit pending/attempting/delivered/failed/dead/unknown states and skips only proven delivered messages.
@@ -54,7 +54,8 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-**The Keiro gate is real, narrow, and has not moved in a month (re-verified 2026-08-10).**
+**The Keiro gate is real and narrow (re-verified against the released 0.13 cohort on
+2026-08-21).**
 Milestone 1 wants a terminal `PublishRejected` outcome so a permanently rejected outbox
 publication stops being retried. It does not exist. `PublishOutcome` at
 `keiro/src/Keiro/Outbox.hs:266-271` is still exactly:
@@ -72,6 +73,12 @@ substantial and describes a 0.12 release, does not mention `PublishRejected` eit
 pending upgrade will not deliver it by accident. Third, keiro's own implementing plan
 `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has zero of
 four milestones complete, which is the honest calibration for how soon to expect it.
+
+Implementation ownership changed on 2026-08-21: the user is implementing the canonical Keiro
+plan in parallel, while this repository proceeds through the independent Shikigami milestones.
+Until that work is released as a coherent Keiro cohort, Shikigami keeps `PermanentFailure`
+additive but maps it to the existing retryable `PublishFailed`; no local terminal outcome is
+invented.
 
 The response is to split Milestone 1 rather than hold the plan. Everything else here — the
 additive `SinkOutcome` constructors, honest enqueue sites, the `sink_deliveries` receipt states,
@@ -125,6 +132,14 @@ Record every decision made while working on the plan.
 - Decision: Follow-ups filed, out of scope here: add an idempotency key to kizashi's create-signal API (field on `CreateSignalReq`, dedupe lookup in `handleCreateH`, unique index) and an external-key/start-idempotency story to danwa. Until then the receipt guard reduces but cannot eliminate duplicates (crash-window floor).
   Rationale: Server-side changes belong to those services' own plans; this plan must not block on them.
   Date: 2026-07-08
+
+- Decision: Proceed with Milestones 2-4 while the user owns Keiro plan 165 in parallel. Until a
+  released cohort exposes `PublishRejected`, retain `PermanentFailure` as an additive domain
+  outcome but translate it to retryable `PublishFailed` at the Keiro boundary.
+  Rationale: The receipt ledger, Danwa sub-receipt guard, and per-sink ordering keys have no
+  dependency on Keiro's terminal outcome. This preserves truthful failure semantics without
+  modifying the user's Keiro checkout or inventing a temporary framework behavior.
+  Date: 2026-08-21
 
 
 ## Outcomes & Retrospective
@@ -374,3 +389,7 @@ Mori. If absent, this plan owns the upstream addition/release before Shikigami c
 
   The prerequisites line was updated to reflect that plan 28 M1 landed on 2026-08-05 and plan 38's
   schema gate is released, so every repository-side prerequisite is now met.
+
+- 2026-08-21: Recorded completion of Milestone 1's Shikigami-owned half and the parallel ownership
+  boundary for Keiro plan 165. The released 0.13 cohort still lacks `PublishRejected`, so the
+  blocked half remains open while Milestones 2-4 proceed independently.

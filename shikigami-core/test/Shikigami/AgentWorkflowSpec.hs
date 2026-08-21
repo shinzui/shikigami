@@ -278,7 +278,7 @@ tests =
       -- check decides whether an outbox row is written at all, and the
       -- publish-time check revalidates before delivery. A revocation landing
       -- between them must stop the delivery even though the row is already
-      -- queued and its journaled SinkResult already says Delivered.
+      -- queued and its journaled SinkResult truthfully says Enqueued.
       testCase "a revocation between enqueue and publish delivers nothing" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
