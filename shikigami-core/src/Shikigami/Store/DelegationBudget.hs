@@ -94,7 +94,7 @@ insertBudgetStatement =
     INSERT INTO shikigami.delegation_budgets
       (budget_id, root_workflow_id, maximum, consumed, created_at, updated_at)
     VALUES ($1, $2, $3, 0, $4, $4)
-    ON CONFLICT (budget_id) DO NOTHING
+    ON CONFLICT DO NOTHING
     """
     ( ((\(DelegationBudgetId value, _, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((\(_, WorkflowId value, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))

@@ -1,7 +1,7 @@
 module Shikigami.AgentWorkflowSpec (tests) where
 
 import Control.Exception (SomeException, throwIO, try)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, void, when)
 import Data.Aeson (Result (..), Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
@@ -1040,6 +1040,46 @@ tests =
 
                 resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
                 assertEqual "parent resumes with child behavior output" (Right (Completed childOutput)) resumed,
+          testCase "a cycle is refused at the durable delegation boundary" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                parentSession <- genSessionId
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    parentWorkflowName = WorkflowName "shikigami.test-delegate-cycle"
+                    parentWorkflowId = WorkflowId "delegate-cycle-parent"
+                    supervisor = decl {delegates = ["heartbeat"]}
+                    ctx =
+                      DelegateCtx
+                        { delegateDepth = 0,
+                          sessionId = Just (idText parentSession),
+                          parentSessionId = Nothing,
+                          parentRunWorkflowId = Nothing,
+                          lineage = ["test-parent", "heartbeat"],
+                          delegationBudgetId = Nothing,
+                          budgetLimit = defaultDelegationBudget
+                        }
+                    parentBody = void (delegate supervisor ctx "cycle" "heartbeat" (object []))
+                refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
+                case refused of
+                  Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected "heartbeat") err
+                  Right outcome -> assertFailure ("cyclic delegation should fail before spawning, got " <> show outcome),
+          testCase "an exhausted root budget is refused before child spawn" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                parentSession <- genSessionId
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    parentWorkflowName = WorkflowName "shikigami.test-delegate-exhausted"
+                    parentWorkflowId = WorkflowId "delegate-exhausted-parent"
+                    supervisor = decl {delegates = ["heartbeat"]}
+                    zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
+                    ctx = (parentDelegateContext parentSession) {budgetLimit = zeroBudget}
+                    parentBody = void (delegate supervisor ctx "over-budget" "heartbeat" (object []))
+                refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
+                case refused of
+                  Left err -> assertEqual "the zero budget is exhausted" DelegationBudgetExhausted err
+                  Right outcome -> assertFailure ("over-budget delegation should fail before spawning, got " <> show outcome),
           testCase "proof supervisor fans out to specialists and records lineage" do
             withShikigamiMigratedDatabase \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -1049,8 +1089,8 @@ tests =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
-                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web"
-                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" "code"
+                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "delegate-0"
+                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" "delegate-1"
                     WorkflowId webWorkflowIdText = webWorkflowId
                     WorkflowId codeWorkflowIdText = codeWorkflowId
                     expectedRunningChildLinks =

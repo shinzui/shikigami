@@ -104,7 +104,7 @@ workflow AgentRun
     step complete -> CompletedSession
     # Shikigami.Agent.Delegate.delegate spawns a child of this same workflow;
     # the child id comes from the parent workflow id, the child agent name, and
-    # a fresh per-run ordinal.
+    # a caller-supplied stable delegation key.
     child delegate id input via delegatedWorkflowId -> AgentRunResult
 
 operation RunAgentRun

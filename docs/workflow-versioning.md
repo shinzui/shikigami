@@ -493,18 +493,18 @@ the un-journaled behavior its journal was written under. Every step ever added t
 grows, and delete the guard and its `False` branch together once no pre-change
 instance can resume.
 
-Two ordinal-derived names remain, and this document does not fix them; it records
+Two ordinal-derived names remain, and this document records their owners.
 that they are governed by rule 5 and names their owners.
 `approval:<SinkKind>:<ordinal>` counts approvals within one run, so inserting a
 sink into an agent declaration shifts the names of every later approval.
 `next-message:<ordinal>` counted conversation turns; it survives only on the
 `False` branch of `shikigami-conversation-rotation-v1`, because the rotating
 shape holds one turn per generation and so awaits the bare `next-message`. A
-third instance is not a step name but has the same shape: `delegate` derives a
-child workflow id from `freshOrdinal "delegate"`
-(`shikigami-core/src/Shikigami/Agent/Delegate.hs:46-48`), and the child's journal
-record is named after that id, so an ordinal shift moves the child. Plan 35 owns
-delegation.
+Delegated child identity no longer shares that hazard: `delegate` derives a child
+workflow id from the parent workflow id, target agent, and a caller-supplied stable
+key. The declaration-driven supervisor derives its keys from the `delegates` list
+stored in the journaled `lookup-agent` result, so a later manifest edit cannot move
+an in-flight run's children.
 
 
 ## Undeclarable label families

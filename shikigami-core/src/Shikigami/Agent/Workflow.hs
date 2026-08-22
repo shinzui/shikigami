@@ -28,6 +28,7 @@ where
 
 import Data.Aeson (Key, Value)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
@@ -79,7 +80,7 @@ import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, run
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
-import Shikigami.Agent.Delegate (awaitDelegated, delegate)
+import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
@@ -98,7 +99,6 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
-import Shikigami.Program.Registry (codeResearcherTaskName, researchSupervisorTaskName, webResearcherTaskName)
 import Shikigami.Sink (DanwaConfig, DanwaTarget, DeliveryGuard (..), GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), SinkKind, sinkKindText)
@@ -338,10 +338,9 @@ runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPoli
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
         Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
-        ShikumiProgram {task}
-          | task == researchSupervisorTaskName ->
-              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
         _
+          | not (null (delegates decl)) ->
+              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
           | useRetrySemantics ->
               first PermanentAgentRunFailure
                 <$> runStep
@@ -566,13 +565,13 @@ runBehaviorStep ::
 runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
-    ShikumiProgram {task}
-      | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor deps decl sid job
-    _ ->
-      liftIO
-        ( first (Text.pack . show)
-            <$> runBehavior activeBehaviorEnv decl BehaviorInput {payload = triggerPayload, recalled = prior}
-        )
+    _
+      | not (null (delegates decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
+      | otherwise ->
+          liftIO
+            ( first (Text.pack . show)
+                <$> runBehavior activeBehaviorEnv decl BehaviorInput {payload = triggerPayload, recalled = prior}
+            )
 
 runFlowBehavior ::
   (Workflow :> es, Store :> es, IOE :> es) =>
@@ -627,30 +626,35 @@ syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempote
       Activity.idempotencyKey = idempotencyKey
     }
 
-runResearchSupervisor ::
+runDeclaredSupervisor ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
   AgentDecl ->
   SessionId ->
   RunJob ->
   Eff es Value
-runResearchSupervisor deps decl currentSession job@RunJob {triggerPayload} = do
+runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentSession job@RunJob {triggerPayload} = do
   let ctx = delegateContext deps decl currentSession job
-      childPayload role =
+      delegationKey ordinal = "delegate-" <> Text.pack (show ordinal)
+      resultLabel target = fromMaybe target (Text.stripSuffix "-researcher" target)
+      childPayload target =
         Aeson.object
-          [ (Aeson..=) "role" role,
+          [ (Aeson..=) "role" (resultLabel target),
             (Aeson..=) "input" triggerPayload
           ]
-  web <- delegate decl ctx "web" webResearcherTaskName (childPayload ("web" :: Text))
-  code <- delegate decl ctx "code" codeResearcherTaskName (childPayload ("code" :: Text))
-  webFinding <- awaitDelegated web
-  codeFinding <- awaitDelegated code
+  childHandles <-
+    traverse
+      (\(ordinal, target) -> delegate decl ctx (delegationKey ordinal) target (childPayload target))
+      (zip [(0 :: Int) ..] delegateTargets)
+  findings <- awaitAllDelegated childHandles
   pure
     ( Aeson.object
-        [ (Aeson..=) "summary" ("research-supervisor synthesized delegated findings" :: Text),
-          (Aeson..=) "web" (webFinding :: Value),
-          (Aeson..=) "code" (codeFinding :: Value)
-        ]
+        ( (Aeson..=) "summary" (agentDeclName decl <> " synthesized delegated findings")
+            : zipWith
+              (\target finding -> (Aeson..=) (Key.fromText (resultLabel target)) (either Aeson.String id finding))
+              delegateTargets
+              findings
+        )
     )
 
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx

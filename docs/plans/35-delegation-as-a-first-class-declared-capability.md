@@ -101,8 +101,15 @@ This section must always reflect the actual current state of the work.
       cancel-remaining-on-first-observed-failure. Real-Postgres tests retain one success beside a
       typed child failure and prove a still-running sibling receives Keiro's durable `Cancelled`
       outcome.
-- [ ] M5: re-express `runResearchSupervisor` on the general mechanism (allow-list + budget + awaitAll); delete the `task == researchSupervisorTaskName` special case.
-- [ ] Tests: allow-list refusal, cycle refusal, budget refusal, partial-collection + sibling cancel — all under `withShikigamiMigratedDatabase`.
+- [x] (2026-08-22T22:58:45Z) M5: replaced `runResearchSupervisor` with a
+      declaration-driven supervisor for any non-Flow agent whose journaled declaration has a
+      non-empty `delegates` list. It assigns stable `delegate-<index>` keys from that journaled
+      list, uses `awaitAllDelegated`, preserves the proof output, and leaves no
+      `researchSupervisorTaskName` branch in the workflow.
+- [x] (2026-08-22T22:58:45Z) Tests: all 16 targeted delegation tests pass,
+      including real-Postgres call-boundary refusals for allow-list, cycle, and exhausted budget;
+      concurrent global-budget enforcement; partial collection; durable sibling cancellation; and
+      both imperative and Flow fan-out.
 
 
 ## Surprises & Discoveries
@@ -145,6 +152,11 @@ implementation. Provide concise evidence.
   `Either AgentRunFailure AgentRunResult`. Success-only tests hid the mismatch; the first failed-child
   test produced `WorkflowStepDecodeError` because a structured failure object was being parsed as
   `Text`. Moving `AgentRunFailure` to a shared module makes the handle match the actual wire type.
+- (Implementation, 2026-08-22) Concurrent first reservations for the same root can race on
+  either the `budget_id` primary key or the separate `root_workflow_id` unique constraint.
+  `ON CONFLICT (budget_id) DO NOTHING` handled only the first and intermittently surfaced SQLSTATE
+  `23505`; targetless `ON CONFLICT DO NOTHING` makes either deterministic identity collision the
+  same idempotent seed outcome before the row lock.
 
 
 ## Decision Log
