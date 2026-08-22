@@ -26,6 +26,8 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
+import Shikigami.Flow.Delegate (Delegate)
+import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 
 -- | Everything a flow body may do, and therefore everything it may not.
@@ -46,7 +48,7 @@ import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCus
 --
 -- Adding an effect here widens what every flow may do. Add a capability instead.
 type FlowEffects es =
-  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es)
+  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es, Delegate :> es)
 
 -- | What 'Shikigami.Flow.Acknowledgement.runAcknowledgement' needs to interpret
 -- a flow's parks.
@@ -102,8 +104,25 @@ flowRegistry =
       { name = "at-risk-customer",
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
+      },
+    FlowDef
+      { name = "delegation-proof",
+        lifecycle =
+          LifecycleDiagram
+            { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
+              validationWarnings = []
+            },
+        run = delegationProofFlow
       }
   ]
+
+-- | Minimal registered proof that Flow can reach the same governed child-run
+-- machinery as an imperative supervisor. The target and call-site key are
+-- static durable vocabulary; the triggering payload remains the child's input.
+delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value
+delegationProofFlow payload = do
+  child <- Delegate.delegate "web-researcher" "web-researcher" payload
+  Delegate.awaitOne child
 
 -- | The name of every registered flow.
 --

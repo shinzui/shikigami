@@ -47,18 +47,20 @@ import Keiro.Workflow
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..))
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Kioku.Id (SessionId, genSessionId)
+import Kioku.Id (SessionId, genSessionId, idText)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
+import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (defaultGrantTable)
@@ -414,6 +416,20 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
     $ runWorkflowWith options flowWorkflowName workflowId body
   where
     memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, sessionId = Nothing}
+    delegateEnv =
+      FlowDelegate.DelegateEnv
+        { FlowDelegate.agent = flowAgentDecl,
+          FlowDelegate.context =
+            DelegateCtx
+              { delegateDepth = 0,
+                sessionId = Just (idText (Approval.currentSession (approval runtime))),
+                parentSessionId = Nothing,
+                parentRunWorkflowId = Nothing,
+                lineage = ["at-risk-customer"],
+                delegationBudgetId = Nothing,
+                budgetLimit = defaultDelegationBudget
+              }
+        }
     sinkEnv =
       SinkEnv
         { agent = "at-risk-customer",
@@ -427,6 +443,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
       runActivity sampleActivity
         . runMemory memoryEnv
         . runSink sinkEnv
+        . FlowDelegate.runDelegate delegateEnv
         . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
         $ run highRiskPayload
 

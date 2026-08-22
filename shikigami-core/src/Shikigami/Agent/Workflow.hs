@@ -82,6 +82,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, Me
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
+import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
@@ -91,6 +92,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId,
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability qualified as FlowCapability
+import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -135,20 +137,6 @@ data AgentRunDeps = AgentRunDeps
     resolveRunProfile ::
       !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile))
   }
-
--- | Why an agent run completed without a result. This value is returned by the
--- workflow but is not stored as a step value, so it may distinguish the legacy
--- retry path from a permanent v2 failure without changing any journal decoder.
-data AgentRunFailure
-  = LegacyBehaviorFailure !Text
-  | PermanentAgentRunFailure !Text
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
-agentRunFailureDetail :: AgentRunFailure -> Text
-agentRunFailureDetail = \case
-  LegacyBehaviorFailure detail -> detail
-  PermanentAgentRunFailure detail -> detail
 
 data AgentRunHooks = AgentRunHooks
   { beforeStepBody :: !(StepName -> IO ()),
@@ -602,11 +590,13 @@ runFlowBehavior deps sid decl job flowName =
         FlowCapability.runActivity (activityFromJob job)
           . FlowCapability.runMemory memoryEnv
           . FlowCapability.runSink sinkEnv
+          . FlowDelegate.runDelegate delegateEnv
           . runAcknowledgement (approval deps sid) (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
           $ run (triggerPayload job)
       pure (Right output)
   where
     memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
+    delegateEnv = FlowDelegate.DelegateEnv {FlowDelegate.agent = decl, FlowDelegate.context = delegateContext deps decl sid job}
     sinkEnv =
       FlowCapability.SinkEnv
         { FlowCapability.agent = agentName job,
@@ -644,17 +634,8 @@ runResearchSupervisor ::
   SessionId ->
   RunJob ->
   Eff es Value
-runResearchSupervisor deps decl currentSession RunJob {agentName, triggerPayload, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} = do
-  let ctx =
-        DelegateCtx
-          { delegateDepth = fromMaybe 0 delegationDepth,
-            sessionId = Just (idText currentSession),
-            parentSessionId,
-            parentRunWorkflowId,
-            lineage = if null lineage then [agentName] else lineage,
-            delegationBudgetId,
-            budgetLimit = fromMaybe (depsDelegationBudget deps) (declDelegationBudget decl)
-          }
+runResearchSupervisor deps decl currentSession job@RunJob {triggerPayload} = do
+  let ctx = delegateContext deps decl currentSession job
       childPayload role =
         Aeson.object
           [ (Aeson..=) "role" role,
@@ -671,6 +652,18 @@ runResearchSupervisor deps decl currentSession RunJob {agentName, triggerPayload
           (Aeson..=) "code" (codeFinding :: Value)
         ]
     )
+
+delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
+delegateContext deps decl currentSession RunJob {agentName, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} =
+  DelegateCtx
+    { delegateDepth = fromMaybe 0 delegationDepth,
+      sessionId = Just (idText currentSession),
+      parentSessionId,
+      parentRunWorkflowId,
+      lineage = if null lineage then [agentName] else lineage,
+      delegationBudgetId,
+      budgetLimit = fromMaybe (depsDelegationBudget deps) (declDelegationBudget decl)
+    }
 
 -- | Mark the run's session failed, after one best-effort learning write.
 --

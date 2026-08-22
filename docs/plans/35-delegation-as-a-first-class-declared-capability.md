@@ -93,8 +93,14 @@ This section must always reflect the actual current state of the work.
       rejection before spawning. Store tests prove replay idempotency, missing-ledger refusal,
       and exactly three winners across ten concurrent reservations under a budget of three;
       all ten targeted delegation tests pass.
-- [ ] M3: a `Delegate` Flow capability (`delegate`, `awaitDelegated`, `awaitAllDelegated`) added to `FlowEffects`; allow-list enforced at the capability boundary.
-- [ ] M4: `awaitAllDelegated :: [Delegated a] -> Eff es [Either Text a]` and sibling cancellation via keiro `cancelChild`; a failure-policy field or awaitAll variant.
+- [x] (2026-08-22T22:53:46Z) M3: added the `Delegate` Flow capability and interpreter,
+      installed it in production and test Flow runners, and registered a proof Flow. Real-Postgres
+      tests prove an allow-listed Flow delegates and resumes while a denied target raises
+      `DelegationNotAllowed` at the shared call boundary.
+- [x] (2026-08-22T22:53:46Z) M4: added partial collection, direct cancellation, and
+      cancel-remaining-on-first-observed-failure. Real-Postgres tests retain one success beside a
+      typed child failure and prove a still-running sibling receives Keiro's durable `Cancelled`
+      outcome.
 - [ ] M5: re-express `runResearchSupervisor` on the general mechanism (allow-list + budget + awaitAll); delete the `task == researchSupervisorTaskName` special case.
 - [ ] Tests: allow-list refusal, cycle refusal, budget refusal, partial-collection + sibling cancel — all under `withShikigamiMigratedDatabase`.
 
@@ -134,6 +140,11 @@ implementation. Provide concise evidence.
   unstable when code inserts or reorders delegation calls. The general capability needs a
   caller-supplied stable key; preserving the ordinal API would formalise the exact hazard this plan
   owns.
+- (Implementation, 2026-08-22) The delegated handle decoded the workflow result as
+  `Either Text AgentRunResult`, but the agent-run workflow durably writes
+  `Either AgentRunFailure AgentRunResult`. Success-only tests hid the mismatch; the first failed-child
+  test produced `WorkflowStepDecodeError` because a structured failure object was being parsed as
+  `Text`. Moving `AgentRunFailure` to a shared module makes the handle match the actual wire type.
 
 
 ## Decision Log

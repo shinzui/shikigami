@@ -31,6 +31,7 @@ library
     Shikigami.Agent.Delegate.Context
     Shikigami.Agent.Loader
     Shikigami.Agent.Run
+    Shikigami.Agent.RunFailure
     Shikigami.Agent.RunJob
     Shikigami.Agent.Skill
     Shikigami.Agent.Workflow
@@ -59,6 +60,7 @@ library
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
+    Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.SinkOutbox
     Shikigami.Generated.Conformance

@@ -28,7 +28,8 @@ import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Capability
@@ -48,6 +49,7 @@ import Shikigami.Flow.Capability
     runMemory,
     runSink,
   )
+import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer
   ( atRiskCustomerMermaid,
     atRiskCustomerValidationWarnings,
@@ -97,7 +99,7 @@ tests =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: at-risk-customer"]
+          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
         assertEqual
           "a registered flow is accepted"
@@ -526,7 +528,22 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
       workflowId
       body
   where
-    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl flowAgent, sessionId = Nothing}
+    flowDecl = flowAgentDecl flowAgent
+    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, sessionId = Nothing}
+    delegateEnv =
+      FlowDelegate.DelegateEnv
+        { FlowDelegate.agent = flowDecl,
+          FlowDelegate.context =
+            DelegateCtx
+              { delegateDepth = 0,
+                sessionId = Just (idText (Approval.currentSession (approval runtime))),
+                parentSessionId = Nothing,
+                parentRunWorkflowId = Nothing,
+                lineage = [flowAgent],
+                delegationBudgetId = Nothing,
+                budgetLimit = defaultDelegationBudget
+              }
+        }
     sinkEnv =
       SinkEnv
         { agent = flowAgent,
@@ -542,6 +559,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
       runActivity sampleActivity
         . runMemory memoryEnv
         . runSink sinkEnv
+        . FlowDelegate.runDelegate delegateEnv
         . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
         $ run input
 

@@ -47,9 +47,9 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkRecallLimit)
-import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
+import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
@@ -1112,7 +1112,97 @@ tests =
                           ]
                       )
                       (lineageSummary rows)
-                  other -> assertFailure ("getDelegationChildren should return rows, got " <> show (first (const ("store-error" :: String)) other))
+                  other -> assertFailure ("getDelegationChildren should return rows, got " <> show (first (const ("store-error" :: String)) other)),
+          testCase "Flow delegates through the governed capability" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                proofAgents <- loadProofAgents
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
+                    parentWorkflowId = WorkflowId (idempotencyKey flowDelegationJob)
+                    childWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web-researcher"
+
+                parked <- runAgentRunWorkflow deps flowDelegationJob
+                assertEqual "delegating Flow parks on its child" (Right Suspended) parked
+                childRun <-
+                  runAppIO appEnv $
+                    runChildWorkflow
+                      defaultWorkflowRunOptions
+                      agentRunWorkflowName
+                      childWorkflowId
+                      (agentRunWorkflow deps Nothing)
+                assertChildCompleted "Flow specialist completes" childRun
+                resumed <- runAgentRunWorkflow deps flowDelegationJob
+                case resumed of
+                  Right (Completed (Right AgentRunResult {behaviorOutput})) ->
+                    assertEqual "Flow returns the delegated output" expectedWebFinding behaviorOutput
+                  other -> assertFailure ("delegating Flow should complete, got " <> show other),
+          testCase "Flow refuses a target absent from its declaration" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                proofAgents <- loadProofAgents
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    deniedDecl = flowDelegationDecl {delegates = []}
+                    deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (deniedDecl : proofAgents)
+                refused <- try @DelegationError (runAgentRunWorkflow deps flowDelegationDeniedJob)
+                assertEqual "the capability applies the agent allow-list" (Left (DelegationNotAllowed "web-researcher")) refused,
+          testCase "awaitAllDelegated retains successes beside a failed child" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                parentSession <- genSessionId
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl, missingTaskDecl]
+                    supervisor = collectionSupervisorDecl
+                    parentWorkflowName = WorkflowName "shikigami.test-delegate-collect"
+                    parentWorkflowId = WorkflowId "delegate-collect-parent"
+                    successId = delegatedWorkflowId parentWorkflowId "heartbeat" "success"
+                    failureId = delegatedWorkflowId parentWorkflowId "missing-task-agent" "failure"
+                    parentBody = parentCollectWorkflow parentSession supervisor
+
+                parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                assertEqual "collector parks on child results" (Right Suspended) parked
+                successRun <- runAppIO appEnv (runChildWorkflow defaultWorkflowRunOptions agentRunWorkflowName successId (agentRunWorkflow deps Nothing))
+                failureRun <- runAppIO appEnv (runChildWorkflow defaultWorkflowRunOptions agentRunWorkflowName failureId (agentRunWorkflow deps Nothing))
+                assertChildCompleted "successful collected child completes" successRun
+                assertChildFailed "failed agent run still produces its typed child result" failureRun
+                resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                case resumed of
+                  Right (Completed [Right _, Left failure]) ->
+                    assertBool ("the failure should be retained as a delegated outcome: " <> Text.unpack failure) ("DelegatedChildFailed" `Text.isPrefixOf` failure)
+                  other -> assertFailure ("collector should retain one success and one failure, got " <> show other),
+          testCase "first observed failure cancels a running sibling truthfully" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                parentSession <- genSessionId
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl, missingTaskDecl]
+                    supervisor = collectionSupervisorDecl
+                    parentWorkflowName = WorkflowName "shikigami.test-delegate-cancel"
+                    parentWorkflowId = WorkflowId "delegate-cancel-parent"
+                    failureId = delegatedWorkflowId parentWorkflowId "missing-task-agent" "failure-first"
+                    siblingId = delegatedWorkflowId parentWorkflowId "heartbeat" "cancelled-sibling"
+                    parentBody = parentCancellationWorkflow parentSession supervisor
+
+                parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                assertEqual "cancelling collector parks on the failure-first child" (Right Suspended) parked
+                failureRun <- runAppIO appEnv (runChildWorkflow defaultWorkflowRunOptions agentRunWorkflowName failureId (agentRunWorkflow deps Nothing))
+                assertChildFailed "failure-first child records its typed result" failureRun
+                resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
+                case resumed of
+                  Right (Completed [Left failure, Left cancellation]) -> do
+                    assertBool "the first result records the child failure" ("DelegatedChildFailed" `Text.isPrefixOf` failure)
+                    assertEqual "the sibling result says why it was cancelled" "delegated child cancelled after sibling failure" cancellation
+                  other -> assertFailure ("cancellation collector should return two failures, got " <> show other)
+                cancelledChild <- runAppIO appEnv (runChildWorkflow defaultWorkflowRunOptions agentRunWorkflowName siblingId (agentRunWorkflow deps Nothing))
+                assertEqual "the sibling workflow carries Keiro's cancelled marker" (Right Cancelled) cancelledChild
         ],
       testGroup
         "Approval"
@@ -1219,19 +1309,35 @@ parentDelegateWorkflow currentSession = do
   delegated <-
     delegate
       (decl {delegates = ["heartbeat"]})
-      DelegateCtx
-        { delegateDepth = 0,
-          sessionId = Just (idText currentSession),
-          parentSessionId = Nothing,
-          parentRunWorkflowId = Nothing,
-          lineage = ["test-parent"],
-          delegationBudgetId = Nothing,
-          budgetLimit = defaultDelegationBudget
-        }
+      (parentDelegateContext currentSession)
       "heartbeat"
       "heartbeat"
       (object ["source" .= ("delegate-test" :: Text)])
   awaitDelegated delegated
+
+parentCollectWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
+parentCollectWorkflow currentSession supervisor = do
+  success <- delegate supervisor (parentDelegateContext currentSession) "success" "heartbeat" (object [])
+  failure <- delegate supervisor (parentDelegateContext currentSession) "failure" "missing-task-agent" (object [])
+  awaitAllDelegated [success, failure]
+
+parentCancellationWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
+parentCancellationWorkflow currentSession supervisor = do
+  failure <- delegate supervisor (parentDelegateContext currentSession) "failure-first" "missing-task-agent" (object [])
+  sibling <- delegate supervisor (parentDelegateContext currentSession) "cancelled-sibling" "heartbeat" (object [])
+  cancelSiblingsOnFailure [failure, sibling]
+
+parentDelegateContext :: SessionId -> DelegateCtx
+parentDelegateContext currentSession =
+  DelegateCtx
+    { delegateDepth = 0,
+      sessionId = Just (idText currentSession),
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      lineage = ["test-parent"],
+      delegationBudgetId = Nothing,
+      budgetLimit = defaultDelegationBudget
+    }
 
 testDeps :: AppEnv -> BehaviorEnv -> AgentRunHooks -> AgentRunDeps
 testDeps appEnv behaviorEnv hooks =
@@ -1326,6 +1432,11 @@ loadProofAgents = do
 assertChildCompleted :: String -> Either err (WorkflowOutcome (Either AgentRunFailure AgentRunResult)) -> IO ()
 assertChildCompleted label = \case
   Right (Completed (Right _)) -> pure ()
+  other -> assertFailure (label <> ", got " <> show (first (const ("store-error" :: String)) other))
+
+assertChildFailed :: String -> Either err (WorkflowOutcome (Either AgentRunFailure AgentRunResult)) -> IO ()
+assertChildFailed label = \case
+  Right (Completed (Left _)) -> pure ()
   other -> assertFailure (label <> ", got " <> show (first (const ("store-error" :: String)) other))
 
 lineageSummary :: [SessionRow] -> Set.Set (Text, Maybe Text, Int)
@@ -1667,6 +1778,30 @@ flowDecl =
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
+    }
+
+flowDelegationDecl :: AgentDecl
+flowDelegationDecl =
+  AgentDecl
+    { name = "flow-delegation-supervisor",
+      description = "workflow Flow delegation test agent",
+      trigger = Event {eventType = "test"},
+      behavior = Flow {name = "delegation-proof"},
+      sinks = [],
+      delegates = ["web-researcher"],
+      delegationBudget = Just (either (error . Text.unpack) id (mkDelegationBudget 1)),
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
+    }
+
+collectionSupervisorDecl :: AgentDecl
+collectionSupervisorDecl =
+  decl
+    { name = "test-collection-supervisor",
+      sinks = [],
+      delegates = ["heartbeat", "missing-task-agent"]
     }
 
 conversationDecl :: AgentDecl
@@ -2200,15 +2335,40 @@ researchSupervisorJob =
       delegationBudgetId = Nothing
     }
 
+flowDelegationJob :: RunJob
+flowDelegationJob =
+  RunJob
+    { agentName = "flow-delegation-supervisor",
+      triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object ["topic" .= ("durable workflows" :: Text)],
+      idempotencyKey = "flow-delegation-supervisor:test-allowed",
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing,
+      lineage = ["flow-delegation-supervisor"],
+      delegationBudgetId = Nothing
+    }
+
+flowDelegationDeniedJob :: RunJob
+flowDelegationDeniedJob =
+  flowDelegationJob
+    { idempotencyKey = "flow-delegation-supervisor:test-denied"
+    }
+
+expectedWebFinding :: Value
+expectedWebFinding =
+  object
+    [ "agent" .= ("web-researcher" :: Text),
+      "finding" .= ("Web sources indicate durable workflow delegation should journal child waits." :: Text)
+    ]
+
 expectedSupervisorOutput :: Value
 expectedSupervisorOutput =
   object
     [ "summary" .= ("research-supervisor synthesized delegated findings" :: Text),
-      "web"
-        .= object
-          [ "agent" .= ("web-researcher" :: Text),
-            "finding" .= ("Web sources indicate durable workflow delegation should journal child waits." :: Text)
-          ],
+      "web" .= expectedWebFinding,
       "code"
         .= object
           [ "agent" .= ("code-researcher" :: Text),

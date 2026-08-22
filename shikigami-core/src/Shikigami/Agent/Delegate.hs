@@ -3,6 +3,9 @@ module Shikigami.Agent.Delegate
   ( Delegated (..),
     delegate,
     awaitDelegated,
+    awaitAllDelegated,
+    cancelDelegated,
+    cancelSiblingsOnFailure,
     delegatedWorkflowId,
   )
 where
@@ -14,13 +17,14 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
-import Effectful.Exception (catchSync, throwIO)
+import Effectful.Exception (catchSync, throwIO, trySync)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow)
-import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, spawnChild)
+import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, cancelChild, spawnChild)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Id.Name (nameBytes)
@@ -34,7 +38,7 @@ import Shikigami.Store.DelegationBudget
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.
-newtype Delegated a = Delegated (ChildHandle (Either Text AgentRunResult))
+newtype Delegated a = Delegated (ChildHandle (Either AgentRunFailure AgentRunResult))
 
 -- | Start @childAgent@ as a child agent-run workflow without blocking.
 delegate ::
@@ -92,7 +96,11 @@ delegate decl ctx delegationKey childAgent payload = do
             lineage = currentLineage <> [childAgent],
             delegationBudgetId = Just budgetId
           }
-  handle <- spawnChild agentRunWorkflowName childWorkflowId (pure (Left "delegated child is driven from the agent-run registry"))
+  handle <-
+    spawnChild
+      agentRunWorkflowName
+      childWorkflowId
+      (pure (Left (PermanentAgentRunFailure "delegated child is driven from the agent-run registry")))
   appendJournalEntry
     agentRunWorkflowName
     childWorkflowId
@@ -113,7 +121,7 @@ awaitDelegated (Delegated handle) =
   where
     awaitSucceededChild = do
       awaitChild handle >>= \case
-        Left err -> throwIO (DelegatedChildFailed err)
+        Left failure -> throwIO (DelegatedChildFailed (agentRunFailureDetail failure))
         Right AgentRunResult {behaviorOutput} ->
           case parseEither Aeson.parseJSON behaviorOutput of
             Right decoded -> pure decoded
@@ -125,6 +133,58 @@ awaitDelegated (Delegated handle) =
       | Just (WorkflowChildFailed _ _ reason) <- fromException err =
           throwIO (DelegatedChildFailed reason)
       | otherwise = throwIO err
+
+-- | Await every child without allowing one failed child to discard its
+-- siblings' results. Infrastructure exceptions still escape; only the typed
+-- delegation outcomes are collected.
+awaitAllDelegated ::
+  (Workflow :> es, Store :> es, IOE :> es, Aeson.FromJSON a) =>
+  [Delegated a] ->
+  Eff es [Either Text a]
+awaitAllDelegated = traverse awaitDelegatedEither
+
+-- | Cancel one pending child. 'False' means it had already reached an outcome
+-- (or was already cancelled), never that a cancellation was fabricated.
+cancelDelegated ::
+  (Store :> es, IOE :> es) =>
+  Delegated a ->
+  Eff es Bool
+cancelDelegated (Delegated handle) = cancelChild handle
+
+-- | Await in declaration order and, after the first observed failure, cancel
+-- every remaining child that is still running. A child that completed before
+-- cancellation is awaited for its truthful stored result.
+cancelSiblingsOnFailure ::
+  (Workflow :> es, Store :> es, IOE :> es, Aeson.FromJSON a) =>
+  [Delegated a] ->
+  Eff es [Either Text a]
+cancelSiblingsOnFailure = \case
+  [] -> pure []
+  child : siblings -> do
+    result <- awaitDelegatedEither child
+    case result of
+      Right value -> (Right value :) <$> cancelSiblingsOnFailure siblings
+      Left failure -> do
+        siblingResults <- traverse cancelOrAwait siblings
+        pure (Left failure : siblingResults)
+  where
+    cancelOrAwait sibling = do
+      cancelled <- cancelDelegated sibling
+      if cancelled
+        then pure (Left "delegated child cancelled after sibling failure")
+        else awaitDelegatedEither sibling
+
+awaitDelegatedEither ::
+  (Workflow :> es, Store :> es, IOE :> es, Aeson.FromJSON a) =>
+  Delegated a ->
+  Eff es (Either Text a)
+awaitDelegatedEither delegated =
+  trySync (awaitDelegated delegated) >>= \case
+    Right value -> pure (Right value)
+    Left err ->
+      case fromException @DelegationError err of
+        Just failure -> pure (Left (Text.pack (show failure)))
+        Nothing -> throwIO err
 
 delegatedWorkflowId :: WorkflowId -> Text -> Text -> WorkflowId
 delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent delegationKey =
