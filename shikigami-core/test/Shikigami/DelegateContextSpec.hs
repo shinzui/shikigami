@@ -1,7 +1,8 @@
 module Shikigami.DelegateContextSpec (tests) where
 
 import Data.Foldable (traverse_)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), checkDepth)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
 
@@ -25,7 +26,13 @@ tests =
         assertEqual
           "the error reports the attempted child depth"
           (Left (DelegationDepthExceeded 5))
-          (checkDepth (ctxAt 4))
+          (checkDepth (ctxAt 4)),
+      testCase "allow-list refuses undeclared targets" do
+        assertEqual "declared target is admitted" (Right ()) (assertMayDelegate delegatingAgent "worker")
+        assertEqual "undeclared target is refused" (Left (DelegationNotAllowed "intruder")) (assertMayDelegate delegatingAgent "intruder"),
+      testCase "cycle detection checks the complete ancestor chain" do
+        assertEqual "an ancestor is refused" (Left (DelegationCycleDetected "root")) (checkCycle (ctxAt 0) "root")
+        assertEqual "a new descendant is admitted" (Right ()) (checkCycle (ctxAt 0) "worker")
     ]
 
 ctxAt :: Int -> DelegateCtx
@@ -34,7 +41,26 @@ ctxAt depth =
     { delegateDepth = depth,
       sessionId = Nothing,
       parentSessionId = Nothing,
-      parentRunWorkflowId = Nothing
+      parentRunWorkflowId = Nothing,
+      lineage = ["root", "lead"],
+      delegationBudgetId = Nothing,
+      budgetLimit = defaultDelegationBudget
+    }
+
+delegatingAgent :: AgentDecl
+delegatingAgent =
+  AgentDecl
+    { name = "lead",
+      description = "delegation guard fixture",
+      trigger = Event {eventType = "test"},
+      behavior = Deterministic {rule = "test", params = mempty},
+      sinks = [],
+      delegates = ["worker"],
+      delegationBudget = Nothing,
+      sanctionedProfile = Nothing,
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True
     }
 
 assertAccepted :: (Int, Int) -> IO ()

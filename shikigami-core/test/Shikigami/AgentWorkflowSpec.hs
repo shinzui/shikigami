@@ -47,7 +47,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultMemoryPolicy, mkRecallLimit)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitDelegated, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -1020,7 +1020,7 @@ tests =
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
-                    childWorkflowId = delegatedWorkflowId parentWorkflowId "heartbeat" 0
+                    childWorkflowId = delegatedWorkflowId parentWorkflowId "heartbeat" "heartbeat"
                     parentBody = parentDelegateWorkflow parentSession
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1049,8 +1049,8 @@ tests =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
-                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" 0
-                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" 1
+                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web"
+                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" "code"
                     WorkflowId webWorkflowIdText = webWorkflowId
                     WorkflowId codeWorkflowIdText = codeWorkflowId
                     expectedRunningChildLinks =
@@ -1218,12 +1218,17 @@ parentDelegateWorkflow :: SessionId -> Eff (Workflow : AppEffects) Value
 parentDelegateWorkflow currentSession = do
   delegated <-
     delegate
+      (decl {delegates = ["heartbeat"]})
       DelegateCtx
         { delegateDepth = 0,
           sessionId = Just (idText currentSession),
           parentSessionId = Nothing,
-          parentRunWorkflowId = Nothing
+          parentRunWorkflowId = Nothing,
+          lineage = ["test-parent"],
+          delegationBudgetId = Nothing,
+          budgetLimit = defaultDelegationBudget
         }
+      "heartbeat"
       "heartbeat"
       (object ["source" .= ("delegate-test" :: Text)])
   awaitDelegated delegated
@@ -1246,6 +1251,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       approval = defaultApprovalEnv,
       deadline = Nothing,
       runTimeout = secondsToNominalDiffTime 300,
+      delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       deliveryPool = Nothing,
@@ -1270,6 +1276,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       approval,
       deadline,
       runTimeout = secondsToNominalDiffTime 300,
+      delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       deliveryPool = Nothing,
@@ -1768,7 +1775,9 @@ job =
       idempotencyKey = "heartbeat:test-workflow-replay",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 retryVersioningJob :: Text -> RunJob
@@ -1782,7 +1791,9 @@ retryVersioningJob key =
       idempotencyKey = key,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 transientRetryJob :: RunJob
@@ -1799,7 +1810,9 @@ permanentFailureJob =
       idempotencyKey = "missing-task-agent:test-permanent-failure",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 crashJob :: RunJob
@@ -1813,7 +1826,9 @@ crashJob =
       idempotencyKey = "heartbeat:test-workflow-crash-resume",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 profileRefusalJob :: RunJob
@@ -1827,7 +1842,9 @@ profileRefusalJob =
       idempotencyKey = "heartbeat:test-profile-refusal",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 profilePinningJob :: RunJob
@@ -1841,7 +1858,9 @@ profilePinningJob =
       idempotencyKey = "heartbeat:test-profile-pinning",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 profileViolationJob :: RunJob
@@ -1855,7 +1874,9 @@ profileViolationJob =
       idempotencyKey = "profiled-skill:test-profile-violation",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 sampleWorkflowProfileId :: ProfileId
@@ -1995,7 +2016,9 @@ recordBeforeCompleteCrashJob =
       idempotencyKey = "heartbeat:test-record-before-complete-crash",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 flowJob :: RunJob
@@ -2009,7 +2032,9 @@ flowJob =
       idempotencyKey = "at-risk-customer:test-flow-low",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 -- | The same agent and the same calm text as 'flowJob', under a different run
@@ -2025,7 +2050,9 @@ flowMemoryJob =
       idempotencyKey = "at-risk-customer:test-flow-memory-high",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 -- | Seed the at-risk-customer agent's memory with an escalation on this
@@ -2104,7 +2131,9 @@ approvalJob =
       idempotencyKey = "heartbeat:test-approval-approved",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 rejectedJob :: RunJob
@@ -2118,7 +2147,9 @@ rejectedJob =
       idempotencyKey = "heartbeat:test-approval-rejected",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 timeoutJob :: RunJob
@@ -2132,7 +2163,9 @@ timeoutJob =
       idempotencyKey = "heartbeat:test-approval-timeout",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 answeredBeforeDeadlineJob :: RunJob
@@ -2146,7 +2179,9 @@ answeredBeforeDeadlineJob =
       idempotencyKey = "heartbeat:test-approval-before-deadline",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 researchSupervisorJob :: RunJob
@@ -2160,7 +2195,9 @@ researchSupervisorJob =
       idempotencyKey = "research-supervisor:test-fanout",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = ["research-supervisor"],
+      delegationBudgetId = Nothing
     }
 
 expectedSupervisorOutput :: Value

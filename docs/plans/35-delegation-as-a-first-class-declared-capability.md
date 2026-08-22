@@ -83,8 +83,16 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-22T22:33:26Z) M1: introduced the shared `ingestJobStepName`
       constant and used it in both `Workflow.hs` and `Delegate.hs`; the durable text remains
       byte-identical as `ingest-job`.
-- [ ] M2: add `lineage : [Text]` and `delegationBudgetId : Maybe DelegationBudgetId` to `RunJob`; initialize one durable root budget and propagate its identity across every descendant.
-- [ ] M2: atomically and idempotently reserve one global budget slot per deterministic child workflow id; add ancestor-cycle and exhausted-budget rejection.
+- [x] (2026-08-22T22:42:59Z) M2: added additive `lineage` and
+      `delegationBudgetId` fields to `RunJob`; root producers initialize lineage, the first
+      delegation creates the deterministic root ledger lazily, and descendants carry the same
+      ledger identity.
+- [x] (2026-08-22T22:42:59Z) M2: added the forward pg-migrate migration and a
+      row-locked, idempotent reservation transaction keyed by deterministic child workflow id;
+      delegation now enforces allow-list, complete-lineage cycle, depth, and exhausted-budget
+      rejection before spawning. Store tests prove replay idempotency, missing-ledger refusal,
+      and exactly three winners across ten concurrent reservations under a budget of three;
+      all ten targeted delegation tests pass.
 - [ ] M3: a `Delegate` Flow capability (`delegate`, `awaitDelegated`, `awaitAllDelegated`) added to `FlowEffects`; allow-list enforced at the capability boundary.
 - [ ] M4: `awaitAllDelegated :: [Delegated a] -> Eff es [Either Text a]` and sibling cancellation via keiro `cancelChild`; a failure-policy field or awaitAll variant.
 - [ ] M5: re-express `runResearchSupervisor` on the general mechanism (allow-list + budget + awaitAll); delete the `task == researchSupervisorTaskName` special case.

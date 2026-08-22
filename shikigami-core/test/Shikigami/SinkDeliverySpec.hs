@@ -26,6 +26,7 @@ import Shikigami.Agent.Decl
     SignalType (Reminder),
     Sink (..),
     Trigger (..),
+    defaultDelegationBudget,
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
@@ -187,6 +188,7 @@ withFixture label sinks kizashi danwa use =
                 AgentWorkflow.approval = defaultApprovalEnv,
                 AgentWorkflow.deadline = Nothing,
                 AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+                AgentWorkflow.delegationBudget = defaultDelegationBudget,
                 AgentWorkflow.grants = DbGrants pool,
                 AgentWorkflow.deliveryPool = Just pool,
                 AgentWorkflow.logger = Log.silentLogger,
@@ -243,7 +245,9 @@ testJob label =
       idempotencyKey = "heartbeat:sink-delivery:" <> label,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 signalSink :: Text -> Sink

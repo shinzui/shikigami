@@ -15,15 +15,22 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (catchSync, throwIO)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow, freshOrdinal)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow)
 import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, spawnChild)
 import Kiroku.Store.Effect (Store)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), checkDepth)
+import Shikigami.Agent.Decl (AgentDecl)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
+import Shikigami.Store.DelegationBudget
+  ( BudgetReservationError (..),
+    ReservationResult (..),
+    delegationBudgetIdFor,
+    reserveDelegationSlot,
+  )
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.
@@ -32,24 +39,45 @@ newtype Delegated a = Delegated (ChildHandle (Either Text AgentRunResult))
 -- | Start @childAgent@ as a child agent-run workflow without blocking.
 delegate ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentDecl ->
   DelegateCtx ->
+  Text ->
   Text ->
   Aeson.Value ->
   Eff es (Delegated Aeson.Value)
-delegate ctx childAgent payload = do
+delegate decl ctx delegationKey childAgent payload = do
+  either throwIO pure (assertMayDelegate decl childAgent)
+  either throwIO pure (checkCycle ctx childAgent)
   childCtx <- either throwIO pure (checkDepth ctx)
-  let DelegateCtx {sessionId = currentCtxSessionId} = ctx
+  let DelegateCtx
+        { sessionId = currentCtxSessionId,
+          lineage = currentLineage,
+          delegationBudgetId = existingBudgetId,
+          budgetLimit = currentBudgetLimit
+        } = ctx
       DelegateCtx {delegateDepth = childDepth} = childCtx
   currentSession <-
     case currentCtxSessionId of
       Just sid -> pure sid
       Nothing -> throwIO DelegationMissingSessionId
   (_, parentWorkflowId) <- currentWorkflow
-  ordinal <- freshOrdinal "delegate"
-  let childWorkflowId = delegatedWorkflowId parentWorkflowId childAgent ordinal
+  let childWorkflowId = delegatedWorkflowId parentWorkflowId childAgent delegationKey
       WorkflowId childWorkflowIdText = childWorkflowId
       WorkflowId parentWorkflowIdText = parentWorkflowId
+      (budgetId, seed) =
+        case existingBudgetId of
+          Just existing -> (existing, Nothing)
+          Nothing ->
+            let created = delegationBudgetIdFor parentWorkflowId
+             in (created, Just (parentWorkflowId, currentBudgetLimit))
   now <- liftIO getCurrentTime
+  reserved <- reserveDelegationSlot budgetId seed childWorkflowId now
+  case reserved of
+    Left (DelegationBudgetLedgerMissing missing) ->
+      throwIO (DelegationBudgetUnavailable (Text.pack (show missing)))
+    Right DelegationSlotsExhausted -> throwIO DelegationBudgetExhausted
+    Right DelegationSlotReserved -> pure ()
+    Right DelegationSlotAlreadyReserved -> pure ()
   let childJob =
         RunJob
           { agentName = childAgent,
@@ -60,7 +88,9 @@ delegate ctx childAgent payload = do
             idempotencyKey = childWorkflowIdText,
             parentSessionId = Just currentSession,
             parentRunWorkflowId = Just parentWorkflowIdText,
-            delegationDepth = Just childDepth
+            delegationDepth = Just childDepth,
+            lineage = currentLineage <> [childAgent],
+            delegationBudgetId = Just budgetId
           }
   handle <- spawnChild agentRunWorkflowName childWorkflowId (pure (Left "delegated child is driven from the agent-run registry"))
   appendJournalEntry
@@ -96,8 +126,8 @@ awaitDelegated (Delegated handle) =
           throwIO (DelegatedChildFailed reason)
       | otherwise = throwIO err
 
-delegatedWorkflowId :: WorkflowId -> Text -> Int -> WorkflowId
-delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent ordinal =
+delegatedWorkflowId :: WorkflowId -> Text -> Text -> WorkflowId
+delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent delegationKey =
   WorkflowId $
     Text.pack $
       UUID.toString $
@@ -105,4 +135,4 @@ delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent ordinal =
           nameBytes $
             Text.intercalate
               ":"
-              ["shikigami", "delegate", parentWorkflowId, childAgent, Text.pack (show ordinal)]
+              ["shikigami", "delegate", parentWorkflowId, childAgent, delegationKey]

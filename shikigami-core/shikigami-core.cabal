@@ -88,6 +88,7 @@ library
     Shikigami.Sink.Types
     Shikigami.Sink.Validate
     Shikigami.Sink.Wire
+    Shikigami.Store.DelegationBudget
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
@@ -175,6 +176,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
     Shikigami.DelegateContextSpec
+    Shikigami.DelegationBudgetSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec

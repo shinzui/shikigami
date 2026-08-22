@@ -78,7 +78,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
@@ -115,6 +115,9 @@ data AgentRunDeps = AgentRunDeps
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime),
     runTimeout :: !NominalDiffTime,
+    -- | Root-run descendant limit used when an agent declaration leaves its
+    -- own delegation budget absent.
+    delegationBudget :: !DelegationBudget,
     -- | Which grant source the enqueue-time C11 check consults, and the one
     -- handed to every 'SinkContext' this run builds.
     grants :: !GrantSource,
@@ -223,6 +226,12 @@ depsGrants AgentRunDeps {grants = g} = g
 
 depsRunTimeout :: AgentRunDeps -> NominalDiffTime
 depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
+
+depsDelegationBudget :: AgentRunDeps -> DelegationBudget
+depsDelegationBudget AgentRunDeps {delegationBudget = value} = value
+
+declDelegationBudget :: AgentDecl -> Maybe DelegationBudget
+declDelegationBudget AgentDecl {delegationBudget = value} = value
 
 runJobOccurredAt :: RunJob -> UTCTime
 runJobOccurredAt RunJob {occurredAt} = occurredAt
@@ -570,7 +579,7 @@ runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBeh
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
     ShikumiProgram {task}
-      | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor sid job
+      | task == researchSupervisorTaskName -> Right <$> runResearchSupervisor deps decl sid job
     _ ->
       liftIO
         ( first (Text.pack . show)
@@ -630,24 +639,29 @@ syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempote
 
 runResearchSupervisor ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentRunDeps ->
+  AgentDecl ->
   SessionId ->
   RunJob ->
   Eff es Value
-runResearchSupervisor currentSession RunJob {triggerPayload, parentSessionId, parentRunWorkflowId, delegationDepth} = do
+runResearchSupervisor deps decl currentSession RunJob {agentName, triggerPayload, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} = do
   let ctx =
         DelegateCtx
           { delegateDepth = fromMaybe 0 delegationDepth,
             sessionId = Just (idText currentSession),
             parentSessionId,
-            parentRunWorkflowId
+            parentRunWorkflowId,
+            lineage = if null lineage then [agentName] else lineage,
+            delegationBudgetId,
+            budgetLimit = fromMaybe (depsDelegationBudget deps) (declDelegationBudget decl)
           }
       childPayload role =
         Aeson.object
           [ (Aeson..=) "role" role,
             (Aeson..=) "input" triggerPayload
           ]
-  web <- delegate ctx webResearcherTaskName (childPayload ("web" :: Text))
-  code <- delegate ctx codeResearcherTaskName (childPayload ("code" :: Text))
+  web <- delegate decl ctx "web" webResearcherTaskName (childPayload ("web" :: Text))
+  code <- delegate decl ctx "code" codeResearcherTaskName (childPayload ("code" :: Text))
   webFinding <- awaitDelegated web
   codeFinding <- awaitDelegated code
   pure

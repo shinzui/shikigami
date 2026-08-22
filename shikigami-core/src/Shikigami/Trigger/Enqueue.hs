@@ -68,7 +68,9 @@ runJobFromEnvelope resolvedOccurredAt decl env =
       idempotencyKey = name decl <> ":" <> envActivityId,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [name decl],
+      delegationBudgetId = Nothing
     }
   where
     ActivityEnvelope {activityId = envActivityId} = env
@@ -143,7 +145,9 @@ enqueueAddressedRunWithKey pool agent route payload key = do
         idempotencyKey = key,
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
-        delegationDepth = Nothing
+        delegationDepth = Nothing,
+        lineage = [agent],
+        delegationBudgetId = Nothing
       }
 
 -- | Enqueue a schedule-triggered run for a deterministic due minute.
@@ -165,5 +169,7 @@ enqueueScheduledRun pool agent dueAt =
         idempotencyKey = agent <> ":sched:" <> Text.pack (iso8601Show dueAt),
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
-        delegationDepth = Nothing
+        delegationDepth = Nothing,
+        lineage = [agent],
+        delegationBudgetId = Nothing
       }

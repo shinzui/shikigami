@@ -10,6 +10,7 @@ where
 
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
 import Shikigami.Prelude
 
 -- | Which trigger class produced the job.
@@ -46,6 +47,8 @@ data RunJob = RunJob
     parentSessionId :: !(Maybe Text),
     parentRunWorkflowId :: !(Maybe Text),
     delegationDepth :: !(Maybe Int),
+    lineage :: ![Text],
+    delegationBudgetId :: !(Maybe DelegationBudgetId),
     routeKind :: !RunRouteKind
   }
   deriving stock (Eq, Show, Generic)
@@ -57,7 +60,7 @@ data RunJob = RunJob
 -- and a queued or journaled job written before the discriminator existed encodes
 -- and decodes exactly as it did.
 instance ToJSON RunJob where
-  toJSON RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, routeKind} =
+  toJSON RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind} =
     Aeson.object
       ( [ "agentName" Aeson..= agentName,
           "triggerKind" Aeson..= triggerKind,
@@ -68,6 +71,8 @@ instance ToJSON RunJob where
           "parentRunWorkflowId" Aeson..= parentRunWorkflowId,
           "delegationDepth" Aeson..= delegationDepth
         ]
+          <> ["lineage" Aeson..= lineage | not (null lineage)]
+          <> maybe [] (\budgetId -> ["delegationBudgetId" Aeson..= budgetId]) delegationBudgetId
           <> ["routeKind" Aeson..= routeKind | routeKind /= InferredLegacyRoute]
       )
 
@@ -84,5 +89,7 @@ instance FromJSON RunJob where
     parentSessionId <- value Aeson..:? "parentSessionId"
     parentRunWorkflowId <- value Aeson..:? "parentRunWorkflowId"
     delegationDepth <- value Aeson..:? "delegationDepth"
+    lineage <- value Aeson..:? "lineage" Aeson..!= []
+    delegationBudgetId <- value Aeson..:? "delegationBudgetId"
     routeKind <- value Aeson..:? "routeKind" Aeson..!= InferredLegacyRoute
-    pure RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, routeKind}
+    pure RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}

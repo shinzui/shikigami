@@ -303,7 +303,9 @@ sampleJob =
       idempotencyKey = "codec-agent:event:1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 requireTuning :: Either e JobTuning -> JobTuning

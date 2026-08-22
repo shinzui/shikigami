@@ -22,6 +22,7 @@ import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
+import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
@@ -72,6 +73,7 @@ main =
           BehaviorProviderSpec.tests,
           BehaviorRetrySpec.tests,
           DelegateContextSpec.tests,
+          DelegationBudgetSpec.tests,
           EnqueueHardeningSpec.tests,
           GrantStoreSpec.tests,
           KeiroSpecificationSpec.tests,

@@ -66,6 +66,7 @@ runWorkerCmd config = do
                 agents,
                 behaviorEnv = behEnv,
                 runTimeout = Config.runTimeout config,
+                delegationBudget = Config.delegationBudget config,
                 approvalDeadline = Config.approvalDeadline config,
                 conversationIdleTimeout = Config.conversationIdleTimeout config,
                 catchUpPolicy = Config.schedulerCatchUp config,

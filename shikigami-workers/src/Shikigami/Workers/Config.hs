@@ -35,7 +35,7 @@ import Hasql.Pool (Pool)
 import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, Trigger (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
@@ -54,6 +54,7 @@ data WorkerEnv = WorkerEnv
     agents :: ![AgentDecl],
     behaviorEnv :: !BehaviorEnv,
     runTimeout :: !NominalDiffTime,
+    delegationBudget :: !DelegationBudget,
     approvalDeadline :: !NominalDiffTime,
     -- | How long a parked conversation waits for its next message before its
     -- epoch ends and its kioku session is completed. Resolved from
@@ -104,6 +105,9 @@ envHeartbeats WorkerEnv {heartbeats = h} = h
 envRunTimeout :: WorkerEnv -> NominalDiffTime
 envRunTimeout WorkerEnv {runTimeout = timeout} = timeout
 
+envDelegationBudget :: WorkerEnv -> DelegationBudget
+envDelegationBudget WorkerEnv {delegationBudget = limit} = limit
+
 -- | Named for the same reason as 'envLogger': 'Scheduler.SchedulerEnv' also
 -- carries a @catchUpPolicy@ field.
 envCatchUpPolicy :: WorkerEnv -> CatchUpPolicy
@@ -132,6 +136,7 @@ agentRunDeps env =
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Just (envApprovalDeadline env),
       AgentWorkflow.runTimeout = envRunTimeout env,
+      AgentWorkflow.delegationBudget = envDelegationBudget env,
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.deliveryPool = Just (envPool env),

@@ -149,7 +149,9 @@ sampleRunJob =
       idempotencyKey = "at-risk-watch:act_1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      delegationDepth = Nothing
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
     }
 
 triggerPayloadValue :: Value

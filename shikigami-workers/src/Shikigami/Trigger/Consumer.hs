@@ -528,7 +528,9 @@ eventInboxHandler receivedAt agents payloadValue event = do
             idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
             parentSessionId = Nothing,
             parentRunWorkflowId = Nothing,
-            delegationDepth = Nothing
+            delegationDepth = Nothing,
+            lineage = [agent ^. #name],
+            delegationBudgetId = Nothing
           }
   traverse_ (enqueueRunJobTx . jobFor) matched
   pure
