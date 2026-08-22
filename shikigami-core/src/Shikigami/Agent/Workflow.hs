@@ -20,6 +20,7 @@ module Shikigami.Agent.Workflow
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,
     preparedSinkResult,
+    permanentPublishOutcome,
     publishSinkIntent,
     reconcilePublishedSinkIntent,
   )
@@ -962,6 +963,9 @@ publishUntracked result = case outcome result of
   Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
   _ -> PublishSucceeded
 
+-- | Build the terminal Keiro verdict for a transport-classified permanent
+-- failure. Keiro keeps rejection values abstract so every caller passes the
+-- bounded audit contract through its smart constructor.
 permanentPublishOutcome :: Text -> Either Text PublishOutcome
 permanentPublishOutcome detail =
   first

@@ -209,16 +209,18 @@ no co-developed package needs one.
 
 ```bash
 $ nix develop --command cabal test all -j1
+keiro-shikigami-conformance PASS   24 checks
+shikigami-agent-test        PASS    8 tests
 shikigami-api-test          PASS   15 tests
 shikigami-client-test       PASS    3 tests
-shikigami-core-test         PASS   93 tests
+shikigami-core-test         PASS  350 tests
 shikigami-migrations-smoke  PASS    2 tests
 shikigami-migrations-test   PASS    3 tests
-shikigami-server-test       PASS   20 tests
-shikigami-workers-test      PASS   21 tests
+shikigami-server-test       PASS   26 tests
+shikigami-workers-test      PASS   74 tests
 ```
 
-157 tests across seven suites, and the same result on an immediate second run.
+505 checks across nine suites passed on 2026-08-22.
 
 Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
 an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail

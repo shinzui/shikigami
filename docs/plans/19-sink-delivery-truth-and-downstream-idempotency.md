@@ -58,9 +58,11 @@ This section must always reflect the actual current state of the work.
       `cabal test all` run passed, the post-reconciliation focused run passed 348 core and
       74 worker tests, the migration manifest check passed, and `just keiro-gate` reported
       replay-neutral workflow storage with all conformance tests passing.
-- [ ] (2026-08-22T20:50:43Z) Final release-integration validation in progress: Keiro DSL
-      regeneration is provenance-only; focused tests, the 63-entry fresh migration plan,
-      full repository tests, and the workflow gate remain to be recorded.
+- [x] (2026-08-22T20:57:53Z) Final release-integration validation: Keiro DSL regeneration
+      changed provenance only; all 350 focused core tests passed; both migration suites applied
+      and re-applied the fresh four-component plan; `just keiro-gate HEAD^` classified the
+      change replay-neutral and passed conformance; and `cabal test all -j1` passed every
+      repository suite.
 
 
 ## Surprises & Discoveries
@@ -236,7 +238,9 @@ The released Keiro 0.14/Kioku 0.5 cohort closes the former upstream gap. A
 known permanent result. Worker summaries keep that result distinct from rows that became
 `dead` only after exhausting transient attempts. Plan 22 remains responsible for classifying
 concrete HTTP statuses into `PermanentFailure`; this plan owns and now completes the durable
-boundary that consumes that outcome.
+boundary that consumes that outcome. Final validation passed the focused 350-test core suite,
+fresh migration apply/re-apply smoke tests, the replay-neutral Keiro gate and generated
+conformance package, and every repository test suite under a serial full run.
 
 
 ## Context and Orientation
@@ -368,11 +372,13 @@ Journal truth (fails before): run `runAgentRunWorkflow` for an agent with one `K
 
 Receipt recording (fails before): enqueue a sink intent (run the workflow), then drive one publish pass — call `Keiro.Outbox.publishClaimedOutbox (publishSinkIntent deps) defaultPublishOptions Nothing` under `runAppIO appEnv` with the kizashi stub URL in `deps`. Assert the stub received exactly one POST, the summary says `published = 1`, and `lookupDelivery` returns a `delivered` receipt whose detail is the stub's signal id (`"sig_stub"`).
 
-Permanent rejection: a stub 401/403/404 response maps through plan 22's typed HTTP error to
-`PermanentFailure`, records receipt `dead`, and yields Keiro `PublishRejected`; the outbox row
-becomes dead after one request. A 429/500/network failure maps to `Failed`/`PublishFailed` and
-remains retryable. This test also runs in the upstream Keiro cohort for summary and ordering
-semantics.
+Permanent rejection: the boundary test calls `permanentPublishOutcome` with a normal transport
+detail and observes Keiro `PublishRejected`; an oversized detail is refused by Keiro's smart
+constructor instead of being silently truncated. `publishSinkIntent` returns that verdict only
+after recording receipt `dead`. Plan 22 owns the producer-level HTTP classification test: once
+its typed client maps a 401/403/404 to `PermanentFailure`, this boundary makes the outbox
+terminal after one request, while 429/500/network failures remain `Failed`/`PublishFailed` and
+retryable.
 
 Send-guard (fails before): after the pass above, manually reset the outbox row to `pending` (or simpler: call `publishSinkIntent deps row` directly a second time with the same `OutboxRow`). Assert it returns `PublishSucceeded` and the stub's request count is still 1 — before this plan the count reaches 2, which is exactly the kizashi duplicate-signal bug.
 
@@ -430,6 +436,7 @@ Shikigami.Sink.Delivery.lookupDelivery :: Pool -> Text -> IO (Either UsageError 
 -- shikigami-core/src/Shikigami/Agent/Workflow.hs
 -- publishSinkIntent keeps its signature (AgentRunDeps -> OutboxRow -> Eff es PublishOutcome)
 -- but now consults/records receipts; sinkIntentEvent gains an ordering-key parameter.
+Shikigami.Agent.Workflow.permanentPublishOutcome :: Text -> Either Text PublishOutcome
 ```
 
 Constraints from sibling plans (record in code comments where relevant): journaled step names never change and `SinkOutcome`'s encoding change is additive-only (docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md); docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md (MasterPlan 5) plans to consolidate `enqueueSinkIntents`/`enqueueSinkIntentStep`/`Flow/SinkOutbox.hs` — this plan should land first, and that consolidation must preserve the `Enqueued` semantics, the receipt guard, and the per-sink keys introduced here (this is a declared cross-MasterPlan integration point in docs/masterplans/3).

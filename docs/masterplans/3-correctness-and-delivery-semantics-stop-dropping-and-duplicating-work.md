@@ -74,7 +74,7 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 | F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Mostly Complete (M1, M2, M3 cancelled, M4 part; remaining: `shikigami-migrate` Settei unification. No longer gates schema authoring) |
 | 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
 | 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
-| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plans 16 ✅, 47 ✅, 28 M1 ✅; upstream Keiro IR-3 ⏳ | None | Not Started (**M2–M4 startable** — F1's schema gate released and plan 28 M1 landed 2026-08-05. M1 still wants a released Keiro `PublishRejected`, which does not exist: `PublishOutcome` is `PublishSucceeded \| PublishFailed` at `keiro/src/Keiro/Outbox.hs:264-269`, verified 2026-08-05) |
+| 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plans 16 ✅, 47 ✅, 28 M1 ✅; `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` ✅ | None | Complete (2026-08-22; Keiro 0.14/Kioku 0.5 cleared the final terminal-rejection gate) |
 | 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 ✅, 47 ✅ | None | Not Started (blocked on EP-1, EP-2) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -94,10 +94,9 @@ the map in Vision & Scope before implementation begins.
 
 F1 follows plans 36, 37, and 47 — all Complete. It no longer gates new Shikigami migrations:
 the manifest, composed plan, and test support exist, so a child may add one today. EP-1, EP-2,
-and F1's remainder are all startable now. EP-3's repository-side gates also cleared on
-2026-08-05 — plan 28 Milestone 1 landed `Shikigami.Log` and `Shikigami.Log.Correlation`, and
-F1's schema gate is released — but its Milestone 1 still wants a released Keiro
-`PublishRejected` that upstream has not shipped, so EP-3 starts at M2 or waits. EP-4 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
+and F1's remainder are all startable now. EP-3 completed on 2026-08-22 after Keiro 0.14
+shipped `PublishRejected` and Kioku 0.5 supplied the coherent consumer bound. EP-4
+hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
 and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
 implementations. Three additional coordination edges exist.
 
@@ -118,8 +117,8 @@ follows plan 16, which makes each sink handler truthful. EP-3 then records deliv
 using the final sink outcomes and structured logger; plan 27 lands afterward and consolidates
 the settled semantics. The sink chain is plan 16 plus plan 28 M1 → EP-3 → plan 27.
 
-EP-1, EP-2, EP-3, and F1's remainder can all proceed in parallel as of 2026-08-05; EP-4
-starts after EP-1 and EP-2. This is the MasterPlan-3 slice of the
+EP-1, EP-2, and F1's remainder can proceed in parallel; EP-3 is complete, and EP-4 starts
+after EP-1 and EP-2. This is the MasterPlan-3 slice of the
 canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
 
@@ -232,10 +231,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-2: Milestone 1 — transactional enqueue: inbox transaction and pgmq send commit atomically
 - [ ] EP-2: Milestone 2 — offset commit only after an explicit terminal inbox disposition; transient/store errors do not commit
 - [ ] EP-2: Milestone 3 — supervised serial Kafka loop with reconnect backoff and durable dead-letter/halt poison policy
-- [ ] EP-3: Milestone 1 — additive Enqueued/PermanentFailure outcomes and released Keiro PublishRejected; logSinkResult implemented
-- [ ] EP-3: Milestone 2 — pg-migrate-managed sink delivery receipts table; publish outcomes and reconciliation state recorded and queryable
-- [ ] EP-3: Milestone 3 — retry-safe dispatch: kizashi send-guard and danwa conversation reuse
-- [ ] EP-3: Milestone 4 — per-sink outbox keys; head-of-line isolation between a run's sinks
+- [x] EP-3: Milestone 1 — additive Enqueued/PermanentFailure outcomes and released Keiro PublishRejected; logSinkResult implemented
+- [x] EP-3: Milestone 2 — pg-migrate-managed sink delivery receipts table; publish outcomes and reconciliation state recorded and queryable
+- [x] EP-3: Milestone 3 — retry-safe dispatch: kizashi send-guard and danwa conversation reuse
+- [x] EP-3: Milestone 4 — per-sink outbox keys; head-of-line isolation between a run's sinks
 - [ ] EP-4: Milestone 1 — routing on an explicit RunJob trigger discriminator with typed failure for mismatched/undecodable payloads
 - [ ] EP-4: Milestone 2 — scheduler catch-up policy (skip-missed/coalesce default) and timer-kind dispatch fix
 - [ ] EP-4: Milestone 3 — critical kioku errors propagate to retry/failure; best-effort writes are explicitly classified and logged
@@ -424,10 +423,21 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+EP-3 completed on 2026-08-22. Sink journals now stop at `Enqueued`; a Shikigami-owned receipt
+ledger carries actual delivery state and downstream ids; proven delivery and Danwa conversation
+sub-receipts guard retries; independent sinks no longer share one ordering key; and Keiro 0.14's
+terminal rejection contract prevents known permanent failures from exhausting transient retries.
+The workflow gate classified the change replay-neutral, fresh migration apply/re-apply passed,
+and the full repository suite remained green. EP-1, EP-2, EP-4, and F1's configuration remainder
+remain open, so this MasterPlan is not complete.
 
 
 ## Revision Notes
+
+- 2026-08-22: Marked EP-3 (plan 19) complete. Keiro 0.14 shipped the upstream terminal
+  rejection contract and Kioku 0.5 shipped its coherent consumer bound, clearing the last
+  external gate. Recorded completion of all four milestones and the replay-neutral/full-suite
+  validation result.
 
 - 2026-08-05: Cancelled F1's Milestone 3 (the codd-ledger import) after the decision that
   shikigami has no users and no database whose history needs preserving; codd was removed from

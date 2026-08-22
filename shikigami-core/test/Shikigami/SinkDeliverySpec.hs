@@ -46,12 +46,22 @@ tests =
   testGroup
     "SinkDelivery"
     [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" journalTruth,
+      testCase "permanent failure becomes a bounded terminal rejection" permanentRejection,
       testCase "publish records a delivered receipt with the downstream id" receiptRecording,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
       testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
       testCase "danwa post-failure retry reuses the started conversation" danwaReuse,
       testCase "failing sink 0 does not block sink 1 in one publish pass" orderingIsolation
     ]
+
+permanentRejection :: IO ()
+permanentRejection = do
+  case AgentWorkflow.permanentPublishOutcome "downstream refused this resource" of
+    Right (Outbox.PublishRejected _) -> pure ()
+    other -> assertFailure ("expected a terminal Keiro rejection, got " <> show other)
+  case AgentWorkflow.permanentPublishOutcome (Text.replicate 1025 "x") of
+    Left err -> assertBool ("invalid rejection should explain itself: " <> Text.unpack err) ("invalid terminal sink rejection" `Text.isPrefixOf` err)
+    Right other -> assertFailure ("an oversized rejection detail must be refused, got " <> show other)
 
 journalTruth :: IO ()
 journalTruth =
