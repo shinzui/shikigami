@@ -307,6 +307,8 @@ triageDecl =
       trigger = Event {eventType = "ticket.received"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,
@@ -327,6 +329,8 @@ heartbeatDecl =
             enabledBy = Nothing
           },
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

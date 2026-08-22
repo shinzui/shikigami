@@ -15,13 +15,13 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (catchSync, throwIO)
-import Keiro.Workflow (Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow, freshOrdinal)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow, freshOrdinal)
 import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, spawnChild)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
-import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
@@ -67,7 +67,7 @@ delegate ctx childAgent payload = do
     agentRunWorkflowName
     childWorkflowId
     StepRecorded
-      { stepName = "ingest-job",
+      { stepName = unStepName ingestJobStepName,
         result = Aeson.toJSON childJob,
         recordedAt = now
       }

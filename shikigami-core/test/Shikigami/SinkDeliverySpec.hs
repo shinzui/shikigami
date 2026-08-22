@@ -224,6 +224,8 @@ agentDeclaration sinks =
             enabledBy = Nothing
           },
       sinks,
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

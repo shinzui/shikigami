@@ -459,6 +459,8 @@ flowAgentDecl =
       trigger = Event {eventType = "customer.risk_detected"},
       behavior = Deterministic {rule = "flow-test", params = mempty},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

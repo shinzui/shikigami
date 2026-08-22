@@ -67,9 +67,22 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: plans 24, 33, and 36–39 have landed; the checked Keiro specification records the delegation topology before implementation.
-- [ ] M1: add `delegates : List Text` and `delegationBudget : Optional Natural` to schema/Agent.dhall (defaults `[]` / `None`), validate the latter into a bounded `DelegationBudget`, and mirror it on `AgentDecl`; a `noopSummary`-behavior supervisor manifest validates.
-- [ ] M1: introduce the shared `ingestJobStepName` constant and use it in both Workflow.hs and Delegate.hs (retire the two independent `"ingest-job"` literals).
+- [x] (2026-08-22T22:24:21Z) Pre-implementation refresh: plans 24, 33, 36, and 39
+      are complete; plans 37 and 38 have delivered the configuration declaration and
+      pg-migrate component this plan needs, while their unrelated migration-CLI remainder stays
+      open. The delivered tree uses `Shikigami.Agent.Decl` and
+      `Shikigami.Agent.RunJob` in `shikigami-core`, Keiro is pinned and published at
+      0.14.0.0, the checked workflow already declares `child delegate`, and the five existing
+      delegation tests pass.
+- [x] (2026-08-22T22:33:26Z) M1: added `delegates : List Text` and
+      `delegationBudget : Optional Natural` to `schema/Agent.dhall` with additive defaults,
+      validated budgets into the bounded `DelegationBudget`, configured the platform default
+      as 16, and made the existing research-supervisor proof manifest declare its two children
+      and budget 8. Both that manifest and unchanged heartbeat validate; declaration,
+      wire-compatibility, and configuration tests pass.
+- [x] (2026-08-22T22:33:26Z) M1: introduced the shared `ingestJobStepName`
+      constant and used it in both `Workflow.hs` and `Delegate.hs`; the durable text remains
+      byte-identical as `ingest-job`.
 - [ ] M2: add `lineage : [Text]` and `delegationBudgetId : Maybe DelegationBudgetId` to `RunJob`; initialize one durable root budget and propagate its identity across every descendant.
 - [ ] M2: atomically and idempotently reserve one global budget slot per deterministic child workflow id; add ancestor-cycle and exhausted-budget rejection.
 - [ ] M3: a `Delegate` Flow capability (`delegate`, `awaitDelegated`, `awaitAllDelegated`) added to `FlowEffects`; allow-list enforced at the capability boundary.
@@ -102,6 +115,17 @@ implementation. Provide concise evidence.
   two siblings can each receive the same remainder and spend it independently, allowing total
   descendants to exceed the root declaration. The budget must therefore be shared, durable,
   atomic under concurrent siblings, and replay-idempotent.
+- (Implementation refresh, 2026-08-22) Keiro 0.14 keeps `registerChildTx` private to
+  `Keiro.Workflow.Child`; the public `spawnChild` opens its own transaction. Shikigami therefore
+  cannot combine its budget reservation and Keiro's child registration in one transaction without
+  importing an internal module or writing Keiro-owned tables. Reserving first under the same
+  deterministic child id has the required safety direction: no child can spawn unbudgeted, and a
+  crash before `spawnChild` retries the same reservation instead of spending twice.
+- (Implementation refresh, 2026-08-22) The current child id still uses
+  `freshOrdinal "delegate"`. `docs/workflow-versioning.md` now explicitly lists that identity as
+  unstable when code inserts or reorders delegation calls. The general capability needs a
+  caller-supplied stable key; preserving the ordinal API would formalise the exact hazard this plan
+  owns.
 
 
 ## Decision Log
@@ -196,6 +220,28 @@ Record every decision made while working on the plan.
   removes; keeping the stub children as allow-listed targets lets the existing delegation
   tests keep passing with minimal edits, proving the general mechanism subsumes the demo.
   Date: 2026-07-08
+
+- Decision: Derive every child workflow id from the parent workflow id, target agent, and a
+  caller-supplied stable delegation key; remove `freshOrdinal` from delegation identity.
+  Rationale: a counter is stable only while source order is frozen. Flow callers can name a
+  durable call site directly. The generic supervisor derives its keys from the `delegates` list
+  stored in the journaled `lookup-agent` result, so a manifest edit cannot move an in-flight
+  run's child identities.
+  Date: 2026-08-22
+
+- Decision: Reserve a budget slot before calling Keiro's public `spawnChild`, rather than
+  duplicating Keiro's private child-registration SQL to manufacture a cross-library transaction.
+  Rationale: the public API exposes no transactional spawn primitive at 0.14.0.0. Reservation and
+  spawn share one deterministic child id; reserve-first prevents an unbudgeted child, and replay
+  repairs the only crash window by observing the existing reservation before idempotently spawning
+  the child. Keeping ownership boundaries is more durable than coupling to Keiro's tables.
+  Date: 2026-08-22
+
+- Decision: Add this plan's ledger migration to Shikigami's existing pg-migrate component.
+  Rationale: plan 38 delivered the component, manifest, runner, and real-Postgres fixture; it did
+  not pre-author tables for later plans. Schema ownership follows the code that defines the
+  delegation budget rather than reopening plan 38.
+  Date: 2026-08-22
 
 
 ## Outcomes & Retrospective
@@ -598,6 +644,11 @@ Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
 
 
 ## Revision Notes
+
+- 2026-08-22: Refreshed the plan against the seven-package tree and the released Keiro 0.14.0.0
+  source. Corrected module ownership to `shikigami-core`, assigned the new SQL to this plan on top
+  of plan 38's delivered migration component, replaced ordinal child identity with a stable key,
+  and changed the impossible cross-library transaction into reserve-first replay convergence.
 
 - 2026-08-05: Added a Portfolio Reconciliation note recording that the run-job lineage fields
   (`parentSessionId`, `parentRunWorkflowId`, `delegationDepth`, `TriggeredByDelegation`) are now read by

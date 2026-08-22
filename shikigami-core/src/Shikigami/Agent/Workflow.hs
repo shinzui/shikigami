@@ -83,7 +83,7 @@ import Shikigami.Agent.Delegate (awaitDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunJob (RunJob (..))
-import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
@@ -232,7 +232,7 @@ agentRunWorkflow ::
   Maybe RunJob ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
-  job <- runStep deps (StepName "ingest-job") (ingestJob mJob)
+  job <- runStep deps ingestJobStepName (ingestJob mJob)
   mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . agentDeclName) (agents deps)))
   case mDecl of
     Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> agentName job)))

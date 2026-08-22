@@ -86,6 +86,8 @@ let Agent =
           , trigger : Trigger
           , behavior : Behavior
           , sinks : List Sink
+          , delegates : List Text
+          , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
           , identity : Optional Identity
           , memory : MemoryPolicy
@@ -94,6 +96,8 @@ let Agent =
       , default =
           { description = ""
           , sinks = [] : List Sink
+          , delegates = [] : List Text
+          , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
           , identity = None Identity
           , memory = defaultMemoryPolicy

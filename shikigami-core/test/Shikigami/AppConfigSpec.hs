@@ -44,6 +44,7 @@ import Settei
 import Settei.Env (EnvName (..), EnvSnapshot, bindingKey, bindingName, bindingsList, envSnapshot, environmentSource)
 import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
+import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -78,6 +79,7 @@ surfaceTests =
                 "conversation.idle_timeout_seconds",
                 "credentials.providers.anthropic.api_key",
                 "database.connection_string",
+                "delegation.default_budget",
                 "health.port",
                 "http.host",
                 "http.port",
@@ -111,6 +113,7 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
+              ("SHIKIGAMI_DELEGATION_DEFAULT_BUDGET", "delegation.default_budget"),
               ("SHIKIGAMI_HEALTH_PORT", "health.port"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
@@ -141,6 +144,7 @@ surfaceTests =
         -- Lenient by default: upgrading must not turn a tolerated broken
         -- manifest into a failed deploy without an explicit configuration change.
         agentsStrict defaultAppConfig @?= False
+        delegationBudgetNatural (delegationBudget defaultAppConfig) @?= 16
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
         runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300
@@ -274,6 +278,14 @@ strictnessTests =
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
         runTimeout low @?= secondsToNominalDiffTime 1
         approvalDeadline high @?= secondsToNominalDiffTime 86_400,
+      testCase "delegation budgets are bounded before runtime" do
+        low <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "0"]) [] []
+        high <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "1000"]) [] []
+        delegationBudgetNatural (delegationBudget low) @?= 0
+        delegationBudgetNatural (delegationBudget high) @?= 1000
+        mapM_
+          (\bad -> exitCode (runWith (optionsWith [] [cliOverride delegationBudgetKey bad]) [] []) @?= resolutionExitCode)
+          ["1001", "-1", "1.5"],
       testCase "a source that could not be read exits with the source status" do
         let run = appConfigRun AdminRole (optionsWith [] []) (Left "config.yaml: does not exist") (emptyEnvironment [])
         exitCode run @?= sourceExitCode

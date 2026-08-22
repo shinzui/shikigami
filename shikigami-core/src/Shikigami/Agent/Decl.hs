@@ -11,6 +11,11 @@ module Shikigami.Agent.Decl
     mkRecallLimit,
     recallLimitNatural,
     recallLimitInt,
+    DelegationBudget,
+    mkDelegationBudget,
+    delegationBudgetNatural,
+    delegationBudgetInt,
+    defaultDelegationBudget,
     defaultMemoryPolicy,
     Behavior (..),
     Trigger (..),
@@ -86,6 +91,52 @@ instance FromJSON RecallLimit where
   parseJSON value = do
     natural <- parseJSON value
     either (fail . Text.unpack) pure (mkRecallLimit natural)
+
+-- | A root-run-wide bound on distinct descendant workflows. Keeping the Dhall
+-- natural bounded here makes conversion to the store's integer column total.
+newtype DelegationBudget = DelegationBudget Natural
+  deriving stock (Eq, Ord)
+
+instance Show DelegationBudget where
+  show = show . delegationBudgetNatural
+
+mkDelegationBudget :: Natural -> Either Text DelegationBudget
+mkDelegationBudget value
+  | value > 1000 =
+      Left
+        ( "delegationBudget must be between 0 and 1000 inclusive; got "
+            <> Text.pack (show value)
+        )
+  | otherwise = Right (DelegationBudget value)
+
+delegationBudgetNatural :: DelegationBudget -> Natural
+delegationBudgetNatural (DelegationBudget value) = value
+
+-- | Total because 'mkDelegationBudget' admits only values from 0 through 1000.
+delegationBudgetInt :: DelegationBudget -> Int
+delegationBudgetInt = fromIntegral . delegationBudgetNatural
+
+defaultDelegationBudget :: DelegationBudget
+defaultDelegationBudget = DelegationBudget 16
+
+instance FromDhall DelegationBudget where
+  autoWith _ =
+    let Decoder {extract = extractNatural, expected = expectedNatural} = Dhall.natural
+     in Decoder
+          { extract = \expression ->
+              case Dhall.toMonadic (extractNatural expression) of
+                Left err -> Dhall.fromMonadic (Left err)
+                Right value -> either Dhall.extractError pure (mkDelegationBudget value),
+            expected = expectedNatural
+          }
+
+instance ToJSON DelegationBudget where
+  toJSON = toJSON . delegationBudgetNatural
+
+instance FromJSON DelegationBudget where
+  parseJSON value = do
+    natural <- parseJSON value
+    either (fail . Text.unpack) pure (mkDelegationBudget natural)
 
 data MemoryPolicy = MemoryPolicy
   { scope :: !MemoryScopeDecl,
@@ -183,6 +234,8 @@ data AgentDecl = AgentDecl
     trigger :: !Trigger,
     behavior :: !Behavior,
     sinks :: ![Sink],
+    delegates :: ![Text],
+    delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
@@ -195,7 +248,7 @@ data AgentDecl = AgentDecl
 -- with values journaled before those fields existed. Non-default declarations
 -- still carry their complete policy in the workflow journal.
 instance ToJSON AgentDecl where
-  toJSON AgentDecl {name, description, trigger, behavior, sinks, sanctionedProfile, identity, memory, enabled} =
+  toJSON AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory, enabled} =
     Aeson.object
       ( [ "name" Aeson..= name,
           "description" Aeson..= description,
@@ -203,6 +256,8 @@ instance ToJSON AgentDecl where
           "behavior" Aeson..= behavior,
           "sinks" Aeson..= sinks
         ]
+          <> ["delegates" Aeson..= delegates | not (null delegates)]
+          <> maybe [] (\budget -> ["delegationBudget" Aeson..= budget]) delegationBudget
           <> maybe [] (\profile -> ["sanctionedProfile" Aeson..= profile]) sanctionedProfile
           <> maybe [] (\declaredIdentity -> ["identity" Aeson..= declaredIdentity]) identity
           <> ["memory" Aeson..= memory | memory /= defaultMemoryPolicy]
@@ -219,8 +274,10 @@ instance FromJSON AgentDecl where
     trigger <- value Aeson..: "trigger"
     behavior <- value Aeson..: "behavior"
     sinks <- value Aeson..: "sinks"
+    delegates <- value Aeson..:? "delegates" Aeson..!= []
+    delegationBudget <- value Aeson..:? "delegationBudget"
     sanctionedProfile <- value Aeson..:? "sanctionedProfile"
     identity <- value Aeson..:? "identity"
     memory <- value Aeson..:? "memory" Aeson..!= defaultMemoryPolicy
     enabled <- value Aeson..:? "enabled" Aeson..!= True
-    pure AgentDecl {name, description, trigger, behavior, sinks, sanctionedProfile, identity, memory, enabled}
+    pure AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory, enabled}

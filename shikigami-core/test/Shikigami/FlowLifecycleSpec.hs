@@ -681,6 +681,8 @@ flowAgentDecl flowAgent =
             params = mempty
           },
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

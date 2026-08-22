@@ -110,6 +110,8 @@ streamAgent =
           },
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

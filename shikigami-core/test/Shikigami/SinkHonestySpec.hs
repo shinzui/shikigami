@@ -185,6 +185,8 @@ agentWith sinks =
       trigger = Schedule {cron = "*/5 * * * *"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks,
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

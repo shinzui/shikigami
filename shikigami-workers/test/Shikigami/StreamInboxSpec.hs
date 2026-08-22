@@ -255,6 +255,8 @@ streamAgent =
           },
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,

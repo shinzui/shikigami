@@ -77,6 +77,7 @@ module Shikigami.App.Config
     databaseConnectionStringKey,
     agentsDirectoryKey,
     agentsStrictKey,
+    delegationBudgetKey,
     schedulerCatchUpKey,
     kafkaBrokerKey,
     kafkaActivityTopicKey,
@@ -115,6 +116,12 @@ import GHC.Generics (Generic)
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
+import Shikigami.Agent.Decl
+  ( DelegationBudget,
+    defaultDelegationBudget,
+    delegationBudgetNatural,
+    mkDelegationBudget,
+  )
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -252,6 +259,9 @@ data AppConfig = AppConfig
     -- Off by default: upgrading must not turn a deployment that has been
     -- tolerating a broken manifest into a failed deploy on its own.
     agentsStrict :: !Bool,
+    -- | Root-run-wide maximum number of distinct descendant workflows when an
+    -- agent declaration does not choose its own limit.
+    delegationBudget :: !DelegationBudget,
     -- | What the scheduler does about cron minutes that passed while it was
     -- down. Skip-missed by default: a cron agent's value is "run about now",
     -- not "run once for every minute I was offline".
@@ -339,6 +349,7 @@ appConfig =
     <$> optional databaseConnectionStringSetting
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
     <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
+    <*> withDefault delegationBudgetSetting (constant "delegation-budget" "Bound the complete descendant tree of a root run" defaultDelegationBudget)
     <*> withDefault schedulerCatchUpSetting (constant "skip-missed" "Waking late arms the next future tick instead of replaying every missed minute" SkipMissed)
     <*> withDefault kafkaBrokerSetting (constant "kafka-broker" "Use the development shell's local broker" "127.0.0.1:9092")
     <*> withDefault kafkaActivityTopicSetting (constant "activity-topic" "The canonical activity stream topic" "activity.v1")
@@ -442,6 +453,28 @@ agentsStrictSetting =
     agentsStrictKey
     "Refuse to start when any agent manifest fails to load (off reports the failure and starts)"
     boolDecoder
+
+delegationBudgetSetting :: Setting DelegationBudget
+delegationBudgetSetting =
+  publicSettingWithRenderer
+    delegationBudgetKey
+    "Maximum distinct descendants per root agent run when its manifest does not override the limit (0-1000)"
+    delegationBudgetDecoder
+    (Text.pack . show . delegationBudgetNatural)
+
+delegationBudgetDecoder :: Decoder DelegationBudget
+delegationBudgetDecoder =
+  decoder
+    ( \key raw ->
+        case runDecoder (boundedIntegralDecoder @Int) key raw of
+          Left _ -> Left (decodeFailure key delegationBudgetExpectation)
+          Right value
+            | value >= 0 -> either (const (Left (decodeFailure key delegationBudgetExpectation))) Right (mkDelegationBudget (fromIntegral value))
+          Right _ -> Left (decodeFailure key delegationBudgetExpectation)
+    )
+
+delegationBudgetExpectation :: Text
+delegationBudgetExpectation = "a whole number between 0 and 1000 inclusive"
 
 schedulerCatchUpSetting :: Setting CatchUpPolicy
 schedulerCatchUpSetting =
@@ -655,6 +688,9 @@ agentsDirectoryKey = stableKey "agents.directory"
 agentsStrictKey :: Key
 agentsStrictKey = stableKey "agents.strict"
 
+delegationBudgetKey :: Key
+delegationBudgetKey = stableKey "delegation.default_budget"
+
 schedulerCatchUpKey :: Key
 schedulerCatchUpKey = stableKey "scheduler.catch_up"
 
@@ -771,6 +807,7 @@ environmentBindings =
         [ binding (EnvName "PG_CONNECTION_STRING") databaseConnectionStringKey,
           binding (EnvName "SHIKIGAMI_AGENTS_DIRECTORY") agentsDirectoryKey,
           binding (EnvName "SHIKIGAMI_AGENTS_STRICT") agentsStrictKey,
+          binding (EnvName "SHIKIGAMI_DELEGATION_DEFAULT_BUDGET") delegationBudgetKey,
           binding (EnvName "SHIKIGAMI_SCHEDULER_CATCH_UP") schedulerCatchUpKey,
           binding (EnvName "SHIKIGAMI_KAFKA_BROKER") kafkaBrokerKey,
           binding (EnvName "SHIKIGAMI_KAFKA_ACTIVITY_TOPIC") kafkaActivityTopicKey,

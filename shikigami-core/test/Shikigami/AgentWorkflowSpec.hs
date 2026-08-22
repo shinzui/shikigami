@@ -1568,6 +1568,8 @@ decl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,
@@ -1588,6 +1590,8 @@ missingTaskDecl =
             enabledBy = Nothing
           },
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,
@@ -1608,6 +1612,8 @@ profiledDecl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile =
         Just
           ProfileRequirement
@@ -1627,6 +1633,8 @@ profiledSkillDecl =
       trigger = Event {eventType = "test"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile =
         Just
           ProfileRequirement
@@ -1646,6 +1654,8 @@ flowDecl =
       trigger = Event {eventType = "test"},
       behavior = Flow {name = "at-risk-customer"},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       identity = Nothing,
       memory = defaultMemoryPolicy,
@@ -1660,13 +1670,15 @@ conversationDecl =
     }
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
-withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, sanctionedProfile, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
+withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
   AgentDecl
     { name,
       description,
       trigger,
       behavior,
       sinks,
+      delegates,
+      delegationBudget,
       sanctionedProfile,
       identity,
       memory = MemoryPolicy {scope, recallLimit, recordPolicy},

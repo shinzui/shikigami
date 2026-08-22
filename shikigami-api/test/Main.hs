@@ -50,6 +50,8 @@ packageBoundaryTests =
                   trigger = Schedule {cron = "* * * * *"},
                   behavior = Skill {path = "skills/none"},
                   sinks = [],
+                  delegates = [],
+                  delegationBudget = Nothing,
                   sanctionedProfile = Nothing,
                   identity = Nothing,
                   memory = defaultMemoryPolicy,

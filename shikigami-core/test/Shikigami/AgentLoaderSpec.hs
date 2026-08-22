@@ -15,6 +15,7 @@ import Shikigami.Agent.Decl
     MemoryPolicy (..),
     MemoryScopeDecl (AgentScope),
     RecordPolicy (Never, OnSuccess),
+    delegationBudgetNatural,
     recallLimitNatural,
   )
 import Shikigami.Agent.Loader
@@ -56,13 +57,21 @@ tests =
           AgentDecl
             { identity,
               memory = MemoryPolicy {scope, recallLimit, recordPolicy},
+              delegates,
+              delegationBudget,
               enabled
             } -> do
               identity @?= Nothing
               scope @?= AgentScope
               recallLimitNatural recallLimit @?= 10
               recordPolicy @?= OnSuccess
+              delegates @?= []
+              delegationBudget @?= Nothing
               enabled @?= True,
+      testCase "decodes a declared delegation allow-list and budget" do
+        AgentDecl {delegates, delegationBudget} <- expectLoaded "../agents/proof/research-supervisor.dhall"
+        delegates @?= ["web-researcher", "code-researcher"]
+        fmap delegationBudgetNatural delegationBudget @?= Just 8,
       testCase "default declarations retain their old JSON shape and decode it" do
         decl <- expectLoaded "../agents/heartbeat.dhall"
         let oldShape =

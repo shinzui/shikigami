@@ -9,11 +9,17 @@
 -- @docs\/plans\/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md@.
 module Shikigami.Agent.Workflow.Name
   ( agentRunWorkflowName,
+    ingestJobStepName,
   )
 where
 
-import Keiro.Workflow (WorkflowName)
+import Keiro.Workflow (StepName (..), WorkflowName)
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as Generated
 
 agentRunWorkflowName :: WorkflowName
 agentRunWorkflowName = Generated.workflowName
+
+-- | The first durable step in every agent run. Delegated children pre-journal
+-- this value, so both the reader and writer must share the same byte identity.
+ingestJobStepName :: StepName
+ingestJobStepName = StepName "ingest-job"

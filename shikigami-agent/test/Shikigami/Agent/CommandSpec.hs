@@ -85,6 +85,8 @@ testDecl sanctionedProfile =
       trigger = Event {eventType = "test"},
       behavior = Agent.Skill {path = "agents/skills/triage-note"},
       sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
       sanctionedProfile,
       identity = Nothing,
       memory = defaultMemoryPolicy,
