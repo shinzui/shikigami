@@ -57,11 +57,15 @@ Independent sinks in an agent run use ordering keys `<run-id>:<ordinal>` so one
 retrying transport does not head-of-line block another. Conversation-reply and
 flow step paths retain their shared per-run key where order is meaningful.
 
-The additive `PermanentFailure` outcome remains retryable at the Keiro boundary
-until a released cohort implements
-`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`.
-Shikigami does not invent a local terminal outbox verdict or mutate Keiro's
-tables.
+The additive `PermanentFailure` outcome maps through Keiro 0.14's public
+`PublishRejected` outcome. Shikigami constructs a bounded rejection with code
+`sink.permanent-failure` through `mkPublishRejection`, preserving the transport
+error as its detail. The main receipt must first commit as `dead`; only then may
+the publisher return `PublishRejected` and let Keiro record its separately
+terminal `rejected` outbox state. If the receipt write fails, the callback
+returns `PublishFailed` so Keiro does not make a terminal claim that
+Shikigami's own delivery ledger cannot substantiate. Shikigami never mutates
+Keiro-owned tables.
 
 
 ## Alternatives rejected
@@ -95,6 +99,13 @@ Production `AgentRunDeps` must carry the Shikigami pool for publisher receipts.
 Focused workflow tests may use the explicitly untracked seam, but the worker
 composition root always supplies the pool.
 
+Permanent transport rejection is visible on both sides of the boundary:
+Shikigami records a `dead` receipt with the transport detail, while Keiro records
+a `rejected` outbox row with the stable rejection code. Worker summaries report
+`rejected` separately from attempt-exhausted `dead` rows. HTTP status
+classification remains owned by Plan 22; this ADR defines what happens once a
+handler produces `PermanentFailure`.
+
 Every new multi-step sink must decide whether it needs a sub-receipt and must
 record it before the first non-idempotent step that can be repeated. Receipt
 write failures fail closed before a send and become operator-visible uncertainty
@@ -115,5 +126,4 @@ enforcement point.
 * `docs/workflow-versioning.md` — Shikigami's durable workflow compatibility
   procedure.
 * `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`
-  — the upstream terminal-rejection outcome still required for permanent
-  transport failures.
+  — the released upstream terminal-rejection contract consumed here.

@@ -30,13 +30,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-21T15:10:14Z) Milestone 1 (startable half): additive `Enqueued` and
       `PermanentFailure` constructors in `SinkOutcome`; enqueue sites tell the truth;
       structured publisher summaries expose retries and dead letters; all 342 core tests pass.
-- [ ] Milestone 1 (blocked half): consume a released Keiro `PublishRejected` terminal outcome.
-      **Still blocked as of 2026-08-21, with the user implementing the upstream plan in
-      parallel.** The released Keiro 0.13 cohort still exposes only
-      `PublishSucceeded | PublishFailed`, and the implementing plan
-      `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has
-      not yet produced a released cohort Shikigami can consume. Split out so the rest of this
-      plan can proceed — see Surprises & Discoveries.
+- [x] (2026-08-22T20:50:43Z) Milestone 1 (formerly blocked half): consumed the released
+      Keiro 0.14/Kioku 0.5 cohort; `PermanentFailure` now records a `dead` receipt and returns
+      bounded Keiro `PublishRejected`, while worker summaries expose terminal `rejected` rows
+      separately from exhausted `dead` rows.
 - [x] (2026-08-21T15:10:14Z) Prerequisites: plans 36/37/38, plan 16, and plan 28 M1 complete. Plan 28 M1 landed
       2026-08-05 and plan 38's schema gate is released, so the repository-side prerequisites are
       met; only the Keiro gate above remains, and it constrains one half of one milestone.
@@ -61,6 +58,9 @@ This section must always reflect the actual current state of the work.
       `cabal test all` run passed, the post-reconciliation focused run passed 348 core and
       74 worker tests, the migration manifest check passed, and `just keiro-gate` reported
       replay-neutral workflow storage with all conformance tests passing.
+- [ ] (2026-08-22T20:50:43Z) Final release-integration validation in progress: Keiro DSL
+      regeneration is provenance-only; focused tests, the 63-entry fresh migration plan,
+      full repository tests, and the workflow gate remain to be recorded.
 
 
 ## Surprises & Discoveries
@@ -68,40 +68,37 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-**The Keiro gate is real and narrow (re-verified against the released 0.13 cohort on
-2026-08-21).**
-Milestone 1 wants a terminal `PublishRejected` outcome so a permanently rejected outbox
-publication stops being retried. It does not exist. `PublishOutcome` at
-`keiro/src/Keiro/Outbox.hs:266-271` is still exactly:
+**The upstream gate cleared as a two-release cohort on 2026-08-22.** Keiro 0.14 implements
+`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` with
+`PublishRejected PublishRejection`, terminal `rejected` rows, bounded audit fields, and a
+separate publisher-summary count. Kioku 0.4.1 still capped Keiro below 0.14, so Shikigami could
+not consume Keiro alone. The user released Kioku 0.5 with matching `^>=0.14.0.0` bounds, and
+the exact six-package Keiro plus three-package Kioku cohort then solved without `allow-newer`
+or source overrides. Upstream annotated tags and all nine Hackage package releases were
+verified before the pins moved.
 
-```haskell
-data PublishOutcome
-  = PublishSucceeded
-  | PublishFailed !Text
-```
+Keiro intentionally makes `PublishRejection` abstract. Shikigami therefore uses
+`mkPublishRejection "sink.permanent-failure" (Just detail)` rather than constructing or
+serializing the audit value itself. The stable code meets Keiro's lowercase 1–64 byte contract;
+the smart constructor also keeps detail inside the 1–1024 UTF-8 byte contract. An invalid
+detail fails visibly as retryable instead of fabricating or truncating audit data.
 
-Three things are worth recording so nobody re-derives them. First, this is unchanged in the
-`keiro-0.11.0.0` tree, so `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`
-does not unblock it — plan 53 says so itself. Second, keiro's `Unreleased` section, which is
-substantial and describes a 0.12 release, does not mention `PublishRejected` either, so the
-pending upgrade will not deliver it by accident. Third, keiro's own implementing plan
-`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` has zero of
-four milestones complete, which is the honest calibration for how soon to expect it.
+Kioku 0.5 has an operational wrinkle unrelated to the terminal-outcome API: it corrects the
+embedded bytes of migration 0011. Fresh test databases apply the corrected migration normally,
+but a long-lived database that applied 0011 from Kioku 0.4.0 or 0.4.1 needs the upstream
+one-time ledger re-baseline before its first 0.5 `up` or `verify`. No real database or ledger was
+modified while implementing this plan. The new Keiro 0031 and Kioku 0013 entries bring the
+dependency-composed migration plan to 55 and Shikigami's complete plan to 63.
 
-Implementation ownership changed on 2026-08-21: the user is implementing the canonical Keiro
-plan in parallel, while this repository proceeds through the independent Shikigami milestones.
-Until that work is released as a coherent Keiro cohort, Shikigami keeps `PermanentFailure`
-additive but maps it to the existing retryable `PublishFailed`; no local terminal outcome is
-invented.
+The Kioku release guide also requires consumers to retire foreign tag decoders where possible.
+A repository scan found no Shikigami parser or literal for Kioku's historical
+`agent_memory_*`, `agent_session_*`, or `interactive_session_recorded` tags, so no decoder
+change is required here.
 
-The response is to split Milestone 1 rather than hold the plan. Everything else here — the
-additive `SinkOutcome` constructors, honest enqueue sites, the `sink_deliveries` receipt states,
-danwa conversation-id reuse on retry, and per-sink outbox keys — needs nothing from keiro. Ship
-those, and treat the `PublishRejected` consumption as a follow-on that lands when upstream does.
-Do **not** work around it by inventing a local terminal-rejection notion inside
-`publishSinkIntent`: the whole point of the upstream request is that the outbox, not its caller,
-must know a publication is terminally rejected, and a local approximation would have to be
-deleted when the real one arrives.
+The Keiro 0.14 build exposed three previously latent incomplete matches around Shikigami's
+custom atomic journal/outbox transaction. `prepareJournalAppend` can return
+`JournalRefusedTerminal`; the enqueue paths now turn that into an error and do not write an
+outbox message or receipt. This adds no workflow step, label, branch, or stored shape.
 
 - Planning research (2026-07-08): neither kizashi nor danwa accepts any client-supplied id or idempotency key. kizashi's `CreateSignalReq` (kizashi repo, `kizashi-api/src/Kizashi/Api/Signal.hs:102-117`) has no dedupe field and its handler mints a fresh `SignalId` per call (`kizashi-core/src/Kizashi/Signal/Http.hs:205-222`); danwa's `StartConversationRequest`/`PostMessageRequest` (danwa repo, `danwa-api/src/Danwa/Conversation/Api.hs:139-148`, `danwa-api/src/Danwa/Message/Api.hs:42-47`) mint server-side TypeIDs, and danwa has no lookup-by-external-key (conversations are listable by status only). Downstream idempotency in this plan is therefore entirely client-side; upstream API additions are recorded as follow-ups in the Decision Log.
 
@@ -202,21 +199,44 @@ Record every decision made while working on the plan.
   the final diff as replay-neutral.
   Date: 2026-08-21
 
+- Decision: Upgrade the complete dependency boundary to Keiro 0.14 and Kioku 0.5 in lockstep,
+  with exact project constraints and no `allow-newer` or source override.
+  Rationale: Kioku 0.4.1 correctly capped Keiro at 0.13. Kioku 0.5 is the released consumer
+  bound that makes Keiro 0.14 coherent, and both upstream migration guides require the two
+  releases to be treated together.
+  Date: 2026-08-22
+
+- Decision: Encode every `PermanentFailure` as a Keiro rejection with stable code
+  `sink.permanent-failure` and the transport error as validated detail; return
+  `PublishRejected` only after the Shikigami `dead` receipt commits.
+  Rationale: Keiro owns terminal outbox truth while Shikigami owns delivery-receipt truth. A
+  terminal result on only one side would reintroduce the split-brain state this plan removes.
+  Invalid audit detail or a failed receipt write remains retryable and visible instead of being
+  silently truncated or terminally acknowledged.
+  Date: 2026-08-22
+
+- Decision: Handle `JournalRefusedTerminal` as an enqueue error without a workflow patch.
+  Rationale: Refusal means the workflow has already reached a terminal marker, so writing a new
+  sink outbox message would violate the journal boundary. Making an existing transaction
+  outcome match total changes no declared step or stored value and is replay-neutral.
+  Date: 2026-08-22
+
 
 ## Outcomes & Retrospective
 
-As of 2026-08-21, all Shikigami-owned work is implemented. The journal stops at `Enqueued`;
+As of 2026-08-22, all planned work is implemented. The journal stops at `Enqueued`;
 the new receipt ledger becomes the queryable delivery truth and stores downstream ids; proven
 delivery suppresses another send; Danwa retries reuse their recorded conversation; and fan-out
 sinks no longer share a head-of-line key. Reconciliation explicitly records the irreducible
 acknowledgement/receipt crash window as `unknown` after Keiro commits a successful publication.
 
-The one remaining gap is deliberately upstream-owned: `PermanentFailure` must map to a released
-Keiro `PublishRejected` rather than the current retryable `PublishFailed`. Until
-`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` is released
-as a coherent dependency cohort, Shikigami does not pretend that permanent transport rejection
-is terminal. The receipt records it as `dead`, but Keiro may retry it; closing that integration
-is the only unchecked item in this plan.
+The released Keiro 0.14/Kioku 0.5 cohort closes the former upstream gap. A
+`PermanentFailure` now commits a `dead` Shikigami receipt and yields Keiro
+`PublishRejected`, so the outbox records `rejected` after one callback instead of retrying a
+known permanent result. Worker summaries keep that result distinct from rows that became
+`dead` only after exhausting transient attempts. Plan 22 remains responsible for classifying
+concrete HTTP statuses into `PermanentFailure`; this plan owns and now completes the durable
+boundary that consumes that outcome.
 
 
 ## Context and Orientation
@@ -246,9 +266,10 @@ Milestone 1 — tell the truth in the journal and the logs. Scope: `Sink/Types.h
 Add `Enqueued !Text` and `PermanentFailure !Text` to `SinkOutcome` in
 `Shikigami.Sink.Types` (keep `Delivered` and `Failed`; additive derived encodings preserve old
 journals). Switch the three enqueue sites to `Enqueued`. Update all exhaustive matches and
-tests. Obtain the coherent released Keiro cohort with `PublishRejected !Text`; do not emulate
-it with raw SQL or `PublishSucceeded`. Implement `logSinkResult` through plan 28's logger and
-emit publisher summary/dead-letter events.
+tests. Obtain the coherent released Keiro cohort with
+`PublishRejected PublishRejection`; construct the abstract rejection through
+`mkPublishRejection`, and do not emulate it with raw SQL or `PublishSucceeded`. Implement
+`logSinkResult` through plan 28's logger and emit publisher summary/dead-letter events.
 
 Milestone 2 — durable delivery receipts, reconciliation, and the send-guard. Scope: a
 plan-38 pg-migrate change, a delivery store module, and `publishSinkIntent`. At the end,
@@ -374,12 +395,10 @@ repair. Rolling back code while retaining the table is harmless.
 
 ## Portfolio Reconciliation (2026-07-30)
 
-This plan hard-depends on plans 16, 28 M1, 38, and 47. Its terminal-delivery milestone is
-blocked on Keiro IR-3 at
-`mori://shinzui/keiro/docs/improvement-requests/add-an-explicit-terminal-outbox-rejection-outcome.md`.
-Keiro 0.4.0.1 has only `PublishSucceeded` and `PublishFailed`; do not emulate rejection with
-raw table mutation, success, or an unbounded retry. Handler truth and receipt-schema work may start
-before the upstream release.
+This plan hard-depends on plans 16, 28 M1, 38, and 47. The former terminal-delivery block is
+cleared: `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`
+shipped in Keiro 0.14, and Kioku 0.5 supplies the coherent consumer bound. Shikigami consumes
+the public rejection API without raw table mutation, false success, or an unbounded retry.
 
 
 ## Interfaces and Dependencies
@@ -387,7 +406,7 @@ before the upstream release.
 Hard dependencies: plans 36, 37, 38, and plan 28 Milestone 1; preferred predecessor:
 plan 16. Schema work uses `pg-migrate`/`pg-migrate-test-support`.
 
-Libraries and why: keiro (`Keiro.Outbox` — `publishClaimedOutbox`, `defaultPublishOptions` (`maxAttempts = 10`, `ConstantBackoff 2`, `orderingPolicy = PerKeyHeadOfLine`, verified in keiro `src/Keiro/Outbox/Types.hs:221-230`), `OutboxRow (..)`, `PublishOutcome (..)`, `OutboxPublishSummary (..)`, `lookupOutbox`/`listOutbox` for inspection; outbox state in table `keiro.keiro_outbox`, status ∈ `pending|publishing|sent|failed|dead`), hasql/hasql-pool (the receipts table statements), warp/wai (test stubs, already test dependencies), aeson (backward-compatible constructor addition).
+Libraries and why: keiro (`Keiro.Outbox` — `publishClaimedOutbox`, `defaultPublishOptions` (`maxAttempts = 10`, `ConstantBackoff 2`, `orderingPolicy = PerKeyHeadOfLine`, verified in keiro `src/Keiro/Outbox/Types.hs:221-230`), `OutboxRow (..)`, `PublishOutcome (..)`, `PublishRejection`, `mkPublishRejection`, `OutboxPublishSummary (..)`, `lookupOutbox`/`listOutbox` for inspection; outbox state in table `keiro.keiro_outbox`, status ∈ `pending|publishing|sent|failed|dead|rejected`), hasql/hasql-pool (the receipts table statements), warp/wai (test stubs, already test dependencies), aeson (backward-compatible constructor addition).
 
 Signatures that must exist at the end (full module paths):
 
@@ -419,9 +438,9 @@ Hard cross-MasterPlan predecessor: plan 28 Milestone 1 supplies `Shikigami.Log`,
 this plan imports for delivery and publisher events. Preferred predecessor: plan 16 first
 makes every handler produce truthful success/failure outcomes. Plan 27 lands after this
 plan and preserves these semantics.
-The selected coherent released Keiro cohort must expose terminal `PublishRejected`; verify
-the release against the authoritative registry/upstream tags after inspecting source through
-Mori. If absent, this plan owns the upstream addition/release before Shikigami consumes it.
+The selected coherent released cohort is Keiro 0.14 plus Kioku 0.5. It exposes terminal
+`PublishRejected PublishRejection`; its Hackage releases and authoritative upstream tags were
+verified after inspecting both projects through Mori.
 
 
 ## Revision Notes
@@ -467,3 +486,9 @@ Mori. If absent, this plan owns the upstream addition/release before Shikigami c
   passed the exact migration manifest check, workflow replay/conformance gate, focused core and
   worker suites, and the full test suite. The plan remains open only for consumption of the
   released Keiro Plan 165 cohort.
+
+- 2026-08-22: Consumed the released Keiro 0.14/Kioku 0.5 cohort and completed the formerly
+  blocked half of Milestone 1. Permanent sink failures now use Keiro's bounded terminal
+  rejection contract after the Shikigami dead receipt commits; worker summaries distinguish
+  rejected rows from exhausted dead rows. Recorded Kioku's migration-0011 ledger remediation,
+  the 63-entry complete fresh migration plan, and total handling of terminal journal refusal.

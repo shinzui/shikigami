@@ -88,9 +88,8 @@ data SinkOutcome
     Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
   | Failed !Text -- the send errored (the worker decides retry)
-  | -- | The transport classified a failure as permanent. Until Keiro exposes
-    -- its terminal publication-rejection outcome, the publisher preserves this
-    -- as a failure rather than claiming success; see
+  | -- | The transport classified a failure as permanent. The publisher maps
+    -- this to Keiro's terminal publication-rejection outcome; see
     -- @mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes@.
     PermanentFailure !Text
   deriving stock (Eq, Show, Generic)

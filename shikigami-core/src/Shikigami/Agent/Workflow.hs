@@ -45,7 +45,7 @@ import Hasql.Pool (Pool)
 import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), decodeJsonIntegrationEvent, encodeJsonIntegrationEvent)
 import Keiro.Integration.Event qualified as Integration
-import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx)
+import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx, mkPublishRejection)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
     PatchId (..),
@@ -739,6 +739,8 @@ enqueueSinkIntents grantSource job decl sid output = do
         case parseEither Aeson.parseJSON stored of
           Right replayed -> pure (Right replayed)
           Left err -> pure (Left ("dispatch-sinks replay decode failed: " <> Text.pack err))
+      JournalRefusedTerminal marker ->
+        pure (Left ("dispatch-sinks journal append refused by terminal marker: " <> marker))
       JournalAppendConflict err ->
         pure (Left ("dispatch-sinks journal append conflict: " <> Text.pack (show err)))
   case txResult of
@@ -804,6 +806,8 @@ enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurred
         case parseEither Aeson.parseJSON stored of
           Right replayed -> pure (Right replayed)
           Left err -> pure (Left ("sink intent replay decode failed: " <> Text.pack err))
+      JournalRefusedTerminal marker ->
+        pure (Left ("sink intent journal append refused by terminal marker: " <> marker))
       JournalAppendConflict err ->
         pure (Left ("sink intent journal append conflict: " <> Text.pack (show err)))
   case txResult of
@@ -954,9 +958,15 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
 publishUntracked :: SinkResult -> PublishOutcome
 publishUntracked result = case outcome result of
   Failed err -> PublishFailed err
-  PermanentFailure err -> PublishFailed err
+  PermanentFailure err -> either PublishFailed id (permanentPublishOutcome err)
   Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
   _ -> PublishSucceeded
+
+permanentPublishOutcome :: Text -> Either Text PublishOutcome
+permanentPublishOutcome detail =
+  first
+    (("invalid terminal sink rejection: " <>) . Text.pack . show)
+    (PublishRejected <$> mkPublishRejection "sink.permanent-failure" (Just detail))
 
 publishTracked :: Log.Logger -> Pool -> Text -> SinkKind -> SinkIntent -> IO SinkResult -> IO PublishOutcome
 publishTracked logger pool messageId kind intent send = do
@@ -1008,11 +1018,16 @@ publishTracked logger pool messageId kind intent send = do
             -- event is the operator-visible repair target.
             pure PublishSucceeded
       Failed err -> recordRetryableFailure err
-      PermanentFailure err -> do
-        recordReceipt Delivery.Dead (Just err) >>= reportReceiptWrite "sink.delivery.dead_write_failed"
-        -- Keiro plan 165 owns terminal publication rejection. Until its release
-        -- is consumed, preserve failure rather than falsely publishing success.
-        pure (PublishFailed err)
+      PermanentFailure err ->
+        case permanentPublishOutcome err of
+          Left rejectionError -> recordRetryableFailure (rejectionError <> "; sink failure: " <> err)
+          Right rejected -> do
+            recorded <- recordReceipt Delivery.Dead (Just err)
+            case recorded of
+              Left receiptError -> do
+                logReceiptError logger "sink.delivery.dead_write_failed" messageId kind receiptError
+                pure (PublishFailed ("terminal delivery receipt write failed: " <> receiptError))
+              Right () -> pure rejected
       Enqueued detail -> recordRetryableFailure ("dispatcher returned enqueue-only outcome during publish: " <> detail)
       DeniedOutcome reason -> recordTerminalNonSend ("permission denied at publish: " <> reason)
       Stubbed -> recordTerminalNonSend "deprecated stubbed sink outcome"

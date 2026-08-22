@@ -56,8 +56,8 @@ library
     , http-types
     , hw-kafka-client
     , kafka-effectful
-    , keiro                        ==0.13.0.0
-    , keiro-ops                    ==0.13.0.0
+    , keiro                        ==0.14.0.0
+    , keiro-ops                    ==0.14.0.0
     , kioku-api
     , kioku-core
     , kiroku-store

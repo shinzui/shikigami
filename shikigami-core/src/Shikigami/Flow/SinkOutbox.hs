@@ -103,6 +103,8 @@ enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurred
         case parseEither Aeson.parseJSON stored of
           Right replayed -> pure (Right replayed)
           Left err -> pure (Left ("sink intent replay decode failed: " <> Text.pack err))
+      JournalRefusedTerminal marker ->
+        pure (Left ("sink intent journal append refused by terminal marker: " <> marker))
       JournalAppendConflict err ->
         pure (Left ("sink intent journal append conflict: " <> Text.pack (show err)))
   case txResult of

@@ -73,20 +73,24 @@ runOutboxPublisher env = do
     threadDelay 1_000_000
 
 -- | Report only passes that claimed work, so an idle one-second polling loop
--- does not fill the log. A dead-lettered row is an error, a retry is a warning,
--- and a wholly successful pass is informational.
+-- does not fill the log. A dead-lettered or permanently rejected row is an
+-- error, a retry is a warning, and a wholly successful pass is informational.
 logPublishSummary :: Log.Logger -> OutboxPublishSummary -> IO ()
-logPublishSummary logger OutboxPublishSummary {claimed, published, retried, dead} =
+logPublishSummary logger OutboxPublishSummary {claimed, published, rejected, retried, dead} =
   when (claimed > 0) do
     let fields =
           [ "claimed" Aeson..= claimed,
             "published" Aeson..= published,
+            "rejected" Aeson..= rejected,
             "retried" Aeson..= retried,
             "dead" Aeson..= dead
           ]
     if dead > 0
       then Log.logError logger "worker.outbox.dead_lettered" fields
       else
-        if retried > 0
-          then Log.logWarn logger "worker.outbox.retried" fields
-          else Log.logInfo logger "worker.outbox.published" fields
+        if rejected > 0
+          then Log.logError logger "worker.outbox.rejected" fields
+          else
+            if retried > 0
+              then Log.logWarn logger "worker.outbox.retried" fields
+              else Log.logInfo logger "worker.outbox.published" fields

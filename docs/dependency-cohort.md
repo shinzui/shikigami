@@ -60,15 +60,15 @@ pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
 |---|---|---|---|---|
 | `keiki` | 0.4.0.0 | **0.9.0.0** | `v0.9.0.0` | `9714d37033c37595e3aaa3319ca0ca77466782e0` |
 | `keiki-codec-json` | 0.4.0.0 | **0.9.0.0** | `v0.9.0.0` | `9714d37033c37595e3aaa3319ca0ca77466782e0` |
-| `keiro` | 0.4.0.1 | **0.13.0.0** | `keiro-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `keiro-core` | 0.4.0.1 | **0.13.0.0** | `keiro-core-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `keiro-dsl` | — | **0.13.0.0** | `keiro-dsl-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `keiro-migrations` | 0.4.0.1 | **0.13.0.0** | `keiro-migrations-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `keiro-ops` | — | **0.13.0.0** | `keiro-ops-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `keiro-pgmq` | — | **0.13.0.0** | `keiro-pgmq-0.13.0.0` | `1eef4b2f5323c419050f3584a0969a0c4f1c9308` |
-| `kioku-api` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
-| `kioku-core` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
-| `kioku-migrations` | 0.2.0.0 | **0.4.1.0** | `v0.4.1.0` | `bb141a7599e5a20c2840ab5702784aa41049c2fc` |
+| `keiro` | 0.4.0.1 | **0.14.0.0** | `keiro-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `keiro-core` | 0.4.0.1 | **0.14.0.0** | `keiro-core-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `keiro-dsl` | — | **0.14.0.0** | `keiro-dsl-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `keiro-migrations` | 0.4.0.1 | **0.14.0.0** | `keiro-migrations-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `keiro-ops` | — | **0.14.0.0** | `keiro-ops-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `keiro-pgmq` | — | **0.14.0.0** | `keiro-pgmq-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
+| `kioku-api` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
+| `kioku-core` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
+| `kioku-migrations` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
 | `shikumi` | 0.3.0.1 | **0.3.0.2** | `shikumi-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
 | `baikai` | 0.4.1.0 | **0.5.0.0** | `baikai-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
 | `baikai-claude` | 0.4.0.1 | **0.5.0.0** | `baikai-claude-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
@@ -91,7 +91,7 @@ run-job consumer and is pinned with the rest of the Keiro family.
 `keiro-ops` is new to this cohort and is an ordinary library: `shikigami-server`
 links it so the `shikigami` administrative binary can mount Keiro's operator
 command tree instead of hand-writing one. Its own bounds are
-`keiro ^>=0.13.0.0`, `keiro-migrations ^>=0.13.0.0`, `keiro-pgmq ^>=0.13.0.0`,
+`keiro ^>=0.14.0.0`, `keiro-migrations ^>=0.14.0.0`, `keiro-pgmq ^>=0.14.0.0`,
 and `kiroku-store >=0.8 && <0.9`, all of which this cohort already satisfies, so
 it resolved without moving anything else. Adopted by
 `docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md`.
@@ -104,9 +104,9 @@ declared as `extra-packages: keiro-dsl` in `cabal.project` rather than as a
 Hackage package as if it were local, which is what lets `cabal run keiro-dsl --
 check ...` resolve to the pinned version from inside this project instead of
 depending on a developer's `PATH` or on a separate keiro checkout. The
-`constraints:` row pins it to the same `0.13.0.0` as the runtime packages,
-because the toolchain and the runtime move in lockstep: `keiro-dsl 0.13.0.0`
-declares `keiro-core ^>=0.13.0.0` and `keiki >=0.9 && <0.10`, both of which this
+`constraints:` row pins it to the same `0.14.0.0` as the runtime packages,
+because the toolchain and the runtime move in lockstep: `keiro-dsl 0.14.0.0`
+declares `keiro-core ^>=0.14.0.0` and `keiki >=0.9 && <0.10`, both of which this
 cohort already satisfies. Adopted by
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`.
 
@@ -120,10 +120,13 @@ That was not true when the upgrade started. `kioku-core 0.4.0.0`'s library decla
 (because `shikumi 0.3.0.2` requires `baikai >=0.5`) and `baikai-effectful` to `0.3.0.2`.
 Three packages held by one bound.
 
-`kioku 0.4.1.0` (2026-08-18) lifted it: the release moves kioku onto baikai 0.5, declaring
+`kioku 0.4.1.0` (2026-08-18) lifted it: that release moved kioku onto baikai 0.5, declaring
 `baikai ^>=0.5.0.0`, `baikai-claude ^>=0.5.0.0`, `baikai-effectful ^>=0.3.0.3`,
 `shikumi ^>=0.3.0.2`, and `shikumi-trace ^>=0.2.0.2`. Its keiro, keiki, kiroku, and shibuya
-bounds are unchanged from 0.4.0.0, and it adds no migration.
+bounds were unchanged from 0.4.0.0, and it added no migration. `kioku 0.5.0.0`
+(2026-08-22) then moved the memory cohort to Keiro 0.14 without moving those other
+dependencies. That released bound is what lets Shikigami consume Keiro's terminal outbox
+rejection without an `allow-newer`.
 
 This is the outcome the cohort discipline is for. The bound was a true statement about which
 baikai kioku had compiled against, so the fix was an upstream release rather than a solver
@@ -161,8 +164,9 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 
 | Concern | Evidence |
 |---|---|
-| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.2.0.0` declares `keiki ^>=0.4.0.0`, `keiro ^>=0.4.0.1`, `keiro-core ^>=0.4.0.1`; `kioku-migrations-0.2.0.0` declares `keiro-migrations ^>=0.4.0.1`. The solver selects them with no `allow-newer`. |
+| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.0.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.14.0.0`, and `keiro-core ^>=0.14.0.0`; `kioku-migrations-0.5.0.0` declares `keiro-migrations ^>=0.14.0.0`. The solver selects the exact released cohort with no `allow-newer`. |
 | Kioku's own codec regression guard | Kioku 0.2.0.0 adds `Kioku.CodecCompatSpec`, which decodes literal pre-upgrade event payloads under the new cohort. |
+| Keiro terminal outbox rejection | Keiro 0.14 adds bounded `PublishRejection` values, `PublishRejected`, terminal `rejected` rows, rejection audit fields, and a `rejected` publisher-summary count. Shikigami constructs code `sink.permanent-failure` through `mkPublishRejection`; it never mutates Keiro-owned tables. |
 | Keiro snapshot state-shape hash | `StateCodec` gains `stateShapeHash`; migration `0019-keiro-snapshots-state-shape-hash.sql` adds the column and existing rows take the empty sentinel, invalidating each snapshot exactly once on next hydration. Journals and events are untouched. |
 | Keiro child failure reason | Migration `0020-keiro-workflow-children-failure-reason.sql` adds a nullable `failure_reason`; `markChildFailedTx` takes the reason as a third argument. |
 | Keiro queue envelopes | Scaffolded workqueues gain a versioned `keiroJobCodec` envelope. Shikigami's queues are not scaffolded by `keiro-dsl` and continue to use their own payload codecs, so no in-flight message changes shape in this plan. Recorded as a live constraint for plan 39. |
@@ -303,9 +307,9 @@ for fallout from baikai 0.5.
 
 ## Migration consequence
 
-This upgrade is migration-first. It added **16** migrations to the composed plan — kiroku
-`0009`–`0011`, keiro `0021`–`0030`, and kioku `0011`–`0012` — bringing the applied total to
-57. Two of them deserve operator attention:
+The first August cohort upgrade was migration-first. It added **16** migrations to the
+then-current composed plan — kiroku `0009`–`0011`, keiro `0021`–`0030`, and kioku
+`0011`–`0012`. Two of them deserve operator attention:
 
 - **`kioku/0011-kioku-memory-space-partition`** adds the partition column and backfills every
   existing row into `kioku_legacy` before making the column `NOT NULL`. A row that escapes
@@ -324,10 +328,23 @@ binary is **not** a rollback. Shikigami is a library embedder, so the registry r
 is its own responsibility; it is already wired at
 `shikigami-migrations/src/Shikigami/Migrations.hs:106`.
 
-`kioku 0.4.1.0` adds no migration — it is a dependency-bounds release — so the plan below is
-unchanged by it.
+Keiro 0.14 and Kioku 0.5 add two entries: Keiro `0031` adds terminal rejected-outbox audit
+columns, constraints, and partial-index exclusions; Kioku `0013` adds the partition-aware
+full-text index when `btree_gin` is available and retains the old correctness-preserving index
+otherwise. The dependency-composed plan is therefore 55 entries (Kiroku 11, Keiro 31, Kioku
+13), and Shikigami's eight entries bring the complete application plan to 63.
 
-Applied and verified on the in-repo dev cluster on 2026-08-17: 57 applied, 0 pending, and
-`cabal test all` green afterwards. **A database holding real data is a different exercise** —
-use the `cohort-migrate` skill, which proves the remediation on a restored clone before
-production is touched.
+Kioku 0.5 also corrects the already-released payload bytes for
+`kioku/0011-kioku-memory-space-partition`. A fresh or ephemeral database applies the corrected
+payload and needs no special handling. Before the first `up` or `verify` with Kioku 0.5, an
+existing database that applied 0011 from Kioku 0.4.0 or 0.4.1 must run Kioku's one-time,
+idempotent ledger re-baseline at
+`mori://shinzui/kioku` project path
+`kioku-migrations/ledger-fixups/2026-08-19-rebaseline-0011-checksum.sql`, after a verified
+backup. An artifact-level Mori URI for ledger fixups is pending, so the canonical project URI
+and project-relative path are recorded together. That script is operational remediation for
+the exact withdrawn checksum, not a schema migration and not permission to ignore any other
+checksum mismatch.
+
+**A database holding real data is a different exercise** — use the `cohort-migrate` skill,
+which proves the remediation on a restored clone before production is touched.

@@ -290,37 +290,43 @@ reiActionTests =
 
 -- ── The outcome mapping ─────────────────────────────────────────────────────
 
--- | 'Shikigami.Agent.Workflow.publishSinkIntent' turns a 'SinkOutcome' into an
--- outbox verdict, and the rule is \"anything that is not 'Failed' is published\".
---
--- That rule is fine — it is what made @Stubbed@ dangerous, not the rule itself.
--- What has to stay true is that the two are consistent: the outcome a dishonest
--- handler used to return would still be published today, which is exactly why
--- nothing produces it any more.
+-- | 'Shikigami.Agent.Workflow.publishSinkIntent' turns a 'SinkOutcome' into one
+-- of three outbox verdicts. Transient failures retry, permanent failures reject
+-- terminally, and successful or intentional non-send outcomes acknowledge the
+-- row. Keeping all three cases visible prevents a stable downstream rejection
+-- from either retrying forever or masquerading as delivery.
 outcomeMappingTests :: TestTree
 outcomeMappingTests =
   testGroup
     "the outbox verdict follows the outcome"
-    [ testCase "a failed outcome leaves the row unpublished" $
-        publishes (Failed "no rei endpoint is configured") @?= False,
-      testCase "a delivered outcome publishes the row" $
-        publishes (Delivered "rei-action recorded for intention int_42") @?= True,
+    [ testCase "a failed outcome leaves the row retryable" $
+        publicationDisposition (Failed "no rei endpoint is configured") @?= Retryable,
+      testCase "a permanent failure terminally rejects the row" $
+        publicationDisposition (PermanentFailure "downstream refused this resource") @?= Rejected,
+      testCase "a delivered outcome acknowledges the row" $
+        publicationDisposition (Delivered "rei-action recorded for intention int_42") @?= Acknowledged,
       -- The historical hazard, stated as a fact rather than as a warning: had
       -- ReiAction kept returning Stubbed, this is what the outbox would have
       -- done with it.
       testCase "the deprecated Stubbed outcome would still publish, which is why nothing returns it" $
-        publishes Stubbed @?= True,
+        publicationDisposition Stubbed @?= Acknowledged,
       testCase "a denied sink publishes, because there is nothing to retry" $
-        publishes (DeniedOutcome "agent 'intruder' has no sink grants") @?= True
+        publicationDisposition (DeniedOutcome "agent 'intruder' has no sink grants") @?= Acknowledged
     ]
 
+data PublicationDisposition
+  = Acknowledged
+  | Retryable
+  | Rejected
+  deriving stock (Eq, Show)
+
 -- | The rule under test, mirrored from @publishSinkIntent@'s @case outcome@.
-publishes :: SinkOutcome -> Bool
-publishes = \case
-  Failed _ -> False
-  PermanentFailure _ -> False
-  Enqueued _ -> False
-  _ -> True
+publicationDisposition :: SinkOutcome -> PublicationDisposition
+publicationDisposition = \case
+  Failed _ -> Retryable
+  PermanentFailure _ -> Rejected
+  Enqueued _ -> Retryable
+  _ -> Acknowledged
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 
