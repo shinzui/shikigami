@@ -1,6 +1,6 @@
 # Shikigami implementation order
 
-Reviewed **2026-08-21**, superseding the 2026-08-20 review. Goal of this revision: absorb the
+Reviewed **2026-08-22**, superseding the 2026-08-21 review. Goal of this revision: absorb the
 largest single movement this portfolio has seen — **thirteen plans landed across two days** — and
 re-cut what remains around one explicit objective: **land shared types and seams before their
 consumers so the sequence minimizes rewrites**.
@@ -49,11 +49,11 @@ widened in [Citation rot](#citation-rot-re-measured).
 
 ## The open set
 
-55 ExecPlans across 10 MasterPlans. **30 are complete**; 25 have open work.
+55 ExecPlans across 10 MasterPlans. **32 are complete**; 23 have open work.
 
-Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, **17**, **18**, **20**, 21, **24**, **25**, **26**,
-**29**, **30**, **33**, 36, 39, **43**, 47, **49**, **50**, **51**, 53, 55. The thirteen in bold
-landed on 2026-08-19 and 2026-08-20; see
+Complete: 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15, **17**, **18**, **19**, **20**, 21, **24**, **25**, **26**,
+**29**, **30**, **33**, **35**, 36, 39, **43**, 47, **49**, **50**, **51**, 53, 55. Thirteen bold entries
+landed on 2026-08-19 and 2026-08-20; plans 19 and 35 landed on 2026-08-22. See
 [what landed](#what-landed-and-what-it-changes-for-everyone-else). Plan 30 counts as complete
 because its Outcomes section says the purpose is met; its one unchecked behavioral test was
 explicitly descoped in favor of the upstream `keiro-ops` coverage plus Shikigami-owned parser,
@@ -69,13 +69,14 @@ Open with a small remainder (5 plans, ~1 session each):
 | 37 | M3, **and its description was stale**: the `CODD_*` contract is gone. `shikigami-migrate` now reads `DATABASE_URL` itself through `pg-migrate`, with the reason written into `shikigami-migrations/app/Main.hs:1-25`. What remains is Settei unification, still blocked by the package cycle (`shikigami-core`'s test suite depends on `shikigami-migrations:test-support`). Reassigned to plan 38. |
 | 38 | M4: the same Settei unification, plus `just migrate` and `just migrate-status` still passing `DATABASE_URL` (`justfile:27-39`). |
 
-Open and substantial (20 plans): 12, 14, 19, 22, 23, 27, 28 (M2–M4), 31, 32, 34, 35, 40, 41,
+Open and substantial (18 plans): 12, 14, 22, 23, 27, 28 (M2–M4), 31, 32, 34, 40, 41,
 42, 44, 45, 46, 48, 52, 54.
 
 
 ## What landed, and what it changes for everyone else
 
-Thirteen plans, four groups. Each entry is what shipped, then what it costs or saves someone else.
+The thirteen-plan 2026-08-19/20 landing is grouped below; plans 19 and 35 are summarized in the
+2026-08-22 revision note. Each entry is what shipped, then what it costs or saves someone else.
 
 ### Correctness and delivery — plans 17, 18, 20
 
@@ -261,9 +262,10 @@ scheduled below; it is one sitting.
 
 Re-measured 2026-08-20 over the then-26 open plans. Seventeen cited `shikigami-cli` or
 `shikigami-core/src/Shikigami/Worker.hs`, but plan 30's hits were its own audit and correction
-table. With plan 30 complete, **sixteen of the 25 open plans still carry unfixed pointers**: 8, 12,
-13, 14, 16, 19, 22, 23, 27, 28, 31, 32, 34, 37, 40, and 48. Four open plans (14, 19, 28, 35)
-additionally carry line-numbered `keiro/src/...` citations predating keiro 0.13.
+table. With plans 19, 30, and 35 complete and refreshed, **fifteen of the 23 open plans still
+carry unfixed pointers**: 8, 12, 13, 14, 16, 22, 23, 27, 28, 31, 32, 34, 37, 40, and 48.
+Two open plans (14 and 28) additionally carry line-numbered `keiro/src/...` citations predating
+keiro 0.13.
 
 The correction table is unchanged:
 
@@ -278,7 +280,7 @@ The correction table is unchanged:
 and audit four things, not one:
 
 1. Every `` `path:line` `` against the working tree and the pinned keiro tag.
-2. **`docs/adr/`**, which now holds 21 records and grew by 18 in two days. Plan 26's central
+2. **`docs/adr/`**, which now holds 23 records and grew rapidly. Plan 26's central
    decision was contradicted by an ADR that had landed the previous day.
 3. **What the cohort already ships.** Three plans in two days found a released package doing work
    they had scheduled.
@@ -301,11 +303,8 @@ and audit four things, not one:
   scattered, which is the good version of this outcome. Moving to `*WithContext` needs a real
   `PrincipalRef`, so **plan 54 owns clearing it**. Kioku confirmed 2026-08-18 that no removal is
   scheduled.
-- **`keiro` still has not shipped `PublishRejected`.** Re-verified 2026-08-20 by reading
-  `keiro/src/Keiro/Outbox.hs:266-271` in the keiro tree: `PublishOutcome` is still
-  `PublishSucceeded | PublishFailed`, and keiro's `Unreleased` section is empty. **Plan 19's
-  M1 blocked half stays blocked**; nothing else in plan 19 needs it, and plan 22 does not need it
-  either — see [the order](#the-order).
+- **Keiro 0.14 shipped `PublishRejected`.** Plan 19 consumed the released terminal rejection and
+  landed on 2026-08-22; plan 22 is no longer waiting on its delivery boundary.
 - **Plan 12's upstream contracts are still absent.** Re-verified 2026-08-20: no `Baikai.Mcp.*`
   source in baikai 0.5.0.0, no MCP adapter in shikumi 0.3.0.2. Both carry upstream *plans*
   (baikai MasterPlan 6 plans 30–32; shikumi plan 30). Plan 12 M1–M2 startable; M3–M5 not.
@@ -314,8 +313,8 @@ and audit four things, not one:
   session id from the workflow journal. It now touches only plan 34.
 - **`keiro 0.13` publishes a Seihou blueprint, `blueprints/keiro-upgrade/`.** Future keiro upgrades
   should go through `seihou agent migrate keiro-upgrade` rather than being hand-derived.
-- **Additive-only journaled-value versioning as a hard constraint** on plans 19, 23, 27, 34, and
-  35. Prefer the right shape now over an additive shape that costs a later cleanup — but note that
+- **Additive-only journaled-value versioning as a hard constraint** on plans 23, 27, and 34.
+  Prefer the right shape now over an additive shape that costs a later cleanup — but note that
   ADR 0011 and ADR 0012 have made the *mechanics* routine: plan 33 changed the declaration record
   with no codec change, and four plans added journaled steps behind patches without incident.
 - **`pgmq 0.5`'s `parseQueueName` narrowing** and **kioku's projection-schema relocation** are both
@@ -338,8 +337,8 @@ landed on 2026-08-20.
 | 28 | **Now has three named consumers waiting.** Plan 20's Milestone 3 is log-only until M2 supplies the counter; plan 29 left health-path exclusion from request logging to M4 and pointed it at `Servant.Health.Paths.healthRawPaths`; M3's trace propagation still waits on plan 22's `postJSONWithHeaders`. It also carries the largest citation debt in the corpus — 11 deleted paths and 3 stale keiro citations. |
 | 30 | ✅ **Landed 2026-08-20.** It mounts `keiro-ops 0.13.0.0`, adds only the agent inventory and Keiro-to-Kioku journal join Shikigami owns, and removes Kioku IR-2 from its dependency set. Plan 23 is now unblocked. |
 | 34, 23, 54 | Route memory access through `Shikigami.Memory.Access`; do not name `legacyMemorySpaceId` directly. Plan 23 supplies the directory that plan 54 consumes. |
-| 35 | **Entry rules met.** Plans 24, 33, and 39 have all landed. Re-check its two keiro citations, and note that plan 24 left `delegate`'s `freshOrdinal`-derived child id in its inventory as this plan's to fix. |
-| 40 | **Not entry-ready until plan 35 lands.** Its own Progress and Context sections correctly make plan 35's `delegates` and `delegationBudget` fields prerequisites; the previous revision's claim that plan 33 was its only dependency was wrong. Re-point one deleted path after consuming plan 35's final schema. |
+| 35 | ✅ **Landed 2026-08-22.** Declarations now own allow-lists and bounded budgets; all callers share cycle/depth/root-ledger enforcement; child ids use stable keys; and Flow has the governed capability. |
+| 40 | **Entry-ready now that plan 35 landed.** Consume its final `delegates`, `delegationBudget`, lineage, and stable-key surfaces; re-point one deleted path before implementation. |
 | 44, 45 | Plan 43 landed and `Shikigami.Repository` is the shared revision vocabulary; cite it rather than defining a second one. **Plan 45's entry rules are met** (43 ✅ + 25 ✅). Plan 44 still needs Kikan IR-5. |
 | 48 | Rewrite as a consumer of `Baikai.Agent` / `baikai-agent` — `AgentRunRequest`, `AgentCapability`, `AgentSafety`, `AgentCommand`, `AgentCeiling`. Its package home (`shikigami-agent`) is settled. **Registration under a MasterPlan is still open.** |
 | 52 | Bind to `canonicalEncode` / `commitmentDigest`; do not define a second encoder. Its dependency set is now precise: plan 22 (signing credential class), plan 14 (review-request identity), plan 44 (content plane), Kikan IR-5 and IR-6. |
@@ -396,12 +395,10 @@ to where it actually belongs: plan 28's M2–M4 is a stage-D item because plan 2
 waiting on it, and the cleanup batch (8, 13, 16, 37 M3 / 38 M4) is unstaged — it is a session each,
 takes no dependency, and blocks only plan 52's positive conformance case (via 13).
 
-### Stage C — Core semantics · ✅ substantially complete 2026-08-20
+### Stage C — Core semantics · ✅ complete 2026-08-22
 
 - **Plan 17** ✅, **plan 24** ✅, **plan 50** ✅, **plan 29** ✅.
-- **Plan 19** — the one substantial remainder, and the reason this stage is not closed.
-  M1's additive half plus M2–M4 need nothing from anyone; only M1's `PublishRejected` consumption
-  is blocked, re-verified 2026-08-20.
+- **Plan 19** ✅ consumed Keiro 0.14's terminal rejection and completed the delivery boundary.
 - **Plan 12 M1–M2** — the `mcpServers` declaration and its validation. M3–M5 upstream-gated.
   Under the rewrite-minimizing rule, do not schedule the partial implementation unless another
   plan needs the declaration before the three upstream contracts land; otherwise it creates a
@@ -409,15 +406,13 @@ takes no dependency, and blocks only plan 52's positive conformance case (via 13
 
 ### Stage D — Shared seams · **the current entry stage**
 
-- **Plan 19's unblocked milestones** define truthful `SinkOutcome`, delivery receipts,
-  idempotency, and per-sink ordering. They need nothing from the missing Keiro
-  `PublishRejected`; leave only that terminal-constructor integration open.
-- **Plan 22**, strictly after plan 19's local work, owns `HttpEnv`, `TokenSource`,
+- **Plan 19** ✅ defines truthful `SinkOutcome`, delivery receipts, idempotency, and per-sink
+  ordering. **Plan 22** is now entry-ready and owns `HttpEnv`, `TokenSource`,
   `postJSONWithHeaders`, and the signing-credential class. Plans 14, 28 M3, 32, and 52 consume
   those seams and must not grow local substitutes first.
-- **Plan 35** is the declaration and durable-delegation seam. It adds `delegates`,
-  `delegationBudget`, lineage, the shared budget ledger, and the Flow capability. It must precede
-  plan 40; plan 40's own plan says so even though the previous roadmap missed the dependency.
+- **Plan 35** ✅ is the declaration and durable-delegation seam: `delegates`,
+  `delegationBudget`, lineage, the shared budget ledger, stable child keys, structured collection,
+  and the Flow capability. **Plan 40** is now entry-ready on that final surface.
 - **Plan 23** is unblocked by plan 30 ✅. Land its directory and Meibo lifecycle view before plan
   41, so plan 41 implements the real lifecycle adapter once instead of landing `local-enabled`
   and replacing it later. It also releases plan 54.
@@ -466,51 +461,47 @@ takes no dependency, and blocks only plan 52's positive conformance case (via 13
 ## Critical path to v1
 
 ```text
-Delivery:   19 → 22 → 28 ─┐
+Delivery:   19 ✅ → 22 → 28 ─┐
                            ├→ 27 → 14 ─┐
 Delegation: 24 ✅ + 33 ✅  │        ↘ 32│
-            + 39 ✅ → 35 ─┘            │
+            + 39 ✅ → 35 ✅ ─┘          │
                                         ├→ 52 → 31
 Attestation: 49 ✅ → 50 ✅ → 51 ✅ ─────┤
              43 ✅ → 44 ────────────────┘
              43 ✅ → 45 ─┐
                     44 ──┴→ 46
 
-Router:     35 → 40 ─┐
+Router:     35 ✅ → 40 ─┐
             30 ✅ → 23 ┴→ 41 → 42
 Memory:             23 → 54 → 34
 ```
 
-**The two poles from the last revision are both discharged.** The feature pole (24 → 25/26/27/35 →
-42) has lost its first three nodes; the attestation pole (49 → 50 → 51 → 52) has lost its first
-three too. What replaced them is a single bottleneck: **plan 19 → plan 22**, which now gates the
-attestation pole as well as egress, because plan 22 owns the signing credential class and plan 14 —
-which sits behind it — owns the review-request identity plan 51 left open.
+**The two poles from the last revision are both discharged.** The feature pole has now also lost
+plan 35, and the delivery bottleneck has advanced past plan 19. The next shared seams are three
+independent lanes: plan 23 for lifecycle/principals, plan 22 for HTTP/auth/signing, and plan 40 for
+router policy. Plan 22 still gates the attestation pole as well as egress because it owns the
+signing credential class and plan 14 behind it owns the review-request identity plan 51 left open.
 
-The immediate queue is therefore three seam definers, then their direct dependents:
+Plans 19 and 35 have discharged two of the three seam-definer slots. The immediate queue is now:
 
-1. **Plan 19's unblocked milestones.** This is still the widest delivery unblocker.
-2. **Plan 35.** It must precede plan 40 and should precede plan 27 so both consume its final
-   declaration and `RunJob` shape.
-3. **Plan 23.** Plan 30 has released it; taking it now prevents plan 41 from shipping a temporary
+1. **Plan 23.** Plan 30 has released it; taking it now prevents plan 41 from shipping a temporary
    lifecycle adapter and gives plan 54 its final directory/principal seam.
-4. **Plan 22**, after plan 19. This opens 28, 14, 32, and 52 without any of them inventing HTTP,
+2. **Plan 22.** Plan 19 has released it; this opens 28, 14, 32, and 52 without any of them inventing HTTP,
    authentication, header, or signing vocabulary.
-5. **Plan 40**, after plan 35, and then **plan 41** after plan 23. This is the no-rewrite route into
+3. **Plan 40**, now that plan 35 has landed, and then **plan 41** after plan 23. This is the no-rewrite route into
    the router initiative.
-6. **Plan 28 M2–M4**, after plan 22, as one pass rather than two partial implementations.
-7. **Plan 27**, after plans 19, 28, and 35, before sink/workflow consumers 14 and 32.
-8. **Plan 54**, after plan 23, before plan 34. It closes the temporary memory principal seam.
+4. **Plan 28 M2–M4**, after plan 22, as one pass rather than two partial implementations.
+5. **Plan 27**, after plan 28, before sink/workflow consumers 14 and 32.
+6. **Plan 54**, after plan 23, before plan 34. It closes the temporary memory principal seam.
 
 Plan 45 is the safest independent filler if one of those lanes is blocked. Plans 12 M1–M2 and 34's
 ungated milestones are technically startable, but postponing them until their upstream contracts
 are available avoids deliberately reopening the same plan.
 
-Two nodes still wait on another repository: plan 19 M1's blocked half (Keiro
-`PublishRejected`) and plan 44 (Kikan IR-5). Neither justifies a local placeholder: plan 19's
-remaining milestones are independent, and the other lanes can advance while plan 44 waits.
+One node still waits on another repository: plan 44 (Kikan IR-5). It does not justify a local
+placeholder; the other lanes can advance while it waits.
 
-If a v1 cut smaller than "all 25 remaining plans" becomes attractive, the natural line has moved:
+If a v1 cut smaller than "all 23 remaining plans" becomes attractive, the natural line has moved:
 **after stage D plus plans 14 and 27** yields a service with a real provider, honest sinks, correct
 delivery semantics, checked durable topology and versioning, fail-closed profile resolution, run
 evidence, authenticated egress, approvals, an operator CLI, health, and observability. Stage E's
@@ -520,7 +511,7 @@ practice reviews) plus packaging.
 
 ## Upstream gates, current status
 
-| Gate | Blocks | Status 2026-08-20 |
+| Gate | Blocks | Status 2026-08-22 |
 |---|---|---|
 | Kioku IR-1 | plan 47 | ✅ Closed. |
 | kioku 0.3.0.0 | plan 53 M0 | ✅ Closed; superseded by kioku 0.4.1.0. |
@@ -528,7 +519,7 @@ practice reviews) plus packaging.
 | keiro 0.12 | plan 17 | ✅ **Moot and consumed.** keiro 0.13 lifted the cap; plan 17 landed. |
 | kioku admitting `baikai ^>=0.5` | plans 48, 51, 52 | ✅ Closed by `kioku 0.4.1.0`. |
 | Shibuya IR-1 | plan 29's worker probe | ✅ **Discharged in substance.** `shibuya-core 0.9.0.0` exports `getAppMetrics` / `ProcessorMetrics` / `ProcessorState` — a non-blocking read distinguishing idle, processing, failed-with-reason-and-time, and stopped, attributed by processor id. Plan 29 shipped on it and reports *last activity* rather than *last time we remembered to beat*. The IR is still `proposed` upstream and its second ask is unmet; it gates nothing here. |
-| Keiro IR-3 / keiro plan 165 | plan 19 M1's blocked half | ❌ Re-verified 2026-08-20 at `keiro-0.13.0.0`: `PublishOutcome` is two constructors and `Unreleased` is empty. Do **not** approximate a local terminal rejection. |
+| Keiro IR-3 / keiro plan 165 | plan 19 M1's blocked half | ✅ Closed by Keiro 0.14.0.0 and consumed when plan 19 landed. |
 | Kioku IR-2 | plan 34 | ❌ Still `proposed`. Plans 26 and 30 stopped waiting on it. |
 | Baikai IR-2 | plan 12 M3–M5 | ❌ No `Baikai.Mcp.*` source in baikai 0.5.0.0. Planned upstream. |
 | Shikumi IR-1 | plan 12 | ❌ No MCP adapter in shikumi 0.3.0.2. Planned upstream. |
@@ -626,3 +617,15 @@ promotes two other soft preferences for the same reason: plan 23 precedes plan 4
 ships with the Meibo lifecycle adapter once, and plan 27 precedes plans 14 and 32 so those consumers
 land on the consolidated sink/workflow surface. The immediate queue is plan 19, plan 35, plan 23,
 then plan 22 and plan 40 as their respective prerequisites land.
+
+
+## Revision note (2026-08-22)
+
+Plans 19 and 35 landed. The portfolio is now 32 complete and 23 open. Keiro 0.14 closed plan 19's
+terminal-rejection gate, so plan 22 is entry-ready. Plan 35 delivered the declaration, stable child
+identity, root-wide budget ledger, structured child outcomes, and Flow capability, so plan 40 is
+entry-ready and plan 27 can consume the final delegation shape.
+
+The immediate queue is plan 23, plan 22, and plan 40. Plan 23 still comes first under the
+rewrite-minimizing rule because it gives plans 41 and 54 their final lifecycle/principal seam;
+plans 22 and 40 are independent lanes now that their prerequisites have landed.

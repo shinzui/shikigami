@@ -150,14 +150,15 @@ declarable spelling of them. Retiring the legacy set — deleting the guard, the
 ### Child workflows
 
 `Shikigami.Agent.Delegate.delegate` spawns a child of `shikigami.agent-run`
-itself (`Agent/Delegate.hs:63`). The child id is a UUIDv5 over
-`["shikigami", "delegate", parentWorkflowId, childAgent, ordinal]`
-(`Agent/Delegate.hs:96-105`), where the ordinal comes from
-`freshOrdinal "delegate"`. Declared as `child delegate id input via
+itself. The child id is a UUIDv5 over
+`["shikigami", "delegate", parentWorkflowId, childAgent, stableKey]`.
+The generic supervisor derives stable keys from the `delegates` list captured in
+the journaled agent declaration; Flow callers supply a stable call-site key.
+Declared as `child delegate id input via
 delegatedWorkflowId -> AgentRunResult`; the `via` name records the hand-owned
 derivation, which takes the parent workflow id rather than the workflow input.
-`docs/plans/35-delegation-as-a-first-class-declared-capability.md` owns making
-that a first-class declaration.
+`docs/plans/35-delegation-as-a-first-class-declared-capability.md` made that a
+governed first-class capability.
 
 ### Operations
 
@@ -183,13 +184,14 @@ entry point; the signal operation lands with it.
 | Message body | `MessageBody (toJSON job)` — a bare `RunJob` | `Trigger/Enqueue.hs` (`enqueueRunJobTx`, `enqueueRunJob`) |
 | Consumer | `Aeson.fromJSON` straight to `RunJob` | `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` (`runJob`) |
 
-`RunJob` (`Agent/RunJob.hs`) has nine fields: `agentName :: Text`,
+`RunJob` (`Agent/RunJob.hs`) has eleven fields: `agentName :: Text`,
 `triggerKind :: TriggerKind` (a four-constructor sum saying where the job came
 from, for audit and tracing), `routeKind :: RunRouteKind` (a three-constructor
 sum saying which workflow the producer meant), `occurredAt :: UTCTime`,
 `triggerPayload :: Data.Aeson.Value`, `idempotencyKey :: Text`, and three
 optionals — `parentSessionId :: Maybe Text`, `parentRunWorkflowId :: Maybe Text`,
-`delegationDepth :: Maybe Int`.
+`delegationDepth :: Maybe Int`, plus `lineage :: [Text]` and
+`delegationBudgetId :: Maybe DelegationBudgetId`.
 
 `routeKind` is additive and hand-encoded per
 [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md):
@@ -197,6 +199,9 @@ its compatibility default `InferredLegacyRoute` emits no key at all, so a job
 enqueued or journaled before the field existed is byte-identical and still
 decodes. See
 [ADR 0014](../adr/0014-a-run-job-declares-its-route-rather-than-being-guessed.md).
+The delegation fields follow the same additive rule: absent keys decode as
+`lineage = []` and `delegationBudgetId = Nothing`, and default values remain
+omitted when encoding.
 The keiro specification still inventories only the three fields it refers to
 (`agentName`, `idempotencyKey`, `occurredAt`) in
 `domain/shikigami-agent-run.keiro`, so adding the field needed no specification

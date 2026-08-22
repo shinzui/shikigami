@@ -97,7 +97,7 @@ without the enforcement.
 | 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, 37, and 47 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Not Started |
 | 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20, 36, and 47 | cross-MP: plan 16 (MasterPlan 2) | Not Started |
 | 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | EP-2; cross-MP: plans 36, 37, and 47; upstream Kioku IR-2 for M2/M3 | None | Not Started |
-| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24, 36–39, and 47 | None | Not Started |
+| 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24, 36–39, and 47 | None | Complete |
 | 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | cross-MP: plans 36, 37, and 47; upstream Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3 for M3–M5 | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -262,11 +262,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-3 M2: recall fallback bounded and recency-ordered by server-side query limits.
 - [ ] EP-3 M3: retention — server-side bounded batches periodically archive old MemoryPattern rows via kioku `archive`.
 - [ ] EP-3 M4: `memory.scope = Shared` semantics implemented over `sharedScope` (record + recall).
-- [ ] EP-4 M1: `delegates : List Text` schema field (follows EP-2 pattern) + shared `ingestJobStepName` constant.
-- [ ] EP-4 M2: lineage + durable global descendant budget on `RunJob`; ancestor-cycle rejection and atomic budget enforcement in `delegate`.
-- [ ] EP-4 M3: `Delegate` Flow capability; allow-list enforced at the capability boundary.
-- [ ] EP-4 M4: failure policy — `awaitAllDelegated` (per-child Either) and sibling cancellation via keiro `cancelChild`.
-- [ ] EP-4 M5: research-supervisor re-expressed on the general mechanism; hardcoded task-name special case removed.
+- [x] (2026-08-22) EP-4 M1: `delegates : List Text` schema field (follows EP-2 pattern) + shared `ingestJobStepName` constant.
+- [x] (2026-08-22) EP-4 M2: lineage + durable global descendant budget on `RunJob`; ancestor-cycle rejection and atomic budget enforcement in `delegate`.
+- [x] (2026-08-22) EP-4 M3: `Delegate` Flow capability; allow-list enforced at the capability boundary.
+- [x] (2026-08-22) EP-4 M4: failure policy — `awaitAllDelegated` (per-child Either) and sibling cancellation via keiro `cancelChild`.
+- [x] (2026-08-22) EP-4 M5: research-supervisor re-expressed on the general mechanism; hardcoded task-name special case removed.
 - [ ] EP-5 M1: `mcpServers` schema field with credential references only + mirror + examples (per plan 12).
 - [ ] EP-5 M2: build wiring (`shikumi-tools`) + `ToolRegistry` seam on `BehaviorEnv` (per plan 12).
 - [ ] EP-5 M3-M5: connect/register/close bracket, tool loop, end-to-end (blocked on upstream Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3; per plan 12).

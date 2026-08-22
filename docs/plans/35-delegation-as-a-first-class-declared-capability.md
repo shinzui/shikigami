@@ -16,8 +16,8 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Shikigami has a working multi-agent delegation *mechanism* but exposes it as a demo, not a
-capability. An agent run can spawn a child agent-run workflow, wait for it, and read its
+Before this plan, Shikigami had a working multi-agent delegation *mechanism* but exposed it as a
+demo, not a capability. An agent run could spawn a child agent-run workflow, wait for it, and read its
 output — the machinery in shikigami-core/src/Shikigami/Agent/Delegate.hs (deterministic
 UUIDv5 child workflow ids, `spawnChild`, a pre-journaled child "ingest-job") works and is
 tested (shikigami-core/test/Shikigami/AgentWorkflowSpec.hs delegation cases;
@@ -57,7 +57,7 @@ to the same `Agent` record (MasterPlan 7, IP-1). Plan 24
 versioning discipline, patch plumbing, and step inventory required before changing the
 durable agent-run workflow (MasterPlan 5, IP-3).
 Plan 36 fixes package ownership, plan 37 provides the validated platform default, plan 38
-owns the budget-ledger migration, and plan 39 requires the changed workflow topology and
+provides the migration component this plan extends, and plan 39 requires the changed workflow topology and
 step contract to pass the checked Keiro DSL evolution gate before runtime code is merged.
 
 
@@ -110,6 +110,10 @@ This section must always reflect the actual current state of the work.
       including real-Postgres call-boundary refusals for allow-list, cycle, and exhausted budget;
       concurrent global-budget enforcement; partial collection; durable sibling cancellation; and
       both imperative and Flow fan-out.
+- [x] (2026-08-22T23:09:13Z) Final validation: `just keiro-gate HEAD^` classified
+      the workflow change replay-neutral and passed conformance; `cabal build all` passed; and
+      sequential `cabal test all -j1` passed every conformance, agent, API, client, core (363),
+      migration, server (26), and worker (74) test.
 
 
 ## Surprises & Discoveries
@@ -128,8 +132,8 @@ implementation. Provide concise evidence.
   first step `runResolvedAgent`/`agentRunWorkflow` reads back (Workflow.hs:135, the
   `StepName "ingest-job"`). A rename on either side silently breaks delegation with no
   compile error. M1 ties them to one shared constant.
-- (Authoring-time) keiro's `cancelChild :: ChildHandle a -> Eff es Bool` exists
-  (/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Child.hs:272) and is unused in
+- (Authoring-time) keiro's `cancelChild :: ChildHandle a -> Eff es Bool` exists in
+  `mori://shinzui/keiro` (`keiro/src/Keiro/Workflow/Child.hs`; source-file artifact URI pending) and was unused in
   shikigami; `awaitDelegated` currently throws on a child failure (Delegate.hs:82-88), which
   is why a supervisor cannot collect partial results today.
 - (Review-time) Propagating a decremented scalar to each child does not bound the whole tree:
@@ -142,8 +146,8 @@ implementation. Provide concise evidence.
   importing an internal module or writing Keiro-owned tables. Reserving first under the same
   deterministic child id has the required safety direction: no child can spawn unbudgeted, and a
   crash before `spawnChild` retries the same reservation instead of spending twice.
-- (Implementation refresh, 2026-08-22) The current child id still uses
-  `freshOrdinal "delegate"`. `docs/workflow-versioning.md` now explicitly lists that identity as
+- (Implementation refresh, 2026-08-22) At preflight the child id still used
+  `freshOrdinal "delegate"`, and `docs/workflow-versioning.md` explicitly listed that identity as
   unstable when code inserts or reorders delegation calls. The general capability needs a
   caller-supplied stable key; preserving the ordinal API would formalise the exact hazard this plan
   owns.
@@ -197,9 +201,9 @@ Record every decision made while working on the plan.
   increment.
   Rationale: a remaining scalar copied into sibling jobs is not a global tree bound. A
   database ledger serializes concurrent siblings, survives process restarts, and uses the
-  already-deterministic child workflow id as its idempotency key. The migration is owned by
-  plan 38 and the reservation plus child registration/pre-journaling must share one database
-  transaction so neither an orphan reservation nor an unbudgeted child can commit.
+  deterministic child workflow id as its idempotency key. This plan owns the tables in plan 38's
+  delivered migration component. The reservation commits before public `spawnChild`; replay repairs
+  a crash in between under the same id, while no child can ever start without a reservation.
   Date: 2026-07-22
 
 - Decision: Update the checked Keiro DSL specification from plan 39 before changing the
@@ -280,49 +284,68 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Plan 35 is complete. Delegation is now a declared capability shared by imperative supervisors and
+Flow bodies. The same boundary enforces target allow-lists, complete-lineage cycle rejection, the
+existing depth limit, and a bounded durable budget shared by the whole descendant tree. Child ids
+use caller-supplied stable keys, and the declaration-driven supervisor derives those keys from the
+agent declaration already captured in the journal. The task-name special case is gone. The durable
+boundary and its reserve-first tradeoff are recorded in
+[ADR 0023](../adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md).
+
+Structured concurrency now offers fail-fast await, full partial-result collection, and
+cancel-remaining-on-first-observed-failure. The implementation also corrected a latent wire bug:
+delegated handles now decode the structured `AgentRunFailure` that the child workflow actually
+persists. One limitation is explicit: Keiro has no public `awaitAny`, so “first observed” means the
+first failure encountered in declaration-order awaiting, not necessarily the earliest wall-clock
+failure.
+
+The shared ledger is safe under concurrent siblings and replay. Because Keiro 0.14 does not expose
+transactional child registration, reservation commits first and replay repairs a crash before
+spawn. That can leave a reserved-but-not-yet-spawned slot until the parent is resumed, but it never
+allows an unbudgeted child. The final evidence is 16 focused delegation tests, a replay-neutral
+`just keiro-gate HEAD^`, `cabal build all`, and a complete sequential `cabal test all -j1` run with
+every package suite passing.
 
 
 ## Context and Orientation
 
-Shikigami (this repo) runs each agent as a durable keiro *workflow* — a function whose steps
+Shikigami runs each agent as a durable keiro *workflow* — a function whose steps
 are journaled so that if the process crashes, the workflow *resumes* from the journal rather
 than restarting. The agent-run workflow is `agentRunWorkflow`
-(shikigami-core/src/Shikigami/Agent/Workflow.hs:129-138); it runs steps named "ingest-job",
+(`shikigami-core/src/Shikigami/Agent/Workflow.hs`); it runs steps named "ingest-job",
 "lookup-agent", "open-session", "recall", "run-behavior", "dispatch-sinks", "record",
 "complete" (each `runStep`/`step` call journals its result under a `StepName`). A "child
 workflow" is another workflow spawned from a running one; keiro provides `spawnChild`,
-`awaitChild`, and `cancelChild` (/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Child.hs).
+`awaitChild`, and `cancelChild` in `mori://shinzui/keiro`
+(`keiro/src/Keiro/Workflow/Child.hs`; source-file artifact URI pending).
 
-Delegation today. `Shikigami.Agent.Delegate.delegate`
-(shikigami-core/src/Shikigami/Agent/Delegate.hs:32-72) spawns a child agent-run workflow: it
-computes a deterministic child `WorkflowId` (UUIDv5 of parent-id + child-agent + ordinal, so a
+Delivered delegation. `Shikigami.Agent.Delegate.delegate`
+(`shikigami-core/src/Shikigami/Agent/Delegate.hs`) spawns a child agent-run workflow after
+checking the caller declaration, ancestor chain, depth, and shared root budget. It computes a
+deterministic child `WorkflowId` (UUIDv5 of parent id + child agent + stable call-site key, so a
 replay recomputes the same id), calls `spawnChild agentRunWorkflowName childWorkflowId ...`,
 and **pre-journals the child's first step** — a `StepRecorded { stepName = "ingest-job",
 result = toJSON childJob, ... }` — so the child resumes with its `RunJob` already ingested.
-`awaitDelegated` (Delegate.hs:75-95) suspends until the child completes and decodes its
+`awaitDelegated` suspends until the child completes and decodes its
 `behaviorOutput`, **throwing** `DelegatedChildFailed`/`DelegatedChildCancelled` on a bad
-outcome. Depth is bounded by `checkDepth` (shikigami-core/src/Shikigami/Agent/Delegate/Context.hs:39-51),
+outcome; `awaitAllDelegated` and `cancelSiblingsOnFailure` provide the two structured alternatives.
+Depth is bounded by `checkDepth` (`shikigami-core/src/Shikigami/Agent/Delegate/Context.hs`),
 which allows attempted depths 1-3 and rejects 4 (`maxDelegationDepth = 4`). The `DelegateCtx`
-(Delegate/Context.hs:14-19) carries `delegateDepth`, `sessionId`, `parentSessionId`, and
-`parentRunWorkflowId` — the last is threaded but never checked for cycles.
+(in that same module) also carries complete agent-name lineage, the optional shared budget id,
+and the validated root limit.
 
-The only caller. `runBehaviorStep` (Workflow.hs:284-289) special-cases
-`ShikumiProgram { task } | task == researchSupervisorTaskName` and calls
-`runResearchSupervisor` (Workflow.hs:344-372), which builds a `DelegateCtx`, delegates to
-`webResearcherTaskName` and `codeResearcherTaskName` (names in
-shikigami-core/src/Shikigami/Program/Registry.hs:57-63), awaits them **sequentially**
-(Workflow.hs:364-365), and synthesizes a fixed object. The two children are stub tasks
-returning fixed strings (Program/Registry.hs:101-113). No other behavior can delegate; Flow
-behaviors especially cannot — `FlowEffects` (shikigami-core/src/Shikigami/Flow.hs:28) is
-`(Workflow, Store, IOE, Memory, Sink, Activity)` with no delegate effect.
+Callers. A non-Flow agent with a non-empty journaled `delegates` list runs the general
+declaration-driven supervisor in `Shikigami.Agent.Workflow`; no task name selects that path.
+Flow bodies use the `Delegate` capability in `Shikigami.Flow.Delegate`, whose interpreter routes
+through exactly the same `delegate` boundary. The web/code stub tasks in
+`Shikigami.Program.Registry` remain ordinary proof fixtures.
 
-The wire contract. `RunJob` (shikigami-api/src/Shikigami/Api/RunJob.hs:19-28) carries
+The wire contract. `RunJob` (`shikigami-core/src/Shikigami/Agent/RunJob.hs`) carries
 `agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId,
-parentRunWorkflowId, delegationDepth`. `openSession` (Workflow.hs:248-275) reads
+parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId`. `openSession` reads
 `parentSessionId`/`delegationDepth` to record session lineage in kioku. `RunJob` is
-client-safe (no hasql/effectful deps), so adding fields is a pure additive change consumed by
-both the enqueuer and the worker.
+dependency-light (no Hasql or Effectful surface), and its custom additive codec keeps old jobs
+decodable with `lineage = []` and `delegationBudgetId = Nothing`.
 
 keiro child API signatures (Keiro/Workflow/Child.hs): `spawnChild :: WorkflowName ->
 WorkflowId -> Eff es a -> Eff es (ChildHandle a)`; `awaitChild :: ChildHandle a -> Eff es a`
@@ -344,7 +367,7 @@ Scope: an agent can declare its delegates and budget, and the brittle "ingest-jo
 centralized. In schema/Agent.dhall extend the `Agent` record (following plan 33's pattern):
 add `delegates : List Text` (default `[] : List Text`) and `delegationBudget : Optional
 Natural` (default `None Natural`) to `Type` and `default`. Mirror on `AgentDecl`
-(shikigami-api/src/Shikigami/Api/Agent.hs) with strict direct fields:
+(`shikigami-core/src/Shikigami/Agent/Decl.hs`) with strict direct fields:
 `delegates :: ![Text]`, `delegationBudget :: !(Maybe DelegationBudget)`. Add a total smart
 constructor that accepts only `0..1000`; surface an actionable validation error for larger
 Dhalls rather than converting an arbitrary `Natural` to `Int`. The Settei platform default
@@ -356,7 +379,7 @@ site (Workflow.hs, the `StepName "ingest-job"` in `agentRunWorkflow`) and the pr
 write site (Delegate.hs:66-70, replacing the literal). This is a code-only refactor; the wire
 value is unchanged (MasterPlan IP-3).
 
-Add a supervisor proof manifest `agents/proof/supervisor.dhall`:
+Update the supervisor proof manifest `agents/proof/research-supervisor.dhall`:
 
 ```dhall
 let A = ../../schema/Agent.dhall
@@ -376,28 +399,29 @@ in  A.Agent::{
     }
 ```
 
-Acceptance: `cabal run shikigami -- validate agents/proof/supervisor.dhall` decodes the two
+Acceptance: `cabal run shikigami -- validate agents/proof/research-supervisor.dhall` decodes the two
 new fields; `cabal run shikigami -- validate agents/heartbeat.dhall` is unchanged (defaults).
 
 ### Milestone 2 — Lineage, durable global budget, cycle and budget rejection
 
 Scope: `RunJob` carries the ancestor chain and the identity of one root budget, and
-`delegate` enforces both. Add to `RunJob` (shikigami-api/src/Shikigami/Api/RunJob.hs)
+`delegate` enforces both. Add to `RunJob` (`shikigami-core/src/Shikigami/Agent/RunJob.hs`)
 `lineage :: ![Text]` (root-to-current agent names; additive, old jobs decode as `[]`) and
 `delegationBudgetId :: !(Maybe DelegationBudgetId)` (old/root jobs decode as `Nothing`). At
 root workflow start, deterministically derive a budget id from the root workflow id, insert
 the ledger with the agent or platform maximum using an idempotent insert, and carry that id
 on every descendant `RunJob`.
 
-Plan 38 adds schema-qualified tables for the ledger and its idempotent reservations. Use
-strict direct Haskell fields such as `budgetId`, `rootWorkflowId`, `maximum`, `consumed`, and
-`childWorkflowId`. The reservation operation locks/updates the ledger and records the child
-workflow id in the same transaction that registers and pre-journals the child. A conflict on
+Use plan 38's delivered pg-migrate component to add schema-qualified tables for the ledger and
+its idempotent reservations. Use strict direct Haskell fields such as `budgetId`,
+`rootWorkflowId`, `maximum`, `consumed`, and `childWorkflowId`. The reservation operation
+locks/updates the ledger and records the child workflow id in one Shikigami-owned transaction
+before Keiro's public `spawnChild`. A conflict on
 an existing reservation is replay success; a new reservation at `consumed == maximum` is a
 typed exhaustion result. Add transaction/concurrency tests at the store boundary.
 
 Extend `DelegateCtx` (Delegate/Context.hs) with `lineage :: ![Text]` and
-`delegationBudgetId :: !DelegationBudgetId`, and extend `checkDepth` (or add a sibling
+`delegationBudgetId :: !(Maybe DelegationBudgetId)`, and extend `checkDepth` (or add a sibling
 `checkDelegation`) to also:
 
 ```haskell
@@ -406,13 +430,14 @@ data DelegationError
   | DelegationMissingSessionId
   | DelegationCycleDetected !Text        -- target already an ancestor
   | DelegationBudgetExhausted            -- durable root ledger has no unreserved slot
+  | DelegationBudgetUnavailable !Text    -- propagated id has no durable root ledger
   | DelegationNotAllowed !Text           -- target not in the delegating agent's `delegates`
   | ...existing child-outcome constructors...
 ```
 
 In `delegate` (Delegate.hs:38-46), before spawning, reject when `childAgent \`elem\`
 lineage ctx` (`DelegationCycleDetected`), compute the deterministic child workflow id, then
-attempt the atomic reservation/child-registration transaction. Map an exhausted ledger to
+reserve before calling `spawnChild`. Map an exhausted ledger to
 `DelegationBudgetExhausted`. The allow-list check needs the *delegating* agent's declaration
 — pass it in (see M3/M5; `delegate` gains an `AgentDecl` or a pre-checked allow-list
 argument). Keep the depth check as an independent outer guard.
@@ -466,7 +491,7 @@ all of them (never throwing). `cancelSiblingsOnFailure` awaits in order; on the 
 it calls keiro `cancelChild` on every not-yet-awaited sibling handle and returns the collected
 list (successes plus the failure plus `Left "cancelled"` for the cancelled siblings). Expose
 `cancelChild` on `Delegated` by storing the `ChildHandle` (already the case:
-`Delegated a = Delegated (ChildHandle (Either Text AgentRunResult))`, Delegate.hs:29) — add a
+`Delegated a = Delegated (ChildHandle (Either AgentRunFailure AgentRunResult))`) — add a
 `cancelDelegated :: Delegated a -> Eff es Bool` wrapping `cancelChild`.
 
 Acceptance: a `withShikigamiMigratedDatabase` test spawns two children where one child agent
@@ -476,19 +501,15 @@ row lookup). `awaitAllDelegated` on the same set returns both results without th
 
 ### Milestone 5 — Retire the special case
 
-Scope: the general mechanism subsumes the demo. Rewrite `runResearchSupervisor`
-(Workflow.hs:344-372) to read its child agent names from the supervisor decl's `delegates`
-list, build the `DelegateCtx` with `lineage`/`delegationBudgetId` from the `RunJob`, delegate to each
-(through the allow-list guard), and collect via `awaitAllDelegated`, synthesizing the same
-output shape. Delete the `task == researchSupervisorTaskName` guard in `runBehaviorStep`
-(Workflow.hs:287-288); route supervisor behavior through a general "supervisor program" arm
-that is chosen by the presence of a non-empty `delegates` list (or keep a named
-`research-supervisor` task in the registry that now uses the general path — either way, no
-hardcoded task-name branch remains in `runBehaviorStep`). Keep the web/code stub tasks in the
-registry as allow-listed fixtures.
+Scope: the general mechanism subsumes the demo. `runDeclaredSupervisor` reads child agent names
+from the journaled declaration's `delegates` list, builds `DelegateCtx` from the `RunJob`, derives
+stable `delegate-<index>` keys, delegates through the allow-list guard, and collects via
+`awaitAllDelegated`. `runBehaviorStep` chooses this path from a non-empty declaration rather than
+a task-name guard. Flow keeps precedence because a Flow body declares and controls its own calls.
+The web/code stub tasks remain allow-listed fixtures.
 
 Acceptance: the existing AgentWorkflowSpec delegation tests pass with the special case
-removed; `grep researchSupervisorTaskName shikigami-core/src` shows no remaining special-case
+removed; `rg researchSupervisorTaskName shikigami-core/src/Shikigami/Agent/Workflow.hs` shows no remaining special-case
 branch in `runBehaviorStep`.
 
 
@@ -506,7 +527,7 @@ cabal test shikigami-core
 Step 2 — after M1:
 
 ```bash
-cabal run shikigami -- validate agents/proof/supervisor.dhall
+cabal run shikigami -- validate agents/proof/research-supervisor.dhall
 cabal run shikigami -- validate agents/heartbeat.dhall
 ```
 
@@ -526,7 +547,7 @@ pre-existing depth and supervisor cases.
 Step 4 — confirm the special case is gone and the suite is green:
 
 ```bash
-grep -n researchSupervisorTaskName shikigami-core/src/Shikigami/Agent/Workflow.hs
+rg -n researchSupervisorTaskName shikigami-core/src/Shikigami/Agent/Workflow.hs
 cabal test all
 ```
 
@@ -568,15 +589,18 @@ under `Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase` (real Pos
 ## Idempotence and Recovery
 
 Delegation child identity is already replay-safe: child workflow ids are deterministic UUIDv5s
-(`delegatedWorkflowId`, Delegate.hs:97-107), so a parent replay recomputes the same child id
+(`delegatedWorkflowId`), so a parent replay recomputes the same child id
 and `spawnChild` is idempotent on it; the pre-journaled child "ingest-job" step dedupes on
 replay. The durable reservation uses that same child id as its uniqueness key, so replays do
 not spend another slot. Ledger creation is idempotent by deterministic root id; the
-reservation and child registration/pre-journal commit together. The new fields are additive:
+reservation commits before Keiro child registration because the public APIs own separate
+transactions. A crash in between leaves a reservation but no unbudgeted child; replay observes
+the existing reservation and idempotently registers/pre-journals that same child. The new fields are additive:
 `RunJob.lineage`/`delegationBudgetId` decode as `[]`/`Nothing` for jobs enqueued before this
 plan; a resumed root with `Nothing` initializes or finds the deterministic ledger before it
-can delegate. Schema fields default to `[]`/`None`, so manifests need no edits. Plan 38's
-forward migration creates the ledger and reservation tables; rollback leaves them inert.
+can delegate. Schema fields default to `[]`/`None`, so manifests need no edits. This plan's
+forward migration creates the ledger and reservation tables in plan 38's migration component;
+rollback leaves them inert.
 `cancelChild` returns `Bool`
 (found or not) and is safe to call on an already-completed or already-cancelled child (it is a
 no-op), so `cancelSiblingsOnFailure` is safe under partial completion and re-runs. The
@@ -617,9 +641,9 @@ Owned and defined by this plan:
 
 - `schema/Agent.dhall` — `delegates : List Text` (default `[]`), `delegationBudget : Optional
   Natural` (default `None`) on `Agent`.
-- `Shikigami.Api.Agent` — `DelegationBudget` is a bounded 0–1000 domain value;
+- `Shikigami.Agent.Decl` — `DelegationBudget` is a bounded 0–1000 domain value;
   `AgentDecl` gains `delegates :: ![Text]`, `delegationBudget :: !(Maybe DelegationBudget)`.
-- `Shikigami.Api.RunJob` — `RunJob` gains `lineage :: ![Text]`,
+- `Shikigami.Agent.RunJob` — `RunJob` gains `lineage :: ![Text]`,
   `delegationBudgetId :: !(Maybe DelegationBudgetId)`.
 - `Shikigami.Agent.Workflow.Name` — `ingestJobStepName :: StepName` (value `"ingest-job"`).
 - `Shikigami.Agent.Delegate.Context` — `DelegateCtx` gains `lineage`,
@@ -632,22 +656,20 @@ Owned and defined by this plan:
   `cancelDelegated :: Delegated a -> Eff es Bool`.
 - `Shikigami.Flow.Delegate` (new) — the `Delegate` effect and `runDelegate` interpreter;
   `Shikigami.Flow.FlowEffects` gains `Delegate :> es`.
-- `Shikigami.Agent.Workflow` — `runResearchSupervisor` rewritten on the general mechanism; the
-  `task == researchSupervisorTaskName` special case in `runBehaviorStep` removed; `runDelegate`
-  wired into `runFlowBehavior`.
-- `Shikigami.Store.DelegationBudget` (name may follow plan 36's exact package layout) —
+- `Shikigami.Agent.Workflow` — `runDeclaredSupervisor` implements the general mechanism; the
+  task-name special case is removed; `runDelegate` is wired into `runFlowBehavior`.
+- `Shikigami.Store.DelegationBudget` —
   deterministic ledger initialization and atomic
   `reserveDelegationSlot :: DelegationBudgetId -> WorkflowId -> ... -> ReservationResult`.
-- Plan 38 migration — schema-qualified delegation-budget and reservation tables, unique
+- This plan's pg-migrate change — schema-qualified delegation-budget and reservation tables, unique
   child-workflow reservation key, maximum/consumed checks, and indexes used by the atomic
   reservation statement.
 
 Consumed (no changes):
 
-- keiro `Keiro.Workflow.Child` — `spawnChild`, `awaitChild`,
-  `cancelChild :: ChildHandle a -> Eff es Bool` (locate via
-  `mori registry show keiro --full`; source
-  /Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Child.hs:272).
+- `mori://shinzui/keiro` `Keiro.Workflow.Child` — `spawnChild`, `awaitChild`, and
+  `cancelChild :: ChildHandle a -> Eff es Bool` (`keiro/src/Keiro/Workflow/Child.hs`;
+  source-file artifact URI pending).
 
 Cross-plan dependencies:
 
@@ -680,6 +702,10 @@ Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
   source. Corrected module ownership to `shikigami-core`, assigned the new SQL to this plan on top
   of plan 38's delivered migration component, replaced ordinal child identity with a stable key,
   and changed the impossible cross-library transaction into reserve-first replay convergence.
+
+- 2026-08-22: Completed all five milestones, recorded the final replay/concurrency tradeoffs,
+  corrected delivered module ownership and Keiro references, and attached the final validation
+  evidence.
 
 - 2026-08-05: Added a Portfolio Reconciliation note recording that the run-job lineage fields
   (`parentSessionId`, `parentRunWorkflowId`, `delegationDepth`, `TriggeredByDelegation`) are now read by
@@ -749,10 +775,11 @@ Delegation is already partly declared. `domain/shikigami-agent-run.keiro` carrie
 `child delegate id input via delegatedWorkflowId -> AgentRunResult`, which records that
 `shikigami.agent-run` spawns children of itself, and the generated conformance target asserts
 `"child:delegate"` in `AgentRun.body`. The `via` name is descriptive: the real derivation
-(`Shikigami/Agent/Delegate.hs:96-105`) is a UUIDv5 over
-`["shikigami", "delegate", parentWorkflowId, childAgent, ordinal]` and takes the parent workflow
+(`Shikigami/Agent/Delegate.hs`) is a UUIDv5 over
+`["shikigami", "delegate", parentWorkflowId, childAgent, stableKey]` and takes the parent workflow
 id, not the workflow input, which is what keiro-dsl's `child ... id input via ...` spelling
-implies. Making the declaration and the derivation agree is this plan's, not plan 39's.
+implies. The `via delegatedWorkflowId` declaration and implementation now agree on that stable
+derivation.
 
 The `RunJob` contract evolution this plan touches is **not** declared. `shikigami_run_jobs` keeps
 its bare payload deliberately, so adding a delegation field to
