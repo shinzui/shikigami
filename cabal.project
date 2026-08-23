@@ -50,6 +50,7 @@ constraints:
   , baikai-claude           ==0.5.0.0
 
   -- worker runtime, queues, and the event store
+  , kafka-effectful         ==0.3.0.0
   , shibuya-core            ==0.9.0.0
   , shibuya-kafka-adapter   ==0.9.0.0
   , shibuya-pgmq-adapter    ==0.14.0.0
@@ -75,12 +76,6 @@ source-repository-package
   location: https://github.com/shinzui/handan.git
   tag: 8e98b0a955f908f70657c04f384b6286e4967422
   subdir: handan-core
-
--- kafka-effectful — activity.v1 stream consumer.
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/kafka-effectful.git
-  tag: f34a43cd476f7234848def9c0f08c54a1b67028e
 
 -- danwa — conversation substrate client behind the DanwaConversation sink.
 source-repository-package

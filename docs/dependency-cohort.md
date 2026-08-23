@@ -79,6 +79,7 @@ published; the current release status is called out immediately below it.
 | `baikai` | 0.4.1.0 | **0.5.0.0** | `baikai-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
 | `baikai-claude` | 0.4.0.1 | **0.5.0.0** | `baikai-claude-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
 | `baikai-effectful` (transitive) | 0.3.0.2 | **0.3.0.3** | `baikai-effectful-0.3.0.3` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
+| `kafka-effectful` | 0.3.0.0 (Git) | **0.3.0.0** | `v0.3.0.0` | `2f3ee7e4f2da41befd338f3eda35aa337b2f022f` |
 | `shibuya-core` | 0.8.0.1 | **0.9.0.0** | `v0.9.0.0` | `d958a5748475a4b84075feda7a2a4f5cc7471c60` |
 | `shibuya-kafka-adapter` | — | **0.9.0.0** | `v0.9.0.0` | `89e8026b3aeb7ebca9ff93482fa7f0195be06f63` |
 | `shibuya-pgmq-adapter` | 0.12.0.0 | **0.14.0.0** | `v0.14.0.0` | `301652375ecdec01c4e1ff50902900ad3a078ea3` |
@@ -93,6 +94,12 @@ published; the current release status is called out immediately below it.
 `baikai-effectful` is not an exact row in `cabal.project`: `kioku-core`
 selects it through `^>=0.3.0.3`, and the resolved plan contains 0.3.0.3. Every
 other package named in the first column is an exact `constraints:` selection.
+
+`kafka-effectful` moved from the post-release Git commit
+`f34a43cd476f7234848def9c0f08c54a1b67028e` to the exact Hackage 0.3.0.0
+release. The old commit differs from tag `v0.3.0.0` only in Nix development
+files; its Cabal file and package source are unchanged, so this is a provenance
+cleanup rather than an API or bytecode change.
 
 `pgmq-migration` left the block rather than moving because it resolves into
 nothing now that kioku composes its migrations through `pg-migrate`.
@@ -171,12 +178,10 @@ were excluded by keiro 0.11's own bounds and are admissible under keiro 0.13.
 | Package | Reason | Retires when |
 |---|---|---|
 | `handan-core` | No Hackage release. Typed-program runtime behind `Shikigami.Behavior.Run` and `Shikigami.Program.Registry`. | Handan publishes. |
-| `kafka-effectful` | Hackage 0.3.0.0 exists. The pinned post-release commit `f34a43cd476f7234848def9c0f08c54a1b67028e` differs from tag `v0.3.0.0` only in Nix development files, not package source. This override has outlived the exception rule. | Replace the Git stanza with an exact 0.3.0.0 Hackage constraint and verify the stream consumer. |
 | `danwa-core`, `danwa-api`, `danwa-client` | No Hackage release. Conversation substrate behind the `DanwaConversation` sink. | Danwa publishes. |
 
-The `kafka-effectful` row is current cleanup debt, not a justification for a
-new Git pin. `cabal.project` still resolves it from Git today, so removing that
-stanza belongs to a dependency change rather than this status-only edit.
+Only Handan and Danwa remain Git-sourced, and both exceptions retire when their
+packages publish to Hackage.
 
 Schema evolution is pg-migrate throughout. The `codd`, `hasql-migration`, and
 `hasql-notifications` forks this project once carried are gone, and so is the
@@ -199,7 +204,7 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 | Keiro queue envelopes | Scaffolded workqueues gain a versioned `keiroJobCodec` envelope. Shikigami's queues are not scaffolded by `keiro-dsl` and continue to use their own payload codecs, so no in-flight message changes shape in this plan. Recorded as a live constraint for plan 39. |
 | PGMQ delivery attempt numbering | `shibuya-pgmq-adapter-0.14.0.0` retains the conversion, present since 0.12, from PGMQ's one-based `read_count` to a zero-based `Message.attempt`. Shikigami must not subtract one again. |
 | Shibuya 0.9 public surface | The 0.9 line retains the public surface adopted at 0.8: `runApp` takes `AppConfig`; handlers receive `Message es msg`; `Ordering` is named `OrderingPolicy`; runner internals live under `Shibuya.Internal.*`. Shikigami uses only the public surface. |
-| Shibuya Kafka adapter 0.9 | `shibuya-kafka-adapter-0.9.0.0` declares `shibuya-core ^>=0.9.0.0` and `kafka-effectful ^>=0.3.0.0`; the stream worker links that exact adapter for `activity.v1`. |
+| Shibuya Kafka adapter 0.9 | `shibuya-kafka-adapter-0.9.0.0` declares `shibuya-core ^>=0.9.0.0` and `kafka-effectful ^>=0.3.0.0`; the stream worker links that exact adapter and the exact Hackage `kafka-effectful-0.3.0.0` release for `activity.v1`. |
 | Baikai 0.5 | The widened `ThinkingLevel` sum and defaulted request `effort` remain, and `ApiProvider` adds `describeThinking` so strictness is decided before request construction. Shikigami's stub implements the new method explicitly. |
 | Settei 0.2 | Unchanged by this cohort; `docs/operations/configuration.md` remains the configuration contract. |
 
@@ -237,9 +242,9 @@ Build profile: -w ghc-9.12.4 -O1
 ```
 
 The plan selects exactly the pinned and transitive versions in the matrix
-above, including both Keiki packages at 0.9.1.0. The only `allow-newer` in
-`cabal.project` is `haxl:time`, a third-party bound that predates this cohort;
-no co-developed package needs one.
+above, including both Keiki packages at 0.9.1.0 and `kafka-effectful` 0.3.0.0
+from Hackage. The only `allow-newer` in `cabal.project` is `haxl:time`, a
+third-party bound that predates this cohort; no co-developed package needs one.
 
 ```bash
 $ nix develop --command cabal test all -j1
@@ -254,7 +259,8 @@ shikigami-server-test       PASS   29 tests
 shikigami-workers-test      PASS   78 tests
 ```
 
-553 checks across nine suites passed on 2026-08-22 with Keiki 0.9.1.0 selected.
+553 checks across nine suites passed on 2026-08-22 with Keiki 0.9.1.0 selected
+and `kafka-effectful` 0.3.0.0 resolved from Hackage.
 
 Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
 an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
