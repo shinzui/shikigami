@@ -39,14 +39,19 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add the capability runtime bundle to `AgentRunDeps` and every composition/test site.
-- [ ] Add the declared `shikigami-capability-overlays-v1` patch and
+- [x] (2026-08-23) Added the capability runtime bundle to `AgentRunDeps` and every
+      composition/test site.
+- [x] (2026-08-23) Added the declared `shikigami-capability-overlays-v1` patch and
       `resolve-capability-overlays` step to the Keiro domain source.
-- [ ] Regenerate the Keiro layer and update hand-owned conformance expectations.
-- [ ] Implement the real runtime patch branch, permanent resolution mapping, and old-shape
-      fallback.
-- [ ] Acquire exact pinned overlay leases inside each timed `run-behavior-v2` attempt.
-- [ ] Add wire, workflow, retry, deploy-simulation, and cleanup tests and run `just keiro-gate`.
+- [x] (2026-08-23) Regenerated the Keiro layer and updated hand-owned conformance
+      expectations.
+- [x] (2026-08-23) Implemented the real runtime patch branch, permanent resolution mapping,
+      and old-shape fallback.
+- [x] (2026-08-23) Acquired exact pinned overlay leases inside each timed
+      `run-behavior-v2` attempt.
+- [x] (2026-08-23) Added wire, workflow, retry, deploy-simulation, cleanup, and Danwa
+      fail-closed tests. `just keiro-gate af3de569fe4f91238fefed57e2ef57575570d8ff`
+      and the full Cabal matrix pass.
 
 
 ## Surprises & Discoveries
@@ -64,6 +69,12 @@ implementation. Provide concise evidence.
 - Keiro step actions are at-least-once. Closing a provider lease cannot undo a tool call, so
   Plan 56's operation class is a workflow admission check, not documentation: this plan must
   refuse every non-observation tool before the step can run.
+- The Keiro diff gate classified the declared patch as `ADDITIVE` and its stored-data effect
+  as `replay-neutral`. The generated scaffold was a no-op after staging, which proves the
+  checked-in generated facts match the domain source.
+- The existing `BehaviorEnv` overlay guard supplies the Danwa fail-closed boundary without a
+  second catalog lookup: a conversation with a non-empty declaration receives the explicit
+  overlay-mismatch refusal before model dispatch.
 
 
 ## Decision Log
@@ -107,12 +118,25 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose. Before marking the plan complete,
-distill durable project context from the Decision Log, Surprises & Discoveries, and
-this section into docs/adr/. Keep task-local execution details here.
+Completed on 2026-08-23 in implementation commit `4649390`. Fresh durable agent runs now
+journal a complete capability-resolution result after profile resolution and before memory
+session creation. Each behavior attempt acquires only the exact journaled provider revision,
+derives a callback-local tool registry, and releases its leases before sink, memory, or
+session-completion work. Pre-patch instances retain the old body and write no added step.
 
-(To be filled during and after implementation.)
+The acceptance proofs cover stable journal bytes, old/fresh patch branches, permanent
+refusals before `open-session`, exact `v1` restoration after the live catalog moves to `v2`,
+transient acquire/release behavior, lease-boundary ordering, and Danwa's explicit fail-closed
+path. `just keiro-gate af3de569fe4f91238fefed57e2ef57575570d8ff` passes and classifies the
+change as additive and replay-neutral. `nix develop --command cabal test all -j1` passes all
+601 repository tests, including 438 core tests.
+
+`nix flake check` still fails only at the pre-existing
+`packages.aarch64-darwin.default` output: its `cabal2nix` source is the multi-package root,
+which has no root `.cabal` file. The same Plan 31 packaging issue was recorded by EP-1 and
+EP-2 and is unchanged by this plan. Direct builds of the flake's `treefmt` and `pre-commit`
+checks pass. ADR 0025 now records the durable patch, journal pin, attempt-local acquisition,
+failure classification, provider-retention, and conversation boundaries established here.
 
 
 ## Context and Orientation

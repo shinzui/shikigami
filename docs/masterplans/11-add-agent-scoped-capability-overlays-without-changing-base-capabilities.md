@@ -91,7 +91,7 @@ from `mori://shinzui/baikai/packages/baikai` and
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | Complete |
 | EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | Complete |
-| EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | In Progress |
+| EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | Complete |
 | EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -176,8 +176,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
       rejection.
 - [x] (2026-08-22) EP-2: Run `Skill` behaviors through one bounded tool loop while preserving
       the empty path.
-- [ ] EP-3: Declare, scaffold, and runtime-gate the durable resolution step.
-- [ ] EP-3: Prove fresh-run pinning, old-run compatibility, exact-version retries, and cleanup.
+- [x] (2026-08-23) EP-3: Declared, scaffolded, and runtime-gated the durable resolution step.
+- [x] (2026-08-23) EP-3: Proved fresh-run pinning, old-run compatibility, exact-version
+      retries, cleanup, and conversation fail-closed behavior.
 - [ ] EP-4: Supply a confined read-only workspace provider in `shikigami-agent`.
 - [ ] EP-4: Prove agent-specific opt-in through the database-free one-off command and reconcile
       the older MCP/repository plan assumptions.
@@ -205,6 +206,13 @@ interactions between child plans. Provide concise evidence.
   namespacing must reconstruct its constructor rather than use the repository's normal lens
   update. The operation preserves its dictionaries, description, and rank-2 body and changes
   only the wire name.
+- Keiro classifies a newly declared step as additive only when the entire body change sits
+  inside a new patch. EP-3's `shikigami-capability-overlays-v1` declaration and runtime branch
+  satisfy that rule: the gate reports `ADDITIVE` and `replay-neutral`, and an in-flight deploy
+  simulation proves the false branch writes no resolution step.
+- Exact-revision restoration does not require the current catalog to point back to the old
+  descriptor. The provider registry may retain `v1` while the catalog selects `v2`; a resumed
+  run reacquires journaled `v1`, while a new run resolves and acquires `v2`.
 
 
 ## Decision Log
@@ -281,4 +289,20 @@ checks pass. The unchanged default-package output still fails because the seihou
 Plan 31 packaging issue does not affect the Cabal test matrix. ADR 0025 now records the final
 lease, registry, guard, loop, and cleanup boundaries.
 
-EP-3 and EP-4 are now unblocked. The MasterPlan remains active until both complete.
+EP-3 and EP-4 became unblocked after EP-2; EP-3 is now complete. The MasterPlan remains
+active until EP-4 completes.
+
+EP-3 completed on 2026-08-23 in commit `4649390`. A fresh `AgentRun` now journals its public
+capability descriptors after profile resolution and before `open-session`; each timed behavior
+attempt reacquires only those exact revisions and releases them before downstream lifecycle
+work. Permanent declaration, catalog, and policy refusals are journaled before session
+creation, while transient provider failures leave the behavior result absent for retry.
+Pre-patch runs retain their old shape, and Danwa conversations with declared overlays fail
+closed until they gain their own durable resolution boundary.
+
+The Keiro gate passes from merge base `af3de569fe4f91238fefed57e2ef57575570d8ff` and reports
+the patch additive and replay-neutral. All 601 repository tests pass, including 438 core
+tests. `nix flake check` retains only the previously documented Plan 31 default-package
+failure at the multi-package root; direct `treefmt` and `pre-commit` flake checks pass. ADR
+0025 records the durable replay and provider-retention contract. EP-4 is now the sole
+remaining child and is dependency-ready.
