@@ -46,11 +46,17 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-23T19:28:46Z) M1: added the read-once immutable directory
   snapshot, explicit source-kind attribution, and content-derived snapshot version; 15 focused
   directory tests pass.
-- [ ] M1: define candidate, availability, exclusion, load-failure-count, and catalog-version types.
-- [ ] M1: resolve candidates only from the router's validated `delegates` order using the exact names enforced by plan 35.
-- [ ] M2: read one directory snapshot, then distinguish duplicate declaration, disabled, paused, deactivated, unknown principal, unavailable directory, and explicit directory-disabled compatibility mode.
-- [ ] M2: keep missing candidates distinct from the unassociated manifest-load count; never infer an agent identity from a failed file.
-- [ ] M3: compute a deterministic catalog version, redact content bodies, and add pure/stubbed tests.
+- [x] (2026-08-23T19:37:35Z) M1: defined candidate, availability, exclusion,
+  load-failure-count, and catalog-version types.
+- [x] (2026-08-23T19:37:35Z) M1: resolve candidates only from the router's
+  validated `delegates` order using the exact names enforced by plan 35.
+- [x] (2026-08-23T19:37:35Z) M2: read one directory snapshot, then distinguish
+  duplicate declaration, disabled, paused, deactivated, unknown principal, unavailable directory,
+  and explicit directory-disabled compatibility mode.
+- [x] (2026-08-23T19:37:35Z) M2: keep missing candidates distinct from the
+  unassociated manifest-load count; never infer an agent identity from a failed file.
+- [x] (2026-08-23T19:37:35Z) M3: compute a deterministic catalog version,
+  redact content bodies, and add pure/stubbed tests; all eight focused router-catalog cases pass.
 - [ ] Final: `cabal test all` proves stable ordering, versions, source attribution, and exclusions.
 
 
@@ -141,10 +147,12 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-Milestone 1's directory half is complete. One read now distinguishes disabled, configured-valid,
-and configured-unavailable state and carries a semantic UUIDv5 version. Identical refreshes and
-failed refreshes that retain the last valid view preserve the version; timestamps and diagnostics
-do not leak into the projection. Catalog domain types and resolution remain in progress.
+Milestones 1 through 3 are implemented. One read distinguishes disabled, configured-valid, and
+configured-unavailable state and carries a semantic UUIDv5 version. The pure catalog preserves the
+validated delegate order, fails closed on missing/duplicate/lifecycle conditions, includes only
+bounded specialist metadata, and reports failed manifests only as a count. Identical inputs produce
+identical JSON and versions; content, lifecycle, or failure-count changes move the version. Eight
+focused router-catalog cases and fifteen directory cases pass. Full-suite validation remains.
 
 
 ## Context and Orientation
