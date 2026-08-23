@@ -49,7 +49,7 @@ import Shikigami.App.Config.Load
     runAppConfig,
     usageExitCode,
   )
-import Shikigami.Server.Command.Agents (runAgentsList)
+import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
@@ -189,7 +189,10 @@ agentsInfo =
     (progDesc "Inspect the declared agents this deployment has loaded")
 
 agentsSubcommands :: [(String, Mod CommandFields AdminAction)]
-agentsSubcommands = [("list", command "list" agentsListInfo)]
+agentsSubcommands =
+  [ ("list", command "list" agentsListInfo),
+    ("sync", command "sync" agentsSyncInfo)
+  ]
 
 -- | @agents list [--json]@.
 --
@@ -205,6 +208,19 @@ agentsListInfo =
   where
     parser =
       (\asJson -> (runAgentsList asJson, []))
+        <$> switch (long "json" <> help "Emit machine-readable JSON")
+
+-- | @agents sync [--json]@ persists the load report and reconciles joined
+-- principal ids onto existing sink grants. Database configuration is required
+-- at execution time so @agents list@ remains available offline.
+agentsSyncInfo :: ParserInfo AdminAction
+agentsSyncInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Persist agent load state and reconcile grant principal ids")
+  where
+    parser =
+      (\asJson -> (runAgentsSync asJson, []))
         <$> switch (long "json" <> help "Emit machine-readable JSON")
 
 -- | @grants@ is a group rather than a flat command: list, grant, and revoke

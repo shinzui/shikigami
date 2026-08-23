@@ -82,9 +82,12 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   scopes or journal step shapes. Evidence: all 387 `shikigami-core` tests pass, including
   enqueue-after-pause, pause-after-enqueue, principal session attribution, and wire
   compatibility cases.
-- [ ] Milestone 5: extend `shikigami agents list`, add `agents sync`, reconcile grant
-  principal ids, update operator/configuration documentation, and capture the pause/resume
-  demonstration.
+- [x] (2026-08-23T01:48:44Z) Milestone 5: extended `shikigami agents list` to render the
+  manifest/principal union, added database-backed `agents sync`, atomically filled or verified
+  grant principal ids, documented the operator flow, and distilled cache semantics into
+  ADR-0024. Evidence: 29 server tests and 13 focused grant tests pass; the real CLI rendered
+  joined, declared-only, principal-only, disabled, and failed states; one live file-backed
+  handle passed an atomic `active → paused → active` refresh test.
 - [ ] Final: `nix develop -c cabal test all`, `nix develop -c just keiro-gate`, and the
   manual acceptance transcript are green; durable decisions are distilled into `docs/adr/`.
 
@@ -139,6 +142,12 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   unchanged. Its semantic checks and scaffolding were clean before the Milestone 4 commit;
   the full gate must be rerun against that commit so the source-tree freshness comparison has
   a committed baseline. (2026-08-22)
+
+- `cabal test all` launches the package test suites concurrently. In the final pre-commit run,
+  one of 390 core tests hit the ephemeral-Postgres harness's 60-second startup timeout while
+  every other core test and every other package passed. The exact failed test passed
+  immediately in isolation, and the complete core suite then passed 390/390 in 24.37 seconds.
+  This was test-host database-startup contention, not an assertion failure. (2026-08-22)
 
 
 ## Decision Log
@@ -220,6 +229,15 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   keeps offset acknowledgement after the inbox and `run_skips` row commit together.
   Date: 2026-08-22
 
+- Decision: Reconcile one joined agent's grant rows under a database row lock, fill only null
+  principal ids, and change nothing if any row already carries a different id. Missing and
+  failed inventory sides remain reportable issues and do not block independent valid joins;
+  an identity conflict makes `agents sync` exit non-zero after rendering every result.
+  Rationale: reconciliation must be safely repeatable and useful on a partially configured
+  deployment, while an existing contradictory identity is an operator decision rather than a
+  value a bulk command may overwrite.
+  Date: 2026-08-22
+
 
 ## Outcomes & Retrospective
 
@@ -251,8 +269,15 @@ a principal paused after enqueue cannot cross the HTTP boundary; the latter beco
 terminal non-send receipt so publication will not retry. Compatible intent decoding keeps old
 rows publishable, while new rows preserve the resolved principal for the second check. Newly
 opened agent-run and conversation sessions now store that principal in Kioku while their
-lookup scope remains declaration-name-keyed. Milestone 5 remains to expose inventory and
-grant reconciliation to operators.
+lookup scope remains declaration-name-keyed.
+
+Milestone 5 exposes the complete join rather than an inner join that hides repair work.
+`agents list` remains database-independent while showing joined, declaration-only,
+principal-only, failed, and explicitly disabled states from one load report and one snapshot.
+`agents sync` first persists that exact report, then reconciles only one-to-one joins onto
+existing grant rows; reruns verify equal ids, conflicts preserve every row and fail visibly,
+and the command never creates grants or principals. ADR-0024 now carries the cached-directory
+failure policy beyond this plan.
 
 
 ## Context and Orientation

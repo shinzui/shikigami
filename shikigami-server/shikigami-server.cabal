@@ -102,6 +102,7 @@ test-suite shikigami-server-test
   main-is:        Main.hs
   hs-source-dirs: test
   other-modules:
+    Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
     Shikigami.Server.ProblemSpec

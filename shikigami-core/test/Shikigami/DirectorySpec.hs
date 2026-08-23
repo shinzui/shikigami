@@ -8,7 +8,7 @@ import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
 import Shikigami.Directory
 import Shikigami.Log qualified as Log
-import System.Directory (getTemporaryDirectory, removeFile)
+import System.Directory (getTemporaryDirectory, removeFile, renameFile)
 import System.IO (hClose, openBinaryTempFile)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -78,6 +78,21 @@ tests =
             refreshDirectory directoryHandle >>= assertLeftContaining "duplicate normalized handle"
             consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
               >>= (@?= AllowRun (Just heartbeat)),
+      testCase "one live handle observes pause and reactivation after file refresh" $
+        withDirectoryFile activeDirectory do
+          \filePath -> do
+            directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
+            refreshDirectory directoryHandle >>= (@?= Right ())
+            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+              >>= (@?= AllowRun (Just heartbeat))
+            replaceFileAtomically filePath pausedDirectory
+            refreshDirectory directoryHandle >>= (@?= Right ())
+            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+              >>= (@?= SkipRun heartbeatPaused "principal lifecycle is paused")
+            replaceFileAtomically filePath activeDirectory
+            refreshDirectory directoryHandle >>= (@?= Right ())
+            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+              >>= (@?= AllowRun (Just heartbeat)),
       testCase "inspection order is deterministic by normalized handle" $
         withDirectoryHandle lifecycleDirectory do
           \directoryHandle ->
@@ -112,6 +127,12 @@ lifecycleDirectory =
     {"principal_id":"agent_01h000000000000000heartbeat","handle":"heartbeat","lifecycle":"paused"},
     {"principal_id":"agent_01h0000000000000000archive","handle":"archive","lifecycle":"deactivated"}
   ]
+  """
+
+pausedDirectory :: ByteString
+pausedDirectory =
+  """
+  [{"principal_id":"agent_01h000000000000000heartbeat","handle":"heartbeat","lifecycle":"paused"}]
   """
 
 duplicateIdDirectory :: ByteString
@@ -173,3 +194,9 @@ assertLeftContaining :: Text -> Either Text a -> IO ()
 assertLeftContaining expected = \case
   Left problem -> assertBool ("expected " <> show expected <> " in " <> show problem) (expected `Text.isInfixOf` problem)
   Right _ -> assertFailure ("expected failure containing " <> show expected)
+
+replaceFileAtomically :: FilePath -> ByteString -> IO ()
+replaceFileAtomically filePath contents = do
+  let candidate = filePath <> ".next"
+  BS.writeFile candidate contents
+  renameFile candidate filePath

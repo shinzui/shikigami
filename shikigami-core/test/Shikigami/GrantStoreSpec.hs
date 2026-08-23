@@ -11,6 +11,7 @@
 module Shikigami.GrantStoreSpec (tests) where
 
 import Data.List (nub, sort)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
@@ -20,6 +21,8 @@ import Shikigami.Sink.GrantStore
   ( GrantCursor (..),
     GrantPage (..),
     GrantPageRequest (..),
+    GrantPrincipalSync (..),
+    GrantPrincipalSyncStatus (..),
     GrantRow (..),
     GrantSource (DbGrants),
     PageSize,
@@ -27,6 +30,7 @@ import Shikigami.Sink.GrantStore
     defaultPageSize,
     listGrants,
     mkPageSize,
+    reconcileGrantPrincipal,
     revokeGrant,
     upsertGrant,
   )
@@ -40,6 +44,7 @@ tests =
     "GrantStore"
     [ testGroup "seed data" seedTests,
       testGroup "runtime grant and revoke" runtimeTests,
+      testGroup "principal reconciliation" principalReconciliationTests,
       testGroup "paging" pagingTests
     ]
 
@@ -146,6 +151,45 @@ runtimeTests =
         assertEqual "no row affected" False changed
   ]
 
+principalReconciliationTests :: [TestTree]
+principalReconciliationTests =
+  [ testCase "fills null principal ids and verifies the same id idempotently" do
+      withPool \pool -> do
+        before <- findRows pool "heartbeat"
+        assertBool "the seed unexpectedly carried a principal" (all ((== Nothing) . principalIdOf) before)
+        first <-
+          reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
+            >>= expectRight "first reconcileGrantPrincipal"
+        assertEqual "first status" PrincipalSynced (status first)
+        assertEqual "filled every row" (fromIntegral (length before)) (filledCount first)
+        assertEqual "nothing was already verified" 0 (verifiedCount first)
+        after <- findRows pool "heartbeat"
+        assertBool "a principal stayed null" (all ((== Just "agent_heartbeat") . principalIdOf) after)
+        second <-
+          reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
+            >>= expectRight "second reconcileGrantPrincipal"
+        assertEqual "second status" PrincipalSynced (status second)
+        assertEqual "idempotent fill count" 0 (filledCount second)
+        assertEqual "verified every row" (fromIntegral (length after)) (verifiedCount second),
+    testCase "a conflicting principal leaves null rows untouched" do
+      withPool \pool -> do
+        upsertGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "first grant"
+        _ <-
+          reconcileGrantPrincipal pool "digest-watcher" "agent_wrong"
+            >>= expectRight "seed conflicting principal"
+        upsertGrant pool "digest-watcher" SKizashiSignal (Just "test") >>= expectRight "second grant"
+        result <-
+          reconcileGrantPrincipal pool "digest-watcher" "agent_digest_watcher"
+            >>= expectRight "conflicting reconcileGrantPrincipal"
+        assertEqual "no row filled" 0 (filledCount result)
+        assertEqual "conflict is explicit" (PrincipalConflict (Set.singleton "agent_wrong")) (status result)
+        rows <- findRows pool "digest-watcher"
+        assertEqual
+          "the null and conflicting values are unchanged"
+          [Nothing, Just "agent_wrong"]
+          (sort (map principalIdOf rows))
+  ]
+
 pagingTests :: [TestTree]
 pagingTests =
   [ testCase "the default page returns the nine seed rows and no cursor" do
@@ -196,6 +240,16 @@ findRow pool agent = do
   case filter (\GrantRow {agentName} -> agentName == agent) (items page) of
     [row] -> pure row
     other -> assertFailure ("expected exactly one row for " <> show agent <> ", got " <> show (length other))
+
+findRows :: Pool -> Text -> IO [GrantRow]
+findRows pool agent = do
+  page <-
+    listGrants pool GrantPageRequest {size = defaultPageSize, after = Nothing}
+      >>= expectRight "listGrants"
+  pure (filter (\GrantRow {agentName} -> agentName == agent) (items page))
+
+principalIdOf :: GrantRow -> Maybe Text
+principalIdOf GrantRow {principalId} = principalId
 
 granted' :: GrantRow -> Bool
 granted' GrantRow {granted = g} = g

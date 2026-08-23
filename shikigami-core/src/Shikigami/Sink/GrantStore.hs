@@ -48,6 +48,9 @@ module Shikigami.Sink.GrantStore
     -- * Writing
     upsertGrant,
     revokeGrant,
+    GrantPrincipalSync (..),
+    GrantPrincipalSyncStatus (..),
+    reconcileGrantPrincipal,
   )
 where
 
@@ -56,6 +59,7 @@ import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
@@ -63,6 +67,8 @@ import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
+import Hasql.Transaction qualified as Transaction
+import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
   ( AgentIdentity (..),
@@ -112,9 +118,9 @@ checkGrant source identity@(AgentIdentity nm) kind = case source of
 
 -- | One row of @shikigami.sink_grants@.
 --
--- @principalId@ is always 'Nothing' today. The column exists so that
--- @docs\/plans\/23-agent-lifecycle-control-with-meibo-principals.md@ can re-key
--- grants by verified principal without reshaping the table.
+-- @principalId@ is filled by @shikigami agents sync@ after it verifies a
+-- declaration/directory join. The grant key deliberately remains the declared
+-- agent name until plan 54 performs the broader durable re-keying.
 data GrantRow = GrantRow
   { agentName :: !Text,
     principalId :: !(Maybe Text),
@@ -125,6 +131,26 @@ data GrantRow = GrantRow
     revokedBy :: !(Maybe Text),
     revokedAt :: !(Maybe UTCTime)
   }
+  deriving stock (Eq, Show, Generic)
+
+-- | Result of reconciling one declaration/principal join across all of the
+-- declaration's sink-grant rows.
+--
+-- Counts describe the state observed while the rows were locked: @filledCount@
+-- is the number changed from null in this call and @verifiedCount@ is the
+-- number that already carried the expected id. A conflict changes nothing.
+data GrantPrincipalSync = GrantPrincipalSync
+  { agentName :: !Text,
+    principalId :: !Text,
+    filledCount :: !Int64,
+    verifiedCount :: !Int64,
+    status :: !GrantPrincipalSyncStatus
+  }
+  deriving stock (Eq, Show, Generic)
+
+data GrantPrincipalSyncStatus
+  = PrincipalSynced
+  | PrincipalConflict !(Set Text)
   deriving stock (Eq, Show, Generic)
 
 -- | How many rows one page may carry. The constructor is private: a caller
@@ -301,6 +327,68 @@ revokeStatement =
     ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((\(_, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((\(_, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    )
+    Decoders.rowsAffected
+
+-- | Fill or verify the principal id on every grant row for one declared agent.
+--
+-- The selected rows are locked until the transaction completes. If any row
+-- already carries a different id, no null row is filled: an operator must
+-- repair that identity conflict explicitly rather than letting a bulk sync
+-- produce a mixed identity set.
+reconcileGrantPrincipal :: Pool -> Text -> Text -> IO (Either Text GrantPrincipalSync)
+reconcileGrantPrincipal pool agent principal =
+  renderUsage
+    <$> Pool.use
+      pool
+      ( Transaction.Sessions.transaction
+          Transaction.Sessions.ReadCommitted
+          Transaction.Sessions.Write
+          do
+            existing <- Transaction.statement agent lockGrantPrincipalsStatement
+            let conflicts = Set.fromList [found | Just found <- existing, found /= principal]
+                verified = fromIntegral (length [() | Just found <- existing, found == principal])
+            if Set.null conflicts
+              then do
+                filled <- Transaction.statement (agent, principal) fillGrantPrincipalsStatement
+                pure
+                  GrantPrincipalSync
+                    { agentName = agent,
+                      principalId = principal,
+                      filledCount = filled,
+                      verifiedCount = verified,
+                      status = PrincipalSynced
+                    }
+              else
+                pure
+                  GrantPrincipalSync
+                    { agentName = agent,
+                      principalId = principal,
+                      filledCount = 0,
+                      verifiedCount = verified,
+                      status = PrincipalConflict conflicts
+                    }
+      )
+
+lockGrantPrincipalsStatement :: Statement Text [Maybe Text]
+lockGrantPrincipalsStatement =
+  preparable
+    "SELECT principal_id FROM shikigami.sink_grants WHERE agent_name = $1 FOR UPDATE"
+    (Encoders.param (Encoders.nonNullable Encoders.text))
+    (Decoders.rowList (Decoders.column (Decoders.nullable Decoders.text)))
+
+fillGrantPrincipalsStatement :: Statement (Text, Text) Int64
+fillGrantPrincipalsStatement =
+  preparable
+    """
+    UPDATE shikigami.sink_grants
+       SET principal_id = $2,
+           updated_at = now()
+     WHERE agent_name = $1
+       AND principal_id IS NULL
+    """
+    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.rowsAffected
 

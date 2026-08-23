@@ -4,6 +4,7 @@ import Network.Wai (Application)
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Server.AgentsSpec qualified as AgentsSpec
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Server.CommandSpec qualified as CommandSpec
@@ -17,6 +18,7 @@ main =
     ( testGroup
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
+          AgentsSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
           ProblemSpec.tests

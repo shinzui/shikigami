@@ -12,10 +12,12 @@ nix develop
 cabal run shikigami -- <command>
 ```
 
-An installed deployment runs `shikigami <command>` directly. Every verb except
-`agents list` needs `database.connection_string` resolved — from a config file,
-`--set database.connection_string=…`, or the `PG_CONNECTION_STRING` environment
-binding. `shikigami --explain-config` shows what it resolved and from where.
+An installed deployment runs `shikigami <command>` directly. Database-backed
+verbs, including `agents sync`, need `database.connection_string` resolved —
+from a config file, `--set database.connection_string=…`, or the
+`PG_CONNECTION_STRING` environment binding. `agents list`, `validate`, and
+`render-lifecycle` remain available without PostgreSQL. `shikigami
+--explain-config` shows what it resolved and from where.
 
 
 ## Where the verbs come from
@@ -37,21 +39,50 @@ tree and work across all of them.
 
 ## Which verb answers which question
 
-**"Which agents are declared, and is any of them broken?"** — `agents list`.
+**"Which declarations and principals are joined, and is either side missing?"**
+— `agents list`.
 
 ```bash
 cabal run shikigami -- agents list
 ```
 
-One row per manifest under the configured agents directory. The `STATE` column
-distinguishes `loaded` from `failed`, and `ENABLED` distinguishes an agent that
-is loaded and running from one that is loaded and deliberately switched off — the
-three states that otherwise look identical from outside. A failed manifest's
-Dhall diagnostic prints below the table. `--json` gives the same data
-machine-readably.
+The table is the union of one completed manifest load report and one principal
+directory snapshot. `MANIFEST` distinguishes `loaded`, `failed`, and `NO
+MANIFEST`; `PRINCIPAL` shows the joined stable id or `NO PRINCIPAL`; and
+`LIFECYCLE` shows `active`, `paused`, or `deactivated`. `ENABLED` remains the
+declaration-local switch. A failed manifest's full Dhall diagnostic prints
+below the table. `--json` gives the same states machine-readably.
 
-This is the only verb that opens no database. It answers when PostgreSQL is
-down, which is often exactly when you are asking.
+When `directory.mode=disabled`, loaded declarations show `NO PRINCIPAL` and
+`DISABLED`. That is explicit compatibility behavior, not proof that Meibo says
+the principal is active. In file mode, an unreadable or invalid initial
+snapshot makes the command fail closed, just as it does for a worker process.
+
+`agents list` opens no database. It answers when PostgreSQL is down, which is
+often exactly when you are asking.
+
+**"Persist what loaded and bind verified principals to existing grants."** —
+`agents sync`.
+
+```bash
+cabal run shikigami -- agents sync
+cabal run shikigami -- agents sync --json
+```
+
+Sync records the complete current manifest report in
+`shikigami.agent_load_state`, including full diagnostics for failed manifests.
+For each one-to-one declaration/principal join it fills null
+`shikigami.sink_grants.principal_id` values or verifies the same id already
+stored. It never creates or deletes grants and never replaces a different
+principal id.
+
+Each declaration without a principal, directory principal without a manifest,
+failed manifest, disabled directory, or ambiguous join is printed as an
+`ISSUE` and skipped. Those inventory gaps do not stop independent valid joins.
+An existing conflicting grant principal prints `CONFLICT`, leaves every grant
+row for that agent untouched, and makes the command exit non-zero. Repair the
+identity deliberately and rerun; a clean rerun is idempotent and reports
+`filled=0` with the verified count.
 
 **"What is running right now?"** — `wf list`.
 

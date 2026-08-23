@@ -166,6 +166,19 @@ unreadable, malformed, or duplicate-filled candidate is rejected and the last va
 continues serving checks. A configured process that has never loaded a valid snapshot fails
 closed. Disabled mode is explicit compatibility behavior, not a directory outage.
 
+Every schedule, Kafka trigger, run-queue drain, sink enqueue, and sink publication consults
+only this cached snapshot; none performs file or Meibo IO on its hot path. `paused` and
+`deactivated` both refuse new effects. Trigger and drain refusals are written to
+`shikigami.run_skips`; sink enqueue refusals are journaled without an outbox row, and a pause
+observed after enqueue becomes a terminal non-send delivery receipt. Changing the file back
+to `active` resumes newly admitted work after the next successful refresh without a process
+restart.
+
+Use `shikigami agents list` to inspect the joined manifest/principal view without PostgreSQL.
+Use `shikigami agents sync` with `database.connection_string` configured to persist the load
+report and fill or verify nullable principal ids on existing sink grants. Sync never invents a
+grant and refuses to overwrite a conflicting principal id.
+
 Environment bindings are explicit, one variable to one key. Nothing scans for a prefix, so
 a typo is a variable that does nothing rather than a value landing on the wrong key.
 
@@ -246,8 +259,8 @@ is the better outcome.
 `shikigami` is deliberately absent from the database list: `shikigami validate` and
 `shikigami render-lifecycle` read a manifest and never connect, so requiring a connection
 string for the whole command line would break an offline command. `shikigami enqueue-run`
-asks for the value at the point it opens the store, and fails with exit code `4` and the
-same key name if it is missing.
+and `shikigami agents sync` ask for the value at the point they open the store, and fail with
+exit code `4` and the same key name if it is missing.
 
 ```text
 $ shikigami-worker

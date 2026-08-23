@@ -77,13 +77,20 @@ to learn (record memory) for later runs.
 Declare an identity when the agent already has a stable principal in meibo:
 
 ```dhall
-, identity = Some { principal = "principal_shikigami_heartbeat" }
+, identity = Some { principal = "agent_01h000000000000000heartbeat" }
 ```
 
-The declaration is parsed and shown by `validate`, but principal verification and lifecycle
-control are not enforced yet; that integration belongs to
-[plan 23](../plans/23-agent-lifecycle-control-with-meibo-principals.md). Until it lands,
-`identity.principal` is carried as declared and must not be treated as proof of authority.
+With `directory.mode=file`, this id is authoritative: it must resolve to an `agent_…` record
+in the cached Meibo projection, and that record must be `active` before the agent can create
+new trigger, drain, or sink effects. A present but unknown id never falls back to the name.
+When `identity` is absent, the declaration's `name` joins by case-normalized Meibo handle for
+compatibility. `shikigami agents list` shows the join and lifecycle; `shikigami agents sync`
+persists load state and fills or verifies the same principal id on existing sink grants.
+
+Explicit `directory.mode=disabled` preserves compatibility: the declared id is carried for
+session attribution but is not directory-verified, and the operator inventory labels the
+lifecycle `DISABLED` rather than implying `active`. The broader migration of name-keyed durable
+state remains in [plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md).
 
 ## Memory policy
 
