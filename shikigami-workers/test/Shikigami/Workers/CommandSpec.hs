@@ -83,7 +83,7 @@ tests =
       testCase "the worker keeps its downstream options" $
         assertHasAll
           workerRoleInfo
-          ["--agents", "--kawa-url", "--kizashi-url", "--danwa-url", "--danwa-agent"],
+          ["--agents", "--kawa-url", "--kizashi-url", "--kanmon-url", "--danwa-url", "--danwa-agent"],
       testCase "the scheduler keeps its agents directory option" $
         assertHasAll schedulerRoleInfo ["--agents"],
       testCase "the stream consumer keeps its topic and feedback-guard options" $
@@ -105,6 +105,7 @@ tests =
           [ "agents.directory",
             "sinks.kawa.base_url",
             "sinks.kizashi.base_url",
+            "sinks.kanmon.base_url",
             "sinks.danwa.base_url",
             "sinks.danwa.agent_participant"
           ],
@@ -148,6 +149,8 @@ resolutionTests =
               "http://kawa.internal",
               "--kizashi-url",
               "http://kizashi.internal",
+              "--kanmon-url",
+              "http://kanmon.internal",
               "--danwa-url",
               "http://danwa.internal",
               "--danwa-agent",
@@ -156,6 +159,7 @@ resolutionTests =
         agentsDirectory config @?= "/srv/agents"
         kawaBaseUrl config @?= "http://kawa.internal"
         kizashiBaseUrl config @?= "http://kizashi.internal"
+        kanmonBaseUrl config @?= "http://kanmon.internal"
         danwaBaseUrl config @?= "http://danwa.internal"
         danwaAgentParticipant config @?= "part_from_flag",
       testCase "the stream consumer's flags land on the activity-stream settings" do

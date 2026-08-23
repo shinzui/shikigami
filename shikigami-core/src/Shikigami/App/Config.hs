@@ -106,11 +106,13 @@ module Shikigami.App.Config
     anthropicApiKeyKey,
     kawaTokenKey,
     kizashiTokenKey,
+    kanmonTokenKey,
     danwaTokenKey,
     sinksKawaBaseUrlKey,
     sinksKawaSourceSegmentKey,
     sinksKizashiBaseUrlKey,
     sinksKizashiDefaultRecipientKey,
+    sinksKanmonBaseUrlKey,
     sinksDanwaBaseUrlKey,
     sinksDanwaAgentParticipantKey,
     sinksReiBaseUrlKey,
@@ -364,6 +366,11 @@ data AppConfig = AppConfig
     kizashiDefaultRecipient :: !Text,
     -- | Bearer token sent to kizashi, when that sink requires authentication.
     kizashiToken :: !(Maybe SecretText),
+    -- | Base URL of the Kanmon guarded channel-action service.
+    kanmonBaseUrl :: !Text,
+    -- | Bearer token authenticating Shikigami to Kanmon. Provider credentials
+    -- remain downstream and never enter this configuration.
+    kanmonToken :: !(Maybe SecretText),
     -- | Base URL of the danwa conversation server.
     danwaBaseUrl :: !Text,
     -- | danwa participant id Shikigami authors messages as.
@@ -427,6 +434,8 @@ appConfig =
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
     <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient:default")
     <*> optional kizashiTokenSetting
+    <*> withDefault sinksKanmonBaseUrlSetting (constant "local-kanmon" "The local Kanmon channel-action service" "http://localhost:8090")
+    <*> optional kanmonTokenSetting
     <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
     <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" "part_shikigami")
     <*> optional danwaTokenSetting
@@ -774,6 +783,16 @@ kizashiTokenSetting =
     "Bearer token for the kizashi sink"
     (SecretText <$> textDecoder)
 
+sinksKanmonBaseUrlSetting :: Setting Text
+sinksKanmonBaseUrlSetting = publicSettingWithRenderer sinksKanmonBaseUrlKey "Base URL of the Kanmon channel-action service" textDecoder id
+
+kanmonTokenSetting :: Setting SecretText
+kanmonTokenSetting =
+  secretSetting
+    kanmonTokenKey
+    "Bearer token authenticating Shikigami to Kanmon"
+    (SecretText <$> textDecoder)
+
 sinksDanwaBaseUrlSetting :: Setting Text
 sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base URL of the danwa conversation server" textDecoder id
 
@@ -909,6 +928,9 @@ sinksKizashiBaseUrlKey = stableKey "sinks.kizashi.base_url"
 sinksKizashiDefaultRecipientKey :: Key
 sinksKizashiDefaultRecipientKey = stableKey "sinks.kizashi.default_recipient"
 
+sinksKanmonBaseUrlKey :: Key
+sinksKanmonBaseUrlKey = stableKey "sinks.kanmon.base_url"
+
 sinksDanwaBaseUrlKey :: Key
 sinksDanwaBaseUrlKey = stableKey "sinks.danwa.base_url"
 
@@ -932,6 +954,9 @@ kawaTokenKey = stableKey "credentials.sinks.kawa.token"
 
 kizashiTokenKey :: Key
 kizashiTokenKey = stableKey "credentials.sinks.kizashi.token"
+
+kanmonTokenKey :: Key
+kanmonTokenKey = stableKey "credentials.sinks.kanmon.token"
 
 danwaTokenKey :: Key
 danwaTokenKey = stableKey "credentials.sinks.danwa.token"
@@ -1004,11 +1029,13 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
+          binding (EnvName "SHIKIGAMI_SINKS_KANMON_BASE_URL") sinksKanmonBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
           binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
           binding (EnvName "SHIKIGAMI_KAWA_TOKEN") kawaTokenKey,
           binding (EnvName "SHIKIGAMI_KIZASHI_TOKEN") kizashiTokenKey,
+          binding (EnvName "SHIKIGAMI_KANMON_TOKEN") kanmonTokenKey,
           binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,

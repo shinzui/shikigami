@@ -57,7 +57,7 @@ import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink (GrantSource (DbGrants), SinkOutcome (Enqueued, SkippedLifecycle), SinkResult (..))
-import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Wire qualified as Wire
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
@@ -353,6 +353,7 @@ withFixtureUsingTracer tracer label sinks kizashi danwa use =
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,
                 AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+                AgentWorkflow.kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
                 AgentWorkflow.danwa = danwa,
                 AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
                 AgentWorkflow.http = sinkHttp,

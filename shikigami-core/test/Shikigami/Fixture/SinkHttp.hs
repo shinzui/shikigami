@@ -37,7 +37,7 @@ testSinkHttpFor :: DanwaConfig -> IO SinkHttp
 testSinkHttpFor danwaConfig =
   newSinkHttp
     testHttpLimits
-    SinkCredentials {kawa = Nothing, kizashi = Nothing, danwa = Nothing}
+    SinkCredentials {kawa = Nothing, kizashi = Nothing, kanmon = Nothing, danwa = Nothing}
     danwaConfig
     >>= either (error . show) pure
 

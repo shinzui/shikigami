@@ -62,6 +62,7 @@ import Shikigami.App.Config
     kafkaStreamGroupKey,
     sinksDanwaAgentParticipantKey,
     sinksDanwaBaseUrlKey,
+    sinksKanmonBaseUrlKey,
     sinksKawaBaseUrlKey,
     sinksKizashiBaseUrlKey,
   )
@@ -99,6 +100,7 @@ workerRoleInfo =
               [ agentsOption,
                 kawaUrlOption,
                 kizashiUrlOption,
+                kanmonUrlOption,
                 danwaUrlOption,
                 danwaAgentOption
               ]
@@ -235,6 +237,13 @@ kizashiUrlOption =
     "--kizashi-url"
     sinksKizashiBaseUrlKey
     (long "kizashi-url" <> metavar "URL" <> help "kizashi base URL (sets sinks.kizashi.base_url)")
+
+kanmonUrlOption :: Parser (Maybe Source)
+kanmonUrlOption =
+  namedOption
+    "--kanmon-url"
+    sinksKanmonBaseUrlKey
+    (long "kanmon-url" <> metavar "URL" <> help "Kanmon base URL (sets sinks.kanmon.base_url)")
 
 danwaUrlOption :: Parser (Maybe Source)
 danwaUrlOption =

@@ -250,7 +250,7 @@ testEnv source httpLimits = do
 danwaClientEnv :: Int -> HttpLimits -> Maybe TokenSource -> IO ClientEnv
 danwaClientEnv port httpLimits source = do
   let config = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = "part_agent_test"}
-      credentials = SinkCredentials {kawa = Nothing, kizashi = Nothing, danwa = source}
+      credentials = SinkCredentials {kawa = Nothing, kizashi = Nothing, kanmon = Nothing, danwa = source}
   newSinkHttp httpLimits credentials config >>= \case
     Left failure -> assertFailure ("failed to build danwa client: " <> show failure)
     Right SinkHttp {danwa} -> pure danwa

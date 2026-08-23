@@ -56,7 +56,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
@@ -106,6 +106,7 @@ data WorkerEnv = WorkerEnv
     schedules :: !(Map Text CronSchedule),
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
+    kanmon :: !KanmonConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
     http :: !SinkHttp,
@@ -188,6 +189,7 @@ agentRunDeps env =
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,
+      AgentWorkflow.kanmon = kanmon env,
       AgentWorkflow.danwa = danwa env,
       AgentWorkflow.rei = rei env,
       AgentWorkflow.http = http env,

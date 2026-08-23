@@ -62,7 +62,7 @@ import Shikigami.Router.Decision
     RoutingError (..),
   )
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -326,6 +326,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.agents,
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      AgentWorkflow.kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
       AgentWorkflow.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
       AgentWorkflow.http = testSinkHttp,

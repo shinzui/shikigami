@@ -93,6 +93,7 @@ data HttpEnv = HttpEnv
 data SinkCredentials = SinkCredentials
   { kawa :: !(Maybe TokenSource),
     kizashi :: !(Maybe TokenSource),
+    kanmon :: !(Maybe TokenSource),
     danwa :: !(Maybe TokenSource)
   }
   deriving stock (Generic)
@@ -103,6 +104,7 @@ data SinkCredentials = SinkCredentials
 data SinkHttp = SinkHttp
   { kawa :: !HttpEnv,
     kizashi :: !HttpEnv,
+    kanmon :: !HttpEnv,
     danwa :: !ClientEnv
   }
   deriving stock (Generic)
@@ -148,10 +150,11 @@ newSinkManager =
 -- | Convert redacted Settei values to static opaque sources without exposing
 -- their plaintext to any serializable sink configuration.
 credentialsFromConfig :: AppConfig -> SinkCredentials
-credentialsFromConfig AppConfig {kawaToken = configKawa, kizashiToken = configKizashi, danwaToken = configDanwa} =
+credentialsFromConfig AppConfig {kawaToken = configKawa, kizashiToken = configKizashi, kanmonToken = configKanmon, danwaToken = configDanwa} =
   SinkCredentials
     { kawa = sourceFromSecret configKawa,
       kizashi = sourceFromSecret configKizashi,
+      kanmon = sourceFromSecret configKanmon,
       danwa = sourceFromSecret configDanwa
     }
   where
@@ -159,7 +162,7 @@ credentialsFromConfig AppConfig {kawaToken = configKawa, kizashiToken = configKi
 
 -- | Build all sink HTTP clients once, before a worker starts consuming work.
 newSinkHttp :: HttpLimits -> SinkCredentials -> DanwaConfig -> IO (Either SinkHttpError SinkHttp)
-newSinkHttp httpLimits SinkCredentials {kawa = kawaSource, kizashi = kizashiSource, danwa = danwaSource} DanwaConfig {baseUrl} = do
+newSinkHttp httpLimits SinkCredentials {kawa = kawaSource, kizashi = kizashiSource, kanmon = kanmonSource, danwa = danwaSource} DanwaConfig {baseUrl} = do
   parsed <- trySynchronous (parseBaseUrl (Text.unpack baseUrl)) :: IO (Either SomeException BaseUrl)
   case parsed of
     Left _ -> pure (Left InvalidDanwaBaseUrl)
@@ -171,6 +174,7 @@ newSinkHttp httpLimits SinkCredentials {kawa = kawaSource, kizashi = kizashiSour
             SinkHttp
               { kawa = HttpEnv {manager = sharedManager, token = kawaSource, limits = httpLimits},
                 kizashi = HttpEnv {manager = sharedManager, token = kizashiSource, limits = httpLimits},
+                kanmon = HttpEnv {manager = sharedManager, token = kanmonSource, limits = httpLimits},
                 danwa = mkClientEnv danwaManager danwaBaseUrl
               }
         )

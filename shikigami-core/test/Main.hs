@@ -37,6 +37,7 @@ import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
+import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
@@ -53,6 +54,7 @@ import Shikigami.Sink
     DanwaConfig (..),
     DanwaTarget (..),
     GrantSource (StaticGrants),
+    KanmonConfig (..),
     KawaConfig (..),
     KizashiConfig (..),
     SinkContext (..),
@@ -98,6 +100,7 @@ main =
           EnqueueHardeningSpec.tests,
           GrantStoreSpec.tests,
           KeiroSpecificationSpec.tests,
+          KanmonClientSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
           PracticeReviewSpec.tests,
@@ -251,11 +254,14 @@ ctxFor ident kz kw =
       kizashi = kz,
       kawa = kw,
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
       rei = Sink.ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       traceHeaders = [],
       danwaTarget = Nothing,
       recipientOverride = Nothing,
+      conversationKey = Nothing,
+      triggeringActivityId = Nothing,
       occurredAt = Nothing,
       receipts = Nothing,
       logger = Log.silentLogger,

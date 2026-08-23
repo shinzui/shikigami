@@ -15,7 +15,7 @@ import Network.HTTP.Types.Header (Header)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
-import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink.Config (DanwaConfig, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
@@ -49,6 +49,7 @@ data SinkContext = SinkContext
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
+    kanmon :: !KanmonConfig,
     rei :: !ReiConfig,
     -- | Process-lifetime authenticated HTTP clients. This is dependency wiring,
     -- not durable input, and is never serialized into a sink intent.
@@ -62,6 +63,10 @@ data SinkContext = SinkContext
     -- on the sink intent. 'Nothing' means either that the sink is not a signal
     -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
     recipientOverride :: !(Maybe Text),
+    -- | Minimal egress destination metadata resolved before durable enqueue,
+    -- while the triggering activity and behavior output are still in scope.
+    conversationKey :: !(Maybe Text),
+    triggeringActivityId :: !(Maybe Text),
     occurredAt :: !(Maybe UTCTime),
     -- | Durable intermediate effects within this delivery, when publication is
     -- running under the receipt-aware outbox transport.

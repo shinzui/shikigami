@@ -63,8 +63,9 @@ opaque token.
   pinned additive JSON/Dhall compatibility, rejected unsafe channel/action segments and blank
   static conversation keys, and retained an explicit permanent-failure dispatch arm until the
   transport lands.
-- [ ] Milestone 2: add Kanmon wire DTOs, client, Settei settings, authenticated `HttpEnv`,
-  and process-level dependency plumbing.
+- [x] (2026-08-23) Milestone 2: added Kanmon wire DTOs, a route-safe authenticated client,
+  Settei base-URL and secret-token settings, shared-manager `HttpEnv` wiring, worker CLI and
+  diagnostics, and strict process-level dependency plumbing.
 - [ ] Milestone 3: carry only the resolved egress metadata on `SinkIntent`, dispatch through
   Kanmon, and prove delivery-receipt and workflow-versioning behavior.
 - [ ] Milestone 4: add the production-shaped `stub-kanmon` command, end-to-end tests, proof
@@ -220,6 +221,19 @@ all 502 tests, including old `AgentDecl`, `SinkIntent`, and `SinkResult` fixture
 test compile exposed only two test-import omissions; after importing the constructor fields
 and `isLeft`, the full core suite passed. The explicit temporary dispatcher result remains a
 permanent failure until Milestone 3 replaces it with Kanmon delivery.
+
+Milestone 2 is also complete. `Shikigami.Sink.KanmonClient` now mirrors Kanmon's exact
+snake-case request and response, revalidates route segments before I/O, preserves only
+allowlisted propagation headers, and uses the configured opaque token through the shared
+bounded HTTP transport. `SinkHttp`, `WorkerEnv`, and `AgentRunDeps` carry strict Kanmon
+dependencies; Settei exposes `sinks.kanmon.base_url` and the redacted
+`credentials.sinks.kanmon.token`, while only the worker exposes `--kanmon-url`. The example
+configuration contains no token. `nix develop --command cabal test shikigami-core-test`
+passes all 508 tests and `nix develop --command cabal test shikigami-workers-test` passes all
+81 tests. `shikigami-worker --describe-config` lists both Kanmon keys without a value, and
+`shikigami-worker --check-config` reports `configuration valid` without opening the runtime
+database. Milestone 3 will move the already modelled optional egress metadata onto the
+durable intent and replace the temporary dispatcher failure with this client.
 
 
 ## Context and Orientation

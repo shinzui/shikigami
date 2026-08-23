@@ -104,6 +104,9 @@ sinks:
   kizashi:
     base_url: http://localhost:8089
     default_recipient: recipient:default
+  kanmon:
+    # Shikigami authenticates to this service; Kanmon owns provider credentials.
+    base_url: http://localhost:8090
   danwa:
     base_url: http://localhost:8080
     agent_participant: part_shikigami

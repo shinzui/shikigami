@@ -12,12 +12,16 @@ module Shikigami.Sink.Wire
     CreateSignalReq (..),
     SignalResponse (..),
 
+    -- * kanmon channel egress
+    EgressActionRequest (..),
+    EgressActionResponse (..),
+
     -- * rei agent action
     ReiActionReq (..),
   )
 where
 
-import Data.Aeson (Value, genericParseJSON, genericToJSON)
+import Data.Aeson (Value)
 import Shikigami.Activity (Actor, ContextRef, Subject)
 import Shikigami.Agent.Decl (Priority, SignalType)
 import Shikigami.Prelude
@@ -76,6 +80,31 @@ data SignalResponse = SignalResponse
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Kanmon's guarded channel-action request. JSON keys are snake_case to match
+-- the canonical @POST /channels/{channel}/actions/{action}@ contract.
+data EgressActionRequest = EgressActionRequest
+  { conversationKey :: !Text,
+    content :: !Text,
+    idempotencyKey :: !(Maybe Text),
+    triggeringActivityId :: !(Maybe Text)
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON EgressActionRequest where toJSON = genericToJSON ingestOptions
+
+instance FromJSON EgressActionRequest where parseJSON = genericParseJSON ingestOptions
+
+-- | Kanmon's acknowledgement for one accepted channel action.
+data EgressActionResponse = EgressActionResponse
+  { activityId :: !Text,
+    verb :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON EgressActionResponse where toJSON = genericToJSON ingestOptions
+
+instance FromJSON EgressActionResponse where parseJSON = genericParseJSON ingestOptions
 
 -- | The body a @ReiAction@ sink would POST: record this agent finding as an
 -- action against a rei intention.

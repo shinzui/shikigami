@@ -29,7 +29,7 @@ import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
-import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -86,6 +86,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
           { baseUrl = Config.kawaBaseUrl config,
             sourceSegment = Config.kawaSourceSegment config
           }
+      kanmonConfig = KanmonConfig {baseUrl = Config.kanmonBaseUrl config}
       danwaConfig =
         DanwaConfig
           { baseUrl = Config.danwaBaseUrl config,
@@ -124,6 +125,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,
             AgentWorkflow.kawa = kawaConfig,
+            AgentWorkflow.kanmon = kanmonConfig,
             AgentWorkflow.danwa = danwaConfig,
             AgentWorkflow.rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
             AgentWorkflow.http = sinkHttp,

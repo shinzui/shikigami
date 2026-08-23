@@ -93,7 +93,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (revokeGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
@@ -1593,6 +1593,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
@@ -1622,6 +1623,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,

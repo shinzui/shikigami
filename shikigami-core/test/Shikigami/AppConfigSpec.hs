@@ -82,6 +82,7 @@ surfaceTests =
                 "conversation.idle_timeout_seconds",
                 "credentials.providers.anthropic.api_key",
                 "credentials.sinks.danwa.token",
+                "credentials.sinks.kanmon.token",
                 "credentials.sinks.kawa.token",
                 "credentials.sinks.kizashi.token",
                 "database.connection_string",
@@ -104,6 +105,7 @@ surfaceTests =
                 "scheduler.catch_up",
                 "sinks.danwa.agent_participant",
                 "sinks.danwa.base_url",
+                "sinks.kanmon.base_url",
                 "sinks.kawa.base_url",
                 "sinks.kawa.source_segment",
                 "sinks.kizashi.base_url",
@@ -141,10 +143,12 @@ surfaceTests =
               ("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "kafka.include_agent_actors"),
               ("SHIKIGAMI_KAFKA_STREAM_GROUP", "kafka.groups.stream"),
               ("SHIKIGAMI_KAWA_TOKEN", "credentials.sinks.kawa.token"),
+              ("SHIKIGAMI_KANMON_TOKEN", "credentials.sinks.kanmon.token"),
               ("SHIKIGAMI_KIZASHI_TOKEN", "credentials.sinks.kizashi.token"),
               ("SHIKIGAMI_DANWA_TOKEN", "credentials.sinks.danwa.token"),
               ("SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT", "sinks.danwa.agent_participant"),
               ("SHIKIGAMI_SINKS_DANWA_BASE_URL", "sinks.danwa.base_url"),
+              ("SHIKIGAMI_SINKS_KANMON_BASE_URL", "sinks.kanmon.base_url"),
               ("SHIKIGAMI_SINKS_KAWA_BASE_URL", "sinks.kawa.base_url"),
               ("SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT", "sinks.kawa.source_segment"),
               ("SHIKIGAMI_SINKS_KIZASHI_BASE_URL", "sinks.kizashi.base_url"),
@@ -184,6 +188,8 @@ surfaceTests =
         kizashiBaseUrl defaultAppConfig @?= "http://localhost:8089"
         kizashiDefaultRecipient defaultAppConfig @?= "recipient:default"
         assertBool "kizashi has no default credential" (isNothing (kizashiToken defaultAppConfig))
+        kanmonBaseUrl defaultAppConfig @?= "http://localhost:8090"
+        assertBool "Kanmon has no default credential" (isNothing (kanmonToken defaultAppConfig))
         danwaBaseUrl defaultAppConfig @?= "http://localhost:8080"
         danwaAgentParticipant defaultAppConfig @?= "part_shikigami"
         assertBool "danwa has no default credential" (isNothing (danwaToken defaultAppConfig))
@@ -518,7 +524,10 @@ secrecyTests =
           assertNoLeak
           [ ("a sink token in a configuration file", [yaml "file" ("credentials:\n  sinks:\n    kawa:\n      token: " <> plantedTokenBytes <> "\n")], [], []),
             ("a sink token in the environment", [], [("SHIKIGAMI_KAWA_TOKEN", plantedToken)], []),
-            ("a sink token in a --set override", [], [], [cliOverride kawaTokenKey plantedToken])
+            ("a sink token in a --set override", [], [], [cliOverride kawaTokenKey plantedToken]),
+            ("the Kanmon token in a configuration file", [yaml "file" ("credentials:\n  sinks:\n    kanmon:\n      token: " <> plantedTokenBytes <> "\n")], [], []),
+            ("the Kanmon token in the environment", [], [("SHIKIGAMI_KANMON_TOKEN", plantedToken)], []),
+            ("the Kanmon token in a --set override", [], [], [cliOverride kanmonTokenKey plantedToken])
           ],
       testCase "an opaque token source renders and compares no plaintext at its public boundary" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAWA_TOKEN", plantedToken)]

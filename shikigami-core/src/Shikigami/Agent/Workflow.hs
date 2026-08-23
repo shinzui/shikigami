@@ -105,7 +105,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
-import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
+import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Intent
@@ -133,6 +133,7 @@ data AgentRunDeps = AgentRunDeps
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
+    kanmon :: !KanmonConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
     -- | Process-lifetime sink clients. This dependency never crosses a journal
@@ -838,7 +839,7 @@ recordFailureLearningBestEffort deps decl sid err = do
         ]
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -858,12 +859,15 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                             ordinal = ordinal,
                             kizashi = depsKizashi,
                             kawa = depsKawa,
+                            kanmon = depsKanmon,
                             danwa = depsDanwa,
                             rei = depsRei,
                             http = sinkHttp,
                             traceHeaders = maybe [] TraceContext.traceHeaders currentTraceContext,
                             danwaTarget = danwaTarget,
                             recipientOverride = resolvedRecipient,
+                            conversationKey = Nothing,
+                            triggeringActivityId = Nothing,
                             occurredAt = occurredAt,
                             receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
                             grants = intentGrants,

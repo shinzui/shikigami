@@ -29,7 +29,7 @@ earlier candidate stays visible in `--explain-config` rather than disappearing.
 2. **`--config PATH`**, once per file, in the order the options appear. Files are YAML.
 3. **Environment variables**, but only the ones explicitly bound below. A variable that
    is not in that table does nothing, however plausible its name.
-4. **Named flags** such as `--broker`, `--agents`, or `--kawa-url`. These are not
+4. **Named flags** such as `--broker`, `--agents`, or `--kanmon-url`. These are not
    separate parsers: each one sets a declared key, so `--broker HOST:PORT` and
    `--set kafka.broker=HOST:PORT` are the same thing.
 5. **`--set KEY=VALUE`**, once per override, in the order the options appear.
@@ -131,12 +131,17 @@ nested under `kafka`.
 | `sinks.kawa.source_segment` | `shinzui/shikigami` | `SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT` | Source segment kawa attributes ingested activity to. |
 | `sinks.kizashi.base_url` | `http://localhost:8089` | `SHIKIGAMI_SINKS_KIZASHI_BASE_URL` | Base URL of the kizashi signal service. |
 | `sinks.kizashi.default_recipient` | `recipient:default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. |
+| `sinks.kanmon.base_url` | `http://localhost:8090` | `SHIKIGAMI_SINKS_KANMON_BASE_URL` | Base URL of Kanmon's guarded channel-action service. |
 | `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
 | `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
 | `sinks.rei.base_url` | *(none)* | `SHIKIGAMI_SINKS_REI_BASE_URL` | Base URL of a rei ingestion endpoint. The one sink URL with no default, because rei has no HTTP surface yet; unset means `ReiAction` sinks fail visibly instead of silently. |
 | `behavior.provider` | `stub` | `SHIKIGAMI_BEHAVIOR_PROVIDER` | Which model runs a `Skill` behavior: `stub` calls no model, `anthropic` calls a real one. |
 | `behavior.model` | `claude-sonnet-4-6` | `SHIKIGAMI_BEHAVIOR_MODEL` | Anthropic model id. Only consulted when the provider is `anthropic`; decoded against baikai's catalog, so an unknown id is rejected here. |
 | `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |
+| `credentials.sinks.kawa.token` | *(none — secret)* | `SHIKIGAMI_KAWA_TOKEN` | Optional bearer token sent only to the configured kawa host. |
+| `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
+| `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
+| `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
 
 The three duration settings are whole seconds in the range 1–86400. The upper bound keeps
 conversion to the microsecond timeout representation safe on the 64-bit platforms
@@ -327,6 +332,7 @@ declared key, so it shows up in `--explain-config` with its spelling.
 | `shikigami-worker` | `--agents` | `agents.directory` |
 | | `--kawa-url` | `sinks.kawa.base_url` |
 | | `--kizashi-url` | `sinks.kizashi.base_url` |
+| | `--kanmon-url` | `sinks.kanmon.base_url` |
 | | `--danwa-url` | `sinks.danwa.base_url` |
 | | `--danwa-agent` | `sinks.danwa.agent_participant` |
 | `shikigami-scheduler` | `--agents` | `agents.directory` |

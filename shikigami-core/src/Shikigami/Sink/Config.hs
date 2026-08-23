@@ -3,6 +3,7 @@ module Shikigami.Sink.Config
   ( KizashiConfig (..),
     KawaConfig (..),
     DanwaConfig (..),
+    KanmonConfig (..),
     ReiConfig (..),
   )
 where
@@ -30,6 +31,14 @@ data DanwaConfig = DanwaConfig
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Where to POST guarded channel actions. Provider credentials remain owned
+-- by Kanmon; this process carries only its own opaque bearer credential in
+-- 'Shikigami.Sink.Http.SinkHttp'.
+newtype KanmonConfig = KanmonConfig
+  { baseUrl :: Text
+  }
+  deriving stock (Eq, Show)
 
 -- | Where to hand an agent finding to @shinzui/rei@, if anywhere.
 --

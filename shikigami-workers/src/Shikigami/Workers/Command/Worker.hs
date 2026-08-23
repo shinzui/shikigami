@@ -19,7 +19,7 @@ import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude (Text)
-import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
@@ -33,7 +33,8 @@ import System.Exit qualified as Exit
 -- directory from @agents.directory@, the connection string from
 -- @database.connection_string@, the model provider from @behavior.provider@ and
 -- its branch, and each downstream from its @sinks.*@ keys. The @--agents@,
--- @--kawa-url@, @--kizashi-url@, @--danwa-url@ and @--danwa-agent@ flags are
+-- @--kawa-url@, @--kizashi-url@, @--kanmon-url@, @--danwa-url@ and
+-- @--danwa-agent@ flags are
 -- command-line sources for exactly those keys.
 --
 -- The logger is built first, before anything that could want to log, and every
@@ -67,6 +68,7 @@ runWorkerCmd config = do
               { baseUrl = Config.kawaBaseUrl config,
                 sourceSegment = Config.kawaSourceSegment config
               }
+          kanmonConfig = KanmonConfig {baseUrl = Config.kanmonBaseUrl config}
           danwaConfig =
             DanwaConfig
               { baseUrl = Config.danwaBaseUrl config,
@@ -86,6 +88,7 @@ runWorkerCmd config = do
         "worker.sink_credentials.configured"
         [ "kawa" Aeson..= credentialPresence (Config.kawaToken config),
           "kizashi" Aeson..= credentialPresence (Config.kizashiToken config),
+          "kanmon" Aeson..= credentialPresence (Config.kanmonToken config),
           "danwa" Aeson..= credentialPresence (Config.danwaToken config)
         ]
       -- Resolved here, at the composition root, so an unparseable cron is
@@ -121,6 +124,7 @@ runWorkerCmd config = do
                 schedules,
                 kizashi = kizashiConfig,
                 kawa = kawaConfig,
+                kanmon = kanmonConfig,
                 danwa = danwaConfig,
                 rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
                 http = sinkHttp,
