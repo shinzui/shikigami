@@ -16,581 +16,744 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-shikigami's durable approval machinery is real and tested — a workflow can park on a
-keiro "awakeable" (a durable promise), journal the notification, arm a deterministic
-deadline timer, and resume when someone answers — but in production nobody can ever
-answer, and nobody is ever asked. The worker wires `defaultApprovalEnv`, whose policy
-always answers "no approval required" and whose notify hooks are no-ops
-(`shikigami-core/src/Shikigami/Agent/Approval.hs:91-98`, wired at
-`shikigami-core/src/Shikigami/Worker.hs:204`). `resolveApproval`
-(`Approval.hs:117-122`) exists but no HTTP endpoint or CLI command calls it. A Flow
-parked on `awaitAcknowledgement` therefore notifies nobody and can only time out
-(fallback 900 seconds, `shikigami-core/src/Shikigami/Agent/Workflow.hs:312-314`).
+Shikigami already has the low-level pieces of durable approval. An agent workflow can
+allocate a Keiro awakeable, arm a durable deadline, suspend, accept an external decision,
+and resume without dispatching a sink twice. The production composition is still inert:
+`Shikigami.Workers.Config.agentRunDeps` installs `defaultApprovalEnv`, which never requires
+sink approval and never sends a notification. Flow acknowledgements do park, but the same
+no-op notifier means no human sees their token. `resolveApproval` exists in core, but the
+administrative `shikigami` dispatcher has no command that calls it.
 
-After this plan, an operator can declare through plan 37's Settei configuration that certain
-sink kinds require human approval. When such an agent runs, the workflow parks, a real
-notification is posted through an existing sink — a danwa conversation message or a
-kizashi signal — containing a human-readable prompt and a resolution token, and a human
-resolves it from the terminal:
+After this plan, a deployment can require approval for selected sink kinds with the typed
+Settei keys `approval.require` and `approval.channel`; the existing
+`approval.deadline_seconds` remains the common deadline. A fresh agent run journals the
+resolved approval policy as a run-local snapshot. Each required sink approval and each
+Flow acknowledgement runs as a dedicated `shikigami.approval` child workflow. That child
+uses the static labels `ingest-approval`, `notify`, and `decision`, posts an authenticated
+ask through the process-lifetime Danwa or Kizashi client, and parks on an opaque Keiro
+awakeable token. An operator can then run:
 
 ```bash
-cabal run shikigami -- resolve-approval 7f3c...uuid --approve
+nix develop -c cabal run shikigami -- resolve-approval TOKEN --approve
 ```
 
-The parked workflow then resumes on the worker's next resume pass and dispatches (or,
-on `--reject`, suppresses) the sink. Timeouts still work exactly as tested today. The
-approval *semantics* (awakeable + journaled notify step + deterministic UUIDv5 deadline
-timer) are already proven by `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs`
-(Approval group, lines 335-386; Deadline group, lines 387-432) — this plan reuses them
-untouched and supplies the three missing production pieces: a real policy, a real
-notification path, and a real resolution path.
+or:
+
+```bash
+nix develop -c cabal run shikigami -- resolve-approval TOKEN --reject "not approved"
+```
+
+The worker's already-supervised resume loop drives the child and then the parent. Approval
+dispatches the sink exactly once; rejection or timeout suppresses it. Flow acknowledgements
+use the same visible notification and resolution path. A stable `ReviewRequestId` identifies
+the review forever and is printed in the ask, while the random awakeable token authorizes
+one decision; they are deliberately different values.
+
+The observable acceptance path is: start a worker with `KawaDigest` approval enabled,
+enqueue `heartbeat`, see one Danwa or Kizashi ask containing a review id and token, approve
+the token from the terminal, and observe the Kawa intent enqueue and publish. Repeating the
+same resolution reports that the token is unknown or already resolved. A second run rejected
+from the terminal completes without enqueuing its Kawa intent.
 
 
 ## Progress
 
-- [ ] Prerequisites: plans 17, 22, 36, and 37 complete; approval policy extends the
-      shared Settei application config and uses the canonical authenticated HTTP layer.
-- [ ] Milestone 1: `Shikigami.Agent.Approval.Policy` module — `ApprovalPolicy`,
-      settings/validation, `policyApprovalEnv` with danwa/kizashi
-      `postAsk`; unit tests for policy parsing and the requiresApproval gate.
-- [ ] Milestone 2: worker wiring — `WorkerEnv` carries the policy; `agentRunDeps` uses
-      `policyApprovalEnv` and the policy deadline; loud startup log of the active
-      policy; integration test with a warp stub capturing the danwa ask.
-- [ ] Milestone 3: `resolve-approval` CLI command calling `resolveApproval`; round-trip
-      test (park → capture token → CLI-style resolve → resume → sink dispatched).
-- [ ] Milestone 4: manual end-to-end transcript against a running worker recorded in
-      this plan.
+- [x] (2026-08-23) Re-audited the repository, all prerequisite plans, the accepted workflow,
+      configuration, outbound HTTP, operator-command, and attestation decisions, and the
+      current Keiro 0.14 source and release tag.
+- [x] (2026-08-23) Rebased this plan from the removed monolithic worker and pre-Settei design
+      onto `shikigami-core`, `shikigami-workers`, and `shikigami-server`; removed work already
+      delivered by plans 17, 22, 36, 37, 39, 47, and 51.
+- [ ] Milestone 1: declare and scaffold the approval child workflow and the permanent
+      `shikigami-approval-workflow-v1` parent patch, then add replay tests for both patch
+      branches.
+- [ ] Milestone 2: implement the approval policy snapshot, stable review identity, child
+      runtime, authenticated Danwa/Kizashi notification, and permanent/transient failure
+      behavior in `shikigami-core`.
+- [ ] Milestone 3: add the Settei settings and production worker wiring, register the approval
+      child for resume, and emit a structured startup description of the effective policy.
+- [ ] Milestone 4: add `shikigami resolve-approval`, parser and exit-behavior tests, and the
+      automated park-notify-resolve-resume acceptance proof.
+- [ ] Milestone 5: pass the Keiro gate and full serialized test suite, then record a manual
+      approve/reject/timeout transcript in this plan.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: most of the original prerequisites are already complete, and the current
+  worker already carries `approvalDeadline` from `approval.deadline_seconds` into
+  `AgentRunDeps.deadline`.
+  Evidence: `docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md`,
+  `docs/plans/22-outbound-authentication-for-sink-clients.md`, and
+  `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` have completed
+  progress; `Shikigami.App.Config` declares the key and
+  `Shikigami.Workers.Config.agentRunDeps` passes it onward.
+  Date: 2026-08-23
+
+- Observation: the original plan's promise to leave approval step labels untouched is no
+  longer compatible with the repository's checked durable-workflow rules. Sink approvals use
+  `approval:<SinkKind>:<ordinal>` and notifications append `:notify`; these computed labels
+  cannot be declared as Keiro DSL wire words and are named as remaining debt by ADR 0017.
+  Evidence: `domain/shikigami-agent-run.keiro`, `docs/workflow-versioning.md`,
+  `docs/adr/0017-rotate-to-make-a-label-static-rather-than-computing-it.md`, and
+  `Shikigami.Agent.Workflow.approveSinks`.
+  Date: 2026-08-23
+
+- Observation: the production resume worker is no longer a one-shot action. It supervises the
+  Keiro resume runner with capped backoff and fails the process after repeated runner exits.
+  This plan only needs to add the approval workflow to the registry; it does not need to build
+  polling or recovery infrastructure.
+  Evidence: `Shikigami.Agent.Workflow.Resume.runResumeLoop` and
+  `Shikigami.Agent.Workflow.Resume.workflowRegistry`.
+  Date: 2026-08-23
+
+- Observation: outbound authentication, request/response bounds, redirect refusal, shared
+  managers, and typed HTTP failure classification are already centralized in `SinkHttp`.
+  Approval notification must consume that object rather than construct a client or manager.
+  Evidence: `Shikigami.Sink.Http` and ADR 0026.
+  Date: 2026-08-23
+
+- Observation: `ReviewRequestId` already exists in `Shikigami.Attestation.Evidence`, because
+  plan 51 needed the type before the approval owner existed. Production agent runs do not yet
+  create run evidence, so this plan owns the approval identity and preserves the evidence JSON
+  shape, but does not invent evidence persistence work.
+  Evidence: `Shikigami.Attestation.Evidence`, outcomes in
+  `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md`, and the follow-on query in
+  `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md`.
+  Date: 2026-08-23
+
+- Observation: the earlier reconciliation proposed a DSL signal operation keyed by the parent
+  workflow id. That is not the runtime being implemented: `resolveApproval` signals an opaque,
+  random, journaled `AwakeableId`. Declaring the proposed operation would violate ADR 0001 by
+  claiming a generated contract the CLI does not execute.
+  Evidence: `mori://shinzui/keiro/packages/keiro` documents v4 journaled awakeable ids and
+  idempotent `signalAwakeable`; `domain/shikigami-agent-run.keiro` has no matching keyed signal
+  runtime.
+  Date: 2026-08-23
+
+- Observation: approval policy itself is replay-sensitive. Reading process configuration again
+  after a crash could cause an old run to skip an approval it previously required, or require a
+  new one before dispatch. The policy must cross one static journal step before it controls the
+  workflow.
+  Evidence: the same mutable-policy problem and journaled-snapshot remedy are established for
+  execution profiles by ADR 0007.
+  Date: 2026-08-23
 
 
 ## Decision Log
 
-- Decision: Approval policy comes from Settei configuration with explicit compatibility bindings for
-  (`SHIKIGAMI_APPROVAL_REQUIRE`, `SHIKIGAMI_APPROVAL_CHANNEL`,
-  `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`) and lives behind a small `ApprovalPolicy`
-  record and one `requiresApprovalFor` function — not in the Dhall agent schema yet.
-  Rationale: plan 33 owns identity, memory policy, and enablement, not approval policy.
-  Keeping approval configuration behind one small pure interface still permits a
-  future, explicitly scoped schema plan to replace the source without changing the
-  machinery. Plan 37 owns source precedence, diagnostics, and process exit behavior.
-  Date: 2026-07-22
-- Decision: The notification path reuses existing sink clients — danwa
-  (`Shikigami.Sink.Danwa`) for `ViaDanwa`, kizashi (`Shikigami.Sink.KizashiClient`)
-  for `ViaKizashi` — rather than introducing a new notification channel.
-  Rationale: the `ApprovalChannel` type already enumerates exactly these two
-  (`Approval.hs:59-63`); both clients are already configured in `WorkerEnv`; and
-  `SignalType` already has an `AgentRequest` constructor
-  (`shikigami-api/src/Shikigami/Api/Agent.hs:21-29`) that is semantically "an agent
-  asks a human for something".
-  Date: 2026-07-08
-- Decision: This plan hard-depends on
-  `docs/plans/22-outbound-authentication-for-sink-clients.md` and sends both danwa and
-  kizashi approval asks through its `SinkHttp`.
-  Rationale: approval asks are production outbound calls. Sending them through the old
-  raw clients would bypass the credential, timeout, and connection-manager policy that
-  plan 22 establishes and would leave a second HTTP path for later contributors to
-  reconcile.
-  Date: 2026-07-22
-- Decision: Preserve plan 22's HTTP failure class in the journaled notify step. A transient
-  notification error throws before the step is recorded so plan 17 can retry it; a permanent
-  400/401/403/404-class error is recorded as a permanent approval-notification failure and
-  completes the run with a dead-letterable `Left` rather than retrying forever.
-  Rationale: an unavailable service may recover, but an invalid credential, forbidden action,
-  or bad route needs operator repair. The workflow must retain that distinction.
-  Date: 2026-07-22
-- Decision: The resolution path is a CLI command (`resolve-approval <token>
-  --approve/--reject`), not an HTTP endpoint.
-  Rationale: shikigami has no HTTP server today and MasterPlan 6 (operations) owns
-  introducing one; a CLI command is the minimum honest resolution path, uses the same
-  `PG_CONNECTION_STRING` access every other command uses, and exercises the exact
-  `resolveApproval` function an HTTP handler would later call. The token round-trip is
-  clean because `AwakeableId` is a newtype over `UUID` with exported constructor and
-  `awakeableIdText = UUID.toText` (`keiro/src/Keiro/Workflow/Awakeable.hs:119-131`), so
-  the CLI parses the printed token with `Data.UUID.fromText`.
-  Date: 2026-07-08
-- Decision: A `postAsk` delivery failure crashes the notify step (throws), rather than
-  being swallowed.
-  Rationale: `awaitApproval` wraps `recordPark`+`postAsk` in the journaled step
-  `<name>:notify` (`Approval.hs:107-114`); a throw before the journal append means the
-  notify is retried on the next resume pass, so the ask is at-least-once. Swallowing
-  the failure would recreate exactly the silent-stub problem this MasterPlan exists to
-  remove.
-  Date: 2026-07-08
-- Decision: When no approval policy is configured, the worker keeps
-  `defaultApprovalEnv` (auto-approve) but logs it loudly at startup.
-  Rationale: approval-off must stay the safe default for existing deployments and CI;
-  the failure mode being fixed is *silence*, not permissiveness.
-  Date: 2026-07-08
+- Decision: Fresh parent workflows use a dedicated `shikigami.approval` child workflow for
+  every Flow acknowledgement and required sink approval. The parent change is guarded by the
+  permanent patch id `shikigami-approval-workflow-v1`; the false branch retains the current
+  direct awakeable path for pre-change journals.
+  Rationale: one approval per child generation permits static `ingest-approval`, `notify`, and
+  `decision` labels, so the checked DSL can describe the durable shape. The child relationship
+  remains idempotent and resumable through Keiro's existing `spawnChild`/`awaitChild` machinery.
+  This project-level choice is recorded in ADR 0030.
+  Date: 2026-08-23
+
+- Decision: The true patch branch journals an `ApprovalPolicySnapshot` once under
+  `resolve-approval-policy` before either behavior or sink policy consumes it. The snapshot
+  includes the selected sink-kind set, notification channel, and deadline.
+  Rationale: process configuration is mutable across deploys; workflow decisions must replay
+  from the original policy rather than silently adopt the worker that happens to resume them.
+  Date: 2026-08-23
+
+- Decision: `approval.require` is a comma-separated set of canonical `sinkKindText` values and
+  defaults to the empty set. `approval.channel` accepts `danwa` or `kizashi` and defaults to
+  `danwa`. Existing `approval.deadline_seconds` remains the bounded positive duration. Explicit
+  environment bindings are `SHIKIGAMI_APPROVAL_REQUIRE`,
+  `SHIKIGAMI_APPROVAL_CHANNEL`, and `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS`.
+  Rationale: these values belong in the one typed Settei application config and its diagnostics;
+  a second environment parser would create conflicting precedence and error behavior. Empty
+  `require` preserves existing sink auto-approval.
+  Date: 2026-08-23
+
+- Decision: Even when the sink policy is disabled, the worker installs the real approval
+  notifier. Policy only decides whether an ordinary declared sink needs approval; an explicit
+  Flow acknowledgement always asks.
+  Rationale: `awaitAcknowledgement` is an intentional human gate, not a sink-policy lookup. The
+  current no-op notifier is why that gate is invisible in production.
+  Date: 2026-08-23
+
+- Decision: `ReviewRequestId` is a stable public identifier derived with UUIDv5 from the parent
+  workflow name, workflow id, generation, and a stable request key. Sink keys use
+  `sink-<canonical-kind>-<declared-ordinal>`; Flow keys use
+  `flow-<call-site-StepName>`.
+  `AwakeableId` remains Keiro's opaque random token and is never derived from the review id.
+  Rationale: the review id is safe to index, log, and retain in attestations; the token is a
+  one-shot capability. Making the token predictable would weaken the authorization boundary,
+  while using it as the review id would couple durable evidence to a completion mechanism.
+  Date: 2026-08-23
+
+- Decision: Move the owning `ReviewRequestId` newtype into the approval vocabulary and import or
+  re-export it from `Shikigami.Attestation.Evidence` without changing its `Text` JSON encoding.
+  Rationale: approval now owns construction and semantics, while plans 51 and 52 retain source
+  and wire compatibility. Connecting every approval to run-evidence persistence remains outside
+  this plan because no production caller constructs that aggregate today.
+  Date: 2026-08-23
+
+- Decision: Approval asks reuse the authenticated `SinkHttp.danwa` and `SinkHttp.kizashi`
+  clients. Danwa gains a text-post helper factored from its existing fresh-conversation path;
+  Kizashi receives an `AgentRequest` signal through the existing wire DTO and client.
+  Rationale: plan 22 and ADR 0026 already own credentials, managers, timeouts, bounds, redirects,
+  and failure classification. Approval is another caller of that boundary, not a parallel HTTP
+  stack.
+  Date: 2026-08-23
+
+- Decision: A transient notification failure throws before the `notify` result is journaled, so
+  Keiro retries the approval child with its existing durable attempt/backoff policy. A permanent
+  failure is journaled as a typed `ApprovalNotificationFailed` child result; the parent records
+  `fail-session` and returns a permanent `AgentRunFailure`. A child that exhausts transient
+  attempts is caught by the parent and mapped to the same permanent run failure with the child
+  identity preserved in the diagnostic.
+  Rationale: temporary transport/service failure may recover; invalid requests, forbidden
+  credentials, and malformed responses will not. Neither class may silently approve or suppress
+  a request.
+  Date: 2026-08-23
+
+- Decision: The resolution surface is a local administrative CLI command, not a new HTTP route.
+  It is registered in `Shikigami.Server.Command`, requires the database only when executed, and
+  calls the Shikigami-owned `resolveApproval` library function.
+  Rationale: this is the smallest complete operator path and follows ADR 0021's rule that
+  operator verbs wrap the owning library instead of reaching into private tables. A future HTTP
+  handler can call the same function without changing the workflow contract.
+  Date: 2026-08-23
+
+- Decision: Do not add a Keiro DSL `signal` operation for `resolve-approval` in this plan.
+  Rationale: the CLI is keyed by `AwakeableId`, whereas the DSL signal form identifies a declared
+  await through a workflow key and label. ADR 0001 forbids declaring a generated operation the
+  runtime does not execute.
+  Date: 2026-08-23
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The 2026-08-23 refresh removed obsolete prerequisite implementation and made the remaining work
+consistent with the checked durable-workflow model. Implementation has not started. The expected
+outcome is one production approval vertical shared by sink policy and Flow acknowledgement, with
+static declared labels for fresh runs, compatible replay for old journals, a stable review id, an
+opaque resolution token, and no new database table or HTTP stack.
 
 
 ## Context and Orientation
 
-Orientation for a reader new to this repository. shikigami (repo root
-`/Users/shinzui/Keikaku/bokuno/shikigami`) runs declared agents as durable **keiro
-workflows**: each lifecycle step (`open-session`, `recall`, `run-behavior`,
-`dispatch-sinks`, `record`, `complete`) is journaled in Postgres so a crashed run
-replays instead of re-executing (`shikigami-core/src/Shikigami/Agent/Workflow.hs`).
-The worker (`shikigami-core/src/Shikigami/Worker.hs`) runs four loops: the pgmq queue
-drainer, a **resume worker** that re-drives parked workflows
-(`runResumeWorker`, lines 86-101), an outbox publisher, and a timer worker.
+This repository is split into seven packages. The parts relevant here are:
 
-Key vocabulary:
+- `shikigami-core` owns domain types, durable workflow bodies, Keiro registry definitions,
+  Settei's shared `AppConfig`, sink clients, and most workflow tests.
+- `shikigami-workers` owns the long-running worker composition and supervision. Its
+  `Shikigami.Workers.Command.Worker` builds `SinkHttp` once and its
+  `Shikigami.Workers.Config.agentRunDeps` adapts `WorkerEnv` to the core workflow.
+- `shikigami-server` owns the short-lived `shikigami` administrative executable. The dispatcher
+  is `Shikigami.Server.Command`; each command returns an `AdminAction`, and only commands that
+  need PostgreSQL call `requireDatabaseUrl` when they execute.
 
-- An **awakeable** is keiro's durable promise: `awakeableNamed` allocates an id inside
-  a workflow and returns an await action; the workflow suspends until some external
-  caller invokes `signalAwakeable` with a payload, which appends a journal entry so the
-  next resume pass completes the await. `AwakeableId` is a UUID newtype
-  (`/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Workflow/Awakeable.hs:119`).
-- **Approval machinery** (`shikigami-core/src/Shikigami/Agent/Approval.hs`):
-  `awaitApproval env stepName request deadline` allocates an awakeable, runs a
-  journaled `<stepName>:notify` step that calls `recordPark` and `postAsk`, optionally
-  arms a deadline timer whose `TimerId` is a deterministic UUIDv5 over
-  workflow-name/id/generation/step (`Approval.hs:174-180`) so replays cannot arm
-  duplicates, then awaits. The timer's fire action (`approvalTimeoutFireAction`,
-  `Approval.hs:124-142`) signals `TimedOut`. `resolveApproval appEnv aid decision`
-  (`Approval.hs:117-122`) is the external completion: it signals the awakeable and
-  returns whether anything was resolved.
-- **Where approval is consulted**: `approveSinks` in `Agent/Workflow.hs:220-246` asks
-  `requiresApproval env (AgentIdentity agent) kind output` per declared sink; on
-  `ApprovalRequired` it parks via `awaitApproval` under the journaled step name
-  `approval:<SinkKindText>:<ordinal>`; `Rejected`/`TimedOut` drop the sink,
-  `Approved` keeps it. Flows park through the same machinery via
-  `awaitAcknowledgement` (`shikigami-core/src/Shikigami/Flow/Acknowledgement.hs:22-30`)
-  with the deadline defaulting to 900 seconds (`Agent/Workflow.hs:312-314`).
-- **The stub being replaced**: `defaultApprovalEnv` (`Approval.hs:91-98`) answers
-  `ApprovalNotRequired` always and no-ops `recordPark`/`postAsk`. The worker installs
-  it at `Worker.hs:204` and sets `deadline = Nothing` at `Worker.hs:205`.
-- **ApprovalEnv** (`Approval.hs:84-89`) is the seam this plan fills:
+An agent run is the Keiro workflow `shikigami.agent-run`, implemented by
+`Shikigami.Agent.Workflow` and declared by `domain/shikigami-agent-run.keiro`. The workflow
+journals results by stable label and can suspend on timers, awakeables, or child workflows. The
+resume registry is assembled in `Shikigami.Agent.Workflow.Resume.workflowRegistry`. The worker
+also runs queue, outbox, timer, and telemetry loops; notification delivery is part of the approval
+workflow, while an approved sink still ends the parent journal at outbox enqueue as required by
+ADR 0022.
 
-```haskell
-data ApprovalEnv = ApprovalEnv
-  { currentSession :: !SessionId,
-    requiresApproval :: !(AgentIdentity -> SinkKind -> Value -> IO ApprovalRequirement),
-    recordPark :: !(SessionId -> AwakeableId -> ApprovalRequest -> IO ()),
-    postAsk :: !(ApprovalChannel -> ApprovalRequest -> AwakeableId -> IO ())
-  }
-```
+`Shikigami.Agent.Approval` currently defines `ApprovalRequest`, `ApprovalChannel`,
+`ApprovalDecision`, `ApprovalRequirement`, `ApprovalEnv`, `awaitApproval`, deadline firing, and
+`resolveApproval`. `awakeableNamed` allocates random v4 ids and journals them under a label before
+exposing them. `signalAwakeable` atomically completes the row and appends the result, returns
+`False` for an unknown or already-resolved token, and is safe to repeat. These are Keiro 0.14
+contracts verified in `mori://shinzui/keiro/packages/keiro`; the repository pins 0.14.0.0 and the
+upstream `keiro-0.14.0.0` tag exists.
 
-- **Sink clients available for notification**: danwa (a conversation service; client in
-  `shikigami-core/src/Shikigami/Sink/Danwa.hs`, config `DanwaConfig { baseUrl,
-  agentParticipant }` in `Sink/Config.hs`) and kizashi (a signal/notification service;
-  `postSignal :: KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)`
-  in `Sink/KizashiClient.hs:57-65`, request DTO in `Sink/Wire.hs:56-67`).
-- **SinkKind** names for the policy variable: `KawaDigest`, `KizashiSignal`,
-  `ReiAction`, `DanwaConversation`, `ChannelEgress` — the `sinkKindText` renderings in
-  `shikigami-core/src/Shikigami/Sink/Permission.hs:43-49`.
+Today `approveSinks` enumerates declared sinks and creates labels such as
+`approval:KawaDigest:0`; `awaitApproval` derives `approval:KawaDigest:0:notify`. The at-risk Flow
+uses the static `await-ack` label. The new child workflow removes those computed application labels
+from fresh parent executions. Keiro's own reserved child steps still contain the child id, but the
+DSL represents that family with a `child approval ...` body node, as it already does for delegation.
 
-The proven tests to imitate: `AgentWorkflowSpec.hs:485-496` builds a test `ApprovalEnv`
-whose `recordPark` captures the `AwakeableId` into an `IORef`; the Approval test cases
-(lines 337-386) park a run, call `resolveApproval`, then drive
-`resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps)` and assert
-the sink outbox row appears exactly once (approve) or never (reject). The Deadline
-cases (lines 389-432) fire the timer via `runWorkflowTimerWorker` with
-`approvalTimeoutFireAction` and assert an answer that arrives first wins.
+Any edit under `shikigami-core/src/Shikigami/Agent/` or
+`shikigami-core/src/Shikigami/Flow/` must follow `docs/workflow-versioning.md`. A new parent body
+shape requires a permanent patch declaration, a generated patch value, an active runtime branch,
+old/new replay tests, and `just keiro-gate <merge-base>`. Generated files are regenerated by the
+gate/scaffold and are never hand-edited or formatted. Keep the old false branch until operational
+evidence says no pre-change instance can resume, then retire it under ADR 0004's procedure.
+
+[ADR 0030](../adr/0030-an-approval-request-is-a-durable-child-workflow.md) owns this plan's child
+workflow, policy snapshot, and split review/token identity. It applies
+[ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) to the absent signal operation,
+[ADR 0004](../adr/0004-one-options-value-and-a-checked-patch-set.md) and
+[ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) to the compatibility
+branch, [ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md) to the
+run-local policy snapshot, and
+[ADR 0017](../adr/0017-rotate-to-make-a-label-static-rather-than-computing-it.md) to the computed
+label family. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md)
+requires Flow to reach approval through its interpreter;
+[ADR 0021](../adr/0021-operator-verbs-wrap-the-owning-library.md) governs the CLI;
+[ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) preserves the
+outbox boundary; and
+[ADR 0026](../adr/0026-outbound-sink-credentials-stay-opaque-and-http-policy-lives-at-the-process-boundary.md)
+owns notification credentials and HTTP policy. Generated files remain unformatted under
+[ADR 0002](../adr/0002-generated-code-is-not-formatted.md). The pre-v1 exception in
+[ADR 0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) is not assumed:
+unless its facts are freshly re-proved during implementation, use the patch described here.
+
+The approval channels are already production-capable. `Shikigami.Sink.Http.SinkHttp` owns the
+authenticated Danwa `ClientEnv` and authenticated Kizashi `HttpEnv`.
+`Shikigami.Sink.Danwa` already starts, joins, and posts to a fresh conversation for one-shot sink
+delivery; factor that sequence so a caller can post rendered approval text without fabricating a
+`Sink`. `Shikigami.Sink.KizashiClient.postSignal` accepts the existing `CreateSignalReq`, whose
+`SignalType.AgentRequest` and `Priority.High` values live in `Shikigami.Agent.Decl`. Danwa's client
+contract is verified at `mori://shinzui/danwa/packages/danwa-client`.
+
+Follow the record conventions at `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`:
+fields are direct names such as `channel`, `deadline`, `request`, and `status`, strict where
+appropriate, with `DuplicateRecordFields` handling repeated vocabulary. Do not introduce fields
+such as `approvalPolicyChannel` or `approvalWorkflowStatus`.
 
 
 ## Plan of Work
 
-Four milestones: the policy module, the worker wiring, the resolution CLI, and the
-end-to-end demonstration.
+### Milestone 1 — Declare the durable shape and compatibility patch
 
-### Milestone 1 — ApprovalPolicy and the notifying ApprovalEnv
+Start with the contract because it determines every runtime label. Add
+`domain/shikigami-approval.keiro` to `domain/shikigami.keiro-workspace`. It declares the new
+workflow, but no external operation:
 
-Scope: a new module `shikigami-core/src/Shikigami/Agent/Approval/Policy.hs` (add to
-`exposed-modules` in `shikigami-core.cabal`). At the end, a policy can be parsed from
-the resolved application config and turned into a fully functional `ApprovalEnv` — testable without a
-worker.
-
-The policy record and resolver extend plan 37's typed Settei configuration and retain a
-loud, secret-safe description function:
-
-```haskell
-data ApprovalPolicy = ApprovalPolicy
-  { requireFor :: !(Set SinkKind),
-    channel :: !ApprovalChannel,
-    deadline :: !(Maybe NominalDiffTime)
+```text
+workflow Approval
+  name "shikigami.approval"
+  in ApprovalWorkflowInput {
+    reviewRequestId:Id
   }
-
-resolveApprovalPolicy :: AppConfig -> Either Text (Maybe ApprovalPolicy)
-describeApprovalPolicy :: Maybe ApprovalPolicy -> Text
+  out ApprovalWorkflowResult
+  id from input.reviewRequestId via reviewRequestIdText
+  body
+    step ingest-approval -> ApprovalWorkflowInput
+    step notify -> ApprovalNotificationResult
+    await decision -> ApprovalDecision
 ```
 
-Settei declares stable keys and explicit legacy environment bindings for:
-
-- `SHIKIGAMI_APPROVAL_REQUIRE` — comma-separated `sinkKindText` names
-  (e.g. `KawaDigest,KizashiSignal`). Unset or empty means `Nothing` (no policy,
-  auto-approve). An unknown name is `Left` listing the valid names.
-- `SHIKIGAMI_APPROVAL_CHANNEL` — `danwa` (default) or `kizashi`.
-- `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` — optional positive integer; parse failure is
-  `Left`.
-
-The env builder:
-
-```haskell
-policyApprovalEnv :: ApprovalPolicy -> SinkHttp -> DanwaConfig -> KizashiConfig -> SessionId -> ApprovalEnv
-```
-
-with these behaviors:
-
-- `requiresApproval identity kind output`: if `kind` is in `requireFor`, return
-  `ApprovalRequired ApprovalRequest { prompt, context = output, channel }` where the
-  prompt names the agent and sink kind, e.g.
-  `"Agent 'heartbeat' wants to dispatch a KawaDigest sink. Approve?"`. Otherwise
-  `ApprovalNotRequired`. Pure decision, IO only for signature compatibility.
-- `recordPark sid aid req`: one loud stderr line —
-  `[approval] parked session=<sid> token=<uuid> prompt=<prompt>`. The durable record
-  of the park already exists (keiro's awakeable row plus the journaled notify step);
-  this plan does not add a bespoke table.
-- `postAsk channel req aid`: render a human-facing ask that MUST embed the token:
+Extend the parent `AgentRun.body` with one new patch block:
 
 ```text
-APPROVAL REQUIRED: Agent 'heartbeat' wants to dispatch a KawaDigest sink. Approve?
-Context: {"summary":"noop-summary produced a fixed digest","verb":"heartbeat.tick"}
-Token: 7f3c9a12-...-uuid
-Resolve with: shikigami resolve-approval 7f3c9a12-...-uuid --approve   (or --reject "reason")
+patch shikigami-approval-workflow-v1 {
+  step resolve-approval-policy -> ApprovalPolicySnapshot
+  child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
+}
 ```
 
-  For `ViaDanwa`: add a small helper to `shikigami-core/src/Shikigami/Sink/Danwa.hs` —
-  `postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either Text Text)` — factored from the
-  existing `postToFreshConversation` (lines 59-92: start a `"thread"` conversation as
-  `agentParticipant cfg`, join, post the message, return the message id). The existing
-  function pattern-matches on the `DanwaConversation` sink variant only to satisfy its
-  current caller; the new helper takes the rendered text directly so the approval path
-  does not fabricate a fake `Sink` value. Call it as
-  `postText (danwa sinkHttp) danwaConfig renderedAsk`.
-  For `ViaKizashi`: build a `CreateSignalReq` directly (`Sink/Wire.hs:56-67`) with
-  `actor` = the agent name from the prompt context, `recipient = defaultRecipient` of
-  the `KizashiConfig`, `source = "shinzui/shikigami"`, `signalType = AgentRequest`,
-  `priority = High`, `importance = 80`, `intent` = the prompt, and
-  `contextTags = ["approval:" <> awakeableIdText aid]`; post with
-  `postSignal (kizashi sinkHttp)`.
-  In both channels map the typed client error to `ApprovalNotificationError`. The journaled
-  notify step returns `Either PermanentNotificationError ()`: transient failures throw before
-  journaling and retry on resume, while permanent failures are journaled and propagate as the
-  run's permanent `Left` under plan 17.
+Leave the existing `await await-ack -> ApprovalDecision` declaration in place because the false
+runtime branch can still execute it for an old instance. Update the specification comments: the
+computed approval and notify labels now belong only to the legacy branch; the true branch is
+represented by the approval child. Do not add `SignalAcknowledgement` or any other signal
+operation.
 
-Tests (in the package/test layout assigned by plan 36): decode policy values through plan
-37's `Config ApprovalPolicy` using in-memory Settei sources, cover happy/edge cases and a
-malformed winning value, and check that `requiresApproval` gates by kind. Do not add a
-plan-local environment resolver or process-global `setEnv` tests.
+Run `just keiro-scaffold`, review every generated path, wire the generated approval facts/runtime
+module into the Cabal component and `Shikigami.Workflow.Versioning.shikigamiActivePatches`, and
+update the create-once conformance expectations only as the scaffold instructs. Add the generated
+approval patch constant to the hand-owned runtime branch rather than spelling a second `PatchId`.
 
-### Milestone 2 — Wire the policy into the worker
+Before proceeding, add focused deploy-simulation tests. A workflow begun with the patch absent
+must retain the direct legacy `await-ack` or auto-approved sink path when resumed by code whose
+active patch set includes the new id. A fresh workflow must journal the true patch choice,
+`resolve-approval-policy`, and a child relation, and must never append a new
+`approval:<kind>:<ordinal>` or derived `:notify` application step. Test both flow and sink paths.
 
-Scope: the production worker consults the policy. `shikigami-core/src/Shikigami/Worker.hs`:
-add `policy :: !(Maybe ApprovalPolicy)` to `WorkerEnv` (lines 55-63); in
-`agentRunDeps` (lines 194-206) replace `approval = Approval.defaultApprovalEnv` and
-`deadline = Nothing` with:
+### Milestone 2 — Implement approval identity, policy, notification, and child runtime
 
-```haskell
-approval = case policy env of
-  Nothing -> Approval.defaultApprovalEnv
-  Just settings -> Policy.policyApprovalEnv settings (http env) (danwa env) (kizashi env),
-deadline = Policy.deadline =<< policy env
-```
+In `Shikigami.Agent.Approval`, move or re-export `ReviewRequestId` as the approval-owned newtype
+while preserving its current `Text` JSON encoding in `Shikigami.Attestation.Evidence`. Add a pure
+derivation function over parent workflow name, parent workflow id, generation, and stable request
+key. Use an explicit UUIDv5 namespace input beginning with `shikigami:approval-review:` and render
+the public value as `review_<uuid>`. Add frozen-vector tests so the derivation cannot drift.
 
-At the plan-36 worker composition root, consume the already-resolved plan 37 application
-config. Typed resolution failure has already stopped startup; log `describeApprovalPolicy`
-unconditionally without values from secret settings:
+Add pure policy types, preferably in `Shikigami.Agent.Approval.Policy`, without importing
+`Shikigami.App.Config` or `Shikigami.Sink.Http`; this avoids a configuration/HTTP import cycle.
+The runtime snapshot contains the canonical `Set SinkKind`, `ApprovalChannel`, and
+`NominalDiffTime`, derives explicit JSON instances, and exposes `requiresApprovalFor`. Keep parsing
+helpers beside the type, but let `AppConfig` own Settei declarations and source precedence.
 
-```text
-[shikigami.worker] approval policy: none — all sinks auto-approved
-[shikigami.worker] approval policy: require=[KawaDigest] channel=danwa deadline=3600s
-```
+Add `Shikigami.Agent.Approval.Workflow` for the child body and parent-side spawn/await helper.
+`requestApproval` obtains the parent workflow coordinates and generation, derives the review id
+and child `WorkflowId`, calls `spawnChild`, appends `ingest-approval` to the child's journal as
+delegation already appends `ingest-job`, then awaits the typed child result. Its stable request key
+is `sink-<canonical-kind>-<declared-ordinal>` for a declared sink and the caller's durable
+`StepName` prefixed with `flow-` for a Flow acknowledgement. The child registry body reads the
+journaled input when resumed; it never consults mutable parent state.
 
-Note the flow path needs no extra wiring: `runFlowBehavior` already threads
-`approval deps sid` and `deadline deps` into the flow runtime
-(`Agent/Workflow.hs:299-314`), so a configured policy automatically gives
-`awaitAcknowledgement` a real notifier and a real (non-fallback) deadline.
+The child allocates `awakeableNamed (StepName "decision")`, then runs
+`step (StepName "notify")`. Render a bounded, human-readable message containing the prompt,
+compact context, review id, opaque token, deadline, and exact CLI examples. Do not put credentials,
+HTTP response bodies, or exception text into the message, journal, or logs. After a successful
+notification, arm the existing deterministic approval deadline using the static `decision` label
+and await the decision. Return `ApprovalResolved decision`. If notification permanently fails,
+return `ApprovalNotificationFailed safeDetail` without arming or awaiting.
 
-Integration test (extend `AgentWorkflowSpec` or the new spec): start a tiny warp stub
-(the test suite already depends on `wai`/`warp`, see the test stanza of
-`shikigami-core.cabal`) that records any `POST` it receives and answers the danwa
-conversation/message JSON shapes used by `Danwa.Client` (imitate the existing danwa
-stub usage in the repo's tests if present; otherwise answer
-`{"conversationId":"conv_test"}` / `{"messageId":"msg_test"}` style bodies matching
-`Danwa.Conversation.Api.ConversationResponse` and `Danwa.Message.Api.MessageResponse`).
-Build deps with `policyApprovalEnv` requiring `SKawaDigest` over the stub's base URL,
-run the standard `heartbeat` test agent, and assert: the workflow suspends; the stub
-captured exactly one ask whose body contains the awakeable token text; and after
-`resolveApproval` + `resumeWorkflowsOnce` the outbox holds one sink row (mirroring
-lines 337-363 of the existing spec).
+Refactor `Shikigami.Sink.Danwa` to export a direct `postText` helper returning
+`Either DanwaError Text`. Reuse the existing authenticated `ClientEnv`, fresh conversation start,
+join, and post calls; approval has no outbox delivery receipt, so the helper must not fabricate a
+`DeliveryGuard` or a `DanwaConversation` sink. For Kizashi, build `CreateSignalReq` with
+`AgentRequest`, `High`, the configured recipient, the prompt as intent, and context tags carrying
+the review id; send it with the existing authenticated `HttpEnv`.
 
-### Milestone 3 — The resolve-approval CLI
+Map `DanwaHttpError` and `KizashiHttpError` through `httpFailureIsPermanent`. Treat Danwa usage or
+receipt errors and Kizashi decode errors as permanent because repeating the same input cannot fix
+them. Throw a dedicated synchronous exception for transient notification failures before the
+`notify` step records a result. Let Keiro's current resume policy back off and retry up to its
+configured attempt ceiling. Keep the successful post at-least-once: a process crash after the
+remote accepted the ask but before the step commit may send the same review id and token again.
 
-Scope: a direct administrative command component in `shikigami-server`, owned by the
-approval vertical (for example `Shikigami.Approval.Command`). Register the preserved
-`shikigami resolve-approval` spelling in the server-owned dispatcher selected by plan 36;
-do not recreate the removed `shikigami-cli` package.
+Add `approvalRegistry` and union it into the worker registry. The registry closes over the
+process-lifetime notifier and database `AppEnv`; the child input supplies the session, policy
+deadline, channel, request, and review identity. Extend `shikigamiActivePatches` with the generated
+approval declared-patch set even if the new workflow currently declares none, so future approval
+patches have the same single source of truth.
 
-CLI shape:
+### Milestone 3 — Resolve configuration once and wire production
+
+Extend `Shikigami.App.Config.AppConfig` and its applicative declaration with the two new settings.
+`approval.require` accepts an empty value or a comma-separated set of exact canonical names:
+`KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, and `ChannelEgress`. Trim
+surrounding whitespace, reject duplicate or unknown elements with an error that lists all valid
+names, and treat an empty scalar as the empty set. `approval.channel`
+accepts exactly `danwa` or `kizashi`. Bind both environment variables explicitly, update
+`declaredKeys`, environment-binding, default, file/env/CLI precedence, malformed-winner, schema,
+and explain-config tests in `Shikigami.AppConfigSpec`, and update
+`config/shikigami.example.yaml` plus `docs/operations/configuration.md`.
+
+At worker startup, build one `ApprovalPolicySnapshot` from the already-resolved `AppConfig` and
+existing deadline, and one notifier from `SinkHttp`, `DanwaConfig`, `KizashiConfig`, and the
+structured logger. Add both to `WorkerEnv` with direct record fields and pass them into
+`AgentRunDeps` and the approval registry. Keep `defaultApprovalEnv` only for the false patch branch
+and focused legacy tests. Log one secret-safe event such as `worker.approval.policy` before loops
+start, with `mode`, `required_sink_kinds`, `channel`, and `deadline_seconds`; an empty set must be
+reported as `mode=auto_approve`, not silently omitted.
+
+In the true patch branch, journal `resolve-approval-policy` exactly once and pass that recorded
+snapshot to both behavior interpretation and `approveSinks`. Change the Flow acknowledgement
+interpreter to call the approval child helper when the patch is true and the existing direct
+`awaitApproval` path when false. Make the true acknowledgement interpreter failure-aware: map
+`ApprovalNotificationFailed` and caught `WorkflowChildFailed` values to the `Left Text` already
+returned by `runFlowBehavior`, so the existing behavior failure branch records `fail-session`
+instead of throwing and spending the parent workflow's own retry budget. Change `approveSinks`
+similarly, returning `Either AgentRunFailure [Sink]`: only kinds selected by the journaled snapshot
+spawn a child; unselected kinds pass through. An approval result keeps the sink; rejection or
+timeout suppresses it. A permanent notification failure or failed child runs the existing
+`fail-session` step and returns `PermanentAgentRunFailure` before `dispatch-sinks`.
+
+Retain the current declared sink ordinal in the request key because `AgentDecl.sinks` is journaled
+by `lookup-agent`; do not reuse that key as an application step label. Preserve sink ordering and
+the outbox boundary: approvals decide which intents reach `enqueueSinkIntents`, and neither the
+approval child nor notifier directly dispatches the approved sink.
+
+### Milestone 4 — Add the operator command and automated end-to-end proof
+
+Add `Shikigami.Server.Command.ResolveApproval` and register `resolve-approval` in
+`adminSubcommands`. The parser accepts exactly one decision:
 
 ```bash
 shikigami resolve-approval TOKEN --approve
-shikigami resolve-approval TOKEN --reject "not in business hours"
+shikigami resolve-approval TOKEN --reject REASON
 ```
 
-Implementation: parse `TOKEN` with `Data.UUID.fromText` (invalid usage → stderr + exit 2);
-wrap as `AwakeableId` (constructor exported, `Keiro.Workflow.Awakeable`); build the
-decision — `Approved (object ["approved" .= True, "via" .= ("cli" :: Text)])` or
-`Rejected reason`. Resolve plan 37's Settei `AppConfig` before acquiring resources, obtain
-the typed database settings from it, bracket the store and telemetry through the shared
-server composition helpers, and call
-`resolveApproval appEnv aid decision`. Print `resolved: true` and exit 0 when it
-returns `True`; print `resolved: false (unknown or already-resolved token)` and exit 1
-on `False`. Note `resolveApproval` only signals the awakeable — the running worker's
-resume loop (`runResumeWorker`, polling continuously) picks the workflow up within a
-second or two; the CLI does not drive the resume itself.
+Parse `TOKEN` as a UUID and construct the exported `AwakeableId`. Let optparse's existing
+`usageExitCode` handle invalid UUIDs, missing decisions, and mutually supplied decisions. The
+action calls `requireDatabaseUrl "resolve-approval"`, constructs `AppEnv` with the same connection
+settings and `withRunTelemetry` composition used by workers, and invokes `resolveApproval`.
+Success prints both the token and `resolved: true` and exits 0. An unknown, timed-out, or already
+resolved token prints `resolved: false (unknown or already resolved)` and exits 1. Never query or
+mutate Keiro's private tables directly, and do not make the CLI run a resume pass.
 
-Test: extend the Milestone 2 integration test to resolve through a helper that goes
-through the same token-text round-trip the CLI performs (render the captured
-`AwakeableId` with `awakeableIdText`, re-parse with `UUID.fromText`, resolve) so the
-string round-trip is covered without spawning a subprocess.
+Extend `Shikigami.Server.CommandSpec` so the top-level command list, help coverage, UUID parser,
+mutual exclusion, and reject reason are pinned. Put effectful command behavior behind a small
+helper so tests can assert exit selection without spawning the executable; retain one database
+integration case for real `resolveApproval` semantics in core.
 
-### Milestone 4 — End-to-end demonstration
+Build the automated acceptance proof around the existing WAI/Warp Danwa and Kizashi stubs in
+`Shikigami.AgentWorkflowSpec`. Run a fresh heartbeat agent with `KawaDigest` required. Assert that
+the parent records the policy snapshot and child relation, the child records one notify result and
+suspends, and the captured ask contains the same typed review id and token as the journal. Resolve
+through the same render/parse boundary as the CLI, drive the existing timer/resume helpers, and
+assert one outbox intent for approval, none for rejection, and none for timeout. Repeat the signal
+and prove it returns false and creates no second intent.
 
-Scope: no code; a manual transcript proving the loop against a live worker, recorded
-into this plan's Surprises & Discoveries when executed. Steps are in Concrete Steps
-below. Acceptance: a human at a terminal sees the ask (in the danwa stub log or a real
-danwa), resolves it, and watches the worker log the workflow complete and the sink
-outbox publish.
+Add failure cases: Danwa and Kizashi 5xx/transport failures leave `notify` unrecorded and increment
+the child's retry attempt; 400/401/403/404 or invalid response records permanent notification
+failure, fails the parent session, and does not retry or enqueue. Add a crash window test in which
+the remote accepts the ask before the local step commit; replay may post twice, but both asks must
+carry the same review id and awakeable token and only one decision can win.
+
+### Milestone 5 — Gate, full validation, and manual transcript
+
+Run the generated-code/evolution gate from the repository's merge base, build every component,
+run focused tests, then run the complete suite serially. The repository has observed intermittent
+parallel test failures, so final evidence uses `cabal test all -j1`. Run `nix fmt` only on
+hand-owned sources; generated Keiro output is excluded by ADR 0002.
+
+Finally, exercise a real configured Danwa or Kizashi service and record the redacted transcript in
+Progress and Outcomes. The automated stub proof remains the self-contained acceptance test; the
+manual exercise verifies operator ergonomics and the production process composition.
 
 
 ## Concrete Steps
 
-All commands from `/Users/shinzui/Keikaku/bokuno/shikigami` inside `nix develop`.
+Run every command from `/Users/shinzui/Keikaku/bokuno/shikigami`.
 
-Build and test loop (used after every milestone):
-
-```bash
-cabal build all
-cabal test all
-```
-
-Milestone 1: create `shikigami-core/src/Shikigami/Agent/Approval/Policy.hs`; add the
-`postText` helper to `shikigami-core/src/Shikigami/Sink/Danwa.hs`; add
-`shikigami-core/test/Shikigami/ApprovalPolicySpec.hs`; register both in the cabal file
-and `test/Main.hs`.
-
-Milestone 2: edit the core approval/workflow modules and the worker composition component
-assigned to `shikigami-workers` by plan 36; extend the integration tests.
-
-Milestone 3: add the approval command module and executable component to
-`shikigami-server`; register the preserved command spelling in its dispatcher.
-
-Milestone 4 — end-to-end, three terminals, local database prepared with
-`just create-database`:
+First establish the merge base used by the workflow gate and inspect the current tree:
 
 ```bash
-# terminal 1 — the worker with an approval policy
-cabal run shikigami-worker -- --config config/approval-demo.yaml
+git status --short
+git rev-parse HEAD
 ```
 
-```text
-[worker] loaded 4 agents
-[shikigami.worker] approval policy: require=[KawaDigest] channel=danwa deadline=3600s
-[shikigami.worker] starting; draining shikigami_run_jobs
+After editing the DSL, scaffold and run the evolution gate, replacing `<merge-base>` with the
+commit printed above:
+
+```bash
+just keiro-scaffold
+just keiro-gate <merge-base>
+```
+
+Use focused tests while implementing:
+
+```bash
+nix develop -c cabal test shikigami-core-test --test-option -p --test-option approval
+nix develop -c cabal test shikigami-core-test --test-option -p --test-option configuration
+nix develop -c cabal test shikigami-workers-test --test-option -p --test-option worker
+nix develop -c cabal test shikigami-server-test --test-option -p --test-option "administrative command line"
+```
+
+Then run final validation:
+
+```bash
+nix fmt
+nix develop -c cabal build all
+nix develop -c cabal test all -j1
+just keiro-gate <merge-base>
+git status --short
+```
+
+For the manual path, add the following values to an untracked local configuration file or pass
+them with `--set`; do not commit credentials:
+
+```yaml
+approval:
+  require: KawaDigest
+  channel: danwa
+  deadline_seconds: 60
+```
+
+With PostgreSQL migrated and Danwa running at the configured URL, use four terminals. The local
+Kawa stub makes the final delivery visible without a second repository:
+
+```bash
+# terminal 1
+nix develop -c cabal run shikigami-worker -- --config config/shikigami.example.yaml --set approval.require=KawaDigest --set approval.channel=danwa
 ```
 
 ```bash
-# terminal 2 — trigger the heartbeat agent (its sink is a KawaDigest)
-export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"
-cabal run shikigami -- enqueue-run heartbeat
+# terminal 2
+nix develop -c cabal run shikigami -- stub-kawa --port 8088
 ```
-
-Terminal 1 then shows the park and the posted ask (via the danwa message, and the
-`[approval] parked session=... token=<uuid> ...` line). Copy the token.
 
 ```bash
-# terminal 3 — resolve
-export PG_CONNECTION_STRING="host=$PGHOST dbname=$PGDATABASE user=$(id -un)"
-cabal run shikigami -- resolve-approval <token-uuid> --approve
+# terminal 3
+nix develop -c cabal run shikigami -- grants grant heartbeat KawaDigest --by plan-14-demo
+nix develop -c cabal run shikigami -- enqueue-run heartbeat --key approval-demo-approve
 ```
 
-```text
-resolved: true
+Read the approval message in Danwa. It must show a `review_...` identifier, an opaque UUID token,
+the prompt, deadline, and both resolution forms. Copy the token, then:
+
+```bash
+# terminal 4
+nix develop -c cabal run shikigami -- resolve-approval TOKEN --approve
+nix develop -c cabal run shikigami -- resolve-approval TOKEN --approve
 ```
 
-Within a couple of seconds terminal 1 logs
-`[shikigami.worker] agent=heartbeat workflow completed` and the outbox publisher
-delivers the digest. Re-running the same `resolve-approval` command prints
-`resolved: false (unknown or already-resolved token)` and exits 1 — resolution is
-one-shot.
+The first command prints `resolved: true`. The second exits 1 and prints the already-resolved
+message. Enqueue a distinct key and reject it:
 
-Repeat with `--reject "testing rejection"` on a fresh enqueue: the workflow completes
-but no sink outbox row is published (the worker log shows completion without a kawa
-POST; `SELECT count(*)` on the outbox, or the test-level assertion, confirms).
+```bash
+nix develop -c cabal run shikigami -- enqueue-run heartbeat --key approval-demo-reject
+nix develop -c cabal run shikigami -- resolve-approval NEW_TOKEN --reject "manual rejection proof"
+```
+
+For timeout, enqueue one more distinct key with a short `approval.deadline_seconds`, do not resolve
+it, and observe the timer worker complete the child with `TimedOut` and the parent suppress the
+sink. Record identifiers only in redacted or test values; never paste credentials or authorization
+headers into this plan.
 
 
 ## Validation and Acceptance
 
-Automated: `cabal test all` must stay green, including (a) the existing Approval and
-Deadline groups in `AgentWorkflowSpec.hs:335-432`, byte-for-byte untouched — this plan
-must not alter `awaitApproval`, `resolveApproval`, the `approval:<kind>:<ordinal>` and
-`:notify` step names, or the timer id derivation; (b) new `ApprovalPolicySpec` parsing
-cases; (c) the new integration case asserting the danwa-stub-captured ask body contains
-the awakeable token and that approve→one outbox row / reject→zero rows.
+Acceptance is behavioral and durable, not merely a compiling command.
 
-Manual acceptance is Milestone 4's transcript: enqueue → park with visible ask
-containing a token → CLI approve → resume → sink dispatched exactly once; and the
-reject and timeout variants (for timeout, set `approval.deadline_seconds: 5` in the
-Settei input, enqueue, do not resolve, and observe the
-worker's timer loop fire the timeout and the run complete with the sink suppressed).
+Configuration acceptance requires `--describe-config` and `--explain-config` to show all three
+approval keys and their sources. Empty `approval.require` resolves to auto-approve. An unknown
+kind or channel makes `--check-config` exit with the reserved configuration status before opening
+PostgreSQL or constructing HTTP clients. Environment, file, and `--set` precedence follow every
+other `AppConfig` key.
 
-Failure-mode checks: a winning `approval.require: Bogus` value makes `--check-config` exit 4
-naming valid kinds before acquiring resources. A danwa timeout/5xx leaves the notify step
-unrecorded and retryable; a 401/403 records a permanent notification failure and dead-letters
-without another HTTP request. Neither path silently proceeds to approval.
+Workflow acceptance requires the Keiro DSL and generated facts to contain the new approval
+workflow and parent patch. Fresh agent runs journal `resolve-approval-policy` and use only the
+child's static application labels. Old journals replay the false branch without looking for new
+steps. `just keiro-gate <merge-base>` and its conformance target pass.
+
+Identity acceptance requires a frozen `ReviewRequestId` vector, stability across crash/resume,
+and distinct review ids for different parent generations or request keys. The awakeable token is
+random, stable only because Keiro journals it, and unequal to the review id. Moving the type does
+not alter the JSON emitted or accepted by `Shikigami.Attestation.Evidence`.
+
+Notification acceptance requires an authenticated request through the existing `SinkHttp` object.
+The message contains no secret material and does contain the prompt, bounded context, review id,
+token, deadline, and executable resolution command. A successful notify is journaled once; a
+crash-before-commit retry may duplicate the remote ask with identical identity. Transient failures
+retry under Keiro's durable attempt policy. Permanent failures fail closed and never arm a timer,
+await a decision, dispatch a sink, or loop forever.
+
+Resolution acceptance requires approve, reject, timeout, unknown token, and double-resolution
+cases. Approval yields exactly one sink outbox intent; rejection and timeout yield zero. The CLI
+only signals the awakeable and returns; the worker resume loop advances child and parent. Flow
+acknowledgement is covered independently of sink policy and sends a visible ask even when
+`approval.require` is empty.
+
+The final evidence is green focused tests, `cabal build all`, `cabal test all -j1`, `nix fmt`,
+`just keiro-gate <merge-base>`, and the manual transcript recorded in this living plan.
 
 
 ## Idempotence and Recovery
 
-The notify step is journaled: a crash after posting but before journaling re-posts the
-ask on resume (at-least-once; a duplicate ask is annoying but safe, and both asks carry
-the same token because `awakeableNamed` is replay-stable for the same step). The
-deadline timer is deterministic (UUIDv5 over workflow identity + step,
-`Approval.hs:174-180`), so replays cannot arm duplicates. `resolveApproval` is
-one-shot; re-running the CLI is safe and reports `false`. All code changes are additive
-(new module, new command, two record fields); rollback is `git checkout` of the touched
-files. No migration is involved.
+The plan adds no schema migration or bespoke approval table. Keiro owns the parent/child relation,
+child journal, awakeable row, timer, retries, and terminal failure state. Kioku owns the agent
+session, and the existing `fail-session` step records approval-notification failure there.
 
+`ReviewRequestId` and the approval child `WorkflowId` are deterministic from journal-stable parent
+coordinates and a stable request key. Re-running `spawnChild` attaches to the existing child.
+Appending `ingest-approval` uses the same idempotent journal rule as delegated `ingest-job`.
+`awakeableNamed "decision"` replays the already-journaled random token. The timer id remains UUIDv5
+over the approval child identity, generation, and static decision label, so repeated arming is
+first-write-wins. `signalAwakeable` is atomic and one-shot.
 
-## Portfolio Reconciliation (2026-07-30)
+Notification is intentionally at-least-once rather than exactly-once. If the remote accepted the
+message but the local `notify` step did not commit, a retry posts it again. The repeated review id
+and token let a human recognize the duplicate, and only one resolution can succeed. Do not add an
+approval-specific receipt table in an attempt to hide this unavoidable distributed commit window.
 
-This plan hard-depends on plan 47 in addition to plans 17, 22, 36, and 37. Approval
-notifications consume plan 22's single authenticated HTTP layer and Settei-resolved credential
-references. Keep all durable step names and wire values compatible with Keiro 0.4's checked
-workflow/state codec requirements.
+A transient notification exception is retried with Keiro's persisted attempts and exponential
+backoff. At the configured ceiling the child is terminally failed and the parent maps that failure
+to its normal permanent failure path. After an operator repairs the downstream service or
+credential, the existing Keiro operator resurrection command can retry the failed child; preserve
+the child workflow registry entry while any instance exists. A permanent typed notification
+failure does not need resurrection unless code or configuration changes make the same request
+valid; starting a new agent run is the normal retry.
 
-
-## Portfolio Reconciliation (2026-08-05)
-
-This plan is the natural owner of a stable, typed **review-request identifier**. MasterPlan 10
-(`docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md`) binds every attested run
-to an approval or review request id plus an idempotency key, and
-`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` serves signed attestations
-*by* that id — so it becomes an external lookup key that a consumer in another repository depends
-on, not merely an internal token. Until this plan lands,
-`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` accepts it as an opaque typed value
-supplied by its caller. When implementing here, give it a distinct newtype rather than reusing bare
-`Text`, keep it stable across the park-and-resume cycle, and do not conflate it with the approval
-*token*: the token authorises a decision and may rotate, while the request id identifies the review
-forever. Nothing else about this plan changes.
+Rollback must not simply remove the patch id, approval workflow registry entry, or false branch.
+Disable new sink approvals with an empty `approval.require` while keeping the code capable of
+resuming existing approval children. Retire the patch and legacy labels only after the operational
+drain evidence required by `docs/workflow-versioning.md` and ADR 0004. Generated files are restored
+by rerunning the scaffold from the matching DSL, never by hand.
 
 
 ## Interfaces and Dependencies
 
-New interfaces (module paths are repository-relative):
+The precise module split may be adjusted to avoid cycles, but the hand-owned domain surface should
+remain equivalent to:
 
 ```haskell
--- shikigami-core/src/Shikigami/Agent/Approval/Policy.hs (new)
-data ApprovalPolicy = ApprovalPolicy
-  { requireFor :: !(Data.Set.Set Shikigami.Sink.Permission.SinkKind),
-    channel :: !Shikigami.Agent.Approval.ApprovalChannel,
-    deadline :: !(Maybe Data.Time.NominalDiffTime)
+newtype ReviewRequestId = ReviewRequestId {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+data ApprovalPolicySnapshot = ApprovalPolicySnapshot
+  { requireFor :: !(Set SinkKind),
+    channel :: !ApprovalChannel,
+    deadline :: !NominalDiffTime
   }
-resolveApprovalPolicy :: Shikigami.App.Config.AppConfig -> Either Data.Text.Text (Maybe ApprovalPolicy)
-describeApprovalPolicy :: Maybe ApprovalPolicy -> Data.Text.Text
-policyApprovalEnv ::
-  ApprovalPolicy ->
-  Shikigami.Sink.Auth.SinkHttp ->
-  Shikigami.Sink.Config.DanwaConfig ->
-  Shikigami.Sink.Config.KizashiConfig ->
-  Kioku.Id.SessionId ->
-  Shikigami.Agent.Approval.ApprovalEnv
+
+data ApprovalWorkflowInput = ApprovalWorkflowInput
+  { reviewRequestId :: !ReviewRequestId,
+    sessionId :: !SessionId,
+    request :: !ApprovalRequest,
+    deadline :: !NominalDiffTime
+  }
+
+data ApprovalWorkflowResult
+  = ApprovalResolved !ApprovalDecision
+  | ApprovalNotificationFailed !Text
 
 data ApprovalNotificationError
   = TransientNotification !Text
   | PermanentNotification !Text
 
--- shikigami-core/src/Shikigami/Sink/Danwa.hs (added helper)
-postText :: Servant.Client.ClientEnv -> Shikigami.Sink.Config.DanwaConfig -> Data.Text.Text -> IO (Either DanwaError Data.Text.Text)
-
--- command/application boundary (package assigned by plan 36)
-runResolveApproval :: ApprovalToken -> ApprovalDecision -> IO ResolveResult
+reviewRequestIdFor :: WorkflowName -> WorkflowId -> Int -> Text -> ReviewRequestId
+reviewRequestIdText :: ReviewRequestId -> Text
+approvalWorkflowId :: ReviewRequestId -> WorkflowId
+requiresApprovalFor :: ApprovalPolicySnapshot -> SinkKind -> Bool
 ```
 
-Existing interfaces consumed (all verified in-tree):
+The notification seam carries process resources but never crosses JSON or the journal:
 
 ```haskell
-Shikigami.Agent.Approval.ApprovalEnv (..)                             -- Approval.hs:84-89
-Shikigami.Agent.Approval.resolveApproval :: AppEnv -> AwakeableId -> ApprovalDecision -> IO Bool  -- Approval.hs:117
-Shikigami.Agent.Approval.ApprovalDecision (Approved | Rejected | TimedOut)                        -- Approval.hs:65-70
-Keiro.Workflow.Awakeable.AwakeableId (AwakeableId)                    -- constructor exported, Awakeable.hs:52,119
-Keiro.Workflow.Awakeable.awakeableIdText :: AwakeableId -> Text       -- Awakeable.hs:130
-Shikigami.Sink.KizashiClient.postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either KizashiError SignalResponse)
-Shikigami.Sink.Wire.CreateSignalReq (..)                              -- Wire.hs:56-67
-Shikigami.Sink.Permission.sinkKindText :: SinkKind -> Text            -- Permission.hs:43-49
-Shikigami.Api.Agent.SignalType (AgentRequest)                         -- Api/Agent.hs:21-29
-Kioku.App.noopTracer, Kioku.App.AppEnv (..)
-Kiroku.Store.Connection (withStore, defaultConnectionSettings)
+data ApprovalNotifier = ApprovalNotifier
+  { recordPark :: !(SessionId -> ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO ()),
+    postAsk :: !(ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
+  }
+
+postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either DanwaError Text)
 ```
 
-Hard dependencies: plans 17, 36, and 37, and
-`docs/plans/22-outbound-authentication-for-sink-clients.md`, which defines
-`SinkHttp`, `HttpEnv`, the authenticated danwa `ClientEnv`, and the final `postSignal`
-signature consumed above. Plan 37 defines the configuration service and startup
-diagnostics; plan 17 supplies the permanent/transient workflow failure discipline; plan 13
-is only a soft model-provider integration neighbor.
+The durable helpers expose a registry and a parent-side request operation; exact effect rows should
+follow the existing delegation and agent workflow rather than introducing a second runner:
 
-No new package dependencies: `uuid` (via keiro), `containers`, `danwa-client`, and
-`optparse-applicative` are already in scope. Coordinate the additive worker-startup
-edits with plans 13, 15, and 16 in the plan-36 worker composition root.
+```haskell
+approvalRegistry :: ApprovalWorkflowEnv -> WorkflowRegistry AppEffects
+
+requestApproval ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  ApprovalWorkflowEnv ->
+  Text ->
+  SessionId ->
+  ApprovalRequest ->
+  NominalDiffTime ->
+  Eff es ApprovalWorkflowResult
+```
+
+The CLI continues to consume the existing external completion interface:
+
+```haskell
+resolveApproval :: AppEnv -> AwakeableId -> ApprovalDecision -> IO Bool
+```
+
+Repository-local dependencies are `Shikigami.Agent.Approval`,
+`Shikigami.Agent.Workflow`, `Shikigami.Flow.Acknowledgement`, `Shikigami.App.Config`,
+`Shikigami.Sink.Http`, `Shikigami.Sink.Danwa`, `Shikigami.Sink.KizashiClient`,
+`Shikigami.Workers.Config`, `Shikigami.Agent.Workflow.Resume`,
+`Shikigami.Workflow.Versioning`, and `Shikigami.Server.Command`. The relevant accepted decisions
+are ADRs 0001, 0002, 0004, 0007, 0012, 0013, 0017, 0021, 0022, 0026, 0027, and 0030.
+
+External dependencies are the pinned and verified
+`mori://shinzui/keiro/packages/keiro` 0.14.0.0 API and
+`mori://shinzui/danwa/packages/danwa-client` at the commit already pinned by this repository. No
+new package dependency is expected: `uuid`, `containers`, `aeson`, `optparse-applicative`, WAI/Warp,
+Keiro, and Danwa are already in the owning components. If implementation discovers a missing
+dependency, locate its current source and docs with Mori and verify its released version and
+upstream tag before changing Cabal bounds.
 
 
 ## Revision Notes
 
-- 2026-08-05: Added a Portfolio Reconciliation note assigning this plan ownership of a stable typed
-  review-request identifier, which MasterPlan 10 binds into signed run attestations and serves as an
-  external lookup key. No milestone scope changed.
-
-- 2026-07-22: Removed the nonexistent approval-policy dependency on plan 33 and made
-  plan 22 a hard dependency. Approval notifications now consume authenticated
-  `SinkHttp` clients instead of introducing an unauthenticated parallel path.
-- 2026-07-22: Rebased policy configuration on plans 36/37 and replaced the plan-local
-  `lookupEnv` resolver with Settei settings and validation.
-- 2026-07-22: Preserved plan 22's typed HTTP failure class through the approval notify step;
-  permanent 4xx errors dead-letter while transient failures remain replayable under plan 17.
-
-
-## Reconciliation with the delivered plan 39 (2026-08-19)
-
-`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed. The
-service is now specified by `domain/shikigami.keiro-workspace`, and two of its findings land on
-this plan.
-
-**The approval awaits cannot be declared, and renaming them would not help.** keiro-dsl parses a
-workflow label with the wire-word production `[A-Za-z0-9][A-Za-z0-9_-]*`, so neither
-`approval:<SinkKind>:<ordinal>` (`Shikigami/Agent/Workflow.hs:299-300`) nor the derived
-`<label>:notify` step (`Shikigami/Agent/Approval.hs:156-157`) is expressible — the colon is
-rejected outright, and the suffix is a runtime value in any case. Only the at-risk flow's
-`await-ack` is static, and it *is* declared, as `await await-ack -> ApprovalDecision` in
-`domain/shikigami-agent-run.keiro`. If this plan wants the approval awaits gated by
-`keiro-dsl diff` it must first make their labels static, which is a modelling decision this plan
-owns.
-
-**The signal operation is this plan's to add.** Plan 39 deliberately declared `run` operations
-only, because `Shikigami.Agent.Approval.resolveApproval` and
-`Shikigami.Agent.Workflow.Input.deliverInput` are exported but have **no caller anywhere in this
-repository**, and `resolveApproval` is keyed by `AwakeableId` rather than by a workflow key —
-which is not what a DSL `signal` operation declares. When this plan adds the entry point, declare
-it alongside:
-
-```text
-operation SignalAcknowledgement
-  signal await-ack of AgentRun
-    key from idempotencyKey via idText
-    value ApprovalDecision
-```
-
-`check` then verifies that the label exists on the workflow and that the value type matches the
-await's, which is the failure that otherwise leaves a workflow waiting forever. Run
-`just keiro-gate` before merging.
+- 2026-08-23: Re-audited and comprehensively rewrote the plan after the package split, Settei
+  adoption, authenticated `SinkHttp`, supervised resume loop, checked Keiro DSL, workflow
+  versioning ADRs, and run-evidence vocabulary landed. Removed completed prerequisite work and
+  stale file/line references. Replaced undeclarable computed labels for fresh runs with a patched
+  approval child workflow, made approval policy a journaled run-local snapshot, corrected the CLI
+  location to the server administrative dispatcher, preserved `ReviewRequestId` wire compatibility,
+  and removed the invalid proposed DSL signal operation because resolution is keyed by opaque
+  `AwakeableId`. Recorded the durable architecture in
+  `docs/adr/0030-an-approval-request-is-a-durable-child-workflow.md`.
+- 2026-08-05: Assigned this plan ownership of a stable typed review-request identifier used by run
+  attestation and later lookup.
+- 2026-07-22: Rebased policy configuration on Settei and made authenticated outbound clients and
+  typed HTTP failure classification hard dependencies.
+- 2026-07-08: Created the original plan for a production policy, notifier, and resolution path.
