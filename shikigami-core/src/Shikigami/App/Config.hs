@@ -48,6 +48,7 @@ module Shikigami.App.Config
     SecretText,
     revealSecretText,
     CredentialRef (..),
+    DirectorySettings (..),
     Port,
     mkPort,
     portNumber,
@@ -77,6 +78,9 @@ module Shikigami.App.Config
     databaseConnectionStringKey,
     agentsDirectoryKey,
     agentsStrictKey,
+    directoryModeKey,
+    directoryFilePathKey,
+    directoryRefreshIntervalSecondsKey,
     delegationBudgetKey,
     schedulerCatchUpKey,
     kafkaBrokerKey,
@@ -122,6 +126,7 @@ import Shikigami.Agent.Decl
     delegationBudgetNatural,
     mkDelegationBudget,
   )
+import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -259,6 +264,9 @@ data AppConfig = AppConfig
     -- Off by default: upgrading must not turn a deployment that has been
     -- tolerating a broken manifest into a failed deploy on its own.
     agentsStrict :: !Bool,
+    -- | Principal lifecycle directory and its refresh policy. Disabled by
+    -- default so existing deployments retain their pre-directory behavior.
+    directorySettings :: !DirectorySettings,
     -- | Root-run-wide maximum number of distinct descendant workflows when an
     -- agent declaration does not choose its own limit.
     delegationBudget :: !DelegationBudget,
@@ -338,17 +346,18 @@ data AppConfig = AppConfig
 
 -- | The complete accepted configuration surface.
 --
--- Everything except 'databaseUrl' has a declared default, so a process starts
--- with no configuration at all and behaves the way the development shell
--- expects. Defaults are declared through Settei rather than baked into a
--- built-in source so that @--explain-config@ can say which rule supplied a value
--- and why.
+-- Every unconditional setting except 'databaseUrl' has a declared default, so
+-- a process starts with no configuration at all and behaves the way the
+-- development shell expects. File directory mode conditionally requires its
+-- path. Defaults are declared through Settei rather than baked into a built-in
+-- source so that @--explain-config@ can say which rule supplied a value and why.
 appConfig :: Config AppConfig
 appConfig =
   AppConfig
     <$> optional databaseConnectionStringSetting
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
     <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
+    <*> directorySettingsConfig
     <*> withDefault delegationBudgetSetting (constant "delegation-budget" "Bound the complete descendant tree of a root run" defaultDelegationBudget)
     <*> withDefault schedulerCatchUpSetting (constant "skip-missed" "Waking late arms the next future tick instead of replaying every missed minute" SkipMissed)
     <*> withDefault kafkaBrokerSetting (constant "kafka-broker" "Use the development shell's local broker" "127.0.0.1:9092")
@@ -398,6 +407,19 @@ behaviorProviderConfig =
           <*> required anthropicApiKeySetting
       )
 
+-- | Directory mode is conditional so file mode cannot resolve without a path,
+-- while disabled deployments are not asked for a meaningless one.
+directorySettingsConfig :: Config DirectorySettings
+directorySettingsConfig =
+  maybe DirectoryDisabled (uncurry DirectoryFile)
+    <$> whenEq
+      (withDefault directoryModeSetting (constant "directory-disabled" "Preserve lifecycle behavior until a directory source is configured" DisableDirectory))
+      ReadDirectoryFile
+      ( (,)
+          <$> required directoryFilePathSetting
+          <*> withDefault directoryRefreshIntervalSecondsSetting (constant "directory-refresh" "Refresh the principal directory every five seconds" (secondsToNominalDiffTime 5))
+      )
+
 -- | The static schema, for @--describe-config@ and for tests.
 appConfigSchema :: Schema
 appConfigSchema = describe appConfig
@@ -410,9 +432,10 @@ appConfigSchema = describe appConfig
 -- use this; it is the same value a process gets with no configuration file, no
 -- bound environment variable, and no flag.
 --
--- Resolution cannot fail here: every setting except 'databaseUrl' has a declared
--- default, and 'databaseUrl' is optional. A failure would mean the declaration
--- itself is broken, which is a programming error rather than an operator error.
+-- Resolution cannot fail here: every unconditional setting except 'databaseUrl'
+-- has a declared default, 'databaseUrl' is optional, and file directory mode is
+-- not selected. A failure would mean the declaration itself is broken, which is
+-- a programming error rather than an operator error.
 defaultAppConfig :: AppConfig
 defaultAppConfig =
   case answer (resolve defaultResolveOptions [] appConfig) of
@@ -453,6 +476,35 @@ agentsStrictSetting =
     agentsStrictKey
     "Refuse to start when any agent manifest fails to load (off reports the failure and starts)"
     boolDecoder
+
+data DirectoryMode = DisableDirectory | ReadDirectoryFile
+  deriving stock (Generic, Eq, Show)
+
+directoryModeSetting :: Setting DirectoryMode
+directoryModeSetting =
+  publicSettingWithRenderer
+    directoryModeKey
+    "Principal lifecycle directory mode: disabled preserves compatibility, file reads a JSON projection"
+    (enumDecoder [("disabled", DisableDirectory), ("file", ReadDirectoryFile)])
+    \case
+      DisableDirectory -> "disabled"
+      ReadDirectoryFile -> "file"
+
+directoryFilePathSetting :: Setting FilePath
+directoryFilePathSetting =
+  publicSettingWithRenderer
+    directoryFilePathKey
+    "Path to the JSON principal projection, required in file mode"
+    (Text.unpack <$> textDecoder)
+    Text.pack
+
+directoryRefreshIntervalSecondsSetting :: Setting NominalDiffTime
+directoryRefreshIntervalSecondsSetting =
+  publicSettingWithRenderer
+    directoryRefreshIntervalSecondsKey
+    "Seconds between principal directory refresh attempts (1-86400)"
+    positiveDurationDecoder
+    renderDurationSeconds
 
 delegationBudgetSetting :: Setting DelegationBudget
 delegationBudgetSetting =
@@ -688,6 +740,15 @@ agentsDirectoryKey = stableKey "agents.directory"
 agentsStrictKey :: Key
 agentsStrictKey = stableKey "agents.strict"
 
+directoryModeKey :: Key
+directoryModeKey = stableKey "directory.mode"
+
+directoryFilePathKey :: Key
+directoryFilePathKey = stableKey "directory.file.path"
+
+directoryRefreshIntervalSecondsKey :: Key
+directoryRefreshIntervalSecondsKey = stableKey "directory.refresh_interval_seconds"
+
 delegationBudgetKey :: Key
 delegationBudgetKey = stableKey "delegation.default_budget"
 
@@ -807,6 +868,9 @@ environmentBindings =
         [ binding (EnvName "PG_CONNECTION_STRING") databaseConnectionStringKey,
           binding (EnvName "SHIKIGAMI_AGENTS_DIRECTORY") agentsDirectoryKey,
           binding (EnvName "SHIKIGAMI_AGENTS_STRICT") agentsStrictKey,
+          binding (EnvName "SHIKIGAMI_DIRECTORY_MODE") directoryModeKey,
+          binding (EnvName "SHIKIGAMI_DIRECTORY_FILE_PATH") directoryFilePathKey,
+          binding (EnvName "SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS") directoryRefreshIntervalSecondsKey,
           binding (EnvName "SHIKIGAMI_DELEGATION_DEFAULT_BUDGET") delegationBudgetKey,
           binding (EnvName "SHIKIGAMI_SCHEDULER_CATCH_UP") schedulerCatchUpKey,
           binding (EnvName "SHIKIGAMI_KAFKA_BROKER") kafkaBrokerKey,

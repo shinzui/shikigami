@@ -59,8 +59,11 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   landed; plan 38's pg-migrate component, manifest, CLI, and test support have landed. Plans
   37 and 38 retain only their shared migration-CLI Settei cleanup, which does not block adding
   a forward migration here.
-- [ ] Milestone 1: implement `Shikigami.Directory`, the typed Settei directory selection,
-  fail-closed cold start, last-known-valid refresh, and unit tests.
+- [x] (2026-08-23T00:38:15Z) Milestone 1: implemented `Shikigami.Directory`, the typed
+  conditional Settei directory selection, fail-closed configured cold start, atomic
+  last-known-valid refresh, operator documentation, and focused tests. Evidence:
+  `nix develop -c cabal build lib:shikigami-core test:shikigami-core-test`, 12 principal
+  directory tests, and 49 configuration/provider tests passed.
 - [ ] Milestone 2: add the pg-migrate change for `shikigami.agent_load_state` and
   `shikigami.run_skips`; implement transactional persistence and persist load reports before
   strict-mode refusal.
@@ -187,8 +190,13 @@ The 2026-08-22 refresh converted the July design into an implementation guide fo
 tree. It removed obsolete `shikigami-cli` and pre-pg-migrate paths, assigned code to
 `shikigami-core`, `shikigami-workers`, `shikigami-server`, and
 `shikigami-migrations`, incorporated transactional Kafka ingestion and terminal delivery
-receipts, and separated this plan's attribution work from plan 54's durable re-keying. Feature
-implementation remains to be completed in Milestones 1–5.
+receipts, and separated this plan's attribution work from plan 54's durable re-keying.
+
+Milestone 1 established the reusable enforcement seam without adding a Meibo package:
+configured processes require one valid file snapshot, later malformed candidates cannot
+replace it, and disabled mode remains visibly distinct from an unavailable source. The Settei
+schema and operator guide now expose the conditional file path and bounded refresh interval.
+Milestones 2–5 remain.
 
 
 ## Context and Orientation

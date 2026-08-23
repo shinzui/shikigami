@@ -111,6 +111,9 @@ nested under `kafka`.
 | `database.connection_string` | *(none — secret)* | `PG_CONNECTION_STRING` | PostgreSQL connection string, libpq URI or key/value form. |
 | `agents.directory` | `agents` | `SHIKIGAMI_AGENTS_DIRECTORY` | Directory holding the `.dhall` agent manifests. |
 | `agents.strict` | `false` | `SHIKIGAMI_AGENTS_STRICT` | Refuse to start when any agent manifest fails to load, or when a scheduled agent's declared cron does not parse. Every offender is reported before the refusal, so one restart shows them all. Off reports the same lines and starts anyway. |
+| `directory.mode` | `disabled` | `SHIKIGAMI_DIRECTORY_MODE` | Principal lifecycle source. `disabled` preserves compatibility and permits work without attribution; `file` enables fail-closed lifecycle enforcement. |
+| `directory.file.path` | *(required in file mode)* | `SHIKIGAMI_DIRECTORY_FILE_PATH` | Path to a JSON array containing the Meibo principal projection. Ignored unless `directory.mode` is `file`. |
+| `directory.refresh_interval_seconds` | `5` in file mode | `SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS` | Seconds between attempts to atomically refresh the principal snapshot. |
 | `scheduler.catch_up` | `skip_missed` | `SHIKIGAMI_SCHEDULER_CATCH_UP` | What the scheduler does about cron minutes that passed while it was down. `skip_missed` arms the first tick after now, so waking a day late produces one run. `fire_all` arms from the tick that just fired, replaying every missed minute — the pre-policy behavior. |
 | `worker.run_timeout_seconds` | `300` | `SHIKIGAMI_RUN_TIMEOUT_SECONDS` | Maximum duration of one synchronous external behavior attempt. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
@@ -135,13 +138,33 @@ nested under `kafka`.
 | `behavior.model` | `claude-sonnet-4-6` | `SHIKIGAMI_BEHAVIOR_MODEL` | Anthropic model id. Only consulted when the provider is `anthropic`; decoded against baikai's catalog, so an unknown id is rejected here. |
 | `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |
 
-Both duration settings are whole seconds in the range 1–86400. The upper bound keeps
+The three duration settings are whole seconds in the range 1–86400. The upper bound keeps
 conversion to the microsecond timeout representation safe on the 64-bit platforms
 supported by the deployment flake. `worker.run_timeout_seconds` bounds each synchronous
 provider or program attempt; it does not time an entire durable workflow or a suspended
 approval. The resume worker derives its workflow-instance lease as the run timeout plus a
 30-second scheduling/database margin. Queue delivery visibility is a separate 10/30-second
-heartbeat policy and is not configured by either key.
+heartbeat policy and is not configured by these settings.
+
+In file mode, the directory file is a JSON array. Each object must contain
+`principal_id`, `handle`, and `lifecycle`; additional Meibo fields are ignored. Principal ids
+must begin with `agent_`, handles must be non-empty, and both ids and case-normalized handles
+must be unique. The accepted lifecycle spellings are `active`, `paused`, and `deactivated`.
+
+```json
+[
+  {
+    "principal_id": "agent_01h000000000000000heartbeat",
+    "handle": "heartbeat",
+    "lifecycle": "active"
+  }
+]
+```
+
+Configured startup requires one valid snapshot. Later refreshes are all-or-nothing: an
+unreadable, malformed, or duplicate-filled candidate is rejected and the last valid snapshot
+continues serving checks. A configured process that has never loaded a valid snapshot fails
+closed. Disabled mode is explicit compatibility behavior, not a directory outage.
 
 Environment bindings are explicit, one variable to one key. Nothing scans for a prefix, so
 a typo is a variable that does nothing rather than a value landing on the wrong key.

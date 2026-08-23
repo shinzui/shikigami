@@ -80,6 +80,9 @@ surfaceTests =
                 "credentials.providers.anthropic.api_key",
                 "database.connection_string",
                 "delegation.default_budget",
+                "directory.file.path",
+                "directory.mode",
+                "directory.refresh_interval_seconds",
                 "health.port",
                 "http.host",
                 "http.port",
@@ -114,6 +117,9 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
               ("SHIKIGAMI_DELEGATION_DEFAULT_BUDGET", "delegation.default_budget"),
+              ("SHIKIGAMI_DIRECTORY_FILE_PATH", "directory.file.path"),
+              ("SHIKIGAMI_DIRECTORY_MODE", "directory.mode"),
+              ("SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS", "directory.refresh_interval_seconds"),
               ("SHIKIGAMI_HEALTH_PORT", "health.port"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
@@ -144,6 +150,7 @@ surfaceTests =
         -- Lenient by default: upgrading must not turn a tolerated broken
         -- manifest into a failed deploy without an explicit configuration change.
         agentsStrict defaultAppConfig @?= False
+        directorySettings defaultAppConfig @?= DirectoryDisabled
         delegationBudgetNatural (delegationBudget defaultAppConfig) @?= 16
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
@@ -242,7 +249,18 @@ precedenceTests =
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "720")
             ]
         runTimeout config @?= secondsToNominalDiffTime 240
-        approvalDeadline config @?= secondsToNominalDiffTime 840
+        approvalDeadline config @?= secondsToNominalDiffTime 840,
+      testCase "file directory settings resolve as one conditional value" do
+        config <-
+          resolveOrFail
+            (optionsWith [] [])
+            [yaml "file" "directory:\n  mode: file\n  file:\n    path: /etc/shikigami/principals.json\n"]
+            [("SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS", "7")]
+        directorySettings config
+          @?= DirectoryFile
+            { path = "/etc/shikigami/principals.json",
+              refreshInterval = secondsToNominalDiffTime 7
+            }
     ]
 
 -- ── Strictness ──────────────────────────────────────────────────────────────
@@ -278,6 +296,30 @@ strictnessTests =
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
         runTimeout low @?= secondsToNominalDiffTime 1
         approvalDeadline high @?= secondsToNominalDiffTime 86_400,
+      testCase "file directory mode requires a path" do
+        let run = runWith (optionsWith [] [cliOverride directoryModeKey "file"]) [] []
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the failure should name the missing file path:\n" <> Text.unpack (standardError run))
+          ("directory.file.path" `Text.isInfixOf` standardError run),
+      testCase "directory refresh interval uses the bounded duration decoder" $
+        mapM_
+          ( \bad ->
+              exitCode
+                ( runWith
+                    ( optionsWith
+                        []
+                        [ cliOverride directoryModeKey "file",
+                          cliOverride directoryFilePathKey "/tmp/principals.json",
+                          cliOverride directoryRefreshIntervalSecondsKey bad
+                        ]
+                    )
+                    []
+                    []
+                )
+                @?= resolutionExitCode
+          )
+          ["0", "86401", "-1", "1.5"],
       testCase "delegation budgets are bounded before runtime" do
         low <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "0"]) [] []
         high <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "1000"]) [] []
@@ -415,7 +457,7 @@ diagnosticTests =
         assertBool
           ("the explanation should name the variable:\n" <> Text.unpack (standardOutput run))
           ("SHIKIGAMI_KAFKA_BROKER" `Text.isInfixOf` standardOutput run),
-      testCase "schema and explanation expose both duration policies" do
+      testCase "schema and explanation expose the duration policies" do
         let schema = renderSchemaText appConfigSchema
             explained = standardOutput (runWith (diagnosticOptions ExplainText) [] [])
         mapM_
@@ -423,7 +465,7 @@ diagnosticTests =
               assertBool (Text.unpack key <> " missing from schema") (key `Text.isInfixOf` schema)
               assertBool (Text.unpack key <> " missing from explanation") (key `Text.isInfixOf` explained)
           )
-          ["worker.run_timeout_seconds", "approval.deadline_seconds"],
+          ["worker.run_timeout_seconds", "approval.deadline_seconds", "directory.refresh_interval_seconds"],
       testCase "with no diagnostic, a valid configuration lets the process continue" do
         let run = runWith (optionsWith [] []) [] []
         exitCode run @?= 0
