@@ -35,6 +35,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -236,6 +237,7 @@ withFixture label sinks kizashi danwa use =
             AgentWorkflow.AgentRunDeps
               { AgentWorkflow.appEnv = appEnv,
                 AgentWorkflow.behaviorEnv = behaviorEnv,
+                AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,
                 AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},

@@ -403,9 +403,12 @@ agent run  (workflow "shikigami.agent-run",
             shikigami-core/src/Shikigami/Agent/Workflow.hs)
   ingest-job                       :187
   lookup-agent                     :188
+  resolve-profile                 runResolvedAgent -- declared; post-patch
+  resolve-capability-overlays     runResolvedAgent -- declared; post-patch
   open-session                     :228
   recall                           :229
   run-behavior                     :236
+  run-behavior-v2                 runSessionedAgent -- declared; post-patch
   fail-session                     :239
   record                           :249
   complete                         :250
@@ -454,6 +457,8 @@ written by keiro on this service's behalf, as of the first patch
                                    every agent-run that interprets a flow's sinks
   patch:shikigami-flow-memory-steps-v1
                                    every agent-run that interprets a flow's memory
+  patch:shikigami-capability-overlays-v1
+                                   every fresh agent-run
 
 reserved by keiro  (keiro/src/Keiro/Workflow/Types.hs)
   __workflow_completed__           :318

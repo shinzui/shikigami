@@ -5,7 +5,9 @@
 -- that every live value still describes the pinned public semantics, and releases
 -- every acquired lease in reverse order on every exit path.
 module Shikigami.Capability.Provider
-  ( CapabilityScope (..),
+  ( CapabilityRuntime (..),
+    emptyCapabilityRuntime,
+    CapabilityScope (..),
     CapabilityAcquireError (..),
     CapabilityReleaseError (..),
     CapabilityLease (..),
@@ -15,6 +17,7 @@ module Shikigami.Capability.Provider
     CapabilityReleaseFailure (..),
     CapabilityRuntimeError (..),
     mkCapabilityProviderRegistry,
+    emptyCapabilityProviderRegistry,
     resolveProvider,
     withCapabilityOverlays,
   )
@@ -33,7 +36,13 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
-import Shikigami.Capability.Catalog (ExecutionMode)
+import Shikigami.Capability.Catalog
+  ( CapabilityCatalog,
+    CapabilityResolutionError (..),
+    ExecutionMode,
+    ResolutionSubject,
+    emptyCapabilityCatalog,
+  )
 import Shikigami.Capability.Overlay
   ( CapabilityDescriptor (..),
     CapabilityId,
@@ -47,6 +56,36 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Tools (CapabilityToolError, composeCapabilityToolsWithNames)
 import Shikigami.Log qualified as Log
 import Shikumi.Tool (SomeTool, ToolRegistry, someToolName)
+
+-- | Process-local capability policy and provider state for durable agent runs.
+-- Only the result of resolving through this bundle is journaled; the bundle
+-- itself contains functions and live factories and therefore has no JSON
+-- instance.
+data CapabilityRuntime = CapabilityRuntime
+  { catalog :: !CapabilityCatalog,
+    providers :: !CapabilityProviderRegistry,
+    authorize ::
+      !( ResolutionSubject ->
+         CapabilityDescriptor ->
+         Either CapabilityResolutionError ()
+       )
+  }
+
+-- | Compatibility runtime for every existing construction site. Empty overlay
+-- requests resolve without consulting policy; a non-empty request cannot be
+-- found in the empty catalog and therefore cannot reach this deny-all callback.
+emptyCapabilityRuntime :: CapabilityRuntime
+emptyCapabilityRuntime =
+  CapabilityRuntime
+    { catalog = emptyCapabilityCatalog,
+      providers = emptyCapabilityProviderRegistry,
+      authorize = \_ CapabilityDescriptor {capability} ->
+        Left
+          CapabilityAuthorizationDenied
+            { capability,
+              reason = "the empty capability runtime authorizes no overlays"
+            }
+    }
 
 -- | Public, non-secret inputs a provider may use to scope one acquisition.
 data CapabilityScope = CapabilityScope
@@ -137,6 +176,9 @@ mkCapabilityProviderRegistry providers =
       case Map.lookup (capability, revision) registry of
         Just _ -> Left DuplicateCapabilityProvider {capability, revision}
         Nothing -> Right (Map.insert (capability, revision) provider registry)
+
+emptyCapabilityProviderRegistry :: CapabilityProviderRegistry
+emptyCapabilityProviderRegistry = CapabilityProviderRegistry Map.empty
 
 -- | Find only the exact revision pinned in a resolved snapshot and verify the
 -- provider advertises the complete same descriptor. There is no current-version

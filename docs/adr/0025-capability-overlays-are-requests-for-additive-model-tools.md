@@ -69,6 +69,20 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Du
 admit only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
+An `AgentRun` resolves that request after its sanctioned profile and before opening a memory
+session. The `shikigami-capability-overlays-v1` workflow patch gates a
+`resolve-capability-overlays` step whose value is the explicit resolution result. Fresh runs
+journal the complete public descriptor set or permanent refusal; an in-flight run that pinned
+the old patch branch keeps the old body and writes no new step. Capability authorization
+receives the already journaled profile snapshot, not an independent live profile lookup.
+
+Each `run-behavior-v2` attempt acquires only the exact revisions named by the journaled set.
+The lease bracket and derived `BehaviorEnv` live inside the attempt timeout, so normal return,
+provider failure, callback exception, and timeout all reach cleanup before the attempt exits.
+Catalog, declaration, and policy failures are permanent; provider acquisition, composition,
+and release failures are transient and leave the behavior step without a journaled result.
+Operators must therefore retain an old provider revision while any journal can still name it.
+
 Overlay descriptors have no operation that replaces or widens a base capability. They do not
 enter `FlowEffects`, and a Flow reaches the world only through its existing replay-safe
 capabilities.
@@ -116,6 +130,12 @@ by a tool; replay-safety policy therefore remains independent of cleanup correct
 Callers that acquire overlays must derive the behavior environment inside the lease callback.
 The environment guard intentionally refuses declared overlays on paths that do not yet acquire
 them, including conversation execution until its durable integration is added.
+
+Danwa conversation execution remains such a path in this decision. A declaration with a
+non-empty overlay list fails explicitly at the behavior-environment guard; it does not resolve
+against the current catalog, silently omit tools, or borrow the `AgentRun` snapshot. Adding
+conversation overlays requires a separately declared, patch-gated resolution boundary for the
+conversation lifecycle.
 
 
 ## References

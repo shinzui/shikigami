@@ -59,16 +59,19 @@ agent-run) child workflows. Both are declared in the workspace.
 
 ### Agent-run journal labels
 
-Eleven labels, all static, all valid DSL wire words, all declared in
+The static labels below are valid DSL wire words and declared in
 `domain/shikigami-agent-run.keiro`.
 
 | Label | Kind | Defined at | Path |
 |---|---|---|---|
 | `ingest-job` | step | `Agent/Workflow.hs:187` | always |
 | `lookup-agent` | step | `Agent/Workflow.hs:188` | always |
+| `resolve-profile` | step | `runResolvedAgent` | fresh runs under `shikigami-resolve-profile-v1` |
+| `resolve-capability-overlays` | step | `runResolvedAgent` | fresh runs under `shikigami-capability-overlays-v1` |
 | `open-session` | step | `Agent/Workflow.hs:228` | agent resolved |
 | `recall` | step | `Agent/Workflow.hs:229` | agent resolved |
 | `run-behavior` | step | `Agent/Workflow.hs:236` | non-`Flow` behaviors only |
+| `run-behavior-v2` | step | `runSessionedAgent` | fresh runs under `shikigami-behavior-retry-v1` |
 | `classify` | step | `Flow/AtRiskCustomer.hs:45` | `Flow` behavior only |
 | `await-ack` | await | `Flow/AtRiskCustomer.hs:50` | `Flow` behavior, high risk only |
 | `dispatch-sinks` | step | `Agent/Workflow.hs:491` | behavior succeeded |
@@ -76,7 +79,7 @@ Eleven labels, all static, all valid DSL wire words, all declared in
 | `record` | step | `Agent/Workflow.hs:249` | behavior succeeded |
 | `complete` | step | `Agent/Workflow.hs:250` | behavior succeeded |
 
-The declared body lists all eleven in reading order. That is honest because the
+The declared body lists them in reading order. That is honest because the
 DSL body is a label inventory, not a control-flow program: keiro's own reference
 says "the body is ordered, but replay matches journal records by label"
 (`mori://shinzui/keiro`, `docs/user/typed-spec-toolchain.md`). `run-behavior`

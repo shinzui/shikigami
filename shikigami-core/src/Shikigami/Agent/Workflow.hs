@@ -12,6 +12,8 @@ module Shikigami.Agent.Workflow
     agentRunWorkflow,
     runAgentRunWorkflow,
     agentRunRegistry,
+    resolveCapabilitiesForRun,
+    runBehaviorWithCapabilities,
     PreparedSinkIntent,
     -- | The outboxed wire type. Exported so
     -- "Shikigami.WireCompatSpec" can pin its JSON encoding.
@@ -26,6 +28,7 @@ module Shikigami.Agent.Workflow
   )
 where
 
+import Control.Exception (throwIO)
 import Data.Aeson (Key, Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
@@ -88,8 +91,17 @@ import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
+import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
-import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttempt)
+import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
+import Shikigami.Capability.Catalog qualified as Capability
+import Shikigami.Capability.Overlay (ResolvedCapabilitySet, emptyResolvedCapabilitySet)
+import Shikigami.Capability.Provider
+  ( CapabilityRuntime (..),
+    CapabilityRuntimeError,
+    CapabilityScope (..),
+    withCapabilityOverlays,
+  )
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Flow qualified as Flow
@@ -110,6 +122,9 @@ import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
+    -- | Operator-owned overlay catalog, policy, and exact-revision provider
+    -- factories. Only its pure resolution result crosses the journal boundary.
+    capabilities :: !CapabilityRuntime,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -292,21 +307,69 @@ runResolvedAgent deps job decl = do
       else pure (Right Nothing)
   case profileResolution of
     Left refusal -> pure (Left (PermanentAgentRunFailure (renderProfileResolutionError refusal)))
-    Right resolvedProfile -> runProfiledAgent deps job decl resolvedProfile
+    Right resolvedProfile -> do
+      resolveCapabilityOverlaysForRun <- patch capabilityOverlayPatch
+      capabilityResolution <-
+        if resolveCapabilityOverlaysForRun
+          then
+            runStep
+              deps
+              (StepName "resolve-capability-overlays")
+              (pure (resolveCapabilitiesForRun (capabilities deps) decl resolvedProfile))
+          else pure (Right emptyResolvedCapabilitySet)
+      case capabilityResolution of
+        Left refusal ->
+          pure
+            ( Left
+                ( PermanentAgentRunFailure
+                    (boundedBehaviorDetail (Text.pack (show refusal)))
+                )
+            )
+        Right resolvedOverlays ->
+          runProfiledAgent deps job decl resolvedProfile resolvedOverlays
 
 profileResolutionPatch :: PatchId
 profileResolutionPatch = PatchId "shikigami-resolve-profile-v1"
+
+capabilityOverlayPatch :: PatchId
+capabilityOverlayPatch = PatchId "shikigami-capability-overlays-v1"
+
+-- | Resolve an agent-authored request through one operator runtime snapshot.
+-- The already journaled profile is part of the authorization subject; policy
+-- never re-reads mutable profile state independently of the workflow.
+resolveCapabilitiesForRun ::
+  CapabilityRuntime ->
+  AgentDecl ->
+  Maybe ResolvedProfile ->
+  Either Capability.CapabilityResolutionError ResolvedCapabilitySet
+resolveCapabilitiesForRun CapabilityRuntime {catalog, authorize} AgentDecl {behavior, capabilityOverlays, delegates, identity} resolvedProfile
+  | not (null capabilityOverlays) && not (null delegates) =
+      Left Capability.CapabilityBehaviorUnsupported {Capability.behaviorKind = "DelegatingSkill"}
+  | otherwise =
+      Capability.resolveCapabilityOverlays
+        catalog
+        authorize
+        Capability.ResolutionSubject
+          { Capability.principal = declared <$> identity,
+            Capability.mode = Capability.Durable,
+            Capability.behavior = behavior,
+            Capability.profile = resolvedProfile
+          }
+        capabilityOverlays
+  where
+    declared IdentityDecl {principal} = principal
 
 runProfiledAgent ::
   AgentRunDeps ->
   RunJob ->
   AgentDecl ->
   Maybe ResolvedProfile ->
+  ResolvedCapabilitySet ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgent deps job decl resolvedProfile =
+runProfiledAgent deps job decl resolvedProfile resolvedOverlays =
   case behaviorEnvForProfile decl resolvedProfile (behaviorEnv deps) of
     Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
-    Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv job decl
+    Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl
 
 behaviorEnvForProfile ::
   AgentDecl ->
@@ -320,10 +383,11 @@ behaviorEnvForProfile _decl _resolvedProfile = Right
 runProfiledAgentWith ::
   AgentRunDeps ->
   BehaviorEnv ->
+  ResolvedCapabilitySet ->
   RunJob ->
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgentWith deps activeBehaviorEnv job decl = do
+runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl = do
   withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
@@ -333,17 +397,18 @@ runProfiledAgentWith deps activeBehaviorEnv job decl = do
     -- kioku refused to open the session. The same command will be refused on
     -- every replay, so there is nothing to retry and the run is over.
     StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
-    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv job decl sid
+    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl sid
 
 -- | The rest of one agent run, once its kioku session is open.
 runSessionedAgent ::
   AgentRunDeps ->
   BehaviorEnv ->
+  ResolvedCapabilitySet ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
+runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
@@ -361,11 +426,25 @@ runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPoli
                   deps
                   (StepName "run-behavior-v2")
                   ( liftIO
-                      ( runBehaviorAttempt
+                      ( runBehaviorAttemptWith
                           (depsRunTimeout deps)
-                          activeBehaviorEnv
-                          decl
-                          BehaviorInput {payload = triggerPayload job, recalled = prior}
+                          do
+                            acquired <-
+                              runBehaviorWithCapabilities
+                                (depsLogger deps)
+                                (capabilities deps)
+                                (capabilityScopeForRun job decl)
+                                resolvedOverlays
+                                activeBehaviorEnv
+                                decl
+                                BehaviorInput {payload = triggerPayload job, recalled = prior}
+                            case acquired of
+                              Left runtimeError ->
+                                throwIO
+                                  ( TransientBehaviorFailure
+                                      (boundedBehaviorDetail (Text.pack (show runtimeError)))
+                                  )
+                              Right behaviorResult -> pure behaviorResult
                       )
                   )
           | otherwise ->
@@ -409,6 +488,35 @@ runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPoli
 
 behaviorRetryPatch :: PatchId
 behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
+
+capabilityScopeForRun :: RunJob -> AgentDecl -> CapabilityScope
+capabilityScopeForRun job decl =
+  CapabilityScope
+    { runId = jobIdempotencyKey job,
+      principal = fromMaybe (agentDeclName decl) (declaredPrincipalId decl),
+      mode = Capability.Durable
+    }
+
+-- | Acquire the exact revisions from a journaled resolution, derive one
+-- callback-local behavior environment, run the behavior, and release every
+-- lease before returning.
+runBehaviorWithCapabilities ::
+  Log.Logger ->
+  CapabilityRuntime ->
+  CapabilityScope ->
+  ResolvedCapabilitySet ->
+  BehaviorEnv ->
+  AgentDecl ->
+  BehaviorInput ->
+  IO (Either CapabilityRuntimeError (Either RunError Value))
+runBehaviorWithCapabilities logger CapabilityRuntime {providers} scope resolvedOverlays baseEnv@BehaviorEnv {tools = baseTools} decl input =
+  withCapabilityOverlays
+    logger
+    providers
+    scope
+    resolvedOverlays
+    baseTools
+    (\registry _active -> runBehavior (withCapabilityTools resolvedOverlays registry baseEnv) decl input)
 
 resolveRequiredProfile ::
   AgentRunDeps ->

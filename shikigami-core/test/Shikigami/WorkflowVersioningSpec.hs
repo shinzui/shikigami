@@ -15,6 +15,7 @@
 -- A change to a rule there should change a case here.
 module Shikigami.WorkflowVersioningSpec (tests) where
 
+import Control.Monad (when)
 import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
@@ -83,6 +84,7 @@ tests =
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
       testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
       testCase "behavior retry patch pins agent and conversation labels per deploy" behaviorRetryLabelsArePinned,
+      testCase "capability resolution is absent in flight and journaled when fresh" capabilityResolutionIsPinned,
       testCase "emitSignal ordinals preserved in flight, labels when fresh" emitSignalSchemeIsPinnedPerInstance
     ]
 
@@ -290,6 +292,66 @@ newRetryShape oldLabel newLabel = do
   step
     (StepName (if useRetrySemantics then newLabel else oldLabel))
     (pure (Right Aeson.Null))
+
+-- | The production capability patch inserts a resolution step before the
+-- session boundary. An instance started by the old deploy takes the real False
+-- branch and never writes that step; a fresh instance under the new patch set
+-- writes it before parking.
+capabilityResolutionIsPinned :: IO ()
+capabilityResolutionIsPinned =
+  withShikigamiMigratedDatabase \connStr ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+      tracer <- noopTracer
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+          preDeploy = defaultWorkflowRunOptions
+          postDeploy = defaultWorkflowRunOptions {activePatches = Set.singleton capabilityResolutionPatch}
+          workflowName = WorkflowName "shikigami.agent-run"
+          parkedId = WorkflowId "capability-resolution-inflight"
+          freshCapabilityId = WorkflowId "capability-resolution-fresh"
+
+      parked <- runAppIO appEnv (runWorkflowWith preDeploy workflowName parkedId oldCapabilityShape)
+      assertEqual "the pre-deploy shape parks before the changed region" (Right Suspended) parked
+      delivered <- runAppIO appEnv (deliverInputTo workflowName parkedId capabilityParkStep ("continue" :: Text))
+      assertEqual "the in-flight instance can resume" (Right True) delivered
+
+      resumed <- runAppIO appEnv (runWorkflowWith postDeploy workflowName parkedId newCapabilityShape)
+      assertEqual "the in-flight instance keeps the old shape" (Right (Completed "old")) resumed
+      oldIndex <- loadStepIndexFor appEnv workflowName parkedId
+      assertEqual
+        "the in-flight instance never writes the inserted resolution step"
+        (Right False)
+        (Map.member "resolve-capability-overlays" <$> oldIndex)
+
+      fresh <- runAppIO appEnv (runWorkflowWith postDeploy workflowName freshCapabilityId newCapabilityShape)
+      assertEqual "the fresh shape resolves before parking" (Right Suspended) fresh
+      freshIndex <- loadStepIndexFor appEnv workflowName freshCapabilityId
+      assertEqual
+        "the fresh instance journals capability resolution"
+        (Right True)
+        (Map.member "resolve-capability-overlays" <$> freshIndex)
+      assertBool
+        "the deployed patch set contains the capability resolution id"
+        (Set.member capabilityResolutionPatch shikigamiActivePatches)
+
+capabilityResolutionPatch :: PatchId
+capabilityResolutionPatch = PatchId "shikigami-capability-overlays-v1"
+
+capabilityParkStep :: StepName
+capabilityParkStep = StepName "capability-resolution-park"
+
+oldCapabilityShape :: Eff (Workflow : AppEffects) Text
+oldCapabilityShape = do
+  (_ :: Maybe Text) <- awaitInput capabilityParkStep
+  pure "old"
+
+newCapabilityShape :: Eff (Workflow : AppEffects) Text
+newCapabilityShape = do
+  useCapabilityResolution <- patch capabilityResolutionPatch
+  when useCapabilityResolution do
+    _ <- step (StepName "resolve-capability-overlays") (pure ("resolved" :: Text))
+    pure ()
+  (_ :: Maybe Text) <- awaitInput capabilityParkStep
+  pure (if useCapabilityResolution then "new" else "old")
 
 -- ── Test B: the emit-signal scheme is pinned per instance ───────────────────
 

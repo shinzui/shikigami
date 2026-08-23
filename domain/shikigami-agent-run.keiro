@@ -50,6 +50,12 @@ workflow AgentRun
     patch shikigami-resolve-profile-v1 {
       step resolve-profile -> ProfileResolution
     }
+    # The operator catalog and authorization decision are resolved once for a
+    # fresh run and journaled as public immutable descriptors. Instances that
+    # began before this patch retain the old shape and acquire no overlays.
+    patch shikigami-capability-overlays-v1 {
+      step resolve-capability-overlays -> CapabilityOverlayResolution
+    }
     step open-session -> SessionId
     step recall -> RecalledLearnings
     step run-behavior -> BehaviorOutput

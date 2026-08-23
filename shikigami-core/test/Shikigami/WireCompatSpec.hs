@@ -32,6 +32,16 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
 import Shikigami.Agent.Workflow (SinkIntent (..), StepResult (..))
+import Shikigami.Capability.Catalog (CapabilityResolutionError)
+import Shikigami.Capability.Overlay
+  ( CapabilityDescriptor (..),
+    CapabilityOperationClass (Observation),
+    CapabilityToolDescriptor (..),
+    ResolvedCapabilitySet,
+    mkCapabilityId,
+    mkCapabilityRevision,
+    mkResolvedCapabilitySet,
+  )
 import Shikigami.Flow.SinkOutbox qualified as FlowOutbox
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
@@ -48,6 +58,7 @@ tests =
     "wire compatibility"
     [ queueTests,
       stepResultTests,
+      capabilityResolutionTests,
       outboxTests,
       deliveryAttemptTests
     ]
@@ -81,6 +92,33 @@ stepResultTests =
         let refused = StepRefused "opening the run's kioku session was refused: SessionInvalidLineage" :: StepResult Text
         decoded <- decodeOrFail @(StepResult Text) (LazyByteString.toStrict (encode refused))
         decoded @?= refused
+    ]
+
+-- | The capability decision is the new journaled policy snapshot. Live
+-- provider registries and leases have no codec; only these public descriptors
+-- cross the durable boundary.
+capabilityResolutionTests :: TestTree
+capabilityResolutionTests =
+  testGroup
+    "capability resolution step values"
+    [ testCase "a successful resolved set has stable journal bytes" do
+        let resolution = Right sampleCapabilityResolution :: Either CapabilityResolutionError ResolvedCapabilitySet
+        assertSameJson
+          "capability resolution"
+          "{\"Right\":[{\"capability\":\"workspace.read\",\"revision\":\"v1\",\"tools\":[{\"name\":\"read\",\"operationClass\":\"Observation\"}]}]}"
+          (encode resolution)
+        decodeOrFail @(Either CapabilityResolutionError ResolvedCapabilitySet) (LazyByteString.toStrict (encode resolution))
+          >>= (@?= resolution)
+    ]
+
+sampleCapabilityResolution :: ResolvedCapabilitySet
+sampleCapabilityResolution =
+  mkResolvedCapabilitySet
+    [ CapabilityDescriptor
+        { capability = either (error . show) id (mkCapabilityId "workspace.read"),
+          revision = either (error . show) id (mkCapabilityRevision "v1"),
+          tools = [CapabilityToolDescriptor {name = "read", operationClass = Observation}]
+        }
     ]
 
 -- ---------------------------------------------------------------------------

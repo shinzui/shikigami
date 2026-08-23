@@ -1,11 +1,13 @@
 module Shikigami.AgentWorkflowSpec (tests) where
 
+import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
 import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (forM_, void, when)
-import Data.Aeson (Result (..), Value, fromJSON, object, toJSON, (.=))
+import Data.Aeson (Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
+import Data.List (elemIndex)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -15,6 +17,7 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
+import GHC.Generics (Generic)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
@@ -47,7 +50,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -73,7 +76,10 @@ import Shikigami.Attestation.Profile
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
-import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
+import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv, newBehaviorEnvWithTraceSink)
+import Shikigami.Capability.Catalog qualified as CapabilityCatalog
+import Shikigami.Capability.Overlay qualified as CapabilityOverlay
+import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
@@ -87,6 +93,9 @@ import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (
 import Shikigami.Sink.GrantStore (revokeGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Tool (SomeTool (..), mkTool)
+import Streamly.Data.Fold qualified as Fold
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -115,12 +124,157 @@ tests =
             oldIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey oldJob)) 0)
             assertEqual "pre-patch journal keeps the old behavior label" (Right True) (Map.member "run-behavior" <$> oldIndex)
             assertEqual "pre-patch journal never writes v2" (Right False) (Map.member "run-behavior-v2" <$> oldIndex)
+            assertEqual "pre-patch journal never resolves capability overlays" (Right False) (Map.member "resolve-capability-overlays" <$> oldIndex)
 
             freshOutcome <- runAgentRunWorkflow deps freshJob
             assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
             freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey freshJob)) 0)
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
-            assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex),
+            assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
+            assertEqual "fresh journal resolves even the empty overlay set" (Right True) (Map.member "resolve-capability-overlays" <$> freshIndex),
+      testCase "an authorized overlay is acquired after recall and released before later lifecycle work" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            events <- newIORef ([] :: [Text])
+            active <- newIORef False
+            tracer <- noopTracer
+            let traceSink =
+                  TraceSink
+                    ( Fold.drainMapM \case
+                        CallStarted {} -> recordCapabilityEvent events "model"
+                        _ -> pure ()
+                    )
+            behaviorEnv <- newBehaviorEnvWithTraceSink (Just traceSink)
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) [KawaDigest {subjectType = "overlay", verb = "overlay.read"}]
+                hooks =
+                  AgentRunHooks
+                    { beforeStepBody = \stepName -> recordCapabilityEvent events ("before:" <> unStepName stepName),
+                      afterStepBody = \stepName -> recordCapabilityEvent events ("after:" <> unStepName stepName)
+                    }
+                runtime =
+                  capabilityRuntime
+                    [workspaceReadV1]
+                    [trackingCapabilityProvider events active "v1" workspaceReadV1 (Right ())]
+                    allowCapability
+                approvalFor sid =
+                  ApprovalEnv
+                    { currentSession = sid,
+                      requiresApproval = \_ _ _ -> do
+                        leaseIsActive <- readIORef active
+                        when leaseIsActive (ioError (userError "overlay lease survived into sink approval"))
+                        recordCapabilityEvent events "sink-boundary"
+                        pure ApprovalNotRequired,
+                      recordPark = \_ _ _ -> pure (),
+                      postAsk = \_ _ _ -> pure ()
+                    }
+                deps =
+                  (testDepsWithAgents appEnv behaviorEnv hooks [declaration])
+                    { capabilities = runtime,
+                      approval = approvalFor
+                    }
+                runJob = capabilityJob "overlay-lifecycle" "overlay-lifecycle:run"
+
+            result <- runAgentRunWorkflow deps runJob
+            assertBool ("authorized overlay run completes: " <> show result) (isCompleted result)
+            observed <- readIORef events
+            assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "sink-boundary", "before:record", "before:complete"]
+            assertEqual "the lease is gone when the workflow returns" False =<< readIORef active,
+      testCase "a retry reacquires the journaled revision while a new run selects the new catalog revision" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            events <- newIORef ([] :: [Text])
+            active <- newIORef False
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                declaration = capabilityDecl "overlay-revision" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) []
+                firstJob = capabilityJob "overlay-revision" "overlay-revision:resume-v1"
+                freshJob = capabilityJob "overlay-revision" "overlay-revision:fresh-v2"
+                unavailableV1 = capabilityRuntime [workspaceReadV1] [] allowCapability
+                v1Provider = trackingCapabilityProvider events active "v1" workspaceReadV1 (Right ())
+                v2Provider = trackingCapabilityProvider events active "v2" workspaceReadV2 (Right ())
+                replacementRuntime = capabilityRuntime [workspaceReadV2] [v1Provider, v2Provider] allowCapability
+                firstDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = unavailableV1}
+                resumedDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = replacementRuntime}
+
+            firstAttempt <- try @TransientBehaviorFailure (runAgentRunWorkflow firstDeps firstJob)
+            case firstAttempt of
+              Left _ -> pure ()
+              Right outcome -> assertFailure ("missing v1 provider should be transient, got " <> show outcome)
+            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey firstJob)) 0)
+            assertEqual "v1 resolution is durable before acquisition" (Right True) (Map.member "resolve-capability-overlays" <$> afterFailure)
+            assertEqual "the failed attempt writes no behavior result" (Right False) (Map.member "run-behavior-v2" <$> afterFailure)
+            loadCapabilityResolution appEnv firstJob >>= assertEqual "the journal pins v1" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
+
+            resumed <- runAgentRunWorkflow resumedDeps firstJob
+            assertBool ("restoring v1 lets the same run finish: " <> show resumed) (isCompleted resumed)
+            loadCapabilityResolution appEnv firstJob >>= assertEqual "catalog replacement cannot move the resumed run" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
+
+            fresh <- runAgentRunWorkflow resumedDeps freshJob
+            assertBool ("a fresh run selects v2: " <> show fresh) (isCompleted fresh)
+            loadCapabilityResolution appEnv freshJob >>= assertEqual "the fresh journal pins v2" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV2]))
+            readIORef events >>= assertEqual "only the exact pinned provider is acquired per run" ["acquire:v1", "release:v1", "acquire:v2", "release:v2"],
+      testCase "capability resolution refusals are permanent before open-session" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            events <- newIORef ([] :: [Text])
+            active <- newIORef False
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                unknownId = expectCapabilityRight (CapabilityOverlay.mkCapabilityId "workspace.unknown")
+                mutation = capabilityDescriptor "workspace.write" "v1" CapabilityOverlay.IdempotentMutation
+                provider = trackingCapabilityProvider events active "unused" workspaceReadV1 (Right ())
+                allowedRuntime = capabilityRuntime [workspaceReadV1] [provider] allowCapability
+                deniedRuntime =
+                  capabilityRuntime
+                    [workspaceReadV1]
+                    [provider]
+                    denyCapability
+                mutationRuntime = capabilityRuntime [mutation] [] allowCapability
+                cases =
+                  [ ("unknown", capabilityDecl "overlay-unknown" (Skill {path = "unused"}) [unknownId] (Just overlayIdentity) [], CapabilityProvider.emptyCapabilityRuntime),
+                    ("duplicate", capabilityDecl "overlay-duplicate" (Skill {path = "unused"}) [workspaceReadId, workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
+                    ("denied", capabilityDecl "overlay-denied" (Skill {path = "unused"}) [workspaceReadId] (Just overlayIdentity) [], deniedRuntime),
+                    ("missing-identity", capabilityDecl "overlay-no-identity" (Skill {path = "unused"}) [workspaceReadId] Nothing [], allowedRuntime),
+                    ("non-skill", capabilityDecl "overlay-non-skill" (ShikumiProgram {task = "noop-summary", preferEnrichment = False, grounding = Nothing, enabledBy = Nothing}) [workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
+                    ("mutation", capabilityDecl "overlay-mutation" (Skill {path = "unused"}) [descriptorCapability mutation] (Just overlayIdentity) [], mutationRuntime)
+                  ]
+            forM_ cases \(label, declaration, runtime) -> do
+              let runJob = capabilityJob (agentDeclNameForTest declaration) ("overlay-refusal:" <> label)
+                  deps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = runtime}
+              result <- runAgentRunWorkflow deps runJob
+              case result of
+                Right (Completed (Left (PermanentAgentRunFailure _))) -> pure ()
+                other -> assertFailure (Text.unpack label <> " should be a permanent refusal, got " <> show other)
+              stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+              assertEqual (Text.unpack label <> " journals the resolution refusal") (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
+              assertEqual (Text.unpack label <> " never opens a session") (Right False) (Map.member "open-session" <$> stepIndex)
+            assertEqual "no permanent refusal reaches provider acquisition" [] =<< readIORef events,
+      testCase "a release failure is transient and leaves the behavior result unjournaled" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            events <- newIORef ([] :: [Text])
+            active <- newIORef False
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                declaration = capabilityDecl "overlay-release" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) []
+                provider = trackingCapabilityProvider events active "v1" workspaceReadV1 (Left (CapabilityProvider.CapabilityReleaseError "release failed"))
+                runtime = capabilityRuntime [workspaceReadV1] [provider] allowCapability
+                deps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = runtime}
+                runJob = capabilityJob "overlay-release" "overlay-release:transient"
+
+            attempted <- try @TransientBehaviorFailure (runAgentRunWorkflow deps runJob)
+            case attempted of
+              Left _ -> pure ()
+              Right outcome -> assertFailure ("release failure should escape transiently, got " <> show outcome)
+            assertEqual "release was still attempted" ["acquire:v1", "release:v1"] =<< readIORef events
+            assertEqual "the failed release leaves no live lease" False =<< readIORef active
+            stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+            assertEqual "resolution remains journaled" (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
+            assertEqual "behavior result remains retryable" (Right False) (Map.member "run-behavior-v2" <$> stepIndex),
       testCase "transient v2 failure leaves no value and a later advance succeeds" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
@@ -675,6 +829,23 @@ tests =
                 stepIndex <- conversationStepKeys appEnv permanentConversationMessage 0
                 assertBool "conversation journals the static v2 label" (Map.member "run-behavior-v2" stepIndex)
                 assertBool "conversation never journals the legacy label" (not (Map.member "run-behavior" stepIndex)),
+          testCase "conversation execution fails closed on a declared overlay" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    declaration = capabilityDecl "conversation-overlay" (Skill {path = "unused"}) [workspaceReadId] (Just overlayIdentity) []
+                    env = testConversationEnv appEnv behaviorEnv [declaration]
+                    message = permanentConversationMessage
+
+                failed <- Conversation.runConversationTurn env declaration message
+                case failed of
+                  Left refusal ->
+                    assertBool
+                      ("conversation refusal should name the overlay mismatch: " <> show refusal)
+                      ("capability overlay mismatch" `Text.isInfixOf` Conversation.conversationTurnFailureDetail refusal)
+                  Right result -> assertFailure ("conversation must not ignore the overlay, got " <> show result),
           -- Session resolution used to be a linear scan over every session the
           -- agent had ever had, filtered on subjectRef. It is now a keyed read
           -- of shikigami.conversation_sessions, confirmed against kioku. The
@@ -1414,6 +1585,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
@@ -1440,6 +1612,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
@@ -1718,6 +1891,180 @@ loadProfileResolution appEnv runJob = do
       Error err -> Left ("cannot decode resolve-profile: " <> err)
     first show resolution
 
+loadCapabilityResolution :: AppEnv -> RunJob -> IO (Either String CapabilityOverlay.ResolvedCapabilitySet)
+loadCapabilityResolution appEnv runJob = do
+  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+  pure do
+    journal <- first show result
+    encoded <- maybe (Left "resolve-capability-overlays was not journaled") Right (Map.lookup "resolve-capability-overlays" journal)
+    resolution <- case fromJSON encoded :: Result (Either CapabilityCatalog.CapabilityResolutionError CapabilityOverlay.ResolvedCapabilitySet) of
+      Success value -> Right value
+      Error err -> Left ("cannot decode resolve-capability-overlays: " <> err)
+    first show resolution
+
+data CapabilityTestInput = CapabilityTestInput {value :: !Text}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToSchema, FromModel)
+
+instance Validatable CapabilityTestInput
+
+data CapabilityTestOutput = CapabilityTestOutput {answer :: !Text}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON)
+
+capabilityRuntime ::
+  [CapabilityOverlay.CapabilityDescriptor] ->
+  [CapabilityProvider.CapabilityProvider] ->
+  ( CapabilityCatalog.ResolutionSubject ->
+    CapabilityOverlay.CapabilityDescriptor ->
+    Either CapabilityCatalog.CapabilityResolutionError ()
+  ) ->
+  CapabilityProvider.CapabilityRuntime
+capabilityRuntime descriptors providers authorize =
+  CapabilityProvider.CapabilityRuntime
+    { CapabilityProvider.catalog = expectCapabilityRight (CapabilityCatalog.mkCapabilityCatalog descriptors),
+      CapabilityProvider.providers = expectCapabilityRight (CapabilityProvider.mkCapabilityProviderRegistry providers),
+      CapabilityProvider.authorize = authorize
+    }
+
+allowCapability ::
+  CapabilityCatalog.ResolutionSubject ->
+  CapabilityOverlay.CapabilityDescriptor ->
+  Either CapabilityCatalog.CapabilityResolutionError ()
+allowCapability _ _ = Right ()
+
+denyCapability ::
+  CapabilityCatalog.ResolutionSubject ->
+  CapabilityOverlay.CapabilityDescriptor ->
+  Either CapabilityCatalog.CapabilityResolutionError ()
+denyCapability _ CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.capability = capabilityId} =
+  Left
+    CapabilityCatalog.CapabilityAuthorizationDenied
+      { CapabilityCatalog.capability = capabilityId,
+        CapabilityCatalog.reason = "policy denied"
+      }
+
+trackingCapabilityProvider ::
+  IORef [Text] ->
+  IORef Bool ->
+  Text ->
+  CapabilityOverlay.CapabilityDescriptor ->
+  Either CapabilityProvider.CapabilityReleaseError () ->
+  CapabilityProvider.CapabilityProvider
+trackingCapabilityProvider events active label descriptor releaseResult =
+  CapabilityProvider.CapabilityProvider
+    { CapabilityProvider.descriptor = descriptor,
+      CapabilityProvider.acquire = \_scope -> do
+        writeIORef active True
+        recordCapabilityEvent events ("acquire:" <> label)
+        pure
+          ( Right
+              CapabilityProvider.CapabilityLease
+                { CapabilityProvider.descriptor = descriptor,
+                  CapabilityProvider.tools = [capabilityTestTool (descriptorToolName descriptor)],
+                  CapabilityProvider.release = do
+                    recordCapabilityEvent events ("release:" <> label)
+                    writeIORef active False
+                    pure releaseResult
+                }
+          )
+    }
+
+capabilityTestTool :: Text -> SomeTool
+capabilityTestTool toolName =
+  SomeTool
+    ( mkTool toolName "Return the supplied value." \CapabilityTestInput {value} ->
+        pure CapabilityTestOutput {answer = value}
+    )
+
+descriptorToolName :: CapabilityOverlay.CapabilityDescriptor -> Text
+descriptorToolName CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.tools} =
+  case tools of
+    CapabilityOverlay.CapabilityToolDescriptor {CapabilityOverlay.name} : _ -> name
+    [] -> error "test capability descriptor must declare one tool"
+
+recordCapabilityEvent :: IORef [Text] -> Text -> IO ()
+recordCapabilityEvent events event = modifyIORef' events (<> [event])
+
+assertCapabilityEventOrder :: [Text] -> [Text] -> IO ()
+assertCapabilityEventOrder observed expected = do
+  indices <-
+    traverse
+      (\event -> maybe (assertFailure ("missing capability event " <> Text.unpack event <> " in " <> show observed)) pure (elemIndex event observed))
+      expected
+  assertBool
+    ("capability events were out of order: " <> show observed)
+    (and (zipWith (<) indices (drop 1 indices)))
+
+workspaceReadId :: CapabilityOverlay.CapabilityId
+workspaceReadId = expectCapabilityRight (CapabilityOverlay.mkCapabilityId "workspace.read")
+
+workspaceReadV1 :: CapabilityOverlay.CapabilityDescriptor
+workspaceReadV1 = capabilityDescriptor "workspace.read" "v1" CapabilityOverlay.Observation
+
+workspaceReadV2 :: CapabilityOverlay.CapabilityDescriptor
+workspaceReadV2 = capabilityDescriptor "workspace.read" "v2" CapabilityOverlay.Observation
+
+capabilityDescriptor :: Text -> Text -> CapabilityOverlay.CapabilityOperationClass -> CapabilityOverlay.CapabilityDescriptor
+capabilityDescriptor capabilityName revisionName operationClass =
+  CapabilityOverlay.CapabilityDescriptor
+    { CapabilityOverlay.capability = expectCapabilityRight (CapabilityOverlay.mkCapabilityId capabilityName),
+      CapabilityOverlay.revision = expectCapabilityRight (CapabilityOverlay.mkCapabilityRevision revisionName),
+      CapabilityOverlay.tools =
+        [ CapabilityOverlay.CapabilityToolDescriptor
+            { CapabilityOverlay.name = "read",
+              CapabilityOverlay.operationClass = operationClass
+            }
+        ]
+    }
+
+descriptorCapability :: CapabilityOverlay.CapabilityDescriptor -> CapabilityOverlay.CapabilityId
+descriptorCapability CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.capability} = capability
+
+overlayIdentity :: IdentityDecl
+overlayIdentity = IdentityDecl {principal = "principal_overlay_test"}
+
+capabilityDecl :: Text -> Behavior -> [CapabilityOverlay.CapabilityId] -> Maybe IdentityDecl -> [Sink] -> AgentDecl
+capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
+  AgentDecl
+    { name = agentName,
+      description = "capability overlay workflow test agent",
+      trigger = Event {eventType = "test"},
+      behavior = agentBehavior,
+      sinks = agentSinks,
+      delegates = [],
+      delegationBudget = Nothing,
+      sanctionedProfile = Nothing,
+      capabilityOverlays = overlays,
+      identity = agentIdentity,
+      memory = defaultMemoryPolicy,
+      enabled = True
+    }
+
+agentDeclNameForTest :: AgentDecl -> Text
+agentDeclNameForTest AgentDecl {name = agentName} = agentName
+
+capabilityJob :: Text -> Text -> RunJob
+capabilityJob agentName key =
+  RunJob
+    { agentName,
+      triggerKind = TriggeredByEvent,
+      routeKind = AgentWorkflowRoute,
+      occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
+      triggerPayload = object [],
+      idempotencyKey = key,
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing,
+      lineage = [],
+      delegationBudgetId = Nothing
+    }
+
+expectCapabilityRight :: (Show err) => Either err value -> value
+expectCapabilityRight = \case
+  Left err -> error (show err)
+  Right value -> value
+
 expectedLifecycleSteps :: Set.Set Text
 expectedLifecycleSteps =
   Set.fromList
@@ -1725,6 +2072,8 @@ expectedLifecycleSteps =
       "lookup-agent",
       "patch:shikigami-resolve-profile-v1",
       "resolve-profile",
+      "patch:shikigami-capability-overlays-v1",
+      "resolve-capability-overlays",
       "open-session",
       "recall",
       "patch:shikigami-behavior-retry-v1",

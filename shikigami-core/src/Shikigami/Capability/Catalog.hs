@@ -7,6 +7,7 @@ module Shikigami.Capability.Catalog
   ( CapabilityCatalog,
     CapabilityCatalogError (..),
     mkCapabilityCatalog,
+    emptyCapabilityCatalog,
     lookupCapability,
     listCapabilities,
     ExecutionMode (..),
@@ -23,6 +24,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Shikigami.Agent.Decl (Behavior (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Capability.Overlay
 import Shikigami.Prelude
 
@@ -45,6 +47,9 @@ mkCapabilityCatalog descriptors = CapabilityCatalog <$> foldl' addDescriptor (Ri
       case Map.lookup capability catalog of
         Just _ -> Left DuplicateCapability {capability}
         Nothing -> Right (Map.insert capability descriptor catalog)
+
+emptyCapabilityCatalog :: CapabilityCatalog
+emptyCapabilityCatalog = CapabilityCatalog Map.empty
 
 validateDescriptor :: CapabilityDescriptor -> Either CapabilityCatalogError ()
 validateDescriptor CapabilityDescriptor {capability, tools}
@@ -74,7 +79,11 @@ data ExecutionMode = Durable | OneOff
 data ResolutionSubject = ResolutionSubject
   { principal :: !(Maybe Text),
     mode :: !ExecutionMode,
-    behavior :: !Behavior
+    behavior :: !Behavior,
+    -- | The already journaled sanctioned-profile snapshot, when the agent
+    -- requested one. Capability policy receives this value rather than reading
+    -- mutable profile state independently.
+    profile :: !(Maybe ResolvedProfile)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

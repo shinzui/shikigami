@@ -40,7 +40,7 @@ awaitLabels :: [Text]
 awaitLabels = ["await-ack"]
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList [PatchId "shikigami-resolve-profile-v1", PatchId "shikigami-behavior-retry-v1", PatchId "shikigami-flow-memory-steps-v1", PatchId "shikigami-emit-signal-labels-v1"]
+declaredPatches = Set.fromList [PatchId "shikigami-resolve-profile-v1", PatchId "shikigami-capability-overlays-v1", PatchId "shikigami-behavior-retry-v1", PatchId "shikigami-flow-memory-steps-v1", PatchId "shikigami-emit-signal-labels-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

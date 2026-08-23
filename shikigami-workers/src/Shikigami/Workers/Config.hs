@@ -46,6 +46,7 @@ import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
@@ -161,6 +162,7 @@ agentRunDeps env =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv = appEnv env,
       AgentWorkflow.behaviorEnv = behaviorEnv env,
+      AgentWorkflow.capabilities = emptyCapabilityRuntime,
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,
       AgentWorkflow.kawa = kawa env,

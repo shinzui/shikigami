@@ -61,7 +61,7 @@ tests =
         listCapabilities catalog @?= [repositorySearchDescriptor, workspaceReadDescriptor],
       testCase "empty resolution needs no identity, behavior compatibility, or policy call" do
         let catalog = expectRight (mkCapabilityCatalog [])
-            incompatible = ResolutionSubject {principal = Nothing, mode = Durable, behavior = Deterministic {rule = "none", params = Map.empty}}
+            incompatible = ResolutionSubject {principal = Nothing, mode = Durable, behavior = Deterministic {rule = "none", params = Map.empty}, profile = Nothing}
         resolveCapabilityOverlays catalog (\_ _ -> error "policy must not run") incompatible []
           @?= Right emptyResolvedCapabilitySet,
       testCase "resolves authorized Skill requests to a canonical snapshot" do
@@ -169,7 +169,8 @@ durableSkillSubject =
   ResolutionSubject
     { principal = Just "principal_capability_proof",
       mode = Durable,
-      behavior = Skill {path = "agents/skills/triage-note"}
+      behavior = Skill {path = "agents/skills/triage-note"},
+      profile = Nothing
     }
 
 allow :: ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()

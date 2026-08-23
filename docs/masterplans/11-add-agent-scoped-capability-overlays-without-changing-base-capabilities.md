@@ -91,7 +91,7 @@ from `mori://shinzui/baikai/packages/baikai` and
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | Complete |
 | EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | Complete |
-| EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | Not Started |
+| EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | In Progress |
 | EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
