@@ -81,6 +81,7 @@ library
     Shikigami.Program.Registry
     Shikigami.Repository
     Shikigami.Router.Catalog
+    Shikigami.Router.Decision
     Shikigami.Router.Declaration
     Shikigami.RunEvidence.Conformance
     Shikigami.Sink
@@ -212,6 +213,7 @@ test-suite shikigami-core-test
     Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.RouterCatalogSpec
+    Shikigami.RouterDecisionSpec
     Shikigami.RouterDeclarationSpec
     Shikigami.RunEvidenceSpec
     Shikigami.SinkAuthSpec

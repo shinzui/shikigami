@@ -44,8 +44,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-23T19:00:21Z) Reconciled durable routing with the imminent first release:
   direct static route labels become the reported v1 baseline under ADR 0027, with no router
   patch id or legacy branch for an empty pre-release population.
-- [ ] Prerequisites: child plans 40 and 41 have landed.
-- [ ] M1: define typed route outcomes/selections, strict JSON decoding, and policy validation.
+- [x] (2026-08-23T19:44:44Z) Prerequisites: child plans 40 and 41 have landed.
+- [x] (2026-08-23T19:52:47Z) M1: Defined typed route outcomes/selections, strict JSON
+  decoding, and catalog/policy validation; all six focused decision tests pass.
 - [ ] M2: add static hyphenated catalog and decision operations directly to the clean v1 workflow baseline, with no router patch or legacy branch.
 - [ ] M2: implement a replay-safe Routing Flow capability, a production evaluator seam, and a deterministic test evaluator.
 - [ ] M3: preflight every selection, atomically reserve the complete plan-35 batch, and delegate only through plan 35.

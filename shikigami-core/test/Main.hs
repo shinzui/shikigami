@@ -43,6 +43,7 @@ import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
+import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
 import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
 import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
 import Shikigami.Sink
@@ -99,6 +100,7 @@ main =
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,
           RouterCatalogSpec.tests,
+          RouterDecisionSpec.tests,
           RouterDeclarationSpec.tests,
           RunEvidenceSpec.tests,
           SinkDeliverySpec.tests,
