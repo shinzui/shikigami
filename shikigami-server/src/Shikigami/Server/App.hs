@@ -23,16 +23,18 @@ module Shikigami.Server.App
     shikigamiServer,
     problemErrorFormatters,
     methodNotAllowedProblem,
+    exceptionBoundary,
     problemResponse,
   )
 where
 
+import Control.Exception (SomeAsyncException, SomeException, catch, fromException, throwIO)
 import Data.Aeson (encode)
 import Data.ByteString (ByteString)
 import Data.CaseInsensitive qualified as CI
 import Data.Text.Encoding qualified as TE
 import Network.HTTP.Types (Status (..), hContentLength, hContentType)
-import Network.Wai (Application, Middleware, Response, responseHeaders, responseLBS, responseStatus)
+import Network.Wai (Application, Middleware, Response, ResponseReceived, responseHeaders, responseLBS, responseStatus)
 import Servant.Health (healthServer)
 import Servant.Server
   ( Context (EmptyContext, (:.)),
@@ -112,6 +114,26 @@ methodNotAllowedProblem app request respond =
       else respond response
   where
     preservedHeaders = filter (\(headerName, _) -> headerName /= hContentType && headerName /= hContentLength)
+
+-- | Turn only escaped synchronous failures into the public 500 shape.
+--
+-- Asynchronous exceptions are process control: request cancellation, Warp
+-- shutdown, and executable shutdown must continue unwinding rather than being
+-- mislabeled as an application response.
+exceptionBoundary :: Middleware
+exceptionBoundary app request respond =
+  app request respond `catch` handleException
+  where
+    handleException :: SomeException -> IO ResponseReceived
+    handleException exception =
+      case fromException exception :: Maybe SomeAsyncException of
+        Just _ -> throwIO exception
+        Nothing ->
+          respond
+            ( problemResponse
+                Internal
+                "The server could not complete the request."
+            )
 
 -- | An RFC 7807 response, built the one way error bodies are ever built.
 problemResponse :: ProblemCode -> Text -> Response

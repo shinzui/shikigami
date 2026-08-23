@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Network.Wai (Application)
+import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
 import Shikigami.App.Config (defaultAppConfig)
@@ -11,6 +12,8 @@ import Shikigami.Server.CommandSpec qualified as CommandSpec
 import Shikigami.Server.DispatchSpec qualified as DispatchSpec
 import Shikigami.Server.KawaStubSpec qualified as KawaStubSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
+import Shikigami.Server.RequestLogSpec qualified as RequestLogSpec
+import Shikigami.Server.TelemetrySpec qualified as TelemetrySpec
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -23,7 +26,9 @@ main =
           CommandSpec.tests,
           DispatchSpec.tests,
           KawaStubSpec.tests,
-          ProblemSpec.tests
+          ProblemSpec.tests,
+          RequestLogSpec.tests,
+          TelemetrySpec.tests
         ]
     )
 
@@ -32,5 +37,7 @@ main =
 -- The conformance kit flips liveness and readiness independently, which is what
 -- proves the two same-typed routes were not wired to each other's checks.
 mkTestApplication :: ProbeCheck -> ProbeCheck -> IO Application
-mkTestApplication livenessCheck readinessCheck =
-  pure (shikigamiApplication (newServerEnvWith defaultAppConfig livenessCheck readinessCheck))
+mkTestApplication livenessCheck readinessCheck = do
+  provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
+  let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
+  pure (shikigamiApplication (newServerEnvWith tracer defaultAppConfig livenessCheck readinessCheck))

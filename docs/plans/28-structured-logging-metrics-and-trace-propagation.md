@@ -17,12 +17,10 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 ## Purpose / Big Picture
 
 Milestone 1 made long-running Shikigami application logs structured JSON and exposed per-sink
-results, but the runtime is still operationally incomplete. Every metrics hook the substrate
-exposes is filled with `Nothing`, so nothing counts runs, queue depth, outbox lag, or consumer
-throughput. Tracing exists only inside the worker command; the scheduler and both consumers
-run a no-op tracer, and the trace dies at the outbox: the `sink.dispatch` producer span is never
-connected to the asynchronous HTTP publish that actually delivers the sink. The HTTP server
-also lacks bounded, trace-correlated production request logs and bracketed provider shutdown.
+results. At the start of Milestone 2, every metrics hook the substrate exposed was filled with
+`Nothing`, tracing existed only inside the worker command, the trace died at the outbox, and
+the HTTP server lacked bounded trace-correlated request logs and bracketed provider shutdown.
+Milestones 2-4 close those gaps; the completed behavior and proof are recorded below.
 
 After this plan, every process emits one structured JSON object per log line (parse them with
 `jq`), the standard `OTEL_EXPORTER_OTLP_ENDPOINT` variable turns on both traces and metrics
@@ -66,9 +64,10 @@ the HTTP POST to the sink endpoint.
       and `sink.result` appeared with `outcome=delivered`. Transcript in Outcomes.
 - [ ] M1 (remaining): one-shot CLI commands still write human-readable text. This is a
       deliberate scope decision, not an omission — see the Decision Log.
-- [ ] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
+- [x] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
       non-JSON output left on a worker's stderr, and it appears on abrupt termination. See
-      Surprises & Discoveries.
+      Surprises & Discoveries. Supported SIGINT/SIGTERM now unwind linked loops without the
+      dump. Done 2026-08-23.
 - [x] M2 (provider proof): a `Meter` built from the hs-opentelemetry 1.0.0.0 SDK exports all
       seven Shikigami instruments on provider force-flush. Done 2026-08-23.
 - [x] M2: `Shikigami.Telemetry.Metrics` written (`ShikigamiMetrics` record +
@@ -86,8 +85,11 @@ the HTTP POST to the sink endpoint.
       and the outbound HTTP POST carries a `traceparent` header through plan 22's
       `postJSONWithHeaders`; Kawa, Kizashi, Rei, and Danwa recording stubs all prove the wire
       header. Done 2026-08-23.
-- [ ] M4: bracket tracer/meter/exporter providers through graceful shutdown and flush;
-      bounded HTTP request logging runs inside OTel, excludes health paths, and records no bodies/query/auth/cookies/arbitrary headers.
+- [x] M4: server tracer/meter/exporter providers bracket the Warp listener and force-flush
+      before shutdown; Warp drains after SIGINT/SIGTERM; bounded HTTP request logging runs
+      inside OTel, excludes exact health paths, and records no bodies/query/auth/cookies/
+      arbitrary headers. All four worker executables cleanly unwind linked loops on the same
+      supported signals without consuming genuine loop failures. Done 2026-08-23.
 
 
 ## Surprises & Discoveries
@@ -241,6 +243,15 @@ PostgreSQL clusters concurrently and a dev cluster was running at the same time,
 most likely cause. Noted rather than resolved: it is not attributable to this plan's changes,
 and it should be watched for.
 
+**The released WAI instrumentation records more caller data than the request-log contract
+allows.** Its old semantic-convention path records `http.target` with the raw query and the
+stable path records `url.query`; both paths also retain the complete user agent. Production
+now wraps the middleware with `boundedTelemetryMiddleware`: OTel sees a query-free request
+with the user-agent removed, while the application receives its original query and headers
+plus OTel's request-context vault. The request log independently retains only the first 256
+Unicode scalar values of the user agent. The focused test proves both application restoration
+and absence of the planted query secret from exported spans.
+
 
 ## Decision Log
 
@@ -260,6 +271,14 @@ and it should be watched for.
   telemetry setting is declared through plan 37's Settei config.
   Rationale: re-parsing the standard SDK surface creates divergent precedence/behavior.
   Date: 2026-07-22
+
+- Decision: Give OpenTelemetry's WAI middleware a query-free request with the user-agent
+  removed, then restore the original request for the inner application.
+  Rationale: hs-opentelemetry-instrumentation-wai 1.0.0.0 records raw query and unbounded
+  user-agent attributes under both supported semantic-convention modes. Trace propagation,
+  host data, and request-local context remain intact without retaining those caller-controlled
+  values.
+  Date: 2026-08-23
 
 - Decision: Keep provider/exporter construction in the `shikigami-workers` and
   `shikigami-server` composition roots; put only instruments and propagation helpers in
@@ -463,9 +482,10 @@ across both lines is the join a later plan's audit record needs.
 Tests: `cabal test all` green — 157 in `shikigami-core-test` (15 of them new, in
 `Shikigami.LogSpec`), plus 21 workers, 20 server, 15 api, 3 client, 3+2 migrations.
 
-**What remains open, and why.** One-shot CLI commands still print human-readable text (a scope
-decision, below). The GHC runtime's crash dump on abrupt shutdown is still non-JSON, and belongs
-to Milestone 4. keiro's own log lines are not convertible from this repository.
+**What remained open after M1.** One-shot CLI commands still print human-readable text (a scope
+decision, below). The GHC runtime crash dump on worker interruption was deferred and is now
+resolved by Milestone 4's supported signal path. keiro's own log lines are not convertible
+from this repository.
 
 **Lesson for milestones 2 through 4.** The paths and dependency assumptions needed a fresh
 audit after the package split. That audit and re-pointing were completed on 2026-08-23 before
@@ -509,6 +529,32 @@ outgoing header to the `sink.publish` span id, prove invalid-context isolation/r
 record the header at Kawa, Kizashi, Rei, and Danwa stubs. The `traceparent` pattern runs six
 tests successfully.
 
+### Milestone 4 — complete 2026-08-23
+
+`Shikigami.Server.Telemetry` now owns the server tracer and meter providers for exactly the
+Warp listener lifetime, preserves the no-endpoint no-op branch, installs W3C propagation in
+that branch, and force-flushes both signals before provider shutdown. Warp's native shutdown
+hook closes the listener on SIGINT or SIGTERM, drains in-flight requests for up to 30 seconds,
+then returns through the provider bracket. The same tracer is present in `ServerEnv` for
+application dependencies.
+
+`Shikigami.Server.RequestLog` emits one complete JSON write per included request with only UTC
+time, method, raw path, numeric status, monotonic duration, request-span ids, and an optional
+256-scalar user agent plus truncation marker. Exact liveness/readiness paths emit nothing.
+`exceptionBoundary` renders escaped synchronous failures through the existing RFC 7807
+`Internal` response while rethrowing asynchronous exceptions, so the logger observes the real
+500 status. The OTel request view additionally removes raw query and user-agent span data and
+restores the original request before dispatch.
+
+All four worker executables install a typed graceful-shutdown boundary. SIGINT/SIGTERM unwind
+telemetry and store brackets cleanly; `LoopExited` and other faults still reach `main` and keep
+the fail-fast supervision contract. Focused tests prove safe request fields and secret
+exclusion, incoming trace correlation, health exclusion, 500 ordering, query exclusion from
+spans, queued span/metric export on release, and a clean subprocess exit while linked loops
+are running. `cabal build all`, `just keiro-gate`, and `cabal test all` pass; the final test
+run covers 650 tests across conformance and all seven packages (including 460 core, 34 server,
+and 81 worker tests).
+
 
 ## Context and Orientation
 
@@ -541,18 +587,19 @@ durable-workflow engine and transactional outbox. *PGMQ*
 hs-opentelemetry 1.0.0.0, all verified against their authoritative registry versions and
 upstream release tags on 2026-08-23.
 
-Logging is already implemented. `Shikigami.Log` emits JSON Lines and
+Logging is implemented. `Shikigami.Log` emits JSON Lines and
 `Shikigami.Log.Correlation` supplies durable run/call identifiers. Runtime composition roots
 construct one logger, and worker loops, consumers, workflows, behavior providers, and sinks
-use it. The remaining logging work is production HTTP request logging and graceful shutdown.
+use it. Production HTTP request logging and graceful shutdown are now implemented in the
+server and worker composition roots.
 
 Metrics and worker tracing are wired. `Shikigami.Telemetry.Metrics` owns provider-free
 instruments; the workers composition roots bracket providers and populate `AppEnv`, workflow
 options, outbox/timer/scheduler options, counters, and the supervised sampler. Trace context now
 crosses both sink-intent producer paths and the durable outbox into `sink.publish`, whose child
-context is propagated by Kawa, Kizashi, Rei, and Danwa. The remaining telemetry surface is the
-server provider lifecycle, safe request middleware, and supported graceful process shutdown in
-M4.
+context is propagated by Kawa, Kizashi, Rei, and Danwa. The server now owns the matching
+provider lifecycle, bounded trace-correlated request middleware, and graceful listener drain;
+worker signals unwind the existing provider brackets cleanly.
 
 Durable workflow constraints apply to the changes in `Shikigami.Agent` and `Shikigami.Flow`.
 Capturing current trace context and threading process telemetry into Keiro options do not add,
@@ -727,7 +774,10 @@ details. Render the complete line before one handle write so concurrent requests
 interleave it. Exclude exact `/health/live` and `/health/ready` paths.
 
 Compose middleware outside-in as
-`otelMiddleware (requestLogMiddleware include (exceptionBoundary servantApp))`. The exception
+`boundedTelemetryMiddleware otelMiddleware (requestLogMiddleware include (exceptionBoundary
+servantApp))`. The bounding wrapper prevents the upstream instrumentation from retaining raw
+query or unbounded user-agent attributes and restores the original request for the application.
+The exception
 boundary converts synchronous escaped exceptions to the standard RFC 7807 500 response while
 rethrowing asynchronous exceptions; the request logger observes the actual status and never
 invents a second renderer. `logStdoutDev` and `wai-extra`'s JSON formatter remain absent from
@@ -803,7 +853,8 @@ a non-null `00-…` value in `keiro.keiro_outbox.traceparent`.
 M4 request and shutdown verification:
 
 ```bash
-cabal test shikigami-server-test --test-options='-p "request log|telemetry shutdown"'
+cabal test shikigami-server-test --test-options='-p "request log"'
+cabal test shikigami-server-test --test-options='-p "telemetry shutdown"'
 cabal test shikigami-workers-test --test-options='-p "graceful shutdown"'
 ```
 
@@ -921,6 +972,12 @@ its loop-supervision events (soft; this plan does not depend on it).
 
 
 ## Revision Notes
+
+- 2026-08-23: Implemented Milestone 4. Added the server provider lifecycle, WAI trace and
+  bounded request-log composition, synchronous exception boundary, Warp signal-driven drain,
+  query/user-agent shielding for OTel span attributes, and typed graceful signal handling for
+  all four worker executables. Focused tests prove request redaction/correlation/order,
+  provider flush, and linked-loop subprocess shutdown without a GHC exception dump.
 
 - 2026-08-23: Implemented Milestones 2 and 3 after the refresh. Added and wired all runtime
   metrics, provider lifecycle in workers, the supervised queue/outbox sampler, durable W3C

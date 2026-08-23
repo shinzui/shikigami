@@ -6,17 +6,28 @@
 -- why there is no fault-injection hook in @WorkerEnv@: a private test flag on a
 -- production record is a worse seam than a function that takes the action it
 -- supervises.
-module Shikigami.Workers.SupervisionSpec (tests) where
+module Shikigami.Workers.SupervisionSpec
+  ( tests,
+    gracefulShutdownFixture,
+  )
+where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Control.Exception (Exception, throwIO, try)
 import Control.Monad (forever, void)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
+import Data.List (isInfixOf)
 import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), runResumeLoopWith)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, ResumeLoop, TimerLoop))
 import Shikigami.Log qualified as Log
+import Shikigami.Workers.Shutdown (withGracefulShutdown)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
+import System.Environment (getEnvironment, getExecutablePath)
+import System.Exit (ExitCode (ExitSuccess))
+import System.IO (BufferMode (LineBuffering), hGetContents, hGetLine, hSetBuffering, stderr, stdout)
+import System.Process (CreateProcess (env, std_err, std_out), StdStream (CreatePipe), createProcess, proc, terminateProcess, waitForProcess)
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -25,8 +36,55 @@ tests =
   testGroup
     "loop supervision"
     [ superviseTests,
-      resumeRetryTests
+      resumeRetryTests,
+      gracefulShutdownTests
     ]
+
+gracefulShutdownTests :: TestTree
+gracefulShutdownTests =
+  testGroup
+    "graceful shutdown"
+    [ testCase "SIGTERM unwinds linked loops and exits without a runtime exception dump" do
+        executable <- getExecutablePath
+        environment <- getEnvironment
+        let childEnvironment =
+              ("SHIKIGAMI_GRACEFUL_SHUTDOWN_FIXTURE", "1")
+                : filter ((/= "SHIKIGAMI_GRACEFUL_SHUTDOWN_FIXTURE") . fst) environment
+            command =
+              (proc executable [])
+                { env = Just childEnvironment,
+                  std_out = CreatePipe,
+                  std_err = CreatePipe
+                }
+        (_, Just childOut, Just childErr, process) <- createProcess command
+        hGetLine childOut >>= (@?= "ready")
+        terminateProcess process
+        outcome <- timeout 5_000_000 (waitForProcess process)
+        case outcome of
+          Just ExitSuccess -> pure ()
+          Just exitCode -> assertFailure ("graceful child exited with " <> show exitCode)
+          Nothing -> do
+            terminateProcess process
+            assertFailure "graceful child did not exit within five seconds"
+        errors <- hGetContents childErr
+        assertBool
+          ("runtime emitted an uncaught-exception dump:\n" <> errors)
+          (not ("Uncaught exception" `isInfixOf` errors))
+    ]
+
+-- | Subprocess mode used by the signal test above. It has the same linked-loop
+-- shape as the worker composition root but no database or broker dependency.
+gracefulShutdownFixture :: IO ()
+gracefulShutdownFixture =
+  withGracefulShutdown do
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
+    putStrLn "ready"
+    superviseLoops
+      Log.silentLogger
+      [ (OutboxLoop, forever (threadDelay 100_000)),
+        (TimerLoop, forever (threadDelay 100_000))
+      ]
 
 superviseTests :: TestTree
 superviseTests =

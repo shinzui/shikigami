@@ -36,6 +36,7 @@ library
     Shikigami.Workers.Command.Worker
     Shikigami.Workers.Config
     Shikigami.Workers.Registry
+    Shikigami.Workers.Shutdown
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
 
@@ -75,6 +76,7 @@ library
     , shikigami-core
     , text                            >=2.1
     , time                            >=1.12
+    , unix
     , uuid
     , wai
     , warp
@@ -150,6 +152,7 @@ test-suite shikigami-workers-test
     , kiroku-store
     , optparse-applicative
     , pgmq-hasql
+    , process
     , servant-health
     , servant-health:testkit
     , settei-env
@@ -161,5 +164,6 @@ test-suite shikigami-workers-test
     , tasty-hunit
     , text
     , time
+    , unix
     , vector
     , wai

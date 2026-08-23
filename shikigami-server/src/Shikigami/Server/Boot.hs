@@ -18,20 +18,28 @@ module Shikigami.Server.Boot
   )
 where
 
+import Data.Aeson qualified as Aeson
 import Data.String (fromString)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection qualified as StoreConnection
+import Network.Wai (Application)
 import Network.Wai.Handler.Warp qualified as Warp
+import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware')
+import OpenTelemetry.Metric qualified as Metric
+import OpenTelemetry.Trace.Core (Tracer)
 import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
 import Shikigami.App.Config (AppConfig, Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Health.Handler (mkHealthChecks)
-import Shikigami.Server.App (shikigamiApplication)
+import Shikigami.Log qualified as Log
+import Shikigami.Server.App (exceptionBoundary, shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
+import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
 import Shikigami.Server.Seam (ServerEnv (..))
-import System.IO (hPutStrLn, stderr)
+import Shikigami.Server.Telemetry (ServerTelemetry (..), boundedTelemetryMiddleware, withServerTelemetry)
+import System.Posix.Signals (Handler (CatchOnce), installHandler, keyboardSignal, softwareTermination)
 
 -- | The @shikigami-server@ executable, start to finish.
 --
@@ -49,10 +57,10 @@ runServerMain = do
 -- The pool is passed in rather than opened here because it has a lifetime:
 -- 'runServer' brackets it around the whole serving loop, so it is closed on
 -- shutdown instead of being leaked by whoever happened to build the environment.
-newServerEnv :: Pool -> AppConfig -> IO ServerEnv
-newServerEnv pool config = do
+newServerEnv :: Tracer -> Pool -> AppConfig -> IO ServerEnv
+newServerEnv tracer pool config = do
   (livenessCheck, readinessCheck) <- mkHealthChecks pool
-  pure (newServerEnvWith config livenessCheck readinessCheck)
+  pure (newServerEnvWith tracer config livenessCheck readinessCheck)
 
 -- | Build the environment with probe checks supplied by the caller.
 --
@@ -61,11 +69,12 @@ newServerEnv pool config = do
 -- an umbrella record that swapped them would still compile; only a request that
 -- fails one check and not the other catches it, and that requires injecting the
 -- checks from outside.
-newServerEnvWith :: AppConfig -> ProbeCheck -> ProbeCheck -> ServerEnv
-newServerEnvWith config livenessCheck readinessCheck =
+newServerEnvWith :: Tracer -> AppConfig -> ProbeCheck -> ProbeCheck -> ServerEnv
+newServerEnvWith tracer config livenessCheck readinessCheck =
   ServerEnv
     { config = serverConfigFrom config,
       appConfig = config,
+      tracer,
       liveness = livenessCheck,
       readiness = readinessCheck
     }
@@ -83,23 +92,49 @@ newServerEnvWith config livenessCheck readinessCheck =
 -- check at.
 runServer :: AppConfig -> IO ()
 runServer config = do
+  logger <- Log.newStderrLogger Log.Info
   connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
   let serverConfig = serverConfigFrom config
       settings = StoreConnection.defaultConnectionSettings connStr
-  StoreConnection.withStore settings \st -> do
-    env <- newServerEnv (StoreConnection.pool st) config
-    hPutStrLn
-      stderr
-      ( "[shikigami.server] listening on "
-          <> Text.unpack (host serverConfig)
-          <> ":"
-          <> show (port serverConfig)
-          <> " (probes: GET /health/live, GET /health/ready)"
-      )
-    Warp.runSettings (warpSettings serverConfig) (shikigamiApplication env)
+  withServerTelemetry \telemetry@ServerTelemetry {tracer = serverTracer} ->
+    StoreConnection.withStore settings \st -> do
+      env <- newServerEnv serverTracer (StoreConnection.pool st) config
+      application <- serverApplication telemetry env
+      Log.logInfo
+        logger
+        "server.listening"
+        [ "host" Aeson..= host serverConfig,
+          "port" Aeson..= port serverConfig,
+          "probes" Aeson..= (["/health/live", "/health/ready"] :: [Text.Text])
+        ]
+      Warp.runSettings (warpSettings serverConfig) application
+
+serverApplication :: ServerTelemetry -> ServerEnv -> IO Application
+serverApplication ServerTelemetry {tracerProvider, meterProvider} env = do
+  meter <- Metric.getMeter meterProvider "hs-opentelemetry-instrumentation-wai"
+  otelMiddleware <- newOpenTelemetryWaiMiddleware' tracerProvider meter
+  pure
+    ( boundedTelemetryMiddleware
+        otelMiddleware
+        ( requestLogMiddleware
+            includeProductionRequest
+            (exceptionBoundary (shikigamiApplication env))
+        )
+    )
 
 warpSettings :: ServerConfig -> Warp.Settings
 warpSettings serverConfig =
-  Warp.setPort (port serverConfig)
+  Warp.setInstallShutdownHandler installShutdownHandlers
+    . Warp.setGracefulShutdownTimeout (Just 30)
+    . Warp.setPort (port serverConfig)
     . Warp.setHost (fromString (Text.unpack (host serverConfig)))
     $ Warp.defaultSettings
+
+-- | Close the listener on either conventional graceful process signal.
+-- Warp then drains in-flight requests before 'runSettings' returns, allowing
+-- the enclosing telemetry bracket to flush and shut providers down.
+installShutdownHandlers :: IO () -> IO ()
+installShutdownHandlers closeListener = do
+  _ <- installHandler softwareTermination (CatchOnce closeListener) Nothing
+  _ <- installHandler keyboardSignal (CatchOnce closeListener) Nothing
+  pure ()

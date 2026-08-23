@@ -18,6 +18,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
+import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.Paths (liveRawPath, readyRawPath)
 import Shikigami.Api.OpenApi (shikigamiOpenApi)
@@ -63,11 +64,12 @@ alwaysFailing = pure (Unhealthy "readiness" (UTCTime (fromGregorian 2026 7 31) 0
 
 -- | Run the assembled application and hand the body a @GET path -> status@ probe.
 withServer :: IO ProbeVerdict -> IO ProbeVerdict -> ((String -> IO Int) -> IO a) -> IO a
-withServer livenessCheck readinessCheck body =
+withServer livenessCheck readinessCheck body = do
+  provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
+  let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
+      application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig livenessCheck readinessCheck)
   testWithApplication (pure application) \port -> do
     manager <- Http.newManager Http.defaultManagerSettings
     body \path -> do
       request <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
       statusCode . Http.responseStatus <$> Http.httpLbs request manager
-  where
-    application = shikigamiApplication (newServerEnvWith defaultAppConfig livenessCheck readinessCheck)

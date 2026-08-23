@@ -29,6 +29,7 @@ import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.Reader (MonadReader, ReaderT (..))
 import Data.Aeson (encode)
 import Data.Text qualified as Text
+import OpenTelemetry.Trace.Core (Tracer)
 import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
 import Shikigami.Api.Problem (ProblemCode, problem, problemStatus, problemTitle)
@@ -45,6 +46,7 @@ import Shikigami.Server.Config (ServerConfig)
 data ServerEnv = ServerEnv
   { config :: !ServerConfig,
     appConfig :: !AppConfig,
+    tracer :: !Tracer,
     liveness :: !ProbeCheck,
     readiness :: !ProbeCheck
   }

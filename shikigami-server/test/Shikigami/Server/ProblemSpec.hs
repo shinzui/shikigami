@@ -25,6 +25,7 @@ import Data.Text (Text)
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (hContentType, statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
+import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeVerdict (Healthy))
 import Servant.Server (ServerError (..))
 import Shikigami.Api.Problem (ProblemCode (..), ProblemDetails (..), problem)
@@ -80,15 +81,18 @@ tests =
 -- and the probe matrix itself is covered by @servant-health@'s conformance kit.
 request :: LBS8.ByteString -> String -> IO (Int, Maybe LBS8.ByteString, LBS.ByteString)
 request method path =
-  testWithApplication (pure application) \port -> do
-    manager <- Http.newManager Http.defaultManagerSettings
-    initial <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
-    response <- Http.httpLbs initial {Http.method = LBS.toStrict method} manager
-    let contentType = LBS.fromStrict <$> lookup hContentType (Http.responseHeaders response)
-    pure (statusCode (Http.responseStatus response), contentType, Http.responseBody response)
+  do
+    provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
+    let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
+        application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig passing passing)
+    testWithApplication (pure application) \port -> do
+      manager <- Http.newManager Http.defaultManagerSettings
+      initial <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
+      response <- Http.httpLbs initial {Http.method = LBS.toStrict method} manager
+      let contentType = LBS.fromStrict <$> lookup hContentType (Http.responseHeaders response)
+      pure (statusCode (Http.responseStatus response), contentType, Http.responseBody response)
   where
     passing = pure Healthy
-    application = shikigamiApplication (newServerEnvWith defaultAppConfig passing passing)
 
 -- | Assert the decoded body is the problem the caller expects.
 assertProblemBody :: LBS.ByteString -> Text -> Int -> Bool -> IO ()
