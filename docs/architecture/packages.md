@@ -111,6 +111,15 @@ mechanical invariant asserted by
 `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` is stated over library
 stanzas.
 
+Capability overlays follow the same domain/leaf split. `shikigami-core` owns the pure
+`Shikigami.Capability.Overlay` vocabulary and `Shikigami.Capability.Catalog` resolution
+contract because both durable workflows and one-off runs consume them. The generic
+provider-registry and lease bracket also belong in core when added; they contain no concrete
+workspace, MCP, queue, or server adapter. A concrete portable workspace provider and its CLI
+wiring belong in `shikigami-agent`. Base capabilities — including Flow, Memory, Sink,
+Workflow, profile enforcement, and provider selection — stay structurally outside the
+overlay registry and cannot be replaced by an adapter.
+
 
 ## Module placement rules
 

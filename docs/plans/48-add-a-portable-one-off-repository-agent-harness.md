@@ -867,3 +867,21 @@ The durable rationale for the package is
 [ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md). This plan is the
 second consumer of the mode it protects, and remains unregistered under any MasterPlan — worth
 resolving when it is scheduled.
+
+
+## Reconciliation with capability overlay plans (2026-08-22)
+
+The full writable workspace sandbox in this plan remains in scope: contained file mutation,
+structured command execution, platform sandboxing, instruction discovery, installation, and
+the external-worktree proof still belong here. Its generic model-tool prerequisites no longer
+come from Plan 12's MCP-specific seam.
+
+`docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` now
+owns capability ids, operator catalog resolution, and the defaulted declaration request.
+`docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` owns the shared
+provider registry, `ToolRegistry` composition, bounded model/tool loop, and acquire/release
+bracket. Plan 59, `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md`,
+owns the first confined read-only workspace provider and one-off opt-in proof. This plan
+consumes those seams, then extends the provider with its broader writable and command-backed
+sandbox. Plan 12 remains relevant only when the harness also consumes an MCP provider; it is
+no longer the owner or hard prerequisite of the generic registry and loop.

@@ -875,3 +875,19 @@ instruction is now not to add a `source-repository-package` stanza at all. The u
 unchanged: `shikumi-tools` is in neither the constraints block nor `shikigami-core.cabal`, and
 this plan must add it — at a bound coherent with the released family, which as of 2026-08-10 is
 `0.3.0.2` and satisfies `kioku-core 0.3.0.0`'s `shikumi ^>=0.3.0.1`.
+
+Revision note (2026-08-22): Plan 56 supersedes the proposed agent-authored `mcpServers`
+field with the provider-neutral `capabilityOverlays : List Text` request field. An agent now
+names a stable capability only. MCP endpoint, transport, authentication reference, immutable
+provider revision, and connection factory belong to the operator-owned provider registry;
+none belongs in `schema/Agent.dhall`.
+
+The generic descriptor/catalog vocabulary is owned by
+`docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md`, and
+the shared `ToolRegistry`, bounded model/tool loop, provider registry, acquisition bracket,
+and cleanup rules move to
+`docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md`. This plan keeps
+the MCP-specific transport adapter, server/tool authorization checks, credential resolution,
+and `mcp__*` naming work. Those live MCP prerequisites remain incomplete; this revision does
+not change the plan's MasterPlan parent and does not claim transport or per-action
+authorization has landed.

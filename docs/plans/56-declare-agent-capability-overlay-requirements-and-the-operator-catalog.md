@@ -46,7 +46,8 @@ This section must always reflect the actual current state of the work.
       fail-closed resolution for identity, policy, behavior, and durable-operation rules.
 - [x] (2026-08-22) Added loader, JSON-wire, catalog, policy, ordering, and malformed-input
       tests plus the `workspace.read` proof declaration; 406 focused tests pass.
-- [ ] Document the overlay/base boundary and update the dependency plan assumptions.
+- [x] (2026-08-22) Recorded the overlay/base boundary in ADR 0025 and the package
+      architecture; reconciled Plans 12 and 48 to consume the generic catalog and lease seam.
 
 
 ## Surprises & Discoveries
