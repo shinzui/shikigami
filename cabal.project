@@ -32,8 +32,8 @@ with-compiler: ghc-9.12.4
 
 constraints:
   -- durable execution, event model, and agent memory
-    keiki                   ==0.9.0.0
-  , keiki-codec-json        ==0.9.0.0
+    keiki                   ==0.9.1.0
+  , keiki-codec-json        ==0.9.1.0
   , keiro                   ==0.14.0.0
   , keiro-core              ==0.14.0.0
   , keiro-dsl               ==0.14.0.0
