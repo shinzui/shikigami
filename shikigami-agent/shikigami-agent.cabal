@@ -42,6 +42,7 @@ library
     , directory
     , effectful
     , filepath
+    , keiro
     , kioku-api
     , kioku-core
     , kiroku-store

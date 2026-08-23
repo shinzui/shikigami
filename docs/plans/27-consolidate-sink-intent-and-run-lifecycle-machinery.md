@@ -56,8 +56,11 @@ This section must always reflect the actual current state of the work.
       declared node consumes it. `cabal build all`, the three SinkIntent tests, all 20
       FlowLifecycle tests, all 44 AgentWorkflow tests, and `just keiro-gate HEAD` pass; the
       scaffold is unchanged and `rg "data SinkIntent" shikigami-core/src` returns one hit.
-- [ ] M2: Unify the run lifecycle — `agent-run` CLI drives the durable workflow (or shares
-      lifecycle functions); retire `runAgentWithMemory`'s divergent copy.
+- [x] (2026-08-23T18:17:36Z) M2: Unified the run lifecycle — `agent-run` now synthesizes a
+      distinct `RunJob`, constructs `AgentRunDeps`, and drives `runAgentRunWorkflow`; the
+      divergent `runAgentWithMemory` and `runAgentWithMemoryUsing` copies are deleted.
+      All 29 `shikigami-agent` tests pass, `rg "runAgentWithMemory"` returns no hits, and two
+      isolated CLI runs recalled zero then one prior memory while recording a learning each time.
 - [ ] M3: keiki lifecycle conformance test for the at-risk flow (or documented as
       illustrative).
 - [ ] M4: Record the plan-19 reconciliation step and the sharedScope note for plan 34;
@@ -91,6 +94,11 @@ implementation. Provide concise evidence.
   `runId` to `run_id` made only the pinned-byte assertion fail, showing the exact old and new
   payloads. Restoring `omitNothingFields` with the original field names made all three focused
   SinkIntent tests pass again. The scratch edit was not committed.
+- The existing development database could not accept current migrations because its recorded
+  checksum for `kioku/0011-kioku-memory-space-partition` differs from the current dependency.
+  CLI acceptance therefore used a fresh `shikigami_plan27_cli` database, ran the current complete
+  migration set, executed twice successfully, and then removed that isolated database. The stale
+  existing database was not changed.
 
 
 ## Decision Log
@@ -162,6 +170,15 @@ Record every decision made while working on the plan.
   and publisher behavior remain unchanged.
   Date: 2026-08-23
 
+- Decision: Take M2's preferred full-workflow path. The CLI builds the same durable dependencies
+  as the worker, with a disabled principal directory for its historical one-off semantics and a
+  local observation-only workspace capability runtime authorized in `Durable` mode. Empty overlay
+  declarations still avoid workspace discovery.
+  Rationale: session failure, profile resolution, capability resolution, memory recording, and
+  workflow outcomes now have one implementation. The one-off package remains light because its
+  new direct `keiro` edge adds no Kafka, queue-adapter, worker-loop, or telemetry-export package.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -173,6 +190,11 @@ deployed JSON bytes, event identity, journal labels, deterministic ids, trace co
 resolution, and delivery receipts. The shared module is hand-owned deliberately: Keiro's checked
 workspace still declares only contracts whose generated artifacts the runtime executes. A
 scratch `runId` wire rename proved the new golden detects field-policy drift.
+
+M2 removed the second session orchestrator rather than factoring smaller lifecycle helpers. The
+CLI now creates a fresh workflow identity for each invocation and reports every terminal or
+nonterminal `WorkflowOutcome`. Its existing human report is unchanged on success, including
+across-run recall; an isolated two-run check observed the second run recall the first learning.
 
 
 ## Context and Orientation
@@ -383,7 +405,8 @@ Exercise the CLI after M2:
 
 ```bash
 just create-database
-cabal run shikigami-agent-run -- at-risk-customer   # prints an across-run report; run twice, priors grow
+cabal run shikigami-agent-run -- --agent agents/detectors/at-risk-customer-flow.dhall
+# Run the same command twice: the report's recalled-prior count grows.
 ```
 
 Finish:

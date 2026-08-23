@@ -4,34 +4,37 @@ module Shikigami.Agent.Command.AgentRun
 where
 
 import Data.Aeson qualified as Aeson
-import Data.Bifunctor (first)
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Time (getCurrentTime)
+import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..), noopTracer)
-import Kioku.Id (idText)
+import Kioku.Id (genSessionId, idText)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Activity (ActivityEnvelope)
-import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
-import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
-import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
+import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord, runAgentWithMemoryUsing)
+import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
-import Shikigami.Attestation.Resolve (postgresProfileStore, renderProfileResolutionError, resolveProfile)
-import Shikigami.Behavior.Provider (newBehaviorEnvFor, newBehaviorEnvForProfileWithLogger, renderProfileViolation)
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
+import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Log qualified as Log
+import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
 -- | @agent-run --agent <name|path> [--from-activity <file>]@: open the kioku store and
--- either run the agent end to end with memory (open session → recall → run behavior →
+-- either run the durable agent workflow (open session → recall → run behavior →
 -- record learning → complete) and print the across-run report, or — with
 -- @--from-activity@ — map an @activity.v1@ envelope into a memory under the agent
 -- scope. The connection string comes from @database.connection_string@, which the
@@ -63,55 +66,102 @@ runAgentRun agentArg mActivity workspace config = do
                 case recE of
                   Left e -> hPutStrLn stderr ("agent-run: " <> Text.unpack e) >> exitFailure
                   Right m -> putStrLn ("recorded activity memory " <> Text.unpack (idText m))
-          Nothing -> do
-            behEnvE <- behaviorEnvForDecl logger store config decl
-            behEnv <- case behEnvE of
-              Left err -> hPutStrLn stderr ("agent-run: " <> Text.unpack err) >> exitFailure
-              Right env -> pure env
-            resultE <-
-              runAgentWithMemoryUsing appEnv behEnv decl Aeson.Null \input -> do
-                overlayResult <-
-                  withOneOffCapabilityOverlays logger workspace decl behEnv \derivedEnv ->
-                    runBehavior derivedEnv decl input
-                pure case overlayResult of
-                  Left err -> Left (renderOneOffCapabilityError err)
-                  Right behaviorResult -> first (Text.pack . show) behaviorResult
-            case resultE of
-              Left e -> do
-                hPutStrLn stderr ("agent-run: " <> Text.unpack e)
-                exitFailure
-              Right r -> do
-                putStrLn ("agent " <> show (name decl) <> " run " <> Text.unpack (idText (sessionId r)))
-                putStrLn ("recalled " <> show (length (recalledPrior r)) <> " prior memories:")
-                mapM_ (TIO.putStrLn . ("  - " <>) . renderMemoryRecord) (recalledPrior r)
-                maybe
-                  (pure ())
-                  (\m -> putStrLn ("recorded learning " <> Text.unpack (idText m)))
-                  (recordedMemId r)
+          Nothing -> runDurableAgent logger store appEnv workspace config decl
 
-behaviorEnvForDecl :: Log.Logger -> KirokuStore -> AppConfig -> AgentDecl -> IO (Either Text BehaviorEnv)
-behaviorEnvForDecl logger KirokuStore {pool} config AgentDecl {behavior, sanctionedProfile} =
-  case sanctionedProfile of
-    Nothing -> Right <$> newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
-    Just ProfileRequirement {profileId, version} -> do
-      now <- getCurrentTime
-      resolved <-
-        resolveProfile
-          (postgresProfileStore pool)
-          now
-          (ProfileId profileId)
-          (ProfileVersion <$> version)
-      case resolved of
-        Left refusal -> pure (Left (renderProfileResolutionError refusal))
-        Right resolvedProfile -> case behavior of
-          Agent.Skill {} ->
-            first renderProfileViolation
-              <$> newBehaviorEnvForProfileWithLogger
-                logger
-                resolvedProfile
-                (Config.behaviorProvider config)
-                Nothing
-          _ -> Right <$> newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
+runDurableAgent :: Log.Logger -> KirokuStore -> AppEnv -> Maybe FilePath -> AppConfig -> AgentDecl -> IO ()
+runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
+  behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
+  capabilities <-
+    oneOffCapabilityRuntime workspace decl >>= \case
+      Left err -> dieAgentRun (renderOneOffCapabilityError err)
+      Right runtime -> pure runtime
+  let kizashiConfig =
+        KizashiConfig
+          { baseUrl = Config.kizashiBaseUrl config,
+            defaultRecipient = Config.kizashiDefaultRecipient config
+          }
+      kawaConfig =
+        KawaConfig
+          { baseUrl = Config.kawaBaseUrl config,
+            sourceSegment = Config.kawaSourceSegment config
+          }
+      danwaConfig =
+        DanwaConfig
+          { baseUrl = Config.danwaBaseUrl config,
+            agentParticipant = Config.danwaAgentParticipant config
+          }
+      httpLimits =
+        HttpLimits
+          { requestBytes = Config.httpRequestMaxBytes config,
+            responseBytes = Config.httpResponseMaxBytes config
+          }
+  sinkHttp <-
+    newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
+      Left err -> dieAgentRun ("invalid sink HTTP configuration: " <> Text.pack (show err))
+      Right clients -> pure clients
+  occurredAt <- getCurrentTime
+  freshId <- genSessionId
+  let job =
+        RunJob
+          { agentName = name decl,
+            triggerKind = TriggeredByEvent,
+            occurredAt,
+            triggerPayload = Aeson.Null,
+            idempotencyKey = name decl <> ":cli:" <> idText freshId,
+            parentSessionId = Nothing,
+            parentRunWorkflowId = Nothing,
+            delegationDepth = Nothing,
+            lineage = [],
+            delegationBudgetId = Nothing,
+            routeKind = AgentWorkflowRoute
+          }
+      deps =
+        AgentWorkflow.AgentRunDeps
+          { AgentWorkflow.appEnv = appEnv,
+            AgentWorkflow.behaviorEnv = behEnv,
+            AgentWorkflow.capabilities = capabilities,
+            AgentWorkflow.agents = [decl],
+            AgentWorkflow.kizashi = kizashiConfig,
+            AgentWorkflow.kawa = kawaConfig,
+            AgentWorkflow.danwa = danwaConfig,
+            AgentWorkflow.rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
+            AgentWorkflow.http = sinkHttp,
+            AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+            AgentWorkflow.approval = Approval.defaultApprovalEnv,
+            AgentWorkflow.deadline = Just (Config.approvalDeadline config),
+            AgentWorkflow.runTimeout = Config.runTimeout config,
+            AgentWorkflow.delegationBudget = Config.delegationBudget config,
+            AgentWorkflow.grants = DbGrants pool,
+            AgentWorkflow.directory = disabledDirectoryHandle,
+            AgentWorkflow.deliveryPool = Just pool,
+            AgentWorkflow.logger = logger,
+            AgentWorkflow.resolveRunProfile = \profileId version -> do
+              now <- getCurrentTime
+              Profile.resolveProfile (Profile.postgresProfileStore pool) now profileId version
+          }
+  AgentWorkflow.runAgentRunWorkflow deps job >>= \case
+    Left err -> dieAgentRun ("workflow store failure: " <> Text.pack (show err))
+    Right (Completed (Left failure)) -> dieAgentRun (AgentWorkflow.agentRunFailureDetail failure)
+    Right (Completed (Right result)) -> renderRunResult decl result
+    Right Suspended -> dieAgentRun "workflow suspended; a worker must resume it after its wake condition"
+    Right Cancelled -> dieAgentRun "workflow was cancelled"
+    Right Failed -> dieAgentRun "workflow journal carries a terminal failure"
+    Right ContinuedAsNew -> dieAgentRun "workflow continued as new; a worker must resume its next generation"
+
+renderRunResult :: AgentDecl -> AgentRunResult -> IO ()
+renderRunResult decl result = do
+  putStrLn ("agent " <> show (name decl) <> " run " <> Text.unpack (idText (sessionId result)))
+  putStrLn ("recalled " <> show (length (recalledPrior result)) <> " prior memories:")
+  mapM_ (TIO.putStrLn . ("  - " <>) . renderMemoryRecord) (recalledPrior result)
+  maybe
+    (pure ())
+    (\memoryId -> putStrLn ("recorded learning " <> Text.unpack (idText memoryId)))
+    (recordedMemId result)
+
+dieAgentRun :: Text -> IO a
+dieAgentRun detail = do
+  hPutStrLn stderr ("agent-run: " <> Text.unpack detail)
+  exitFailure
 
 -- | A bare agent name resolves to @agents/<name>.dhall@; anything that already looks
 -- like a path (contains @/@ or ends in @.dhall@) is used as-is.

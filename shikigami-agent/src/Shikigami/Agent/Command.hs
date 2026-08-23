@@ -68,7 +68,7 @@ runBehaviorRoleInfo =
           (pure [])
     }
 
--- | @shikigami-agent-run@: run one agent through the kioku session lifecycle.
+-- | @shikigami-agent-run@: run one agent through the durable workflow lifecycle.
 --
 -- Unlike 'runBehaviorRoleInfo' this one does open a database, because a session
 -- and its memories are the point. It stays in this package anyway: \"light\"
@@ -81,7 +81,7 @@ agentRunRoleInfo =
       role = AgentRunRole,
       parserInfo =
         withConfigOptions
-          "Run an agent with the kioku session/memory lifecycle"
+          "Run an agent with the durable workflow and kioku memory lifecycle"
           ( runAgentRun
               <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
               <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))

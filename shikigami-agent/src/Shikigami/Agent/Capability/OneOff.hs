@@ -1,6 +1,7 @@
 -- | Operator-owned capability composition for the two one-off commands.
 module Shikigami.Agent.Capability.OneOff
   ( OneOffCapabilityError (..),
+    oneOffCapabilityRuntime,
     renderOneOffCapabilityError,
     withOneOffCapabilityOverlays,
   )
@@ -25,7 +26,7 @@ import Shikigami.Behavior.Run qualified as Behavior
 import Shikigami.Capability.Catalog
   ( CapabilityCatalogError,
     CapabilityResolutionError (..),
-    ExecutionMode (OneOff),
+    ExecutionMode (Durable, OneOff),
     ResolutionSubject (..),
     mkCapabilityCatalog,
     resolveCapabilityOverlays,
@@ -38,8 +39,10 @@ import Shikigami.Capability.Overlay
   )
 import Shikigami.Capability.Provider
   ( CapabilityProviderRegistryError,
+    CapabilityRuntime (..),
     CapabilityRuntimeError,
     CapabilityScope (..),
+    emptyCapabilityRuntime,
     mkCapabilityProviderRegistry,
     withCapabilityOverlays,
   )
@@ -61,6 +64,31 @@ renderOneOffCapabilityError = \case
   OneOffProviderRegistryInvalid err -> "built-in capability provider registry is invalid: " <> Text.pack (show err)
   OneOffCapabilityRuntimeFailed err -> "capability provider failed: " <> Text.pack (show err)
 
+-- | Build the observation-only workspace runtime used by the durable
+-- @shikigami-agent-run@ workflow. An empty declaration needs no catalog,
+-- provider, or workspace and therefore returns the shared empty runtime without
+-- touching the filesystem.
+oneOffCapabilityRuntime :: Maybe FilePath -> AgentDecl -> IO (Either OneOffCapabilityError CapabilityRuntime)
+oneOffCapabilityRuntime workspaceArgument AgentDecl {capabilityOverlays}
+  | null capabilityOverlays = pure (Right emptyCapabilityRuntime)
+  | otherwise =
+      case mkCapabilityCatalog [workspaceReadDescriptor] of
+        Left err -> pure (Left (OneOffCatalogInvalid err))
+        Right catalog -> do
+          workspace <- resolveWorkspaceScope workspaceArgument
+          case workspace of
+            Left err -> pure (Left (OneOffWorkspaceInvalid err))
+            Right scope ->
+              pure case mkCapabilityProviderRegistry [workspaceReadProvider scope] of
+                Left err -> Left (OneOffProviderRegistryInvalid err)
+                Right providers ->
+                  Right
+                    CapabilityRuntime
+                      { catalog,
+                        providers,
+                        authorize = authorizeForMode Durable
+                      }
+
 -- | Resolve requested overlays against the fixed one-off catalog, acquire them
 -- for exactly one callback, and derive an immutable behavior environment. The
 -- empty branch deliberately avoids catalog construction and all workspace IO.
@@ -77,7 +105,7 @@ withOneOffCapabilityOverlays logger workspaceArgument decl@AgentDecl {capability
       case mkCapabilityCatalog [workspaceReadDescriptor] of
         Left err -> pure (Left (OneOffCatalogInvalid err))
         Right catalog ->
-          case resolveCapabilityOverlays catalog authorize subject capabilityOverlays of
+          case resolveCapabilityOverlays catalog (authorizeForMode OneOff) subject capabilityOverlays of
             Left err -> pure (Left (OneOffResolutionRefused err))
             Right resolved -> do
               workspace <- resolveWorkspaceScope workspaceArgument
@@ -119,9 +147,9 @@ withOneOffCapabilityOverlays logger workspaceArgument decl@AgentDecl {capability
         Just value -> value
         Nothing -> ""
 
-authorize :: ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()
-authorize ResolutionSubject {principal, mode} descriptor@CapabilityDescriptor {capability, tools}
-  | mode /= OneOff = denied "the built-in workspace provider is one-off only"
+authorizeForMode :: ExecutionMode -> ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()
+authorizeForMode expectedMode ResolutionSubject {principal, mode} descriptor@CapabilityDescriptor {capability, tools}
+  | mode /= expectedMode = denied (executionModeText expectedMode <> " workspace capability used in the wrong execution mode")
   | maybe True Text.null principal = denied "a non-empty declared principal is required"
   | descriptor /= workspaceReadDescriptor = denied "only the immutable workspace.read revision 1 descriptor is installed"
   | capability /= workspaceReadId = denied "only workspace.read is authorized"
@@ -130,6 +158,11 @@ authorize ResolutionSubject {principal, mode} descriptor@CapabilityDescriptor {c
   where
     denied reason = Left CapabilityAuthorizationDenied {capability, reason}
     operationClassOf CapabilityToolDescriptor {operationClass} = operationClass
+
+executionModeText :: ExecutionMode -> Text
+executionModeText = \case
+  OneOff -> "one-off"
+  Durable -> "durable"
 
 principalText :: AgentDecl -> Maybe Text
 principalText AgentDecl {identity} =

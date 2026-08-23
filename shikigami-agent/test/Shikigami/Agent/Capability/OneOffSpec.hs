@@ -41,6 +41,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, runBehavior, triggerOnly)
 import Shikigami.Capability.Catalog (CapabilityResolutionError (MissingCapabilityIdentity))
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText)
@@ -79,6 +80,24 @@ tests =
             base
             (\BehaviorEnv {tools, activeOverlays} -> pure (WireTool.name <$> Vector.toList (registryBaikai tools), activeOverlays))
         result @?= Right ([], Set.empty),
+      testCase "the durable CLI runtime also skips workspace discovery for an empty request" do
+        result <-
+          oneOffCapabilityRuntime
+            (Just "/definitely/missing/shikigami-workspace")
+            (declFor [])
+        case result of
+          Left err -> assertFailure ("empty durable runtime was refused: " <> show err)
+          Right _runtime -> pure (),
+      testCase "the durable CLI runtime authorizes the requested observation overlay" $
+        withRepository \RepositoryFixture {repository} -> do
+          let decl = declFor [workspaceReadId]
+          runtimeResult <- oneOffCapabilityRuntime (Just repository) decl
+          case runtimeResult of
+            Left err -> assertFailure ("durable runtime was not constructed: " <> show err)
+            Right runtime ->
+              case AgentWorkflow.resolveCapabilitiesForRun runtime decl Nothing of
+                Left err -> assertFailure ("durable overlay was not authorized: " <> show err)
+                Right _resolved -> pure (),
       testCase "a missing identity is refused before workspace discovery" do
         base <- newBehaviorEnv
         result <-

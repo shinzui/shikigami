@@ -65,6 +65,13 @@ adapters, stream clients — to `shikigami-agent` as well as `shikigami-core`.
 future architecture change has to argue against it rather than delete it by not
 knowing about it.
 
+**The database-backed `shikigami-agent-run` command executes
+`Shikigami.Agent.Workflow.runAgentRunWorkflow` directly.** Its one-off character
+describes how the operator invokes it, not a second session lifecycle. A direct
+dependency on `keiro` is within this package's budget because it is the durable
+runtime already used by `shikigami-core`; the forbidden platform weight remains
+Kafka clients, queue adapters, supervised worker loops, and telemetry exporters.
+
 
 ## Alternatives rejected
 
@@ -101,6 +108,12 @@ objection is to edges *between* existing packages, and this adds a lighter leaf
 platform's messaging, queueing, and telemetry-export stack. Making
 `shikigami-core` itself lighter is separate work that nothing currently plans, and
 if it happens, `shikigami-agent` is where the benefit lands.
+
+The command synthesizes a distinct durable `RunJob` for every invocation and
+handles Keiro's complete outcome algebra at the terminal boundary. Its bounded
+workspace observation provider remains local to `shikigami-agent`, but capability
+resolution and acquisition now run under the durable workflow's journaled policy
+path. There is no parallel `runAgentWithMemory` lifecycle left to diverge.
 
 `RoleInfo` and `runRole` moved to `Shikigami.App.Role` in `shikigami-core` so both
 packages share one configuration-resolution order. That module is now on the
