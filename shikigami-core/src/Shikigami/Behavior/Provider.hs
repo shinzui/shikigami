@@ -57,15 +57,17 @@ import Baikai.ThinkingLevel (ThinkingLevel, renderThinkingLevel)
 import Baikai.Trace (TraceSink)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
+import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
-import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Log qualified as Log
+import Shikumi.Tool (mkRegistry)
 
 -- | The exact model-call tuple a 'BehaviorEnv' would put on the provider seam.
 -- Thinking is optional because leaving it to the SDK is itself a policy fact,
@@ -178,10 +180,28 @@ newBehaviorEnvFor logger selection traceSink = do
   registerStubProvider
   case selection of
     UseStub ->
-      pure BehaviorEnv {runtime, model = stubModel, options = emptyOptions, traceSink}
+      pure
+        BehaviorEnv
+          { runtime,
+            model = stubModel,
+            options = emptyOptions,
+            traceSink,
+            tools = mkRegistry [],
+            activeOverlays = Set.empty,
+            toolTurnLimit = defaultToolTurnLimit
+          }
     UseAnthropic model credential -> do
       Claude.register
-      pure BehaviorEnv {runtime, model, options = credentialOptions credential, traceSink}
+      pure
+        BehaviorEnv
+          { runtime,
+            model,
+            options = credentialOptions credential,
+            traceSink,
+            tools = mkRegistry [],
+            activeOverlays = Set.empty,
+            toolTurnLimit = defaultToolTurnLimit
+          }
 
 -- | Lower a resolved credential into the per-call options baikai dispatches with.
 --

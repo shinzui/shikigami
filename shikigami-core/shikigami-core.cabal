@@ -184,6 +184,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
+    Shikigami.BehaviorToolSpec
     Shikigami.CapabilityOverlaySpec
     Shikigami.CapabilityProviderSpec
     Shikigami.DelegateContextSpec
@@ -228,6 +229,7 @@ test-suite shikigami-core-test
     , kioku-api
     , kioku-core
     , kiroku-store
+    , lens
     , pgmq-hasql
     , settei
     , settei-env
@@ -238,6 +240,7 @@ test-suite shikigami-core-test
     , shikigami-migrations:test-support
     , shikumi
     , shikumi-tools
+    , streamly-core
     , tasty
     , tasty-hunit
     , text

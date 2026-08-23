@@ -69,9 +69,10 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, renderProfileViolation)
-import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, triggerOnly)
+import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
+import Shikumi.Tool (mkRegistry)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -177,7 +178,14 @@ runSkillWithFixture ::
   IO (Either RunError Value)
 runSkillWithFixture model options complete = do
   root <- repositoryRoot
-  runSkillWith model options (SkillDir (root </> "agents" </> "skills" </> "triage-note")) (triggerOnly Aeson.Null) complete
+  runSkillWith
+    model
+    options
+    (mkRegistry [])
+    defaultToolTurnLimit
+    (SkillDir (root </> "agents" </> "skills" </> "triage-note"))
+    (triggerOnly Aeson.Null)
+    complete
 
 assertAbsent :: String -> Text -> IO ()
 assertAbsent label rendered =
@@ -225,12 +233,15 @@ profileConstraintTests =
     ]
 
 envWithThinking :: Profile.ThinkingLevel -> BehaviorEnv -> BehaviorEnv
-envWithThinking level BehaviorEnv {runtime, model, options, traceSink} =
+envWithThinking level BehaviorEnv {runtime, model, options, traceSink, tools, activeOverlays, toolTurnLimit} =
   BehaviorEnv
     { runtime,
       model,
       options = options {thinking = Just level},
-      traceSink
+      traceSink,
+      tools,
+      activeOverlays,
+      toolTurnLimit
     }
 
 stubProfile :: Text -> Profile.Prohibitions -> ResolvedProfile

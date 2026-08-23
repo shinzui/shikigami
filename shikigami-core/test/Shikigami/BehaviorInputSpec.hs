@@ -39,10 +39,11 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
-import Shikigami.Behavior.Run (newBehaviorEnv, programArgs, runBehavior, runProgramTask)
+import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, programArgs, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Flow.AtRiskCustomer (RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
+import Shikumi.Tool (mkRegistry)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -172,6 +173,8 @@ capturedContext input = do
     runSkillWith
       emptyModel
       emptyOptions
+      (mkRegistry [])
+      defaultToolTurnLimit
       (SkillDir (root </> "agents" </> "skills" </> "triage-note"))
       input
       (\_model ctx _opts -> writeIORef seen (Just ctx) >> pure emptyResponse)

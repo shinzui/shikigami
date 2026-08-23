@@ -51,6 +51,19 @@ the leases for that run. Overlay tools are namespaced as
 duplicate logical names, or any final wire-name collision are refused before the callback.
 An overlay cannot replace a base tool, and no acquisition mutates a process-global registry.
 
+`BehaviorEnv` carries that derived registry together with the exact active capability-id set.
+Before dispatch, the runtime requires the declaration's requested ids to be unique and to
+equal the active set. Missing, extra, or duplicate ids are permanent refusals. This makes an
+empty declaration plus an empty environment the compatibility default while preventing a
+caller from silently running a declared-overlay agent without its acquired tools.
+
+A Skill with no tools retains its original single-completion request path. A Skill with tools
+advertises the one derived registry and runs a model/tool loop bounded to eight model turns by
+default. Unknown and ordinary tool failures return error observations to the model; budget and
+context-window exhaustion leave the loop as permanent infrastructure failures, and transient
+provider/tool infrastructure failures retain their retry classification. Every model turn uses
+the environment's trace sink.
+
 Resolution is pure and fail-closed. Duplicate or unknown requests, missing identity,
 authorization refusal, and non-`Skill` behavior are permanent typed refusals. Durable runs
 admit only observation tools. A one-off invocation may admit a mutation only when its explicit
@@ -99,6 +112,10 @@ generic resolution and lifecycle contracts remain in `shikigami-core`.
 Providers must pair every successful acquisition with its inverse in the returned lease.
 The lifecycle bracket can release resources but cannot reverse writes or emissions performed
 by a tool; replay-safety policy therefore remains independent of cleanup correctness.
+
+Callers that acquire overlays must derive the behavior environment inside the lease callback.
+The environment guard intentionally refuses declared overlays on paths that do not yet acquire
+them, including conversation execution until its durable integration is added.
 
 
 ## References

@@ -12,25 +12,36 @@ module Shikigami.Behavior.Skill
   )
 where
 
-import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
-import Baikai.Context (Context (..), _Context)
+import Baikai.Content (AssistantContent (..), TextContent (..), ToolCall)
+import Baikai.Context (Context (..), appendToolResult, emptyContext)
 import Baikai.Error (BaikaiError (..), isRetryable)
-import Baikai.Message (user)
+import Baikai.Message (AssistantPayload (..), ToolResult, toolResultErrorText, toolResultText, user)
 import Baikai.Model (Model)
 import Baikai.Options (Options)
 import Baikai.Provider.Registry (completeRequest)
-import Baikai.Response (Response, flattenAssistantBlocks, responseError)
+import Baikai.Response (Response (..), flattenAssistantBlocks, responseError)
+import Baikai.StopReason (StopReason (ToolUse))
+import Control.Exception (Exception, SomeAsyncException, SomeException, displayException, fromException, throwIO)
+import Control.Exception qualified as Exception
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Generics.Labels ()
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Vector qualified as V
+import Effectful (runEff)
+import Effectful.Error.Static (runErrorNoCallStack)
+import GHC.Generics (Generic)
 import Kioku.Api.Types (MemoryRecord (..))
-import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Input (BehaviorInput (..))
+import Shikumi.Error (ShikumiError (..), isTransient)
+import Shikumi.LLM (runLLM)
+import Shikumi.Tool (ToolRegistry, registryBaikai, registryNames, renderToolError, runToolCall)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 
@@ -95,9 +106,9 @@ parseManifest t =
 -- process resolved (see 'Shikigami.Behavior.Run.BehaviorEnv'), so a run's key
 -- source is whatever configuration said and never what a provider handler found
 -- in the environment.
-runSkill :: Model -> Options -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
-runSkill model options dir input =
-  runSkillWith model options dir input completeRequest
+runSkill :: Model -> Options -> ToolRegistry -> Int -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
+runSkill model options registry turnLimit dir input =
+  runSkillWith model options registry turnLimit dir input completeRequest
 
 -- | 'runSkill' with the completion function supplied.
 --
@@ -107,38 +118,148 @@ runSkill model options dir input =
 runSkillWith ::
   Model ->
   Options ->
+  ToolRegistry ->
+  Int ->
   SkillDir ->
   BehaviorInput ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
-runSkillWith model options dir BehaviorInput {payload, recalled} complete = do
+runSkillWith model options registry turnLimit dir BehaviorInput {payload, recalled} complete = do
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
     Right manifest -> do
       let ctx =
-            _Context
-              { systemPrompt = Just (description manifest),
-                messages =
-                  V.singleton
-                    ( user
-                        ( body manifest
-                            <> "\n\nTrigger payload: "
-                            <> renderPayload payload
-                            <> renderPriorLearnings recalled
-                        )
-                    ),
-                tools = V.empty
-              }
+            emptyContext
+              & #systemPrompt .~ Just (description manifest)
+              & #messages
+                .~ V.singleton
+                  ( user
+                      ( body manifest
+                          <> "\n\nTrigger payload: "
+                          <> renderPayload payload
+                          <> renderPriorLearnings recalled
+                      )
+                  )
+              & #tools .~ V.empty
+      if null (registryNames registry)
+        then do
+          -- This is deliberately the original one-completion request path.
+          resp <- complete model ctx options
+          pure (renderResponse resp)
+        else
+          if turnLimit < 1
+            then pure (Left (SkillToolTurnLimitExceeded turnLimit))
+            else
+              runToolPath
+                complete
+                model
+                options
+                registry
+                turnLimit
+                (ctx & #tools .~ registryBaikai registry)
+
+runToolPath ::
+  (Model -> Context -> Options -> IO Response) ->
+  Model ->
+  Options ->
+  ToolRegistry ->
+  Int ->
+  Context ->
+  IO (Either RunError Value)
+runToolPath complete model options registry turnLimit = go turnLimit
+  where
+    go remaining ctx = do
       resp <- complete model ctx options
-      -- baikai 0.4 reports provider failure in band: an error-shaped response
-      -- carries no assistant text, so reading the reply alone would turn an
-      -- outage into a successful empty answer.
-      pure case responseError resp of
-        Just err ->
-          Left (ProviderFailed (isRetryable err) (renderProviderError err))
-        Nothing ->
-          Right (object ["reply" .= renderReply resp])
+      case responseError resp of
+        Just err -> pure (Left (ProviderFailed (isRetryable err) (renderProviderError err)))
+        Nothing
+          | responseStopReason resp == ToolUse,
+            not (null (responseToolCalls resp)) ->
+              if remaining <= 1
+                then pure (Left (SkillToolTurnLimitExceeded turnLimit))
+                else do
+                  advanced <-
+                    Exception.try @SkillToolInfrastructureFailure
+                      (appendToolResult ctx resp (safeToolDispatcher registry))
+                  case advanced of
+                    Left (SkillToolInfrastructureFailure infraError) ->
+                      pure
+                        ( Left
+                            ( SkillToolInfrastructureFailed
+                                (isTransient infraError)
+                                (renderShikumiError infraError)
+                            )
+                        )
+                    Right next -> go (remaining - 1) next
+          | otherwise -> pure (renderResponse resp)
+
+responseStopReason :: Response -> StopReason
+responseStopReason Response {message = AssistantPayload {stopReason}} = stopReason
+
+responseToolCalls :: Response -> [ToolCall]
+responseToolCalls = V.toList . V.mapMaybe toolCallOf . flattenAssistantBlocks
+  where
+    toolCallOf = \case
+      AssistantToolCall toolCall -> Just toolCall
+      _ -> Nothing
+
+newtype SkillToolInfrastructureFailure = SkillToolInfrastructureFailure ShikumiError
+  deriving stock (Show, Generic)
+
+instance Exception SkillToolInfrastructureFailure
+
+safeToolDispatcher :: ToolRegistry -> ToolCall -> IO ToolResult
+safeToolDispatcher registry call = do
+  dispatched <- Exception.try @SomeException (dispatchTool registry call)
+  case dispatched of
+    Right result -> pure result
+    Left exception ->
+      case fromException exception :: Maybe SkillToolInfrastructureFailure of
+        Just failure -> throwIO failure
+        Nothing
+          | isAsyncException exception -> throwIO exception
+          | otherwise ->
+              pure
+                ( toolResultErrorText
+                    (boundedBehaviorDetail (Text.pack (displayException exception)))
+                )
+
+dispatchTool :: ToolRegistry -> ToolCall -> IO ToolResult
+dispatchTool registry call = do
+  outcome <- runEff . runErrorNoCallStack . runLLM $ runToolCall registry call
+  case outcome of
+    Left infraError -> throwIO (SkillToolInfrastructureFailure infraError)
+    Right (Left toolError) -> pure (toolResultErrorText (renderToolError toolError))
+    Right (Right output) -> pure (toolResultText output)
+
+isAsyncException :: SomeException -> Bool
+isAsyncException exception =
+  case fromException exception :: Maybe SomeAsyncException of
+    Just _ -> True
+    Nothing -> False
+
+renderShikumiError :: ShikumiError -> Text
+renderShikumiError =
+  boundedBehaviorDetail . \case
+    InvalidJSON detail -> "invalid JSON: " <> detail
+    MissingField detail -> "missing field: " <> detail
+    SchemaMismatch detail -> "schema mismatch: " <> detail
+    ValidationFailure detail -> "validation failure: " <> detail
+    ProviderFailure detail -> "provider failure: " <> detail
+    ContextWindowExceeded detail -> "context window exceeded: " <> detail
+    Timeout detail -> "timeout: " <> detail
+    BudgetExceeded detail -> "budget exceeded: " <> detail
+    CodeExecFailed detail -> "code execution failed: " <> detail
+
+renderResponse :: Response -> Either RunError Value
+renderResponse resp =
+  -- Baikai reports provider failure in band: an error-shaped response carries
+  -- no assistant text, so reading the reply alone would turn an outage into a
+  -- successful empty answer.
+  case responseError resp of
+    Just err -> Left (ProviderFailed (isRetryable err) (renderProviderError err))
+    Nothing -> Right (object ["reply" .= renderReply resp])
 
 -- | A loggable one-line rendering of an in-band provider failure: its category,
 -- HTTP status when the call was HTTP, and the provider's own detail.

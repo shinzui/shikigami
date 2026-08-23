@@ -129,6 +129,14 @@ tests =
                 forbiddenInLightPackages
           )
           lightPackages,
+      testCase "core links the neutral tool registry without a provider adapter" do
+        stanzas <- allStanzas
+        deps <- productionLibraryDeps "shikigami-core" stanzas
+        assertBool "shikigami-core must link the released shikumi-tools registry" ("shikumi-tools" `elem` deps)
+        let linkedAdapters = filter isProviderAdapterDependency deps
+        assertBool
+          ("provider adapters belong in leaf composition packages; core links " <> show linkedAdapters)
+          (null linkedAdapters),
       -- The check that would have caught the regression plan 55 exists to fix.
       --
       -- The sibling-edge case above looks at what a *library* declares. It
@@ -221,6 +229,11 @@ productionLibraryDeps package stanzas =
 -- | @shikigami-migrations:test-support@ names the @shikigami-migrations@ package.
 dropSublibrary :: Text -> Text
 dropSublibrary = Text.takeWhile (/= ':')
+
+isProviderAdapterDependency :: Text -> Bool
+isProviderAdapterDependency dependency =
+  "mcp" `Text.isInfixOf` dependency
+    || dependency `elem` ["process", "typed-process"]
 
 -- | Split a @.cabal@ file into its stanzas and collect each one's dependencies.
 --

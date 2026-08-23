@@ -43,10 +43,10 @@ This section must always reflect the actual current state of the work.
       failures.
 - [x] (2026-08-22) Implement masked deterministic acquisition, collision-safe composition, and LIFO
       release, including partial-failure rollback.
-- [ ] Add an empty default tool registry and active overlay set to `BehaviorEnv` plus a
+- [x] (2026-08-22) Add an empty default tool registry and active overlay set to `BehaviorEnv` plus a
       derived-environment constructor.
-- [ ] Add the bounded Skill model/tool loop and preserve the exact empty-registry path.
-- [ ] Add lifecycle, failure, isolation, dispatch, timeout, and tracing tests.
+- [x] (2026-08-22) Add the bounded Skill model/tool loop and preserve the exact empty-registry path.
+- [x] (2026-08-22) Add lifecycle, failure, isolation, dispatch, timeout, and tracing tests.
 
 
 ## Surprises & Discoveries
@@ -76,6 +76,9 @@ implementation. Provide concise evidence.
   including timeout cancellation, partial-acquisition rollback, LIFO cleanup, continued
   cleanup after a release failure, exact revision selection, collision refusal, and
   concurrent derived-registry isolation.
+- The completed behavior milestone passes all 431 core tests. Its bracketed end-to-end case
+  records two traced model turns, carries the namespaced tool result into the second context,
+  returns the unchanged `{"reply": ...}` shape, and releases the provider afterward.
 
 
 ## Decision Log
@@ -119,6 +122,14 @@ Record every decision made while working on the plan.
   as the primary failure and report cleanup failures separately.
   Rationale: Stopping after the first disposer failure maximizes leaks. Replacing the original
   exception with cleanup noise hides the cause of the failed run.
+  Date: 2026-08-22
+
+- Decision: Treat a declaration/environment overlay mismatch and exhaustion of the hard
+  model-turn ceiling as permanent behavior failures. Preserve Shikumi's transient/permanent
+  classification when a tool body reports an infrastructure failure.
+  Rationale: Neither a retry nor a model observation can repair missing authority, a fixed
+  local ceiling, budget exhaustion, or context overflow. Provider and timeout faults may
+  recover and continue to use the existing retry path.
   Date: 2026-08-22
 
 

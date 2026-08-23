@@ -8,6 +8,7 @@ module Shikigami.Behavior.Run
     BehaviorInput (..),
     RunError (..),
     behaviorModelId,
+    defaultToolTurnLimit,
     newBehaviorEnv,
     newBehaviorEnvWithTraceSink,
     programArgs,
@@ -20,6 +21,7 @@ module Shikigami.Behavior.Run
     -- constructed task to observe the argument map a real dispatch builds.
     runProgramTask,
     triggerOnly,
+    withCapabilityTools,
   )
 where
 
@@ -28,15 +30,20 @@ import Baikai.Options (Options, emptyOptions)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception (throwIO)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Generics.Labels ()
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
+import GHC.Generics (Generic)
 import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
@@ -52,7 +59,10 @@ import Shikigami.Behavior.Error
 import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
+import Shikigami.Capability.Overlay (CapabilityId, ResolvedCapabilitySet, resolvedCapabilities)
+import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.Program.Registry (lookupTask)
+import Shikumi.Tool (ToolRegistry, mkRegistry)
 import System.Timeout (timeout)
 
 -- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once),
@@ -70,8 +80,16 @@ data BehaviorEnv = BehaviorEnv
   { runtime :: !Runtime,
     model :: !Model,
     options :: !Options,
-    traceSink :: !(Maybe TraceSink)
+    traceSink :: !(Maybe TraceSink),
+    tools :: !ToolRegistry,
+    activeOverlays :: !(Set CapabilityId),
+    toolTurnLimit :: !Int
   }
+  deriving stock (Generic)
+
+-- | Hard model-turn ceiling for a tool-using Skill behavior.
+defaultToolTurnLimit :: Int
+defaultToolTurnLimit = 8
 
 -- | The upstream id of the model this environment dispatches with — @stub-v1@
 -- under the stub, @claude-haiku-4-5@ and the like under a real provider.
@@ -103,24 +121,66 @@ newBehaviorEnvWithTraceSink :: Maybe TraceSink -> IO BehaviorEnv
 newBehaviorEnvWithTraceSink traceSink = do
   rt <- newRuntime
   registerStubProvider
-  pure BehaviorEnv {runtime = rt, model = stubModel, options = emptyOptions, traceSink}
+  pure
+    BehaviorEnv
+      { runtime = rt,
+        model = stubModel,
+        options = emptyOptions,
+        traceSink,
+        tools = mkRegistry [],
+        activeOverlays = Set.empty,
+        toolTurnLimit = defaultToolTurnLimit
+      }
+
+-- | Derive one callback-local environment from an immutable base environment.
+-- The active ids come from the same resolved snapshot whose leases produced the
+-- composed registry.
+withCapabilityTools :: ResolvedCapabilitySet -> ToolRegistry -> BehaviorEnv -> BehaviorEnv
+withCapabilityTools resolved registry env =
+  env
+    & #tools .~ registry
+    & #activeOverlays .~ Set.fromList (descriptorCapability <$> resolvedCapabilities resolved)
+  where
+    descriptorCapability Overlay.CapabilityDescriptor {Overlay.capability = capabilityId} = capabilityId
 
 -- | Dispatch on the behavior union. The 'BehaviorInput' is what triggered the run
 -- and what the agent remembers; the output @Value@ is the behavior's result.
 runBehavior :: BehaviorEnv -> AgentDecl -> BehaviorInput -> IO (Either RunError Value)
-runBehavior env decl input =
-  case behavior decl of
-    ShikumiProgram {task = t} ->
-      case lookupTask t of
-        Nothing -> pure (Left (UnknownTask t))
-        Just tk -> runProgramTask (runtime env) tk input
-    Skill {path = p} ->
-      runSkillWithTrace (traceSink env) (model env) (options env) (SkillDir (Text.unpack p)) input
-    Flow {} ->
-      pure (Left (UnsupportedBehavior "Flow"))
-    Deterministic {} ->
-      -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
-      pure (Left (UnsupportedBehavior "Deterministic"))
+runBehavior env decl input
+  | not (overlaysMatch env decl) =
+      pure
+        ( Left
+            ( CapabilityOverlayMismatch
+                (capabilityOverlays decl)
+                (Set.toAscList (activeOverlays env))
+            )
+        )
+  | otherwise = case behavior decl of
+      ShikumiProgram {task = t} ->
+        case lookupTask t of
+          Nothing -> pure (Left (UnknownTask t))
+          Just tk -> runProgramTask (runtime env) tk input
+      Skill {path = p} ->
+        runSkillWithTrace
+          (traceSink env)
+          (model env)
+          (options env)
+          (tools env)
+          (toolTurnLimit env)
+          (SkillDir (Text.unpack p))
+          input
+      Flow {} ->
+        pure (Left (UnsupportedBehavior "Flow"))
+      Deterministic {} ->
+        -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
+        pure (Left (UnsupportedBehavior "Deterministic"))
+
+overlaysMatch :: BehaviorEnv -> AgentDecl -> Bool
+overlaysMatch BehaviorEnv {activeOverlays} AgentDecl {capabilityOverlays} =
+  length capabilityOverlays == Set.size requested
+    && requested == activeOverlays
+  where
+    requested = Set.fromList capabilityOverlays
 
 -- | Bound one synchronous behavior call. Retryable failures and timeouts throw
 -- before a workflow step can append them; permanent failures remain a bounded
@@ -192,8 +252,8 @@ envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
     ErrorS -> Left (ProgramRuntimeFailed msg)
     _ -> Right (maybe Aeson.Null id v)
 
-runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
-runSkillWithTrace Nothing model options dir input =
-  runSkill model options dir input
-runSkillWithTrace (Just sink) model options dir input =
-  runSkillWith model options dir input (BaikaiTrace.withTrace sink)
+runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> ToolRegistry -> Int -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
+runSkillWithTrace Nothing model options registry turnLimit dir input =
+  runSkill model options registry turnLimit dir input
+runSkillWithTrace (Just sink) model options registry turnLimit dir input =
+  runSkillWith model options registry turnLimit dir input (BaikaiTrace.withTrace sink)

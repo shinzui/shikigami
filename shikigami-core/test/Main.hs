@@ -21,6 +21,7 @@ import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
 import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
+import Shikigami.BehaviorToolSpec qualified as BehaviorToolSpec
 import Shikigami.CapabilityOverlaySpec qualified as CapabilityOverlaySpec
 import Shikigami.CapabilityProviderSpec qualified as CapabilityProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
@@ -77,6 +78,7 @@ main =
           BehaviorInputSpec.tests,
           BehaviorProviderSpec.tests,
           BehaviorRetrySpec.tests,
+          BehaviorToolSpec.tests,
           CapabilityOverlaySpec.tests,
           CapabilityProviderSpec.tests,
           DelegateContextSpec.tests,
