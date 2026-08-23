@@ -16,15 +16,13 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-An operator running shikigami today is nearly blind. Every log line in the runtime is a bare
-`hPutStrLn stderr` with an ad-hoc bracket prefix (`[shikigami.worker] ...`, `[stream] ...`,
-`[sink] ...`), impossible to filter or aggregate by field; the per-sink result logger is a
-literal no-op (`logSinkResult _job _result = pure ()`,
-`shikigami-core/src/Shikigami/Agent/Workflow.hs:629-630`). Every metrics hook the substrate
-already exposes is filled with `Nothing`, so nothing counts runs, queue depth, outbox lag, or
-consumer throughput. Tracing exists only inside the `worker` command; the scheduler and both
-consumers run a no-op tracer, and the trace dies at the outbox: the `sink.dispatch` producer
-span is never connected to the asynchronous HTTP publish that actually delivers the sink.
+Milestone 1 made long-running Shikigami application logs structured JSON and exposed per-sink
+results, but the runtime is still operationally incomplete. Every metrics hook the substrate
+exposes is filled with `Nothing`, so nothing counts runs, queue depth, outbox lag, or consumer
+throughput. Tracing exists only inside the worker command; the scheduler and both consumers
+run a no-op tracer, and the trace dies at the outbox: the `sink.dispatch` producer span is never
+connected to the asynchronous HTTP publish that actually delivers the sink. The HTTP server
+also lacks bounded, trace-correlated production request logs and bracketed provider shutdown.
 
 After this plan, every process emits one structured JSON object per log line (parse them with
 `jq`), the standard `OTEL_EXPORTER_OTLP_ENDPOINT` variable turns on both traces and metrics
@@ -43,7 +41,13 @@ the HTTP POST to the sink endpoint.
 
 ## Progress
 
-- [ ] Prerequisites: plans 36/37 complete; telemetry lifecycle is owned by process composition roots in server/workers packages.
+- [x] Prerequisites: plans 22/36/37/47 complete for this plan's integration surfaces;
+      telemetry lifecycle remains owned by the server and workers process composition roots.
+      Verified 2026-08-23.
+- [x] Pre-implementation refresh: reconciled Milestones 2-4 with the current seven-package
+      layout, Keiro 0.14.0.0, hs-opentelemetry 1.0.0.0, Kioku 0.5.0.0, Shibuya 0.9.0.0,
+      the public PGMQ queue-metrics API, and the current workflow-versioning rules.
+      Done 2026-08-23.
 
 - [x] M1: `Shikigami.Log` module written (JSON-lines logger, levels, event names, key-value
       fields); vocabulary documented in the module header. Done 2026-08-05, with a sibling
@@ -65,8 +69,8 @@ the HTTP POST to the sink endpoint.
 - [ ] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
       non-JSON output left on a worker's stderr, and it appears on abrupt termination. See
       Surprises & Discoveries.
-- [ ] M2 (spike): a `Meter` built from the hs-opentelemetry SDK exports a test counter via
-      OTLP; promotion criteria met (or fallback recorded in the Decision Log).
+- [ ] M2 (provider proof): a `Meter` built from the hs-opentelemetry 1.0.0.0 SDK exports a
+      test counter and the provider force-flushes before shutdown.
 - [ ] M2: `Shikigami.Telemetry.Metrics` written (`ShikigamiMetrics` record +
       `newShikigamiMetrics`); `Shikigami.Telemetry.withRunTelemetry` supersedes `withRunTracer`
       and also yields `Maybe KeiroMetrics` and `ShikigamiMetrics`.
@@ -86,8 +90,45 @@ the HTTP POST to the sink endpoint.
 
 ## Surprises & Discoveries
 
-**Every path in the plan's Context section names a location the code is not in today.** This
-plan was written before
+**The refresh found a seven-package deployed layout, not the six-package layout recorded in
+the 2026-08-05 note.** Plan 22 subsequently introduced the deliberately light
+`shikigami-agent` package alongside `shikigami-core`, `shikigami-api`, `shikigami-server`,
+`shikigami-workers`, `shikigami-client`, and `shikigami-migrations`. ADR 0003 requires the
+agent package to avoid the exporter stack, so provider construction cannot move into core as
+the old Milestone 2 text proposed. Provider-free instruments and trace-context helpers belong
+in core; the server and workers packages each own their provider lifecycle at the process
+composition root.
+
+**The metrics spike no longer needs to decide whether hs-opentelemetry metrics can export.**
+The released 1.0.0.0 SDK has an OTLP metric exporter, a periodic reader, global meter-provider
+initialization, force-flush, and shutdown APIs. The authoritative Hackage registry and upstream
+release tags agree with the versions already selected by `cabal.project`. M2 keeps a small
+export/flush integration proof, but the log-exposition fallback in the old plan is removed:
+it would create a second metrics system after the selected SDK has already supplied the required
+one.
+
+**Keiro 0.14 exposes context capture but not generic remote-parent continuation.**
+`Keiro.Telemetry.traceContextFromCurrentSpan` is public and produces the exact
+`IntegrationEvent.traceContext` value this plan needs. Keiro's W3C extraction helper,
+`withRemoteParent`, is private, while the public `withConsumerSpan` is specialized to Kafka
+records. Therefore the outbox publisher cannot implement `sink.publish` from the released API
+alone. M3 adds one narrow provider-free helper in Shikigami core using the same released
+`hs-opentelemetry-propagator-w3c` context attach/detach mechanism Keiro uses internally. It is
+only a bridge from Keiro's public `TraceContext`; it does not define another wire format.
+
+**The PGMQ adapter already exposes queue depth without table-name coupling.**
+`Pgmq.Hasql.Sessions.queueMetrics` returns `QueueMetrics` with strict `queueLength` and
+`queueVisibleLength` fields. The sampler should use that public API instead of querying
+`pgmq.q_shikigami_run_jobs` directly, which would couple Shikigami to PGMQ's physical schema.
+
+**Workflow telemetry must pass through Shikigami's single options authority.**
+Keiro 0.14's `WorkflowRunOptions` carries both `tracer` and `metrics`, but
+`Shikigami.Workflow.Versioning` currently constructs one static value with neither populated.
+Parameterizing that module from `AppEnv` preserves its ownership of patches and resume options;
+threading process dependencies into options does not alter durable step shape and requires no
+workflow patch under `docs/workflow-versioning.md`.
+
+**The original plan named locations the code no longer occupies.** This plan was written before
 `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` landed,
 and it points at two different absent layouts. `shikigami-core/src/Shikigami/Worker.hs` is the
 pre-split past: plan 36 moved that code into `shikigami-workers`. `shikigami-cli` is the
@@ -103,12 +144,9 @@ errors to delete. The real 2026-08-05 locations are:
 | `shikigami-cli/.../Commands/ConsumeStream.hs` | `shikigami-workers/src/Shikigami/Workers/Subscription.hs` |
 | `shikigami-core/src/Shikigami/Telemetry.hs` | `shikigami-workers/src/Shikigami/Telemetry.hs` |
 
-`docs/architecture/implementation-order.md` records stale package placement for MasterPlan 3's
-children; MasterPlan 6's children have the same problem in both directions — behind the split
-for the worker, ahead of it for `shikigami-cli` — and the board does not say so. Milestones 2
-through 4 of this plan still quote those paths and line numbers throughout, and must be
-re-pointed before they are started. When `shikigami-cli` lands, the command-module references
-should be revisited rather than assumed wrong.
+The Context, Plan of Work, and Interfaces sections were re-pointed to the current locations on
+2026-08-23. When `shikigami-cli` lands, command-module references should be revisited rather
+than assumed wrong.
 
 **`Control.Lens` exports a `Level` type, so the plan's `data Level` was ambiguous on sight.**
 `Shikigami.Prelude` re-exports `module Control.Lens`, which brings
@@ -207,6 +245,43 @@ and it should be watched for.
   Rationale: re-parsing the standard SDK surface creates divergent precedence/behavior.
   Date: 2026-07-22
 
+- Decision: Keep provider/exporter construction in the `shikigami-workers` and
+  `shikigami-server` composition roots; put only instruments and propagation helpers in
+  `shikigami-core`.
+  Rationale: this follows the seven-package boundary and ADR 0003's requirement that the
+  `shikigami-agent` closure remain free of the telemetry exporter stack.
+  Date: 2026-08-23
+
+- Decision: Parameterize `Shikigami.Workflow.Versioning` with `AppEnv` and derive Keiro's
+  workflow `tracer` and `metrics` options there.
+  Rationale: the module remains the only authority that constructs Shikigami workflow and
+  resume options, while every run receives the process telemetry already stored in `AppEnv`.
+  This dependency threading changes no durable workflow step shape and needs no patch id.
+  Date: 2026-08-23
+
+- Decision: Sample PGMQ depth through `Pgmq.Hasql.Sessions.queueMetrics`, recording total
+  `queueLength`, and sample Keiro outbox backlog through `sampleOutboxBacklog`.
+  Rationale: both are released public APIs and avoid coupling observability to either
+  dependency's physical table schema. Total queue length includes in-flight work and is the
+  most useful saturation signal; visible length can be added later under a distinct metric.
+  Date: 2026-08-23
+
+- Decision: Add a narrow local `withRemoteTraceContext` helper over
+  `hs-opentelemetry-propagator-w3c` for `sink.publish`.
+  Rationale: Keiro 0.14 publicly captures `TraceContext` but its generic remote-parent helper
+  is private. Copying the released library's attach/detach pattern lets Shikigami consume
+  Keiro's public wire type without inventing a format or waiting on a cross-repository release.
+  Date: 2026-08-23
+
+- Decision: Count `runs.started` immediately before dispatch of an admitted job;
+  `runs.completed` only for a terminal successful run; `runs.failed` for each unsuccessful
+  attempt; and `runs.retried` or `runs.dead_lettered` additionally at the matching queue
+  disposition. Suspended or continued-as-new workflows are neither completed nor failed.
+  Rationale: these decision points match actual lifecycle transitions and keep a retry visible
+  as both a failed attempt and a scheduled retry without falsely presenting workflow suspension
+  as success.
+  Date: 2026-08-23
+
 - Decision: Put the run and call correlation identifiers in a sibling module,
   `Shikigami.Log.Correlation`, re-exported from `Shikigami.Log`.
   Rationale: the 2026-08-05 Portfolio Reconciliation makes these identifiers durable audit
@@ -255,8 +330,8 @@ and it should be watched for.
   kioku, kawa — `.cabal` build-depends and source greps for katip/co-log/monad-logger/
   fast-logger/LogAction): none uses a logging framework. The ecosystem idiom is plain stderr
   lines plus OpenTelemetry spans for deep diagnostics (`Shibuya.Telemetry.Effect` is the shared
-  tracing surface; `AppEnv.tracer` at
-  `/Users/shinzui/Keikaku/bokuno/kioku/kioku-core/src/Kioku/App.hs:26`). Following the ecosystem
+  tracing surface; `AppEnv.tracer` in `mori://shinzui/kioku` at
+  `kioku-core/src/Kioku/App.hs`). Following the ecosystem
   means staying framework-free; what is missing is *structure*, not a framework. A ~100-line
   module over `aeson` (already a dependency) gives machine-parseable lines with zero new
   dependencies and no effect-system friction, and can be swapped later if the platform ever
@@ -267,24 +342,24 @@ and it should be watched for.
   substrate instruments plus a sibling `ShikigamiMetrics` record for shikigami's own — rather
   than a Prometheus endpoint.
   Rationale: the hooks shikigami must fill are typed for this. `AppEnv.metrics ::
-  Maybe KeiroMetrics` (`kioku-core/src/Kioku/App.hs:25-29`), and keiro's only constructor is
+  Maybe KeiroMetrics` (`mori://shinzui/kioku`, `kioku-core/src/Kioku/App.hs`), and Keiro's constructor is
   `newKeiroMetrics :: MonadIO m => Meter -> m KeiroMetrics`
-  (`/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Telemetry.hs:643`) over hs-opentelemetry
+  (`mori://shinzui/keiro`, `keiro/src/Keiro/Telemetry.hs`) over hs-opentelemetry
   instruments; there is no Prometheus-based builder in keiro. shibuya's Prometheus exposition
   (`shibuya-metrics`) reads shibuya's internal always-on `MetricsMap` and is not a hook
   shikigami can populate. One OTel pipeline, gated by the already-honored
-  `OTEL_EXPORTER_OTLP_ENDPOINT`, carries traces and metrics through the same collector. M2
-  starts with a spike because the hs-opentelemetry *metrics* export path is less traveled than
-  its trace path; the fallback, if the SDK cannot export metrics, is a small periodic
-  log-exposition loop over the same instruments, recorded here before promotion.
+  `OTEL_EXPORTER_OTLP_ENDPOINT`, carries traces and metrics through the same collector. The
+  2026-08-23 refresh verified the released SDK's OTLP metric path and lifecycle APIs; M2 keeps
+  an export/flush proof but no longer carries a parallel log-exposition fallback.
   Date: 2026-07-08
 
-- Decision: Propagate trace context through the outbox as a W3C `traceparent` using keiro's
+- Decision: Propagate trace context through the outbox as a W3C `traceparent` using Keiro's
   existing `IntegrationEvent.traceContext` field, and give the asynchronous publish its own
   `sink.publish` span parented on it.
   Rationale: keiro already models this end to end — `traceContext :: Maybe TraceContext` on
-  `IntegrationEvent` (`keiro-core/src/Keiro/Integration/Event.hs:107`), `TraceContext
-  { traceparent :: Text, tracestate :: Maybe Text }` (`Event.hs:146-150`), persisted in the
+  `IntegrationEvent` (`mori://shinzui/keiro`,
+  `keiro-core/src/Keiro/Integration/Event.hs`), `TraceContext
+  { traceparent :: Text, tracestate :: Maybe Text }`, persisted in the
   `keiro.keiro_outbox` columns `traceparent`/`tracestate` (keiro-migrations,
   `2026-05-19-12-55-02-keiro-outbox.sql:18-19`) and carried as Kafka headers. Shikigami just
   never fills it (`traceContext = Nothing`, `Shikigami/Agent/Workflow.hs:541`). Using the field
@@ -303,7 +378,7 @@ and it should be watched for.
 - Decision: Keep the "no endpoint set → no-op providers" behavior of
   `Shikigami.Telemetry.withRunTracer` in its successor `withRunTelemetry`.
   Rationale: callers must not need separate traced and untraced code paths (the existing
-  contract, `shikigami-core/src/Shikigami/Telemetry.hs:15-23`), and `newKeiroMetrics` is
+  contract, now at `shikigami-workers/src/Shikigami/Telemetry.hs`), and `newKeiroMetrics` is
   documented safe under a no-op meter (keiro `Telemetry.hs:636-641`), so `Just metrics` can be
   passed unconditionally.
   Date: 2026-07-08
@@ -370,86 +445,69 @@ Tests: `cabal test all` green — 157 in `shikigami-core-test` (15 of them new, 
 decision, below). The GHC runtime's crash dump on abrupt shutdown is still non-JSON, and belongs
 to Milestone 4. keiro's own log lines are not convertible from this repository.
 
-**Lesson for milestones 2 through 4.** Every path and line number in this plan's Context and
-Plan of Work sections predates the six-package split and is wrong; see Surprises & Discoveries
-for the corrected map. Re-point them before starting M2 rather than during it.
+**Lesson for milestones 2 through 4.** The paths and dependency assumptions needed a fresh
+audit after the package split. That audit and re-pointing were completed on 2026-08-23 before
+M2 began; see Surprises & Discoveries for the resulting boundary decisions.
 
 
 ## Context and Orientation
 
-Shikigami is a declared-agent runtime: one executable, `shikigami`, whose long-running
-subcommands form the runtime. The `worker` command
-(`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`) boots four concurrent loops
-(`shikigami-core/src/Shikigami/Worker.hs:70`): a queue processor draining the
-`shikigami_run_jobs` pgmq queue, a keiro workflow-resume worker, a keiro outbox publisher
-(which delivers "sink intents" — queued outbound effects — over HTTP), and a keiro timer
-worker. The `scheduler` command fires cron triggers; `consume-stream`/`consume-events`
-(`shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`) consume Kafka topics and enqueue
-run jobs. The shared environment type is kioku's `AppEnv`
-(`/Users/shinzui/Keikaku/bokuno/kioku/kioku-core/src/Kioku/App.hs:25-29`):
+Shikigami is a declared-agent runtime split across seven packages. `shikigami-workers` owns
+the worker, scheduler, activity-stream consumer, and integration-event consumer executables;
+`shikigami-server` owns the HTTP server; `shikigami-core` owns durable workflows and the sink
+dispatcher; and `shikigami-agent` deliberately stays free of provider/exporter dependencies.
+`Shikigami.Workers.Registry` supervises the run-job drain, workflow-resume, outbox-publisher,
+timer, and optional directory-consumer loops. `Shikigami.Workers.Command.Worker`,
+`Shikigami.Workers.Scheduler`, and `Shikigami.Workers.Subscription` are their composition
+roots. `Shikigami.Server.Boot` is the HTTP composition root.
+
+The shared runtime environment is Kioku's `AppEnv`
+([mori://shinzui/kioku](mori://shinzui/kioku)):
 
 ```haskell
 data AppEnv = AppEnv
-  { store :: !KirokuStore,
+  { connectionSettings :: !ConnectionSettings,
     tracer :: !Tracer,
     metrics :: !(Maybe KeiroMetrics)
   }
 ```
 
-Three terms of art. *keiro* is the durable-workflow engine over Postgres (source:
-`/Users/shinzui/Keikaku/bokuno/keiro`); an agent run is a keiro workflow, and outbound sink
-deliveries go through keiro's transactional *outbox* (a table, `keiro.keiro_outbox`, drained
-by a publisher loop). *shibuya* is the supervised queue-processor library the worker's drain
-loop runs on. *OTLP* is the OpenTelemetry wire protocol; `Shikigami.Telemetry.withRunTracer`
-(`shikigami-core/src/Shikigami/Telemetry.hs:18-41`) builds an OTLP-exporting tracer iff
-`OTEL_EXPORTER_OTLP_ENDPOINT` is set, else a no-op one.
+Three dependency terms matter. *Keiro* ([mori://shinzui/keiro](mori://shinzui/keiro)) is the
+durable-workflow engine and transactional outbox. *PGMQ*
+([mori://shinzui/pgmq-hs](mori://shinzui/pgmq-hs)) stores run jobs and exposes queue metrics.
+*OTLP* is the OpenTelemetry wire protocol; the selected
+[hs-opentelemetry source](mori://iand675/hs-opentelemetry) is the released 1.0.0.0 family.
+`cabal.project` selects Keiro 0.14.0.0, Kioku 0.5.0.0, Shibuya 0.9.0.0, and
+hs-opentelemetry 1.0.0.0, all verified against their authoritative registry versions and
+upstream release tags on 2026-08-23.
 
-The current state, verified per file:
+Logging is already implemented. `Shikigami.Log` emits JSON Lines and
+`Shikigami.Log.Correlation` supplies durable run/call identifiers. Runtime composition roots
+construct one logger, and worker loops, consumers, workflows, behavior providers, and sinks
+use it. The remaining logging work is production HTTP request logging and graceful shutdown.
 
-Logging. Everything is `hPutStrLn stderr`: the worker loops (`Worker.hs:69,80,83,88,100,105,
-110,116,121`), job handling (`Worker.hs:136,160,177,180,183,188`), the sink permission gate
-(`shikigami-core/src/Shikigami/Sink.hs:45`), the stream/event consumers
-(`shikigami-core/src/Shikigami/Trigger/Consumer.hs:86,113,150,157-160,184,190-194`), and the
-CLI command modules (`putStrLn`/`hPutStrLn` in `Commands/Worker.hs:27`,
-`Commands/Scheduler.hs:35,46,56`, `Commands/ConsumeStream.hs`). `logSinkResult` is a no-op
-(`Workflow.hs:629-630`), so per-sink outcomes are recorded in the workflow journal but never
-logged.
+Metrics remain unwired. `shikigami-workers/src/Shikigami/Telemetry.hs` currently constructs
+only a tracer. Worker, scheduler, and subscription composition roots build `AppEnv` with
+`metrics = Nothing`; outbox and timer publishers also receive `Nothing` directly. Keiro 0.14
+provides `newKeiroMetrics`, `sampleOutboxBacklog`, and metrics/tracer fields on
+`WorkflowRunOptions`. PGMQ provides `queueMetrics`. Shikigami needs a provider-free
+`Shikigami.Telemetry.Metrics` module in core and provider ownership in workers/server.
 
-Metrics. `metrics = Nothing` at every `AppEnv` construction:
-`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs:32`, `Commands/Scheduler.hs:39`,
-`Commands/ConsumeStream.hs:43` and `:73` (also `Commands/AgentRun.hs:40` and the test specs).
-The keiro workers that accept `Maybe KeiroMetrics` get `Nothing` literally:
-`publishClaimedOutbox (…) defaultPublishOptions Nothing` at `Worker.hs:108` and
-`runWorkflowTimerWorker Nothing now (…)` at `Worker.hs:119`. (The scheduler's own timer loop
-already threads `metrics appEnv` — `shikigami-core/src/Shikigami/Trigger/Scheduler.hs:118` —
-which is `Nothing` today.) `KeiroMetrics` is a record of 33 OTel instruments
-(`keiro/src/Keiro/Telemetry.hs:600-634`) including `outboxBacklog :: Gauge Int64`,
-`outboxPublished/outboxRetried/outboxDeadlettered :: Counter Int64`, `timerBacklog`,
-`timerFireLag :: Histogram`, `workflowActive :: Gauge Int64`; the constructor is
-`newKeiroMetrics :: MonadIO m => Meter -> m KeiroMetrics` (`Telemetry.hs:643`). keiro also
-offers `sampleOutboxBacklog` and `outboxMaintenancePass` (`keiro/src/Keiro/Outbox.hs:470` and
-`:451-455`), both taking `Maybe KeiroMetrics`.
+Tracing is also partial. Only the worker command calls `withRunTracer`; scheduler and
+subscription commands use `noopTracer`. Agent and conversation workflows use the tracer from
+`AppEnv`, but `Shikigami.Workflow.Versioning` does not yet copy that tracer or Keiro metrics
+into `WorkflowRunOptions`. Both sink-intent builders—`Shikigami.Agent.Workflow` and
+`Shikigami.Flow.SinkOutbox`—set `IntegrationEvent.traceContext = Nothing`. The outbox
+publisher dispatches HTTP without a child `sink.publish` span or trace header. Plan 22's
+`Shikigami.Sink.Http.postJSONWithHeaders` already composes safe caller headers with opaque
+authorization, so M3 extends that seam rather than creating another HTTP path.
 
-Tracing. Only the worker command builds a real tracer (`Commands/Worker.hs:29`,
-`withRunTracer`); the scheduler and consumers call kioku's `noopTracer`
-(`Commands/Scheduler.hs:38`, `Commands/ConsumeStream.hs:42,:72`). Spans exist for `agent.run`
-(consumer kind, `Worker.hs:168-172`), `trigger` and `behavior` (internal,
-`Workflow.hs:170-182`), and `sink.dispatch` (producer, `Workflow.hs:190-193`). But
-`sink.dispatch` only *enqueues* outbox messages; the actual HTTP delivery happens later in the
-outbox publisher loop via `publishSinkIntent` (`Workflow.hs:561-583`) → `dispatch`
-(`Sink.hs:39`) → `postJSON` (`shikigami-core/src/Shikigami/Sink/Http.hs:31-51`), with no span
-and no `traceparent` header (`Http.hs:38-43` sets only `content-type`). The link between the
-two sides is severed at `sinkIntentEvent`, which constructs the keiro `IntegrationEvent` with
-`traceContext = Nothing` (`Workflow.hs:541`). A second, near-duplicate sink-intent builder
-lives in `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` (its `SinkIntent` at lines 33-41
-also builds an `IntegrationEvent` without trace context); note that
-`docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` plans to merge these —
-patch both until then.
-
-One API caveat for later readers: shikigami pins shibuya from git (`cabal.project:114`), and
-the pinned `runApp` takes `(strategy, inboxSize, processors)` positionally (`Worker.hs:78`)
-while newer shibuya sources take an `AppConfig`. This plan does not touch that call; do not
-"fix" it in passing.
+Durable workflow constraints apply to the changes in `Shikigami.Agent` and `Shikigami.Flow`.
+Capturing current trace context and threading process telemetry into Keiro options do not add,
+remove, reorder, or rename workflow steps; under `docs/workflow-versioning.md` and ADR 0012,
+they require no patch id. The two duplicated sink-intent wire records must remain byte-compatible
+for historical rows; adding only the existing `IntegrationEvent` metadata leaves their JSON
+payload unchanged and is covered by `Shikigami.WireCompatSpec`.
 
 
 ## Plan of Work
@@ -496,34 +554,20 @@ parse errors.
 
 ### Milestone 2 — metrics
 
-Scope: real instruments behind every hook that today gets `Nothing`, plus shikigami's own
-counters. Start with a spike (prototyping in the PLANS.md sense) because the metrics export
-path of hs-opentelemetry is less proven in this codebase than its trace path: in a scratch
-`Main`, build a `MeterProvider`/`Meter` (find the construction API by reading the imports of
-`/Users/shinzui/Keikaku/bokuno/keiro/keiro/src/Keiro/Telemetry.hs`, which names the instrument
-types shikigami must feed), create one counter, add to it, and confirm the collector receives
-it via OTLP. Promotion criterion: the counter is visible in the collector's debug output. If
-the SDK cannot export metrics, record it in Surprises & Discoveries and fall back to a periodic
-exposition loop that logs instrument readings as `metrics.sample` events through
-`Shikigami.Log` — the instrument wiring below is identical either way.
+Scope: real instruments behind every hook that today gets `Nothing`, plus Shikigami's own
+counters and gauges. First add a focused integration proof in the workers test suite: a metric
+recorded through the 1.0.0.0 SDK is observed by an exporter after force-flush. This is a
+regression test for provider construction and lifecycle, not a go/no-go API spike.
 
-Then extend `shikigami-core/src/Shikigami/Telemetry.hs`: replace `withRunTracer` with
-
-```haskell
-withRunTelemetry :: Text -> (Tracer -> Maybe KeiroMetrics -> ShikigamiMetrics -> IO a) -> IO a
-```
-
-(the `Text` is the instrumentation-scope name — currently hardcoded to `"shikigami.worker"` at
-`Telemetry.hs:26`; each command passes its own). Keep `withRunTracer` as a thin shim during the
-migration, delete it at the end. When `OTEL_EXPORTER_OTLP_ENDPOINT` is unset, build the no-op
-providers exactly as today — and still return `Just` metrics, which is safe per keiro's
-documentation of `newKeiroMetrics` under a no-op meter.
-
-Create `shikigami-core/src/Shikigami/Telemetry/Metrics.hs` with:
+Create `shikigami-core/src/Shikigami/Telemetry/Metrics.hs` with provider-free instruments:
 
 ```haskell
 data ShikigamiMetrics = ShikigamiMetrics
-  { runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered :: !(Counter Int64),
+  { runsStarted :: !(Counter Int64),
+    runsCompleted :: !(Counter Int64),
+    runsFailed :: !(Counter Int64),
+    runsRetried :: !(Counter Int64),
+    runsDeadLettered :: !(Counter Int64),
     queueDepth :: !(Gauge Int64),
     consumerRecords :: !(Counter Int64)
   }
@@ -531,81 +575,95 @@ data ShikigamiMetrics = ShikigamiMetrics
 newShikigamiMetrics :: (MonadIO m) => Meter -> m ShikigamiMetrics
 ```
 
-instrument names per the vocabulary (`shikigami.runs.started` etc.), attribute sets kept
-low-cardinality (`agent`, `trigger.kind`, `outcome`, `topic` only).
+Instrument names are fixed by the Decision Log. Keep attributes low-cardinality: `agent.name`,
+`trigger.kind`, `outcome`, and `topic`; never attach run ids, message ids, URLs, or error text to
+metrics. Provide named recording functions so call sites do not manipulate raw instruments or
+reconstruct attribute sets.
 
-Wire it: in each CLI command construct `AppEnv { …, metrics = keiroMetrics }` with the value
-from `withRunTelemetry` (`Commands/Worker.hs:32`, `Commands/Scheduler.hs:39`,
-`Commands/ConsumeStream.hs:43,:73`); pass the same value to `publishClaimedOutbox` at
-`Worker.hs:108` and `runWorkflowTimerWorker` at `Worker.hs:119` (the scheduler's
-`Trigger/Scheduler.hs:118` then works for free). Add `ShikigamiMetrics` to `WorkerEnv` and
-increment: `runsStarted` on job decode success (`handleRunJob`, `Worker.hs:132`),
-`runsCompleted`/`runsFailed`/`runsRetried`/`runsDeadLettered` at each `AckDecision` branch of
-`runOneAgent` (`Worker.hs:174-192`) and the dead-letter branches at `Worker.hs:136-137,146`.
-In the worker add a sampler loop (a fifth concurrent action in `runWorker`, `Worker.hs:70`)
-that once per, say, 15 seconds sets `queueDepth` from
-`SELECT count(*) FROM pgmq.q_shikigami_run_jobs` (a hasql statement over `pool`) and calls
-keiro's `sampleOutboxBacklog` with the metrics so `outboxBacklog` is live. In
-`Trigger/Consumer.hs`, bump `consumerRecords` (attribute `topic`) per record processed in
-`processRecord`/`processEventRecord`.
+Replace `withRunTracer` in `shikigami-workers/src/Shikigami/Telemetry.hs` with:
+
+```haskell
+withRunTelemetry :: Text -> (Tracer -> Maybe KeiroMetrics -> ShikigamiMetrics -> IO a) -> IO a
+```
+
+The callback scope name is per process. With no `OTEL_EXPORTER_OTLP_ENDPOINT`, install no-op
+providers but still construct `Just KeiroMetrics` and `ShikigamiMetrics`; callers never branch.
+With an endpoint, initialize one global tracer provider and one global meter provider using the
+SDK's standard `OTEL_*` parsing. The finalizer force-flushes and shuts down both providers.
+Delete the transitional `withRunTracer` after all call sites move.
+
+In the worker, scheduler, and subscription composition roots, construct `AppEnv` with the
+returned tracer and Keiro metrics. Add `metrics :: !ShikigamiMetrics` to `WorkerEnv` and thread
+the Keiro value into `publishClaimedOutbox`, `runWorkflowTimerWorker`, and scheduler paths.
+Change `Shikigami.Workflow.Versioning.shikigamiWorkflowRunOptions` and
+`shikigamiWorkflowResumeOptions` to derive the Keiro `tracer` and `metrics` options from
+`AppEnv`; update the agent and conversation workflow calls without changing workflow steps.
+
+Record run counters in `Shikigami.Agent.RunJob.Worker` according to the lifecycle semantics in
+the Decision Log. Record consumer throughput after each decoded stream record reaches its
+processor, with `topic` only. Add a supervised telemetry sampler loop at a 15-second cadence:
+read total run-job depth with `Pgmq.Hasql.Sessions.queueMetrics`, record
+`shikigami.queue.depth`, and call Keiro's `sampleOutboxBacklog`. A sampling error logs one
+structured warning and the loop continues; it must never stop job processing.
 
 Acceptance: with the collector running, one enqueued run yields `shikigami.runs.started` and
 `shikigami.runs.completed` increments and a `shikigami.queue.depth` gauge report; keiro's
-`keiro.outbox.*` instruments (names as keiro defines them) appear once sink intents flow.
+outbox instruments appear once sink intents flow. Unit tests pin instrument names, attributes,
+run-outcome accounting, and sampling failure recovery.
 
 ### Milestone 3 — trace propagation end to end
 
-Scope: every command traced, and one connected trace across the outbox.
+Scope: every long-running workers command traced, and one connected trace across the outbox.
+M2 already moves scheduler and subscriptions from `noopTracer` to `withRunTelemetry`, using
+scope names `shikigami.scheduler`, `shikigami.consume-stream`, and
+`shikigami.consume-events`.
 
-First, replace `noopTracer` with `withRunTelemetry` in `Commands/Scheduler.hs:38` and
-`Commands/ConsumeStream.hs:42,:72`, scope names `shikigami.scheduler`,
-`shikigami.consume-stream`, `shikigami.consume-events`.
+At each sink-intent producer, call Keiro's released
+`traceContextFromCurrentSpan :: MonadIO m => m (Maybe TraceContext)` while the producer span is
+active. Pass the result into `sinkIntentEvent` and populate the existing
+`IntegrationEvent.traceContext`. Apply the same change to
+`Shikigami.Agent.Workflow` and `Shikigami.Flow.SinkOutbox`; keep their duplicated payload
+records identical.
 
-Second, capture context at the producer. In `enqueueSinkIntents` (`Workflow.hs:386-440`) the
-`sink.dispatch` span is already open when intents are built; call Keiro's released
-`traceContextFromCurrentSpan :: MonadIO m => m (Maybe TraceContext)` and pass its result into
-`sinkIntentEvent`
-(`Workflow.hs:523-544`) as a new parameter and set
-`traceContext` instead of hard-coding `Nothing` (`Workflow.hs:541`). Do not hand-render W3C
-headers or add a parallel propagator helper. Apply the same change to the builder in
-`shikigami-core/src/Shikigami/Flow/SinkOutbox.hs`.
+Add `Shikigami.Telemetry.TraceContext.withRemoteTraceContext` in core. It accepts Keiro's
+public `TraceContext`, uses `hs-opentelemetry-propagator-w3c` to extract it into an OTel
+`Context`, attaches that context only for the supplied action, and always restores the previous
+context. Invalid remote context degrades to an unparented span and a structured warning rather
+than failing publication.
 
-Third, continue the trace at the publisher. `publishSinkIntent` (`Workflow.hs:561-583`)
-receives the `OutboxRow` whose `event :: IntegrationEvent` now carries `traceContext`. Wrap the
-`dispatch` call in a `sink.publish` span (kind Consumer — it continues the producer span) whose
-parent is reconstructed from the stored `traceparent`; attributes `agent`, `sink_kind`,
-`outbox.message_id`. Fourth, propagate onward over HTTP: consume
+In `publishSinkIntent`, reconstruct the stored parent and open `sink.publish` with consumer
+span kind and the low-cardinality `sink.kind` attribute. Once that span is current, capture its
+W3C context and add it to `SinkContext`; the outgoing request must carry the new child span,
+not merely replay the producer's stored header. Extend plan 22's existing seam:
 
 ```haskell
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
+postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [Header] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 ```
 
-from `Shikigami.Sink.Http` as defined by plan 22, appending the trace header to the
-authentication headers already injected from `HttpEnv`; `postJSON env =
-postJSONWithHeaders env []`. Have the sink clients
-(`Shikigami.Sink.KawaClient`, `Shikigami.Sink.KizashiClient`, `Shikigami.Sink.Danwa`) accept an
-optional traceparent from `SinkContext` (add a `traceparent :: Maybe Text` field) and send
-`("traceparent", …)`. `publishSinkIntent` fills that field from the row's context.
+Represent propagated headers as `traceHeaders :: ![Header]` on `SinkContext`. Kawa, Kizashi,
+Rei, and Danwa all consume those headers. The first three pass them directly to
+`postJSONWithHeaders`; Danwa applies them through its dedicated request path without weakening
+the existing host-scoped opaque authorization. Only `traceparent` and optional `tracestate`
+are created; caller headers still cannot override content type or authorization.
 
 Acceptance: the Postgres-level proof is a new test (M3 step) in
 `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs` — run a workflow that enqueues a sink
 intent under a real tracer, then assert `SELECT traceparent FROM keiro.keiro_outbox` is
 non-null and starts with `00-`. The wire-level proof captures `traceparent` in a test-only
-recording stub without adding arbitrary headers to production access logs; the collector then
-shows `agent.run` and `sink.publish` in one trace.
+recording stub for each HTTP sink and proves the emitted header names are allowlisted. An
+in-memory span exporter proves `sink.publish` has the stored producer span as its parent.
 
 ### Milestone 4 — provider lifetime and production request logging
 
 Scope: make telemetry survive normal shutdown and make every served request observable without
 creating a credential or memory leak.
 
-Every server, worker, consumer, scheduler, and short-lived administrative executable that
-initializes telemetry brackets one tracer provider and one meter provider in its composition
-root. Build those executables with `-threaded`. Initialize and install the providers before
-constructing `newOpenTelemetryWaiMiddleware`; pass the same tracer into Keiro. On release,
-stop accepting work, drain in-flight work within the graceful-shutdown deadline, force-flush
-then shut down the tracer provider, and shut down the meter provider. A disabled SDK yields
-no-op providers through the same path. Keep standard `OTEL_*` parsing in the SDK.
+Workers lifecycle is implemented in M2. Add the same bracketed tracer/meter ownership to
+`Shikigami.Server.Boot`; the relevant executables are already built with `-threaded`.
+Initialize and install global providers before constructing
+`newOpenTelemetryWaiMiddleware`, pass the same tracer to application dependencies, and on
+release stop accepting work, force-flush, then shut down tracer and meter providers. Preserve
+the existing no-endpoint no-op behavior and keep standard `OTEL_*` parsing in the SDK.
 
 Add `Shikigami.Server.RequestLog.requestLogMiddleware` in the server package. It emits exactly
 one JSON line with UTC `time`, `method`, `path = rawPathInfo` (never the query string), numeric
@@ -618,15 +676,18 @@ interleave it. Exclude exact `/health/live` and `/health/ready` paths.
 
 Compose middleware outside-in as
 `otelMiddleware (requestLogMiddleware include (exceptionBoundary servantApp))`. The exception
-boundary converts escaped exceptions to the standard RFC 7807 500 response; the request logger
-observes the actual status and never invents a second renderer. `logStdoutDev` and
-`wai-extra`'s JSON formatter remain development-only and are absent from production boot.
+boundary converts synchronous escaped exceptions to the standard RFC 7807 500 response while
+rethrowing asynchronous exceptions; the request logger observes the actual status and never
+invents a second renderer. `logStdoutDev` and `wai-extra`'s JSON formatter remain absent from
+production boot.
 
 Tests send bodies, query secrets, authorization/cookie headers, long user agents, successful
 and failing responses, health probes, and an incoming `traceparent`. They assert one parseable
 line per included request, exact field names, truncation, matching trace correlation, no planted
 secret, no health lines, and correct middleware ordering. A shutdown test proves queued spans
-are exported before provider teardown.
+and metrics are exported before provider teardown. A worker termination test reproduces the
+old linked-thread crash, sends the supported graceful signal, and asserts a clean exit with no
+GHC uncaught-exception dump.
 
 
 ## Concrete Steps
@@ -666,17 +727,17 @@ Expected shape (names per the vocabulary; counts vary):
 
 Any non-JSON line makes `jq` print a parse error — that is the failure signal.
 
-M2 spike — run a local collector and point the exporter at it (any OTLP collector works; if one
-is not installed, `docker run -p 4318:4318 otel/opentelemetry-collector` with a debug exporter
-config is the reference setup, or skip to the fallback exposition):
+M2 focused tests exercise instrument construction, force-flush, lifecycle decisions, and the
+sampler without an external collector:
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-cabal run shikigami-worker -- --config config/worker-observability-dev.yaml 2>worker.log
+cabal test shikigami-workers-test --test-options='-p "telemetry|metrics|sampler"'
 ```
 
-Expected: the collector's debug output prints `shikigami.runs.started` datapoints after an
-`enqueue-run`.
+Expected: all matching tests pass, including the export-after-flush assertion. A manual OTLP
+acceptance run may additionally point `OTEL_EXPORTER_OTLP_ENDPOINT` at any collector and
+enqueue one job; its debug exporter then shows `shikigami.runs.started`,
+`shikigami.runs.completed`, and `shikigami.queue.depth`.
 
 M3 verification — the DB-level assertion, runnable without any collector:
 
@@ -686,6 +747,16 @@ cabal test shikigami-core-test --test-options='-p "traceparent"'
 
 Expected: the new test case (named to match the pattern `traceparent`) passes, having asserted
 a non-null `00-…` value in `keiro.keiro_outbox.traceparent`.
+
+M4 request and shutdown verification:
+
+```bash
+cabal test shikigami-server-test --test-options='-p "request log|telemetry shutdown"'
+cabal test shikigami-workers-test --test-options='-p "graceful shutdown"'
+```
+
+Expected: safe-field request logs parse as JSON, planted secrets are absent, health paths emit
+nothing, telemetry is flushed, and the worker exits without a runtime exception dump.
 
 
 ## Validation and Acceptance
@@ -709,10 +780,9 @@ Acceptance is behavioral:
 ## Idempotence and Recovery
 
 All changes are code-level and additive-then-substitutive; every milestone leaves `cabal test
-all` green, so work can pause at any milestone boundary. The log-call replacement in M1 is
-mechanical and safe to do file-by-file (each file compiles independently). If the M2 spike
-fails, nothing has been wired yet — record the finding, switch to the log-exposition fallback,
-and proceed; the instrument call sites are identical. M3's schema is untouched (the outbox
+all` green, so work can pause at any milestone boundary. M2 installs no-op providers when no
+OTLP endpoint is configured, so instrumentation is always safe to retry without separate
+call-site branches. M3's schema is untouched (the outbox
 columns already exist), so no migration risk exists; if the `sink.publish` span or header
 breaks a sink client, the header addition is behind `postJSONWithHeaders` and reverting to
 `postJSON` restores the old wire behavior without touching the propagation of `traceContext`
@@ -746,37 +816,43 @@ the tree as of 2026-08-05, so this remains the gate for both plan 19 and plan 51
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36 and 37. Plan 22 remains required for outbound trace-header
-composition. The server package owns request middleware; workers own loop spans/metrics.
+Hard dependencies: plans 22, 36, 37, and 47 are complete for the surfaces consumed here. The
+server package owns request middleware and server provider lifecycle; workers own loop
+telemetry and their provider lifecycle; core owns only provider-free instruments and context
+propagation.
 
-Dependencies: `hs-opentelemetry-api`, `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp`
-are already in `shikigami-core.cabal:89-91`; use Keiro's public W3C bridge rather than adding a
-second direct propagator dependency. keiro
-provides `Keiro.Telemetry (KeiroMetrics, newKeiroMetrics)` and
-`Keiro.Outbox (publishClaimedOutbox, sampleOutboxBacklog)`; kioku provides
-`Kioku.App (AppEnv (..))`. No logging framework is added.
+Selected released dependencies, verified 2026-08-23: hs-opentelemetry API/SDK/OTLP/WAI/W3C
+1.0.0.0; Keiro 0.14.0.0; Kioku 0.5.0.0; Shibuya 0.9.0.0. Core adds direct
+`hs-opentelemetry-propagator-w3c` for the narrow remote-parent bridge. Workers already depend
+on the SDK and OTLP exporter. Server adds SDK, OTLP exporter, and WAI instrumentation. Keiro
+provides `Keiro.Telemetry (KeiroMetrics, newKeiroMetrics, traceContextFromCurrentSpan)` and
+`Keiro.Outbox (publishClaimedOutbox, sampleOutboxBacklog)`; PGMQ provides
+`Pgmq.Hasql.Sessions.queueMetrics`; Kioku provides `Kioku.App (AppEnv (..))`. No logging
+framework is added.
 
 Signatures that must exist at the end of each milestone (full module paths):
 
 - M1: `Shikigami.Log.Logger`, `Shikigami.Log.newStderrLogger :: Level -> IO Logger`,
   `Shikigami.Log.logEvent :: Logger -> Level -> Text -> [Data.Aeson.Types.Pair] -> IO ()`;
-  `Shikigami.Worker.WorkerEnv` gains `logger :: !Logger`;
+  `Shikigami.Workers.Config.WorkerEnv` gains `logger :: !Logger`;
   `Shikigami.Agent.Workflow.AgentRunDeps` gains `logger :: !Logger`.
 - M2: `Shikigami.Telemetry.Metrics.ShikigamiMetrics`,
   `Shikigami.Telemetry.Metrics.newShikigamiMetrics :: (MonadIO m) => Meter -> m ShikigamiMetrics`,
-  `Shikigami.Telemetry.withRunTelemetry :: Text -> (Tracer -> Maybe KeiroMetrics -> ShikigamiMetrics -> IO a) -> IO a`.
-  Consumed upstream signatures (verified 2026-07-08):
-  `newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics` (keiro `Telemetry.hs:643`);
-  `publishClaimedOutbox :: (IOE :> es, Store :> es) => ([OutboxRow] -> Eff es [(OutboxId, PublishOutcome)]) -> OutboxPublishOptions -> Maybe KeiroMetrics -> Eff es OutboxPublishSummary`
-  (keiro `Outbox.hs:297-303`);
-  `runWorkflowTimerWorker :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)`
-  (keiro `Workflow/Sleep.hs:305-311`).
+  `Shikigami.Telemetry.withRunTelemetry :: Text -> (Tracer -> Maybe KeiroMetrics -> ShikigamiMetrics -> IO a) -> IO a`,
+  `Shikigami.Workflow.Versioning.shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions`,
+  and `shikigamiWorkflowResumeOptions :: AppEnv -> NominalDiffTime -> WorkflowResumeOptions`.
+  Consumed upstream signatures (verified against Keiro 0.14.0.0 on 2026-08-23):
+  `newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics`,
+  `publishClaimedOutbox :: (IOE :> es, Store :> es) => ([OutboxRow] -> Eff es [(OutboxId, PublishOutcome)]) -> OutboxPublishOptions -> Maybe KeiroMetrics -> Eff es OutboxPublishSummary`,
+  `runWorkflowTimerWorker :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)`,
+  and `queueMetrics :: QueueName -> Session QueueMetrics`.
 - M3: consume `Shikigami.Sink.Http.postJSONWithHeaders` and preserve plan 22's typed
   `HttpFailure` classification while adding trace propagation;
-  `Shikigami.Sink.Types.SinkContext` gains `traceparent :: !(Maybe Text)`;
+  `Shikigami.Sink.Types.SinkContext` gains `traceHeaders :: ![Header]`;
+  `Shikigami.Telemetry.TraceContext.withRemoteTraceContext` consumes Keiro's public
+  `TraceContext` through the released W3C propagator;
   `sinkIntentEvent` takes the trace context and sets
-  `Keiro.Integration.Event.IntegrationEvent.traceContext :: Maybe TraceContext` (field at
-  `keiro-core/src/Keiro/Integration/Event.hs:107`; `TraceContext` at `Event.hs:146-150`).
+  `Keiro.Integration.Event.IntegrationEvent.traceContext :: Maybe TraceContext`.
 - M4: `Shikigami.Server.RequestLog.requestLogMiddleware :: (Request -> Bool) -> Middleware`;
   the server composition root constructs OTel WAI middleware only after provider installation,
   nests the request logger inside it, and brackets tracer/meter flush and shutdown.
@@ -785,7 +861,7 @@ Cross-plan contracts (mirrored in the MasterPlan's Integration Points): Mileston
 may proceed independently, but Milestone 3 has a hard milestone dependency on plan 22's
 authenticated HTTP seam. The vocabulary defined
 here (Decision Log, last entry) is what plans in MasterPlans 2-5 emit against; the new env/flag
-surface (none beyond the standard `OTEL_*` family, unless the M2 fallback adds a knob) must be
+surface (none beyond the standard `OTEL_*` family) must be
 recorded in `docs/operations/configuration.md` owned by
 `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`;
 `docs/plans/29-health-liveness-and-worker-loop-supervision.md` will reuse `Shikigami.Log` for
@@ -793,6 +869,15 @@ its loop-supervision events (soft; this plan does not depend on it).
 
 
 ## Revision Notes
+
+- 2026-08-23: Refreshed Milestones 2-4 before implementation. Reconciled the current
+  seven-package boundary, marked prerequisite plans 22/36/37/47 satisfied, verified dependency
+  versions against Mori source plus authoritative registries and upstream tags, replaced the
+  physical PGMQ table query with the public queue-metrics API, parameterized the workflow
+  options authority in the design, and recorded Keiro 0.14's missing public generic
+  remote-parent continuation API. The revised design keeps providers in server/workers,
+  permits one narrow core W3C continuation helper, and removes the obsolete metrics
+  log-exposition fallback.
 
 - 2026-08-05: Milestone 1 implemented. Progress items checked off with the two remaining
   M1-adjacent gaps stated explicitly (one-shot CLI commands by decision, the runtime's shutdown
