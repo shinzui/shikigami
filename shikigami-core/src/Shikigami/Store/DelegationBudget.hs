@@ -8,14 +8,17 @@
 -- remainder they each observed independently.
 module Shikigami.Store.DelegationBudget
   ( ReservationResult (..),
+    BatchReservationResult (..),
     BudgetReservationError (..),
     delegationBudgetIdFor,
     reserveDelegationSlot,
+    reserveDelegationSlots,
   )
 where
 
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
@@ -27,6 +30,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
 import Shikigami.Id.Name (nameBytes)
@@ -36,6 +40,14 @@ data ReservationResult
   = DelegationSlotReserved
   | DelegationSlotAlreadyReserved
   | DelegationSlotsExhausted
+  deriving stock (Eq, Show)
+
+-- | Result of reserving one complete idempotent batch.  Exhaustion inserts no
+-- child reservation and consumes no slot; an accepted replay reports every id
+-- as existing and consumes nothing further.
+data BatchReservationResult
+  = DelegationBatchReserved !Natural !Natural
+  | DelegationBatchExhausted
   deriving stock (Eq, Show)
 
 data BudgetReservationError
@@ -71,21 +83,52 @@ reserveDelegationSlot ::
   UTCTime ->
   Eff es (Either BudgetReservationError ReservationResult)
 reserveDelegationSlot budgetId seed childWorkflowId now =
+  reserveDelegationSlots budgetId seed (childWorkflowId :| []) now <&> fmap toSingleResult
+  where
+    toSingleResult = \case
+      DelegationBatchReserved 1 _ -> DelegationSlotReserved
+      DelegationBatchReserved _ _ -> DelegationSlotAlreadyReserved
+      DelegationBatchExhausted -> DelegationSlotsExhausted
+
+-- | Reserve a complete set of distinct child ids under one ledger-row lock.
+--
+-- Duplicate ids are defensively collapsed, although callers are expected to
+-- reject duplicate stable delegation keys during pure preflight.  Every
+-- existence check, capacity check, reservation insert, and consumption update
+-- occurs in the same transaction, so a batch either owns all new slots or
+-- none.
+reserveDelegationSlots ::
+  (Store :> es) =>
+  DelegationBudgetId ->
+  Maybe (WorkflowId, DelegationBudget) ->
+  NonEmpty WorkflowId ->
+  UTCTime ->
+  Eff es (Either BudgetReservationError BatchReservationResult)
+reserveDelegationSlots budgetId seed childWorkflowIds now =
   runTransaction do
     traverse_ (\(rootWorkflowId, limit) -> Tx.statement (budgetId, rootWorkflowId, limit, now) insertBudgetStatement) seed
     Tx.statement budgetId lockBudgetStatement >>= \case
       Nothing -> pure (Left (DelegationBudgetLedgerMissing budgetId))
       Just (limit, consumed) -> do
-        alreadyReserved <- Tx.statement (budgetId, childWorkflowId) reservationExistsStatement
-        if alreadyReserved
-          then pure (Right DelegationSlotAlreadyReserved)
-          else
-            if consumed >= limit
-              then pure (Right DelegationSlotsExhausted)
-              else do
-                Tx.statement (budgetId, childWorkflowId, now) insertReservationStatement
-                Tx.statement (budgetId, now) incrementBudgetStatement
-                pure (Right DelegationSlotReserved)
+        reservationStates <-
+          traverse
+            (\childWorkflowId -> (childWorkflowId,) <$> Tx.statement (budgetId, childWorkflowId) reservationExistsStatement)
+            uniqueChildWorkflowIds
+        let newChildWorkflowIds = [childWorkflowId | (childWorkflowId, False) <- reservationStates]
+            existingCount = length reservationStates - length newChildWorkflowIds
+            newCount = length newChildWorkflowIds
+        if consumed + newCount > limit
+          then pure (Right DelegationBatchExhausted)
+          else do
+            traverse_ (\childWorkflowId -> Tx.statement (budgetId, childWorkflowId, now) insertReservationStatement) newChildWorkflowIds
+            when (newCount > 0) do
+              Tx.statement (budgetId, newCount, now) incrementBudgetStatement
+            pure
+              ( Right
+                  (DelegationBatchReserved (fromIntegral newCount) (fromIntegral existingCount))
+              )
+  where
+    uniqueChildWorkflowIds = NonEmpty.toList (NonEmpty.nub childWorkflowIds)
 
 insertBudgetStatement :: Statement (DelegationBudgetId, WorkflowId, DelegationBudget, UTCTime) ()
 insertBudgetStatement =
@@ -149,16 +192,17 @@ insertReservationStatement =
     )
     Decoders.noResult
 
-incrementBudgetStatement :: Statement (DelegationBudgetId, UTCTime) ()
+incrementBudgetStatement :: Statement (DelegationBudgetId, Int, UTCTime) ()
 incrementBudgetStatement =
   preparable
     """
     UPDATE shikigami.delegation_budgets
-    SET consumed = consumed + 1,
-        updated_at = $2
+    SET consumed = consumed + $2,
+        updated_at = $3
     WHERE budget_id = $1
     """
-    ( ((\(DelegationBudgetId value, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( ((\(DelegationBudgetId value, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, value, _) -> fromIntegral value) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        <> ((\(_, _, value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult

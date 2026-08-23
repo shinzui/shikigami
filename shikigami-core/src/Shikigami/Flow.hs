@@ -17,6 +17,7 @@ where
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.List (find)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
@@ -24,6 +25,7 @@ import Effectful (Eff, (:>))
 import Keiro.Workflow (Workflow)
 import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
@@ -32,6 +34,7 @@ import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 -- | Everything a flow body may do, and therefore everything it may not.
 --
@@ -136,12 +139,39 @@ delegationProofFlow payload = do
   child <- Delegate.delegate "web-researcher" "web-researcher" payload
   Delegate.awaitOne child
 
--- | First registered routing call site.  Milestone 3 maps a validated matched
--- decision to governed batch delegation; at this checkpoint the observable
--- output is the already journaled and validated semantic decision.
+-- | First registered routing call site.  A matched decision reserves every
+-- selection before any child is spawned, then awaits successful results in
+-- selection order.  Semantic no-match and ambiguous outcomes spawn nothing;
+-- operational and child failures escape the flow.
 architecturePracticeRouterFlow :: (FlowEffects es) => Value -> Eff es Value
-architecturePracticeRouterFlow payload =
-  Aeson.toJSON <$> Routing.route Routing.ArchitecturePractice payload
+architecturePracticeRouterFlow payload = do
+  Routing.RoutedRoute {catalog, decision = decision@RouteDecision {outcome}} <-
+    Routing.routeWithCatalog Routing.ArchitecturePractice payload
+  case outcome of
+    Matched selections -> do
+      children <- Delegate.delegateBatch catalog (toRequest <$> selections)
+      results <- traverse Delegate.awaitOne children
+      pure
+        ( Aeson.object
+            [ "decision" Aeson..= decision,
+              "results" Aeson..= NonEmpty.toList results
+            ]
+        )
+    NoMatch _ -> pure (semanticResult decision)
+    Ambiguous _ _ -> pure (semanticResult decision)
+  where
+    toRequest RouteSelection {agent} =
+      DelegationRequest
+        { key = "architecture-practice-" <> agent,
+          target = agent,
+          payload
+        }
+
+    semanticResult decision =
+      Aeson.object
+        [ "decision" Aeson..= decision,
+          "results" Aeson..= ([] :: [Value])
+        ]
 
 -- | The name of every registered flow.
 --

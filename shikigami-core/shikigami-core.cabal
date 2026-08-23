@@ -200,6 +200,7 @@ test-suite shikigami-core-test
     Shikigami.CapabilityOverlaySpec
     Shikigami.CapabilityProviderSpec
     Shikigami.DelegateContextSpec
+    Shikigami.DelegationBatchSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectorySpec
     Shikigami.DirectoryStoreSpec

@@ -41,6 +41,14 @@ under the deterministic child workflow id while locking the ledger row. The
 reservation key makes replay idempotent, and the row lock prevents concurrent
 siblings from overspending.
 
+A caller that intends to spawn multiple children must preflight the complete
+batch and reserve every deterministic child id under that same row lock before
+spawning the first child. `reserveDelegationSlots` distinguishes existing replay
+reservations from new ids, checks the complete new count against the remaining
+capacity, and either inserts all new reservations and increments consumption by
+that count or inserts none. The single-slot operation is a singleton wrapper over
+this batch primitive, so the two paths cannot drift.
+
 Child workflow ids derive from the parent workflow id, target agent, and a
 caller-supplied stable delegation key. The generic supervisor derives
 `delegate-<index>` keys from the `delegates` list stored in the journaled agent
@@ -73,6 +81,11 @@ semantics. Reserve-first convergence preserves ownership and fails safely.
 bypass it. The shared spawn boundary is the only location every caller must
 cross.
 
+**Reserve and spawn a routed batch sequentially.** An early child could start
+before a later reservation discovered exhaustion. Atomic batch reservation
+keeps the externally visible boundary all-or-nothing without taking ownership
+of Keiro's child tables.
+
 
 ## Consequences
 
@@ -91,6 +104,13 @@ Callers must provide stable keys. Reusing one key for the same target is replay;
 using distinct keys spends distinct slots. The result type of a delegated child
 is the actual durable `Either AgentRunFailure AgentRunResult`, shared between
 the workflow and delegation modules.
+
+Routed fan-out computes every child workflow id and checks the declaration
+allow-list, journaled catalog availability, complete lineage, depth, stable-key
+uniqueness, session context, and routing selection limit before touching the
+ledger. After an accepted batch reservation, each child still crosses the
+existing single-child boundary; it observes an already-reserved id and retains
+the final policy and spawn checks.
 
 The checked agent-run body already declared `child delegate`, and the routing
 change is driven by the `AgentDecl` value captured in `lookup-agent`. Old

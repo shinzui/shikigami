@@ -3,6 +3,7 @@ module Shikigami.DelegationBudgetSpec (tests) where
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, readMVar, takeMVar)
 import Control.Monad (replicateM)
 import Data.Either (rights)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow (WorkflowId (..))
@@ -12,10 +13,12 @@ import Shikigami.Agent.Decl (DelegationBudget, mkDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Store.DelegationBudget
-  ( BudgetReservationError (..),
+  ( BatchReservationResult (..),
+    BudgetReservationError (..),
     ReservationResult (..),
     delegationBudgetIdFor,
     reserveDelegationSlot,
+    reserveDelegationSlots,
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
@@ -25,6 +28,8 @@ tests =
   testGroup
     "DelegationBudget"
     [ testCase "replay reserves a deterministic child only once" replayIsIdempotent,
+      testCase "an oversized batch reserves no child" batchExhaustionIsAtomic,
+      testCase "replaying a batch consumes no additional slots" batchReplayIsIdempotent,
       testCase "concurrent branches cannot overspend the root limit" concurrentLimit,
       testCase "a descendant cannot invent a missing root ledger" missingLedger
     ]
@@ -39,6 +44,37 @@ replayIsIdempotent =
     second <- reserve appEnv budgetId Nothing child
     assertEqual "first occurrence consumes one slot" (Right DelegationSlotReserved) first
     assertEqual "same child id is replay success" (Right DelegationSlotAlreadyReserved) second
+
+batchExhaustionIsAtomic :: IO ()
+batchExhaustionIsAtomic =
+  withFixture \appEnv -> do
+    let root = WorkflowId "budget-root-atomic-batch"
+        budgetId = delegationBudgetIdFor root
+        firstChild = WorkflowId "budget-batch-first"
+        secondChild = WorkflowId "budget-batch-second"
+    rejected <- reserveBatch appEnv budgetId (Just (root, budget 1)) (firstChild :| [secondChild])
+    assertEqual "the complete oversized batch is rejected" (Right DelegationBatchExhausted) rejected
+    firstAfterRejection <- reserve appEnv budgetId Nothing firstChild
+    secondAfterFirst <- reserve appEnv budgetId Nothing secondChild
+    assertEqual "the failed batch left its first child unreserved" (Right DelegationSlotReserved) firstAfterRejection
+    assertEqual "the failed batch consumed no hidden slot" (Right DelegationSlotsExhausted) secondAfterFirst
+
+batchReplayIsIdempotent :: IO ()
+batchReplayIsIdempotent =
+  withFixture \appEnv -> do
+    let root = WorkflowId "budget-root-batch-replay"
+        budgetId = delegationBudgetIdFor root
+        children = WorkflowId "budget-batch-replay-first" :| [WorkflowId "budget-batch-replay-second"]
+    first <- reserveBatch appEnv budgetId (Just (root, budget 2)) children
+    second <- reserveBatch appEnv budgetId Nothing children
+    assertEqual
+      "the first batch consumes both slots together"
+      (Right (DelegationBatchReserved 2 0))
+      first
+    assertEqual
+      "the replay recognizes both reservations without spending"
+      (Right (DelegationBatchReserved 0 2))
+      second
 
 concurrentLimit :: IO ()
 concurrentLimit =
@@ -77,6 +113,11 @@ missingLedger =
 reserve :: AppEnv -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> WorkflowId -> IO (Either BudgetReservationError ReservationResult)
 reserve appEnv budgetId seed child = do
   stored <- runAppIO appEnv (reserveDelegationSlot budgetId seed child fixedTime)
+  either (assertFailure . show) pure stored
+
+reserveBatch :: AppEnv -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> NonEmpty WorkflowId -> IO (Either BudgetReservationError BatchReservationResult)
+reserveBatch appEnv budgetId seed children = do
+  stored <- runAppIO appEnv (reserveDelegationSlots budgetId seed children fixedTime)
   either (assertFailure . show) pure stored
 
 budget :: Integer -> DelegationBudget

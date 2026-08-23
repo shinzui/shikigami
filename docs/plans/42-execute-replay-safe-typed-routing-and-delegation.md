@@ -53,8 +53,13 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-23T20:04:03Z) M2: Implemented the replay-safe Routing Flow capability,
   production model evaluator seam, worker/CLI runtime wiring, and deterministic injectable test
   runtime. Core, worker, agent, Keiro component, conformance, and proof-manifest checks pass.
-- [ ] M3: preflight every selection, atomically reserve the complete plan-35 batch, and delegate only through plan 35.
-- [ ] M3: preserve matched child results and operational failures without semantic coercion.
+- [x] (2026-08-23T20:17:49Z) M3: Added pure complete-batch preflight and atomic
+  idempotent batch reservation under the plan-35 ledger lock; the registered router reserves
+  all deterministic child ids before reusing the governed single-child spawn boundary.
+- [x] (2026-08-23T20:17:49Z) M3: Matched routes await successful child values in
+  selection order, while no-match and ambiguous spawn nothing and evaluator, routing,
+  delegation, budget, and child failures escape without semantic coercion. Eight focused batch
+  preflight/budget tests pass.
 - [ ] M4: add bounded routing telemetry and real-Postgres replay/authorization tests.
 - [ ] Final: checked DSL, domain harness, `cabal test all`, and replay proof are green.
 

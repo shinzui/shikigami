@@ -1,7 +1,13 @@
 -- | Imperative delegation from one durable agent run to another.
 module Shikigami.Agent.Delegate
   ( Delegated (..),
+    DelegationRequest (..),
+    PreparedDelegation (..),
+    DelegationBatchPreflightError (..),
+    DelegationBatchFailure (..),
     delegate,
+    delegateBatch,
+    preflightDelegationBatch,
     awaitDelegated,
     awaitAllDelegated,
     cancelDelegated,
@@ -10,9 +16,12 @@ module Shikigami.Agent.Delegate
   )
 where
 
-import Control.Exception (fromException)
+import Control.Exception (Exception, fromException)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
@@ -21,7 +30,8 @@ import Effectful.Exception (catchSync, throwIO, trySync)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow)
 import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, cancelChild, spawnChild)
 import Kiroku.Store.Effect (Store)
-import Shikigami.Agent.Decl (AgentDecl)
+import Numeric.Natural (Natural)
+import Shikigami.Agent.Decl (AgentDecl (..), RouterPolicy (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
@@ -29,16 +39,53 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
+import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
 import Shikigami.Store.DelegationBudget
-  ( BudgetReservationError (..),
+  ( BatchReservationResult (..),
+    BudgetReservationError (..),
     ReservationResult (..),
     delegationBudgetIdFor,
     reserveDelegationSlot,
+    reserveDelegationSlots,
   )
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.
 newtype Delegated a = Delegated (ChildHandle (Either AgentRunFailure AgentRunResult))
+
+-- | One member of a delegation batch.  The key is stable call-site vocabulary,
+-- never an ordinal derived from evaluation order.
+data DelegationRequest = DelegationRequest
+  { key :: !Text,
+    target :: !Text,
+    payload :: !Aeson.Value
+  }
+  deriving stock (Eq, Show)
+
+-- | A request whose deterministic child identity has been computed before the
+-- store is touched.
+data PreparedDelegation = PreparedDelegation
+  { request :: !DelegationRequest,
+    childWorkflowId :: !WorkflowId
+  }
+  deriving stock (Eq, Show)
+
+-- | Independently actionable reasons a complete batch cannot be reserved.
+data DelegationBatchPreflightError
+  = DelegationBatchRoutingPolicyMissing
+  | DelegationBatchSelectionLimitExceeded !Natural !Natural
+  | DelegationBatchDuplicateKey !Text
+  | DelegationBatchCatalogRouterMismatch !Text !Text
+  | DelegationBatchCatalogTargetMissing !Text
+  | DelegationBatchCatalogTargetUnavailable !Text !ExclusionReason
+  | DelegationBatchGovernanceRejected !(Maybe Text) !DelegationError
+  | DelegationBatchSessionMissing
+  deriving stock (Eq, Show)
+
+newtype DelegationBatchFailure = DelegationBatchFailure (NonEmpty DelegationBatchPreflightError)
+  deriving stock (Eq, Show)
+
+instance Exception DelegationBatchFailure
 
 -- | Start @childAgent@ as a child agent-run workflow without blocking.
 delegate ::
@@ -110,6 +157,107 @@ delegate decl ctx delegationKey childAgent payload = do
         recordedAt = now
       }
   pure (Delegated handle)
+
+-- | Validate and identify every child without touching durable state.
+--
+-- The recorded catalog is checked again here even though route-decision
+-- validation already established availability.  This keeps the complete
+-- all-targets-before-spawn contract local to the delegation boundary.
+preflightDelegationBatch ::
+  AgentDecl ->
+  DelegateCtx ->
+  CandidateCatalog ->
+  WorkflowId ->
+  NonEmpty DelegationRequest ->
+  Either (NonEmpty DelegationBatchPreflightError) (NonEmpty PreparedDelegation)
+preflightDelegationBatch decl@AgentDecl {name = delegatingAgent, routing} ctx@DelegateCtx {sessionId = currentSessionId} CandidateCatalog {router, candidates = catalogCandidates} parentWorkflowId requests =
+  case NonEmpty.nonEmpty errors of
+    Just failures -> Left failures
+    Nothing -> Right (prepare <$> requests)
+  where
+    requestList = NonEmpty.toList requests
+    errors =
+      [DelegationBatchRoutingPolicyMissing | isNothing routing]
+        <> selectionLimitErrors
+        <> (DelegationBatchDuplicateKey <$> duplicateKeys)
+        <> [DelegationBatchCatalogRouterMismatch delegatingAgent router | router /= delegatingAgent]
+        <> [DelegationBatchSessionMissing | isNothing currentSessionId]
+        <> depthErrors
+        <> concatMap requestErrors requestList
+
+    selectionLimitErrors = case routing of
+      Nothing -> []
+      Just RouterPolicy {maxSelections} ->
+        [ DelegationBatchSelectionLimitExceeded (fromIntegral (length requestList)) maxSelections
+        | fromIntegral (length requestList) > maxSelections
+        ]
+
+    duplicateKeys = duplicatesInOrder [key | DelegationRequest {key} <- requestList]
+
+    depthErrors = case checkDepth ctx of
+      Left failure -> [DelegationBatchGovernanceRejected Nothing failure]
+      Right _ -> []
+
+    candidatesByName =
+      Map.fromList [(candidateName, candidate) | candidate@CandidateEntry {name = candidateName} <- catalogCandidates]
+
+    requestErrors DelegationRequest {target} =
+      governanceError target (assertMayDelegate decl target)
+        <> governanceError target (checkCycle ctx target)
+        <> catalogErrors target
+
+    governanceError targetName = \case
+      Left failure -> [DelegationBatchGovernanceRejected (Just targetName) failure]
+      Right () -> []
+
+    catalogErrors targetName = case Map.lookup targetName candidatesByName of
+      Nothing -> [DelegationBatchCatalogTargetMissing targetName]
+      Just CandidateEntry {availability = Available} -> []
+      Just CandidateEntry {availability = Excluded reason} -> [DelegationBatchCatalogTargetUnavailable targetName reason]
+
+    prepare request@DelegationRequest {key, target} =
+      PreparedDelegation
+        { request,
+          childWorkflowId = delegatedWorkflowId parentWorkflowId target key
+        }
+
+-- | Reserve the complete routed batch before invoking the existing governed
+-- single-child spawn boundary for any member.
+delegateBatch ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentDecl ->
+  DelegateCtx ->
+  CandidateCatalog ->
+  NonEmpty DelegationRequest ->
+  Eff es (NonEmpty (Delegated Aeson.Value))
+delegateBatch decl ctx catalog requests = do
+  (_, parentWorkflowId) <- currentWorkflow
+  prepared <-
+    either
+      (throwIO . DelegationBatchFailure)
+      pure
+      (preflightDelegationBatch decl ctx catalog parentWorkflowId requests)
+  let DelegateCtx
+        { delegationBudgetId = existingBudgetId,
+          budgetLimit = currentBudgetLimit
+        } = ctx
+      (budgetId, seed) =
+        case existingBudgetId of
+          Just existing -> (existing, Nothing)
+          Nothing ->
+            let created = delegationBudgetIdFor parentWorkflowId
+             in (created, Just (parentWorkflowId, currentBudgetLimit))
+  now <- liftIO getCurrentTime
+  reserved <- reserveDelegationSlots budgetId seed (childWorkflowId <$> prepared) now
+  case reserved of
+    Left (DelegationBudgetLedgerMissing missing) ->
+      throwIO (DelegationBudgetUnavailable (Text.pack (show missing)))
+    Right DelegationBatchExhausted -> throwIO DelegationBudgetExhausted
+    Right (DelegationBatchReserved _ _) -> pure ()
+  traverse spawnPrepared prepared
+  where
+    spawnPrepared PreparedDelegation {request = DelegationRequest {key, target, payload}} =
+      delegate decl ctx key target payload
 
 -- | Suspend until the delegated child completes and decode its behavior output.
 awaitDelegated ::
@@ -196,3 +344,12 @@ delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent delegationKey =
             Text.intercalate
               ":"
               ["shikigami", "delegate", parentWorkflowId, childAgent, delegationKey]
+
+duplicatesInOrder :: (Ord a) => [a] -> [a]
+duplicatesInOrder = go Set.empty Set.empty
+  where
+    go _ _ [] = []
+    go seen reported (value : rest)
+      | value `Set.member` reported = go seen reported rest
+      | value `Set.member` seen = value : go seen (Set.insert value reported) rest
+      | otherwise = go (Set.insert value seen) reported rest

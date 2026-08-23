@@ -10,10 +10,12 @@
 module Shikigami.Flow.Routing
   ( Routing,
     RouteLabel (..),
+    RoutedRoute (..),
     RoutingEnv (..),
     RoutingRuntime (..),
     RoutingFailure (..),
     route,
+    routeWithCatalog,
     runRouting,
     routingRuntime,
     modelRouteEvaluator,
@@ -75,13 +77,25 @@ data RoutingFailure
 
 instance Exception RoutingFailure
 
+-- | The exact journaled catalog paired with the validated semantic decision.
+-- Most flows need only 'route'; the registered router retains the catalog for
+-- the delegation boundary's independent availability preflight.
+data RoutedRoute = RoutedRoute
+  { catalog :: !CandidateCatalog,
+    decision :: !RouteDecision
+  }
+  deriving stock (Eq, Show)
+
 data Routing :: Effect where
-  Route :: RouteLabel -> Value -> Routing m RouteDecision
+  Route :: RouteLabel -> Value -> Routing m RoutedRoute
 
 type instance DispatchOf Routing = Dynamic
 
 route :: (Routing :> es) => RouteLabel -> Value -> Eff es RouteDecision
-route label payload = send (Route label payload)
+route label payload = decision <$> routeWithCatalog label payload
+
+routeWithCatalog :: (Routing :> es) => RouteLabel -> Value -> Eff es RoutedRoute
+routeWithCatalog label payload = send (Route label payload)
 
 runRouting ::
   (Workflow :> es, IOE :> es) =>
@@ -110,7 +124,7 @@ runRouting RoutingEnv {agent, behaviorEnv, runtime = RoutingRuntime {resolveCata
           Aeson.Success decoded -> pure decoded
       case validateRouteDecision (policy validatedDeclaration) catalog decision of
         Left refusals -> throwIO (RoutingDecisionInvalid refusals)
-        Right _ -> pure decision
+        Right _ -> pure RoutedRoute {catalog, decision}
 
 routeStepNames :: RouteLabel -> (StepName, StepName)
 routeStepNames ArchitecturePractice =
