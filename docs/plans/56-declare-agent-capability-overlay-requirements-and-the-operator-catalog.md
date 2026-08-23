@@ -62,6 +62,12 @@ implementation. Provide concise evidence.
   overlay should instead expose a stable capability name and keep endpoint, transport, and
   credential resolution in the operator provider registry. This prevents an agent-authored
   file from becoming authority or a secret-bearing runtime configuration source.
+- Repository-wide validation exposed an unrelated, pre-existing Nix packaging failure:
+  `packages.default` still calls `cabal2nix` on the multi-package repository root, which has
+  no root `.cabal` file. `nix flake check --keep-going` proves the actual `treefmt` and
+  pre-commit checks pass before that package output fails. This plan changed neither
+  `flake.nix` nor `nix/haskell.nix`; deployable/default package ownership remains with
+  `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`.
 
 
 ## Decision Log
@@ -112,7 +118,19 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-22. Agent declarations can now request validated overlay names while
+unchanged declarations preserve their old Dhall behavior and exact five-key JSON bytes. The
+core package supplies explicit descriptor/refusal JSON, deterministic resolved snapshots, a
+collision-rejecting operator catalog, and pure fail-closed resolution for identity, policy,
+behavior, and durable-operation rules. The proof declaration requests exactly
+`workspace.read`; this plan deliberately acquires no provider and adds no model tool.
+
+The focused core suite passes all 406 tests, and the repository-wide run passes all 569 tests
+across nine suites. `nix fmt`, the flake's `treefmt` check, and its pre-commit check pass.
+The overall `nix flake check` command remains non-zero only because the pre-existing default
+package asks `cabal2nix` to package the multi-package repository root; the implementation did
+not touch that definition, and Plan 31 retains its packaging ownership. Plans 57, 58, and 59
+can consume the completed pure contract; Plan 57 is the next unblocked child.
 
 
 ## Context and Orientation

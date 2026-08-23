@@ -89,7 +89,7 @@ from `mori://shinzui/baikai/packages/baikai` and
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | In Progress |
+| EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | Complete |
 | EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | Not Started |
 | EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | Not Started |
 | EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Not Started |
@@ -252,4 +252,15 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-1 completed on 2026-08-22. The declaration and pure catalog boundary now exists with
+backward-compatible agent JSON, validated capability names, immutable public descriptors,
+canonical resolved snapshots, and typed permanent refusals. ADR 0025 records that overlay
+declarations are requests for additive model tools rather than authority or replacements for
+base capabilities. All 569 repository tests pass, including 406 core tests. The flake's
+formatting and pre-commit checks pass; its old default-package output still fails because it
+points `cabal2nix` at a multi-package root with no root `.cabal` file, a packaging concern
+already owned by Plan 31 and unchanged by EP-1.
+
+EP-2 (Plan 57) is now the next unblocked child. It can implement provider leases, reverse-order
+release, collision-free tool composition, and the bounded `Skill` tool loop against EP-1's
+completed public contract. The MasterPlan remains active until EP-2 through EP-4 complete.
