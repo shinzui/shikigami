@@ -2,7 +2,7 @@ module Shikigami.SinkDeliverySpec (tests) where
 
 import Data.Aeson (Result (..), eitherDecode, encode, fromJSON, object, (.=))
 import Data.ByteString.Lazy.Char8 qualified as LBS8
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -13,6 +13,8 @@ import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
+import Kioku.Session (SessionRow (..))
+import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404, status500)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
@@ -33,9 +35,12 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Log qualified as Log
+import Shikigami.Memory.Access (shikigamiMemorySpace)
+import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink (GrantSource (DbGrants), SinkOutcome (Enqueued), SinkResult (..))
+import Shikigami.Sink (GrantSource (DbGrants), SinkOutcome (Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Wire qualified as Wire
@@ -47,6 +52,8 @@ tests =
   testGroup
     "SinkDelivery"
     [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" journalTruth,
+      testCase "paused enqueue journals a lifecycle skip without outbox or receipt" pausedEnqueue,
+      testCase "pause before publish records a terminal non-send without HTTP" pauseBeforePublish,
       testCase "permanent failure becomes a bounded terminal rejection" permanentRejection,
       testCase "publish records a delivered receipt with the downstream id" receiptRecording,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
@@ -63,6 +70,56 @@ permanentRejection = do
   case AgentWorkflow.permanentPublishOutcome (Text.replicate 1025 "x") of
     Left err -> assertBool ("invalid rejection should explain itself: " <> Text.unpack err) ("invalid terminal sink rejection" `Text.isPrefixOf` err)
     Right other -> assertFailure ("an oversized rejection detail must be refused, got " <> show other)
+
+pausedEnqueue :: IO ()
+pausedEnqueue =
+  withFixture "paused-enqueue" [signalSink "paused"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    directory <- directoryWith Paused
+    rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv runJob
+    assertEqual "lifecycle refusal creates no outbox row" [] rows
+    receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey (idempotencyKey runJob <> ":sink:0"))
+    assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
+    case fromJSON encoded :: Result [SinkResult] of
+      Success [SinkResult {outcome = SkippedLifecycle reason}] ->
+        assertBool "journal names paused lifecycle" ("paused" `Text.isInfixOf` reason)
+      other -> assertFailure ("expected one SkippedLifecycle result, got " <> show other)
+
+pauseBeforePublish :: IO ()
+pauseBeforePublish = do
+  requests <- newIORef []
+  lifecycleRef <- newIORef Active
+  testWithApplication (pure (kizashiApp requests)) \port ->
+    withFixture "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+      directory <- mutableDirectory lifecycleRef
+      let gatedDeps = deps {AgentWorkflow.directory = directory}
+      [row] <- runWorkflowAndRows gatedDeps appEnv runJob
+      case Integration.decodeJsonIntegrationEvent (rowEvent row) of
+        Right AgentWorkflow.SinkIntent {AgentWorkflow.principalId} ->
+          assertEqual "outbox intent carries canonical principal" (Just "agent_heartbeat") principalId
+        other -> assertFailure ("sink intent should decode, got " <> show other)
+
+      sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+      case sessions of
+        Right (Right [SessionRow {agentId}]) -> assertEqual "agent-run session uses principal id" "agent_heartbeat" agentId
+        other -> assertFailure ("expected one attributed session, got " <> show other)
+
+      writeIORef lifecycleRef Paused
+      refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
+      summary <-
+        expectRight "publishClaimedOutbox"
+          =<< runAppIO
+            appEnv
+            ( Outbox.publishClaimedOutbox
+                (traverse (\claimed -> (rowOutboxId claimed,) <$> AgentWorkflow.publishSinkIntent gatedDeps claimed))
+                Outbox.defaultPublishOptions
+                Nothing
+            )
+      assertEqual "lifecycle non-send publishes the outbox row" 1 (Outbox.published summary)
+      assertEqual "paused publish performs no HTTP request" [] =<< readIORef requests
+      receipt <- lookupReceipt pool row
+      assertEqual "paused publish is terminal" Delivery.Dead (Delivery.status receipt)
 
 journalTruth :: IO ()
 journalTruth =
@@ -190,12 +247,27 @@ withFixture label sinks kizashi danwa use =
                 AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
                 AgentWorkflow.delegationBudget = defaultDelegationBudget,
                 AgentWorkflow.grants = DbGrants pool,
+                AgentWorkflow.directory = disabledDirectoryHandle,
                 AgentWorkflow.deliveryPool = Just pool,
                 AgentWorkflow.logger = Log.silentLogger,
                 AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
               }
           runJob = testJob label
       use deps appEnv pool runJob
+
+directoryWith :: Lifecycle -> IO DirectoryHandle
+directoryWith lifecycle = do
+  ref <- newIORef lifecycle
+  mutableDirectory ref
+
+mutableDirectory :: IORef Lifecycle -> IO DirectoryHandle
+mutableDirectory lifecycleRef = do
+  directory <-
+    newDirectoryHandle do
+      lifecycle <- readIORef lifecycleRef
+      staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle}]
+  refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
+  pure directory
 
 runWorkflowAndRows :: AgentWorkflow.AgentRunDeps -> AppEnv -> RunJob -> IO [Outbox.OutboxRow]
 runWorkflowAndRows deps appEnv runJob = do

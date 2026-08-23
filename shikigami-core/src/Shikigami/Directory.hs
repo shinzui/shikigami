@@ -21,6 +21,8 @@ module Shikigami.Directory
     startDirectory,
     startDirectoryWithHeartbeat,
     consultLifecycle,
+    lifecycleAdmission,
+    principalAttribution,
     lookupPrincipal,
     directoryPrincipals,
   )
@@ -217,6 +219,31 @@ consultLifecycle directoryHandle@(ConfiguredDirectory _ stateRef) declaredPrinci
           Active -> AllowRun (Just principal)
           Paused -> SkipRun principal "principal lifecycle is paused"
           Deactivated -> SkipRun principal "principal lifecycle is deactivated"
+
+-- | Collapse a lifecycle decision into the shape side-effect gates need.
+-- The successful value is the principal id to carry into durable work.
+lifecycleAdmission :: DirectoryHandle -> Maybe Text -> Text -> IO (Either Text (Maybe Text))
+lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
+  fmap
+    ( \case
+        AllowRun Nothing -> Right declaredPrincipalId
+        AllowRun (Just principal) -> Right (Just (principalId principal))
+        SkipRun _ reason -> Left reason
+        UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
+        DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
+    )
+    (consultLifecycle directoryHandle declaredPrincipalId agentHandle)
+
+-- | Resolve the principal stored on a newly opened Kioku session.
+--
+-- The drain gate has already admitted configured work, so a configured lookup
+-- succeeds in normal operation. The fallback preserves disabled-mode behavior
+-- and keeps a declared id authoritative if attribution is retried around a
+-- snapshot change.
+principalAttribution :: DirectoryHandle -> Maybe Text -> Text -> IO Text
+principalAttribution directoryHandle declaredPrincipalId agentHandle = do
+  found <- lookupPrincipal directoryHandle declaredPrincipalId agentHandle
+  pure (maybe (maybe agentHandle id declaredPrincipalId) principalId found)
 
 -- | Look up by authoritative principal id, or by normalized handle only when
 -- no id was declared.

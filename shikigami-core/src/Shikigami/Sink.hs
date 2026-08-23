@@ -27,6 +27,7 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (runDanwa)
@@ -51,19 +52,33 @@ sinkKindOf = \case
 dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
 dispatch ctx sink output = do
   let kind = sinkKindOf sink
-  grant <- checkGrant (grants ctx) (identity ctx) kind
-  case grant of
-    Left (Denied reason) -> do
+      agent = agentName (identity ctx)
+  lifecycle <- Directory.lifecycleAdmission (directory ctx) (principalId ctx) agent
+  case lifecycle of
+    Left reason -> do
       Log.logWarn
         (logger ctx)
-        "sink.denied"
-        [ "agent" Aeson..= agentName (identity ctx),
+        "sink.lifecycle_skipped"
+        [ "agent" Aeson..= agent,
           Log.runIdKey Aeson..= runId ctx,
           "sink_kind" Aeson..= sinkKindText kind,
           "reason" Aeson..= reason
         ]
-      pure (SinkResult kind (DeniedOutcome reason))
-    Right () -> SinkResult kind <$> runSink ctx sink output
+      pure (SinkResult kind (SkippedLifecycle reason))
+    Right _ -> do
+      grant <- checkGrant (grants ctx) (identity ctx) kind
+      case grant of
+        Left (Denied reason) -> do
+          Log.logWarn
+            (logger ctx)
+            "sink.denied"
+            [ "agent" Aeson..= agent,
+              Log.runIdKey Aeson..= runId ctx,
+              "sink_kind" Aeson..= sinkKindText kind,
+              "reason" Aeson..= reason
+            ]
+          pure (SinkResult kind (DeniedOutcome reason))
+        Right () -> SinkResult kind <$> runSink ctx sink output
 
 -- | Route a granted sink to its handler, wrapping the outcome.
 runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome

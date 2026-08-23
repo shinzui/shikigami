@@ -79,7 +79,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
@@ -90,6 +90,8 @@ import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv, BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttempt)
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability qualified as FlowCapability
@@ -123,6 +125,9 @@ data AgentRunDeps = AgentRunDeps
     -- | Which grant source the enqueue-time C11 check consults, and the one
     -- handed to every 'SinkContext' this run builds.
     grants :: !GrantSource,
+    -- | Cached principal lifecycle and attribution view shared with trigger and
+    -- drain gates.
+    directory :: !DirectoryHandle,
     -- | The Shikigami receipt store used only by the asynchronous publisher.
     -- Production always supplies it; focused workflow tests may opt out because
     -- they never cross the publisher boundary.
@@ -159,6 +164,7 @@ data AgentRunHooks = AgentRunHooks
 -- database — see @Shikigami.WireCompatSpec@, which pins the pre-upgrade bytes.
 data SinkIntent = SinkIntent
   { agent :: !Text,
+    principalId :: !(Maybe Text),
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
@@ -211,6 +217,14 @@ depsLogger AgentRunDeps {logger = l} = l
 -- 'FlowCapability.SinkEnv' also carry a @grants@ field.
 depsGrants :: AgentRunDeps -> GrantSource
 depsGrants AgentRunDeps {grants = g} = g
+
+depsDirectory :: AgentRunDeps -> DirectoryHandle
+depsDirectory AgentRunDeps {directory = value} = value
+
+declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId AgentDecl {identity} = declared <$> identity
+  where
+    declared IdentityDecl {principal} = principal
 
 depsRunTimeout :: AgentRunDeps -> NominalDiffTime
 depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
@@ -375,7 +389,7 @@ runSessionedAgent deps activeBehaviorEnv job decl@AgentDecl {memory = MemoryPoli
         withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
           addAttribute traceSpan "agent.name" (agentDeclName decl)
           addAttribute traceSpan "sink.count" (length approvedSinks)
-          enqueueSinkIntents (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
+          enqueueSinkIntents (depsDirectory deps) (depsGrants deps) job (decl {sinks = approvedSinks}) sid output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
       recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps decl sid output))
       case recorded of
@@ -517,6 +531,7 @@ openSession :: (IOE :> es) => AgentRunDeps -> RunJob -> AgentDecl -> Eff es (Eit
 openSession deps job decl = liftIO do
   startedAt' <- getCurrentTime
   sid <- genSessionId
+  sessionAgentId <- Directory.principalAttribution (depsDirectory deps) (declaredPrincipalId decl) (agentDeclName decl)
   let focusTxt = behaviorKindText (behavior decl)
       RunJob {parentSessionId = jobParentSessionId, delegationDepth = jobDelegationDepth} = job
   parsedParent <-
@@ -535,7 +550,7 @@ openSession deps job decl = liftIO do
           memorySpaceId = shikigamiMemorySpace,
           actorPrincipal = agentActor (agentDeclName decl),
           ownerPrincipal = Nothing,
-          agentId = agentDeclName decl,
+          agentId = sessionAgentId,
           focus = focusTxt,
           scope = agentScope (agentDeclName decl),
           subjectRef = Just (idText sid),
@@ -603,7 +618,9 @@ runFlowBehavior deps sid decl job flowName =
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,
           FlowCapability.activity = Just (activityFromJob job),
-          FlowCapability.grants = depsGrants deps
+          FlowCapability.grants = depsGrants deps,
+          FlowCapability.directory = depsDirectory deps,
+          FlowCapability.principalId = declaredPrincipalId decl
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope
@@ -726,13 +743,14 @@ recordFailureLearningBestEffort deps decl sid err = do
 
 enqueueSinkIntents ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  DirectoryHandle ->
   GrantSource ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   Value ->
   Eff es [SinkResult]
-enqueueSinkIntents grantSource job decl sid output = do
+enqueueSinkIntents directoryHandle grantSource job decl sid output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
@@ -765,33 +783,39 @@ enqueueSinkIntents grantSource job decl sid output = do
     buildSinkIntent workflowId now (ordinal, sink) = do
       let RunJob {occurredAt = jobOccurredAt} = job
       let kind = sinkKindOf sink
-      checkGrant grantSource (AgentIdentity (agentName job)) kind <&> \case
-        Left (Denied reason) ->
-          (SinkResult kind (DeniedOutcome reason), Nothing)
-        Right () ->
-          let intent =
-                SinkIntent
-                  { agent = agentName job,
-                    runId = runIdText,
-                    ordinal,
-                    occurredAt = Just jobOccurredAt,
-                    danwaTarget = Nothing,
-                    -- Resolved here, not in the publisher: the trigger activity
-                    -- is in scope on this side of the outbox and not the other.
-                    resolvedRecipient = resolveSinkRecipient sink (Just (activityFromJob job)),
-                    sink,
-                    output
-                  }
-              messageId = sinkMessageId workflowId ordinal
-              orderingKey = runIdText <> ":" <> Text.pack (show ordinal)
-              event = sinkIntentEvent messageId orderingKey jobOccurredAt intent
-              outboxId = deterministicOutboxId workflowId ordinal
-              receipt = pendingDeliveryReceipt messageId kind now intent
-           in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
+      Directory.lifecycleAdmission directoryHandle (declaredPrincipalId decl) (agentName job) >>= \case
+        Left reason -> pure (SinkResult kind (SkippedLifecycle reason), Nothing)
+        Right resolvedPrincipalId ->
+          checkGrant grantSource (AgentIdentity (agentName job)) kind <&> \case
+            Left (Denied reason) ->
+              (SinkResult kind (DeniedOutcome reason), Nothing)
+            Right () ->
+              let intent =
+                    SinkIntent
+                      { agent = agentName job,
+                        principalId = resolvedPrincipalId,
+                        runId = runIdText,
+                        ordinal,
+                        occurredAt = Just jobOccurredAt,
+                        danwaTarget = Nothing,
+                        -- Resolved here, not in the publisher: the trigger activity
+                        -- is in scope on this side of the outbox and not the other.
+                        resolvedRecipient = resolveSinkRecipient sink (Just (activityFromJob job)),
+                        sink,
+                        output
+                      }
+                  messageId = sinkMessageId workflowId ordinal
+                  orderingKey = runIdText <> ":" <> Text.pack (show ordinal)
+                  event = sinkIntentEvent messageId orderingKey jobOccurredAt intent
+                  outboxId = deterministicOutboxId workflowId ordinal
+                  receipt = pendingDeliveryReceipt messageId kind now intent
+               in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  DirectoryHandle ->
   GrantSource ->
+  Maybe Text ->
   StepName ->
   Text ->
   Text ->
@@ -802,11 +826,11 @@ enqueueSinkIntentStep ::
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
+enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId' stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
+  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource declaredPrincipalId' workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -827,7 +851,9 @@ enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurred
     Left err -> liftIO (ioError (userError (Text.unpack err)))
 
 prepareSinkIntent ::
+  DirectoryHandle ->
   GrantSource ->
+  Maybe Text ->
   WorkflowId ->
   StepName ->
   Text ->
@@ -840,38 +866,48 @@ prepareSinkIntent ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+prepareSinkIntent directoryHandle grantSource declaredPrincipalId' workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
-  checkGrant grantSource (AgentIdentity agentName') kind <&> \case
-    Left (Denied reason) ->
-      PreparedSinkIntent
-        { sinkResult = deniedResult reason,
-          outboxMessage = Nothing,
-          deliveryReceipt = Nothing
-        }
-    Right () ->
-      let intent =
-            SinkIntent
-              { agent = agentName',
-                runId = runIdText,
-                ordinal,
-                occurredAt = occurredAt',
-                danwaTarget = danwaTarget',
-                resolvedRecipient = resolvedRecipient',
-                sink,
-                output
-              }
-          event = sinkIntentEvent messageId runIdText now intent
-          receipt = pendingDeliveryReceipt messageId kind now intent
-       in PreparedSinkIntent
-            { sinkResult = enqueuedResult,
-              outboxMessage = Just (OutboxMessage outboxId event),
-              deliveryReceipt = Just receipt
+  Directory.lifecycleAdmission directoryHandle declaredPrincipalId' agentName' >>= \case
+    Left reason ->
+      pure
+        PreparedSinkIntent
+          { sinkResult = SinkResult kind (SkippedLifecycle reason),
+            outboxMessage = Nothing,
+            deliveryReceipt = Nothing
+          }
+    Right resolvedPrincipalId ->
+      checkGrant grantSource (AgentIdentity agentName') kind <&> \case
+        Left (Denied reason) ->
+          PreparedSinkIntent
+            { sinkResult = deniedResult reason,
+              outboxMessage = Nothing,
+              deliveryReceipt = Nothing
             }
+        Right () ->
+          let intent =
+                SinkIntent
+                  { agent = agentName',
+                    principalId = resolvedPrincipalId,
+                    runId = runIdText,
+                    ordinal,
+                    occurredAt = occurredAt',
+                    danwaTarget = danwaTarget',
+                    resolvedRecipient = resolvedRecipient',
+                    sink,
+                    output
+                  }
+              event = sinkIntentEvent messageId runIdText now intent
+              receipt = pendingDeliveryReceipt messageId kind now intent
+           in PreparedSinkIntent
+                { sinkResult = enqueuedResult,
+                  outboxMessage = Just (OutboxMessage outboxId event),
+                  deliveryReceipt = Just receipt
+                }
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult
@@ -939,16 +975,18 @@ deterministicOutboxIdForMessage messageId =
       nameBytes ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants, deliveryPool} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right intent@SinkIntent {agent, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
+        Right intent@SinkIntent {agent, principalId, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
           let messageId = Integration.messageId integrationEvent
               kind = sinkKindOf sink
               sinkContext =
                 SinkContext
                   { identity = AgentIdentity agent,
+                    principalId,
+                    directory = intentDirectory,
                     runId = runId,
                     ordinal = ordinal,
                     kizashi = depsKizashi,
@@ -1045,6 +1083,7 @@ publishTracked logger pool messageId kind intent send = do
               Right () -> pure rejected
       Enqueued detail -> recordRetryableFailure ("dispatcher returned enqueue-only outcome during publish: " <> detail)
       DeniedOutcome reason -> recordTerminalNonSend ("permission denied at publish: " <> reason)
+      SkippedLifecycle reason -> recordTerminalNonSend ("lifecycle skipped at publish: " <> reason)
       Stubbed -> recordTerminalNonSend "deprecated stubbed sink outcome"
 
     recordRetryableFailure err = do
@@ -1248,6 +1287,7 @@ logSinkResult logger job result =
       Failed _ -> Log.Error
       PermanentFailure _ -> Log.Error
       DeniedOutcome _ -> Log.Warn
+      SkippedLifecycle _ -> Log.Warn
       _ -> Log.Info
     outcomeText :: SinkOutcome -> Text
     outcomeText = \case
@@ -1255,6 +1295,7 @@ logSinkResult logger job result =
       Enqueued _ -> "enqueued"
       Stubbed -> "stubbed"
       DeniedOutcome _ -> "denied"
+      SkippedLifecycle _ -> "skipped_lifecycle"
       Failed _ -> "failed"
       PermanentFailure _ -> "permanent_failure"
     -- The detail rides under a key that says what kind of detail it is, so that
@@ -1265,6 +1306,7 @@ logSinkResult logger job result =
       Enqueued detail -> ["detail" Aeson..= detail]
       Stubbed -> []
       DeniedOutcome reason -> ["reason" Aeson..= reason]
+      SkippedLifecycle reason -> ["reason" Aeson..= reason]
       Failed err -> ["error" Aeson..= err]
       PermanentFailure err -> ["error" Aeson..= err]
 

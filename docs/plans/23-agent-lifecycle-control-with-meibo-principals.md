@@ -75,9 +75,13 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   worker role; and proved transactional skip auditing. Evidence: `shikigami-core` and all
   worker executables build, and all 78 `shikigami-workers` tests pass, including real-Postgres
   schedule, inbox, and drain lifecycle cases.
-- [ ] Milestone 4: enforce lifecycle at sink enqueue and publish boundaries, carry the
-  principal through sink intents, and attribute agent-run and conversation sessions to the
-  principal without changing journal step shape.
+- [x] (2026-08-23T01:24:31Z) Milestone 4: enforced lifecycle before sink grant checks at
+  enqueue and publish, carried an optional resolved principal through both compatible sink
+  intent codecs, recorded publish-time refusals as terminal non-send receipts, and attributed
+  new agent-run and conversation sessions to the principal without changing their name-keyed
+  scopes or journal step shapes. Evidence: all 387 `shikigami-core` tests pass, including
+  enqueue-after-pause, pause-after-enqueue, principal session attribution, and wire
+  compatibility cases.
 - [ ] Milestone 5: extend `shikigami agents list`, add `agents sync`, reconcile grant
   principal ids, update operator/configuration documentation, and capture the pause/resume
   demonstration.
@@ -129,6 +133,12 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   wedge. `Heartbeats` now stores per-registration thresholds; existing loops retain their
   defaults and configured directory loops use three missed refresh periods with a ten-second
   floor. (2026-08-22)
+
+- `just keiro-gate` runs `git diff --exit-code -- shikigami-core/src` after scaffolding, so it
+  cannot certify an uncommitted workflow-source milestone even when every generated file is
+  unchanged. Its semantic checks and scaffolding were clean before the Milestone 4 commit;
+  the full gate must be rerun against that commit so the source-tree freshness comparison has
+  a committed baseline. (2026-08-22)
 
 
 ## Decision Log
@@ -234,8 +244,15 @@ durable refusal. Kafka matches prepare lifecycle decisions before opening the in
 transaction, then atomically enqueue or record the refusal; duplicate delivery repeats
 neither effect. The PGMQ worker consults lifecycle before route selection, acknowledges a
 durable refusal, and retries an audit failure. Directory refresh loops are supervised and
-heartbeat after success or failure using the configured cadence. Milestones 4–5 remain to
-gate sinks, attribute sessions, and expose operator reconciliation.
+heartbeat after success or failure using the configured cadence.
+
+Milestone 4 closes both sink race windows. A paused principal cannot create an outbox row, and
+a principal paused after enqueue cannot cross the HTTP boundary; the latter becomes a dead,
+terminal non-send receipt so publication will not retry. Compatible intent decoding keeps old
+rows publishable, while new rows preserve the resolved principal for the second check. Newly
+opened agent-run and conversation sessions now store that principal in Kioku while their
+lookup scope remains declaration-name-keyed. Milestone 5 remains to expose inventory and
+grant reconciliation to operators.
 
 
 ## Context and Orientation

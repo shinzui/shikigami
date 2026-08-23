@@ -47,6 +47,7 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
+import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -75,7 +76,9 @@ data SinkEnv = SinkEnv
     activity :: !(Maybe ActivityEnvelope),
     -- | Which grant source the enqueue-time C11 check consults for sinks emitted
     -- from inside a flow.
-    grants :: !GrantSource
+    grants :: !GrantSource,
+    directory :: !DirectoryHandle,
+    principalId :: !(Maybe Text)
   }
 
 data Memory :: Effect where
@@ -368,7 +371,7 @@ recordFlowMemory
 -- position of the emission — in both branches. Only the journal step name, and
 -- with it the deterministic outbox id, differ.
 runSink :: (Workflow :> es, Store :> es, IOE :> es) => SinkEnv -> Eff (Sink : es) a -> Eff es a
-runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants} action = do
+runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, directory, principalId} action = do
   useLabels <- patch (PatchId "shikigami-emit-signal-labels-v1")
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
@@ -378,7 +381,7 @@ runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants} action
           let stepName
                 | useLabels = StepName ("emit-signal:" <> label)
                 | otherwise = StepName ("emit-signal:" <> Text.pack (show ordinal))
-          enqueueSinkIntentStep grants stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
+          enqueueSinkIntentStep directory grants principalId stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
     )
     action
 

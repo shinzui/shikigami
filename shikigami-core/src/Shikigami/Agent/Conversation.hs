@@ -69,13 +69,15 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Input (awaitInput)
 import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, runBehaviorAttempt, triggerOnly)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
@@ -99,7 +101,8 @@ data ConversationEnv = ConversationEnv
     danwa :: !DanwaConfig,
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
-    grants :: !GrantSource
+    grants :: !GrantSource,
+    directory :: !DirectoryHandle
   }
 
 conversationRunTimeout :: ConversationEnv -> NominalDiffTime
@@ -107,6 +110,11 @@ conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout
 
 conversationIdleTimeout :: ConversationEnv -> NominalDiffTime
 conversationIdleTimeout ConversationEnv {idleTimeout = timeout} = timeout
+
+declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId AgentDecl {identity} = declared <$> identity
+  where
+    declared IdentityDecl {principal} = principal
 
 data ConversationTurnResult = ConversationTurnResult
   { sessionId :: !SessionId,
@@ -726,7 +734,7 @@ processTurn env decl msg@AddressedMessage {conversationId = msgConversationId, m
         step (assistantReplyStepName msgMessageId) do
           turns <- liftIO (loadTurns env sid)
           let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (grants env) decl sid msg replyText userTurnIndex turns
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (directory env) (grants env) decl sid msg replyText userTurnIndex turns
           either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
       let replyMessageId = sinkResultDetail sinkResult
           RecordedTurn {turnId = recordedUserTurnId} = userTurn
@@ -790,7 +798,7 @@ processRotatingTurn env decl msg@AddressedMessage {conversationId = msgConversat
         step (StepName "record-assistant-and-reply") do
           turns <- liftIO (loadTurns env sid)
           let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (grants env) decl sid msg replyText userTurnIndex turns
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (directory env) (grants env) decl sid msg replyText userTurnIndex turns
           (recordedTurn, recordedReply) <- either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
           pure AssistantTurnAndReply {assistantTurn = recordedTurn, assistantReply = recordedReply}
       let replyMessageId = sinkResultDetail sinkResult
@@ -1117,6 +1125,7 @@ startSession :: ConversationEnv -> AgentDecl -> Text -> Maybe SessionId -> IO (E
 startSession env decl conversationId previousSession = do
   now <- getCurrentTime
   sid <- genSessionId
+  sessionAgentId <- Directory.principalAttribution (directory env) (declaredPrincipalId decl) (name decl)
   result <-
     runKioku env $
       Session.start
@@ -1125,7 +1134,7 @@ startSession env decl conversationId previousSession = do
             memorySpaceId = shikigamiMemorySpace,
             actorPrincipal = agentActor (name decl),
             ownerPrincipal = Nothing,
-            agentId = name decl,
+            agentId = sessionAgentId,
             focus = "conversation",
             scope = agentScope (name decl),
             subjectRef = Just conversationId,
@@ -1160,6 +1169,7 @@ recordTurnOnce env decl sid turnId desiredIndex role content turns =
 
 recordAssistantTurnAndEnqueueReply ::
   (IOE :> es, Store :> es, KirokuStoreResource :> es, Error StoreError :> es) =>
+  DirectoryHandle ->
   GrantSource ->
   AgentDecl ->
   SessionId ->
@@ -1168,15 +1178,15 @@ recordAssistantTurnAndEnqueueReply ::
   Int ->
   [TurnRow] ->
   Eff es (Either Text (RecordedTurn, SinkResult))
-recordAssistantTurnAndEnqueueReply grantSource decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
+recordAssistantTurnAndEnqueueReply directoryHandle grantSource decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
   case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
     Just TurnRow {turnIndex = existingTurnIndex} -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent grantSource decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg replyText now)
       pure (Right (RecordedTurn {turnId, turnIndex = existingTurnIndex}, AgentWorkflow.preparedSinkResult prepared))
     Nothing -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent grantSource decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg replyText now)
       existing <- Session.getById shikigamiMemorySpace sid
       case existing of
         Left err -> pure (Left (Text.pack (show err)))
@@ -1225,6 +1235,7 @@ recordAssistantTurnAndEnqueueReply grantSource decl sid msg@AddressedMessage {me
         projections
 
 prepareConversationReplySinkIntent ::
+  DirectoryHandle ->
   GrantSource ->
   AgentDecl ->
   SessionId ->
@@ -1232,9 +1243,11 @@ prepareConversationReplySinkIntent ::
   Text ->
   UTCTime ->
   IO AgentWorkflow.PreparedSinkIntent
-prepareConversationReplySinkIntent grantSource decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
+prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
   AgentWorkflow.prepareSinkIntent
+    directoryHandle
     grantSource
+    (declaredPrincipalId decl)
     (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
     (name decl)

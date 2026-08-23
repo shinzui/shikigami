@@ -74,6 +74,8 @@ import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
+import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
@@ -574,7 +576,31 @@ tests =
               other -> assertFailure ("expected exactly one emitted signal, got " <> show (fmap length other)),
       testGroup
         "Conversation"
-        [ testCase "parks and resumes a danwa conversation as one workflow session" do
+        [ testCase "new conversation session carries principal id under the name-keyed scope" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                directory <-
+                  newDirectoryHandle
+                    (staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle = Directory.Active}])
+                refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    env = (testConversationEnv appEnv behaviorEnv [conversationDecl]) {Conversation.directory = directory}
+
+                turn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
+                sid <- case turn of
+                  Right result -> pure (Conversation.sessionId result)
+                  Left err -> assertFailure ("conversation turn failed: " <> show err)
+                sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+                case sessions of
+                  Right (Right [SessionRow {agentId}]) -> assertEqual "session agent id" "agent_heartbeat" agentId
+                  other -> assertFailure ("name-keyed scope should contain one attributed session, got " <> show other)
+                loaded <- runAppIO appEnv (Session.getById shikigamiMemorySpace sid)
+                case loaded of
+                  Right (Right (Just SessionRow {agentId})) -> assertEqual "resolved session row" "agent_heartbeat" agentId
+                  other -> assertFailure ("conversation session should be readable, got " <> show other),
+          testCase "parks and resumes a danwa conversation as one workflow session" do
             withShikigamiMigratedDatabase \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
@@ -1400,6 +1426,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
+      directory = disabledDirectoryHandle,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -1425,6 +1452,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
+      directory = disabledDirectoryHandle,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -1533,7 +1561,8 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.idleTimeout = idleWindow,
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       Conversation.agents = conversationAgents,
-      Conversation.grants = StaticGrants defaultGrantTable
+      Conversation.grants = StaticGrants defaultGrantTable,
+      Conversation.directory = disabledDirectoryHandle
     }
 
 -- | A running session in the same agent scope under a different subject.

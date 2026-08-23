@@ -30,6 +30,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Capability
@@ -553,7 +554,9 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
           -- The same activity the flow's own capability sees, so a signal
           -- emitted from inside it resolves recipientFrom the way production does.
           activity = Just sampleActivity,
-          grants = StaticGrants defaultGrantTable
+          grants = StaticGrants defaultGrantTable,
+          directory = disabledDirectoryHandle,
+          principalId = Nothing
         }
     body =
       runActivity sampleActivity

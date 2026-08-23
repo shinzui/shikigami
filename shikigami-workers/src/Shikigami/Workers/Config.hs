@@ -173,6 +173,7 @@ agentRunDeps env =
       AgentWorkflow.delegationBudget = envDelegationBudget env,
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
+      AgentWorkflow.directory = envDirectory env,
       AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime
@@ -192,7 +193,8 @@ conversationEnv env =
       Conversation.idleTimeout = envConversationIdleTimeout env,
       Conversation.danwa = danwa env,
       Conversation.agents = agents env,
-      Conversation.grants = envGrants env
+      Conversation.grants = envGrants env,
+      Conversation.directory = envDirectory env
     }
 
 -- | Resolve every scheduled agent's declared cron, once, at boot.

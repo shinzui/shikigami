@@ -33,6 +33,8 @@ import Keiro.Workflow
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (Sink)
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaTarget, GrantSource, SinkOutcome (..), SinkResult (..), checkGrant, sinkKindOf)
@@ -50,6 +52,7 @@ import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), Si
 -- @docs\/plans\/27-consolidate-the-sink-dispatch-and-delivery-machinery.md@.
 data SinkIntent = SinkIntent
   { agent :: !Text,
+    principalId :: !(Maybe Text),
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
@@ -76,7 +79,9 @@ data PreparedSinkIntent = PreparedSinkIntent
 
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  DirectoryHandle ->
   GrantSource ->
+  Maybe Text ->
   StepName ->
   Text ->
   Text ->
@@ -87,11 +92,11 @@ enqueueSinkIntentStep ::
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
+enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
+  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -112,7 +117,9 @@ enqueueSinkIntentStep grantSource stepName agentName' runIdText ordinal occurred
     Left err -> liftIO (ioError (userError (Text.unpack err)))
 
 prepareSinkIntent ::
+  DirectoryHandle ->
   GrantSource ->
+  Maybe Text ->
   WorkflowId ->
   StepName ->
   Text ->
@@ -125,38 +132,48 @@ prepareSinkIntent ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent grantSource workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
-  checkGrant grantSource (AgentIdentity agentName') kind <&> \case
-    Left (Denied reason) ->
-      PreparedSinkIntent
-        { sinkResult = deniedResult reason,
-          outboxMessage = Nothing,
-          deliveryReceipt = Nothing
-        }
-    Right () ->
-      let intent =
-            SinkIntent
-              { agent = agentName',
-                runId = runIdText,
-                ordinal,
-                occurredAt = occurredAt',
-                danwaTarget = danwaTarget',
-                resolvedRecipient = resolvedRecipient',
-                sink,
-                output
-              }
-          event = sinkIntentEvent messageId runIdText now intent
-          receipt = pendingDeliveryReceipt messageId kind now intent
-       in PreparedSinkIntent
-            { sinkResult = enqueuedResult,
-              outboxMessage = Just (OutboxMessage outboxId event),
-              deliveryReceipt = Just receipt
+  Directory.lifecycleAdmission directoryHandle declaredPrincipalId agentName' >>= \case
+    Left reason ->
+      pure
+        PreparedSinkIntent
+          { sinkResult = SinkResult kind (SkippedLifecycle reason),
+            outboxMessage = Nothing,
+            deliveryReceipt = Nothing
+          }
+    Right resolvedPrincipalId ->
+      checkGrant grantSource (AgentIdentity agentName') kind <&> \case
+        Left (Denied reason) ->
+          PreparedSinkIntent
+            { sinkResult = deniedResult reason,
+              outboxMessage = Nothing,
+              deliveryReceipt = Nothing
             }
+        Right () ->
+          let intent =
+                SinkIntent
+                  { agent = agentName',
+                    principalId = resolvedPrincipalId,
+                    runId = runIdText,
+                    ordinal,
+                    occurredAt = occurredAt',
+                    danwaTarget = danwaTarget',
+                    resolvedRecipient = resolvedRecipient',
+                    sink,
+                    output
+                  }
+              event = sinkIntentEvent messageId runIdText now intent
+              receipt = pendingDeliveryReceipt messageId kind now intent
+           in PreparedSinkIntent
+                { sinkResult = enqueuedResult,
+                  outboxMessage = Just (OutboxMessage outboxId event),
+                  deliveryReceipt = Just receipt
+                }
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult

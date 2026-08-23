@@ -11,6 +11,7 @@ module Shikigami.Sink.Types
 where
 
 import Data.Text qualified as Text
+import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
@@ -39,6 +40,8 @@ data DeliveryGuard = DeliveryGuard
 -- run timestamp.
 data SinkContext = SinkContext
   { identity :: !AgentIdentity,
+    principalId :: !(Maybe Text),
+    directory :: !DirectoryHandle,
     runId :: !Text,
     ordinal :: !Int,
     kizashi :: !KizashiConfig,
@@ -87,6 +90,7 @@ data SinkOutcome
     -- @Shikigami.WireCompatSpec@, which pins that it still /decodes/.
     Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
+  | SkippedLifecycle !Text -- principal paused, deactivated, unknown, or unavailable (no send)
   | Failed !Text -- the send errored (the worker decides retry)
   | -- | The transport classified a failure as permanent. The publisher maps
     -- this to Keiro's terminal publication-rejection outcome; see

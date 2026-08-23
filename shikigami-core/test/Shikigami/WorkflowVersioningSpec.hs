@@ -57,6 +57,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
+import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
@@ -437,7 +438,9 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
           occurredAt = Just flowOccurredAt,
           danwaTarget = Nothing,
           activity = Just sampleActivity,
-          grants = StaticGrants defaultGrantTable
+          grants = StaticGrants defaultGrantTable,
+          directory = disabledDirectoryHandle,
+          principalId = Nothing
         }
     body =
       runActivity sampleActivity

@@ -38,6 +38,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink
   ( AgentIdentity (..),
@@ -341,6 +342,8 @@ ctxWithIdentity :: AgentIdentity -> ReiConfig -> SinkContext
 ctxWithIdentity agentIdentity rei =
   SinkContext
     { identity = agentIdentity,
+      principalId = Nothing,
+      directory = disabledDirectoryHandle,
       runId = "run-1",
       ordinal = 0,
       kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient_default"},

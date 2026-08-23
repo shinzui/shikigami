@@ -23,6 +23,7 @@ import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
+import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
@@ -221,6 +222,8 @@ ctxFor :: AgentIdentity -> KizashiConfig -> KawaConfig -> SinkContext
 ctxFor ident kz kw =
   SinkContext
     { identity = ident,
+      principalId = Nothing,
+      directory = disabledDirectoryHandle,
       runId = "run-1",
       ordinal = 0,
       kizashi = kz,
