@@ -14,12 +14,13 @@ import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
-import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), newHeartbeats, serveProbesWith)
+import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
-import Shikigami.Workers.Config (WorkerEnv (..), persistAgentLoadReport, schedulerSchedules)
+import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import System.Exit qualified as Exit
 
@@ -64,7 +65,13 @@ runWorkerCmd config = do
       -- The resume loop is deliberately absent: it is still a run-once action
       -- rather than a loop, so it has no cadence to be stale against. It joins
       -- this list when it becomes a loop.
-      registry <- newHeartbeats [QueueLoop, OutboxLoop, TimerLoop]
+      registry <-
+        newHeartbeatsWithStaleness
+          ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop]]
+              <> directoryLoopRegistration (Config.directorySettings config)
+          )
+      DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+        startProcessDirectory logger registry (Config.directorySettings config)
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
           env =
             WorkerEnv
@@ -99,7 +106,9 @@ runWorkerCmd config = do
                 -- the rest of the process uses, so a grant change is visible on
                 -- the next dispatch without a restart.
                 grants = DbGrants storePool,
-                heartbeats = registry
+                heartbeats = registry,
+                directory,
+                directoryRefresher
               }
       serveProbesWith
         logger

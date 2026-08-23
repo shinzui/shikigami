@@ -24,12 +24,14 @@ import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Health.Worker (LoopName (SchedulerLoop), beat, newHeartbeats, serveProbesWith)
+import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, SchedulerLoop), beat, loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import Shikigami.Workers.Config (persistAgentLoadReport, schedulerSchedules)
+import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, principalIdsByAgent, schedulerSchedules, startProcessDirectory)
+import Shikigami.Workers.Supervision (superviseLoops)
 import System.Exit (exitFailure)
 
 -- | Arm every scheduled agent and drive keiro timer firing.
@@ -69,32 +71,42 @@ runSchedulerCmd config = do
       Right () ->
         Log.logInfo logger "scheduler.queue.reconciled" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
     tracer <- noopTracer
+    registry <-
+      newHeartbeatsWithStaleness
+        ( (SchedulerLoop, loopStaleAfter SchedulerLoop)
+            : directoryLoopRegistration (Config.directorySettings config)
+        )
+    DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+      startProcessDirectory logger registry (Config.directorySettings config)
     let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
         env =
           SchedulerEnv
             { pool = storePool,
               schedules = scheduleMap,
+              principalIds = principalIdsByAgent agents,
+              directory,
               catchUpPolicy = Config.schedulerCatchUp config,
               logger
             }
     armAll logger appEnv schedules
-    registry <- newHeartbeats [SchedulerLoop]
+    let schedulerLoop = forever do
+          now <- getCurrentTime
+          result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
+          case result of
+            Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
+            Right _ -> pure ()
+          -- Beat on every pass, failed included: a store error is a dependency
+          -- being unavailable, not this loop being wedged.
+          beat registry SchedulerLoop
+          threadDelay 1_000_000
+        directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
       (Config.httpHost config)
       (Config.healthPortFor SchedulerRole config)
       storePool
       registry
-      $ forever do
-        now <- getCurrentTime
-        result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
-        case result of
-          Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
-          Right _ -> pure ()
-        -- Beat on every pass, failed included: a store error is a dependency
-        -- being unavailable, not this loop being wedged.
-        beat registry SchedulerLoop
-        threadDelay 1_000_000
+      (superviseLoops logger ((SchedulerLoop, schedulerLoop) : directoryLoops))
 
 armAll :: Log.Logger -> AppEnv -> [(Text, CronSchedule)] -> IO ()
 armAll logger appEnv schedules =

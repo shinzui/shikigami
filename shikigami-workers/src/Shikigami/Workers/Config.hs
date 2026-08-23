@@ -19,11 +19,16 @@ module Shikigami.Workers.Config
     envGrants,
     envCatchUpPolicy,
     envHeartbeats,
+    envDirectory,
+    envDirectoryRefresher,
     agentRunDeps,
     conversationEnv,
     persistAgentLoadReport,
     schedulerSchedules,
+    principalIdsByAgent,
     schedulerEnv,
+    directoryLoopRegistration,
+    startProcessDirectory,
   )
 where
 
@@ -36,13 +41,14 @@ import Hasql.Pool (Pool)
 import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
-import Shikigami.Health.Worker (Heartbeats)
+import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
@@ -103,7 +109,9 @@ data WorkerEnv = WorkerEnv
     -- @\/health\/live@ probe. Shared by all four loops for the same reason the
     -- logger is: one process answers with one registry, or the probe reports on
     -- whichever copy it happens to hold.
-    heartbeats :: !Heartbeats
+    heartbeats :: !Heartbeats,
+    directory :: !DirectoryHandle,
+    directoryRefresher :: !(Maybe (IO ()))
   }
 
 -- | The process-wide logger. Named rather than used as a bare selector
@@ -121,6 +129,12 @@ envGrants WorkerEnv {grants = g} = g
 -- selector is ambiguous under @DuplicateRecordFields@.
 envHeartbeats :: WorkerEnv -> Heartbeats
 envHeartbeats WorkerEnv {heartbeats = h} = h
+
+envDirectory :: WorkerEnv -> DirectoryHandle
+envDirectory WorkerEnv {directory = value} = value
+
+envDirectoryRefresher :: WorkerEnv -> Maybe (IO ())
+envDirectoryRefresher WorkerEnv {directoryRefresher = value} = value
 
 envRunTimeout :: WorkerEnv -> NominalDiffTime
 envRunTimeout WorkerEnv {runTimeout = timeout} = timeout
@@ -221,6 +235,8 @@ schedulerEnv env =
   Scheduler.SchedulerEnv
     { Scheduler.pool = pool env,
       Scheduler.schedules = envSchedules env,
+      Scheduler.principalIds = principalIdsByAgent (agents env),
+      Scheduler.directory = envDirectory env,
       Scheduler.catchUpPolicy = envCatchUpPolicy env,
       Scheduler.logger = envLogger env
     }
@@ -229,3 +245,28 @@ schedulerEnv env =
 -- carries a @schedules@ field.
 envSchedules :: WorkerEnv -> Map Text CronSchedule
 envSchedules WorkerEnv {schedules = s} = s
+
+principalIdsByAgent :: [AgentDecl] -> Map Text (Maybe Text)
+principalIdsByAgent =
+  Map.fromList . fmap (\AgentDecl {name, identity} -> (name, declaredPrincipal <$> identity))
+  where
+    declaredPrincipal IdentityDecl {principal} = principal
+
+-- | Register the directory loop only when lifecycle enforcement is enabled.
+-- Its liveness deadline scales with the configured cadence: three missed
+-- attempts, with the same ten-second floor as the one-second worker loops.
+directoryLoopRegistration :: DirectorySettings -> [(LoopName, NominalDiffTime)]
+directoryLoopRegistration = \case
+  DirectoryDisabled -> []
+  DirectoryFile {refreshInterval} -> [(DirectoryLoop, max 10 (refreshInterval * 3))]
+
+-- | Cold-start the process directory and bind refresh attempts to liveness.
+-- A configured source without an initial valid snapshot is fail-closed and
+-- therefore fatal before any trigger or drain loop starts.
+startProcessDirectory :: Log.Logger -> Heartbeats -> DirectorySettings -> IO DirectoryRuntime
+startProcessDirectory logger registry settings =
+  startDirectoryWithHeartbeat logger (beat registry DirectoryLoop) settings >>= \case
+    Left problem -> do
+      Log.logError logger "directory.start_failed" ["reason" Aeson..= problem]
+      exitFailure
+    Right runtime -> pure runtime

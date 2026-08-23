@@ -19,6 +19,8 @@ import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Consumer
@@ -30,6 +32,7 @@ import Shikigami.Trigger.Consumer
     ensureDeadLetterQueue,
     processActivityRecord,
     processDecodedActivity,
+    processDecodedActivityWithDirectory,
   )
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors))
@@ -71,6 +74,42 @@ tests =
           assertEqual "redelivery" Duplicate second
           jobs <- readRunJobs pool
           assertEqual "one queue message" 1 (length jobs),
+      testCase "paused stream match commits skip with inbox and enqueues nothing" do
+        withFixture \appEnv pool -> do
+          ensureQueue pool
+          directory <- directoryWith Paused
+          first <-
+            processDecodedActivityWithDirectory
+              Log.silentLogger
+              appEnv
+              directory
+              ExcludeAgentActors
+              [streamAgent]
+              (const (pure ()))
+              activityEvent
+              (Just deliveryRef)
+          second <-
+            processDecodedActivityWithDirectory
+              Log.silentLogger
+              appEnv
+              directory
+              ExcludeAgentActors
+              [streamAgent]
+              (const (pure ()))
+              activityEvent
+              (Just deliveryRef)
+          assertEqual "first refusal commits" Enqueued first
+          assertEqual "redelivery is deduped" Duplicate second
+          assertEqual "paused stream enqueues no jobs" [] =<< readRunJobs pool
+          assertEqual "skip and inbox commit together" (Just InboxCompleted) . fmap inboxStatus =<< readInbox appEnv
+          skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
+          case skips of
+            [runSkip] -> do
+              assertEqual "principal" (Just "agent_risk") (DirectoryStore.principalId runSkip)
+              assertEqual "trigger boundary" DirectoryStore.TriggerStage (DirectoryStore.stage runSkip)
+              assertEqual "source" "stream" (DirectoryStore.detail runSkip)
+              assertEqual "same key the run would use" "risk-agent:act_stream_1" (DirectoryStore.idempotencyKey runSkip)
+            other -> assertFailure ("expected one stream skip, got " <> show other),
       testCase "handler failure rolls back both inbox row and message" do
         withFixture \appEnv pool -> do
           ensureQueue pool
@@ -237,6 +276,15 @@ readInbox appEnv = do
 
 inboxStatus :: InboxRow -> InboxStatus
 inboxStatus InboxRow {status} = status
+
+directoryWith :: Lifecycle -> IO DirectoryHandle
+directoryWith lifecycle = do
+  directory <-
+    newDirectoryHandle
+      (staticDirectorySource [PrincipalRecord {principalId = "agent_risk", handle = "risk-agent", lifecycle}])
+  refreshDirectory directory >>= \case
+    Left problem -> assertFailure (Text.unpack problem)
+    Right () -> pure directory
 
 streamAgent :: AgentDecl
 streamAgent =

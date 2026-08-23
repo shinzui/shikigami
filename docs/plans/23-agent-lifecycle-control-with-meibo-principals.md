@@ -70,8 +70,11 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   through the combined worker, standalone scheduler, and both consumers. Evidence: four pure
   migration tests, two real-Postgres migration smoke tests, three real-Postgres directory
   store tests, and all 11 loader tests passed; the core and workers libraries build.
-- [ ] Milestone 3: enforce lifecycle at schedule, Kafka trigger, and run-job drain boundaries;
-  supervise refresh loops in every configured worker role; prove transactional skip auditing.
+- [x] (2026-08-23T01:07:54Z) Milestone 3: enforced lifecycle at schedule, Kafka trigger,
+  and run-job drain boundaries; supervised a cadence-aware refresh loop in every configured
+  worker role; and proved transactional skip auditing. Evidence: `shikigami-core` and all
+  worker executables build, and all 78 `shikigami-workers` tests pass, including real-Postgres
+  schedule, inbox, and drain lifecycle cases.
 - [ ] Milestone 4: enforce lifecycle at sink enqueue and publish boundaries, carry the
   principal through sink intents, and attribute agent-run and conversation sessions to the
   principal without changing journal step shape.
@@ -119,6 +122,13 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   the earlier concrete transcript. It requires `--manifest` and `--description`, and this
   timestamp-style manifest also needs an explicit `--name`; the implementation used the
   mounted CLI's help and authoring contract. (2026-08-22)
+
+- Worker liveness previously had only fixed, constructor-wide stale thresholds. A directory
+  refresh interval is operator-configured up to one day, so a fixed `DirectoryLoop` threshold
+  would either fail healthy slow-cadence processes or take a day to notice a default-cadence
+  wedge. `Heartbeats` now stores per-registration thresholds; existing loops retain their
+  defaults and configured directory loops use three missed refresh periods with a ten-second
+  floor. (2026-08-22)
 
 
 ## Decision Log
@@ -191,6 +201,15 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   reconciliation incomplete.
   Date: 2026-07-08; reaffirmed 2026-08-22
 
+- Decision: Treat a committed Kafka lifecycle refusal as `Enqueued` at the broker disposition
+  layer, while carrying an internal committed-result value that distinguishes a queued run
+  from a skip for post-commit logging.
+  Rationale: `Enqueued` is the pre-existing name for "the inbox handler's durable effect
+  committed" and maps to `AckOk`; adding a second terminal broker disposition would not alter
+  mechanics. The internal distinction prevents the enqueue callback from firing for skips and
+  keeps offset acknowledgement after the inbox and `run_skips` row commit together.
+  Date: 2026-08-22
+
 
 ## Outcomes & Retrospective
 
@@ -207,8 +226,16 @@ schema and operator guide now expose the conditional file path and bounded refre
 
 Milestone 2 made the loader report and lifecycle refusals durable. One transaction replaces
 the complete observed state for a manifest directory, strict startup persists before refusal,
-and `(stage, idempotency_key)` makes retried trigger/drain evidence safe. Milestones 3–5
-remain.
+and `(stage, idempotency_key)` makes retried trigger/drain evidence safe.
+
+Milestone 3 connected that policy to every ingress and drain composition root. Schedule
+timers now remain retryable if skip auditing fails and advance only after either enqueue or
+durable refusal. Kafka matches prepare lifecycle decisions before opening the inbox
+transaction, then atomically enqueue or record the refusal; duplicate delivery repeats
+neither effect. The PGMQ worker consults lifecycle before route selection, acknowledges a
+durable refusal, and retries an audit failure. Directory refresh loops are supervised and
+heartbeat after success or failure using the configured cadence. Milestones 4–5 remain to
+gate sinks, attribute sessions, and expose operator reconciliation.
 
 
 ## Context and Orientation

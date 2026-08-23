@@ -28,12 +28,13 @@ import Shibuya.Core.Metrics
     emptyProcessorMetrics,
   )
 import Shikigami.Health.Worker
-  ( LoopName (ConsumerLoop, OutboxLoop, QueueLoop, TimerLoop),
+  ( LoopName (ConsumerLoop, DirectoryLoop, OutboxLoop, QueueLoop, TimerLoop),
     beat,
     loopCheckName,
     loopLivenessAt,
     loopStaleAfter,
     newHeartbeats,
+    newHeartbeatsWithStaleness,
     probeApplication,
     processorStateVerdict,
     registerReport,
@@ -124,6 +125,12 @@ livenessTests =
         outboxVerdict <- loopLivenessAt outboxOnly observedAt
         failedCheckOf outboxVerdict >>= (@?= loopCheckName OutboxLoop)
         loopLivenessAt consumerOnly observedAt >>= assertHealthy,
+      testCase "directory liveness follows its configured refresh cadence" do
+        registry <- newHeartbeatsWithStaleness [(DirectoryLoop, 300)]
+        born <- getCurrentTime
+        loopLivenessAt registry (addUTCTime 299 born) >>= assertHealthy
+        verdict <- loopLivenessAt registry (addUTCTime 301 born)
+        failedCheckOf verdict >>= (@?= "loop.directory"),
       -- An unregistered loop belongs to a different role. The scheduler runs no
       -- outbox publisher and must not fail liveness for not having one.
       testCase "a loop this role does not run is not checked" do

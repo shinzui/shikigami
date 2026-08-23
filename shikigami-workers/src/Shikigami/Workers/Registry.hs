@@ -32,11 +32,11 @@ import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailur
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
-import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, ResumeLoop, TimerLoop), registerReport, supervisedLoopVerdict)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TimerLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Trigger.Timer (runTimerWorker)
-import Shikigami.Workers.Config (WorkerEnv (..), envHeartbeats, envLogger)
+import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 
 -- | Start every worker loop and run until the process is stopped.
@@ -49,13 +49,14 @@ import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 runWorkers :: WorkerEnv -> IO ()
 runWorkers env = do
   Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= jobName runJob]
-  superviseLoops
-    (envLogger env)
-    [ (QueueLoop, runQueueWorker env),
-      (ResumeLoop, runResumeWorker env),
-      (OutboxLoop, runOutboxPublisher env),
-      (TimerLoop, runTimerWorker env)
-    ]
+  let durableLoops =
+        [ (QueueLoop, runQueueWorker env),
+          (ResumeLoop, runResumeWorker env),
+          (OutboxLoop, runOutboxPublisher env),
+          (TimerLoop, runTimerWorker env)
+        ]
+      directoryLoops = maybe [] (pure . (DirectoryLoop,)) (envDirectoryRefresher env)
+  superviseLoops (envLogger env) (durableLoops <> directoryLoops)
 
 -- | The id shibuya knows the run-job processor by.
 --

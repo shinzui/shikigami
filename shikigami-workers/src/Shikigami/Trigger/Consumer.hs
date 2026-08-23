@@ -15,9 +15,13 @@ module Shikigami.Trigger.Consumer
     subscribeActivityStream,
     subscribeIntegrationEventStream,
     processActivityRecord,
+    processActivityRecordWithDirectory,
     processIntegrationEventRecord,
+    processIntegrationEventRecordWithDirectory,
     processDecodedActivity,
+    processDecodedActivityWithDirectory,
     processDecodedIntegrationEvent,
+    processDecodedIntegrationEventWithDirectory,
     ackDecisionFor,
     ensureDeadLetterQueue,
   )
@@ -72,8 +76,10 @@ import Shibuya.Core.Types (Cursor (..), Envelope (..))
 import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
-import Shikigami.Agent.Decl (AgentDecl (..), StreamMatch, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
+import Shikigami.Directory qualified as Directory
+import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -148,15 +154,15 @@ data RecordDisposition
 type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
 
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
-subscribeActivityStream :: Log.Logger -> OnSupervisor -> AppEnv -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger onSupervisor appEnv config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger onSupervisor "stream" appEnv config $ processActivityRecord logger appEnv deadLetterQueue include agents onHit
+subscribeActivityStream :: Log.Logger -> OnSupervisor -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger onSupervisor appEnv directory config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger onSupervisor "stream" appEnv config $ processActivityRecordWithDirectory logger appEnv directory deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
-subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> AppEnv -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream logger onSupervisor appEnv config@StreamConfig {deadLetterQueue} agents onHit =
-  runSubscription logger onSupervisor "events" appEnv config $ processIntegrationEventRecord appEnv deadLetterQueue agents onHit
+subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream logger onSupervisor appEnv directory config@StreamConfig {deadLetterQueue} agents onHit =
+  runSubscription logger onSupervisor "events" appEnv config $ processIntegrationEventRecordWithDirectory logger appEnv directory deadLetterQueue agents onHit
 
 runSubscription ::
   Log.Logger ->
@@ -291,13 +297,26 @@ processActivityRecord ::
   (StreamHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processActivityRecord logger appEnv queue include agents onHit record =
+processActivityRecord logger appEnv =
+  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle
+
+processActivityRecordWithDirectory ::
+  Log.Logger ->
+  AppEnv ->
+  Directory.DirectoryHandle ->
+  QueueName ->
+  IncludeAgentActors ->
+  [AgentDecl] ->
+  (StreamHit -> IO ()) ->
+  KafkaInboundRecord ->
+  IO RecordDisposition
+processActivityRecordWithDirectory logger appEnv directory queue include agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right activity -> processActivity logger appEnv include agents onHit event (Just delivery) activity
+        Right activity -> processActivity logger appEnv directory include agents onHit event (Just delivery) activity
 
 -- | Process one raw public integration-event delivery.
 processIntegrationEventRecord ::
@@ -307,13 +326,25 @@ processIntegrationEventRecord ::
   (EventHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processIntegrationEventRecord appEnv queue agents onHit record =
+processIntegrationEventRecord appEnv =
+  processIntegrationEventRecordWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle
+
+processIntegrationEventRecordWithDirectory ::
+  Log.Logger ->
+  AppEnv ->
+  Directory.DirectoryHandle ->
+  QueueName ->
+  [AgentDecl] ->
+  (EventHit -> IO ()) ->
+  KafkaInboundRecord ->
+  IO RecordDisposition
+processIntegrationEventRecordWithDirectory logger appEnv directory queue agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right payloadValue -> processIntegrationEvent appEnv agents onHit event (Just delivery) payloadValue
+        Right payloadValue -> processIntegrationEvent logger appEnv directory agents onHit event (Just delivery) payloadValue
 
 -- | Process an already decoded transport event. An invalid activity payload is
 -- transient here because this broker-free entry point has no raw delivery to
@@ -327,10 +358,23 @@ processDecodedActivity ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivity logger appEnv include agents onHit event kafka =
+processDecodedActivity logger appEnv =
+  processDecodedActivityWithDirectory logger appEnv Directory.disabledDirectoryHandle
+
+processDecodedActivityWithDirectory ::
+  Log.Logger ->
+  AppEnv ->
+  Directory.DirectoryHandle ->
+  IncludeAgentActors ->
+  [AgentDecl] ->
+  (StreamHit -> IO ()) ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  IO RecordDisposition
+processDecodedActivityWithDirectory logger appEnv directory include agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right activity -> processActivity logger appEnv include agents onHit event kafka activity
+    Right activity -> processActivity logger appEnv directory include agents onHit event kafka activity
 
 -- | When the envelope says it happened, or this moment plus a line saying the
 -- envelope did not say.
@@ -358,6 +402,7 @@ resolveOccurredAt logger activity =
 processActivity ::
   Log.Logger ->
   AppEnv ->
+  Directory.DirectoryHandle ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
@@ -365,17 +410,18 @@ processActivity ::
   Maybe KafkaDeliveryRef ->
   ActivityEnvelope ->
   IO RecordDisposition
-processActivity logger appEnv include agents onHit event kafka activity = do
+processActivity logger appEnv directory include agents onHit event kafka activity = do
   -- Resolved before the transaction opens, because deciding it may need a clock
   -- and a log line and the handler runs inside Hasql.
   resolvedOccurredAt <- resolveOccurredAt logger activity
+  prepared <- prepareActivityHits directory resolvedOccurredAt include agents activity
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
-        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler resolvedOccurredAt include agents activity)
+        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler prepared)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
-    Right result -> classifyInboxResult event onHit result
+    Right result -> classifyInboxResult event (reportCommitted logger "stream" onHit) result
 
 -- | Broker-free transactional entry point for public integration events.
 processDecodedIntegrationEvent ::
@@ -385,28 +431,43 @@ processDecodedIntegrationEvent ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedIntegrationEvent appEnv agents onHit event kafka =
+processDecodedIntegrationEvent appEnv =
+  processDecodedIntegrationEventWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle
+
+processDecodedIntegrationEventWithDirectory ::
+  Log.Logger ->
+  AppEnv ->
+  Directory.DirectoryHandle ->
+  [AgentDecl] ->
+  (EventHit -> IO ()) ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  IO RecordDisposition
+processDecodedIntegrationEventWithDirectory logger appEnv directory agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right payloadValue -> processIntegrationEvent appEnv agents onHit event kafka payloadValue
+    Right payloadValue -> processIntegrationEvent logger appEnv directory agents onHit event kafka payloadValue
 
 processIntegrationEvent ::
+  Log.Logger ->
   AppEnv ->
+  Directory.DirectoryHandle ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   Value ->
   IO RecordDisposition
-processIntegrationEvent appEnv agents onHit event kafka payloadValue = do
+processIntegrationEvent logger appEnv directory agents onHit event kafka payloadValue = do
   receivedAt <- getCurrentTime
+  prepared <- prepareEventHits directory receivedAt agents payloadValue event
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
-        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler receivedAt agents payloadValue)
+        runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler prepared)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
-    Right result -> classifyInboxResult event onHit result
+    Right result -> classifyInboxResult event (reportCommitted logger "events" onHit) result
 
 classifyInboxResult ::
   (Show storeError, Show inboxError) =>
@@ -493,55 +554,127 @@ logDisposition logger prefix = \case
     Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" Aeson..= deadLetterId]
   TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" Aeson..= err]
 
--- | Matching and queue sends run inside the inbox transaction.
-inboxHandler :: UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IntegrationEvent -> Tx.Transaction [StreamHit]
-inboxHandler resolvedOccurredAt include agents activity _event = do
-  let matched =
-        [ agent
-        | agent <- agents,
-          Just streamMatch <- [streamMatchOf agent],
-          matchesStreamWith include streamMatch activity
-        ]
-  traverse_ (\agent -> enqueueRunJobTx (runJobFromEnvelope resolvedOccurredAt agent activity)) matched
-  pure [StreamHit {agentName = agent ^. #name, envelope = activity} | agent <- matched]
+data PreparedTrigger hit
+  = EnqueueTrigger !RunJob !hit
+  | SkipTrigger !RunSkip
+
+data CommittedTrigger hit
+  = EnqueuedTrigger !hit
+  | SkippedTrigger !RunSkip
+
+prepareActivityHits :: Directory.DirectoryHandle -> UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IO [PreparedTrigger StreamHit]
+prepareActivityHits directory resolvedOccurredAt include agents activity =
+  traverse
+    prepare
+    [ agent
+    | agent <- agents,
+      Just streamMatch <- [streamMatchOf agent],
+      matchesStreamWith include streamMatch activity
+    ]
+  where
+    prepare agent = do
+      let job = runJobFromEnvelope resolvedOccurredAt agent activity
+          hit = StreamHit {agentName = agent ^. #name, envelope = activity}
+      prepareTrigger directory "stream" agent job hit
+
+-- | Queue sends and lifecycle refusals share the inbox transaction. A broker
+-- offset is acknowledged only after exactly one durable effect commits.
+inboxHandler :: [PreparedTrigger StreamHit] -> IntegrationEvent -> Tx.Transaction [CommittedTrigger StreamHit]
+inboxHandler prepared _event = traverse commitTrigger prepared
 
 streamMatchOf :: AgentDecl -> Maybe StreamMatch
 streamMatchOf agent = case agent ^. #trigger of
   Stream {match = streamMatch} -> Just streamMatch
   _ -> Nothing
 
-eventInboxHandler :: UTCTime -> [AgentDecl] -> Value -> IntegrationEvent -> Tx.Transaction [EventHit]
-eventInboxHandler receivedAt agents payloadValue event = do
-  let matched =
-        [ agent
-        | agent <- agents,
-          Just expectedEventType <- [eventTriggerTypeOf agent],
-          expectedEventType == event ^. #eventType
-        ]
-      jobFor agent =
-        RunJob
-          { agentName = agent ^. #name,
-            triggerKind = TriggeredByEvent,
-            routeKind = eventRouteOf agent,
-            occurredAt = receivedAt,
-            triggerPayload = payloadValue,
-            idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
-            parentSessionId = Nothing,
-            parentRunWorkflowId = Nothing,
-            delegationDepth = Nothing,
-            lineage = [agent ^. #name],
-            delegationBudgetId = Nothing
-          }
-  traverse_ (enqueueRunJobTx . jobFor) matched
-  pure
-    [ EventHit
-        { agentName = agent ^. #name,
-          eventType = event ^. #eventType,
-          integrationMessageId = event ^. #messageId,
-          payload = payloadValue
-        }
-    | agent <- matched
+prepareEventHits :: Directory.DirectoryHandle -> UTCTime -> [AgentDecl] -> Value -> IntegrationEvent -> IO [PreparedTrigger EventHit]
+prepareEventHits directory receivedAt agents payloadValue event =
+  traverse
+    prepare
+    [ agent
+    | agent <- agents,
+      Just expectedEventType <- [eventTriggerTypeOf agent],
+      expectedEventType == event ^. #eventType
     ]
+  where
+    prepare agent = do
+      let job =
+            RunJob
+              { agentName = agent ^. #name,
+                triggerKind = TriggeredByEvent,
+                routeKind = eventRouteOf agent,
+                occurredAt = receivedAt,
+                triggerPayload = payloadValue,
+                idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
+                parentSessionId = Nothing,
+                parentRunWorkflowId = Nothing,
+                delegationDepth = Nothing,
+                lineage = [agent ^. #name],
+                delegationBudgetId = Nothing
+              }
+          hit =
+            EventHit
+              { agentName = agent ^. #name,
+                eventType = event ^. #eventType,
+                integrationMessageId = event ^. #messageId,
+                payload = payloadValue
+              }
+      prepareTrigger directory "event" agent job hit
+
+eventInboxHandler :: [PreparedTrigger EventHit] -> IntegrationEvent -> Tx.Transaction [CommittedTrigger EventHit]
+eventInboxHandler prepared _event = traverse commitTrigger prepared
+
+prepareTrigger :: Directory.DirectoryHandle -> Text -> AgentDecl -> RunJob -> hit -> IO (PreparedTrigger hit)
+prepareTrigger directory detail agent job hit = do
+  let declaredPrincipalId = principalIdOf agent
+  decision <- Directory.consultLifecycle directory declaredPrincipalId (agent ^. #name)
+  pure case lifecycleRefusal declaredPrincipalId decision of
+    Nothing -> EnqueueTrigger job hit
+    Just (resolvedPrincipalId, reason) ->
+      SkipTrigger
+        RunSkip
+          { agentName = agent ^. #name,
+            principalId = resolvedPrincipalId,
+            stage = TriggerStage,
+            detail,
+            reason,
+            idempotencyKey = job ^. #idempotencyKey
+          }
+
+commitTrigger :: PreparedTrigger hit -> Tx.Transaction (CommittedTrigger hit)
+commitTrigger = \case
+  EnqueueTrigger job hit -> do
+    _ <- enqueueRunJobTx job
+    pure (EnqueuedTrigger hit)
+  SkipTrigger runSkip -> do
+    recordRunSkipTx runSkip
+    pure (SkippedTrigger runSkip)
+
+reportCommitted :: Log.Logger -> Text -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
+reportCommitted logger prefix onHit = \case
+  EnqueuedTrigger hit -> onHit hit
+  SkippedTrigger RunSkip {agentName, principalId, detail, reason, idempotencyKey} ->
+    Log.logInfo
+      logger
+      (prefix <> ".trigger.skipped")
+      [ "agent" Aeson..= agentName,
+        "principal_id" Aeson..= principalId,
+        "detail" Aeson..= detail,
+        "reason" Aeson..= reason,
+        Log.runIdKey Aeson..= idempotencyKey
+      ]
+
+principalIdOf :: AgentDecl -> Maybe Text
+principalIdOf AgentDecl {identity} = declared <$> identity
+  where
+    declared IdentityDecl {principal} = principal
+
+lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
+lifecycleRefusal declaredPrincipalId = \case
+  Directory.AllowRun _ -> Nothing
+  Directory.SkipRun principal reason -> Just (Just (Directory.principalId principal), reason)
+  Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
+  Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
 
 eventTriggerTypeOf :: AgentDecl -> Maybe Text
 eventTriggerTypeOf agent = case agent ^. #trigger of

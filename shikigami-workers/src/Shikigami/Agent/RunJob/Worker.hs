@@ -8,6 +8,10 @@
 module Shikigami.Agent.RunJob.Worker
   ( runJob,
     handleRunJob,
+    DrainAdmission (..),
+    admitRunJob,
+    admitRunJobWith,
+    drainAdmissionOutcome,
     RunRoute (..),
     routeRunJob,
     routeErrorJobOutcome,
@@ -30,6 +34,7 @@ import Data.Text qualified as Text
 import Data.Time.Clock (NominalDiffTime)
 import Data.Void (absurd)
 import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
+import Hasql.Pool qualified
 import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..), aesonJobCodec, defaultRetryPolicy, queueRef)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
@@ -40,10 +45,12 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
+import Shikigami.Directory qualified as Directory
+import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envDirectory, envLogger)
 
 -- | The queue contract for run jobs. Its codec intentionally preserves the
 -- existing unwrapped Aeson payload until a dual-read migration can introduce a
@@ -63,20 +70,104 @@ runJob =
 handleRunJob :: (IOE :> es) => WorkerEnv -> JobContext es -> RunJob -> Eff es JobOutcome
 handleRunJob env context job =
   withVisibilityHeartbeat context do
-    attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
-    case attemptResult of
-      Left failure@(TransientBehaviorFailure {detail}) -> do
+    liftIO (admitRunJob env job) >>= \case
+      DrainSkipped runSkip -> do
+        liftIO $
+          jobLog
+            env
+            job
+            Log.Info
+            "worker.job.lifecycle_skipped"
+            [ "principal_id" Aeson..= DirectoryStore.principalId runSkip,
+              "route" Aeson..= DirectoryStore.detail runSkip,
+              "reason" Aeson..= DirectoryStore.reason runSkip
+            ]
+        pure Done
+      DrainAuditFailed problem -> do
         liftIO $
           jobLog
             env
             job
             Log.Error
-            "worker.job.retried"
-            [ "error" Aeson..= detail,
-              "reason" Aeson..= ("transient_behavior_failure" :: Text)
+            "worker.job.lifecycle_skip_failed"
+            [ "error" Aeson..= problem,
+              "reason" Aeson..= ("skip_audit_failed" :: Text)
             ]
-        pure (transientBehaviorJobOutcome failure)
-      Right outcome -> pure outcome
+        pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
+      DrainAllowed -> do
+        attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
+        case attemptResult of
+          Left failure@(TransientBehaviorFailure {detail}) -> do
+            liftIO $
+              jobLog
+                env
+                job
+                Log.Error
+                "worker.job.retried"
+                [ "error" Aeson..= detail,
+                  "reason" Aeson..= ("transient_behavior_failure" :: Text)
+                ]
+            pure (transientBehaviorJobOutcome failure)
+          Right outcome -> pure outcome
+
+data DrainAdmission
+  = DrainAllowed
+  | DrainSkipped !DirectoryStore.RunSkip
+  | DrainAuditFailed !Text
+  deriving stock (Eq, Show)
+
+-- | Queue disposition for a completed drain gate. Allowed jobs continue to
+-- routing, durable refusals acknowledge, and audit failures retry.
+drainAdmissionOutcome :: DrainAdmission -> Maybe JobOutcome
+drainAdmissionOutcome = \case
+  DrainAllowed -> Nothing
+  DrainSkipped _ -> Just Done
+  DrainAuditFailed _ -> Just RetryDefault
+
+-- | Consult lifecycle immediately before route selection or workflow work.
+-- A durable refusal is acknowledged; a refusal whose audit row cannot be
+-- committed is retried so the queue remains the source of truth.
+admitRunJob :: WorkerEnv -> RunJob -> IO DrainAdmission
+admitRunJob env = admitRunJobWith (pool env) (envDirectory env) (agents env)
+
+-- | The drain gate with its concrete dependencies exposed for focused tests.
+admitRunJobWith :: Hasql.Pool.Pool -> Directory.DirectoryHandle -> [AgentDecl] -> RunJob -> IO DrainAdmission
+admitRunJobWith storePool directory declarations job =
+  case find ((== agentName job) . name) declarations of
+    Nothing -> pure DrainAllowed
+    Just AgentDecl {name, identity} -> do
+      let declaredPrincipalId = principalOf <$> identity
+      decision <- Directory.consultLifecycle directory declaredPrincipalId name
+      case lifecycleRefusal declaredPrincipalId decision of
+        Nothing -> pure DrainAllowed
+        Just (resolvedPrincipalId, skipReason) -> do
+          let runSkip =
+                DirectoryStore.RunSkip
+                  { DirectoryStore.agentName = name,
+                    DirectoryStore.principalId = resolvedPrincipalId,
+                    DirectoryStore.stage = DirectoryStore.DrainStage,
+                    DirectoryStore.detail = routeKindText (routeKind job),
+                    DirectoryStore.reason = skipReason,
+                    DirectoryStore.idempotencyKey = idempotencyKey job
+                  }
+          DirectoryStore.recordRunSkip storePool runSkip >>= \case
+            Left problem -> pure (DrainAuditFailed problem)
+            Right () -> pure (DrainSkipped runSkip)
+  where
+    principalOf identityDecl = identityDecl ^. #principal
+
+lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
+lifecycleRefusal declaredPrincipalId = \case
+  Directory.AllowRun _ -> Nothing
+  Directory.SkipRun principal skipReason -> Just (Just (Directory.principalId principal), skipReason)
+  Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
+  Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
+
+routeKindText :: RunRouteKind -> Text
+routeKindText = \case
+  AgentWorkflowRoute -> "agent_run"
+  ConversationWorkflowRoute -> "conversation"
+  InferredLegacyRoute -> "inferred_legacy"
 
 -- | Production heartbeat policy: after ten seconds, extend visibility to thirty
 -- seconds from now, and repeat until work completes.

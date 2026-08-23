@@ -21,6 +21,8 @@ import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
@@ -79,6 +81,32 @@ tests =
 
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
             assertBool "re-armed next schedule timer fired" (either (const False) (maybe False (const True)) refired),
+      testCase "paused schedule commits a trigger skip and enqueues no job" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            cron <- parseCronOrFail "* * * * *"
+            directory <- directoryWith Paused
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                pool = StoreConnection.pool kirokuStore
+                env =
+                  (testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger)
+                    { principalIds = Map.singleton "heartbeat" (Just "agent_heartbeat"),
+                      directory
+                    }
+            ensureQueue pool
+            fired <- runAppIO appEnv (scheduleFireAction env (atMinute 1) (staleScheduleRow (atMinute 1)))
+            assertEqual "durably skipped timer advances" (Right True) (fmap (maybe False (const True)) fired)
+            assertEqual "paused schedule enqueues no run" [] =<< readRunJobs pool
+            skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
+            case skips of
+              [runSkip] -> do
+                assertEqual "agent" "heartbeat" (DirectoryStore.agentName runSkip)
+                assertEqual "principal" (Just "agent_heartbeat") (DirectoryStore.principalId runSkip)
+                assertEqual "trigger boundary" DirectoryStore.TriggerStage (DirectoryStore.stage runSkip)
+                assertEqual "source" "schedule" (DirectoryStore.detail runSkip)
+                assertEqual "same key the run would use" "heartbeat:sched:2026-06-20T00:01:00Z" (DirectoryStore.idempotencyKey runSkip)
+              other -> assertFailure ("expected one schedule skip, got " <> show other),
       -- The catch-up policy is a choice of what instant the next timer is armed
       -- from. Before it, a schedule fire always re-armed from the tick that just
       -- fired, so a process that had been down for a day walked forward one
@@ -259,7 +287,16 @@ scheduledAgent agentName cron =
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.
 testSchedulerEnv :: Pool.Pool -> Map.Map Text CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv
 testSchedulerEnv pool schedules catchUpPolicy logger =
-  SchedulerEnv {pool, schedules, catchUpPolicy, logger}
+  SchedulerEnv {pool, schedules, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
+
+directoryWith :: Lifecycle -> IO DirectoryHandle
+directoryWith lifecycle = do
+  directory <-
+    newDirectoryHandle
+      (staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle}])
+  refreshDirectory directory >>= \case
+    Left problem -> assertFailure (Text.unpack problem)
+    Right () -> pure directory
 
 -- | The minute the stale timer below was armed for: 2026-06-20T00:01:00Z.
 staleDue :: UTCTime

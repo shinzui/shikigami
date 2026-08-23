@@ -8,6 +8,7 @@ import Control.Exception qualified as Exception
 import Data.Aeson qualified as Aeson
 import Data.Foldable (for_)
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
@@ -34,12 +35,17 @@ import Keiro.PGMQ
     withJobRuntime,
   )
 import Keiro.Workflow (WorkflowOutcome (..))
+import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
-import Shikigami.Agent.RunJob.Worker (RunRoute (..), agentJobOutcome, conversationJobOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
+import Shikigami.Agent.RunJob.Worker (DrainAdmission (..), RunRoute (..), admitRunJobWith, agentJobOutcome, conversationJobOutcome, drainAdmissionOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
+import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import System.Timeout (timeout)
@@ -121,6 +127,42 @@ tests =
           assertConversation
             ("conversation route under " <> show kind)
             (routeRunJob sampleJob {triggerKind = kind, routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+      testCase "drain gate enforces every configured lifecycle decision" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            let pool = StoreConnection.pool store
+                jobWith suffix = sampleJob {idempotencyKey = "codec-agent:event:" <> suffix}
+            activeDirectory <- directoryWith [principalRecord Active]
+            active <- admitRunJobWith pool activeDirectory [drainAgent] (jobWith "active")
+            assertEqual "active principal continues" DrainAllowed active
+
+            pausedDirectory <- directoryWith [principalRecord Paused]
+            paused <- admitRunJobWith pool pausedDirectory [drainAgent] (jobWith "paused")
+            assertSkipped "paused" paused
+
+            deactivatedDirectory <- directoryWith [principalRecord Deactivated]
+            deactivated <- admitRunJobWith pool deactivatedDirectory [drainAgent] (jobWith "deactivated")
+            assertSkipped "deactivated" deactivated
+
+            unknownDirectory <- directoryWith [PrincipalRecord {principalId = "agent_other", handle = "codec-agent", lifecycle = Active}]
+            unknown <- admitRunJobWith pool unknownDirectory [drainAgent] (jobWith "unknown")
+            assertSkipped "explicit unknown id does not fall back to handle" unknown
+
+            unavailableDirectory <- newDirectoryHandle (pure (Left "directory offline"))
+            unavailable <- admitRunJobWith pool unavailableDirectory [drainAgent] (jobWith "unavailable")
+            assertSkipped "unavailable configured directory fails closed" unavailable
+
+            maybe (assertFailure "durable refusal had no terminal outcome") (assertDone "durable refusal acknowledges") (drainAdmissionOutcome paused)
+            maybe (assertFailure "audit failure had no terminal outcome") (assertRetryDefault "audit failure retries") (drainAdmissionOutcome (DrainAuditFailed "write failed"))
+            skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
+            assertEqual
+              "only the four refusals were recorded"
+              [ "codec-agent:event:paused",
+                "codec-agent:event:deactivated",
+                "codec-agent:event:unknown",
+                "codec-agent:event:unavailable"
+              ]
+              (DirectoryStore.idempotencyKey <$> skips),
       testCase "worker-path heartbeat keeps one slow delivery leased" do
         withShikigamiMigratedDatabase \connStr -> do
           callCount <- newIORef (0 :: Int)
@@ -307,6 +349,37 @@ sampleJob =
       lineage = [],
       delegationBudgetId = Nothing
     }
+
+drainAgent :: AgentDecl
+drainAgent =
+  AgentDecl
+    { name = "codec-agent",
+      description = "drain lifecycle fixture",
+      trigger = Event {eventType = "fixture.event"},
+      behavior = Deterministic {rule = "test", params = Map.empty},
+      sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
+      sanctionedProfile = Nothing,
+      identity = Just IdentityDecl {principal = "agent_codec"},
+      memory = defaultMemoryPolicy,
+      enabled = True
+    }
+
+principalRecord :: Lifecycle -> PrincipalRecord
+principalRecord lifecycle = PrincipalRecord {principalId = "agent_codec", handle = "codec-agent", lifecycle}
+
+directoryWith :: [PrincipalRecord] -> IO DirectoryHandle
+directoryWith principals = do
+  directory <- newDirectoryHandle (staticDirectorySource principals)
+  refreshDirectory directory >>= \case
+    Left problem -> assertFailure (Text.unpack problem)
+    Right () -> pure directory
+
+assertSkipped :: String -> DrainAdmission -> IO ()
+assertSkipped _ (DrainSkipped runSkip) =
+  assertEqual "drain stage" DirectoryStore.DrainStage (DirectoryStore.stage runSkip)
+assertSkipped label other = assertFailure (label <> ": expected DrainSkipped, got " <> show other)
 
 requireTuning :: Either e JobTuning -> JobTuning
 requireTuning = either (const (error "invalid test job tuning")) id

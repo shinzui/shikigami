@@ -53,6 +53,7 @@ module Shikigami.Health.Worker
     -- * Heartbeats
     Heartbeats,
     newHeartbeats,
+    newHeartbeatsWithStaleness,
     beat,
     registerReport,
     clearReport,
@@ -116,6 +117,7 @@ data LoopName
   | TimerLoop
   | ConsumerLoop
   | SchedulerLoop
+  | DirectoryLoop
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | The name a failed loop reports under, and therefore the string an operator
@@ -128,6 +130,7 @@ loopCheckName = \case
   TimerLoop -> "loop.timer"
   ConsumerLoop -> "loop.consumer"
   SchedulerLoop -> "loop.scheduler"
+  DirectoryLoop -> "loop.directory"
 
 -- | How long a loop may go without a heartbeat before it is considered wedged.
 --
@@ -153,6 +156,7 @@ loopStaleAfter = \case
   TimerLoop -> 10
   ConsumerLoop -> 60
   SchedulerLoop -> 10
+  DirectoryLoop -> 60
 
 -- ── Heartbeats ──────────────────────────────────────────────────────────────
 
@@ -167,6 +171,7 @@ loopStaleAfter = \case
 -- a loop did beats a callback recording when we last remembered to call it.
 data Heartbeats = Heartbeats
   { beats :: !(Map LoopName (IORef UTCTime)),
+    staleAfter :: !(Map LoopName NominalDiffTime),
     -- | Filled after the process starts, because a supervised loop's reporter
     -- does not exist until its supervisor is running.
     reports :: !(IORef (Map LoopName (IO ProbeVerdict)))
@@ -178,11 +183,25 @@ data Heartbeats = Heartbeats
 -- process is not born failing its own liveness probe during the seconds between
 -- the listener binding and the first pass completing.
 newHeartbeats :: [LoopName] -> IO Heartbeats
-newHeartbeats loops = do
+newHeartbeats loops =
+  newHeartbeatsWithStaleness [(loop, loopStaleAfter loop) | loop <- loops]
+
+-- | Create a registry whose heartbeat loops may override their stale bounds.
+--
+-- The directory cadence is operator-configured, so its liveness deadline must
+-- be derived from that cadence instead of the fixed defaults used by the
+-- one-second worker loops.
+newHeartbeatsWithStaleness :: [(LoopName, NominalDiffTime)] -> IO Heartbeats
+newHeartbeatsWithStaleness loops = do
   now <- getCurrentTime
-  cells <- traverse (\loop -> (loop,) <$> newIORef now) loops
+  cells <- traverse (\(loop, _) -> (loop,) <$> newIORef now) loops
   reported <- newIORef Map.empty
-  pure Heartbeats {beats = Map.fromList cells, reports = reported}
+  pure
+    Heartbeats
+      { beats = Map.fromList cells,
+        staleAfter = Map.fromList loops,
+        reports = reported
+      }
 
 -- | Record that a loop just completed a pass.
 --
@@ -240,7 +259,7 @@ loopLivenessCheck registry = getCurrentTime >>= loopLivenessAt registry
 -- and — worse — makes the tempting alternative a fake heartbeat that exercises
 -- none of the arithmetic below.
 loopLivenessAt :: Heartbeats -> UTCTime -> IO ProbeVerdict
-loopLivenessAt registry@Heartbeats {beats} now = do
+loopLivenessAt registry@Heartbeats {beats, staleAfter} now = do
   reported <- readIORef (reports registry)
   go reported [minBound .. maxBound]
   where
@@ -256,7 +275,7 @@ loopLivenessAt registry@Heartbeats {beats} now = do
             Nothing -> go reported rest
             Just cell -> do
               lastBeat <- readIORef cell
-              let deadline = addUTCTime (loopStaleAfter loop) lastBeat
+              let deadline = addUTCTime (Map.findWithDefault (loopStaleAfter loop) loop staleAfter) lastBeat
               if now > deadline
                 then pure (Unhealthy (loopCheckName loop) deadline)
                 else go reported rest

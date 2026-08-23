@@ -31,15 +31,20 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Directory qualified as Directory
+import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Trigger.Enqueue (enqueueScheduledRun)
+import Shikigami.Trigger.Enqueue (enqueueScheduledRun, scheduleRunIdempotencyKey)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
 
 data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
     schedules :: !(Map Text CronSchedule),
+    -- | Declaration principal ids keyed by scheduled agent name.
+    principalIds :: !(Map Text (Maybe Text)),
+    directory :: !Directory.DirectoryHandle,
     -- | What to do about cron minutes that passed while the process was down.
     catchUpPolicy :: !CatchUpPolicy,
     -- | Where the timer loop reports what it did and what it could not do.
@@ -116,28 +121,73 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
   case parseSchedulePayload timerPayload of
     Nothing -> pure Nothing
     Just (agent, dueAt) -> do
-      enqueued <- liftIO (enqueueScheduledRun (pool env) agent dueAt)
-      case enqueued of
-        -- Returning Nothing leaves the row in Firing for keiro to requeue. The
-        -- log line is what makes that retry visible: before it, a failed enqueue
-        -- was indistinguishable from "this is not a schedule timer".
-        Left err -> do
-          liftIO $
-            Log.logError
-              (logger env)
-              "scheduler.schedule.enqueue_failed"
-              [ "agent" Aeson..= agent,
-                "due_at" Aeson..= dueAt,
-                "error" Aeson..= Text.pack (show err)
-              ]
-          pure Nothing
-        Right _ -> do
-          let armFrom = case catchUpPolicy env of
-                SkipMissed -> now
-                FireAll -> dueAt
-          for_ (Map.lookup agent (schedules env)) \cron ->
-            armNextRun cron agent armFrom
-          pure (Just (scheduleFiredEventId agent dueAt))
+      let declaredPrincipalId = Map.findWithDefault Nothing agent (principalIds env)
+      decision <- liftIO (Directory.consultLifecycle (directory env) declaredPrincipalId agent)
+      let advance = do
+            let armFrom = case catchUpPolicy env of
+                  SkipMissed -> now
+                  FireAll -> dueAt
+            for_ (Map.lookup agent (schedules env)) \cron ->
+              armNextRun cron agent armFrom
+            pure (Just (scheduleFiredEventId agent dueAt))
+      case lifecycleRefusal declaredPrincipalId decision of
+        Nothing -> do
+          enqueued <- liftIO (enqueueScheduledRun (pool env) agent dueAt)
+          case enqueued of
+            -- Returning Nothing leaves the row in Firing for keiro to requeue. The
+            -- log line is what makes that retry visible: before it, a failed enqueue
+            -- was indistinguishable from "this is not a schedule timer".
+            Left err -> do
+              liftIO $
+                Log.logError
+                  (logger env)
+                  "scheduler.schedule.enqueue_failed"
+                  [ "agent" Aeson..= agent,
+                    "due_at" Aeson..= dueAt,
+                    "error" Aeson..= Text.pack (show err)
+                  ]
+              pure Nothing
+            Right _ -> advance
+        Just (resolvedPrincipalId, reason) -> do
+          let runSkip =
+                RunSkip
+                  { agentName = agent,
+                    principalId = resolvedPrincipalId,
+                    stage = TriggerStage,
+                    detail = "schedule",
+                    reason,
+                    idempotencyKey = scheduleRunIdempotencyKey agent dueAt
+                  }
+          liftIO (recordRunSkip (pool env) runSkip) >>= \case
+            Left problem -> do
+              liftIO $
+                Log.logError
+                  (logger env)
+                  "scheduler.schedule.skip_failed"
+                  [ "agent" Aeson..= agent,
+                    "due_at" Aeson..= dueAt,
+                    "reason" Aeson..= reason,
+                    "error" Aeson..= problem
+                  ]
+              pure Nothing
+            Right () -> do
+              liftIO $
+                Log.logInfo
+                  (logger env)
+                  "scheduler.schedule.skipped"
+                  [ "agent" Aeson..= agent,
+                    "due_at" Aeson..= dueAt,
+                    "principal_id" Aeson..= resolvedPrincipalId,
+                    "reason" Aeson..= reason
+                  ]
+              advance
+
+lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
+lifecycleRefusal declaredPrincipalId = \case
+  Directory.AllowRun _ -> Nothing
+  Directory.SkipRun principal reason -> Just (Just (Directory.principalId principal), reason)
+  Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
+  Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
 
 -- | Route one due timer row to the action that owns its kind.
 --

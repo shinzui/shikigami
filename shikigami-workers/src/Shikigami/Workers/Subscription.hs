@@ -11,12 +11,14 @@ import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Health.Worker
   ( Heartbeats,
-    LoopName (ConsumerLoop),
+    LoopName (ConsumerLoop, DirectoryLoop),
     beat,
     clearReport,
-    newHeartbeats,
+    loopStaleAfter,
+    newHeartbeatsWithStaleness,
     registerReport,
     serveProbesWith,
     supervisedLoopVerdict,
@@ -25,7 +27,8 @@ import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
-import Shikigami.Workers.Config (persistAgentLoadReport)
+import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
+import Shikigami.Workers.Supervision (superviseLoops)
 
 -- | Run the @activity.v1@ stream consumer; for each declared stream agent that
 -- matches an incoming envelope, log the match and enqueue a run job (the
@@ -77,14 +80,20 @@ runConsumeStream config = do
         onHit StreamHit {agentName} = do
           let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
           Log.logInfo logger "stream.record.matched" matched
-    registry <- newHeartbeats [ConsumerLoop]
+    registry <-
+      newHeartbeatsWithStaleness
+        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration (Config.directorySettings config))
+    DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+      startProcessDirectory logger registry (Config.directorySettings config)
+    let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) appEnv directory cfg include agents onHit
+        directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
       (Config.httpHost config)
       (Config.healthPortFor StreamConsumerRole config)
       storePool
       registry
-      (subscribeActivityStream logger (consumerSupervisor registry) appEnv cfg include agents onHit)
+      (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
 
 -- | Consume public integration events and enqueue matching @Trigger.Event@
 -- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
@@ -138,14 +147,20 @@ runConsumeEvents config = do
                 ]
           Log.logInfo logger "events.record.matched" matched
           Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
-    registry <- newHeartbeats [ConsumerLoop]
+    registry <-
+      newHeartbeatsWithStaleness
+        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration (Config.directorySettings config))
+    DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+      startProcessDirectory logger registry (Config.directorySettings config)
+    let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) appEnv directory cfg agents onHit
+        directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
       (Config.httpHost config)
       (Config.healthPortFor EventConsumerRole config)
       storePool
       registry
-      (subscribeIntegrationEventStream logger (consumerSupervisor registry) appEnv cfg agents onHit)
+      (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
 
 -- | Turn the consumer's report of its own supervisor into a liveness verdict.
 --

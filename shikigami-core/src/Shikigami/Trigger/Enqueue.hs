@@ -10,6 +10,7 @@ module Shikigami.Trigger.Enqueue
     enqueueRunJob,
     addressedRunKey,
     enqueueAddressedRunWithKey,
+    scheduleRunIdempotencyKey,
     enqueueScheduledRun,
   )
 where
@@ -166,10 +167,15 @@ enqueueScheduledRun pool agent dueAt =
               "agent" Aeson..= agent,
               "dueAt" Aeson..= dueAt
             ],
-        idempotencyKey = agent <> ":sched:" <> Text.pack (iso8601Show dueAt),
+        idempotencyKey = scheduleRunIdempotencyKey agent dueAt,
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
         lineage = [agent],
         delegationBudgetId = Nothing
       }
+
+-- | The producer and lifecycle-audit key for one deterministic cron tick.
+scheduleRunIdempotencyKey :: Text -> UTCTime -> Text
+scheduleRunIdempotencyKey agent dueAt =
+  agent <> ":sched:" <> Text.pack (iso8601Show dueAt)

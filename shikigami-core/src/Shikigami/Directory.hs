@@ -14,10 +14,12 @@ module Shikigami.Directory
     LifecycleDecision (..),
     DirectoryRuntime (..),
     fileDirectorySource,
+    staticDirectorySource,
     newDirectoryHandle,
     disabledDirectoryHandle,
     refreshDirectory,
     startDirectory,
+    startDirectoryWithHeartbeat,
     consultLifecycle,
     lookupPrincipal,
     directoryPrincipals,
@@ -131,6 +133,15 @@ fileDirectorySource filePath = do
           now <- getCurrentTime
           pure (buildDirectoryView now principals)
 
+-- | Build an in-memory source with the same validation as the file source.
+--
+-- Useful for deterministic tests and for adapters that have already projected
+-- an upstream response into 'PrincipalRecord's.
+staticDirectorySource :: [PrincipalRecord] -> DirectorySource
+staticDirectorySource principals = do
+  now <- getCurrentTime
+  pure (buildDirectoryView now principals)
+
 -- | Make a configured handle with no initial snapshot.
 newDirectoryHandle :: DirectorySource -> IO DirectoryHandle
 newDirectoryHandle source = do
@@ -162,9 +173,17 @@ refreshDirectory (ConfiguredDirectory source stateRef) = do
 -- Configured startup requires one valid snapshot.  Once startup succeeds, a
 -- later refresh failure is logged and the last valid snapshot remains live.
 startDirectory :: Log.Logger -> DirectorySettings -> IO (Either Text DirectoryRuntime)
-startDirectory _ DirectoryDisabled =
+startDirectory logger = startDirectoryWithHeartbeat logger (pure ())
+
+-- | 'startDirectory' with a callback after every background refresh attempt.
+--
+-- Composition roots use the callback to heartbeat the supervised directory
+-- loop.  It runs after both successes and failures because a failed fetch is a
+-- dependency condition while a missing callback means the loop itself wedged.
+startDirectoryWithHeartbeat :: Log.Logger -> IO () -> DirectorySettings -> IO (Either Text DirectoryRuntime)
+startDirectoryWithHeartbeat _ _ DirectoryDisabled =
   pure (Right DirectoryRuntime {handle = disabledDirectoryHandle, refresher = Nothing})
-startDirectory logger (DirectoryFile filePath interval)
+startDirectoryWithHeartbeat logger heartbeat (DirectoryFile filePath interval)
   | interval <= 0 = pure (Left "directory.refresh_interval_seconds must be positive")
   | otherwise = do
       directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
@@ -175,7 +194,7 @@ startDirectory logger (DirectoryFile filePath interval)
             ( Right
                 DirectoryRuntime
                   { handle = directoryHandle,
-                    refresher = Just (refreshLoop logger directoryHandle filePath interval)
+                    refresher = Just (refreshLoop logger heartbeat directoryHandle filePath interval)
                   }
             )
 
@@ -220,8 +239,8 @@ directoryPrincipals (ConfiguredDirectory _ stateRef) = do
     Nothing -> []
     Just view -> sortOn (normalizeHandle . principalHandle) (Map.elems (byPrincipalId view))
 
-refreshLoop :: Log.Logger -> DirectoryHandle -> FilePath -> NominalDiffTime -> IO ()
-refreshLoop logger directoryHandle filePath interval = forever do
+refreshLoop :: Log.Logger -> IO () -> DirectoryHandle -> FilePath -> NominalDiffTime -> IO ()
+refreshLoop logger heartbeat directoryHandle filePath interval = forever do
   threadDelay (durationMicroseconds interval)
   refreshDirectory directoryHandle >>= \case
     Left problem ->
@@ -233,6 +252,7 @@ refreshLoop logger directoryHandle filePath interval = forever do
         ]
     Right () ->
       Log.logDebug logger "directory.refreshed" ["path" Aeson..= filePath]
+  heartbeat
 
 durationMicroseconds :: NominalDiffTime -> Int
 durationMicroseconds = ceiling . (* 1_000_000) . nominalDiffTimeToSeconds

@@ -10,6 +10,7 @@ module Shikigami.Directory.Store
     recordLoadStates,
     recordRunSkip,
     recordRunSkipTx,
+    listRunSkips,
   )
 where
 
@@ -26,6 +27,7 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Transaction
@@ -103,6 +105,11 @@ recordRunSkip pool runSkip =
 -- a no-op while allowing the same external key at a different boundary.
 recordRunSkipTx :: RunSkip -> Transaction ()
 recordRunSkipTx runSkip = Transaction.statement runSkip recordRunSkipStatement
+
+-- | Read lifecycle refusals in insertion order for operator inspection.
+listRunSkips :: Pool -> IO (Either Text [RunSkip])
+listRunSkips pool =
+  renderUsage <$> Pool.use pool (Session.statement () listRunSkipsStatement)
 
 loadStateRows :: FilePath -> UTCTime -> AgentLoadReport -> [LoadState]
 loadStateRows directory observedAt AgentLoadReport {entries} = fmap toRow entries
@@ -190,6 +197,27 @@ recordRunSkipStatement =
     )
     Decoders.noResult
 
+listRunSkipsStatement :: Statement () [RunSkip]
+listRunSkipsStatement =
+  preparable
+    """
+    SELECT agent_name, principal_id, stage, detail, reason, idempotency_key
+      FROM shikigami.run_skips
+     ORDER BY occurred_at, run_skip_id
+    """
+    Encoders.noParams
+    (Decoders.rowList runSkipRow)
+
+runSkipRow :: Decoders.Row RunSkip
+runSkipRow =
+  RunSkip
+    <$> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseSkipStage Decoders.text))
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+
 renderLoadStatus :: LoadStatus -> Text
 renderLoadStatus = \case
   Loaded -> "loaded"
@@ -199,6 +227,12 @@ renderSkipStage :: SkipStage -> Text
 renderSkipStage = \case
   TriggerStage -> "trigger"
   DrainStage -> "drain"
+
+parseSkipStage :: Text -> Either Text SkipStage
+parseSkipStage = \case
+  "trigger" -> Right TriggerStage
+  "drain" -> Right DrainStage
+  other -> Left ("unknown run skip stage: " <> other)
 
 renderUsage :: Either Pool.UsageError a -> Either Text a
 renderUsage = first (Text.pack . show)
