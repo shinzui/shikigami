@@ -22,6 +22,7 @@ import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
 import Shikigami.CapabilityOverlaySpec qualified as CapabilityOverlaySpec
+import Shikigami.CapabilityProviderSpec qualified as CapabilityProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -77,6 +78,7 @@ main =
           BehaviorProviderSpec.tests,
           BehaviorRetrySpec.tests,
           CapabilityOverlaySpec.tests,
+          CapabilityProviderSpec.tests,
           DelegateContextSpec.tests,
           DelegationBudgetSpec.tests,
           DirectorySpec.tests,

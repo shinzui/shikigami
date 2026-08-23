@@ -39,8 +39,9 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-22) Add the released `shikumi-tools` package and document its verified cohort version.
-- [ ] Define the provider registry, acquisition scope, lease, and typed runtime failures.
-- [ ] Implement masked deterministic acquisition, collision-safe composition, and LIFO
+- [x] (2026-08-22) Define the provider registry, acquisition scope, lease, and typed runtime
+      failures.
+- [x] (2026-08-22) Implement masked deterministic acquisition, collision-safe composition, and LIFO
       release, including partial-failure rollback.
 - [ ] Add an empty default tool registry and active overlay set to `BehaviorEnv` plus a
       derived-environment constructor.
@@ -65,6 +66,16 @@ implementation. Provide concise evidence.
   per-turn tracing. A small completion-function-driven loop using Baikai's public context
   operations is acceptable; silently bypassing `BehaviorEnv.traceSink` on overlay runs is
   not.
+- Released `Shikumi.Tool.Tool` does not derive `Generic`, so the repository's normal
+  generic-lens record update cannot rename an existential tool. The namespace adapter instead
+  pattern-matches and reconstructs `Tool`, preserving its existential dictionaries,
+  description, and rank-2 body while changing only `name`. Evidence: the first core build
+  failed with `No instance for Generic (Shikumi.Tool.Tool i o)` at `#name`; constructor-based
+  matching and construction are explicitly permitted by the record-pattern standard.
+- The full 420-case `shikigami-core-test` suite passed after the provider milestone,
+  including timeout cancellation, partial-acquisition rollback, LIFO cleanup, continued
+  cleanup after a release failure, exact revision selection, collision refusal, and
+  concurrent derived-registry isolation.
 
 
 ## Decision Log

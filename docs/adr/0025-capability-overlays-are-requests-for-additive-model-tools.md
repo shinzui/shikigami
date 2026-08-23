@@ -38,6 +38,19 @@ descriptors sorted by capability id, so request order cannot change their equali
 Provider factories and acquired leases are a separate runtime boundary and are never part of
 the resolved snapshot.
 
+Each exact provider acquisition returns one run-scoped lease containing its tools and the
+release action for that concrete resource. The runtime acquires resolved providers in their
+canonical order and keeps successful leases on a disposal stack. It releases the stack in
+LIFO order on normal return, partial acquisition failure, tool-composition refusal, callback
+exception, and asynchronous cancellation. A release failure is observable but does not stop
+the runtime from attempting every remaining release.
+
+The callback receives one immutable registry derived from the process's base registry and
+the leases for that run. Overlay tools are namespaced as
+`overlay__<capability-id-with-dashes>__<logical-tool-name>`, and duplicate capability groups,
+duplicate logical names, or any final wire-name collision are refused before the callback.
+An overlay cannot replace a base tool, and no acquisition mutates a process-global registry.
+
 Resolution is pure and fail-closed. Duplicate or unknown requests, missing identity,
 authorization refusal, and non-`Skill` behavior are permanent typed refusals. Durable runs
 admit only observation tools. A one-off invocation may admit a mutation only when its explicit
@@ -82,6 +95,10 @@ Provider registries must key factories by the exact `(CapabilityId, CapabilityRe
 must acquire only the descriptors already resolved. Concrete adapters such as the first
 read-only workspace provider live at the leaf package that owns their runtime resources;
 generic resolution and lifecycle contracts remain in `shikigami-core`.
+
+Providers must pair every successful acquisition with its inverse in the returned lease.
+The lifecycle bracket can release resources but cannot reverse writes or emissions performed
+by a tool; replay-safety policy therefore remains independent of cleanup correctness.
 
 
 ## References

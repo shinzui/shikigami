@@ -57,6 +57,8 @@ library
     Shikigami.Behavior.StubProvider
     Shikigami.Capability.Catalog
     Shikigami.Capability.Overlay
+    Shikigami.Capability.Provider
+    Shikigami.Capability.Tools
     Shikigami.Core
     Shikigami.Directory
     Shikigami.Directory.Store
@@ -183,6 +185,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
     Shikigami.CapabilityOverlaySpec
+    Shikigami.CapabilityProviderSpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectorySpec
@@ -233,6 +236,7 @@ test-suite shikigami-core-test
     , shibuya-core
     , shikigami-core
     , shikigami-migrations:test-support
+    , shikumi
     , shikumi-tools
     , tasty
     , tasty-hunit
