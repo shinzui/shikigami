@@ -28,7 +28,7 @@ import Baikai.Provider (completeRequest)
 import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseError)
 import Baikai.ResponseFormat (ResponseFormat (JsonObject))
 import Baikai.Trace qualified as BaikaiTrace
-import Control.Exception (Exception)
+import Control.Exception (Exception, fromException)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
@@ -39,15 +39,16 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.Lazy qualified as LazyText
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
-import Effectful.Exception (throwIO)
-import Keiro.Workflow (StepName (..), Workflow, step)
-import Shikigami.Agent.Decl (AgentDecl)
+import Effectful.Exception (catchSync, throwIO)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentWorkflow, step)
+import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArguments, withSpan')
+import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
-import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot)
+import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
 import Shikigami.Prelude
-import Shikigami.Router.Catalog (CandidateCatalog, buildCandidateCatalog)
-import Shikigami.Router.Decision (RouteDecision, RoutingError, renderRoutingError, validateRouteDecision)
+import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion (..), buildCandidateCatalog)
+import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..), RoutingError, renderRoutingError, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationError, ValidatedRouterDeclaration (..), renderRouterDeclarationError, validateRouterDeclaration)
 
 -- | Closed registry of routing call sites.  A constructor maps to two literal
@@ -64,6 +65,7 @@ data RoutingRuntime = RoutingRuntime
 
 data RoutingEnv = RoutingEnv
   { agent :: !AgentDecl,
+    sessionId :: !Text,
     behaviorEnv :: !BehaviorEnv,
     runtime :: !RoutingRuntime
   }
@@ -98,15 +100,27 @@ routeWithCatalog :: (Routing :> es) => RouteLabel -> Value -> Eff es RoutedRoute
 routeWithCatalog label payload = send (Route label payload)
 
 runRouting ::
-  (Workflow :> es, IOE :> es) =>
+  (Workflow :> es, Tracing :> es, IOE :> es) =>
   RoutingEnv ->
   Eff (Routing : es) a ->
   Eff es a
-runRouting RoutingEnv {agent, behaviorEnv, runtime = RoutingRuntime {resolveCatalog, evaluateRoute}} =
+runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessionId, behaviorEnv, runtime = RoutingRuntime {resolveCatalog, evaluateRoute}} =
   interpret \_ -> \case
-    Route label payload -> do
+    Route label payload ->
+      withSpan' "routing.route" defaultSpanArguments \traceSpan -> do
+        (WorkflowName parentWorkflowName, WorkflowId parentWorkflowId) <- currentWorkflow
+        addAttribute traceSpan "routing.parent.session_id" sessionId
+        addAttribute traceSpan "routing.parent.workflow" parentWorkflowName
+        addAttribute traceSpan "routing.parent.workflow_id" parentWorkflowId
+        addAttribute traceSpan "router.agent" routerAgent
+        routeAction traceSpan label payload `catchSync` \err -> do
+          forM_ (fromException @RoutingFailure err) \failure ->
+            addAttribute traceSpan "routing.error.category" (routingFailureCategory failure)
+          throwIO err
+  where
+    routeAction traceSpan label payload = do
       validatedDeclaration <-
-        case validateRouterDeclaration agent of
+        case validateRouterDeclaration routerDecl of
           Left errors ->
             case NonEmpty.nonEmpty errors of
               Just refusals -> throwIO (RoutingDeclarationInvalid refusals)
@@ -114,6 +128,7 @@ runRouting RoutingEnv {agent, behaviorEnv, runtime = RoutingRuntime {resolveCata
           Right validated -> pure validated
       let (catalogStepName, decisionStepName) = routeStepNames label
       catalog <- step catalogStepName (liftIO (resolveCatalog validatedDeclaration))
+      recordCatalogAttributes traceSpan catalog
       rawDecision <-
         step decisionStepName do
           evaluated <- liftIO (evaluateRoute behaviorEnv catalog payload)
@@ -124,7 +139,71 @@ runRouting RoutingEnv {agent, behaviorEnv, runtime = RoutingRuntime {resolveCata
           Aeson.Success decoded -> pure decoded
       case validateRouteDecision (policy validatedDeclaration) catalog decision of
         Left refusals -> throwIO (RoutingDecisionInvalid refusals)
-        Right _ -> pure RoutedRoute {catalog, decision}
+        Right _ -> do
+          recordDecisionAttributes traceSpan decision
+          pure RoutedRoute {catalog, decision}
+
+recordCatalogAttributes :: (Tracing :> es, IOE :> es) => Span -> CandidateCatalog -> Eff es ()
+recordCatalogAttributes traceSpan CandidateCatalog {router, version = CatalogVersion catalogVersion, lifecycleSource, candidates} = do
+  addAttribute traceSpan "router.agent" router
+  addAttribute traceSpan "routing.catalog.version" catalogVersion
+  addAttribute traceSpan "routing.lifecycle.source" (renderDirectorySourceKind lifecycleSource)
+  addAttribute traceSpan "routing.candidates.available" (boundedList [name | CandidateEntry {name, availability = Available} <- candidates])
+  addAttribute
+    traceSpan
+    "routing.candidates.excluded"
+    ( boundedList
+        [ name <> ":" <> boundedText 64 (Text.pack (show reason))
+        | CandidateEntry {name, availability = Excluded reason} <- candidates
+        ]
+    )
+
+recordDecisionAttributes :: (Tracing :> es, IOE :> es) => Span -> RouteDecision -> Eff es ()
+recordDecisionAttributes traceSpan RouteDecision {outcome} =
+  case outcome of
+    Matched selections -> do
+      addAttribute traceSpan "routing.outcome" ("matched" :: Text)
+      recordSelections traceSpan "routing.selected" selections
+    NoMatch rationale -> do
+      addAttribute traceSpan "routing.outcome" ("no-match" :: Text)
+      addAttribute traceSpan "routing.rationale" (boundedText rationaleLimit rationale)
+    Ambiguous alternatives rationale -> do
+      addAttribute traceSpan "routing.outcome" ("ambiguous" :: Text)
+      recordSelections traceSpan "routing.alternative" alternatives
+      addAttribute traceSpan "routing.rationale" (boundedText rationaleLimit rationale)
+
+recordSelections :: (Tracing :> es, IOE :> es) => Span -> Text -> NonEmpty RouteSelection -> Eff es ()
+recordSelections traceSpan prefix selections = do
+  let values = NonEmpty.toList selections
+  addAttribute traceSpan (prefix <> ".agents") (boundedList [agent | RouteSelection {agent} <- values])
+  addAttribute traceSpan (prefix <> ".expertise") (boundedList (concat [expertise | RouteSelection {expertise} <- values]))
+  addAttribute traceSpan (prefix <> ".confidence") (boundedList [confidenceText confidence | RouteSelection {confidence} <- values])
+  addAttribute traceSpan (prefix <> ".rationale") (boundedRationales [rationale | RouteSelection {rationale} <- values])
+
+routingFailureCategory :: RoutingFailure -> Text
+routingFailureCategory = \case
+  RoutingDeclarationInvalid {} -> "declaration"
+  RoutingEvaluationFailed {} -> "evaluation"
+  RoutingDecisionDecodeFailed {} -> "decode"
+  RoutingDecisionInvalid {} -> "validation"
+
+confidenceText :: RouterConfidence -> Text
+confidenceText = \case
+  RoutingLow -> "low"
+  RoutingMedium -> "medium"
+  RoutingHigh -> "high"
+
+rationaleLimit :: Int
+rationaleLimit = 512
+
+boundedList :: [Text] -> Text
+boundedList = Text.intercalate "," . fmap (boundedText 128) . take 32
+
+boundedRationales :: [Text] -> Text
+boundedRationales = Text.intercalate " | " . fmap (boundedText rationaleLimit) . take 32
+
+boundedText :: Int -> Text -> Text
+boundedText = Text.take
 
 routeStepNames :: RouteLabel -> (StepName, StepName)
 routeStepNames ArchitecturePractice =

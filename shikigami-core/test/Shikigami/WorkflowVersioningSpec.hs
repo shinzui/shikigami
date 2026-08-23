@@ -53,6 +53,7 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
@@ -479,6 +480,7 @@ runFlow ::
 runFlow appEnv runtime options FlowDef {run} workflowId =
   newBehaviorEnv >>= \behaviorEnv ->
     runEff
+      . runTracingNoop
       . runErrorNoCallStack
       . withKirokuStore (connectionSettings appEnv)
       . runStoreResource
@@ -493,6 +495,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowAgentDecl,
+                  Routing.sessionId = "flow-versioning-session",
                   Routing.behaviorEnv = behaviorEnv,
                   Routing.runtime =
                     Routing.routingRuntime

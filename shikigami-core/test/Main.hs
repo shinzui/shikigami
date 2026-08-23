@@ -46,6 +46,7 @@ import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
 import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
 import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
+import Shikigami.RouterWorkflowSpec qualified as RouterWorkflowSpec
 import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
@@ -104,6 +105,7 @@ main =
           RouterCatalogSpec.tests,
           RouterDecisionSpec.tests,
           RouterDeclarationSpec.tests,
+          RouterWorkflowSpec.tests,
           RunEvidenceSpec.tests,
           SinkDeliverySpec.tests,
           SinkHonestySpec.tests,

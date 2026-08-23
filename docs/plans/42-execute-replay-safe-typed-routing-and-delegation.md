@@ -60,7 +60,11 @@ This section must always reflect the actual current state of the work.
   selection order, while no-match and ambiguous spawn nothing and evaluator, routing,
   delegation, budget, and child failures escape without semantic coercion. Eight focused batch
   preflight/budget tests pass.
-- [ ] M4: add bounded routing telemetry and real-Postgres replay/authorization tests.
+- [x] (2026-08-23T20:33:49Z) M4: Added bounded routing spans and a real-Postgres
+  workflow matrix covering matched single/multi, no-match, ambiguous, undeclared/paused/low
+  confidence/fan-out refusals, exhausted budget, changed-runtime replay, child failure, exact
+  journal labels, child-id stability, error categories, and payload/description redaction. All five
+  workflow cases plus the existing Flow lifecycle/versioning suites pass.
 - [ ] Final: checked DSL, domain harness, `cabal test all`, and replay proof are green.
 
 

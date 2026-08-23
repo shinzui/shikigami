@@ -70,7 +70,7 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
+import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
@@ -656,7 +656,7 @@ openSession deps job decl = liftIO do
 -- memories the original attempt did. The step's name and result shape are
 -- unchanged — only what the body is given.
 runBehaviorStep ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
+  (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
   SessionId ->
@@ -676,7 +676,7 @@ runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBeh
             )
 
 runFlowBehavior ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
+  (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
   SessionId ->
@@ -700,7 +700,13 @@ runFlowBehavior deps activeBehaviorEnv sid decl job flowName =
   where
     memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
     delegateEnv = FlowDelegate.DelegateEnv {FlowDelegate.agent = decl, FlowDelegate.context = delegateContext deps decl sid job}
-    routingEnv = FlowRouting.RoutingEnv {FlowRouting.agent = decl, FlowRouting.behaviorEnv = activeBehaviorEnv, FlowRouting.runtime = depsRouting deps}
+    routingEnv =
+      FlowRouting.RoutingEnv
+        { FlowRouting.agent = decl,
+          FlowRouting.sessionId = idText sid,
+          FlowRouting.behaviorEnv = activeBehaviorEnv,
+          FlowRouting.runtime = depsRouting deps
+        }
     sinkEnv =
       FlowCapability.SinkEnv
         { FlowCapability.agent = agentName job,

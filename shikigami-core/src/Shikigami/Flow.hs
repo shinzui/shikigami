@@ -48,9 +48,10 @@ import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSe
 -- So every way a flow reaches the world is a capability with a replay-safe
 -- interpreter: 'Memory' journals its recalls and writes, 'Sink' journals its
 -- emissions, 'Acknowledgement' parks through the approval machinery, and
--- 'Activity' is pure data. 'Workflow' stays so a flow can still name a pure
--- checkpoint with 'Keiro.Workflow.step' — without 'IOE' that step body cannot
--- smuggle IO in.
+-- 'Delegate' governs durable child runs, 'Routing' journals catalog/model
+-- decisions before validation, and 'Activity' is pure data. 'Workflow' stays
+-- so a flow can still name a pure checkpoint with 'Keiro.Workflow.step' —
+-- without 'IOE' that step body cannot smuggle IO in.
 --
 -- Adding an effect here widens what every flow may do. Add a capability instead.
 type FlowEffects es =

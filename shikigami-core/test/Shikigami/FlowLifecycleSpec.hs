@@ -27,6 +27,7 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
@@ -112,7 +113,7 @@ tests =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof"]
+          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof, architecture-practice-router"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
         assertEqual
           "a registered flow is accepted"
@@ -535,6 +536,7 @@ runFlowBody ::
 runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
   newBehaviorEnv >>= \behaviorEnv ->
     runEff
+      . runTracingNoop
       . runErrorNoCallStack
       . withKirokuStore (connectionSettings appEnv)
       . runStoreResource
@@ -549,6 +551,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,
+                  Routing.sessionId = "flow-test-session",
                   Routing.behaviorEnv = behaviorEnv,
                   Routing.runtime =
                     Routing.routingRuntime

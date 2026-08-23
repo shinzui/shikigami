@@ -217,6 +217,7 @@ test-suite shikigami-core-test
     Shikigami.RouterCatalogSpec
     Shikigami.RouterDecisionSpec
     Shikigami.RouterDeclarationSpec
+    Shikigami.RouterWorkflowSpec
     Shikigami.RunEvidenceSpec
     Shikigami.SinkAuthSpec
     Shikigami.SinkDeliverySpec
@@ -272,6 +273,7 @@ test-suite shikigami-core-test
     , tasty-hunit
     , text
     , time
+    , unordered-containers
     , vector
     , wai
     , warp
