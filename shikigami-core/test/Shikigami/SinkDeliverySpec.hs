@@ -1,14 +1,22 @@
 module Shikigami.SinkDeliverySpec (tests) where
 
+import Control.Exception (bracket)
+import Control.Monad (filterM, void)
 import Data.Aeson (Result (..), eitherDecode, encode, fromJSON, object, (.=))
 import Data.ByteString.Lazy.Char8 qualified as LBS8
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
 import Effectful (runEff)
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
+import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
@@ -17,8 +25,12 @@ import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404, status500)
-import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
+import Network.HTTP.Types.Header (Header)
+import Network.Wai (Application, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
+import OpenTelemetry.Propagator.W3CTraceContext (decodeSpanContext)
+import OpenTelemetry.Trace.Core qualified as Otel
 import Shikigami.Agent.Approval (defaultApprovalEnv)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -46,6 +58,7 @@ import Shikigami.Sink (GrantSource (DbGrants), SinkOutcome (Enqueued, SkippedLif
 import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Wire qualified as Wire
+import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -57,6 +70,8 @@ tests =
       testCase "paused enqueue journals a lifecycle skip without outbox or receipt" pausedEnqueue,
       testCase "pause before publish records a terminal non-send without HTTP" pauseBeforePublish,
       testCase "permanent failure becomes a bounded terminal rejection" permanentRejection,
+      testCase "outbox trace context parents sink.publish and its HTTP traceparent" tracePropagation,
+      testCase "invalid traceparent is unparented and restores ambient context" invalidTraceContextIsolation,
       testCase "publish records a delivered receipt with the downstream id" receiptRecording,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
       testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
@@ -72,6 +87,95 @@ permanentRejection = do
   case AgentWorkflow.permanentPublishOutcome (Text.replicate 1025 "x") of
     Left err -> assertBool ("invalid rejection should explain itself: " <> Text.unpack err) ("invalid terminal sink rejection" `Text.isPrefixOf` err)
     Right other -> assertFailure ("an oversized rejection detail must be refused, got " <> show other)
+
+tracePropagation :: IO ()
+tracePropagation =
+  withTestTracer \tracer spansRef -> do
+    requests <- newIORef []
+    headers <- newIORef []
+    testWithApplication (pure (captureHeaders headers (kizashiApp requests))) \port ->
+      withFixtureUsingTracer tracer "trace-propagation" [signalSink "trace"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+        [row] <- runWorkflowAndRows deps appEnv runJob
+        storedContext <-
+          case Integration.traceContext (rowEvent row) of
+            Nothing -> assertFailure "the sink outbox event has no trace context"
+            Just context -> pure context
+        persistedTraceparent <-
+          expectRight "load persisted traceparent"
+            =<< Pool.use pool (Session.statement (Integration.messageId (rowEvent row)) loadTraceparentStatement)
+        assertEqual "keiro.keiro_outbox.traceparent is populated" (Just (Integration.traceparent storedContext)) persistedTraceparent
+        assertBool "persisted traceparent uses W3C version 00" ("00-" `Text.isPrefixOf` Integration.traceparent storedContext)
+
+        published <- runEff (AgentWorkflow.publishSinkIntent deps row)
+        assertEqual "transport succeeds" Outbox.PublishSucceeded published
+        observedHeaders <- readIORef headers
+        outgoingTraceparent <-
+          case observedHeaders >>= maybe [] pure . lookup "traceparent" of
+            [] -> assertFailure "the sink HTTP request has no traceparent header"
+            value : _ -> pure value
+
+        void (Otel.forceFlushTracerProvider (Otel.getTracerTracerProvider tracer) Nothing)
+        spans <- readIORef spansRef
+        publishSpan <- findSpanNamed "sink.publish" spans
+        storedParent <- decodeTraceContext "stored" storedContext
+        outgoingContext <-
+          maybe
+            (assertFailure "the outbound traceparent is invalid")
+            pure
+            (decodeSpanContext (Just outgoingTraceparent) Nothing)
+        actualParent <- maybe (assertFailure "sink.publish has no parent") pure (Otel.spanParent publishSpan)
+        actualParentContext <- Otel.getSpanContext actualParent
+        assertEqual "sink.publish keeps the producer trace id" (Otel.traceId storedParent) (Otel.traceId actualParentContext)
+        assertEqual "sink.publish is parented by the stored producer span" (Otel.spanId storedParent) (Otel.spanId actualParentContext)
+        assertEqual "HTTP propagation uses the sink.publish trace id" (Otel.traceId (Otel.spanContext publishSpan)) (Otel.traceId outgoingContext)
+        assertEqual "HTTP propagation uses the sink.publish span id" (Otel.spanId (Otel.spanContext publishSpan)) (Otel.spanId outgoingContext)
+
+invalidTraceContextIsolation :: IO ()
+invalidTraceContextIsolation =
+  withTestTracer \tracer spansRef -> do
+    Otel.inSpan' tracer "ambient" Otel.defaultSpanArguments \_ -> do
+      (continued, ()) <-
+        TraceContext.withRemoteTraceContext
+          Integration.TraceContext {Integration.traceparent = "not-a-traceparent", Integration.tracestate = Nothing}
+          (Otel.inSpan tracer "invalid-remote" Otel.defaultSpanArguments (pure ()))
+      assertBool "an invalid traceparent is reported" (not continued)
+      Otel.inSpan tracer "restored" Otel.defaultSpanArguments (pure ())
+    void (Otel.forceFlushTracerProvider (Otel.getTracerTracerProvider tracer) Nothing)
+    spans <- readIORef spansRef
+    ambient <- findSpanNamed "ambient" spans
+    invalidRemote <- findSpanNamed "invalid-remote" spans
+    restored <- findSpanNamed "restored" spans
+    case Otel.spanParent invalidRemote of
+      Nothing -> pure ()
+      Just _ -> assertFailure "invalid remote context did not create an unparented span"
+    restoredParent <- maybe (assertFailure "restored span has no ambient parent") Otel.getSpanContext (Otel.spanParent restored)
+    assertEqual "the previous context is restored after dispatch" (Otel.spanId (Otel.spanContext ambient)) (Otel.spanId restoredParent)
+
+findSpanNamed :: Text -> [Otel.ImmutableSpan] -> IO Otel.ImmutableSpan
+findSpanNamed expected spans = do
+  matching <- filterM (fmap ((== expected) . Otel.hotName) . readIORef . Otel.spanHot) spans
+  case matching of
+    [span'] -> pure span'
+    other -> assertFailure ("expected one " <> Text.unpack expected <> " span, got " <> show (length other))
+
+decodeTraceContext :: String -> Integration.TraceContext -> IO Otel.SpanContext
+decodeTraceContext label Integration.TraceContext {Integration.traceparent, Integration.tracestate} =
+  maybe
+    (assertFailure (label <> " trace context is invalid"))
+    pure
+    (decodeSpanContext (Just (TextEncoding.encodeUtf8 traceparent)) (TextEncoding.encodeUtf8 <$> tracestate))
+
+loadTraceparentStatement :: Statement Text (Maybe Text)
+loadTraceparentStatement =
+  preparable
+    "SELECT traceparent FROM keiro.keiro_outbox WHERE message_id = $1"
+    (Encoders.param (Encoders.nonNullable Encoders.text))
+    (Decoders.singleRow (Decoders.column (Decoders.nullable Decoders.text)))
+
+captureHeaders :: IORef [[Header]] -> Application -> Application
+captureHeaders headers app request respond = do
+  modifyIORef' headers (requestHeaders request :)
+  app request respond
 
 pausedEnqueue :: IO ()
 pausedEnqueue =
@@ -226,10 +330,14 @@ orderingIsolation = do
       assertEqual "the failing sink remains retryable" 1 (Outbox.retried summary)
 
 withFixture :: Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
-withFixture label sinks kizashi danwa use =
+withFixture label sinks kizashi danwa use = do
+  tracer <- noopTracer
+  withFixtureUsingTracer tracer label sinks kizashi danwa use
+
+withFixtureUsingTracer :: Otel.Tracer -> Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
+withFixtureUsingTracer tracer label sinks kizashi danwa use =
   withShikigamiMigratedDatabase \connectionString ->
     withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
-      tracer <- noopTracer
       behaviorEnv <- newBehaviorEnv
       sinkHttp <- testSinkHttpFor danwa
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
@@ -259,6 +367,17 @@ withFixture label sinks kizashi danwa use =
               }
           runJob = testJob label
       use deps appEnv pool runJob
+
+withTestTracer :: (Otel.Tracer -> IORef [Otel.ImmutableSpan] -> IO a) -> IO a
+withTestTracer use =
+  bracket acquire release \(tracer, spansRef) -> use tracer spansRef
+  where
+    acquire = do
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- Otel.createTracerProvider [processor] Otel.emptyTracerProviderOptions
+      let tracer = Otel.makeTracer provider "shikigami-sink-test" Otel.tracerOptions
+      pure (tracer, spansRef)
+    release (tracer, _) = void (Otel.shutdownTracerProvider (Otel.getTracerTracerProvider tracer) Nothing)
 
 directoryWith :: Lifecycle -> IO DirectoryHandle
 directoryWith lifecycle = do

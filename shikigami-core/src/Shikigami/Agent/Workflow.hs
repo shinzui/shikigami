@@ -51,6 +51,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), decodeJsonIntegrationEvent, encodeJsonIntegrationEvent)
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), OutboxRow (..), PublishOutcome (..), enqueueOutboxTx, mkPublishRejection)
+import Keiro.Telemetry (traceContextFromCurrentSpan)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
     PatchId (..),
@@ -118,6 +119,7 @@ import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), SinkKind, sinkKindText)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
+import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
 data AgentRunDeps = AgentRunDeps
@@ -865,8 +867,9 @@ enqueueSinkIntents ::
 enqueueSinkIntents directoryHandle grantSource job decl sid output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
+  capturedTraceContext <- traceContextFromCurrentSpan
   now <- liftIO getCurrentTime
-  prepared <- liftIO (traverse (buildSinkIntent workflowId now) (zip [0 ..] (sinks decl)))
+  prepared <- liftIO (traverse (buildSinkIntent capturedTraceContext workflowId now) (zip [0 ..] (sinks decl)))
   let results = fst <$> prepared
       enqueued = mapMaybe snd prepared
       encoded = Aeson.toJSON results
@@ -892,7 +895,7 @@ enqueueSinkIntents directoryHandle grantSource job decl sid output = do
     dispatchSinksStep = StepName "dispatch-sinks"
     runIdText = idText sid
 
-    buildSinkIntent workflowId now (ordinal, sink) = do
+    buildSinkIntent capturedTraceContext workflowId now (ordinal, sink) = do
       let RunJob {occurredAt = jobOccurredAt} = job
       let kind = sinkKindOf sink
       Directory.lifecycleAdmission directoryHandle (declaredPrincipalId decl) (agentName job) >>= \case
@@ -918,7 +921,7 @@ enqueueSinkIntents directoryHandle grantSource job decl sid output = do
                       }
                   messageId = sinkMessageId workflowId ordinal
                   orderingKey = runIdText <> ":" <> Text.pack (show ordinal)
-                  event = sinkIntentEvent messageId orderingKey jobOccurredAt intent
+                  event = sinkIntentEvent messageId orderingKey jobOccurredAt capturedTraceContext intent
                   outboxId = deterministicOutboxId workflowId ordinal
                   receipt = pendingDeliveryReceipt messageId kind now intent
                in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
@@ -979,6 +982,7 @@ prepareSinkIntent ::
   UTCTime ->
   IO PreparedSinkIntent
 prepareSinkIntent directoryHandle grantSource declaredPrincipalId' workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+  capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
@@ -1013,7 +1017,7 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId' workflowId st
                     sink,
                     output
                   }
-              event = sinkIntentEvent messageId runIdText now intent
+              event = sinkIntentEvent messageId runIdText now capturedTraceContext intent
               receipt = pendingDeliveryReceipt messageId kind now intent
            in PreparedSinkIntent
                 { sinkResult = enqueuedResult,
@@ -1049,8 +1053,8 @@ deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkInt
 pendingDeliveryReceipt :: Text -> SinkKind -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 pendingDeliveryReceipt messageId kind = deliveryReceiptFor messageId kind Delivery.Pending Nothing
 
-sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
-sinkIntentEvent messageId orderingKey occurredAt intent =
+sinkIntentEvent :: Text -> Text -> UTCTime -> Maybe Integration.TraceContext -> SinkIntent -> IntegrationEvent
+sinkIntentEvent messageId orderingKey occurredAt traceContext intent =
   encodeJsonIntegrationEvent
     IntegrationEvent
       { messageId,
@@ -1067,7 +1071,7 @@ sinkIntentEvent messageId orderingKey occurredAt intent =
         occurredAt,
         causationId = Nothing,
         correlationId = Nothing,
-        traceContext = Nothing,
+        traceContext,
         attributes = Nothing
       }
     intent
@@ -1087,36 +1091,51 @@ deterministicOutboxIdForMessage messageId =
       nameBytes ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
         Right intent@SinkIntent {agent, principalId, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
           let messageId = Integration.messageId integrationEvent
               kind = sinkKindOf sink
-              sinkContext =
-                SinkContext
-                  { identity = AgentIdentity agent,
-                    principalId,
-                    directory = intentDirectory,
-                    runId = runId,
-                    ordinal = ordinal,
-                    kizashi = depsKizashi,
-                    kawa = depsKawa,
-                    danwa = depsDanwa,
-                    rei = depsRei,
-                    http = sinkHttp,
-                    danwaTarget = danwaTarget,
-                    recipientOverride = resolvedRecipient,
-                    occurredAt = occurredAt,
-                    receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
-                    grants = intentGrants,
-                    logger = intentLogger
-                  }
-              send = dispatch sinkContext sink output
-          case deliveryPool of
-            Nothing -> publishUntracked <$> send
-            Just pool -> publishTracked intentLogger pool messageId kind intent send
+              publish =
+                Otel.inSpan' (tracer depsAppEnv) "sink.publish" (spanArgs Consumer) \traceSpan -> do
+                  Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (sinkKindText kind))
+                  currentTraceContext <- traceContextFromCurrentSpan
+                  let sinkContext =
+                        SinkContext
+                          { identity = AgentIdentity agent,
+                            principalId,
+                            directory = intentDirectory,
+                            runId = runId,
+                            ordinal = ordinal,
+                            kizashi = depsKizashi,
+                            kawa = depsKawa,
+                            danwa = depsDanwa,
+                            rei = depsRei,
+                            http = sinkHttp,
+                            traceHeaders = maybe [] TraceContext.traceHeaders currentTraceContext,
+                            danwaTarget = danwaTarget,
+                            recipientOverride = resolvedRecipient,
+                            occurredAt = occurredAt,
+                            receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
+                            grants = intentGrants,
+                            logger = intentLogger
+                          }
+                      send = dispatch sinkContext sink output
+                  case deliveryPool of
+                    Nothing -> publishUntracked <$> send
+                    Just pool -> publishTracked intentLogger pool messageId kind intent send
+          case Integration.traceContext integrationEvent of
+            Nothing -> publish
+            Just storedContext -> do
+              (continued, result) <- TraceContext.withRemoteTraceContext storedContext publish
+              unless continued $
+                Log.logWarn
+                  intentLogger
+                  "sink.trace_context.invalid"
+                  ["outbox_message_id" Aeson..= messageId]
+              pure result
 
 publishUntracked :: SinkResult -> PublishOutcome
 publishUntracked result = case outcome result of

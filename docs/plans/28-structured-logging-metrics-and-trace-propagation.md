@@ -79,12 +79,13 @@ the HTTP POST to the sink endpoint.
       outbox-backlog sampler supervised; run and consumer counters recorded. Done 2026-08-23.
 - [x] M3: scheduler and both consumers run a real tracer (`withRunTelemetry`), not
       `noopTracer`. Done as part of M2 process wiring 2026-08-23.
-- [ ] M3: `sinkIntentEvent` and the `Shikigami.Flow.SinkOutbox` builder populate
+- [x] M3: `sinkIntentEvent` and the `Shikigami.Flow.SinkOutbox` builder populate
       `IntegrationEvent.traceContext`; test proves `keiro.keiro_outbox.traceparent` is non-null
-      after `enqueueSinkIntents`.
-- [ ] M3: `publishSinkIntent` opens a `sink.publish` span parented on the stored trace context,
+      after `enqueueSinkIntents`. Done 2026-08-23.
+- [x] M3: `publishSinkIntent` opens a `sink.publish` span parented on the stored trace context,
       and the outbound HTTP POST carries a `traceparent` header through plan 22's
-      `postJSONWithHeaders`.
+      `postJSONWithHeaders`; Kawa, Kizashi, Rei, and Danwa recording stubs all prove the wire
+      header. Done 2026-08-23.
 - [ ] M4: bracket tracer/meter/exporter providers through graceful shutdown and flush;
       bounded HTTP request logging runs inside OTel, excludes health paths, and records no bodies/query/auth/cookies/arbitrary headers.
 
@@ -121,6 +122,13 @@ only a bridge from Keiro's public `TraceContext`; it does not define another wir
 `Pgmq.Hasql.Sessions.queueMetrics` returns `QueueMetrics` with strict `queueLength` and
 `queueVisibleLength` fields. The sampler should use that public API instead of querying
 `pgmq.q_shikigami_run_jobs` directly, which would couple Shikigami to PGMQ's physical schema.
+
+**Danwa's generated Servant actions have no per-request header parameter.** The released
+`servant-client` `ClientEnv` exposes `makeClientRequest`, which can be composed for one
+`runClientM` call. M3 uses a record-updated environment for each dispatch, filters additions to
+`traceparent` and `tracestate`, and leaves Danwa's dedicated manager hook as the only owner of
+authorization. This avoids mutable manager state and prevents concurrent deliveries from
+observing one another's trace context.
 
 **Workflow telemetry must pass through Shikigami's single options authority.**
 Keiro 0.14's `WorkflowRunOptions` carries both `tracer` and `metrics`, but
@@ -279,6 +287,12 @@ and it should be watched for.
   Rationale: Keiro 0.14 publicly captures `TraceContext` but its generic remote-parent helper
   is private. Copying the released library's attach/detach pattern lets Shikigami consume
   Keiro's public wire type without inventing a format or waiting on a cross-repository release.
+  Date: 2026-08-23
+
+- Decision: Add Danwa W3C propagation by composing `ClientEnv.makeClientRequest` for each
+  generated-client invocation.
+  Rationale: the generated API has no header arguments, while a per-call environment update is
+  concurrency-safe and preserves the existing host-scoped opaque-authentication manager hook.
   Date: 2026-08-23
 
 - Decision: Count `runs.started` immediately before dispatch of an admitted job;
@@ -479,6 +493,22 @@ the outbox sampler. `cabal test shikigami-core-test shikigami-workers-test` pass
 tests and 80 worker tests. The workflow-versioning tests remain green without a new patch id,
 confirming that telemetry dependency threading did not alter durable step shape.
 
+### Milestone 3 — complete 2026-08-23
+
+Both sink-intent producers now capture the active W3C context into Keiro's existing durable
+outbox columns. Publication attaches that stored remote parent, opens a Consumer-kind
+`sink.publish` span with only `sink.kind`, captures the child context, and restores the prior
+thread-local context even on exceptions. Invalid stored context is isolated as an unparented
+publish and emits a structured warning instead of failing delivery.
+
+All four HTTP sinks consume dispatch-scoped W3C headers. Kawa, Kizashi, and Rei use plan 22's
+bounded authenticated `postJSONWithHeaders` path; Danwa uses a per-call Servant environment
+transform while retaining its dedicated auth manager. The focused tests query
+`keiro.keiro_outbox.traceparent`, compare exported producer/publish parent ids, compare the
+outgoing header to the `sink.publish` span id, prove invalid-context isolation/restoration, and
+record the header at Kawa, Kizashi, Rei, and Danwa stubs. The `traceparent` pattern runs six
+tests successfully.
+
 
 ## Context and Orientation
 
@@ -516,21 +546,13 @@ Logging is already implemented. `Shikigami.Log` emits JSON Lines and
 construct one logger, and worker loops, consumers, workflows, behavior providers, and sinks
 use it. The remaining logging work is production HTTP request logging and graceful shutdown.
 
-Metrics remain unwired. `shikigami-workers/src/Shikigami/Telemetry.hs` currently constructs
-only a tracer. Worker, scheduler, and subscription composition roots build `AppEnv` with
-`metrics = Nothing`; outbox and timer publishers also receive `Nothing` directly. Keiro 0.14
-provides `newKeiroMetrics`, `sampleOutboxBacklog`, and metrics/tracer fields on
-`WorkflowRunOptions`. PGMQ provides `queueMetrics`. Shikigami needs a provider-free
-`Shikigami.Telemetry.Metrics` module in core and provider ownership in workers/server.
-
-Tracing is also partial. Only the worker command calls `withRunTracer`; scheduler and
-subscription commands use `noopTracer`. Agent and conversation workflows use the tracer from
-`AppEnv`, but `Shikigami.Workflow.Versioning` does not yet copy that tracer or Keiro metrics
-into `WorkflowRunOptions`. Both sink-intent builders—`Shikigami.Agent.Workflow` and
-`Shikigami.Flow.SinkOutbox`—set `IntegrationEvent.traceContext = Nothing`. The outbox
-publisher dispatches HTTP without a child `sink.publish` span or trace header. Plan 22's
-`Shikigami.Sink.Http.postJSONWithHeaders` already composes safe caller headers with opaque
-authorization, so M3 extends that seam rather than creating another HTTP path.
+Metrics and worker tracing are wired. `Shikigami.Telemetry.Metrics` owns provider-free
+instruments; the workers composition roots bracket providers and populate `AppEnv`, workflow
+options, outbox/timer/scheduler options, counters, and the supervised sampler. Trace context now
+crosses both sink-intent producer paths and the durable outbox into `sink.publish`, whose child
+context is propagated by Kawa, Kizashi, Rei, and Danwa. The remaining telemetry surface is the
+server provider lifecycle, safe request middleware, and supported graceful process shutdown in
+M4.
 
 Durable workflow constraints apply to the changes in `Shikigami.Agent` and `Shikigami.Flow`.
 Capturing current trace context and threading process telemetry into Keiro options do not add,
@@ -676,8 +698,8 @@ Rei, and Danwa all consume those headers. The first three pass them directly to
 the existing host-scoped opaque authorization. Only `traceparent` and optional `tracestate`
 are created; caller headers still cannot override content type or authorization.
 
-Acceptance: the Postgres-level proof is a new test (M3 step) in
-`shikigami-core/test/Shikigami/AgentWorkflowSpec.hs` — run a workflow that enqueues a sink
+Acceptance: the Postgres-level proof is a new test in
+`shikigami-core/test/Shikigami/SinkDeliverySpec.hs` — run a workflow that enqueues a sink
 intent under a real tracer, then assert `SELECT traceparent FROM keiro.keiro_outbox` is
 non-null and starts with `00-`. The wire-level proof captures `traceparent` in a test-only
 recording stub for each HTTP sink and proves the emitted header names are allowlisted. An
@@ -899,6 +921,15 @@ its loop-supervision events (soft; this plan does not depend on it).
 
 
 ## Revision Notes
+
+- 2026-08-23: Implemented Milestones 2 and 3 after the refresh. Added and wired all runtime
+  metrics, provider lifecycle in workers, the supervised queue/outbox sampler, durable W3C
+  capture, stored-parent continuation, the `sink.publish` consumer span, and trace headers for
+  all four HTTP sinks. Focused in-memory and database/wire tests prove metric export, sampler
+  isolation, non-null outbox `traceparent`, exact span parentage, context restoration, and all
+  sink headers. The M3 database proof lives with sink delivery tests rather than the already
+  very large agent workflow suite because it exercises enqueue, outbox storage, publication,
+  span export, and downstream wire behavior as one delivery contract.
 
 - 2026-08-23: Refreshed Milestones 2-4 before implementation. Reconciled the current
   seven-package boundary, marked prerequisite plans 22/36/37/47 satisfied, verified dependency

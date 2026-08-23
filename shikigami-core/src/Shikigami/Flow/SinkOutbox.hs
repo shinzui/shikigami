@@ -18,8 +18,9 @@ import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Hasql.Transaction qualified as Tx
-import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent)
+import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), TraceContext, encodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxId (..), OutboxMessage (..), enqueueOutboxTx)
+import Keiro.Telemetry (traceContextFromCurrentSpan)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
     StepName (..),
@@ -133,6 +134,7 @@ prepareSinkIntent ::
   UTCTime ->
   IO PreparedSinkIntent
 prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName' runIdText ordinal occurredAt' danwaTarget' resolvedRecipient' sink output now = do
+  capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
@@ -167,7 +169,7 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
                     sink,
                     output
                   }
-              event = sinkIntentEvent messageId runIdText now intent
+              event = sinkIntentEvent messageId runIdText now capturedTraceContext intent
               receipt = pendingDeliveryReceipt messageId kind now intent
            in PreparedSinkIntent
                 { sinkResult = enqueuedResult,
@@ -200,8 +202,8 @@ pendingDeliveryReceipt messageId kind now SinkIntent {agent, runId, ordinal} =
 -- | Flow emits are step-shaped and may be consecutive replies in one durable
 -- flow, so they intentionally retain the shared per-run ordering key. The
 -- agent run's independent @dispatch-sinks@ fan-out uses per-ordinal keys.
-sinkIntentEvent :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
-sinkIntentEvent messageId orderingKey occurredAt intent =
+sinkIntentEvent :: Text -> Text -> UTCTime -> Maybe TraceContext -> SinkIntent -> IntegrationEvent
+sinkIntentEvent messageId orderingKey occurredAt traceContext intent =
   encodeJsonIntegrationEvent
     IntegrationEvent
       { messageId,
@@ -218,7 +220,7 @@ sinkIntentEvent messageId orderingKey occurredAt intent =
         occurredAt,
         causationId = Nothing,
         correlationId = Nothing,
-        traceContext = Nothing,
+        traceContext,
         attributes = Nothing
       }
     intent

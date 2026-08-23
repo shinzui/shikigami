@@ -17,6 +17,7 @@ module Shikigami.Sink.Http
     unauthenticatedHttpEnv,
     classifyDanwaClientError,
     runDanwaClient,
+    runDanwaClientWithHeaders,
     httpFailureIsPermanent,
     renderHttpFailure,
     postJSONWithHeaders,
@@ -56,7 +57,7 @@ import Network.HTTP.Types.Header (Header, hAuthorization, hContentType)
 import Network.HTTP.Types.Status (statusCode)
 import Servant.Client
   ( BaseUrl,
-    ClientEnv,
+    ClientEnv (makeClientRequest),
     ClientError (..),
     ClientM,
     ResponseF (responseStatusCode),
@@ -313,6 +314,28 @@ runDanwaClient clientEnv action =
     Left wrapped -> Left (classifyDanwaException wrapped)
     Right (Left failure) -> Left (classifyDanwaClientError failure)
     Right (Right value) -> Right value
+
+-- | Run one generated Danwa action with dispatch-scoped W3C trace headers.
+--
+-- The 'ClientEnv' override is local to this call, so concurrent deliveries
+-- cannot leak context into one another. Only the two W3C propagation headers
+-- are accepted; authentication remains owned by the host-scoped manager hook.
+runDanwaClientWithHeaders :: [Header] -> ClientEnv -> ClientM a -> IO (Either HttpFailure a)
+runDanwaClientWithHeaders extraHeaders clientEnv =
+  runDanwaClient
+    clientEnv
+      { makeClientRequest = \baseUrl request -> do
+          outgoing <- makeClientRequest clientEnv baseUrl request
+          pure
+            outgoing
+              { requestHeaders =
+                  traceHeaders
+                    <> filter ((`notElem` traceHeaderNames) . fst) (requestHeaders outgoing)
+              }
+      }
+  where
+    traceHeaders = filter ((`elem` traceHeaderNames) . fst) extraHeaders
+    traceHeaderNames = ["traceparent", "tracestate"]
 
 classifyDanwaException :: SomeException -> HttpFailure
 classifyDanwaException wrapped =

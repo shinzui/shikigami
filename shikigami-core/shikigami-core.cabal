@@ -99,6 +99,7 @@ library
     Shikigami.Sink.Wire
     Shikigami.Store.DelegationBudget
     Shikigami.Telemetry.Metrics
+    Shikigami.Telemetry.TraceContext
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
@@ -129,28 +130,29 @@ library
     Shikigami.Sink.Auth.Internal
 
   build-depends:
-    , aeson                        >=2.2
+    , aeson                            >=2.2
     , baikai
     , baikai-claude
-    , base                         >=4.21    && <5
+    , base                             >=4.21    && <5
     , bytestring
-    , containers                   >=0.6
+    , containers                       >=0.6
     , cron
     , danwa-api
     , danwa-client
-    , dhall                        >=1.42
-    , directory                    >=1.3
+    , dhall                            >=1.42
+    , directory                        >=1.3
     , effectful
     , effectful-core
-    , filepath                     >=1.4
-    , generic-lens                 >=2.2
+    , filepath                         >=1.4
+    , generic-lens                     >=2.2
     , handan-core
     , hasql
     , hasql-pool
     , hasql-transaction
     , hs-opentelemetry-api
+    , hs-opentelemetry-propagator-w3c
     , http-client
-    , http-client-tls              ==0.3.6.1
+    , http-client-tls                  ==0.3.6.1
     , http-types
     , keiki
     , keiro
@@ -158,25 +160,25 @@ library
     , kioku-api
     , kioku-core
     , kiroku-store
-    , lens                         >=5.2
-    , memory                       >=0.18    && <0.19
+    , lens                             >=5.2
+    , memory                           >=0.18    && <0.19
     , mmzk-typeid
-    , optparse-applicative         >=0.19    && <0.20
+    , optparse-applicative             >=0.19    && <0.20
     , pgmq-hasql
-    , servant-client               >=0.20    && <0.21
-    , settei                       ==0.2.0.0
-    , settei-env                   ==0.2.0.0
-    , settei-optparse-applicative  ==0.2.0.0
-    , settei-yaml                  ==0.2.0.0
+    , servant-client                   >=0.20    && <0.21
+    , settei                           ==0.2.0.0
+    , settei-env                       ==0.2.0.0
+    , settei-optparse-applicative      ==0.2.0.0
+    , settei-yaml                      ==0.2.0.0
     , shibuya-core
     , shikumi
     , shikumi-tools
     , streamly-core
-    , text                         >=2.1
-    , time                         >=1.12
+    , text                             >=2.1
+    , time                             >=1.12
     , uuid
-    , vector                       >=0.13
-    , yaml                         >=0.11
+    , vector                           >=0.13
+    , yaml                             >=0.11
 
 test-suite shikigami-core-test
   import:         common
@@ -233,6 +235,10 @@ test-suite shikigami-core-test
     , hasql
     , hasql-pool
     , hasql-transaction
+    , hs-opentelemetry-api
+    , hs-opentelemetry-exporter-in-memory
+    , hs-opentelemetry-propagator-w3c
+    , hs-opentelemetry-sdk
     , http-client
     , http-types
     , keiki

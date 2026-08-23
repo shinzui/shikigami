@@ -11,6 +11,7 @@ module Shikigami.Sink.Types
 where
 
 import Data.Text qualified as Text
+import Network.HTTP.Types.Header (Header)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
@@ -52,6 +53,9 @@ data SinkContext = SinkContext
     -- | Process-lifetime authenticated HTTP clients. This is dependency wiring,
     -- not durable input, and is never serialized into a sink intent.
     http :: !SinkHttp,
+    -- | Allowlisted W3C propagation headers for this one outbound dispatch.
+    -- Authentication remains owned by 'SinkHttp' and cannot be supplied here.
+    traceHeaders :: ![Header],
     danwaTarget :: !(Maybe DanwaTarget),
     -- | The recipient a @KizashiSignal@'s @recipientFrom@ strategy resolved to,
     -- decided upstream where the trigger activity is in scope and carried here

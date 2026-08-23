@@ -10,7 +10,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
-import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestMethod, responseLBS, strictRequestBody)
+import Network.HTTP.Types.Header (Header)
+import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
@@ -72,7 +73,7 @@ main =
   defaultMain
     ( testGroup
         "shikigami"
-        [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests],
+        [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AgentLoaderSpec.tests,
           AppConfigSpec.tests,
@@ -240,6 +241,7 @@ ctxFor ident kz kw =
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = Sink.ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
+      traceHeaders = [],
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
@@ -410,6 +412,77 @@ danwaTests =
           reqs <- readIORef ref
           postedContent reqs @?= Just "fresh thread text"
     ]
+
+traceHeaderTests :: TestTree
+traceHeaderTests =
+  testGroup
+    "traceparent"
+    [ testCase "kawa receives only the generated W3C trace headers" do
+        headers <- newIORef []
+        store <- newIORef (Map.empty :: Map (Text, Text) Text)
+        testWithApplication (pure (captureHeaders headers (kawaDoorwayApplication store))) \port -> do
+          let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
+              ctx = (ctxFor (AgentIdentity "heartbeat") dummyKizashi kw) {traceHeaders = sampleTraceHeaders}
+              sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
+          _ <- Sink.dispatch ctx sink sampleOutput
+          assertCapturedTraceHeaders headers,
+      testCase "kizashi receives only the generated W3C trace headers" do
+        headers <- newIORef []
+        signals <- newIORef []
+        testWithApplication (pure (captureHeaders headers (stubKizashiApp signals))) \port -> do
+          let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
+              ctx = (ctxFor (AgentIdentity "heartbeat") kz dummyKawa) {traceHeaders = sampleTraceHeaders}
+          _ <- Sink.dispatch ctx sampleKizashiSink sampleOutput
+          assertCapturedTraceHeaders headers,
+      testCase "rei receives only the generated W3C trace headers" do
+        headers <- newIORef []
+        testWithApplication (pure (captureHeaders headers acceptingReiApp)) \port -> do
+          let ctx =
+                (ctxFor (AgentIdentity "heartbeat") dummyKizashi dummyKawa)
+                  { rei = Sink.ReiConfig {baseUrl = Just (testBaseUrl port)},
+                    traceHeaders = sampleTraceHeaders
+                  }
+              sink = ReiAction {intentionId = "int_trace", note = "trace this action"}
+          _ <- Sink.dispatch ctx sink sampleOutput
+          assertCapturedTraceHeaders headers,
+      testCase "danwa receives only the generated W3C trace headers" do
+        headers <- newIORef []
+        messages <- newIORef []
+        testWithApplication (pure (captureHeaders headers (stubDanwaApp messages))) \port -> do
+          let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
+              target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
+              sink = DanwaConversation {topic = "support"}
+          baseCtx <- ctxForDanwa (AgentIdentity "heartbeat") cfg target
+          _ <- Sink.dispatch (baseCtx {traceHeaders = sampleTraceHeaders}) sink sampleOutput
+          assertCapturedTraceHeaders headers
+    ]
+
+sampleTraceHeaders :: [Header]
+sampleTraceHeaders =
+  [ ("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+    ("tracestate", "shikigami=test")
+  ]
+
+captureHeaders :: IORef [[Header]] -> Application -> Application
+captureHeaders headers app request respond = do
+  modifyIORef' headers (requestHeaders request :)
+  app request respond
+
+assertCapturedTraceHeaders :: IORef [[Header]] -> IO ()
+assertCapturedTraceHeaders headers = do
+  requests <- readIORef headers
+  assertBool "the sink issued at least one HTTP request" (not (null requests))
+  mapM_ assertOne requests
+  where
+    assertOne requestHeaders' = do
+      lookup "traceparent" requestHeaders' @?= lookup "traceparent" sampleTraceHeaders
+      lookup "tracestate" requestHeaders' @?= lookup "tracestate" sampleTraceHeaders
+
+acceptingReiApp :: Application
+acceptingReiApp request respond =
+  case (requestMethod request, pathInfo request) of
+    ("POST", ["v1", "agent-actions"]) -> respond (responseLBS status204 [] "")
+    _ -> respond (responseLBS status404 [] "not found")
 
 -- | The @content@ of the single message the danwa stub recorded.
 postedContent :: [Value] -> Maybe Text

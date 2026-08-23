@@ -32,12 +32,12 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((^.))
 import Shikigami.Sink.Config
-import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwa)
+import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwaWithHeaders)
 import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
 import Shikigami.Sink.Http (HttpFailure)
 import Shikigami.Sink.Http qualified as Http
-import Shikigami.Sink.KawaClient (KawaError (..), buildEnvelope, postEnvelope, renderKawaError)
-import Shikigami.Sink.KizashiClient (KizashiError (..), buildSignalReq, postSignal, renderKizashiError)
+import Shikigami.Sink.KawaClient (KawaError (..), buildEnvelope, postEnvelopeWithHeaders, renderKawaError)
+import Shikigami.Sink.KizashiClient (KizashiError (..), buildSignalReq, postSignalWithHeaders, renderKizashiError)
 import Shikigami.Sink.Permission
 import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (runReiAction)
@@ -89,7 +89,7 @@ runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome
 runSink ctx sink output = case sink of
   KawaDigest {} -> do
     env <- buildEnvelope ctx sink output
-    r <- postEnvelope (http ctx ^. #kawa) (kawa ctx) env
+    r <- postEnvelopeWithHeaders (http ctx ^. #kawa) (traceHeaders ctx) (kawa ctx) env
     pure (either kawaFailure Delivered r)
   KizashiSignal {} -> do
     -- A strategy that was declared and could not be honored is said out loud;
@@ -109,13 +109,13 @@ runSink ctx sink output = case sink of
     case buildSignalReq (kizashi ctx) (recipientOverride ctx) sink (identity ctx) output of
       Left e -> pure (Failed e)
       Right req -> do
-        r <- postSignal (http ctx ^. #kizashi) (kizashi ctx) req
+        r <- postSignalWithHeaders (http ctx ^. #kizashi) (traceHeaders ctx) (kizashi ctx) req
         pure (either kizashiFailure (Delivered . signalId) r)
   ReiAction {} -> do
     r <- runReiAction (Http.unauthenticatedHttpEnv (http ctx ^. #kawa)) (rei ctx) ctx sink output
     pure (either Failed Delivered r)
   DanwaConversation {} -> do
-    r <- runDanwa (http ctx ^. #danwa) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
+    r <- runDanwaWithHeaders (http ctx ^. #danwa) (traceHeaders ctx) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
     pure (either danwaFailure Delivered r)
 
 kawaFailure :: KawaError -> SinkOutcome

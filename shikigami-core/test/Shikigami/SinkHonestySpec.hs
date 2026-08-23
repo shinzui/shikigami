@@ -353,6 +353,7 @@ ctxWithIdentity agentIdentity rei =
       danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
       rei,
       http = testSinkHttp,
+      traceHeaders = [],
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,

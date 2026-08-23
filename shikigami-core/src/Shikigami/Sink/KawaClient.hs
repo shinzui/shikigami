@@ -9,6 +9,7 @@ module Shikigami.Sink.KawaClient
   ( KawaError (..),
     buildEnvelope,
     postEnvelope,
+    postEnvelopeWithHeaders,
     projectIngest,
     renderKawaError,
   )
@@ -19,11 +20,12 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.KindID (genKindID, toText)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
+import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KawaConfig (..))
-import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSON, renderHttpFailure)
+import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
 import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
 import Shikigami.Sink.Wire (IngestRequest (..), IngestResponse (..))
@@ -84,10 +86,14 @@ projectIngest (ActivityEnvelope {verb = vb, actor = ac, subject = sj, payload = 
 -- | POST the envelope (projected to an @IngestRequest@) to @/v1/sources/{source}/events@
 -- and return the canonical activity id.
 postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
-postEnvelope http KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
+postEnvelope http = postEnvelopeWithHeaders http []
+
+-- | 'postEnvelope' with dispatch-scoped propagation headers.
+postEnvelopeWithHeaders :: HttpEnv -> [Header] -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
+postEnvelopeWithHeaders http headers KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
   let req = projectIngest env
       url = cfgBaseUrl <> "/v1/sources/" <> Text.replace "/" "%2F" cfgSourceSegment <> "/events"
-  respE <- postJSON http url req
+  respE <- postJSONWithHeaders http headers url req
   pure $ case respE of
     Left e -> Left (KawaHttpError e)
     Right body -> case eitherDecode body of

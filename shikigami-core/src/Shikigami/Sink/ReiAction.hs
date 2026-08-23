@@ -31,8 +31,8 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (ReiConfig (..))
-import Shikigami.Sink.Http (HttpEnv, postJSON, renderHttpFailure)
-import Shikigami.Sink.Types (SinkContext, mkSourceEventId)
+import Shikigami.Sink.Http (HttpEnv, postJSONWithHeaders, renderHttpFailure)
+import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
 import Shikigami.Sink.Wire (ReiActionReq (..))
 
 -- | The path an agent action is posted to, appended to the configured base URL.
@@ -58,7 +58,7 @@ runReiAction http ReiConfig {baseUrl} ctx sink output =
                     output,
                     sourceEventId = mkSourceEventId ctx
                   }
-          result <- postJSON http (url <> reiActionPath) req
+          result <- postJSONWithHeaders http (traceHeaders ctx) (url <> reiActionPath) req
           pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> iid))) result)
     _ -> pure (Left "runReiAction: not a ReiAction sink")
 
