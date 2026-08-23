@@ -38,7 +38,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add validated capability identifiers and public descriptor/resolution types.
+- [x] (2026-08-22) Added validated capability identifiers, immutable revision words,
+      explicit descriptor JSON, and deterministically ordered resolved snapshots.
 - [ ] Add `capabilityOverlays` to the Dhall and Haskell agent declaration with an empty
       default and backward-compatible JSON.
 - [ ] Implement collision-rejecting catalog construction and fail-closed pure resolution.

@@ -55,6 +55,7 @@ library
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
+    Shikigami.Capability.Overlay
     Shikigami.Core
     Shikigami.Directory
     Shikigami.Directory.Store
@@ -179,6 +180,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
+    Shikigami.CapabilityOverlaySpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectorySpec
