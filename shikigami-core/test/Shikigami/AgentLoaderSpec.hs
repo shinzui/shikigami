@@ -28,6 +28,7 @@ import Shikigami.Agent.Loader
     loadAgentsReport,
     loadedAgents,
   )
+import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
 import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
@@ -59,6 +60,7 @@ tests =
               memory = MemoryPolicy {scope, recallLimit, recordPolicy},
               delegates,
               delegationBudget,
+              capabilityOverlays,
               enabled
             } -> do
               identity @?= Nothing
@@ -67,6 +69,7 @@ tests =
               recordPolicy @?= OnSuccess
               delegates @?= []
               delegationBudget @?= Nothing
+              capabilityOverlays @?= []
               enabled @?= True,
       testCase "decodes a declared delegation allow-list and budget" do
         AgentDecl {delegates, delegationBudget} <- expectLoaded "../agents/proof/research-supervisor.dhall"
@@ -87,12 +90,26 @@ tests =
             assertBool "identity is omitted" (not (KeyMap.member "identity" fields))
             assertBool "memory is omitted" (not (KeyMap.member "memory" fields))
             assertBool "enabled is omitted" (not (KeyMap.member "enabled" fields))
+            assertBool "capability overlays are omitted" (not (KeyMap.member "capabilityOverlays" fields))
           other -> assertFailure ("declaration must encode as an object: " <> show other)
         encode decl @?= encode oldShape
         eitherDecode (encode decl) @?= Right decl,
       testCase "non-default declarations retain their policy in JSON" do
         decl <- expectLoaded "../agents/proof/declared-identity.dhall"
         eitherDecode (encode decl) @?= Right decl,
+      testCase "loads and round-trips an explicit capability overlay request" do
+        decl@AgentDecl {capabilityOverlays} <- expectLoaded "../agents/proof/capability-overlay.dhall"
+        map capabilityIdText capabilityOverlays @?= ["workspace.read"]
+        eitherDecode (encode decl) @?= Right decl,
+      testCase "rejects malformed capability ids during Dhall decoding" do
+        loadAgent "test/fixtures/agents/invalid-capability-id.dhall" >>= \case
+          Left (LoadError message) -> do
+            assertBool "diagnostic states the identifier grammar" ("[a-z][a-z0-9.-]*" `Text.isInfixOf` message)
+            assertBool "diagnostic states the invalid value" ("Workspace.read" `Text.isInfixOf` message)
+          Right decl -> assertFailure ("expected invalid capability id, loaded " <> show decl),
+      testCase "loads duplicate requests so pure resolution can refuse them" do
+        AgentDecl {capabilityOverlays} <- expectLoaded "test/fixtures/agents/duplicate-capability-overlay.dhall"
+        map capabilityIdText capabilityOverlays @?= ["workspace.read", "workspace.read"],
       testCase "rejects recall limits before runtime conversion" do
         expectBoundError "test/fixtures/agents/invalid-recall-limit-zero.dhall" "got 0"
         expectBoundError "test/fixtures/agents/invalid-recall-limit-too-large.dhall" "got 1001",

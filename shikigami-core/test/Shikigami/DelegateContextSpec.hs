@@ -58,6 +58,7 @@ delegatingAgent =
       delegates = ["worker"],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True

@@ -34,6 +34,7 @@ import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
 import Numeric.Natural (Natural)
+import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Prelude
 
 data IdentityDecl = IdentityDecl {principal :: !Text}
@@ -237,6 +238,7 @@ data AgentDecl = AgentDecl
     delegates :: ![Text],
     delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
+    capabilityOverlays :: ![CapabilityId],
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
     enabled :: !Bool
@@ -248,7 +250,7 @@ data AgentDecl = AgentDecl
 -- with values journaled before those fields existed. Non-default declarations
 -- still carry their complete policy in the workflow journal.
 instance ToJSON AgentDecl where
-  toJSON AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory, enabled} =
+  toJSON AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory, enabled} =
     Aeson.object
       ( [ "name" Aeson..= name,
           "description" Aeson..= description,
@@ -259,6 +261,7 @@ instance ToJSON AgentDecl where
           <> ["delegates" Aeson..= delegates | not (null delegates)]
           <> maybe [] (\budget -> ["delegationBudget" Aeson..= budget]) delegationBudget
           <> maybe [] (\profile -> ["sanctionedProfile" Aeson..= profile]) sanctionedProfile
+          <> ["capabilityOverlays" Aeson..= capabilityOverlays | not (null capabilityOverlays)]
           <> maybe [] (\declaredIdentity -> ["identity" Aeson..= declaredIdentity]) identity
           <> ["memory" Aeson..= memory | memory /= defaultMemoryPolicy]
           <> ["enabled" Aeson..= False | not enabled]
@@ -277,7 +280,8 @@ instance FromJSON AgentDecl where
     delegates <- value Aeson..:? "delegates" Aeson..!= []
     delegationBudget <- value Aeson..:? "delegationBudget"
     sanctionedProfile <- value Aeson..:? "sanctionedProfile"
+    capabilityOverlays <- value Aeson..:? "capabilityOverlays" Aeson..!= []
     identity <- value Aeson..:? "identity"
     memory <- value Aeson..:? "memory" Aeson..!= defaultMemoryPolicy
     enabled <- value Aeson..:? "enabled" Aeson..!= True
-    pure AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory, enabled}
+    pure AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory, enabled}

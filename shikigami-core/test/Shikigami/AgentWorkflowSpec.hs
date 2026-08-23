@@ -1758,6 +1758,7 @@ decl =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1780,6 +1781,7 @@ missingTaskDecl =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1807,6 +1809,7 @@ profiledDecl =
             { profileId = "sanctioned-review",
               version = Just "1"
             },
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1828,6 +1831,7 @@ profiledSkillDecl =
             { profileId = "sanctioned-review",
               version = Just "1"
             },
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1844,6 +1848,7 @@ flowDecl =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1860,6 +1865,7 @@ flowDelegationDecl =
       delegates = ["web-researcher"],
       delegationBudget = Just (either (error . Text.unpack) id (mkDelegationBudget 1)),
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
@@ -1881,7 +1887,7 @@ conversationDecl =
     }
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
-withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
+withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
   AgentDecl
     { name,
       description,
@@ -1891,6 +1897,7 @@ withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, s
       delegates,
       delegationBudget,
       sanctionedProfile,
+      capabilityOverlays,
       identity,
       memory = MemoryPolicy {scope, recallLimit, recordPolicy},
       enabled

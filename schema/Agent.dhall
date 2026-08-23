@@ -89,6 +89,7 @@ let Agent =
           , delegates : List Text
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
+          , capabilityOverlays : List Text
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
@@ -99,6 +100,7 @@ let Agent =
           , delegates = [] : List Text
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
+          , capabilityOverlays = [] : List Text
           , identity = None Identity
           , memory = defaultMemoryPolicy
           , enabled = True

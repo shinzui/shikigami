@@ -40,8 +40,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-22) Added validated capability identifiers, immutable revision words,
       explicit descriptor JSON, and deterministically ordered resolved snapshots.
-- [ ] Add `capabilityOverlays` to the Dhall and Haskell agent declaration with an empty
-      default and backward-compatible JSON.
+- [x] (2026-08-22) Added `capabilityOverlays` to Dhall and `AgentDecl`; empty requests
+      retain the old five-key JSON bytes and missing keys decode to `[]`.
 - [ ] Implement collision-rejecting catalog construction and fail-closed pure resolution.
 - [ ] Add loader, JSON-wire, catalog, and policy tests plus a proof declaration.
 - [ ] Document the overlay/base boundary and update the dependency plan assumptions.

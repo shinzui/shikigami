@@ -361,6 +361,7 @@ drainAgent =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Just IdentityDecl {principal = "agent_codec"},
       memory = defaultMemoryPolicy,
       enabled = True

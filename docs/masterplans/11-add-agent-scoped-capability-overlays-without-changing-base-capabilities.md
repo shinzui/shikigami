@@ -168,7 +168,8 @@ and EP-4 may proceed in parallel.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: Add the defaulted declaration field and byte-compatibility fixtures.
+- [x] (2026-08-22) EP-1: Added the defaulted declaration field and byte-compatibility
+      fixtures.
 - [ ] EP-1: Add pure catalog resolution, authorization, descriptor pinning, and validation.
 - [ ] EP-2: Add provider/lease acquisition with partial rollback and collision rejection.
 - [ ] EP-2: Run `Skill` behaviors through one bounded tool loop while preserving the empty path.

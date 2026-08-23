@@ -88,6 +88,7 @@ testDecl sanctionedProfile =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True

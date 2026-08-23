@@ -301,6 +301,7 @@ agentDeclaration sinks =
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
+      capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = True
