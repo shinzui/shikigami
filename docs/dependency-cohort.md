@@ -76,6 +76,7 @@ published; the current release status is called out immediately below it.
 | `kioku-core` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
 | `kioku-migrations` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
 | `shikumi` | 0.3.0.1 | **0.3.0.2** | `shikumi-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
+| `shikumi-tools` | — | **0.3.0.2** | `shikumi-tools-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
 | `baikai` | 0.4.1.0 | **0.5.0.0** | `baikai-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
 | `baikai-claude` | 0.4.0.1 | **0.5.0.0** | `baikai-claude-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
 | `baikai-effectful` (transitive) | 0.3.0.2 | **0.3.0.3** | `baikai-effectful-0.3.0.3` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
@@ -94,6 +95,12 @@ published; the current release status is called out immediately below it.
 `baikai-effectful` is not an exact row in `cabal.project`: `kioku-core`
 selects it through `^>=0.3.0.3`, and the resolved plan contains 0.3.0.3. Every
 other package named in the first column is an exact `constraints:` selection.
+
+`shikumi-tools 0.3.0.2` is the released model-tool registry consumed by
+`shikigami-core`. Hackage and the upstream `shikumi-tools-0.3.0.2` tag were
+reverified on 2026-08-22; it shares tag commit
+`5e3680e52608d7e88698fa9485f78619853ced98` with the selected `shikumi 0.3.0.2`
+cohort.
 
 `kafka-effectful` moved from the post-release Git commit
 `f34a43cd476f7234848def9c0f08c54a1b67028e` to the exact Hackage 0.3.0.0

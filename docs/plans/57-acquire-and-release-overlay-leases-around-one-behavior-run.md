@@ -38,7 +38,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add the released `shikumi-tools` package and document its verified cohort version.
+- [x] (2026-08-22) Add the released `shikumi-tools` package and document its verified cohort version.
 - [ ] Define the provider registry, acquisition scope, lease, and typed runtime failures.
 - [ ] Implement masked deterministic acquisition, collision-safe composition, and LIFO
       release, including partial-failure rollback.

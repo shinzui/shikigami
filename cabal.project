@@ -46,6 +46,7 @@ constraints:
 
   -- typed model programs and providers
   , shikumi                 ==0.3.0.2
+  , shikumi-tools           ==0.3.0.2
   , baikai                  ==0.5.0.0
   , baikai-claude           ==0.5.0.0
 

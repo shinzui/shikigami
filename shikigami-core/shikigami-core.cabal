@@ -162,6 +162,7 @@ library
     , settei-yaml                  ==0.2.0.0
     , shibuya-core
     , shikumi
+    , shikumi-tools
     , streamly-core
     , text                         >=2.1
     , time                         >=1.12
@@ -232,6 +233,7 @@ test-suite shikigami-core-test
     , shibuya-core
     , shikigami-core
     , shikigami-migrations:test-support
+    , shikumi-tools
     , tasty
     , tasty-hunit
     , text
