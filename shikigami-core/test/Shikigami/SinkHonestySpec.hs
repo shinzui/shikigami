@@ -19,6 +19,7 @@ module Shikigami.SinkHonestySpec (tests) where
 
 import Data.Aeson (Value, eitherDecode, encode, object, (.=))
 import Data.ByteString.Lazy.Char8 qualified as LBS8
+import Data.Either (isLeft)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -58,7 +59,7 @@ import Shikigami.Sink.KizashiClient (buildSignalReq)
 import Shikigami.Sink.Permission (SinkKind (SReiAction))
 import Shikigami.Sink.Recipient (resolveSinkRecipient, unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (unconfiguredMessage)
-import Shikigami.Sink.Validate (sinkDeclarationErrors)
+import Shikigami.Sink.Validate (sinkDeclarationErrors, validateKanmonRouteSegment)
 import Shikigami.Sink.Wire (CreateSignalReq (..), ReiActionReq (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -104,6 +105,21 @@ validationTests =
         sinkDeclarationErrors (agentWith [signalWith Actor Nothing]) @?= [],
       testCase "sinks with no routing at all are not the subject" $
         sinkDeclarationErrors (agentWith [sampleReiSink]) @?= [],
+      testCase "Kanmon accepts its current channel and action segments" do
+        validateKanmonRouteSegment "intercom" @?= Right "intercom"
+        validateKanmonRouteSegment "reply_to_conversation" @?= Right "reply_to_conversation"
+        sinkDeclarationErrors (agentWith [egressWith "intercom" "reply_to_conversation" Nothing]) @?= [],
+      testCase "Kanmon route segments refuse empty and unsafe values" do
+        mapM_
+          (\segment -> assertBool ("expected an invalid segment: " <> Text.unpack segment) (isLeft (validateKanmonRouteSegment segment)))
+          ["", "inter/com", "reply?now", "..\\reply", "intercom/../other"]
+        let errors = sinkDeclarationErrors (agentWith [egressWith "inter/com" "reply?now" Nothing])
+        assertBool "the channel field is named" (any ("channel" `Text.isPrefixOf`) errors)
+        assertBool "the action field is named" (any ("action" `Text.isPrefixOf`) errors),
+      testCase "an explicitly blank conversation key is refused" $
+        case sinkDeclarationErrors (agentWith [egressWith "intercom" "reply_to_conversation" (Just "  ")]) of
+          [err] -> assertBool "the field is named" ("conversationKey" `Text.isInfixOf` err)
+          other -> assertFailure ("expected one conversation key error, got " <> show other),
       testCase "every offending sink is reported, not just the first" $
         length (sinkDeclarationErrors (agentWith [signalWith SubjectOwner Nothing, signalWith AreaOwner Nothing])) @?= 2
     ]
@@ -210,6 +226,10 @@ signalWith recipientFrom defaultRecipient =
       intentTemplate = "escalate this",
       extraContextTags = []
     }
+
+egressWith :: Text -> Text -> Maybe Text -> Sink
+egressWith channel action conversationKey =
+  ChannelEgress {channel, action, conversationKey}
 
 -- | An activity whose actor is a person, so a resolved recipient is visibly not
 -- the agent's own name or the fallback.

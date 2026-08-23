@@ -16,558 +16,803 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Today a shikigami agent can only produce *internal* outputs: a kawa digest, a kizashi signal,
-a rei action, or a danwa conversation. The architecture spec's C12 contract
-(docs/initial-spec.md:334-338) promises a fifth sink — channel egress — that lets a declared
-agent **act back on the outside world** (reply to an Intercom conversation, answer a Zendesk
-ticket) through kanmon's egress API, with kanmon holding the provider credentials so shikigami
-never does. That sink does not exist: the `Sink` union in schema/Agent.dhall:43-57 and its
-Haskell mirror in shikigami-api/src/Shikigami/Api/Agent.hs:68-83 have four variants, and only
-the permission enum reserves a slot for it (`SChannelEgress`,
-shikigami-core/src/Shikigami/Sink/Permission.hs:30, commented "reserved... (IR-3)").
+Shikigami can currently publish a kawa digest, a kizashi signal, a rei action, or a danwa
+conversation. It cannot act back on the external conversation that caused an agent to run.
+The architecture's C12 contract promises that fifth path: a declared `ChannelEgress` sink
+sends a reply through Kanmon, which owns the Intercom or Zendesk provider credential and
+enforces destination authorization. Shikigami authenticates only to Kanmon and never learns
+the provider credential.
 
-After this plan, an agent manifest can declare
+After this plan is implemented, an agent can declare:
 
 ```dhall
-, sinks = [ A.Sink.ChannelEgress { channel = "intercom", action = "reply", conversationKey = None Text } ]
+A.Sink.ChannelEgress
+  { channel = "intercom"
+  , action = "reply_to_conversation"
+  , conversationKey = None Text
+  }
 ```
 
-and when the agent runs, the worker POSTs the behavior's output to kanmon's egress endpoint
-`POST /channels/intercom/actions/reply`, gated by the same permission check as every other
-sink, delivered through the same durable outbox, and idempotent under retry. The observable
-proof is hermetic: a new `stub-kanmon` CLI command (the same pattern as the existing
-`stub-kawa`) serves kanmon's real wire contract locally, and an end-to-end run shows the
-delivery, the dedup on retry, and a denial for an ungranted agent. Because the stub mirrors
-kanmon's actual implemented API (verified in the kanmon repo — see Context), swapping to the
-real service later is a base-URL and token change with no schema change.
+For a granted agent, the existing durable sink-intent publisher will POST the behavior
+output to `POST /channels/intercom/actions/reply_to_conversation`. A static declared
+conversation key wins; otherwise the key comes from a top-level `conversation_key` in the
+behavior output, then from the triggering activity's subject id. The deterministic sink
+source-event id becomes Kanmon's idempotency key. The workflow journal continues to say only
+that the sink was `Enqueued`; the delivery receipt becomes `Delivered` only after Kanmon
+acknowledges the request and retains Kanmon's returned activity id.
+
+The primary proof is hermetic. A Shikigami-owned `stub-kanmon` serves the exact current
+Kanmon route and JSON shapes, checks the configured bearer token and destination allow-list,
+and deduplicates repeated idempotency keys. Database-backed tests prove granted delivery,
+local receipt suppression, downstream idempotency, permanent rejection, and denial without
+an outbox row. An optional compatibility check points the same client at Kanmon's offline
+host. Switching between the stub and real Kanmon changes only the configured base URL and
+opaque token.
 
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
-
-- [ ] M1: add the `ChannelEgress` alternative to the `Sink` union in schema/Agent.dhall and mirror it in Shikigami.Api.Agent; extend `sinkKindOf`.
-- [ ] Prerequisites: plans 36/37 and 22 complete; modules/configuration consume the six-package and Settei foundations.
-- [ ] M1: add the proof manifest `agents/proof/channel-reply.dhall`; `cabal run shikigami -- validate` accepts it and all existing manifests still validate.
-- [ ] M2: extend plan 22's `SinkCredentials`/`SinkHttp` with kanmon and consume its `postJSONWithHeaders`; add `KanmonConfig` to Shikigami.Sink.Config.
-- [ ] M2: new module Shikigami.Sink.KanmonClient (`buildEgressRequest`, `postEgress`); pure request-shape unit tests in shikigami-core/test/Main.hs.
-- [ ] M3: dispatcher arm; `kanmon` field through strict dependency records; Settei URL/credential-reference settings; permanent 4xx versus transient 429/5xx/network classification; grant-table entry for the proof agent.
-- [ ] M4: new module Shikigami.Sink.KanmonStub + `stub-kanmon` CLI command; WAI-level stub tests.
-- [ ] M4: end-to-end proof — enqueue-run against the worker + stub-kanmon; delivered, deduplicated on re-dispatch, denied for `intruder`.
-- [ ] Docs: add ChannelEgress to docs/user/sinks.md and the sink list in docs/user/writing-agents.md.
+- [x] (2026-08-23) Re-audited the plan against the current seven-package repository, all
+  prerequisite plans, the current workflow-versioning policy, and Kanmon's implemented
+  egress contract.
+- [x] (2026-08-23) Confirmed prerequisites 19, 21, 22, 27, 36, and the relevant Settei work
+  from plan 37 have landed. `SChannelEgress`, database grant commands, delivery receipts,
+  terminal rejection, the authenticated bounded HTTP client, and the single durable
+  `Shikigami.Sink.Intent.SinkIntent` owner are available to extend.
+- [x] (2026-08-23) Milestone 1: added and validated the `ChannelEgress` declaration,
+  pinned additive JSON/Dhall compatibility, rejected unsafe channel/action segments and blank
+  static conversation keys, and retained an explicit permanent-failure dispatch arm until the
+  transport lands.
+- [ ] Milestone 2: add Kanmon wire DTOs, client, Settei settings, authenticated `HttpEnv`,
+  and process-level dependency plumbing.
+- [ ] Milestone 3: carry only the resolved egress metadata on `SinkIntent`, dispatch through
+  Kanmon, and prove delivery-receipt and workflow-versioning behavior.
+- [ ] Milestone 4: add the production-shaped `stub-kanmon` command, end-to-end tests, proof
+  manifest, user/operator docs, and optional real-Kanmon compatibility transcript.
+- [ ] Run all focused and full validation, record results here, and distill any durable
+  architectural decision that differs from the existing ADRs.
 
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
+- (2026-08-23) The original plan described prerequisite APIs as future work. They have now
+  landed: production grants use `DbGrants`, outbound HTTP uses `TokenSource` and bounded
+  `HttpEnv`, publisher outcomes use delivery receipts, and all producers share
+  `Shikigami.Sink.Intent`. Evidence: `Shikigami.Sink.GrantStore`,
+  `Shikigami.Sink.Http`, `Shikigami.Sink.Delivery`, and `Shikigami.Sink.Intent` in
+  `shikigami-core`.
 
-- (Authoring-time) Kanmon's egress API is already implemented, not just specified: the route
-  and semantics live at `/Users/shinzui/Keikaku/bokuno/kanmon/kanmon-core/src/Kanmon/Http.hs:134`
-  (`("POST", ["channels", channelId, "actions", action]) -> handleEgressRoute ...`) and
-  `Kanmon/Egress.hs` (request/response bodies, 401/403 mapping, idempotency). This plan
-  therefore pins the *real* wire contract rather than a provisional one; the stub-first
-  approach is kept only because kanmon is a separate service outside shikigami's dev stack.
+- (2026-08-23) `Sink` is owned by `shikigami-core/src/Shikigami/Agent/Decl.hs`, not by
+  `shikigami-api`. The API package is now limited to the public HTTP surface. The production
+  stub and administrative CLI belong in `shikigami-server`; worker assembly and the outbox
+  publisher belong in `shikigami-workers`.
+
+- (2026-08-23) Kanmon's configured Intercom action is
+  `reply_to_conversation`, not the original plan's illustrative `reply`. The implemented
+  contract is in `mori://shinzui/kanmon/repos/kanmon`; the relevant project-relative source
+  files are `kanmon-core/src/Kanmon/Egress.hs`, `kanmon-core/src/Kanmon/Http.hs`, and
+  `instances/intercom-support.dhall`. Mori does not yet define source-file artifact URIs for
+  these files, so the canonical repository URI plus project-relative paths are used here.
+
+- (2026-08-23) The workflow synthesizes an `ActivityEnvelope` for an arbitrary CLI payload.
+  That synthetic envelope's subject id is the run idempotency key, not a customer
+  conversation. A manual proof of the activity-subject fallback must therefore enqueue a
+  complete activity envelope, while a raw payload must provide `conversation_key` in the
+  behavior output or use a static declaration.
+
+- (2026-08-23) A delivery retry has two independent deduplication layers. Once Shikigami's
+  receipt is `Delivered`, republishing the same outbox message performs no HTTP request.
+  Kanmon's `(provider, idempotency_key)` store protects the narrower crash window in which
+  Kanmon accepted the request but Shikigami did not persist the acknowledgement. These need
+  separate tests; a local receipt-suppression test alone does not exercise Kanmon dedup.
+
+- (2026-08-23) `mori path` resolves the canonical Kanmon repository and Haskell record-pattern
+  references used here. The current registry does not yet resolve
+  `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`, but
+  ADR 0022 and the implemented terminal-outcome comment already pin that canonical URI. The
+  registry lag is not a reason to replace it with an ambiguous plan number or checkout path.
 
 
 ## Decision Log
 
-Record every decision made while working on the plan.
+- Decision: The declaration remains
+  `ChannelEgress : { channel : Text, action : Text, conversationKey : Optional Text }`.
+  `channel` and `action` are Kanmon route segments; `conversationKey` is an optional static
+  destination. Resolution order is a non-empty static key, a non-empty top-level
+  `conversation_key` string in behavior output, then the triggering activity's non-empty
+  `subject.id`. Missing all three is a permanent construction failure.
+  Rationale: this supports both fixed destinations and the primary "reply to what triggered
+  me" case without giving Shikigami provider credentials or arbitrary provider APIs.
+  Date: 2026-07-08; clarified 2026-08-23.
 
-- Decision: The Dhall variant is
-  `ChannelEgress : { channel : Text, action : Text, conversationKey : Optional Text }`. This
-  settles the spec's Open Question 4 (docs/initial-spec.md:942-944, "conversation key +
-  destination + the egress action"): `channel` is the destination (kanmon's channel id, e.g.
-  `"intercom"` — kanmon resolves it via `find (\ci -> ci.provider == channelId)`), `action` is
-  the declared egress action (must be in the channel instance's `egress` list or kanmon
-  returns 404), and `conversationKey` is an optional *static* destination key. When
-  `conversationKey` is `None`, the key is resolved dynamically at dispatch time: first from a
-  `conversation_key` string field in the behavior's output object, else from the trigger
-  activity's `subject.subjectId` when the trigger payload parses as an `ActivityEnvelope`.
-  Rationale: kanmon's `EgressActionRequest` requires a `conversation_key`, but a reply agent
-  almost always answers *the conversation that triggered it* — forcing a static key would make
-  the sink useless for the primary use case, while allowing only a dynamic key would prevent
-  fixed-destination agents (e.g. always post to an ops channel). The remaining request fields
-  are derived, not declared: `content` from the output (its `reply`/`content`/`summary` string
-  field, falling back to compact JSON — the same convention as `renderLearning` in
-  Shikigami/Agent/Run.hs:177-184), `idempotency_key` from the deterministic
-  `mkSourceEventId` shape `agent:runId:ordinal` (Shikigami/Sink/Types.hs:59-61), and
-  `triggering_activity_id` from the trigger activity's `activityId` when available.
-  Date: 2026-07-08
+- Decision: Resolve the conversation key and triggering activity id before enqueue, and add
+  only `conversationKey :: Maybe Text` and `triggeringActivityId :: Maybe Text` to the
+  durable `SinkIntent` and `SinkContext`. Do not copy the full `ActivityEnvelope` into every
+  sink intent.
+  Rationale: publication may occur long after the workflow step, so resolved data must be
+  durable. Two small values are sufficient, keep outbox rows bounded, and follow the
+  existing `resolvedRecipient` precedent. Optional fields are omitted from JSON, preserving
+  old non-egress bytes and allowing old intents to decode as `Nothing`.
+  Date: 2026-08-23.
 
-- Decision: Build the client against kanmon's real wire contract and prove it against a local
-  `stub-kanmon` command in this repo (the KawaStub pattern), not against a live kanmon.
-  Rationale: kanmon exists (kanmon-core implements the endpoint) but is not part of this
-  repo's process-compose stack; a local stub keeps `cabal run` + `cabal test` hermetic. The
-  stub mirrors the verified contract byte-for-byte (same route, same snake_case body, same
-  `{activity_id, verb}` response, same 401/403/404 mapping, same idempotency on
-  `idempotency_key`), so the later swap is a Settei base-URL value pointing at the real
-  service. No schema or client change.
-  Date: 2026-07-08
+- Decision: Derive `content` from the first non-empty top-level `reply`, `content`, or
+  `summary` string, falling back to compact JSON for any other output. Set
+  `idempotency_key = Just (mkSourceEventId ctx)` and carry the resolved trigger activity id
+  as `triggering_activity_id`.
+  Rationale: the ordering matches existing behavior-output conventions, always produces the
+  required Kanmon content field, and reuses the stable per-sink identity already used by the
+  other doorway client.
+  Date: 2026-07-08; clarified 2026-08-23.
 
-- Decision: Authentication uses plan 22's `TokenSource` and `HttpEnv`; this plan extends
-  the duplicate-record surfaces with `kanmon :: Maybe TokenSource` on `SinkCredentials`
-  and `kanmon :: HttpEnv` on `SinkHttp`. Plan 37 resolves a credential reference; its
-  explicit legacy environment binding is adapter-only. `KanmonConfig` carries only the base
-  URL.
-  Rationale: kanmon's verifier is currently a config token map
-  (`Kanmon.Egress.Config.EgressAuthConfig` / `configVerifier`) explicitly designed to be
-  swapped for real shomei JWKS verification with no kanmon change; mirroring that interim
-  shape behind plan 22's token interface keeps kanmon consistent with every other sink
-  and permits a later shomei-backed `TokenSource` swap without changing this client.
-  Date: 2026-07-22
-- Decision: Treat 400/401/403/404 as permanent delivery failures, 429 and retryable
-  5xx/network timeouts as transient, and feed the classification into plan 19's delivery
-  receipt/dead-letter semantics.
-  Rationale: authorization, route, and request-shape failures do not heal by retrying and
-  must not consume the outbox retry budget forever.
-  Date: 2026-07-22
+- Decision: Validate `channel` and `action` at manifest validation time as one non-empty URL
+  segment containing only ASCII letters, digits, `.`, `_`, or `-`; reject a declared empty
+  conversation key. Re-run the same route validation at publication before constructing the
+  path, so corrupted or hand-built durable data fails permanently without issuing a request.
+  Rationale: joining arbitrary declaration text into a URL would admit slashes, query text,
+  or traversal-like paths. Kanmon's current identifiers and
+  `reply_to_conversation` fit this deliberately small vocabulary.
+  Date: 2026-08-23.
 
-- Decision: Permission gating reuses the existing static `defaultGrantTable` stub
-  (Permission.hs:53-61) by granting `SChannelEgress` to the proof agent only; the
-  database-backed table is owned by docs/plans/21-database-backed-sink-permission-grants.md
-  (MasterPlan 4) behind the unchanged `checkGrant` signature.
-  Rationale: `SChannelEgress` is already enumerated in `SinkKind`, so no vocabulary change is
-  needed anywhere in the gate; duplicating plan 21's table here would create a merge conflict
-  for no proof value.
-  Date: 2026-07-08
+- Decision: Mirror Kanmon's current wire contract in `Shikigami.Sink.Wire`, and keep
+  transport behavior in a new `Shikigami.Sink.KanmonClient`. Use
+  `postJSONWithHeaders`; do not introduce a Kanmon-specific manager, retry loop, raw-token
+  argument, or generic HTTP helper.
+  Rationale: ADR 0026 centralizes authentication, cancellation, body bounds, headers, and
+  failure classification in `Shikigami.Sink.Http`. The outbox, not the client, owns retries.
+  Date: 2026-07-08; updated 2026-08-23.
+
+- Decision: Extend `SinkCredentials` and `SinkHttp` with direct `kanmon` fields. Configure
+  `sinks.kanmon.base_url` and secret `credentials.sinks.kanmon.token` through Settei, with
+  explicit environment bindings `SHIKIGAMI_SINKS_KANMON_BASE_URL` and
+  `SHIKIGAMI_KANMON_TOKEN`. `KanmonConfig` carries only `baseUrl`.
+  Rationale: the opaque, process-lifetime `TokenSource` seam allows a later Shomei-backed
+  source without changing declarations, durable data, or the client. Settei's `SecretText`
+  provides the current redaction boundary.
+  Date: 2026-07-22; corrected from a future credential-reference assumption 2026-08-23.
+
+- Decision: Reuse `HttpFailure` classification. HTTP 408, 425, 429, 5xx and transport
+  failures remain retryable; other 4xx, invalid request/URL/response, oversized bodies, and
+  response decoding failures are permanent. Failure to read the configured credential
+  source remains transient. A locally missing conversation key is permanent.
+  Rationale: this is the policy already implemented and tested by plan 22. Retrying a
+  deterministic malformed intent cannot heal it, while transient infrastructure may.
+  Date: 2026-07-22; updated 2026-08-23.
+
+- Decision: Use the database grant table and `shikigami grants grant`; do not edit
+  `defaultGrantTable`.
+  Rationale: plan 21 landed `DbGrants`, which production checks on enqueue and publish. A
+  grant or revocation is visible on the next check without redeploying the worker.
+  Date: 2026-07-08; superseded 2026-08-23.
+
+- Decision: The workflow's `dispatch-sinks` result remains `Enqueued "outbox:..."`.
+  Successful publication records `Delivered <kanmon-activity-id>` in the delivery receipt;
+  permanent failure records `Dead` and returns Keiro `PublishRejected`; retryable failure
+  leaves publication retryable.
+  Rationale: ADR 0022 makes the receipt the delivery source of truth and forbids a workflow
+  journal from claiming asynchronous delivery.
+  Date: 2026-08-23.
+
+- Decision: This change requires no Keiro patch or `continueAsNew`. Still run
+  `just keiro-gate HEAD` and retain wire-compatibility tests.
+  Rationale: the existing workflow step names, order, declared domain body, and journaled
+  `SinkResult` shape do not change. Process dependencies are threaded outside the journal,
+  and the new intent metadata is additive, optional, and omitted for existing sinks. The new
+  `Sink` constructor is additive; old constructors retain their encodings.
+  Date: 2026-08-23.
+
+- Decision: Keep a production-shaped Shikigami `stub-kanmon` for hermetic proofs and run the
+  real Kanmon offline host only as an optional compatibility check.
+  Rationale: tests must not depend on another checkout or service, but the local mirror
+  should periodically be checked against the authoritative implementation. The default
+  proof route is `intercom/reply_to_conversation` and response verb is
+  `conversation.reply_sent`.
+  Date: 2026-07-08; updated 2026-08-23.
 
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
-
-(To be filled during and after implementation.)
+As of 2026-08-23, Milestone 1 is complete. `ChannelEgress` now exists in the Dhall and
+Haskell declaration mirrors, maps to `SChannelEgress`, validates both route segments and a
+declared static key, and round-trips through declaration and sink-intent JSON. The proof
+manifest prints the expected constructor and validates successfully. The unchanged heartbeat
+manifest still validates, and `nix develop --command cabal test shikigami-core-test` passes
+all 502 tests, including old `AgentDecl`, `SinkIntent`, and `SinkResult` fixtures. The first
+test compile exposed only two test-import omissions; after importing the constructor fields
+and `isLeft`, the full core suite passed. The explicit temporary dispatcher result remains a
+permanent failure until Milestone 3 replaces it with Kanmon delivery.
 
 
 ## Context and Orientation
 
-This section assumes no prior repository knowledge. Shikigami (this repo,
-/Users/shinzui/Keikaku/bokuno/shikigami) is a declared-agent runtime: an agent is a typed
-Dhall value (schema at `schema/Agent.dhall`), and when a trigger fires, a worker runs the
-agent's behavior and dispatches its declared *sinks* (output destinations). A "sink" is one
-alternative of the Dhall `Sink` union (schema/Agent.dhall:43-57), mirrored one-for-one by the
-Haskell type `Sink` in shikigami-api/src/Shikigami/Api/Agent.hs:68-83 (the mirror must match
-the Dhall alternative and field names exactly or Dhall decoding fails at runtime).
+Shikigami is a declared-agent runtime. `schema/Agent.dhall` defines the operator-authored
+agent schema, and `shikigami-core/src/Shikigami/Agent/Decl.hs` mirrors it in Haskell. A
+`Sink` describes one output destination. `Shikigami.Sink.Validate` performs declaration
+checks that Dhall's structural type cannot express. The direct field names in this plan
+follow `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`: use
+`DuplicateRecordFields`, strict fields, explicit deriving, and names such as `baseUrl`,
+`kanmon`, `conversationKey`, and `triggeringActivityId`, never type-prefixed alternatives.
 
-The dispatch path has two halves. At run time, the durable agent-run workflow
-(shikigami-core/src/Shikigami/Agent/Workflow.hs) does not call sink endpoints directly: it
-journals a "sink intent" and enqueues it on keiro's transactional outbox
-(`enqueueSinkIntents`, Workflow.hs:386-440). A separate worker loop (`runOutboxPublisher`,
-shikigami-core/src/Shikigami/Worker.hs:103-112) drains the outbox and calls
-`publishSinkIntent` (Workflow.hs:561-583), which finally invokes the dispatcher
-`Shikigami.Sink.dispatch` (shikigami-core/src/Shikigami/Sink.hs:39-47). `dispatch` computes
-the sink's permission kind via `sinkKindOf` (Sink.hs:31-36), gates it with
-`checkGrant :: AgentIdentity -> SinkKind -> IO (Either Denied ())`
-(shikigami-core/src/Shikigami/Sink/Permission.hs:65-71, a static allow-list stub keyed by
-agent name), and on grant routes to the per-variant handler in `runSink` (Sink.hs:51-65).
-Each handler uses a small config record from shikigami-core/src/Shikigami/Sink/Config.hs
-(`KawaConfig`, `KizashiConfig`, `DanwaConfig`) carried in `SinkContext`
-(shikigami-core/src/Shikigami/Sink/Types.hs:29-38), and the HTTP POSTs go through the shared
-helper `postJSON` (shikigami-core/src/Shikigami/Sink/Http.hs:31-51 — note it supports no
-custom request headers today).
+Sink delivery is split across two durable phases. Producers call functions in
+`shikigami-core/src/Shikigami/Sink/Intent.hs`. That module checks principal lifecycle and
+the `(agent, sink kind)` grant, journals an `Enqueued` `SinkResult`, and writes one
+`SinkIntent` plus pending delivery receipt transactionally. Agent runs call
+`enqueueSinkIntents`; flows and conversation replies call `enqueueSinkIntentStep` or
+`prepareSinkIntent`. `SinkIntent` is the single hand-owned wire contract for every producer
+and publisher. It uses `omitNothingFields = True`.
 
-"Kanmon" (関門, /Users/shinzui/Keikaku/bokuno/kanmon — discoverable via
-`mori registry show kanmon --full`) is the platform's bidirectional channel runtime: it
-normalizes inbound provider webhooks into Activity Envelopes, and its *egress* half lets an
-authorized caller act on an external conversation. Its egress API is implemented (not merely
-specified) in kanmon-core:
+The publisher is
+`shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs`. It decodes the intent and
+calls `publishSinkIntent` in `Shikigami.Agent.Workflow`, which constructs a `SinkContext`
+and invokes `Shikigami.Sink.dispatch`. The dispatcher checks lifecycle and the current
+database grant again, so a principal pause or grant revocation after enqueue prevents the
+external effect. A pending receipt allows a send. A delivered receipt suppresses a repeat
+send. A downstream acknowledgement records `Delivered` with the returned id; a permanent
+failure records `Dead` and maps to Keiro's terminal `PublishRejected`; a transient failure
+maps to retryable `PublishFailed`.
 
-- Route: `POST /channels/{channelId}/actions/{action}` (Kanmon/Http.hs:134). 404 for an
-  unknown channel or an action not in the channel instance's declared `egress` list; 400 for
-  a malformed body.
-- Request body (`Kanmon.Egress.EgressActionRequest`, snake_case wire keys):
-  `{"conversation_key": Text, "content": Text, "idempotency_key": Text?, "triggering_activity_id": Text?}`.
-- Auth: `Authorization: Bearer <token>` verified by a `ShomeiVerifier` (today a config token
-  map, later real shomei); missing/bad token → 401 `{"error":"unauthenticated"}`.
-- Authorization: per-destination — the verified subject must be granted the
-  `conversation_key` (instance grants or a local grant table); otherwise 403
-  `{"error":"forbidden"}` (Kanmon/Egress/Authz.hs).
-- Success: 200 `{"activity_id": <uuid>, "verb": "<provider>.reply_sent"}`; kanmon calls the
-  provider, publishes the reply envelope, and records idempotency on
-  `(provider, idempotency_key)` so a retried POST with the same key returns the same
-  `activity_id` without re-sending (Kanmon/Egress.hs:100-135).
+`shikigami-core/src/Shikigami/Sink/Http.hs` owns outbound HTTP. `SinkHttp` holds
+process-lifetime clients; `HttpEnv` holds a shared manager, optional `TokenSource`, and
+request/response byte limits. `postJSONWithHeaders` injects the bearer credential and
+content type, permits only the caller's propagation headers, rethrows asynchronous
+cancellation, and returns typed `HttpFailure`. Kawa and Kizashi already share a manager;
+Kanmon should use that same direct-request client shape. Danwa remains separate because its
+generated client owns a dedicated manager.
 
-Shikigami's role per C12 (docs/initial-spec.md:334-338, :642-643, :902-904): construct the
-egress call and present its identity; **never** hold provider credentials and never name an
-arbitrary destination — kanmon enforces the destination authorization.
+`shikigami-core/src/Shikigami/App/Config.hs` is the only configuration declaration.
+`AppConfig` holds sink base URLs and optional redacted `SecretText` token values. The worker
+composition root in
+`shikigami-workers/src/Shikigami/Workers/Command/Worker.hs` lowers those values into
+`SinkCredentials`, creates `SinkHttp` once, constructs each small sink config record, and
+threads them through `WorkerEnv` and `AgentRunDeps`. The worker command preserves named URL
+flags as Settei sources. No sink module reads the environment directly.
 
-The precedent this plan follows is the kawa stub: shikigami-core/src/Shikigami/Sink/KawaStub.hs
-is a warp/wai app imitating the real kawa doorway (route, idempotency map, response shape),
-exposed as the `stub-kawa` CLI command (shikigami-cli/src/Shikigami/Cli/Commands/StubKawa.hs,
-wired in shikigami-cli/src/Shikigami/Cli.hs). The `stub-kanmon` command mirrors this exactly.
+The administrative executable is owned by `shikigami-server`. Its subcommands include
+`validate`, `enqueue-run`, `grants`, and the production `stub-kawa`. A new listener/stub
+belongs in this package according to ADR 0003. Core tests cannot import server, so a focused
+core delivery test should use a deliberately small test-only WAI application, while server
+tests exercise the actual `stub-kanmon` implementation and CLI.
 
-Terms: the "outbox" is keiro's transactional at-least-once delivery table (a sink send is
-first stored in the same transaction as the workflow journal, then published by a loop);
-"idempotency key" is the deduplication key that makes retried deliveries harmless; a
-"grant" is an (agent, sink-kind) permission entry.
+Kanmon is the platform's bidirectional channel runtime. Its canonical repository is
+`mori://shinzui/kanmon/repos/kanmon`, and its initial guide is
+`mori://shinzui/kanmon/docs/initial-spec`. The authoritative implementation currently has:
+
+- `POST /channels/{channelId}/actions/{action}`;
+- request JSON fields `conversation_key` and `content`, plus optional
+  `idempotency_key` and `triggering_activity_id`;
+- success JSON fields `activity_id` and `verb`;
+- 400 for malformed JSON, 401 for failed authentication, 403 for an unauthorized
+  conversation, and 404 for an unknown channel or action;
+- idempotency by `(provider, idempotency_key)`, returning the original activity id on a
+  duplicate; and
+- the default Intercom instance action `reply_to_conversation` and success verb
+  `conversation.reply_sent`.
+
+The relevant source-file artifact URI shape is still pending Mori coverage. Resolve the
+checkout with `mori path mori://shinzui/kanmon/repos/kanmon` and inspect project-relative
+`kanmon-core/src/Kanmon/Egress.hs`, `kanmon-core/src/Kanmon/Http.hs`,
+`docs/user/http-api.md`, `instances/intercom-support.dhall`, and
+`instances/egress-auth.dhall` before implementing or changing the mirror. Do not copy or
+import Kanmon's package: Shikigami owns a small local DTO mirror just as it does for Kawa and
+Kizashi.
+
+The workflow rules that constrain this work are in `docs/workflow-versioning.md`.
+[ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) governs patches
+for declared workflow-body changes;
+[ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) assigns
+asynchronous delivery truth to receipts;
+[ADR 0026](../adr/0026-outbound-sink-credentials-stay-opaque-and-http-policy-lives-at-the-process-boundary.md)
+governs outbound credentials and HTTP;
+[ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) forbids declaring runtime
+mappings that the executable does not use; and
+[ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md) fixes package
+ownership. This plan does not add a fake Keiro DSL mapping for `SinkIntent`, because it
+remains a hand-owned outbox wire type rather than a declared workflow input or result.
 
 
 ## Plan of Work
 
-The work proceeds in four milestones. Everything is additive; no existing sink's behavior
-changes.
+### Milestone 1 — Declaration, validation, and compatibility
 
-### Milestone 1 — The `ChannelEgress` declaration surface
-
-Scope: an agent manifest can declare the sink and it decodes; nothing dispatches yet. In
-schema/Agent.dhall, add a fifth alternative to the `Sink` union (after `DanwaConversation`):
+Add a fifth alternative to `Sink` in `schema/Agent.dhall`, after
+`DanwaConversation`:
 
 ```dhall
 | ChannelEgress :
-    { channel : Text                    -- kanmon channel id, e.g. "intercom"
-    , action : Text                     -- declared egress action, e.g. "reply"
-    , conversationKey : Optional Text   -- static destination; None = resolve from payload/output
+    { channel : Text
+    , action : Text
+    , conversationKey : Optional Text
     }
 ```
 
-Mirror it in shikigami-api/src/Shikigami/Api/Agent.hs by adding a constructor to `Sink`:
+Add the exact Haskell mirror to `shikigami-core/src/Shikigami/Agent/Decl.hs`:
 
 ```haskell
-| ChannelEgress {channel :: !Text, action :: !Text, conversationKey :: !(Maybe Text)}
+| ChannelEgress
+    { channel :: !Text
+    , action :: !Text
+    , conversationKey :: !(Maybe Text)
+    }
 ```
 
-(the module already uses `DuplicateRecordFields`-style overlapping selectors across `Sink`
-constructors — `subjectType`, `source`, `topic` — so the new field names are safe). In
-shikigami-core/src/Shikigami/Sink.hs extend `sinkKindOf` with
-`ChannelEgress {} -> SChannelEgress` — `SChannelEgress` already exists
-(Permission.hs:25-31), so `SinkKind` does not change. GHC's incomplete-pattern warnings will
-point at every other `case` over `Sink` that needs an arm (at minimum `runSink`, handled in
-M3 — until then give it a temporary `Failed "ChannelEgress not wired"` arm so the build stays
-green and honest).
+Extend every total `Sink` match. `sinkKindOf` maps the new constructor to the already
+existing `SChannelEgress`. Add a real dispatcher arm only in Milestone 3; while working
+incrementally, a temporary explicit `PermanentFailure "ChannelEgress is not wired"` keeps
+the match total and prevents false delivery.
 
-Create the proof manifest `agents/proof/channel-reply.dhall`:
+Extend `Shikigami.Sink.Validate` with an exported
+`validateKanmonRouteSegment :: Text -> Either Text Text`. Both `channel` and
+`action` must be non-empty and contain only `[A-Za-z0-9._-]`. A `Some` conversation key must
+remain non-empty after stripping whitespace. Report declaration errors with the field name,
+following the existing validation style. Add valid and invalid Dhall fixtures or direct
+declaration tests covering empty values, a slash, a query marker, and
+`reply_to_conversation`. The client must call this same helper again at the durable publish
+boundary; startup validation alone is not permission to trust a stored or hand-built intent.
+
+Add constructor JSON round trips and Dhall decode tests. In
+`Shikigami.WireCompatSpec`, pin that previously stored `SinkResult`, `AgentDecl`, and old
+`SinkIntent` fixtures still decode. Do not change old golden bytes. The additive union arm
+must not alter JSON for any existing constructor.
+
+Create `agents/proof/channel-reply.dhall` from a current proof manifest, using the
+`noop-summary` Shikumi program, an Event trigger, and:
 
 ```dhall
-let A = ../../schema/Agent.dhall
-
-in  A.Agent::{
-    , name = "channel-reply"
-    , description = "Proof agent: replies to the triggering external conversation via kanmon egress"
-    , behavior =
-        A.Behavior.ShikumiProgram
-          { task = "noop-summary"
-          , preferEnrichment = False
-          , grounding = None Text
-          , enabledBy = None Text
-          }
-    , trigger = A.Trigger.Event { eventType = "channel.intercom.message-received" }
-    , sinks =
-        [ A.Sink.ChannelEgress
-            { channel = "intercom", action = "reply", conversationKey = None Text }
-        ]
-    }
+, sinks =
+    [ A.Sink.ChannelEgress
+        { channel = "intercom"
+        , action = "reply_to_conversation"
+        , conversationKey = None Text
+        }
+    ]
 ```
 
-Acceptance: `cabal run shikigami -- validate agents/proof/channel-reply.dhall` prints the
-decoded manifest and `OK: 1 agent parsed.`; `cabal run shikigami -- validate
-agents/heartbeat.dhall` is byte-identical to before (proving the union extension is
-backward-compatible).
+This milestone is complete when the new proof manifest validates, the invalid declarations
+fail for the intended reason, all existing agent fixtures still load, and the compatibility
+tests pass.
 
-### Milestone 2 — `KanmonConfig` and the `KanmonClient`
 
-Scope: a pure, unit-testable client for kanmon's wire contract. Consume the canonical
-helper from plan 22 in `shikigami-core/src/Shikigami/Sink/Http.hs`:
+### Milestone 2 — Wire client, authenticated HTTP, and configuration
 
-```haskell
-postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [(HeaderName, ByteString)] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
-```
-
-Do not add another helper. Plan 22 already composes the `HttpEnv` token with caller headers
-and defines `postJSON env = postJSONWithHeaders env []`. In
-shikigami-core/src/Shikigami/Sink/Config.hs add:
+Add the shared local DTOs to `shikigami-core/src/Shikigami/Sink/Wire.hs`, using generic
+snake-case JSON options:
 
 ```haskell
-data KanmonConfig = KanmonConfig
-  { baseUrl :: !Text -- e.g. "http://localhost:8090"
+data EgressActionRequest = EgressActionRequest
+  { conversationKey :: !Text
+  , content :: !Text
+  , idempotencyKey :: !(Maybe Text)
+  , triggeringActivityId :: !(Maybe Text)
   }
-  deriving stock (Eq, Show)
+
+data EgressActionResponse = EgressActionResponse
+  { activityId :: !Text
+  , verb :: !Text
+  }
 ```
 
-New module shikigami-core/src/Shikigami/Sink/KanmonClient.hs with three pieces. First the wire
-types (snake_case, matching Kanmon.Egress exactly — write the ToJSON/FromJSON instances by
-hand or with field-label modifiers so the keys are `conversation_key`, `content`,
-`idempotency_key`, `triggering_activity_id`, `activity_id`, `verb`). Second the pure builder:
+Add `KanmonConfig { baseUrl :: !Text }` to `Shikigami.Sink.Config`. Add
+`Shikigami.Sink.KanmonClient` with this public surface:
 
 ```haskell
-buildEgressRequest ::
-  Sink ->                      -- the ChannelEgress variant (crash-free: callers match first)
-  Text ->                      -- idempotency key (mkSourceEventId of the SinkContext)
-  Maybe ActivityEnvelope ->    -- the trigger activity, when the payload parses as one
-  Value ->                     -- the behavior output
-  Either Text EgressActionRequest
+data KanmonError
+  = KanmonHttpError !HttpFailure
+  | KanmonDecodeError !Text
+  | KanmonUsageError !Text
+
+resolveConversationKey :: Sink -> Maybe ActivityEnvelope -> Value -> Maybe Text
+buildEgressRequest :: SinkContext -> Value -> Either Text EgressActionRequest
+postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
+postEgressWithHeaders :: HttpEnv -> [Header] -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
+renderKanmonError :: KanmonError -> Text
 ```
 
-which resolves `conversation_key` per the Decision Log (declared key, else output
-`conversation_key` field, else the activity's `subject.subjectId`, else
-`Left "channel egress: no conversation key"`), resolves `content` (output's
-`reply`/`content`/`summary` string field, else compact JSON), and sets
-`triggering_activity_id` from the activity's `activityId`. Third the sender:
+`resolveConversationKey` implements the declared/output/activity precedence and ignores
+empty candidates. The intent producer will call it while the triggering activity is in
+scope. `buildEgressRequest` reads the already resolved `conversationKey` and
+`triggeringActivityId` from `SinkContext`, derives content, and sets the deterministic
+idempotency key. It returns `Left` rather than throwing if a caller somehow publishes an old
+or malformed ChannelEgress intent without a key. `postEgressWithHeaders` calls the existing
+`postJSONWithHeaders` and decodes `EgressActionResponse`; `postEgress` supplies no propagation
+headers. It revalidates `channel` and `action` with `validateKanmonRouteSegment` before URL
+construction; an invalid durable route becomes `KanmonUsageError`. Neither function retries.
+`KanmonError` rendering must not include request content, tokens, or response bodies.
+
+Extend `SinkCredentials` with `kanmon :: !(Maybe TokenSource)` and `SinkHttp` with
+`kanmon :: !HttpEnv`. `credentialsFromConfig` converts `kanmonToken`; `newSinkHttp` creates
+the Kanmon environment on the existing shared manager used by the direct HTTP sinks. Update
+constructor sites and tests so a missing token is allowed, a present token produces the
+expected authorization header, caller headers cannot override it, trace headers propagate,
+and credential lookup failure retains ADR 0026's transient classification.
+
+Extend `Shikigami.App.Config` with direct fields `kanmonBaseUrl :: !Text` and
+`kanmonToken :: !(Maybe SecretText)`. Declare:
+
+```text
+sinks.kanmon.base_url                    default http://localhost:8090
+credentials.sinks.kanmon.token           optional secret, no default
+SHIKIGAMI_SINKS_KANMON_BASE_URL           explicit base-URL binding
+SHIKIGAMI_KANMON_TOKEN                    explicit secret binding
+```
+
+Export the stable keys. Add `--kanmon-url` to only `shikigami-worker`, as a named Settei
+source for `sinks.kanmon.base_url`. Extend `AppConfigSpec`, worker help/config tests, secret
+redaction tests, `config/shikigami.example.yaml`, and
+`docs/operations/configuration.md`. Keep the token out of help, logs, non-secret example
+files, and command arguments. The worker's bounded startup log may add only
+`"kanmon": "none" | "token"` to the existing credential-presence event.
+
+Construct `KanmonConfig` in `Shikigami.Workers.Command.Worker` and thread it through direct
+`kanmon` fields on `WorkerEnv`, `AgentRunDeps`, and `SinkContext`. This is process dependency
+wiring, not durable workflow input. Update all strict record constructors; do not make the
+dependency optional merely to reduce compiler errors.
+
+This milestone is complete when request/response JSON exactly matches Kanmon, an
+authenticated request carries the allowlisted trace headers and configured bearer token,
+all config diagnostics show the new public key and redact the secret key, and no client or
+command reads an environment variable directly.
+
+
+### Milestone 3 — Durable intent metadata and dispatch
+
+Extend the one `SinkIntent` in `Shikigami.Sink.Intent` and `SinkContext` with:
 
 ```haskell
-postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either EgressFailure EgressActionResponse)
+conversationKey :: !(Maybe Text)
+triggeringActivityId :: !(Maybe Text)
 ```
 
-which POSTs to `<baseUrl>/channels/<channel>/actions/<action>` via
-`postJSONWithHeaders httpEnv []`, decodes the 200 body, and renders non-2xx as
-a typed permanent/transient error. 400/401/403/404 are terminal/dead-lettered; 429 and
-retryable 5xx/network failures use the shared bounded retry policy. The idempotency key
-makes transient retry safe.
+Keep `sinkIntentOptions = defaultOptions { omitNothingFields = True }`. In
+`enqueueSinkIntents`, resolve the values from each sink, the actual activity, and the
+behavior output before constructing the intent. Refactor `enqueueSinkIntentStep` and
+`prepareSinkIntent` to accept `Maybe ActivityEnvelope` rather than an already-resolved
+recipient. Inside the single preparation owner, derive both the existing
+`resolvedRecipient` and the new egress metadata. Flow `SinkEnv` passes its current
+`activity`; conversation reply code passes `Nothing`. This removes caller-specific intent
+preparation and ensures any future producer gets the same precedence.
 
-Acceptance: pure unit tests in shikigami-core/test/Main.hs assert (a) declared-key,
-output-key, and subject-fallback resolution; (b) the JSON encoding uses the exact snake_case
-keys; (c) missing key yields `Left`. `cabal test shikigami-core` passes.
+Add three compatibility assertions to `SinkIntentSpec` and `WireCompatSpec`: an old fixture
+decodes both new fields as `Nothing`; encoding a non-egress intent is byte-for-byte unchanged;
+and a new ChannelEgress intent round-trips its resolved key and activity id. The full activity
+must not appear in encoded intent JSON.
 
-### Milestone 3 — Dispatcher arm and configuration plumbing
+Replace the temporary dispatch arm in `Shikigami.Sink.runSink`. For
+`ChannelEgress {channel, action}`, call `buildEgressRequest ctx output`, then
+`postEgressWithHeaders (http ctx ^. #kanmon) (traceHeaders ctx) (kanmon ctx) channel action`.
+Map success to `Delivered response.activityId`. Map `KanmonHttpError` through the existing
+HTTP classifier and both `KanmonDecodeError` and `KanmonUsageError` to
+`PermanentFailure`. Map request-construction failure to `PermanentFailure`. Reuse
+`classifiedFailure`; do not introduce an overlapping egress failure taxonomy.
 
-Scope: a granted `ChannelEgress` sink actually sends. Add `kanmon :: !KanmonConfig` to
-`SinkContext` (Sink/Types.hs:29-38), to `AgentRunDeps` (Workflow.hs:79-89), and to
-`WorkerEnv` (Worker.hs:55-63); thread it in `agentRunDeps` (Worker.hs:194-206) and in
-`publishSinkIntent`'s `SinkContext` construction (Workflow.hs:566-578). The `SinkIntent`
-payload already carries the full `Sink` and `output` values, so most of the wire is in place;
-what is missing is the trigger activity (source of `triggering_activity_id` and the
-subject-id fallback key). Extend the internal `SinkIntent` record (Workflow.hs:96-104) with
-`triggeringActivity :: !(Maybe ActivityEnvelope)` — an additive `Maybe` field, so
-already-enqueued intents decode as `Nothing` — populated in `buildSinkIntent` (and left
-`Nothing` in `prepareSinkIntent`'s flow/conversation path) by parsing the job's
-`triggerPayload` as an `ActivityEnvelope`. Mirror it as
-`triggeringActivity :: !(Maybe ActivityEnvelope)` on `SinkContext` so the handler can reach
-it.
+Add focused dispatcher tests for request construction, success id retention, trace
+propagation, retryable 429/5xx/transport failure, permanent 400/401/403/404 and decode
+failure, and a missing resolved conversation key. Logs may include agent, run id, sink kind,
+channel, action, status/classification, and downstream activity id. They must not include
+content, conversation key, bearer token, or raw bodies.
 
-Replace M1's placeholder arm in `runSink` (Sink.hs:51-65):
+Before finishing the milestone, review `docs/workflow-versioning.md` against the actual diff.
+The intended result has no step-name/order/result or declared workflow-body change, so do not
+add a patch id or call `continueAsNew`. Run `just keiro-gate HEAD`; if the implementation
+does alter a journaled step shape, stop and revise this plan before bypassing the gate.
+
+This milestone is complete when an enqueued ChannelEgress intent has only the resolved
+minimal metadata, the workflow journal says `Enqueued`, successful publication records the
+Kanmon activity id in a delivered receipt, and permanent and transient failures reach the
+existing publisher outcomes correctly.
+
+
+### Milestone 4 — Stub, end-to-end proof, and documentation
+
+Add `shikigami-server/src/Shikigami/Sink/KanmonStub.hs` and
+`Shikigami.Server.Command.StubKanmon`. The production-shaped stub handles only
+`POST /channels/{channel}/actions/{action}` and shares the DTOs in
+`Shikigami.Sink.Wire`. A suitable options record is:
 
 ```haskell
-ChannelEgress {} ->
-  case buildEgressRequest sink (mkSourceEventId ctx) (triggeringActivity ctx) output of
-    Left e -> pure (Failed e)
-    Right req -> do
-      r <- postEgress (kanmon (http ctx)) (kanmon ctx) channel action req
-      pure (either sinkOutcomeForEgressFailure (Delivered . activityId) r)
+data StubKanmonOptions = StubKanmonOptions
+  { port :: !Int
+  , requireToken :: !(Maybe BearerToken)
+  , allowedConversations :: !(Set Text)
+  }
 ```
 
-`sinkOutcomeForEgressFailure` maps permanent HTTP/auth/routing/protocol failures to plan
-19's additive `PermanentFailure` and transient timeout/network/429/5xx failures to `Failed`.
-The outbox framework then owns terminal versus retry state through
-`PublishRejected`/`PublishFailed`; this module never updates Keiro tables.
+Register `shikigami stub-kanmon --port PORT [--allow-conversation KEY]`. Port and repeated
+conversation allow-list values are invocation arguments; the token comes only from
+`Config.kanmonToken`. Default the proof allow-list to `conv_55012` when the option is absent,
+and accept only the fixed `intercom/reply_to_conversation` route unless the implementation
+adds an equally small explicit route allow-list. Authenticate before reading the body.
+Return the repository's RFC 9457 401 response for a missing or wrong token, 400 for malformed
+JSON, 404 for an unrecognized channel/action, 403 for a conversation outside the allow-list,
+and 200 with the exact `EgressActionResponse`.
 
-Extend plan 37's Settei declaration with the stable kanmon base-URL and credential-reference
-settings plus explicit legacy bindings. Extend plan 22's duplicate-record surfaces with
-`kanmon :: !(Maybe TokenSource)` on `SinkCredentials` and `kanmon :: !HttpEnv` on
-`SinkHttp`; the worker composition root receives the already-resolved values and no command
-module reads the environment. Grant the proof agent in
-`defaultGrantTable` (Permission.hs:53-61): add
-`("channel-reply", Set.fromList [SChannelEgress])`. Do not grant anyone else — the denial
-proof relies on that.
+Maintain an in-memory map keyed by `(channel, idempotency_key)` and an accepted-effect
+counter or inspectable log. A duplicate returns the original activity id and does not
+increment accepted effects. No idempotency key means a fresh effect, matching Kanmon. Mint
+bounded fixture ids and log metadata only; never log content, the conversation key, or a
+credential. Document that the in-memory map clears on restart, as does Kanmon's current
+offline store.
 
-Acceptance: `cabal build all` clean; the M4 end-to-end scenario is now wired end to end.
+Server tests exercise the production stub: success shape, authentication before body
+parsing, 400, 403, 404, and same-id dedup. Command tests pin registration, `--port`,
+`--allow-conversation`, and absence of a token flag. Core tests use a small test-only WAI app
+rather than importing `shikigami-server` against the package direction.
 
-### Milestone 4 — `stub-kanmon` and the living-loop proof
+Extend the database-backed `Shikigami.SinkDeliverySpec` with one complete agent-run path.
+Insert `channel-reply -> SChannelEgress` through `upsertGrant`; do not rely on seed or static
+grants. Use a complete `ActivityEnvelope` whose subject id is `conv_55012`. Assert:
 
-Scope: a hermetic, observable end-to-end demonstration plus regression tests. New module
-shikigami-core/src/Shikigami/Sink/KanmonStub.hs modeled line-for-line on KawaStub.hs: a wai
-`Application` handling `POST /channels/{channel}/actions/{action}` that (a) checks
-`Authorization: Bearer <token>` when a credential reference is configured and resolved at the
-stub composition root (else accepts), returning 401 on
-mismatch; (b) returns 404 unless the channel/action pair is in a small configured allow list
-(default: `intercom`/`reply`); (c) keeps an in-memory `IORef (Map (Text, Text) Text)` from
-`(channel, idempotency_key)` to the minted activity id, returning the stored id on a
-duplicate; (d) responds 200 `{"activity_id": ..., "verb": "conversation.reply_sent"}` and
-logs one bounded line per accepted action without bodies or credentials. Place the dev stub
-executable component in `shikigami-server` per plan 36, expose
-`runStubKanmon :: StubKanmonOptions -> IO ()`, and register `stub-kanmon`. Its port and optional
-credential reference are Settei settings; there is no raw `--token` or environment read.
+1. enqueue journals `Enqueued`, creates one outbox message, and records a pending receipt;
+2. first publication makes one HTTP action and records `Delivered` with the response
+   activity id;
+3. publishing the same row again makes no HTTP request because the local delivered receipt
+   is authoritative;
+4. two direct posts with the same idempotency key produce one stub-visible accepted effect
+   and the same response id, independently proving downstream dedup;
+5. a 403 records a dead receipt and maps to `PublishRejected`;
+6. an ungranted agent gets `DeniedOutcome`, no outbox row, no receipt, and no HTTP request.
 
-Tests, in shikigami-core/test/Main.hs (WAI level, `testWithApplication`, like the existing
-kawa stub tests): 200 + dedup on repeated `idempotency_key`; 401 with a wrong token; 404 for
-an undeclared action. And one database-backed test in
-shikigami-core/test/Shikigami/AgentWorkflowSpec.hs style using
-`withShikigamiMigratedDatabase`: run the agent-run workflow for `channel-reply`, assert the
-journal records a `dispatch-sinks` result with kind `SChannelEgress` and outcome
-`Delivered "outbox:..."`, then drive `publishSinkIntent` against the stub and assert the stub
-received exactly one action; re-publish the same outbox row and assert the stub's map still
-has one entry (idempotency). A second workflow run for an ungranted agent (`intruder` is
-already the conventional name) asserts `DeniedOutcome`.
+Update `docs/user/sinks.md` with the declaration, resolution precedence, database grant,
+delivery-receipt truth, failure classification, and credential boundary. Update the sink
+list in `docs/user/writing-agents.md`, the administrative command list in
+`docs/operations/operator-cli.md`, the package/command table in
+`docs/architecture/packages.md`, the Settei table in
+`docs/operations/configuration.md`, and the example YAML. Correct nearby stale claims about
+static grants or a workflow result being `Delivered` when encountered in these owned
+sections.
 
-Acceptance: the Concrete Steps transcript below reproduces exactly.
+This milestone is complete after the hermetic transcript below succeeds and the optional
+real-Kanmon check returns the same response shape without code changes.
 
 
 ## Concrete Steps
 
-All commands run from the repo root `/Users/shinzui/Keikaku/bokuno/shikigami`, inside the Nix
-dev shell (`nix develop` provides ghc, cabal, dhall, just, and a Postgres toolchain). The
-database-backed pieces need `just create-database` once (idempotent).
-
-Step 1 — baseline before edits:
+Run commands from the repository root. Use the Nix development environment so GHC, Cabal,
+Dhall, PostgreSQL tools, and `just` match CI. Begin by recording the worktree and baseline:
 
 ```bash
-cabal build all
-cabal run shikigami -- validate agents/heartbeat.dhall
+git status --short
+nix develop --command cabal build all
+nix develop --command cabal run shikigami -- validate agents/heartbeat.dhall
 ```
 
-Expected: the decoded `AgentDecl` for heartbeat and `OK: 1 agent parsed.`.
-
-Step 2 — after M1:
+After Milestone 1, validate both new and existing declarations:
 
 ```bash
-cabal run shikigami -- validate agents/proof/channel-reply.dhall
+nix develop --command cabal run shikigami -- validate agents/proof/channel-reply.dhall
+nix develop --command cabal run shikigami -- validate agents/heartbeat.dhall
+nix develop --command cabal test shikigami-core-test --test-options='--pattern Agent'
 ```
 
-Expected (shape):
+Expected new shape includes:
 
 ```text
-AgentDecl {name = "channel-reply", ..., sinks = [ChannelEgress {channel = "intercom", action = "reply", conversationKey = Nothing}]}
+ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}
 OK: 1 agent parsed.
 ```
 
-Step 3 — after M2/M3, build and unit-test:
+After Milestones 2 and 3, run the focused suites and workflow gate:
 
 ```bash
-cabal build all
-cabal test shikigami-core
+nix develop --command cabal build all
+nix develop --command cabal test shikigami-core-test shikigami-workers-test
+nix develop --command cabal run shikigami-worker -- --describe-config
+nix develop --command cabal run shikigami-worker -- --check-config
+nix develop --command just keiro-gate HEAD
 ```
 
-Expected: all suites pass, including the new `KanmonClient` request-shape assertions.
+The described config must contain `sinks.kanmon.base_url` and the secret Kanmon token key
+without a value. `--check-config` must not open the database in diagnostic mode. The Keiro
+gate should report that no patch is needed; record any different result in Surprises before
+proceeding.
 
-Step 4 — after M4, the end-to-end proof. Terminal 1, the stub:
+After Milestone 4, prepare the local database and grant. The dev-shell connection string is
+used by both commands:
 
 ```bash
-cabal run shikigami -- stub-kanmon --config config/stub-kanmon-auth.yaml
+nix develop --command just create-database
+nix develop --command cabal run shikigami -- grants grant channel-reply ChannelEgress --by local-proof
+nix develop --command cabal run shikigami -- grants list
 ```
 
-Terminal 2, the worker (database and sink settings come through the plan-37 Settei source):
+For the live hermetic proof, use the fixture token only in the process environment; do not
+put it in a tracked YAML file. Terminal A runs the stub:
 
 ```bash
-cabal run shikigami-worker -- --config config/channel-egress-proof.yaml
+SHIKIGAMI_KANMON_TOKEN=test-token nix develop --command cabal run shikigami -- stub-kanmon --port 8090 --allow-conversation conv_55012
 ```
 
-Terminal 3, enqueue a run whose payload carries a conversation key:
+Terminal B runs only proof manifests and points the worker at the stub:
 
 ```bash
-cabal run shikigami -- enqueue-run channel-reply --payload '{"conversation_key":"conv-42","text":"customer asked for an update"}'
+SHIKIGAMI_KANMON_TOKEN=test-token nix develop --command cabal run shikigami-worker -- --agents agents/proof --kanmon-url http://127.0.0.1:8090
 ```
 
-Expected: terminal 1 logs one accepted action for `intercom/reply` with
-`conversation_key=conv-42` and prints the minted activity id; terminal 2 logs the workflow
-completing and the outbox publish succeeding. Re-running the same `enqueue-run` command
-re-uses the same idempotency key path only if the same run id is replayed — to observe dedup
-directly, kill and restart the worker mid-publish or re-run the M4 test, which asserts the
-stub's idempotency map holds a single entry after a double publish.
-
-Step 5 — regression:
+Terminal C enqueues a complete activity, with a stable run key:
 
 ```bash
-cabal test all
+nix develop --command cabal run shikigami -- enqueue-run channel-reply --key channel-egress-proof-1 --payload '{"activity_id":"act_channel_1","occurred_at":"2026-08-23T12:00:00Z","source":"external/intercom","actor":{"kind":"human","id":"person_42"},"subject":{"type":"conversation","id":"conv_55012"},"verb":"conversation.message_received","payload":{"text":"Could I get an update?"},"context_refs":[],"idempotency_key":"intercom-message-1"}'
 ```
 
-Expected: green, including the workflow-level Delivered/Denied/dedup assertions.
+Terminal A should log one accepted `intercom/reply_to_conversation` effect without content,
+conversation key, or token. Terminal B should show an enqueued sink followed by successful
+publication. Query Shikigami's own receipt table and verify that its outcome is delivered
+with the returned activity id:
+
+```bash
+nix develop --command psql postgresql:///shikigami -x -c "SELECT outbox_message_id, run_id, sink_kind, status, detail FROM shikigami.sink_deliveries WHERE agent = 'channel-reply' ORDER BY updated_at DESC LIMIT 1"
+```
+
+Re-enqueuing with the same
+`--key` must not create a second workflow run; downstream duplicate behavior is proven by
+the focused test because local delivered receipts intentionally suppress a second HTTP call.
+
+Run the focused core, server, and worker suites, then the hermetic regression suite
+sequentially; the repository's timing-sensitive database tests are more stable at `-j1`:
+
+```bash
+nix develop --command cabal test shikigami-core-test shikigami-server-test shikigami-workers-test
+nix develop --command cabal test all -j1
+```
+
+Optionally check the mirror against real Kanmon. Resolve its checkout through Mori rather
+than embedding a machine path:
+
+```bash
+kanmon_repo="$(mori path mori://shinzui/kanmon/repos/kanmon)"
+cd "$kanmon_repo"
+nix develop --command cabal run kanmon -- serve --port 8090
+```
+
+Kanmon's offline fixtures currently accept token `test-token`, conversation `conv_55012`,
+and action `reply_to_conversation`. Point the same Shikigami worker at that host. A 200
+response must decode to the same `{activity_id, verb}` DTO. This compatibility check is
+informative and must not make the Shikigami test suite depend on the Kanmon checkout.
 
 
 ## Validation and Acceptance
 
-Acceptance is behavioral. Given `agents/proof/channel-reply.dhall` (a `ChannelEgress` sink,
-channel `intercom`, action `reply`, no static key), the static grant
-`channel-reply → {SChannelEgress}`, and `stub-kanmon` on port 8090 with a matching opaque
-test credential supplied by its secret source:
+Acceptance is behavioral and must be demonstrated by tests, not inferred from compilation.
 
-1. Enqueuing a run with payload `{"conversation_key":"conv-42", ...}` results in the stub
-   receiving `POST /channels/intercom/actions/reply` with body
-   `{"conversation_key":"conv-42","content":...,"idempotency_key":"channel-reply:<runId>:0",...}`
-   and the run's journal recording `Delivered "outbox:..."` for kind `SChannelEgress`.
-2. Publishing the same outbox message twice results in exactly one provider-visible action:
-   the stub's `(channel, idempotency_key)` map has one entry and both publishes return the
-   same `activity_id`.
-3. An agent without the grant gets `DeniedOutcome` with reason
-   `agent 'intruder' is not granted ChannelEgress`, the run does not fail, and nothing is
-   POSTed (the existing denied-sink contract: logged, skipped, recorded).
-4. A wrong resolved credential yields 401 from the stub and is classified as a permanent
-   authorization failure: it is durably surfaced and not retried. A timeout, network error,
-   429, or 5xx remains transient and follows the bounded retry/DLQ policy.
-5. All prior manifests validate unchanged: `cabal run shikigami -- validate
-   agents/heartbeat.dhall` output is identical to the pre-change baseline.
+1. A valid `ChannelEgress` declaration loads from Dhall and JSON, maps to
+   `SChannelEgress`, and keeps every old declaration and golden encoding unchanged. Unsafe
+   or empty channel/action values and an explicitly empty conversation key are rejected at
+   validation.
 
-Exact test commands: `cabal test shikigami-core` (unit + WAI stub tests; hermetic) and
-`cabal test all` (includes the `withShikigamiMigratedDatabase`-backed workflow tests, which
-require the dev-shell Postgres and `just create-database`).
+2. For a database-granted agent and an activity whose subject id is `conv_55012`, enqueue
+   writes a single intent containing `conversationKey = Just "conv_55012"` and
+   `triggeringActivityId = Just "act_channel_1"`; it does not serialize the full activity.
+   The workflow's journaled sink outcome is `Enqueued`, never `Delivered`.
+
+3. Publication sends exactly
+   `POST /channels/intercom/actions/reply_to_conversation`, preserves allowed trace headers,
+   uses the configured opaque bearer token, and encodes:
+
+```json
+{
+  "conversation_key": "conv_55012",
+  "content": "...",
+  "idempotency_key": "channel-reply:<runId>:0",
+  "triggering_activity_id": "act_channel_1"
+}
+```
+
+4. A 200 response stores its `activity_id` in a delivered receipt. A subsequent attempt to
+   publish that Shikigami outbox row performs zero HTTP requests. Separately, two direct
+   requests with the same idempotency key cause one stub-visible accepted effect and return
+   the same id, proving Kanmon's crash-window defense.
+
+5. HTTP 400/401/403/404, a malformed success response, and a locally missing conversation
+   key become permanent rejection and a dead receipt. HTTP 408/425/429, 5xx, and transport
+   failures remain retryable. Credential-source lookup failure remains retryable. No error
+   or log contains token, content, conversation key, or raw response body.
+
+6. Without a current database grant, enqueue returns `DeniedOutcome`, creates no outbox row
+   or delivery receipt, and sends nothing. Revoking a grant after enqueue prevents publish
+   because the publisher checks the database again.
+
+7. `stub-kanmon` enforces auth before parsing, exact routes, destination authorization, JSON
+   shape, and dedup. Its CLI exposes no token option. The optional real-Kanmon check requires
+   no client or schema change.
+
+8. `cabal build all`, focused core/server/worker tests, `cabal test all -j1`, config
+   diagnostics, and `just keiro-gate HEAD` pass. The final Progress and Outcomes sections
+   record the exact commands and results.
 
 
 ## Idempotence and Recovery
 
-Every edit is additive (a new union alternative with mirrored constructor, a new config
-field, new modules, a new CLI command); re-applying the steps is a no-op, and agents that do
-not declare `ChannelEgress` are untouched. The dispatch path inherits the existing outbox
-semantics: the intent is journaled and enqueued transactionally, so a crash between journal
-and publish re-publishes on recovery, and the deterministic idempotency key
-(`agent:runId:ordinal`) makes the re-send harmless at kanmon (and at the stub). If M3's
-`SinkContext` change breaks a call site, the compiler lists every constructor site — fix them
-all before proceeding; there is no partial-wiring hazard because the M1 placeholder arm keeps
-`runSink` total. Rollback: revert the dispatcher arm to the placeholder and remove the sink
-from manifests; the schema alternative can remain (unused alternatives are inert).
+The implementation is additive and can be applied incrementally. New optional intent fields
+decode as `Nothing` for already-enqueued messages and are omitted for old sink kinds. A
+temporary explicit permanent-failure dispatcher arm keeps the build honest between the
+declaration and transport milestones. Compiler errors from strict dependency records are a
+checklist of composition sites; fix every constructor rather than inserting defaults.
 
+Database grant creation is idempotent through `grants grant`/`upsertGrant`. Repeating the
+manual enqueue with the same `--key` reuses the durable workflow identity. If a worker
+crashes before HTTP, the outbox retries. If it crashes after Kanmon accepts but before the
+delivered receipt commits, the stable `agent:runId:ordinal` key lets Kanmon return the first
+activity id without repeating the provider effect. Once the receipt is delivered,
+Shikigami skips the network call itself.
 
-## Portfolio Reconciliation (2026-07-30)
+A rejected or malformed durable intent cannot be repaired by retry and is terminal. To
+retry after fixing a declaration, enqueue a new logical run with a new run key. A 429, 5xx,
+transport outage, or unavailable credential source stays retryable and needs no manual row
+rewrite. The stub's in-memory idempotency state is intentionally ephemeral; restart it only
+between proof scenarios, not during a dedup assertion.
 
-This plan hard-depends on plans 19, 22, 36, 37, and 47. It consumes Keiro IR-3's terminal
-rejection outcome through plan 19 and extends plan 22's HTTP/auth records instead of creating a
-Kanmon-specific request stack. Plan 21 and plan 27 remain preferred landing predecessors.
+Rollback does not require rewriting journals. Stop declaring `ChannelEgress` and revoke the
+database grant. The additive schema constructor, optional decoder fields, config keys, and
+stub command may remain inert. Do not delete the constructor or optional fields after they
+have appeared in durable data; removal would require a separate workflow/wire migration
+plan.
 
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 19, 22, 36, and 37. Plan 19 owns the receipt/failure taxonomy and
-Keiro terminal `PublishRejected` mapping consumed here.
+The landed local plans consumed here are:
 
-Owned and defined by this plan (all in this repo):
+- `docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md` for delivery truth
+  and Keiro terminal rejection;
+- `docs/plans/21-database-backed-sink-permission-grants.md` for `DbGrants`, grant storage,
+  and administrative verbs;
+- `docs/plans/22-outbound-authentication-for-sink-clients.md` for `TokenSource`, `HttpEnv`,
+  bounded requests, trace/header policy, and `HttpFailure` classification;
+- `docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` for the one
+  hand-owned durable `SinkIntent` and preparation path;
+- `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` plus the current
+  package map in `docs/architecture/packages.md` for ownership; and
+- `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md` for the one typed
+  configuration declaration and diagnostic surface.
 
-- `schema/Agent.dhall` — the `ChannelEgress` alternative on `Sink` (shape in the Decision Log).
-- `Shikigami.Api.Agent` (shikigami-api) —
-  `ChannelEgress {channel :: !Text, action :: !Text, conversationKey :: !(Maybe Text)}` on `Sink`.
-- `Shikigami.Sink.Http` — consume plan 22's typed `postJSONWithHeaders`, preserving
-  `HttpFailure` permanent/transient classification.
-- `Shikigami.Sink.Config` — `data KanmonConfig = KanmonConfig {baseUrl :: !Text}`.
-- `Shikigami.Sink.Auth` — extend `SinkCredentials` with
-  `kanmon :: Maybe TokenSource` and `SinkHttp` with `kanmon :: HttpEnv`; plan 37's Settei config supplies a
-  credential reference with an explicit legacy `SHIKIGAMI_KANMON_TOKEN` binding.
-- `Shikigami.Sink.KanmonClient` — `EgressActionRequest`/`EgressActionResponse` wire types
-  (snake_case keys matching Kanmon.Egress),
-  `buildEgressRequest :: Sink -> Text -> Maybe ActivityEnvelope -> Value -> Either Text EgressActionRequest`,
-  `postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either EgressFailure EgressActionResponse)`.
-- `Shikigami.Sink` — `sinkKindOf (ChannelEgress {}) = SChannelEgress`; the `runSink` arm.
-- `shikigami-server`'s Kanmon test-stub vertical — `StubKanmonOptions`,
-  `stubKanmonApplication`, `runStubKanmon`; command `stub-kanmon --config ...`, with only a
-  credential reference admitted to configuration.
-- `Shikigami.Sink.Types` / `Shikigami.Agent.Workflow` / `Shikigami.Worker` / CLI — the
-  `kanmon :: KanmonConfig` plumbing and Settei URL/credential settings; the additive
-  `triggeringActivity :: Maybe ActivityEnvelope` on the internal `SinkIntent` and on
-  `SinkContext`.
+This plan owns these new or extended local interfaces:
 
-Consumed contracts (external, verified in source — do not redefine):
+- `schema/Agent.dhall` and `Shikigami.Agent.Decl.Sink` gain the exact additive
+  `ChannelEgress` alternative.
+- `Shikigami.Sink.Validate` exports `validateKanmonRouteSegment` and validates both route
+  segments plus the optional static key; the client reuses the route validator at publish.
+- `Shikigami.Sink.Wire` gains `EgressActionRequest` and `EgressActionResponse`.
+- `Shikigami.Sink.Config` gains `KanmonConfig {baseUrl :: !Text}`.
+- `Shikigami.Sink.KanmonClient` owns resolution, request construction, transport, response
+  decoding, and secret-safe errors with the signatures in Milestone 2.
+- `SinkCredentials` and `SinkHttp` gain direct `kanmon` fields using the existing opaque
+  token and HTTP policies.
+- `Shikigami.Sink.Intent.SinkIntent` and `Shikigami.Sink.Types.SinkContext` gain optional
+  `conversationKey` and `triggeringActivityId`; the intent preparation functions derive them
+  once.
+- `WorkerEnv` and `AgentRunDeps` gain strict `kanmon :: !KanmonConfig` process dependencies.
+- `Shikigami.App.Config` gains the two stable Kanmon keys and explicit environment bindings;
+  `shikigami-worker` gains `--kanmon-url`.
+- `Shikigami.Sink` gains the permission mapping and dispatch arm.
+- `shikigami-server` gains `StubKanmonOptions`, `stubKanmonApplication`,
+  `runStubKanmon`, and the `stub-kanmon` administrative command.
 
-- Kanmon egress wire contract: route `POST /channels/{channelId}/actions/{action}`; body and
-  response per `/Users/shinzui/Keikaku/bokuno/kanmon/kanmon-core/src/Kanmon/Egress.hs:46-71`;
-  status mapping per `Kanmon/Http.hs:160-186` (200/400/401/403/404); idempotency on
-  `(provider, idempotency_key)`. Locate kanmon via `mori registry show kanmon --full`.
-- `Shikigami.Sink.Permission.checkGrant` — signature frozen; the grant *storage* is swapped by
-  docs/plans/21-database-backed-sink-permission-grants.md (MasterPlan 4).
-- Authenticated HTTP layer — hard dependency on
-  docs/plans/22-outbound-authentication-for-sink-clients.md (MasterPlan 4); this plan
-  extends its credential and HTTP records for kanmon and does not add another helper.
-- keiro outbox (`Keiro.Outbox.enqueueOutboxTx`, `publishClaimedOutbox`) — already in use by
-  every sink; unchanged.
+The external wire contract is consumed from `mori://shinzui/kanmon/repos/kanmon`, with the
+source-file paths and pending artifact-level URI limitation recorded in Context. No Kanmon
+package dependency is introduced. No dependency version bound or compatibility workaround
+is selected by this plan; if implementation unexpectedly needs one, use Mori to inspect its
+source and docs, then verify the released version against its authoritative registry and
+upstream tags before changing bounds.
 
-Build/test toolchain: Nix dev shell; `cabal build all`; `cabal test all`;
-`just create-database` for the Postgres-backed tests
-(`Shikigami.Migrations.TestSupport.withShikigamiMigratedDatabase :: (Text -> IO a) -> IO a`).
+Existing Keiro outbox and workflow APIs remain unchanged. The durable cross-repository
+terminal outcome is documented by
+`mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`; use that
+canonical reference in any new durable comment or documentation. Follow
+`docs/workflow-versioning.md` for any actual workflow-body deviation and never bypass
+`just keiro-gate` by inventing an unrelated patch.
 
 
 ## Revision Notes
 
-- 2026-07-22: Made plan 22 a hard dependency and replaced the serializable
-  `KanmonConfig.bearerToken`, `--kanmon-token`, and duplicate `postJSONWith` helper with
-  plan 22's `TokenSource`, credential-reference setting (with adapter-only legacy binding),
-  `HttpEnv`, and
-  `postJSONWithHeaders`.
-- 2026-07-22: Added plans 36/37, replaced direct URL/token configuration with Settei,
-  and classified permanent 4xx separately from transient retryable failures.
+- 2026-07-22: Made plan 22 a hard dependency and replaced a serializable bearer token, raw
+  token CLI option, and duplicate HTTP helper with the planned opaque token and shared HTTP
+  seams. Added the package-split and Settei prerequisites and distinguished permanent from
+  transient failure.
+
+- 2026-08-23: Comprehensively refreshed the plan against the implemented repository and
+  Kanmon contract. Corrected package ownership and the Intercom action, replaced static
+  grants with database grant commands, changed delivery acceptance from a false journaled
+  `Delivered` claim to receipt-owned truth, consumed the landed authenticated HTTP and
+  consolidated intent seams, reduced durable trigger data from a full activity to two
+  optional derived fields, added route validation and explicit workflow-versioning analysis,
+  separated local receipt suppression from downstream idempotency, converted cross-repo
+  paths to canonical Mori references, and made the tests and manual proof executable against
+  current commands.

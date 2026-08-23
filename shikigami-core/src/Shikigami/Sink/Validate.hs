@@ -19,6 +19,7 @@
 -- tests, and any future server-side validator all ask the same question.
 module Shikigami.Sink.Validate
   ( sinkDeclarationErrors,
+    validateKanmonRouteSegment,
   )
 where
 
@@ -43,7 +44,32 @@ sinkErrors = \case
             <> Text.pack (show recipientFrom)
             <> " requires defaultRecipient (no ownership directory exists to resolve it)"
         ]
+  ChannelEgress {channel, action, conversationKey} ->
+    routeErrors "channel" channel
+      <> routeErrors "action" action
+      <> ["conversationKey must be non-empty when declared" | maybe False (Text.null . Text.strip) conversationKey]
   _ -> []
+
+-- | Validate one path component in Kanmon's channel-action route. The client
+-- repeats this check at publication so corrupted durable data cannot inject a
+-- slash, query, or traversal-like path after declaration validation has passed.
+validateKanmonRouteSegment :: Text -> Either Text Text
+validateKanmonRouteSegment segment
+  | Text.null segment = Left "must be non-empty"
+  | Text.all isAllowed segment = Right segment
+  | otherwise = Left "must contain only ASCII letters, digits, '.', '_', or '-'"
+  where
+    isAllowed char =
+      ('a' <= char && char <= 'z')
+        || ('A' <= char && char <= 'Z')
+        || ('0' <= char && char <= '9')
+        || char `elem` ("._-" :: String)
+
+routeErrors :: Text -> Text -> [Text]
+routeErrors field value =
+  case validateKanmonRouteSegment value of
+    Left reason -> [field <> " " <> reason]
+    Right _ -> []
 
 -- | Which strategies name a person this platform has no way to look up.
 --

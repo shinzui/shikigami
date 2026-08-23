@@ -51,6 +51,7 @@ sinkKindOf = \case
   KizashiSignal {} -> SKizashiSignal
   ReiAction {} -> SReiAction
   DanwaConversation {} -> SDanwaConversation
+  ChannelEgress {} -> SChannelEgress
 
 -- | Dispatch one sink: gate on @checkGrant@, then route. Always returns a 'SinkResult'.
 dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
@@ -117,6 +118,8 @@ runSink ctx sink output = case sink of
   DanwaConversation {} -> do
     r <- runDanwaWithHeaders (http ctx ^. #danwa) (traceHeaders ctx) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
     pure (either danwaFailure Delivered r)
+  ChannelEgress {} ->
+    pure (PermanentFailure "ChannelEgress is not wired")
 
 kawaFailure :: KawaError -> SinkOutcome
 kawaFailure failure = case failure of

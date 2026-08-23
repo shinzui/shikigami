@@ -64,7 +64,8 @@ representativeSinks =
   [ KawaDigest {subjectType = "customer", verb = "relationship.at_risk"},
     canonicalSink,
     ReiAction {intentionId = "intention_01sink", note = "Escalate the customer risk"},
-    DanwaConversation {topic = "At-risk customer review"}
+    DanwaConversation {topic = "At-risk customer review"},
+    ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}
   ]
 
 canonicalSink :: Sink

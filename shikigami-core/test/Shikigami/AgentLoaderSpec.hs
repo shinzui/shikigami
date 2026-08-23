@@ -19,6 +19,7 @@ import Shikigami.Agent.Decl
     RecordPolicy (Never, OnSuccess),
     RouterConfidence (RoutingMedium),
     RouterPolicy (..),
+    Sink (..),
     delegationBudgetNatural,
     recallLimitNatural,
   )
@@ -97,6 +98,10 @@ tests =
             aliases @?= ["otel", "telemetry"]
             evidenceHints @?= ["traceparent", "service.name", "instrumentation scope"]
           other -> assertFailure ("unexpected specialist declaration: " <> show other),
+      testCase "decodes and round-trips the ChannelEgress proof declaration" do
+        decl@AgentDecl {sinks} <- expectLoaded "../agents/proof/channel-reply.dhall"
+        sinks @?= [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}]
+        eitherDecode (encode decl) @?= Right decl,
       testCase "the v1 declaration JSON shape contains every field and round-trips" do
         decl <- expectLoaded "../agents/heartbeat.dhall"
         fixtureBytes <- ByteString.Char8.readFile "test/fixtures/wire/agent-decl-v1.json"

@@ -250,6 +250,11 @@ data Sink
       }
   | ReiAction {intentionId :: !Text, note :: !Text}
   | DanwaConversation {topic :: !Text}
+  | ChannelEgress
+      { channel :: !Text,
+        action :: !Text,
+        conversationKey :: !(Maybe Text)
+      }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
