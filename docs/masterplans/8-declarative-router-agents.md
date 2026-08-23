@@ -20,8 +20,9 @@ catalog of specialists from its existing `delegates` allow-list, and make one re
 typed route decision. An `architecture-practice-router` presented with an
 OpenTelemetry-shaped payload can select `opentelemetry-practice-reviewer`, explain the
 selection, and launch the specialist through the durable delegation mechanism planned in
-`docs/plans/35-delegation-as-a-first-class-declared-capability.md`. A replay reuses the
-recorded catalog and decision instead of consulting changed declarations or a model again.
+`docs/plans/35-delegation-as-a-first-class-declared-capability.md`, which is now delivered. A
+replay reuses the recorded catalog and decision instead of consulting changed declarations or
+a model again.
 
 The initiative includes additive Dhall and Haskell declaration types, candidate discovery,
 lifecycle filtering, typed `matched` / `no-match` / `ambiguous` decisions, policy and
@@ -51,9 +52,9 @@ unverifiable intermediate state.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | cross-MP: plans 33 and 47 | None | Not Started |
-| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; cross-MP: plans 33 and 47 | cross-MP: plan 23 | Not Started |
-| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; cross-MP: plans 35 and 47 | None | Not Started |
+| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | Not Started |
+| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | Not Started |
+| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -66,28 +67,31 @@ that candidate discovery reads and the validation rules that runtime code may as
 then produces the resolved, versioned catalog consumed by EP-3. EP-3 therefore waits for
 both EP-1 and EP-2.
 
-There are also cross-MasterPlan prerequisites. EP-1 follows the additive schema pattern from
-`docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`. EP-3 must not
-start until `docs/plans/35-delegation-as-a-first-class-declared-capability.md` has delivered
-the declared allow-list, global budget, cycle checks, and Flow delegation capability; it
-extends that mechanism rather than creating another. EP-2 consumes
-`docs/plans/23-agent-lifecycle-control-with-meibo-principals.md` when available, but the
-improvement request explicitly permits plan 33's local `enabled` field as an honest interim
-source, making plan 23 a soft external dependency rather than a blocker. Plans 24 and 39 are
-inherited through plan 35 for workflow evolution and checked topology.
+All external foundations have landed. Plan 33 delivered the additive declaration and manual
+workflow-journal codec pattern; plans 35 and 36 delivered governed delegation and final package
+ownership; plan 23 delivered the cached principal-directory lifecycle boundary; and plans 24
+and 39 delivered workflow patching plus the checked Keiro specification. Plans 37 and 38 still
+carry unrelated migration-CLI configuration cleanup, but the declaration, configuration, and
+migration surfaces consumed here are already present and are not blockers. The only remaining
+hard ordering is therefore EP-1, then EP-2, then EP-3.
 
 
 ## Integration Points
 
 IP-1 — the canonical agent declaration. EP-1 owns additive `ExpertiseDecl` and
 `RouterPolicy` shapes in `schema/Agent.dhall` and their mirrors in
-`shikigami-api/src/Shikigami/Api/Agent.hs`. EP-2 and EP-3 only consume these shapes. The
+`shikigami-core/src/Shikigami/Agent/Decl.hs`. Its default-value JSON encoder and missing-key
+decoder preserve old `lookup-agent` journal bytes as required by
+`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md`. EP-2 and EP-3
+only consume these shapes. The
 fields use direct names under `DuplicateRecordFields`; no type-prefixed record fields are
 introduced.
 
 IP-2 — the candidate catalog. EP-2 owns `Shikigami.Router.Catalog`, including catalog
-versioning, exclusion reasons, and lifecycle-source attribution. EP-3 journals the exact
-catalog snapshot or its stable version plus complete entries before it evaluates a route.
+versioning, exclusion reasons, lifecycle-source attribution, and an atomic read-once directory
+snapshot. EP-3 journals the complete catalog before it evaluates a route. A catalog never
+performs one live lifecycle lookup per candidate because a background refresh could otherwise
+mix two directory snapshots in one decision boundary.
 
 IP-3 — the route decision. EP-3 owns `RouteDecision`, `RouteSelection`, `RouteOutcome`, and
 their strict decoder/validator. A model-facing program may produce the JSON, but only the
@@ -95,17 +99,24 @@ validator may convert it into authority to delegate.
 
 IP-4 — delegation governance. Existing plan 35 owns `delegates`, the durable tree-wide
 budget, ancestor-cycle rejection, deterministic child workflow ids, and partial child
-results. EP-3 calls that capability after routing checks; it does not spawn directly or
-maintain a second budget.
+results. It currently reserves one child at a time. EP-3 extends the same owned store module
+with one atomic, idempotent batch reservation over deterministic child ids, then calls the
+existing governed `delegate` boundary for every already-reserved child. It does not create a
+second ledger or spawn path.
 
-IP-5 — lifecycle availability. Existing plan 23 owns the Meibo-backed `DirectoryHandle`
-and lifecycle decisions. EP-2 adapts that source. Before plan 23 lands, it may report
-`local-enabled` as the source and use plan 33's `enabled`; it must never label that result as
-Meibo-verified.
+IP-5 — lifecycle availability. Existing plan 23 owns `DirectoryHandle`, its last-known-valid
+snapshot semantics, and lifecycle decisions. EP-2 adds a public immutable snapshot projection
+so one catalog uses one directory view. Explicit directory-disabled mode is attributed as
+`local-enabled`; the currently shipped file source is attributed as `directory-file`, not as a
+live Meibo client. A future typed client may use `meibo-client` without changing the catalog
+algorithm.
 
-IP-6 — routing observability. EP-2 defines exclusion data and EP-3 writes the catalog,
-selection, rationale, confidence, declaration version, and failure class to the parent run
-trace/session. Payload document bodies are excluded from logs.
+IP-6 — durable routing and observability. EP-3 owns statically declared, hyphenated catalog
+and decision step names under a new checked patch. The runtime honors the patch with a real
+legacy branch per `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md`.
+Routing attributes are added through the tracing effect already used by
+`Shikigami.Agent.Workflow`; the worker-only `Shikigami.Telemetry` module remains tracer setup,
+not domain policy. Payload document bodies are excluded from logs and traces.
 
 
 ## Progress
@@ -130,13 +141,25 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-- Mori inspection confirmed that current `schema/Agent.dhall` has no identity, enablement,
-  delegates, expertise, or routing fields yet; plans 33 and 35 are still unchecked. The new
-  work must therefore target their documented future shapes and preserve the stated landing
-  order rather than patching around them.
-- The shipped `Shikigami.Agent.Delegate.delegate` already provides deterministic child ids and
-  parent workflow/session lineage, but it accepts a raw child name and checks only depth.
-  Plan 35 is the necessary governance layer; EP-3 must build on it.
+- Plans 33, 35, 36, 39, and 23 have landed. The current declaration already carries identity,
+  memory, enablement, delegates, delegation budget, sanctioned profile, and capability overlays;
+  expertise and routing are the only MasterPlan-8 declaration fields still absent.
+- `AgentLoadReport` now preserves every loaded and failed manifest, but a failed entry has a
+  path and diagnostic rather than a trustworthy agent name. EP-2 must not attribute an
+  arbitrary failed file to a missing delegate; it records the candidate as missing and carries
+  only a bounded unassociated load-failure count in the catalog. Full diagnostics remain in
+  the canonical load report and operator logs.
+- The report can also contain multiple successfully decoded declarations with the same name.
+  EP-2 excludes that candidate as `duplicate-declaration` instead of choosing by file order.
+- `DirectoryHandle` publishes complete snapshots atomically, but its public lookup functions
+  each read the handle independently and expose no stable snapshot identity. EP-2 needs one
+  read-once immutable projection so a catalog cannot mix refresh generations.
+- Governed delegation now checks allow-list, lineage cycle, depth, and the durable root budget,
+  but its store API reserves one child per transaction. EP-3 must add the already-planned batch
+  reservation before any routed child is spawned.
+- The July proposal's `route-catalog:<label>` and `route-decision:<label>` spellings cannot be
+  declared by the checked Keiro language because `:` is not a workflow wire-word character.
+  EP-3 uses static hyphenated labels inside a new patch and runs `just keiro-gate`.
 
 
 ## Decision Log
@@ -169,6 +192,25 @@ plan.
   or model output changed after the original workflow step.
   Date: 2026-07-25
 
+- Decision: Keep the three-child decomposition but refresh every child against the delivered
+  August architecture before implementation begins.
+  Rationale: the functional boundaries remain sound, while package ownership, lifecycle,
+  workflow evolution, delegation governance, and dependency versions have all become concrete.
+  Date: 2026-08-23
+
+- Decision: Read one immutable directory snapshot per catalog and version semantic contents,
+  not refresh time.
+  Rationale: per-candidate reads can mix generations, while including `loadedAt` would change a
+  catalog version when identical policy content is merely refreshed.
+  Date: 2026-08-23
+
+- Decision: Use declarable hyphenated route-step labels under a real workflow patch and reserve
+  every selected child in one transaction before spawning any of them.
+  Rationale: the checked specification rejects colon labels, and one-at-a-time reservation can
+  create a partial routed fan-out before discovering that the complete selection exceeds the
+  remaining budget.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -182,3 +224,7 @@ Compare the result against the original vision.
 
 - 2026-07-30: Added the previously prose-only external edges to plans 33, 35, and 47 and
   kept plan 23 as a source-attributed soft dependency.
+- 2026-08-23: Refreshed the MasterPlan after plans 23, 24, 33, 35, 36, and 39 landed; removed
+  false external blockers, corrected package and lifecycle ownership, made directory snapshot
+  consistency and batch reservation explicit, and reconciled routing steps with the checked
+  workflow patch contract.

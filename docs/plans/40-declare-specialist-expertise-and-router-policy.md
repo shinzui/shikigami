@@ -35,10 +35,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`, `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, and `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` have landed; use their final package paths and declaration fields.
+- [x] (2026-08-23T14:41:54Z) Refreshed this plan against the delivered six-package tree,
+  governed delegation, manual `AgentDecl` journal codec, current proof-manifest tests, and
+  Keiro 0.14 dependency cohort.
+- [x] (2026-08-23T14:41:54Z) Prerequisites verified: plans 33, 35, 36, 39, and 47 have
+  landed. The implementation can begin in `shikigami-core` without waiting on another plan.
 - [ ] M1: add `Expertise`, routing-policy unions, and backward-compatible `expertise` / `routing` fields to `schema/Agent.dhall`.
-- [ ] M2: mirror the types in Haskell and validate router-only invariants with bounded `Natural` conversion.
-- [ ] M2: prove every existing manifest decodes with `expertise = []` and `routing = None`.
+- [ ] M2: mirror the types in `Shikigami.Agent.Decl`, extend its manual JSON compatibility codec, and validate router-only invariants with bounded `Natural` conversion.
+- [ ] M2: prove every existing manifest and historical default JSON declaration decodes with `expertise = []` and `routing = None`.
 - [ ] M3: add router/specialist proof manifests and document authoring, authority boundaries, and diagnostics.
 - [ ] Final: `cabal test all` and validation of both proof manifests succeed.
 
@@ -48,9 +52,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-- The checked-in schema currently stops at `name`, `description`, `trigger`, `behavior`, and
-  `sinks`. Plans 33 and 35 describe additive fields but their Progress sections are unchecked,
-  so implementation must re-read their final landed shapes rather than duplicating them.
+- The checked-in schema now includes `delegates`, `delegationBudget`, `sanctionedProfile`,
+  `capabilityOverlays`, `identity`, `memory`, and `enabled`. The Haskell mirror moved from the
+  deleted `Shikigami.Api.Agent` module to `Shikigami.Agent.Decl` in `shikigami-core`.
+- `AgentDecl` is journaled by the durable `lookup-agent` step and therefore has a hand-written
+  JSON codec. Dhall record completion alone is insufficient: default expertise/routing fields
+  must be omitted from JSON and restored when absent, exactly like the fields delivered by
+  plan 33.
 
 
 ## Decision Log
@@ -75,6 +83,19 @@ Record every decision made while working on the plan.
   1 through 16 is enough for the requested local routers and remains below the durable budget.
   Date: 2026-07-25
 
+- Decision: Put router declaration validation in `Shikigami.Router.Declaration` and keep the
+  schema mirror in `Shikigami.Agent.Decl`.
+  Rationale: the delivered package architecture puts agent domain types in `shikigami-core`,
+  while router-only semantic validation is a separate functional concern consumed by the
+  catalog and routing plans.
+  Date: 2026-08-23
+
+- Decision: Extend the manual `AgentDecl` JSON codec so default expertise and routing values
+  preserve historical journal bytes and missing keys restore those defaults.
+  Rationale: `lookup-agent` values outlive the binary; source-compatible Dhall defaults do not
+  make old JSON journal records decode or keep unchanged declarations byte-compatible.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -89,13 +110,23 @@ Compare the result against the original purpose.
 `schema/Agent.dhall` is the canonical declaration. Its `Agent.Type` record is decoded by
 `Shikigami.Agent.Loader.loadAgent` in
 `shikigami-core/src/Shikigami/Agent/Loader.hs` into `AgentDecl` from
-`shikigami-api/src/Shikigami/Api/Agent.hs`. The CLI command in
-`shikigami-cli/src/Shikigami/Cli/Commands/Validate.hs` is the author-facing proof that Dhall
-and Haskell agree.
+`shikigami-core/src/Shikigami/Agent/Decl.hs`. The CLI command in
+`shikigami-server/src/Shikigami/Server/Command/Validate.hs` is the author-facing proof that
+Dhall and Haskell agree. Existing declaration and compatibility tests live in
+`shikigami-core/test/Shikigami/AgentLoaderSpec.hs` and
+`shikigami-core/test/Shikigami/WireCompatSpec.hs`.
 
 Plan 33 adds general identity, memory, and `enabled` fields and establishes the repository's
 additive schema-evolution pattern. Plan 35 adds `delegates` and `delegationBudget`. Read both
-plans and their landed code before editing. This plan adds no delegation implementation.
+plans and their landed code before editing. Plan 50 and the capability-overlay MasterPlan have
+also added `sanctionedProfile` and `capabilityOverlays`; preserve all of these fields. This plan
+adds no delegation implementation.
+
+The relevant durable decisions are
+`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md`, which requires
+defaulted declaration fields to preserve old JSON bytes, and
+`docs/adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md`, which makes `delegates`
+the authority boundary this routing metadata must not replace.
 
 "Expertise" means routing metadata: a stable key such as `opentelemetry`, a plain-language
 description, aliases, and optional evidence hints. A "router policy" bounds semantic
@@ -114,19 +145,20 @@ Dhall type from the schema record. At the end, an old manifest imports the new s
 editing its body.
 
 Milestone 2 mirrors the declaration in
-`shikigami-api/src/Shikigami/Api/Agent.hs` with strict, direct field names, explicit deriving
-strategies, and no type-name prefixes. Add a core validation module at the package path
-assigned by `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`, expected to be
-`shikigami-core/src/Shikigami/Agent/Router/Declaration.hs`. Validation rejects an expertise
+`shikigami-core/src/Shikigami/Agent/Decl.hs` with strict, direct field names, explicit deriving
+strategies, and no type-name prefixes. Extend the existing manual `ToJSON` and `FromJSON`
+instances: omit `expertise = []` and `routing = Nothing`, restore both when their keys are
+missing, and encode complete non-default values. Add
+`shikigami-core/src/Shikigami/Router/Declaration.hs`. Validation rejects an expertise
 entry with an empty/duplicate normalized key, routing with no delegates, zero or more than 16
 selections, `maxSelections` greater than the number of distinct delegates, and duplicate
 delegate names. Use distinct `RoutingLow` / `RoutingMedium` / `RoutingHigh` constructors
 because `Priority` already owns `Low` and `High` in this module; record fields remain direct
-and unprefixed. Keep decode and semantic validation separate so diagnostics name the actual
-invariant. Add focused unit tests and a regression test that loads every `.dhall` file except
-the deliberate `agents/broken.dhall` fixture in
-`shikigami-core/test/Shikigami/RouterDeclarationSpec.hs`, registering the module in the final
-core test component.
+and unprefixed. Keep Dhall/JSON decoding and semantic validation separate so diagnostics name
+the actual invariant. Add focused tests in
+`shikigami-core/test/Shikigami/RouterDeclarationSpec.hs`; extend
+`shikigami-core/test/Shikigami/AgentLoaderSpec.hs` with old/default/non-default JSON cases and
+the existing all-manifest regression. Register the new module in `shikigami-core-test`.
 
 Milestone 3 adds `agents/proof/architecture-practice-router.dhall` with routing enabled and
 `agents/proof/opentelemetry-practice-reviewer.dhall` with one expertise entry. Update
@@ -151,8 +183,10 @@ sed -n '1,240p' schema/Agent.dhall
 Format and test inside the repository development environment:
 
 ```bash
-nix develop -c fourmolu -i shikigami-api/src/Shikigami/Api/Agent.hs
-nix develop -c fourmolu -i shikigami-core/src/Shikigami/Agent/Router/Declaration.hs
+nix develop -c fourmolu -i shikigami-core/src/Shikigami/Agent/Decl.hs
+nix develop -c fourmolu -i shikigami-core/src/Shikigami/Router/Declaration.hs
+nix develop -c fourmolu -i shikigami-core/test/Shikigami/RouterDeclarationSpec.hs
+nix develop -c cabal test shikigami-core-test --test-options='-p "router"' --test-show-details=direct
 nix develop -c cabal test all
 ```
 
@@ -172,7 +206,9 @@ Both commands exit zero and print the decoded expertise/routing values. A test f
 
 Acceptance requires all existing valid manifests to load unchanged and decode to empty
 expertise/no router policy. The two proof manifests must load with their exact declared
-values. Semantic tests must prove empty and duplicate expertise keys, duplicate delegates,
+values. The historical default JSON fixture must decode with the same defaults, encoding that
+declaration must remain byte-identical, and non-default expertise/routing must round-trip.
+Semantic tests must prove empty and duplicate expertise keys, duplicate delegates,
 router-without-delegates, zero/oversized selection bounds, and a selection bound larger than
 the allow-list are rejected. An ordinary manifest whose payload later contains an `agent`
 field must still have no routing authority because only declaration fields are inspected.
@@ -183,18 +219,21 @@ human-visible proof beyond compilation.
 
 ## Idempotence and Recovery
 
-The change is additive and contains no data migration. Formatting, validation, and tests are
-safe to repeat. If a proof manifest fails after a prerequisite plan changed the schema, update
-its record completion against the landed `Agent.default`; do not add a second default or
-duplicate a plan-35 field. If implementation stops after Dhall changes, Haskell compilation
-will fail loudly until the mirror is updated; complete both sides in the same commit.
+The change is additive and contains no database migration. Formatting, validation, and tests
+are safe to repeat. If a proof manifest fails, update its record completion against the current
+`Agent.default`; do not add a second default or duplicate any delivered field. If implementation
+stops after Dhall changes, Haskell compilation will fail until the mirror is updated. Complete
+the Dhall mirror, manual JSON codec, and compatibility tests in the same commit so no deploy can
+write a declaration shape that a later replay cannot read.
 
 
-## Portfolio Reconciliation (2026-07-30)
+## Portfolio Reconciliation (2026-08-23)
 
-This plan hard-depends on plans 33 and 47. It is the first MasterPlan-8 child and reuses
-plan 33's additive Dhall/Haskell declaration pattern. Keep policy closed, bounded, and backward
-compatible through defaults; do not start runtime routing here.
+Plans 33, 35, 36, 39, and 47 are complete, so this first MasterPlan-8 child is ready to
+implement. Reuse plan 33's Dhall plus manual JSON declaration pattern, preserve plan 35's
+governed `delegates` authority, and target the delivered `Shikigami.Agent.Decl` module. Keep
+policy closed, bounded, and backward compatible through defaults; do not start runtime routing
+here.
 
 
 ## Interfaces and Dependencies
@@ -225,12 +264,20 @@ validateRouterDeclaration
   -> Either [RouterDeclarationError] ValidatedRouterDeclaration
 ```
 
-The exact `AgentDecl` record also contains the fields landed by plans 33 and 35; this plan
-adds `expertise :: ![ExpertiseDecl]` and `routing :: !(Maybe RouterPolicy)`. All records use
-strict direct fields and the project's `DuplicateRecordFields` / Generic Lens convention.
+The exact `AgentDecl` record also contains `delegates`, `delegationBudget`,
+`sanctionedProfile`, `capabilityOverlays`, `identity`, `memory`, and `enabled`; this plan adds
+`expertise :: ![ExpertiseDecl]` and `routing :: !(Maybe RouterPolicy)`. All records use strict
+direct fields and the project's `DuplicateRecordFields` / Generic Lens convention.
 Dependencies are Dhall decoding already used by `Shikigami.Agent.Loader`, the additive schema
 pattern in `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`,
 `delegates` from `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, and final
 package ownership from
 `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`. No new external
 library or service is required.
+
+
+## Revision Notes
+
+- 2026-08-23: Refreshed the plan after its external foundations landed. Corrected package and
+  command paths, incorporated the manual `AgentDecl` journal codec and relevant ADRs, updated
+  tests and commands, and marked the declaration child ready to implement.

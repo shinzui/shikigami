@@ -36,11 +36,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: `docs/plans/40-declare-specialist-expertise-and-router-policy.md`, `docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md`, `docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md`, `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, and `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` through `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` have landed.
+- [x] (2026-08-23T14:41:54Z) Refreshed this plan against governed Flow delegation, the
+  checked language-5 workspace, the workflow patch contract, current tracing ownership, and
+  the repository's Keiro 0.14 cohort.
+- [x] (2026-08-23T14:41:54Z) External prerequisites verified: plans 24, 35, 36, 39, and 47
+  have landed. Plans 37 and 38 retain only unrelated migration-CLI configuration cleanup.
+- [ ] Prerequisites: child plans 40 and 41 have landed.
 - [ ] M1: define typed route outcomes/selections, strict JSON decoding, and policy validation.
-- [ ] M2: add catalog and decision operations to the checked Keiro specification with stable labels.
-- [ ] M2: implement a replay-safe Routing Flow capability and a stub evaluator.
-- [ ] M3: preflight every selection, reserve plan-35 budget, and delegate only through plan 35.
+- [ ] M2: add static hyphenated catalog and decision operations behind one new checked workflow patch with a real legacy branch.
+- [ ] M2: implement a replay-safe Routing Flow capability, a production evaluator seam, and a deterministic test evaluator.
+- [ ] M3: preflight every selection, atomically reserve the complete plan-35 batch, and delegate only through plan 35.
 - [ ] M3: preserve matched child results and operational failures without semantic coercion.
 - [ ] M4: add bounded routing telemetry and real-Postgres replay/authorization tests.
 - [ ] Final: checked DSL, domain harness, `cabal test all`, and replay proof are green.
@@ -51,12 +56,26 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-- The shipped `delegate` accepts a raw child name and checks depth only. Plan 35 must land
-  first so this plan can rely on its allow-list, ancestor cycle check, and durable global
-  budget instead of duplicating them.
-- Multiple selections require batch preflight before the first spawn. If plan 35 lands with
-  only one-at-a-time reservation, its owned module needs a batch reservation operation over
-  the same ledger before routed fan-out can be implemented safely.
+- Plan 35 has landed. `Shikigami.Agent.Delegate.delegate` now checks the declaration allow-list,
+  complete ancestor lineage, depth, and durable tree-wide budget before spawning, and the Flow
+  `Delegate` effect calls the same function.
+- `Shikigami.Store.DelegationBudget` exposes only `reserveDelegationSlot`, so the anticipated
+  multi-selection gap is real. Sequential calls can reserve and spawn an early child before a
+  later selection discovers budget exhaustion.
+- The July step spellings `route-catalog:<label>` and `route-decision:<label>` contain `:` and
+  cannot appear in a declared Keiro workflow body. The checked specification accepts static
+  wire words, and ADR-0012 requires any declared body addition to sit in a new patch that the
+  runtime genuinely honors.
+- `FlowRuntime` now carries only acknowledgement configuration. Flow effects are installed as
+  interpreters in `runFlowBehavior`; a routing environment belongs in a `Routing` interpreter,
+  not in `FlowRuntime`.
+- `Shikigami.Telemetry` now lives in `shikigami-workers` and constructs worker tracers. Domain
+  spans and attributes are emitted in `Shikigami.Agent.Workflow` through Shibuya's tracing
+  effect.
+- The delivered capability resolver rejects a declaration that combines non-empty
+  `capabilityOverlays` with non-empty `delegates`. A router therefore evaluates with the active
+  model/provider environment and no overlay tools; changing that authority boundary is outside
+  this initiative.
 
 
 ## Decision Log
@@ -80,6 +99,33 @@ Record every decision made while working on the plan.
   selection violates the budget, contradicting the request's all-targets-before-spawn rule.
   Date: 2026-07-25
 
+- Decision: Use static hyphenated step names for each registered routing call site and place
+  the complete catalog/decision addition inside one new `shikigami-routing-steps-v1` patch.
+  Rationale: colon-bearing or runtime-computed labels cannot be checked as workflow wire words;
+  static names keep the durable inventory visible to `just keiro-gate`.
+  Date: 2026-08-23
+
+- Decision: The patch's legacy branch fails a routing call as unavailable without resolving a
+  catalog, evaluating a model, reserving budget, or spawning a child.
+  Rationale: a pre-patch in-flight run must retain the old body shape. There was no routing
+  capability in that shape, so performing new routing work on the false branch would defeat the
+  patch.
+  Date: 2026-08-23
+
+- Decision: Add atomic `reserveDelegationSlots` beside plan 35's single-slot operation, then
+  reuse the existing governed `delegate` function for child creation.
+  Rationale: one locked transaction can accept the whole idempotent batch or none of its new
+  reservations, while repeated `delegate` calls observe those ids as already reserved and keep
+  one policy/spawn boundary.
+  Date: 2026-08-23
+
+- Decision: Install routing as its own Flow effect interpreter and inject the evaluator through
+  run dependencies; production uses the active model/provider policy while tests use a
+  deterministic evaluator.
+  Rationale: `FlowRuntime` is acknowledgement configuration, and a hard-coded stub would prove
+  replay without delivering a replaceable production routing seam.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -93,15 +139,25 @@ Compare the result against the original purpose.
 
 `shikigami-core/src/Shikigami/Agent/Workflow.hs` runs durable agent workflows with named
 Keiro steps. Flow behaviors are looked up in `shikigami-core/src/Shikigami/Flow.hs` and their
-effects are interpreted by `runFlowBehavior`. `shikigami-core/src/Shikigami/Flow/Capability.hs`
-currently contains Activity, Memory, and Sink effects. Plan 25 makes Memory labeled and
-replay-safe; plan 35 adds governed Flow delegation.
+effects are interpreted by `runFlowBehavior`. `Shikigami.Flow.FlowEffects` currently contains
+Workflow, Memory, Sink, Activity, Acknowledgement, and Delegate. Memory, Sink, Acknowledgement,
+and Delegate are replay-safe capabilities; routing becomes another capability rather than
+restoring ambient `IOE` or `Store` to Flow bodies. This follows
+`docs/adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md`.
 
-The shipped imperative primitive in `shikigami-core/src/Shikigami/Agent/Delegate.hs` creates
-deterministic child workflow ids, records the child's `ingest-job`, and awaits a typed result.
-Plan 35 owns the future allow-list, tree-wide budget, cycle prevention, partial collection,
-and cancellation semantics. This plan may add a batch entry point in the same plan-35-owned
-module if required, but must not create another ledger or spawn path.
+The delivered primitive in `shikigami-core/src/Shikigami/Agent/Delegate.hs` creates deterministic
+child workflow ids from parent id, target, and stable key; checks allow-list, cycle, and depth;
+reserves the root-wide budget; spawns the child; records its `ingest-job`; and awaits a typed
+result. `shikigami-core/src/Shikigami/Flow/Delegate.hs` exposes the same machinery to Flow.
+`docs/adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md` requires every caller to
+keep using that path. This plan extends the same budget store with atomic batch reservation but
+does not create another ledger or child-registration implementation.
+
+`domain/shikigami.keiro-workspace` composes language-5 agent-run and conversation members. The
+repository is pinned to Keiro/keiro-dsl 0.14. `docs/workflow-versioning.md` and
+`docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` require every declared
+body addition to be inside a new patch, generated into the active patch set, honored by a real
+runtime branch, and validated with `just keiro-gate`.
 
 `docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md` creates
 `CandidateCatalog`, including unavailable entries and a stable version. A route
@@ -122,28 +178,51 @@ the minimum; selection count is within `maxSelections`; no-match has no executab
 ambiguous alternatives are advisory and spawn nothing. Reject undeclared, unavailable, low
 confidence, duplicate, oversized, and stale-catalog decisions with distinct errors.
 
-Milestone 2 updates the `domain/shikigami.keiro-workspace` artifact owned by
-`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` with additive, stable workflow steps
-`route-catalog:<label>` and `route-decision:<label>` and passes parse, check, scaffold,
-harness, and evolution diff. Add a `Routing` effect to
-`shikigami-core/src/Shikigami/Flow/Capability.hs` (or its plan-36 destination). Its caller
-supplies a non-empty `RouteLabel`; `runRouting` resolves the catalog from
-`docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md` inside the first
-Keiro step and calls `RouteEvaluator` inside the second. Replays return recorded JSON before
-the resolver or evaluator executes. Thread `RoutingEnv` through `FlowRuntime` and
-`runFlowBehavior`. Tests count resolver/evaluator invocations and prove both remain one after
-replay.
+Milestone 2 updates `domain/shikigami-agent-run.keiro` through its workspace. Add one contiguous
+patch `shikigami-routing-steps-v1` containing the static labels used by the first registered
+router: `route-catalog-architecture-practice` and
+`route-decision-architecture-practice`. Regenerate the checked modules and conformance
+expectations. Add the same `PatchId` constant to `Shikigami.Agent.Workflow`, call `patch` once
+per run, and pass the result into the Routing interpreter. On the false branch, `route` returns
+a typed permanent `RoutingUnavailableForLegacyRun` before any side effect. Do not use colon
+labels and do not derive step names from payload data.
 
-Milestone 3 maps a validated matched decision to plan 35. Before spawning, call its batch
-preflight/reservation with every selected agent and the deterministic child ids that will be
-used. The operation checks allow-list, current recorded-catalog availability, ancestor
-cycles, maximum selections, and remaining global budget atomically/idempotently. Then call
-the existing Flow delegation capability and await results in selection order. No-match and
-ambiguous return typed parent results without invoking delegation. Preserve `RouterFailure`,
-`DelegationError`, and child failures as failures; do not manufacture a verdict.
+Create `shikigami-core/src/Shikigami/Flow/Routing.hs` beside `Flow/Delegate.hs`. Add `Routing`
+to `FlowEffects`. `route` takes a validated static `RouteLabel`; `runRouting` maps that label to
+the two declared `StepName`s, resolves and journals the complete catalog in the first step,
+calls `RouteEvaluator` and journals its raw versioned JSON in the second, then strictly decodes
+and validates it. Replays return both recorded values before the resolver or evaluator runs.
+Install the interpreter in `runFlowBehavior` beside `runDelegate`. Extend that function's inputs
+only as needed to pass the active `BehaviorEnv` and per-process `RoutingRuntime`; do not put
+these in the acknowledgement-only `FlowRuntime`. Add
+`RoutingRuntime` to `AgentRunDeps`. Its catalog-resolver closure captures the same
+`AgentLoadReport`, `DirectoryHandle`, and validated lifecycle source kind produced at worker
+startup; invocation inside the catalog step reads exactly one immutable snapshot and calls
+EP-2's pure builder. Its evaluator field is the injected production/test seam.
 
-Milestone 4 adds telemetry in `Shikigami.Telemetry` and real-Postgres workflow tests in the
-plan-36 integration test package. Trace fields include parent session/workflow, catalog
+Tests use a deterministic evaluator. The production `RouteEvaluator` is an explicit dependency
+that uses the process's active behavior/provider policy and returns raw JSON; it is not a second
+hard-coded stub hidden in the interpreter. If the router declares a sanctioned profile, extend
+the existing profile-constraining branch so its model call uses that constrained environment.
+Do not enable capability overlays for routers: the delivered resolver deliberately rejects
+overlays combined with delegates. Model/provider failure remains an operational routing error.
+
+Milestone 3 maps a validated matched decision to plan 35. Add pure batch preflight in
+`Shikigami.Agent.Delegate`: validate every target against the journaled declaration allow-list,
+the recorded catalog availability, distinct stable keys, the complete ancestor lineage, depth,
+and `maxSelections`; compute every deterministic child workflow id before touching the store.
+Add `reserveDelegationSlots` to `Shikigami.Store.DelegationBudget`. Under one ledger-row lock it
+recognizes already-reserved ids, verifies the complete new count fits, inserts every new
+reservation, and increments consumption once by that count; otherwise it writes nothing. Then
+call the existing Flow delegation capability for each target. Its single-slot reservation sees
+the ids as already reserved, and its existing checks remain the final spawn boundary. Await
+results in selection order. No-match and ambiguous return typed parent results without invoking
+delegation. Preserve routing, delegation, evaluator, and child failures as failures; do not
+manufacture a semantic outcome.
+
+Milestone 4 adds bounded spans/attributes through the tracing effect already used by
+`Shikigami.Agent.Workflow` and real-Postgres workflow tests in `shikigami-core-test`. Trace
+fields include parent session/workflow, catalog
 version/source, bounded candidate and excluded names, selected names, expertise keys,
 confidence, rationale capped to a documented length, and error category. Do not record the
 full trigger, candidate descriptions, changed documents, or model prompt. Tests cover
@@ -163,23 +242,23 @@ Run from `/Users/shinzui/Keikaku/bokuno/shikigami`.
 ```bash
 sed -n '1,260p' docs/plans/35-delegation-as-a-first-class-declared-capability.md
 sed -n '1,240p' docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md
-sed -n '277,380p' shikigami-core/src/Shikigami/Agent/Workflow.hs
-sed -n '1,260p' shikigami-core/src/Shikigami/Flow/Capability.hs
+sed -n '1,220p' docs/workflow-versioning.md
+sed -n '1,230p' shikigami-core/src/Shikigami/Agent/Delegate.hs
+sed -n '1,180p' shikigami-core/src/Shikigami/Flow/Delegate.hs
+sed -n '680,740p' shikigami-core/src/Shikigami/Agent/Workflow.hs
 ```
 
-Check the durable topology before compiling runtime changes:
+Check the complete durable topology and generated layer before compiling runtime changes:
 
 ```bash
-nix develop -c cabal run keiro-dsl -- parse domain/shikigami.keiro-workspace
-nix develop -c cabal run keiro-dsl -- check domain/shikigami.keiro-workspace --emit
-nix develop -c cabal run keiro-dsl -- diff domain/shikigami.keiro-workspace --since HEAD^
+nix develop -c just keiro-gate HEAD^
 ```
 
 Format and validate the implementation:
 
 ```bash
 nix develop -c fourmolu -i shikigami-core/src/Shikigami/Router/Decision.hs
-nix develop -c cabal test shikigami-core:shikigami-core-domain
+nix develop -c fourmolu -i shikigami-core/src/Shikigami/Flow/Routing.hs
 nix develop -c cabal test shikigami-core-test --test-options='-p "router"' --test-show-details=direct
 nix develop -c cabal test all
 ```
@@ -198,30 +277,37 @@ parent workflow, depth, and global budget lineage. A classifier response naming 
 undeclared agent is rejected before a budget reservation or child journal exists. A paused
 candidate is likewise rejected with its catalog exclusion reason.
 
-No-match and ambiguous responses return their typed outcomes and spawn zero children. A
-cross-domain matched response may spawn multiple distinct children but never beyond
-`maxSelections` or available global budget. A runtime/evaluator/decoder/child failure remains
-an error. Replaying the same workflow after replacing the evaluator and lifecycle snapshot
-must return the original decision and child ids and create no duplicate child. Existing
-non-router flows continue to run. The Keiro checks and `nix develop -c cabal test all` exit
-zero.
+No-match and ambiguous responses return their typed outcomes and spawn zero children. A matched
+response may spawn multiple distinct children but never beyond `maxSelections` or available
+global budget. A batch with two new children and only one remaining slot writes no reservation
+and spawns no child. Replaying a successfully reserved batch spends no additional slots. A
+runtime/evaluator/decoder/child failure remains an error. Replaying the same workflow after
+replacing the evaluator and lifecycle snapshot must return the original decision and child ids
+and create no duplicate child. A pre-patch workflow run that reaches a routing call returns the
+typed legacy-unavailable failure and records neither routing step. Existing non-router flows
+continue to run. `nix develop -c just keiro-gate HEAD^` and
+`nix develop -c cabal test all` exit zero.
 
 
 ## Idempotence and Recovery
 
-Both new workflow operations are additive labeled steps and use the checked evolution gate.
-Plan 24's final compatibility rules govern any already-running Flow. A crash before a step is
-recorded re-executes the operation; catalog and decision values are deterministic for their
-inputs. Batch budget reservation is keyed by deterministic child workflow ids, so retrying
-cannot spend twice. A crash after some child spawns finds the same child ids through Keiro
-instead of creating new workflows. Tests and DSL commands are safe to repeat.
+Both new workflow operations are additive labeled steps inside one new checked patch. The
+runtime reads that guard once and the false branch performs no new routing work. A crash before
+a step is recorded re-executes the operation; catalog and decision values are deterministic for
+their inputs. Batch budget reservation is keyed by deterministic child workflow ids, so retrying
+cannot spend twice. A crash after reservation but before one or more child registrations leaves
+safe reserved slots; replay calls the same governed `delegate` operations and repairs the same
+child ids. Tests and gate commands are safe to repeat. Generated Keiro modules are regenerated
+by the gate and are not formatted manually.
 
 
-## Portfolio Reconciliation (2026-07-30)
+## Portfolio Reconciliation (2026-08-23)
 
-This plan hard-depends on plans 35, 40, 41, and 47; plans 24 and 39 are inherited through
-plan 35. Journal the exact candidate catalog and routing decision under Keiro 0.4 checked topology,
-and reuse plan 35's allow-list, global budget, cycle, and typed delegation paths.
+Plans 24, 35, 36, 39, and 47 are complete; plans 37 and 38 have delivered every surface used
+here, and their remaining migration-CLI cleanup is unrelated. This plan now waits only on child
+plans 40 and 41. Target the checked language-5 workspace and the repository's Keiro 0.14 cohort,
+honor the new routing patch at runtime, and reuse plan 35's allow-list, global budget, cycle,
+typed delegation, and child-operation paths.
 
 
 ## Interfaces and Dependencies
@@ -254,11 +340,32 @@ validateRouteDecision
   -> CandidateCatalog
   -> RouteDecision
   -> Either (NonEmpty RoutingError) ValidatedRouteDecision
+
+data RoutingRuntime = RoutingRuntime
+  { resolveCatalog
+      :: ValidatedRouterDeclaration
+      -> IO CandidateCatalog
+  , evaluateRoute
+      :: BehaviorEnv
+      -> CandidateCatalog
+      -> Value
+      -> IO (Either RoutingFailure Value)
+  }
+
+reserveDelegationSlots
+  :: (Store :> es)
+  => DelegationBudgetId
+  -> Maybe (WorkflowId, DelegationBudget)
+  -> NonEmpty WorkflowId
+  -> UTCTime
+  -> Eff es (Either BudgetReservationError BatchReservationResult)
 ```
 
-If `Natural` version fields are bounded into a newtype during decoding, keep the wire value
-`1` for the initial schema. Direct field names and strict records follow the repository record
-pattern. Dependencies are
+`RouteLabel` is a validated enum/newtype whose initial value maps to the static suffix
+`architecture-practice`; arbitrary text is rejected before a step name is formed. If `Natural`
+version fields are bounded into a newtype during decoding, keep the wire value `1` for the
+initial schema. Direct field names and strict records follow the repository record pattern.
+Dependencies are
 `docs/plans/40-declare-specialist-expertise-and-router-policy.md`,
 `docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md`, Keiro/Effectful APIs
 already in this repository,
@@ -267,3 +374,12 @@ already in this repository,
 evolution, and `docs/plans/35-delegation-as-a-first-class-declared-capability.md` for all delegation governance and child
 operations. Use the Keiro source located by `mori registry show shinzui/keiro --full`; do not
 guess at a changed workflow API.
+
+
+## Revision Notes
+
+- 2026-08-23: Refreshed the plan after governed delegation and the checked workflow system
+  landed. Replaced impossible colon labels with static hyphenated labels under a real patch,
+  specified atomic batch reservation over the existing ledger, moved routing into its own Flow
+  interpreter, corrected tracing/test/gate ownership, and updated the target from Keiro 0.4 to
+  the repository's 0.14 cohort.
