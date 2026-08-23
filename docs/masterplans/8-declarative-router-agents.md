@@ -54,7 +54,7 @@ unverifiable intermediate state.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | Complete |
 | 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | Complete |
-| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | In Progress |
+| 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -144,10 +144,14 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   availability with explicit exclusion reasons and one immutable snapshot.
 - [x] (2026-08-23T19:40:11Z) EP-2 M3: Versioned, redacted, and tested the
   catalog boundary across the full package suite.
-- [ ] EP-3 M1: Define and strictly decode the typed route decision.
-- [ ] EP-3 M2: Journal catalog and decision under stable checked Keiro step names.
-- [ ] EP-3 M3: Validate policy, lifecycle, allow-list, and budget before using plan 35 delegation.
-- [ ] EP-3 M4: Record observability and prove matched, no-match, ambiguous, replay, and failure behavior.
+- [x] (2026-08-23T20:38:19Z) EP-3 M1: Defined and strictly decoded the typed route
+  decision, then validated it against the journaled catalog and router policy.
+- [x] (2026-08-23T20:38:19Z) EP-3 M2: Journaled the catalog and raw decision under
+  stable checked Keiro step names and proved changed-runtime replay bypasses both live inputs.
+- [x] (2026-08-23T20:38:19Z) EP-3 M3: Added complete batch preflight and atomic,
+  idempotent reservation before reusing plan 35's governed delegation boundary.
+- [x] (2026-08-23T20:38:19Z) EP-3 M4: Added bounded routing observability and proved
+  matched, no-match, ambiguous, replay, policy refusal, budget refusal, and failure behavior.
 
 
 ## Surprises & Discoveries
@@ -192,6 +196,13 @@ interactions between child plans. Provide concise evidence.
   missing delegate is excluded as `missing-declaration`, while the independent failed-manifest
   count preserves operational evidence without inventing a relationship. ADR 0028 records this
   boundary for EP-3 and future catalog consumers.
+- Model output is safest when retained as a replay artifact but treated only as a proposal.
+  Journaling the raw value preserves exact history; strict decoding plus validation against the
+  already-journaled catalog is the boundary that grants delegation authority. ADR 0029 records
+  this contract.
+- Atomic reservation composes cleanly with the existing single-child boundary when both are
+  idempotent by deterministic child workflow id. The batch operation prevents partial fan-out,
+  while each later governed delegate call still owns the final policy and child-spawn checks.
 
 
 ## Decision Log
@@ -260,12 +271,26 @@ plan.
 
 ## Outcomes & Retrospective
 
-EP-1 and EP-2 are complete. Shikigami now has an author-facing expertise and router-policy
-vocabulary plus a pure, delegate-bounded, lifecycle-aware candidate catalog. The catalog captures
-one declaration report and one immutable directory generation, exposes distinct typed exclusions,
-redacts behavior and loader internals, and carries deterministic source and catalog versions. The
-full package suite passes, and ADR 0028 preserves the authority/snapshot contract. EP-3 remains: no
-typed route decision or routed workflow execution exists yet.
+Complete. Shikigami now has an author-facing expertise and router-policy vocabulary, a pure and
+lifecycle-aware candidate catalog, and replay-safe routed Flow execution. A router journals the
+complete authority snapshot and raw evaluator proposal under checked static labels, then admits
+only a strictly decoded and policy-validated decision. Semantic no-match and ambiguity spawn no
+children; matched selections reserve the entire deterministic batch atomically before reusing the
+existing governed delegation boundary.
+
+The implementation preserves one durable source of truth for lifecycle and delegation policy.
+Catalogs capture one declaration report and one immutable directory generation, decisions cannot
+name unavailable or undeclared agents, and replay never reconsults changed declarations or model
+output. Parent-session traces expose bounded catalog, selection, confidence, rationale, and error
+metadata without document bodies, prompts, or candidate descriptions. ADRs 0028 and 0029 preserve
+the catalog-authority and model-proposal boundaries, while ADR 0023 now records atomic routed
+fan-out.
+
+All three child ExecPlans are complete. The checked Keiro workspace, generated facts and
+conformance, proof declarations, real-Postgres routing/replay suites, existing lifecycle and
+versioning suites, and every Cabal test suite pass. The direct route operations produce the one
+expected pre-v1 `WorkflowBodyChanged` report against `9000b96` under ADR 0027; the resulting v1
+baseline is replay-neutral. No initiative scope remains open.
 
 
 ## Revision Notes
@@ -286,3 +311,6 @@ typed route decision or routed workflow execution exists yet.
 - 2026-08-23: Completed EP-2 with immutable directory snapshots, delegate-bounded catalog
   resolution, typed lifecycle/declaration exclusions, semantic UUIDv5 versions, redacted JSON,
   full-suite validation, and ADR 0028. Advanced the checkpoint to EP-3.
+- 2026-08-23: Completed EP-3 with strict typed decisions, replay-journaled catalog/evaluator
+  boundaries, atomic governed fan-out, bounded telemetry, real-Postgres replay/failure proofs,
+  ADR 0029, and all repository gates. Closed the initiative with every child complete.

@@ -65,7 +65,10 @@ This section must always reflect the actual current state of the work.
   confidence/fan-out refusals, exhausted budget, changed-runtime replay, child failure, exact
   journal labels, child-id stability, error categories, and payload/description redaction. All five
   workflow cases plus the existing Flow lifecycle/versioning suites pass.
-- [ ] Final: checked DSL, domain harness, `cabal test all`, and replay proof are green.
+- [x] (2026-08-23T20:38:19Z) Final: `keiro-check`, `keiro-inspect`, deterministic
+  scaffolding, generated conformance, the proof declarations, `cabal test all`, and the
+  changed-runtime replay proof are green. A diff from the resulting v1 routing baseline is
+  replay-neutral.
 
 
 ## Surprises & Discoveries
@@ -99,6 +102,10 @@ implementation. Provide concise evidence.
   `replay-neutral: stored-data replay is unchanged by this diff`. This is the deliberate
   ADR-0027 clean-v1 reset; `keiro-check`, `keiro-inspect`, regenerated conformance, and the
   proof declaration all pass.
+- Routing telemetry can remain replay-safe without adding tracing to the Flow effect row. The
+  Routing interpreter wraps the two journaled operations with the existing Shibuya tracing
+  effect and records only bounded authority metadata; replay tests prove that changed resolver
+  and evaluator closures are not invoked after their values have been journaled.
 
 
 ## Decision Log
@@ -166,7 +173,25 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Complete. A registered Flow router now resolves and journals one authoritative candidate
+catalog, journals a raw evaluator proposal under a second declared operation, and strictly
+decodes and validates that proposal before it can authorize delegation. `matched` decisions
+support single or ordered multi-agent delegation; `no-match` and `ambiguous` remain successful
+zero-child results. Invalid proposals, exhausted budget, evaluator errors, and child failures
+remain operational errors.
+
+Routed fan-out reuses plan 35's governance while adding one atomic, idempotent reservation for
+the complete deterministic child-id batch. This closes the partial-spawn gap without creating a
+second delegation path. Bounded Shibuya attributes expose the parent identity, catalog authority,
+selection, confidence, rationale, and error category without prompts, payload bodies, or candidate
+descriptions.
+
+The real-Postgres workflow matrix proves both semantic and failure outcomes, exact journal
+labels, selection order, budget refusal, child-id stability, and replay after replacing both the
+resolver and evaluator. The checked DSL, generated facts and conformance, proof manifests, Flow
+lifecycle/versioning suites, and every Cabal test suite pass. The only pre-baseline difference is
+the expected ADR-0027 `WorkflowBodyChanged` report against `9000b96`; `keiro-diff` against the
+resulting v1 baseline is replay-neutral. No planned functionality remains.
 
 
 ## Context and Orientation
@@ -436,3 +461,5 @@ guess at a changed workflow API.
   made the static labels part of the direct v1 baseline, and replaced the impossible passing
   pre-reset diff criterion with explicit component checks plus a captured expected
   `WorkflowBodyChanged` report under ADR 0027.
+- 2026-08-23: Completed typed route validation, journaled routing, atomic governed fan-out,
+  bounded telemetry, real-Postgres replay/failure proofs, and every repository acceptance gate.
