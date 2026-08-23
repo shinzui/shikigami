@@ -73,8 +73,9 @@ opaque token.
   database-backed end-to-end coverage, hermetic live transcript, and user/operator docs.
   The optional real-Kanmon comparison was not needed for acceptance and remains an
   informative follow-up.
-- [ ] Run all focused and full validation, record results here, and distill any durable
-  architectural decision that differs from the existing ADRs.
+- [x] (2026-08-23) Ran all focused and full validation, recorded the live proof and
+  exact results here, and confirmed that the implementation introduces no durable
+  architectural decision beyond accepted ADRs 0022 and 0026.
 
 
 ## Surprises & Discoveries
@@ -293,6 +294,23 @@ The optional real-Kanmon comparison was skipped because the shared wire DTOs, di
 contract inspection through `mori://shinzui/kanmon/repos/kanmon`, production-shaped stub,
 and hermetic tests provide the acceptance proof without coupling validation to another
 checkout.
+
+Final validation passed on the clean milestone commits. `nix develop --command cabal build
+all` succeeded; both `channel-reply.dhall` and the unchanged `heartbeat.dhall` validated;
+`shikigami-worker --describe-config` listed the public Kanmon URL and secret token key without
+a value; and `--check-config` reported `configuration valid`. `nix develop --command cabal
+test all -j1` passed all nine suites and 715 tests: 24 Keiro conformance, 29 agent, 15 API, 3
+client, 516 core, 2 migration-smoke, 4 migration-unit, 41 server, and 81 worker tests. The
+clean-tree `nix develop --command just keiro-gate HEAD` again reported
+`replay-neutral: stored-data replay is unchanged` and passed its conformance suite.
+
+ADR distillation produced no new ADR. ChannelEgress applies
+[ADR-0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) for
+asynchronous delivery truth and downstream idempotency, and
+[ADR-0026](../adr/0026-outbound-sink-credentials-stay-opaque-and-http-policy-lives-at-the-process-boundary.md)
+for opaque tokens and bounded HTTP behavior. The fixed proof-stub route and in-memory state
+are feature-local implementation choices already captured in this plan's Decision Log; a new
+ADR would duplicate rather than extend those accepted boundaries.
 
 
 ## Context and Orientation
