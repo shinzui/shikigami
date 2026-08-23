@@ -31,6 +31,12 @@ data RiskVerdict = RiskVerdict
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- Lifecycle correspondence checked by @Shikigami.FlowLifecycleSpec@: a low
+-- verdict is @ClassifyLowRisk@; a high verdict begins with @ClassifyHighRisk@;
+-- an acknowledged wait adds @Acknowledge@; and a timeout adds
+-- @DeadlineExpired@. The concrete declined result is not in the illustrative
+-- transducer's command alphabet, so the conformance claim deliberately covers
+-- only the three sequences that transducer models.
 atRiskCustomerFlow ::
   (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es, Acknowledgement :> es) =>
   Value ->

@@ -61,8 +61,10 @@ This section must always reflect the actual current state of the work.
       divergent `runAgentWithMemory` and `runAgentWithMemoryUsing` copies are deleted.
       All 29 `shikigami-agent` tests pass, `rg "runAgentWithMemory"` returns no hits, and two
       isolated CLI runs recalled zero then one prior memory while recording a learning each time.
-- [ ] M3: keiki lifecycle conformance test for the at-risk flow (or documented as
-      illustrative).
+- [x] (2026-08-23T18:20:23Z) M3: Added a Keiki input-acceptor conformance test for the
+      at-risk flow's three modelled branch sequences plus an invalid-order rejection, and
+      documented the branch-to-command mapping beside the flow body. All 21 FlowLifecycle
+      tests pass.
 - [ ] M4: Record the plan-19 reconciliation step and the sharedScope note for plan 34;
       full suite green.
 - [x] (2026-08-23T17:53:54Z) Implementation preflight: verified plans 19, 36, 39, and
@@ -99,6 +101,11 @@ implementation. Provide concise evidence.
   CLI acceptance therefore used a fresh `shikigami_plan27_cli` database, ran the current complete
   migration set, executed twice successfully, and then removed that isolated database. The stale
   existing database was not changed.
+- The concrete at-risk flow also has a `Declined` acknowledgement branch, while the illustrative
+  Keiki transducer has no decline command or state. The source mapping now states that boundary;
+  this plan tests the three sequences the transducer actually claims rather than silently implying
+  coverage of the unmodelled branch. Expanding the lifecycle alphabet would be a modelling change,
+  not consolidation.
 
 
 ## Decision Log
@@ -195,6 +202,11 @@ M2 removed the second session orchestrator rather than factoring smaller lifecyc
 CLI now creates a fresh workflow identity for each invocation and reports every terminal or
 nonterminal `WorkflowOutcome`. Its existing human report is unchanged on success, including
 across-run recall; an isolated two-run check observed the second run recall the first learning.
+
+M3 made the useful portion of the illustrative Keiki lifecycle executable as a specification:
+low risk, acknowledged high risk, and timed-out high risk are accepted, while acknowledgement
+before classification is rejected. The nearby mapping note keeps the correspondence—and its
+explicit decline limitation—visible when the flow changes.
 
 
 ## Context and Orientation

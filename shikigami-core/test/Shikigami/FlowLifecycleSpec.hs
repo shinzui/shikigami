@@ -11,6 +11,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
+import Keiki.Acceptor qualified as Acceptor
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
@@ -52,7 +53,9 @@ import Shikigami.Flow.Capability
   )
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer
-  ( atRiskCustomerMermaid,
+  ( AtRiskCustomerCommand (..),
+    atRiskCustomerLifecycle,
+    atRiskCustomerMermaid,
     atRiskCustomerValidationWarnings,
   )
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -71,6 +74,12 @@ tests =
     "FlowLifecycle"
     [ testCase "at-risk customer lifecycle is well-formed" do
         assertEqual "keiki validation warnings" [] atRiskCustomerValidationWarnings,
+      testCase "at-risk flow branches belong to the lifecycle command language" do
+        let accepts = Acceptor.accepts (Acceptor.inputAcceptor atRiskCustomerLifecycle)
+        assertBool "low-risk branch is accepted" (accepts [ClassifyLowRisk])
+        assertBool "acknowledged high-risk branch is accepted" (accepts [ClassifyHighRisk, Acknowledge])
+        assertBool "timed-out high-risk branch is accepted" (accepts [ClassifyHighRisk, DeadlineExpired])
+        assertBool "acknowledgement cannot precede classification" (not (accepts [Acknowledge])),
       testCase "at-risk customer lifecycle renders the expected states" do
         assertBool "Mermaid output starts as a state diagram" ("stateDiagram-v2" `Text.isInfixOf` atRiskCustomerMermaid)
         assertBool "Mermaid output includes AwaitingAck" ("AwaitingAck" `Text.isInfixOf` atRiskCustomerMermaid)
