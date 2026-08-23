@@ -68,7 +68,6 @@ library
     Shikigami.Flow.Capability
     Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
-    Shikigami.Flow.SinkOutbox
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Id.Name
@@ -89,6 +88,7 @@ library
     Shikigami.Sink.Delivery
     Shikigami.Sink.GrantStore
     Shikigami.Sink.Http
+    Shikigami.Sink.Intent
     Shikigami.Sink.KawaClient
     Shikigami.Sink.KizashiClient
     Shikigami.Sink.Permission
@@ -213,6 +213,7 @@ test-suite shikigami-core-test
     Shikigami.SinkAuthSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SinkHonestySpec
+    Shikigami.SinkIntentSpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec
     Shikigami.WorkflowVersioningSpec

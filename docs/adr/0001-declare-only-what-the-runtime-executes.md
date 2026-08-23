@@ -87,6 +87,13 @@ meantime by the literal wire fixtures in
 "the payload is a bare run job, not a versioned envelope" — are the tripwire
 that fires if someone declares a surface without moving the runtime with it.
 
+The undeclared sink contract has one hand-owned runtime owner:
+`Shikigami.Sink.Intent`. Agent runs, conversations, flows, and the outbox
+publisher share its `SinkIntent` codec, preparation, deterministic identity,
+delivery-receipt, and enqueue behavior. Its dedicated golden test pins the
+literal bytes and integration-event identity. This is consolidation within the
+hand-owned side of the generated-code firewall, not an exception to it.
+
 A corollary that has already bitten one downstream plan: a declaration is not
 made real by wanting it. `docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md`
 was written expecting a generated `SinkIntent` module to exist; it does not, and

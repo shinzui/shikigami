@@ -60,6 +60,7 @@ import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
 import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
+import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
@@ -98,6 +99,7 @@ main =
           RunEvidenceSpec.tests,
           SinkDeliverySpec.tests,
           SinkHonestySpec.tests,
+          SinkIntentSpec.tests,
           SinkAuthSpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,

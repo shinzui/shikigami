@@ -48,10 +48,10 @@ import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Flow.SinkOutbox (enqueueSinkIntentStep)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
+import Shikigami.Sink.Intent (enqueueSinkIntentStep)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 import Shikigami.Sink.Types (DanwaTarget, SinkResult)
 
@@ -291,11 +291,10 @@ writeMemory env mid opts value =
 -- (@Kioku.Distill.L1.l1AtomMemoryId@), which is the same construction; it is not
 -- exported, so this mints its own.
 --
--- Hashes UTF-8 bytes rather than @fromEnum@ over 'Char's. This deliberately
--- diverges from @deterministicOutboxIdForMessage@ in "Shikigami.Agent.Workflow",
--- whose @fromEnum@ truncates any code point above 255 and is safe only because
--- its inputs are ASCII by construction. A workflow name is not: nothing in the
--- type system keeps it ASCII. Do not \"fix\" this back to match its neighbour.
+-- Hashes UTF-8 bytes under the same policy as
+-- 'Shikigami.Sink.Intent.deterministicOutboxIdForMessage'. The namespace and
+-- input tuple remain distinct, so flow-memory ids cannot collide with sink
+-- outbox ids.
 deterministicFlowMemoryId :: WorkflowName -> WorkflowId -> Int -> Text -> MemoryId
 deterministicFlowMemoryId (WorkflowName wfName) (WorkflowId wfId) generation label =
   KindID.decorateKindID $

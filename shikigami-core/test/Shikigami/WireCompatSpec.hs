@@ -31,7 +31,7 @@ import Shikigami.Agent.Decl
     Sink (..),
   )
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
-import Shikigami.Agent.Workflow (SinkIntent (..), StepResult (..))
+import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
 import Shikigami.Capability.Overlay
   ( CapabilityDescriptor (..),
@@ -42,7 +42,7 @@ import Shikigami.Capability.Overlay
     mkCapabilityRevision,
     mkResolvedCapabilitySet,
   )
-import Shikigami.Flow.SinkOutbox qualified as FlowOutbox
+import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
   ( DanwaTarget (..),
@@ -239,41 +239,11 @@ outboxTests =
         let resolved = sampleSinkIntent {resolvedRecipient = Just "person:nadeem"}
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
         toJSON decoded @?= toJSON resolved,
-      -- The agent-run path and the flow path each carry their own copy of this
-      -- record, because the module that enqueues flow intents cannot import the
-      -- one that publishes them without a cycle. The publisher decodes both with
-      -- the agent-run copy, so a field on one and not the other is dropped in
-      -- transit with nothing to notice. Merging them belongs to
-      -- docs/plans/27-consolidate-the-sink-dispatch-and-delivery-machinery.md;
-      -- until then this is what makes the divergence a test failure.
-      testCase "the flow path's duplicate SinkIntent encodes identically" $
-        toJSON flowSinkIntent @?= toJSON sampleSinkIntent,
-      testCase "both intent copies carry a principal id identically" do
-        let agentIntent = sampleSinkIntent {principalId = Just "agent_at_risk_watch"}
-            flowIntent = flowSinkIntent {FlowOutbox.principalId = Just "agent_at_risk_watch"}
-        toJSON flowIntent @?= toJSON agentIntent,
       testCase "the lifecycle skip outcome round-trips without changing old outcomes" do
         let skipped = SinkResult {kind = SKizashiSignal, outcome = SkippedLifecycle "principal lifecycle is paused"}
         decoded <- decodeOrFail @SinkResult (LazyByteString.toStrict (encode skipped))
         decoded @?= skipped
     ]
-
--- | The same intent, built through "Shikigami.Flow.SinkOutbox"'s copy of the
--- record. Written out field by field on purpose: a conversion function would
--- hide exactly the mismatch this is looking for.
-flowSinkIntent :: FlowOutbox.SinkIntent
-flowSinkIntent =
-  FlowOutbox.SinkIntent
-    { FlowOutbox.agent = "at-risk-watch",
-      FlowOutbox.principalId = Nothing,
-      FlowOutbox.runId = "run_1",
-      FlowOutbox.ordinal = 0,
-      FlowOutbox.occurredAt = Just sampleTime,
-      FlowOutbox.danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
-      FlowOutbox.resolvedRecipient = Nothing,
-      FlowOutbox.sink = sampleSink,
-      FlowOutbox.output = outputValue
-    }
 
 sampleSinkIntent :: SinkIntent
 sampleSinkIntent =

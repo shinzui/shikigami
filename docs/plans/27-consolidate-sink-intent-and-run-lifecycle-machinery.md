@@ -32,9 +32,9 @@ Separately, the agent run lifecycle (open session → recall → run behavior �
 `agent-run` demo CLI, with subtly different failure-path semantics. And the keiki lifecycle
 transducer for the at-risk flow is a parallel artifact that nothing checks the flow against.
 
-After this plan, the sink-intent wire contract has exactly one generated definition from
-plan 39's checked Keiro DSL, re-exported behind the hand-owned `Shikigami.Sink.Intent` vertical with
-a golden round-trip test that fails if the wire format ever changes, so the two producers
+After this plan, the sink-intent wire contract has exactly one hand-owned definition in
+`Shikigami.Sink.Intent`, with a golden round-trip test that fails if the wire format ever changes,
+so the two producers
 and the one consumer can never silently disagree. The `agent-run` CLI drives the same
 durable lifecycle as the worker (or shares the exact same lifecycle functions), so there is
 one definition of what an agent run does and one failure-path behavior. The at-risk flow is
@@ -49,17 +49,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: consolidate the two `SinkIntent` copies into one hand-owned `Shikigami.Sink.Intent`
+- [x] (2026-08-23T18:08:27Z) M1: consolidated the two `SinkIntent` copies into one hand-owned `Shikigami.Sink.Intent`
       module, together with prepare/enqueue/id behavior, delete both former copies, and keep
       `WireCompatSpec`'s byte-identity fixtures green. **Revised 2026-08-19: this is a Haskell
       consolidation, not a regeneration** — the specification cannot own the type's codec until a
-      declared node consumes it. See the reconciliation section at the end of this plan.
+      declared node consumes it. `cabal build all`, the three SinkIntent tests, all 20
+      FlowLifecycle tests, all 44 AgentWorkflow tests, and `just keiro-gate HEAD` pass; the
+      scaffold is unchanged and `rg "data SinkIntent" shikigami-core/src` returns one hit.
 - [ ] M2: Unify the run lifecycle — `agent-run` CLI drives the durable workflow (or shares
       lifecycle functions); retire `runAgentWithMemory`'s divergent copy.
 - [ ] M3: keiki lifecycle conformance test for the at-risk flow (or documented as
       illustrative).
 - [ ] M4: Record the plan-19 reconciliation step and the sharedScope note for plan 34;
       full suite green.
+- [x] (2026-08-23T17:53:54Z) Implementation preflight: verified plans 19, 36, 39, and
+      47 complete; verified plan 28's trace context is present in both sink-intent
+      copies; `nix develop -c cabal build all` and `nix develop -c cabal test all -j1`
+      passed on the untouched implementation (460 core tests, 81 worker tests, and all
+      other repository and Keiro conformance suites green).
 
 
 ## Surprises & Discoveries
@@ -67,7 +74,23 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The record-pattern instruction path in `AGENTS.md` has moved from
+  `core/record-patterns.md` to `patterns/core/record-patterns.md`. Mori's
+  `mori registry docs shinzui/haskell-jitsurei` reported the current canonical
+  document as `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`; the
+  moved document was read before editing Haskell records.
+- Plans 19 and 28 have materially expanded both duplicated sink paths since this
+  plan was drafted: each copy now carries `principalId`, `resolvedRecipient`, a
+  pending delivery receipt, and `IntegrationEvent.traceContext`. Evidence:
+  `rg -n "principalId|resolvedRecipient|traceContext|deliveryReceipt"` over
+  `Shikigami.Agent.Workflow` and `Shikigami.Flow.SinkOutbox` finds the same
+  fields and preparation behavior in both copies. The consolidation must move
+  these settled semantics together rather than reproduce the older seven-field
+  sketch in this plan.
+- The new golden is a real wire-compatibility tripwire: a scratch codec edit that renamed
+  `runId` to `run_id` made only the pinned-byte assertion fail, showing the exact old and new
+  payloads. Restoring `omitNothingFields` with the original field names made all three focused
+  SinkIntent tests pass again. The scratch edit was not committed.
 
 
 ## Decision Log
@@ -128,13 +151,28 @@ Record every decision made while working on the plan.
   (MasterPlan 7). Deleting it here would preempt that plan.
   Date: 2026-07-08
 
+- Decision: Keep transport dispatch in `Shikigami.Agent.Workflow`, where `AgentRunDeps` owns
+  sink client configuration, but move the integration-event decoder and all intent preparation,
+  identity, receipt, and enqueue behavior to `Shikigami.Sink.Intent`. The bulk enqueue helper
+  accepts the already-resolved agent/job values instead of importing workflow-private `RunJob`
+  helpers.
+  Rationale: this removes both structural and behavioral duplication without introducing an
+  import cycle or moving process-level HTTP configuration into the sink contract module. The
+  journaled `dispatch-sinks` label, message ids, ordering keys, delivery receipts, trace context,
+  and publisher behavior remain unchanged.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+M1 removed 560 lines of duplicated sink contract and enqueue machinery while preserving the
+deployed JSON bytes, event identity, journal labels, deterministic ids, trace context, recipient
+resolution, and delivery receipts. The shared module is hand-owned deliberately: Keiro's checked
+workspace still declares only contracts whose generated artifacts the runtime executes. A
+scratch `runId` wire rename proved the new golden detects field-policy drift.
 
 
 ## Context and Orientation
@@ -208,11 +246,11 @@ non-test caller (`rg sharedScope` finds only its definition and export); it is d
 
 ## Plan of Work
 
-Milestone 1 — one sink intent contract and module. First update
-`domain/shikigami.keiro-workspace` with the exact deployed event type, schema version, fields, JSON
-names, and outbox relationship, run `check`/`diff`, and regenerate through plan 39. The
-generated module owns `SinkIntent` and its codec; do not edit it. Create the hand-owned
-`shikigami-core/src/Shikigami/Sink/Intent.hs` vertical by moving the shared behavior there:
+Milestone 1 — one sink intent contract and module. Keep the sink outbox undeclared, as required by
+ADR 0001: the current HTTP publisher is not a generated Keiro contract publisher, so a generated
+shape would not describe the codec the runtime executes. Create the hand-owned
+`shikigami-core/src/Shikigami/Sink/Intent.hs` vertical by moving the single `SinkIntent` definition
+and all shared behavior there:
 `PreparedSinkIntent`, `prepareSinkIntent`, `preparedSinkResult`,
 `enqueuePreparedSinkIntentTx`, `enqueueSinkIntentStep`, `sinkIntentEvent`,
 `deterministicOutboxIdForMessage`, and the bulk `enqueueSinkIntents` and the
@@ -224,15 +262,13 @@ function and pass the sink configs explicitly; choose the smaller diff and recor
 - Delete `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` entirely and change its importer
   `shikigami-core/src/Shikigami/Flow/Capability.hs:39` to
   `import Shikigami.Sink.Intent (enqueueSinkIntentStep)`.
-- Delete both hand-written `SinkIntent` definitions and the moved helpers from
-  `shikigami-core/src/Shikigami/Agent/Workflow.hs`; import the type from the generated module
-  through
+- Delete the former hand-written `SinkIntent` definition and moved helpers from
+  `shikigami-core/src/Shikigami/Agent/Workflow.hs`; import the type through
   `Shikigami.Sink.Intent`; re-export from `Agent/Workflow.hs` if downstream modules import
   those names from there today (`Conversation.hs` imports `AgentWorkflow.prepareSinkIntent`
   etc. — either repoint those imports to `Shikigami.Sink.Intent` or keep the re-export; the
   re-export is the smaller diff).
-- Register the hand-owned and generated modules per plan 39's firewall in
-  `shikigami-core/shikigami-core.cabal`; remove
+- Register the hand-owned module in `shikigami-core/shikigami-core.cabal`; remove
   `Shikigami.Flow.SinkOutbox` from the module list.
 - Add the golden test `shikigami-core/test/Shikigami/SinkIntentSpec.hs` (register in
   `test/Main.hs`): construct a representative `SinkIntent` for each `Sink` constructor
@@ -243,11 +279,11 @@ function and pass the sink configs explicitly; choose the smaller diff and recor
   against a checked-in expected `ByteString` (a golden string in the test), so a field
   rename or reordering is caught even if it round-trips. Assert the event's `eventType` is
   `"shikigami.sink.dispatch-requested"` and `schemaVersion` is `1`. This is the tripwire
-  that makes future drift impossible to land silently. The generated domain harness and DSL
-  evolution diff are part of the same acceptance gate.
+  that makes future drift impossible to land silently. The unchanged generated domain harness
+  and DSL evolution diff remain part of the workflow-topology acceptance gate.
 
 Acceptance: `cabal build all` succeeds; `rg "data SinkIntent" shikigami-core/src` finds
-exactly one generated definition and no hand-written definition; deterministic scaffold and
+exactly one hand-written definition in `Shikigami.Sink.Intent`; deterministic scaffold and
 domain-harness checks pass; the FlowLifecycleSpec sink tests
 (`FlowLifecycleSpec.hs:83-97`) and AgentWorkflowSpec outbox assertions still pass unchanged
 (same outbox message ids, same delivered details); the new golden test passes.
@@ -371,7 +407,7 @@ SinkIntent
 Accepted when these behaviors hold:
 
 1. Single sink-intent definition: `rg "data SinkIntent" shikigami-core/src` returns one
-   generated hit; `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` no longer exists; both
+   hand-owned hit; `shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` no longer exists; both
    former call sites import through `Shikigami.Sink.Intent`; DSL check, deterministic scaffold,
    domain harness, and evolution diff pass.
 2. Wire format preserved: the AgentWorkflowSpec outbox assertions
@@ -393,12 +429,12 @@ Accepted when these behaviors hold:
 
 All work is checked-spec/code motion plus tests; builds and tests repeat safely, and each DB-backed test
 provisions its own migrated database. The M1 extraction is behavior-preserving by the checked
-specification plus byte-level golden tests and is verified by the unchanged outbox
+workflow topology gate plus byte-level golden tests and is verified by the unchanged outbox
 assertions, so there is no data-migration or deploy-ordering hazard: existing outbox rows
 and journals decode identically because the codec bytes are unchanged. If M1 accidentally
 alters the wire format (caught by the golden test or the spec outbox assertions), revert the
-offending edit, correct the spec/schema mapping or hand-owned wiring, and regenerate; never
-patch the generated file. M2 changes only a demo command's code path; rolling it back
+offending edit and correct the hand-owned wiring; never patch the generated workflow files. M2
+changes only a demo command's code path; rolling it back
 restores the old non-durable behavior with no persistent effect. M3 and M4 are tests and
 documentation, always safe to redo. Because this plan changes no journaled step names (it is
 the plan whose acceptance criterion is that names and bytes are unchanged), it introduces no
@@ -422,25 +458,31 @@ Dependencies: `keiro` (`Keiro.Outbox`, `Keiro.Integration.Event`,
 `Keiro.Workflow` journal-append helpers — all already used by the code being moved),
 `keiki` (`Keiki.Acceptor.{inputAcceptor, accepts}`, `Keiki.Core.SymTransducer` — keiki is
 already a transitive dependency via the lifecycle module), `kioku` (unchanged session/memory
-helpers retained in `Agent/Run.hs`). No new package dependencies.
+helpers retained in `Agent/Run.hs`). M2 adds `keiro` as a direct dependency of the lightweight
+`shikigami-agent` package because its CLI handles a `WorkflowOutcome`; it was already in the
+repository dependency cohort.
 
 Signatures that must exist at the end (full paths):
 
 ```haskell
--- plan-39 generated module, re-exported by Shikigami.Sink.Intent
-data SinkIntent          -- agent, runId, ordinal, occurredAt, danwaTarget, sink, output
-
--- shikigami-core/src/Shikigami/Sink/Intent.hs (hand-owned behavior)
+-- shikigami-core/src/Shikigami/Sink/Intent.hs (hand-owned wire contract and behavior)
+data SinkIntent          -- agent, principalId, runId, ordinal, occurredAt,
+                         -- danwaTarget, resolvedRecipient, sink, output
 data PreparedSinkIntent
-prepareSinkIntent        :: WorkflowId -> StepName -> Text -> Text -> Int
-                         -> Maybe UTCTime -> Maybe DanwaTarget -> Sink -> Value -> UTCTime
+prepareSinkIntent        :: DirectoryHandle -> GrantSource -> Maybe Text
+                         -> WorkflowId -> StepName -> Text -> Text -> Int
+                         -> Maybe UTCTime -> Maybe DanwaTarget -> Maybe Text
+                         -> Sink -> Value -> UTCTime
                          -> IO PreparedSinkIntent
 preparedSinkResult       :: PreparedSinkIntent -> SinkResult
 enqueuePreparedSinkIntentTx :: PreparedSinkIntent -> Tx.Transaction ()
 enqueueSinkIntentStep    :: (Workflow :> es, Store :> es, IOE :> es)
-                         => StepName -> Text -> Text -> Int -> Maybe UTCTime
-                         -> Maybe DanwaTarget -> Sink -> Value -> Eff es SinkResult
-sinkIntentEvent          :: Text -> Text -> UTCTime -> SinkIntent -> IntegrationEvent
+                         => DirectoryHandle -> GrantSource -> Maybe Text
+                         -> StepName -> Text -> Text -> Int -> Maybe UTCTime
+                         -> Maybe DanwaTarget -> Maybe Text -> Sink -> Value
+                         -> Eff es SinkResult
+sinkIntentEvent          :: Text -> Text -> UTCTime -> Maybe TraceContext
+                         -> SinkIntent -> IntegrationEvent
 deterministicOutboxIdForMessage :: Text -> OutboxId
 
 -- shikigami-core/src/Shikigami/Agent/Run.hs (runAgentWithMemory removed; helpers kept)
