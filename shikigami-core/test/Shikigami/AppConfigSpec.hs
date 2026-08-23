@@ -26,7 +26,9 @@
 module Shikigami.AppConfigSpec (tests) where
 
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as ByteString
 import Data.List (sort)
+import Data.Maybe (isNothing)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
@@ -47,6 +49,7 @@ import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -78,6 +81,9 @@ surfaceTests =
                 "behavior.provider",
                 "conversation.idle_timeout_seconds",
                 "credentials.providers.anthropic.api_key",
+                "credentials.sinks.danwa.token",
+                "credentials.sinks.kawa.token",
+                "credentials.sinks.kizashi.token",
                 "database.connection_string",
                 "delegation.default_budget",
                 "directory.file.path",
@@ -86,6 +92,8 @@ surfaceTests =
                 "health.port",
                 "http.host",
                 "http.port",
+                "http.request_max_bytes",
+                "http.response_max_bytes",
                 "kafka.activity.topic",
                 "kafka.broker",
                 "kafka.dead_letter.queue",
@@ -123,6 +131,8 @@ surfaceTests =
               ("SHIKIGAMI_HEALTH_PORT", "health.port"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
+              ("SHIKIGAMI_HTTP_REQUEST_MAX_BYTES", "http.request_max_bytes"),
+              ("SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES", "http.response_max_bytes"),
               ("SHIKIGAMI_KAFKA_ACTIVITY_TOPIC", "kafka.activity.topic"),
               ("SHIKIGAMI_KAFKA_BROKER", "kafka.broker"),
               ("SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE", "kafka.dead_letter.queue"),
@@ -130,6 +140,9 @@ surfaceTests =
               ("SHIKIGAMI_KAFKA_EVENTS_TOPIC", "kafka.events.topic"),
               ("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "kafka.include_agent_actors"),
               ("SHIKIGAMI_KAFKA_STREAM_GROUP", "kafka.groups.stream"),
+              ("SHIKIGAMI_KAWA_TOKEN", "credentials.sinks.kawa.token"),
+              ("SHIKIGAMI_KIZASHI_TOKEN", "credentials.sinks.kizashi.token"),
+              ("SHIKIGAMI_DANWA_TOKEN", "credentials.sinks.danwa.token"),
               ("SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT", "sinks.danwa.agent_participant"),
               ("SHIKIGAMI_SINKS_DANWA_BASE_URL", "sinks.danwa.base_url"),
               ("SHIKIGAMI_SINKS_KAWA_BASE_URL", "sinks.kawa.base_url"),
@@ -154,6 +167,8 @@ surfaceTests =
         delegationBudgetNatural (delegationBudget defaultAppConfig) @?= 16
         portNumber (httpPort defaultAppConfig) @?= 8080
         httpHost defaultAppConfig @?= "127.0.0.1"
+        byteLimitBytes (httpRequestMaxBytes defaultAppConfig) @?= 8_388_608
+        byteLimitBytes (httpResponseMaxBytes defaultAppConfig) @?= 8_388_608
         runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300
         approvalDeadline defaultAppConfig @?= secondsToNominalDiffTime 900
         kafkaBroker defaultAppConfig @?= "127.0.0.1:9092"
@@ -165,10 +180,13 @@ surfaceTests =
         queueNameToText (kafkaDeadLetterQueue defaultAppConfig) @?= "shikigami_stream_dead_letters"
         kawaBaseUrl defaultAppConfig @?= "http://localhost:8088"
         kawaSourceSegment defaultAppConfig @?= "shinzui/shikigami"
+        assertBool "kawa has no default credential" (isNothing (kawaToken defaultAppConfig))
         kizashiBaseUrl defaultAppConfig @?= "http://localhost:8089"
         kizashiDefaultRecipient defaultAppConfig @?= "recipient:default"
+        assertBool "kizashi has no default credential" (isNothing (kizashiToken defaultAppConfig))
         danwaBaseUrl defaultAppConfig @?= "http://localhost:8080"
         danwaAgentParticipant defaultAppConfig @?= "part_shikigami"
+        assertBool "danwa has no default credential" (isNothing (danwaToken defaultAppConfig))
         -- Deliberately absent rather than pointing somewhere: rei has no HTTP
         -- surface, and a defaulted URL would turn "nowhere to send" into
         -- "connection refused to a host nobody chose".
@@ -287,6 +305,15 @@ strictnessTests =
       testCase "the boundary port is accepted" do
         config <- resolveOrFail (optionsWith [] [cliOverride httpPortKey "65535"]) [] []
         portNumber (httpPort config) @?= 65535,
+      testCase "HTTP body limits reject values outside 1 KiB through 64 MiB" $
+        mapM_
+          (\bad -> exitCode (runWith (optionsWith [] [cliOverride httpRequestMaxBytesKey bad]) [] []) @?= resolutionExitCode)
+          ["1023", "67108865", "-1", "1.5"],
+      testCase "HTTP body-limit boundaries are accepted" do
+        low <- resolveOrFail (optionsWith [] [cliOverride httpRequestMaxBytesKey "1024"]) [] []
+        high <- resolveOrFail (optionsWith [] [cliOverride httpResponseMaxBytesKey "67108864"]) [] []
+        byteLimitBytes (httpRequestMaxBytes low) @?= 1_024
+        byteLimitBytes (httpResponseMaxBytes high) @?= 67_108_864,
       testCase "duration budgets reject non-positive and unsafe values" $
         mapM_
           (\bad -> exitCode (runWith (optionsWith [] [cliOverride workerRunTimeoutSecondsKey bad]) [] []) @?= resolutionExitCode)
@@ -486,6 +513,25 @@ secrecyTests =
             ("the environment", [], [("PG_CONNECTION_STRING", planted)], []),
             ("a --set override", [], [], [cliOverride databaseConnectionStringKey planted])
           ],
+      testCase "a planted sink token appears in no rendering, whatever supplied it" $
+        mapM_
+          assertNoLeak
+          [ ("a sink token in a configuration file", [yaml "file" ("credentials:\n  sinks:\n    kawa:\n      token: " <> plantedTokenBytes <> "\n")], [], []),
+            ("a sink token in the environment", [], [("SHIKIGAMI_KAWA_TOKEN", plantedToken)], []),
+            ("a sink token in a --set override", [], [], [cliOverride kawaTokenKey plantedToken])
+          ],
+      testCase "an opaque token source renders and compares no plaintext at its public boundary" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAWA_TOKEN", plantedToken)]
+        case kawaToken config of
+          Nothing -> assertFailure "the configured kawa token did not resolve"
+          Just secret -> do
+            let token = credentialToken secret
+            assertBool "the exact bearer header should match" (matchesBearerHeader token ("Bearer " <> ByteString.pack (Text.unpack plantedToken)))
+            assertBool "a different bearer header must not match" (not (matchesBearerHeader token "Bearer wrong"))
+            fetched <- fetchToken (staticTokenSource token)
+            case fetched of
+              Left _ -> assertFailure "a static token source failed"
+              Right fetchedToken -> assertBool "the fetched token should remain usable without rendering" (matchesBearerHeader fetchedToken ("Bearer " <> ByteString.pack (Text.unpack plantedToken))),
       -- A failing resolution is the dangerous case: error renderings are where a
       -- raw value most easily escapes.
       testCase "a planted secret does not leak through a failing resolution" do
@@ -508,6 +554,12 @@ planted = "postgresql://user:s3cr3t-planted-token-42@db/shikigami"
 
 plantedBytes :: ByteString
 plantedBytes = "postgresql://user:s3cr3t-planted-token-42@db/shikigami"
+
+plantedToken :: Text
+plantedToken = "sink-s3cr3t-planted-token-42"
+
+plantedTokenBytes :: ByteString
+plantedTokenBytes = "sink-s3cr3t-planted-token-42"
 
 -- | Resolve one source combination in every mode and prove the token is absent
 -- from output, errors, and both resolution reports.

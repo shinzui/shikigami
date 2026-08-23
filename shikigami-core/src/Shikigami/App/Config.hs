@@ -52,6 +52,9 @@ module Shikigami.App.Config
     Port,
     mkPort,
     portNumber,
+    ByteLimit,
+    mkByteLimit,
+    byteLimitBytes,
 
     -- * Which model runs a Skill behavior
     ProviderSelection (..),
@@ -92,6 +95,8 @@ module Shikigami.App.Config
     kafkaDeadLetterQueueKey,
     httpHostKey,
     httpPortKey,
+    httpRequestMaxBytesKey,
+    httpResponseMaxBytesKey,
     healthPortKey,
     workerRunTimeoutSecondsKey,
     approvalDeadlineSecondsKey,
@@ -99,6 +104,9 @@ module Shikigami.App.Config
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
+    kawaTokenKey,
+    kizashiTokenKey,
+    danwaTokenKey,
     sinksKawaBaseUrlKey,
     sinksKawaSourceSegmentKey,
     sinksKizashiBaseUrlKey,
@@ -178,6 +186,34 @@ portNumber (Port value) = value
 
 portExpectation :: Text
 portExpectation = "a TCP port between 1 and 65535"
+
+-- | A validated in-memory bound for an HTTP request or response body.
+--
+-- The lower bound keeps accidental zero-byte limits from disabling every sink,
+-- while the upper bound prevents a configuration typo from defeating the
+-- allocation guard. The constructor stays private so HTTP code can rely on the
+-- invariant without checking it again.
+newtype ByteLimit = ByteLimit Int
+  deriving stock (Generic, Eq, Ord)
+
+-- | Build a body-size limit between 1 KiB and 64 MiB, inclusive.
+mkByteLimit :: Int -> Either Text ByteLimit
+mkByteLimit value
+  | value >= minByteLimit && value <= maxByteLimit = Right (ByteLimit value)
+  | otherwise = Left byteLimitExpectation
+
+-- | The body-size limit in bytes.
+byteLimitBytes :: ByteLimit -> Int
+byteLimitBytes (ByteLimit value) = value
+
+minByteLimit :: Int
+minByteLimit = 1_024
+
+maxByteLimit :: Int
+maxByteLimit = 67_108_864
+
+byteLimitExpectation :: Text
+byteLimitExpectation = "a whole number of bytes between 1024 and 67108864"
 
 -- | Which model the @Skill@ behavior arm dispatches with, and what it
 -- authenticates as.
@@ -294,6 +330,10 @@ data AppConfig = AppConfig
     httpHost :: !Text,
     -- | Port the public HTTP API binds.
     httpPort :: !Port,
+    -- | Largest encoded body an outbound sink request may carry.
+    httpRequestMaxBytes :: !ByteLimit,
+    -- | Largest body an outbound sink response may return.
+    httpResponseMaxBytes :: !ByteLimit,
     -- | Port a probe listener binds, when an operator names one.
     --
     -- 'Maybe' rather than a declared default because the sensible default is
@@ -316,14 +356,20 @@ data AppConfig = AppConfig
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
     kawaSourceSegment :: !Text,
+    -- | Bearer token sent to kawa, when that sink requires authentication.
+    kawaToken :: !(Maybe SecretText),
     -- | Base URL of the kizashi signal service.
     kizashiBaseUrl :: !Text,
     -- | Recipient used when a declared signal names none.
     kizashiDefaultRecipient :: !Text,
+    -- | Bearer token sent to kizashi, when that sink requires authentication.
+    kizashiToken :: !(Maybe SecretText),
     -- | Base URL of the danwa conversation server.
     danwaBaseUrl :: !Text,
     -- | danwa participant id Shikigami authors messages as.
     danwaAgentParticipant :: !Text,
+    -- | Bearer token sent to danwa, when that sink requires authentication.
+    danwaToken :: !(Maybe SecretText),
     -- | Base URL of a rei ingestion endpoint, if one exists.
     --
     -- The only sink base URL with no default, because rei has no HTTP surface to
@@ -369,16 +415,21 @@ appConfig =
     <*> withDefault kafkaDeadLetterQueueSetting (constant "stream-dead-letter-queue" "Keep poison Kafka records in Postgres before advancing their offsets" defaultKafkaDeadLetterQueue)
     <*> withDefault httpHostSetting (constant "loopback" "Keep a development server off the network" "127.0.0.1")
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
+    <*> withDefault httpRequestMaxBytesSetting (constant "http-request-limit" "Bound encoded sink request bodies to 8 MiB" (ByteLimit 8_388_608))
+    <*> withDefault httpResponseMaxBytesSetting (constant "http-response-limit" "Bound sink response bodies to 8 MiB" (ByteLimit 8_388_608))
     <*> optional healthPortSetting
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
+    <*> optional kawaTokenSetting
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
     <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient:default")
+    <*> optional kizashiTokenSetting
     <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
     <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" "part_shikigami")
+    <*> optional danwaTokenSetting
     <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
 
@@ -603,6 +654,22 @@ httpPortSetting =
     portDecoder
     (Text.pack . show . portNumber)
 
+httpRequestMaxBytesSetting :: Setting ByteLimit
+httpRequestMaxBytesSetting =
+  publicSettingWithRenderer
+    httpRequestMaxBytesKey
+    "Maximum encoded request body sent to an outbound sink, in bytes (1024-67108864)"
+    byteLimitDecoder
+    (Text.pack . show . byteLimitBytes)
+
+httpResponseMaxBytesSetting :: Setting ByteLimit
+httpResponseMaxBytesSetting =
+  publicSettingWithRenderer
+    httpResponseMaxBytesKey
+    "Maximum response body accepted from an outbound sink, in bytes (1024-67108864)"
+    byteLimitDecoder
+    (Text.pack . show . byteLimitBytes)
+
 healthPortSetting :: Setting Port
 healthPortSetting =
   publicSettingWithRenderer
@@ -623,6 +690,15 @@ portDecoder =
         case runDecoder (boundedIntegralDecoder @Int) key raw of
           Left _ -> Left (decodeFailure key portExpectation)
           Right value -> either (const (Left (decodeFailure key portExpectation))) Right (mkPort value)
+    )
+
+byteLimitDecoder :: Decoder ByteLimit
+byteLimitDecoder =
+  decoder
+    ( \key raw ->
+        case runDecoder (boundedIntegralDecoder @Int) key raw of
+          Left _ -> Left (decodeFailure key byteLimitExpectation)
+          Right value -> either (const (Left (decodeFailure key byteLimitExpectation))) Right (mkByteLimit value)
     )
 
 workerRunTimeoutSecondsSetting :: Setting NominalDiffTime
@@ -678,17 +754,38 @@ sinksKawaBaseUrlSetting = publicSettingWithRenderer sinksKawaBaseUrlKey "Base UR
 sinksKawaSourceSegmentSetting :: Setting Text
 sinksKawaSourceSegmentSetting = publicSettingWithRenderer sinksKawaSourceSegmentKey "Source segment kawa attributes ingested activity to" textDecoder id
 
+kawaTokenSetting :: Setting SecretText
+kawaTokenSetting =
+  secretSetting
+    kawaTokenKey
+    "Bearer token for the kawa sink"
+    (SecretText <$> textDecoder)
+
 sinksKizashiBaseUrlSetting :: Setting Text
 sinksKizashiBaseUrlSetting = publicSettingWithRenderer sinksKizashiBaseUrlKey "Base URL of the kizashi signal service" textDecoder id
 
 sinksKizashiDefaultRecipientSetting :: Setting Text
 sinksKizashiDefaultRecipientSetting = publicSettingWithRenderer sinksKizashiDefaultRecipientKey "Recipient used when a signal declares none" textDecoder id
 
+kizashiTokenSetting :: Setting SecretText
+kizashiTokenSetting =
+  secretSetting
+    kizashiTokenKey
+    "Bearer token for the kizashi sink"
+    (SecretText <$> textDecoder)
+
 sinksDanwaBaseUrlSetting :: Setting Text
 sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base URL of the danwa conversation server" textDecoder id
 
 sinksDanwaAgentParticipantSetting :: Setting Text
 sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" textDecoder id
+
+danwaTokenSetting :: Setting SecretText
+danwaTokenSetting =
+  secretSetting
+    danwaTokenKey
+    "Bearer token for the danwa sink"
+    (SecretText <$> textDecoder)
 
 -- | Deliberately without a default: there is no rei endpoint to default to.
 sinksReiBaseUrlSetting :: Setting Text
@@ -782,6 +879,12 @@ httpHostKey = stableKey "http.host"
 httpPortKey :: Key
 httpPortKey = stableKey "http.port"
 
+httpRequestMaxBytesKey :: Key
+httpRequestMaxBytesKey = stableKey "http.request_max_bytes"
+
+httpResponseMaxBytesKey :: Key
+httpResponseMaxBytesKey = stableKey "http.response_max_bytes"
+
 healthPortKey :: Key
 healthPortKey = stableKey "health.port"
 
@@ -823,6 +926,15 @@ behaviorModelKey = stableKey "behavior.model"
 
 anthropicApiKeyKey :: Key
 anthropicApiKeyKey = stableKey "credentials.providers.anthropic.api_key"
+
+kawaTokenKey :: Key
+kawaTokenKey = stableKey "credentials.sinks.kawa.token"
+
+kizashiTokenKey :: Key
+kizashiTokenKey = stableKey "credentials.sinks.kizashi.token"
+
+danwaTokenKey :: Key
+danwaTokenKey = stableKey "credentials.sinks.danwa.token"
 
 -- | Every key this declaration accepts, in schema order.
 --
@@ -882,6 +994,8 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
+          binding (EnvName "SHIKIGAMI_HTTP_REQUEST_MAX_BYTES") httpRequestMaxBytesKey,
+          binding (EnvName "SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES") httpResponseMaxBytesKey,
           binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
@@ -893,6 +1007,9 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
           binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
+          binding (EnvName "SHIKIGAMI_KAWA_TOKEN") kawaTokenKey,
+          binding (EnvName "SHIKIGAMI_KIZASHI_TOKEN") kizashiTokenKey,
+          binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey

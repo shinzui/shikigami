@@ -38,6 +38,7 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
 - [x] (2026-08-23T15:08:41Z) Pre-implementation audit: compared the full plan with the current seven-package tree, plan 37's delivered Settei surface, plans 19/36/47, the still-open but unrelated migration item in plan 37, local ADRs 0003/0020/0022/0024, and the Mori-located dependency sources. The plan required a refresh before implementation.
 - [x] (2026-08-23T15:08:41Z) Prerequisites: plans 19, 36, and 47 are complete; plan 37's application configuration, redaction, and source composition are complete. Its only open item is the migration package cycle and does not block sink authentication.
 - [x] (2026-08-23T15:08:41Z) Refreshed every affected plan section onto the current package boundaries, Settei secret types, dependency releases, local ADRs, and applicable Haskell Jitsurei standards before changing code.
+- [x] (2026-08-23T15:22:16Z) Foundation: added validated 1 KiB–64 MiB `ByteLimit` settings (8 MiB defaults), optional redacted Settei secrets with the three exact legacy token bindings, and the opaque `BearerToken`/`TokenSource` API with constant-time header comparison. All 442 core tests pass.
 - [ ] Milestone 1: shared TLS-capable `Manager` with timeouts and bounded request/response bodies; `postJSON` takes an `HttpEnv`, injects auth, and preserves typed failure class; kawa/kizashi clients rewired.
 - [ ] Milestone 2: optional Settei secret settings with explicit legacy bindings, converted to opaque tokens and threaded from composition root to dispatch; secret types have no `Show`/JSON instances; boot log states which sinks have credentials (never values).
 - [ ] Milestone 3: danwa client path authenticated (local servant runner over the shared token-injecting manager, replacing `Danwa.runDanwa`).
@@ -58,6 +59,9 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
 
 - Observation: The authoritative package registry currently lists `http-client` 0.7.19, `http-client-tls` 0.4.0, and `servant-client` 0.20.3.0. Mori located their sources at `mori://snoyberg/http-client` and `mori://haskell-servant/servant`; upstream tags confirm those releases. The existing project already selects Servant 0.20.x through its package bounds and Danwa source pin.
   Evidence: `cabal list --simple-output`, upstream `git ls-remote --tags`, `mori registry show ... --full`, and `cabal.project`.
+
+- Observation: The draft's strict field annotation on the `TokenSource` `newtype` is rejected by GHC; newtype constructors cannot carry field strictness because their representation is already the wrapped value. The standards-compliant definition therefore keeps the direct `fetchToken` field but omits the impossible bang.
+  Evidence: GHC 9.12.4 rejected the draft signature during the first compile; the corrected module and all 442 core tests compile and pass.
 
 
 ## Decision Log
@@ -94,6 +98,10 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
   request. Limits are Settei domain values and violations are typed permanent protocol/input
   failures.
   Date: 2026-07-22
+
+- Decision: Use `Data.ByteArray.constEq` from `memory` 0.18.x for bearer-header comparison and keep that comparison behind `matchesBearerHeader`.
+  Rationale: `ByteString`'s ordinary equality can short-circuit on the first mismatching byte. The established `memory` primitive provides the required constant-time byte comparison without exposing a token renderer from the public auth module. Mori has no registered `memory` project, so the selected `>=0.18 && <0.19` bound was verified against Hackage's 0.18.0 release and the upstream `memory-v0.18.0` tag.
+  Date: 2026-08-23
 
 - Decision: Plan 37 owns Settei source composition, explicit legacy environment
   bindings, validation, diagnostics, and exit semantics. This plan declares per-sink
@@ -280,7 +288,7 @@ data CredentialFailureReason
 -- | Where tokens come from. Static today (a constant); a shomei-backed source
 -- later fetches a scoped service token, caches it until expiry, and refreshes —
 -- behind this same one-method interface, so nothing downstream changes.
-newtype TokenSource = TokenSource {fetchToken :: !(IO (Either CredentialFailure BearerToken))}
+newtype TokenSource = TokenSource {fetchToken :: IO (Either CredentialFailure BearerToken)}
 
 staticTokenSource :: BearerToken -> TokenSource
 staticTokenSource token = TokenSource (pure (Right token))
@@ -605,7 +613,7 @@ Signatures that must exist at the end (full module paths):
 newtype BearerToken = BearerToken Text          -- private constructor; no Show/Read/JSON
 data CredentialFailure = CredentialFailure
   { reference :: !CredentialRef, reason :: !CredentialFailureReason }
-newtype TokenSource = TokenSource {fetchToken :: !(IO (Either CredentialFailure BearerToken))}
+newtype TokenSource = TokenSource {fetchToken :: IO (Either CredentialFailure BearerToken)}
 credentialToken :: SecretText -> BearerToken
 staticTokenSource :: BearerToken -> TokenSource
 matchesBearerHeader :: BearerToken -> ByteString -> Bool

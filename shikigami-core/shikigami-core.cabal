@@ -83,6 +83,7 @@ library
     Shikigami.Repository
     Shikigami.RunEvidence.Conformance
     Shikigami.Sink
+    Shikigami.Sink.Auth
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
     Shikigami.Sink.Delivery
@@ -124,6 +125,7 @@ library
     Shikigami.RunEvidence.Generated.Harness
     Shikigami.RunEvidence.Generated.Projection
     Shikigami.RunEvidence.Generated.Transducer
+    Shikigami.Sink.Auth.Internal
 
   build-depends:
     , aeson                        >=2.2
@@ -155,6 +157,7 @@ library
     , kioku-core
     , kiroku-store
     , lens                         >=5.2
+    , memory                       >=0.18    && <0.19
     , mmzk-typeid
     , optparse-applicative         >=0.19    && <0.20
     , pgmq-hasql
