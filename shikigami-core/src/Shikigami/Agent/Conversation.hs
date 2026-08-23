@@ -835,7 +835,7 @@ runConversationWorkflow env epoch mStart msg =
         . withKirokuStore connectionSettings
         . runStoreResource
         $ runWorkflowWith
-          shikigamiWorkflowRunOptions
+          (shikigamiWorkflowRunOptions (appEnv env))
           conversationWorkflowName
           (conversationWorkflowId epoch msg)
           (conversationWorkflow env mStart)

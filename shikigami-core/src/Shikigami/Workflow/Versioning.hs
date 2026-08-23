@@ -37,6 +37,7 @@ import Data.Set (Set)
 import Data.Time (NominalDiffTime)
 import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptions)
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
+import Kioku.App (AppEnv (..))
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
 
@@ -62,15 +63,19 @@ shikigamiActivePatches =
   AgentRun.declaredPatches <> DanwaConversation.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
-shikigamiWorkflowRunOptions :: WorkflowRunOptions
-shikigamiWorkflowRunOptions =
-  defaultWorkflowRunOptions {activePatches = shikigamiActivePatches}
+shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions
+shikigamiWorkflowRunOptions AppEnv {tracer = appTracer, metrics = appMetrics} =
+  defaultWorkflowRunOptions
+    { activePatches = shikigamiActivePatches,
+      tracer = Just appTracer,
+      metrics = appMetrics
+    }
 
 -- | The options the resume worker uses, carrying 'shikigamiWorkflowRunOptions'
 -- so a resumed run is configured exactly as its first run was.
-shikigamiWorkflowResumeOptions :: NominalDiffTime -> WorkflowResumeOptions
-shikigamiWorkflowResumeOptions timeout =
+shikigamiWorkflowResumeOptions :: AppEnv -> NominalDiffTime -> WorkflowResumeOptions
+shikigamiWorkflowResumeOptions appEnv timeout =
   defaultWorkflowResumeOptions
-    { runOptions = shikigamiWorkflowRunOptions,
+    { runOptions = shikigamiWorkflowRunOptions appEnv,
       leaseTtl = timeout + 30
     }

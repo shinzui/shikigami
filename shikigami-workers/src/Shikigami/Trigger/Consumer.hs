@@ -83,6 +83,7 @@ import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), record
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelope)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
@@ -154,25 +155,26 @@ data RecordDisposition
 type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
 
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
-subscribeActivityStream :: Log.Logger -> OnSupervisor -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger onSupervisor appEnv directory config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger onSupervisor "stream" appEnv config $ processActivityRecordWithDirectory logger appEnv directory deadLetterQueue include agents onHit
+subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger onSupervisor metrics appEnv directory config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
-subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream logger onSupervisor appEnv directory config@StreamConfig {deadLetterQueue} agents onHit =
-  runSubscription logger onSupervisor "events" appEnv config $ processIntegrationEventRecordWithDirectory logger appEnv directory deadLetterQueue agents onHit
+subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream logger onSupervisor metrics appEnv directory config@StreamConfig {deadLetterQueue} agents onHit =
+  runSubscription logger onSupervisor "events" metrics appEnv config $ processIntegrationEventRecordWithDirectory logger appEnv directory deadLetterQueue agents onHit
 
 runSubscription ::
   Log.Logger ->
   OnSupervisor ->
   Text ->
+  ShikigamiMetrics ->
   AppEnv ->
   StreamConfig ->
   (KafkaInboundRecord -> IO RecordDisposition) ->
   IO ()
-runSubscription logger onSupervisor prefix AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
+runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
   reconnect 1
   where
     reconnect backoffSeconds = do
@@ -193,7 +195,7 @@ runSubscription logger onSupervisor prefix AppEnv {tracer} StreamConfig {broker 
             let handler message = do
                   attempt <-
                     liftIO . trySynchronous $ do
-                      disposition <- processKafkaMessage streamTopic processRecord message
+                      disposition <- processKafkaMessage streamTopic metrics processRecord message
                       logDisposition logger prefix disposition
                       pure disposition
                   case attempt of
@@ -246,8 +248,8 @@ trySynchronous action =
       | otherwise -> pure (Left err)
     Right value -> pure (Right value)
 
-processKafkaMessage :: Text -> (KafkaInboundRecord -> IO RecordDisposition) -> Message es (Maybe ByteString) -> IO RecordDisposition
-processKafkaMessage streamTopic processRecord Message {envelope = Envelope {cursor, partition, headers, payload}} = do
+processKafkaMessage :: Text -> ShikigamiMetrics -> (KafkaInboundRecord -> IO RecordDisposition) -> Message es (Maybe ByteString) -> IO RecordDisposition
+processKafkaMessage streamTopic metrics processRecord Message {envelope = Envelope {cursor, partition, headers, payload}} = do
   now <- getCurrentTime
   case do
     recordPartition <- maybe (Left "Kafka envelope has no partition") parsePartition partition
@@ -265,7 +267,9 @@ processKafkaMessage streamTopic processRecord Message {envelope = Envelope {curs
           receivedAt = now
         } of
     Left err -> pure (TransientFailure err)
-    Right record -> processRecord record
+    Right record -> do
+      recordConsumerRecord metrics streamTopic
+      processRecord record
 
 parsePartition :: Text -> Either Text Int64
 parsePartition = parseSignedDecimal "Kafka partition"

@@ -75,11 +75,13 @@ tests =
   testGroup
     "WorkflowVersioning"
     [ testCase "resume lease exceeds the synchronous behavior timeout" do
+        tracer <- noopTracer
         let timeout = secondsToNominalDiffTime 300
+            appEnv = AppEnv {connectionSettings = defaultConnectionSettings "", tracer, metrics = Nothing}
             WorkflowResumeOptions
               { leaseTtl,
                 runOptions = WorkflowRunOptions {leaseHeartbeat}
-              } = shikigamiWorkflowResumeOptions timeout
+              } = shikigamiWorkflowResumeOptions appEnv timeout
         assertEqual "resume lease includes the scheduling margin" (secondsToNominalDiffTime 330) leaseTtl
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
       testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,

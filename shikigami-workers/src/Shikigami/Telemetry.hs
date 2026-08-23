@@ -1,59 +1,85 @@
--- | Runtime OpenTelemetry wiring for Shikigami.
+-- | Process-lifetime OpenTelemetry wiring for worker executables.
 --
 -- == Why this module reads the environment directly
 --
--- Everything else in this repository resolves configuration through
--- "Shikigami.App.Config"; @getEnv@ and @lookupEnv@ are forbidden outside that
--- declaration. This module is the one documented exception, and the exception is
--- narrow: the @OTEL_*@ variables are a cross-language specification owned by the
--- OpenTelemetry SDK, which parses them itself in
--- @loadExporterEnvironmentVariables@ below. Re-declaring them as Shikigami
--- settings would create a second, subtly different parser for names an operator
--- already knows from every other service in the fleet, and would not remove the
--- SDK's own reads. The single @lookupEnv@ here only asks whether the standard
--- endpoint variable is set at all, so that a process with no collector runs
--- against a no-op provider instead of failing to build an exporter.
---
--- A Shikigami-specific tracing *policy* — whether to trace at all, sampling
--- decisions — would be an ordinary Settei setting. The standard variables stay
--- SDK-owned.
+-- The standard @OTEL_*@ variables remain SDK-owned. The one direct endpoint
+-- lookup preserves Shikigami's established behavior: without an explicit OTLP
+-- endpoint the process installs no-op providers instead of trying the SDK's
+-- default localhost exporter.
 module Shikigami.Telemetry
-  ( withRunTracer,
+  ( withRunTelemetry,
   )
 where
 
-import Control.Exception (bracket)
-import Data.String (fromString)
-import OpenTelemetry.Exporter.OTLP.Span (loadExporterEnvironmentVariables, otlpExporter)
-import OpenTelemetry.Processor.Batch.Span (batchProcessor, batchTimeoutConfig)
-import OpenTelemetry.Trace.Core qualified as Otel
+import Control.Exception (bracket, onException)
+import Control.Monad (void)
+import Data.Text (Text)
+import Keiro.Telemetry (KeiroMetrics, keiroInstrumentationLibrary, newKeiroMetrics)
+import OpenTelemetry.Metric qualified as Metric
+import OpenTelemetry.Trace qualified as Trace
 import Shibuya.Telemetry.Effect (Tracer)
+import Shikigami.Telemetry.Metrics
+  ( ShikigamiMetrics,
+    newShikigamiMetrics,
+    shikigamiInstrumentationLibrary,
+  )
 import System.Environment (lookupEnv)
 
--- | Build a worker tracer from @OTEL_EXPORTER_OTLP_ENDPOINT@ when configured.
--- Without an endpoint, the action runs against a no-op provider so callers do
--- not need separate tracing and non-tracing code paths.
-withRunTracer :: (Tracer -> IO a) -> IO a
-withRunTracer action = do
+data Providers = Providers
+  { tracer :: !Trace.TracerProvider,
+    meter :: !Metric.MeterProvider
+  }
+
+-- | Acquire one tracer and meter provider for a long-running workers process,
+-- construct both Keiro's and Shikigami's instruments, and flush everything
+-- before provider shutdown.
+withRunTelemetry :: Text -> (Tracer -> Maybe KeiroMetrics -> ShikigamiMetrics -> IO a) -> IO a
+withRunTelemetry scope action =
+  bracket acquire release \Providers {tracer = tracerProvider, meter = meterProvider} -> do
+    keiroMeter <- Metric.getMeter meterProvider keiroInstrumentationLibrary
+    shikigamiMeter <- Metric.getMeter meterProvider shikigamiInstrumentationLibrary
+    keiroMetrics <- newKeiroMetrics keiroMeter
+    shikigamiMetrics <- newShikigamiMetrics shikigamiMeter
+    action (makeTracer scope tracerProvider) (Just keiroMetrics) shikigamiMetrics
+
+acquire :: IO Providers
+acquire = do
   endpoint <- lookupEnv "OTEL_EXPORTER_OTLP_ENDPOINT"
   case endpoint of
-    Nothing -> bracket mkNoopProvider shutdownProvider (action . makeTracer)
-    Just _ -> bracket mkOtlpProvider shutdownProvider (action . makeTracer)
-  where
-    makeTracer provider =
-      Otel.makeTracer provider (fromString "shikigami.worker") Otel.tracerOptions
+    Nothing -> do
+      tracer <- newNoopTracerProvider
+      Trace.setGlobalTracerProvider tracer
+      Metric.setGlobalMeterProvider Metric.noopMeterProvider
+      pure Providers {tracer, meter = Metric.noopMeterProvider}
+    Just _ -> do
+      tracer <- Trace.initializeGlobalTracerProvider
+      meter <-
+        Metric.initializeGlobalMeterProvider
+          `onException` void (Trace.shutdownTracerProvider tracer Nothing)
+      pure Providers {tracer, meter}
 
-    shutdownProvider provider = do
-      _ <- Otel.shutdownTracerProvider provider Nothing
-      pure ()
+release :: Providers -> IO ()
+release Providers {tracer, meter} = do
+  void (Trace.forceFlushTracerProvider tracer Nothing)
+  void (Metric.forceFlushMeterProvider meter Nothing)
+  void (Trace.shutdownTracerProvider tracer Nothing)
+  void (Metric.shutdownMeterProvider meter Nothing)
+  replacement <- newNoopTracerProvider
+  Trace.setGlobalTracerProvider replacement
+  Metric.setGlobalMeterProvider Metric.noopMeterProvider
 
-mkNoopProvider :: IO Otel.TracerProvider
-mkNoopProvider =
-  Otel.createTracerProvider [] Otel.emptyTracerProviderOptions
+newNoopTracerProvider :: IO Trace.TracerProvider
+newNoopTracerProvider =
+  Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
 
-mkOtlpProvider :: IO Otel.TracerProvider
-mkOtlpProvider = do
-  cfg <- loadExporterEnvironmentVariables
-  exporter <- otlpExporter cfg
-  processor <- batchProcessor batchTimeoutConfig exporter
-  Otel.createTracerProvider [processor] Otel.emptyTracerProviderOptions
+makeTracer :: Text -> Trace.TracerProvider -> Tracer
+makeTracer scope provider =
+  Trace.makeTracer
+    provider
+    Trace.InstrumentationLibrary
+      { Trace.libraryName = scope,
+        Trace.libraryVersion = "0.1.0.0",
+        Trace.librarySchemaUrl = "",
+        Trace.libraryAttributes = Metric.emptyAttributes
+      }
+    Trace.tracerOptions

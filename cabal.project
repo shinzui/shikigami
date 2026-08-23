@@ -67,6 +67,7 @@ constraints:
   , settei                  ==0.2.0.0
   , hs-opentelemetry-api    ==1.0.0.0
   , hs-opentelemetry-sdk    ==1.0.0.0
+  , hs-opentelemetry-exporter-in-memory ==1.0.0.0
 
 -- ── Dependencies with no Hackage release ───────────────────────────────────
 

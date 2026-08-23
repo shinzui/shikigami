@@ -50,7 +50,8 @@ import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envDirectory, envLogger)
+import Shikigami.Telemetry.Metrics qualified as Metrics
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envDirectory, envLogger, envMetrics)
 
 -- | The queue contract for run jobs. Its codec intentionally preserves the
 -- existing unwrapped Aeson payload until a dual-read migration can introduce a
@@ -95,9 +96,13 @@ handleRunJob env context job =
             ]
         pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
       DrainAllowed -> do
+        liftIO (runMetric Metrics.recordRunStarted env job)
         attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
         case attemptResult of
           Left failure@(TransientBehaviorFailure {detail}) -> do
+            liftIO do
+              runMetric Metrics.recordRunFailed env job
+              runMetric Metrics.recordRunRetried env job
             liftIO $
               jobLog
                 env
@@ -233,6 +238,8 @@ dispatchRunJob env job = do
     ConversationRoute addressed -> runConversationAgent env job addressed
     AgentRunRoute -> runOneAgent env job
     RouteError detail -> do
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunDeadLettered env job
       jobLog
         env
         job
@@ -262,6 +269,8 @@ runConversationAgent env job addressed =
   case find ((== agentName job) . name) (agents env) of
     Nothing -> do
       let detail = "unknown agent " <> agentName job
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunDeadLettered env job
       jobLog
         env
         job
@@ -275,6 +284,8 @@ runConversationAgent env job addressed =
       result <- Conversation.runConversationTurn (conversationEnv env) decl addressed
       case result of
         Left (Conversation.ConversationTransientFailure err) -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunRetried env job
           jobLog
             env
             job
@@ -285,6 +296,8 @@ runConversationAgent env job addressed =
             ]
           pure ()
         Left (Conversation.ConversationPermanentFailure err) -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunDeadLettered env job
           jobLog
             env
             job
@@ -295,6 +308,8 @@ runConversationAgent env job addressed =
             ]
           pure ()
         Left (Conversation.ConversationTerminalFailure err) -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunDeadLettered env job
           jobLog
             env
             job
@@ -311,15 +326,19 @@ runConversationAgent env job addressed =
         -- existed, because a busy conversation was indistinguishable from a
         -- transient failure -- makes the ordinary case look like an incident.
         Left (Conversation.ConversationBusy detail) ->
-          jobLog
-            env
-            job
-            Log.Info
-            "worker.conversation.redelivered"
-            [ "detail" Aeson..= detail,
-              "reason" Aeson..= ("conversation_busy" :: Text)
-            ]
+          do
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunRetried env job
+            jobLog
+              env
+              job
+              Log.Info
+              "worker.conversation.redelivered"
+              [ "detail" Aeson..= detail,
+                "reason" Aeson..= ("conversation_busy" :: Text)
+              ]
         Right _ -> do
+          runMetric Metrics.recordRunCompleted env job
           jobLog env job Log.Info "worker.conversation.completed" []
       pure (conversationJobOutcome result)
 
@@ -337,6 +356,8 @@ runOneAgent env job =
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
         case resE of
           Left err -> do
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunRetried env job
             jobLog
               env
               job
@@ -347,9 +368,12 @@ runOneAgent env job =
               ]
             pure ()
           Right (Completed (Right _result)) -> do
+            runMetric Metrics.recordRunCompleted env job
             jobLog env job Log.Info "worker.job.completed" []
             pure ()
           Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure err))) -> do
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunRetried env job
             jobLog
               env
               job
@@ -361,6 +385,8 @@ runOneAgent env job =
             pure ()
           Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
             let err = AgentWorkflow.agentRunFailureDetail failure
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunDeadLettered env job
             jobLog
               env
               job
@@ -374,6 +400,8 @@ runOneAgent env job =
             jobLog env job Log.Info "worker.job.suspended" []
             pure ()
           Right Cancelled -> do
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunDeadLettered env job
             jobLog
               env
               job
@@ -382,6 +410,8 @@ runOneAgent env job =
               ["reason" Aeson..= ("workflow_cancelled" :: Text)]
             pure ()
           Right Failed -> do
+            runMetric Metrics.recordRunFailed env job
+            runMetric Metrics.recordRunDeadLettered env job
             jobLog
               env
               job
@@ -453,6 +483,10 @@ triggerKindText = \case
   TriggeredByStream -> "stream"
   TriggeredByEvent -> "event"
   TriggeredByDelegation -> "delegation"
+
+runMetric :: (Metrics.ShikigamiMetrics -> Text -> Text -> IO ()) -> WorkerEnv -> RunJob -> IO ()
+runMetric record env job =
+  record (envMetrics env) (agentName job) (triggerKindText (triggerKind job))
 
 spanArgs :: SpanKind -> SpanArguments
 spanArgs spanKind =

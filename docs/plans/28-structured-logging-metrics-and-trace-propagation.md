@@ -69,15 +69,16 @@ the HTTP POST to the sink endpoint.
 - [ ] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
       non-JSON output left on a worker's stderr, and it appears on abrupt termination. See
       Surprises & Discoveries.
-- [ ] M2 (provider proof): a `Meter` built from the hs-opentelemetry 1.0.0.0 SDK exports a
-      test counter and the provider force-flushes before shutdown.
-- [ ] M2: `Shikigami.Telemetry.Metrics` written (`ShikigamiMetrics` record +
+- [x] M2 (provider proof): a `Meter` built from the hs-opentelemetry 1.0.0.0 SDK exports all
+      seven Shikigami instruments on provider force-flush. Done 2026-08-23.
+- [x] M2: `Shikigami.Telemetry.Metrics` written (`ShikigamiMetrics` record +
       `newShikigamiMetrics`); `Shikigami.Telemetry.withRunTelemetry` supersedes `withRunTracer`
-      and also yields `Maybe KeiroMetrics` and `ShikigamiMetrics`.
-- [ ] M2: `AppEnv.metrics` populated (`Just`) in all construction sites; `Nothing` arguments at
-      `Worker.hs:108` and `Worker.hs:119` replaced; queue-depth and outbox-backlog samplers
-      running in the worker; consumer throughput counters in `Trigger.Consumer`.
-- [ ] M3: scheduler and both consumers run a real tracer (`withRunTelemetry`), not `noopTracer`.
+      and also yields `Maybe KeiroMetrics` and `ShikigamiMetrics`. Done 2026-08-23.
+- [x] M2: production `AppEnv.metrics` construction sites populated; Keiro workflow, resume,
+      outbox, timer, and scheduler options receive process telemetry; queue-depth and
+      outbox-backlog sampler supervised; run and consumer counters recorded. Done 2026-08-23.
+- [x] M3: scheduler and both consumers run a real tracer (`withRunTelemetry`), not
+      `noopTracer`. Done as part of M2 process wiring 2026-08-23.
 - [ ] M3: `sinkIntentEvent` and the `Shikigami.Flow.SinkOutbox` builder populate
       `IntegrationEvent.traceContext`; test proves `keiro.keiro_outbox.traceparent` is non-null
       after `enqueueSinkIntents`.
@@ -127,6 +128,13 @@ Keiro 0.14's `WorkflowRunOptions` carries both `tracer` and `metrics`, but
 Parameterizing that module from `AppEnv` preserves its ownership of patches and resume options;
 threading process dependencies into options does not alter durable step shape and requires no
 workflow patch under `docs/workflow-versioning.md`.
+
+**The SDK's meter initializer defaults to an OTLP exporter even without an endpoint.** That is
+correct SDK behavior, but it is not Shikigami's existing opt-in contract: a process with no
+`OTEL_EXPORTER_OTLP_ENDPOINT` must not start a localhost exporter loop. `withRunTelemetry`
+therefore performs the single endpoint-presence check already permitted by the configuration
+policy, installs global no-op tracer/meter providers when absent, and delegates all other
+`OTEL_*` parsing to the SDK when present.
 
 **The original plan named locations the code no longer occupies.** This plan was written before
 `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md` landed,
@@ -448,6 +456,28 @@ to Milestone 4. keiro's own log lines are not convertible from this repository.
 **Lesson for milestones 2 through 4.** The paths and dependency assumptions needed a fresh
 audit after the package split. That audit and re-pointing were completed on 2026-08-23 before
 M2 began; see Surprises & Discoveries for the resulting boundary decisions.
+
+### Milestone 2 — complete 2026-08-23
+
+`Shikigami.Telemetry.Metrics` now owns seven provider-free instruments and bounded recording
+helpers. `shikigami-workers` brackets the global tracer and meter providers in each worker,
+scheduler, and subscription process, constructs Keiro and Shikigami metrics once, force-flushes
+before shutdown, and restores no-op globals after release. No configured endpoint still means
+no exporter; configured processes delegate the remaining standard environment surface to the
+1.0.0.0 SDK.
+
+The same process telemetry now reaches Kioku `AppEnv`, Keiro workflow and resume options,
+outbox publication, timers, and the scheduler. The worker records admitted attempts and exact
+terminal/retry/dead-letter decisions. Both Kafka consumers count delivered records by topic.
+A supervised 15-second sampler reads PGMQ total depth through `queueMetrics` and Keiro outbox
+backlog through `sampleOutboxBacklog`; either failure is a structured warning and does not
+suppress the independent sample or stop durable work.
+
+The provider proof uses hs-opentelemetry's released in-memory metric exporter. One force-flush
+exports all seven exact names. A second focused test proves a queue sampling failure still runs
+the outbox sampler. `cabal test shikigami-core-test shikigami-workers-test` passes: 454 core
+tests and 80 worker tests. The workflow-versioning tests remain green without a new patch id,
+confirming that telemetry dependency threading did not alter durable step shape.
 
 
 ## Context and Orientation

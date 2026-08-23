@@ -30,7 +30,7 @@ import Kioku.App (runAppIO)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Health.Worker (LoopName (OutboxLoop), beat)
 import Shikigami.Log qualified as Log
-import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, envHeartbeats, envLogger)
+import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, envHeartbeats, envKeiroMetrics, envLogger)
 
 -- | Publish claimed outbox rows until the process stops.
 --
@@ -53,7 +53,7 @@ runOutboxPublisher env = do
               rows
           unsafeEff_ (modifyIORef' attempted (<> zip rows (snd <$> outcomes)))
           pure outcomes
-    result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
+    result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions (envKeiroMetrics env))
     case result of
       Left err -> Log.logError (envLogger env) "worker.outbox.failed" ["error" Aeson..= Text.pack (show err)]
       Right summary -> do

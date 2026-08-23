@@ -16,12 +16,12 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
-import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
+import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude (Text)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
-import Shikigami.Telemetry (withRunTracer)
+import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import System.Exit qualified as Exit
@@ -42,7 +42,7 @@ runWorkerCmd :: AppConfig -> IO ()
 runWorkerCmd config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
-  withRunTracer \tr -> do
+  withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
     behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
@@ -100,12 +100,12 @@ runWorkerCmd config = do
       -- this list when it becomes a loop.
       registry <-
         newHeartbeatsWithStaleness
-          ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop]]
+          ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop, TelemetryLoop]]
               <> directoryLoopRegistration (Config.directorySettings config)
           )
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry (Config.directorySettings config)
-      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
           env =
             WorkerEnv
               { pool = storePool,
@@ -123,6 +123,7 @@ runWorkerCmd config = do
                 danwa = danwaConfig,
                 rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
                 http = sinkHttp,
+                metrics = shikigamiMetrics,
                 logger,
                 -- The C11 gate reads shikigami.sink_grants over the same pool
                 -- the rest of the process uses, so a grant change is visible on

@@ -489,13 +489,15 @@ spikeRuntime session =
 runSleepSpike :: WorkflowId -> IO (Either StoreError (WorkflowOutcome Value))
 runSleepSpike workflowId =
   withShikigamiMigratedDatabase \connStr ->
-    withStore (defaultConnectionSettings connStr) \_kirokuStore ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+      tracer <- noopTracer
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
       runEff
         . runErrorNoCallStack
         . withKirokuStore (defaultConnectionSettings connStr)
         . runStoreResource
         $ runWorkflowWith
-          shikigamiWorkflowRunOptions
+          (shikigamiWorkflowRunOptions appEnv)
           (WorkflowName "shikigami.flow.spike")
           workflowId
           (sleepFlow (object []))
@@ -524,7 +526,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
     . withKirokuStore (connectionSettings appEnv)
     . runStoreResource
     $ runWorkflowWith
-      shikigamiWorkflowRunOptions
+      (shikigamiWorkflowRunOptions appEnv)
       (WorkflowName "shikigami.flow.spike")
       workflowId
       body

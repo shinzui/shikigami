@@ -15,7 +15,7 @@ import Data.Text qualified as Text
 import Data.Time (getCurrentTime)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
-import Kioku.App (AppEnv (..), noopTracer)
+import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
@@ -27,6 +27,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, SchedulerLoop), beat, loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
+import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
@@ -44,7 +45,7 @@ runSchedulerCmd config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
-  StoreConnection.withStore settings \st -> do
+  StoreConnection.withStore settings \st -> withRunTelemetry "shikigami.scheduler" \tr keiroMetrics _ -> do
     let manifestDirectory = Config.agentsDirectory config
         storePool = StoreConnection.pool st
     report <-
@@ -70,7 +71,6 @@ runSchedulerCmd config = do
         exitFailure
       Right () ->
         Log.logInfo logger "scheduler.queue.reconciled" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
-    tracer <- noopTracer
     registry <-
       newHeartbeatsWithStaleness
         ( (SchedulerLoop, loopStaleAfter SchedulerLoop)
@@ -78,7 +78,7 @@ runSchedulerCmd config = do
         )
     DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
       startProcessDirectory logger registry (Config.directorySettings config)
-    let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
+    let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
         env =
           SchedulerEnv
             { pool = storePool,

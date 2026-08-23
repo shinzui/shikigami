@@ -115,7 +115,7 @@ defaultResumeRetry =
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env@WorkerEnv {runTimeout} =
   runResumeLoop defaultResumeRetry (envLogger env) do
-    result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions runTimeout) (workflowRegistry env))
+    result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions (appEnv env) runTimeout) (workflowRegistry env))
     pure case result of
       Left err -> Text.pack (show err)
       Right () -> "the resume runner returned without an error, which a forever loop should never do"

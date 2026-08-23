@@ -16,6 +16,8 @@
 module Shikigami.Workers.Config
   ( WorkerEnv (..),
     envLogger,
+    envMetrics,
+    envKeiroMetrics,
     envGrants,
     envCatchUpPolicy,
     envHeartbeats,
@@ -38,6 +40,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
+import Keiro.Telemetry (KeiroMetrics)
 import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
@@ -54,6 +57,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Http (SinkHttp)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 import System.Exit (exitFailure)
@@ -100,6 +104,9 @@ data WorkerEnv = WorkerEnv
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
     http :: !SinkHttp,
+    -- | Shikigami-owned process metrics. The provider may be real or no-op;
+    -- recording sites never branch on telemetry configuration.
+    metrics :: !ShikigamiMetrics,
     -- | Which grant source every C11 check in this process consults. Built once
     -- at boot as 'DbGrants' over the store pool, so a grant or revocation takes
     -- effect on the next dispatch with no restart.
@@ -122,6 +129,14 @@ data WorkerEnv = WorkerEnv
 -- the unqualified use ambiguous under @DuplicateRecordFields@.
 envLogger :: WorkerEnv -> Log.Logger
 envLogger WorkerEnv {logger = l} = l
+
+-- | Named because both 'WorkerEnv' and Kioku's 'AppEnv' carry a @metrics@
+-- field under @DuplicateRecordFields@.
+envMetrics :: WorkerEnv -> ShikigamiMetrics
+envMetrics WorkerEnv {metrics = value} = value
+
+envKeiroMetrics :: WorkerEnv -> Maybe KeiroMetrics
+envKeiroMetrics WorkerEnv {appEnv = AppEnv {metrics = value}} = value
 
 -- | Named for the same reason as 'envLogger': several of the records below also
 -- carry a @grants@ field.

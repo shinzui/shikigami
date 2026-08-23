@@ -115,6 +115,7 @@ data LoopName
   | ResumeLoop
   | OutboxLoop
   | TimerLoop
+  | TelemetryLoop
   | ConsumerLoop
   | SchedulerLoop
   | DirectoryLoop
@@ -128,6 +129,7 @@ loopCheckName = \case
   ResumeLoop -> "loop.resume"
   OutboxLoop -> "loop.outbox"
   TimerLoop -> "loop.timer"
+  TelemetryLoop -> "loop.telemetry"
   ConsumerLoop -> "loop.consumer"
   SchedulerLoop -> "loop.scheduler"
   DirectoryLoop -> "loop.directory"
@@ -154,6 +156,7 @@ loopStaleAfter = \case
   ResumeLoop -> 10
   OutboxLoop -> 10
   TimerLoop -> 10
+  TelemetryLoop -> 45
   ConsumerLoop -> 60
   SchedulerLoop -> 10
   DirectoryLoop -> 60

@@ -1816,9 +1816,9 @@ drainConversationResumes appEnv env = go (0 :: Int) (8 :: Int)
 -- ADR 0004's whole point, and it is why every durable run goes through
 -- 'shikigamiWorkflowResumeOptions'.
 resumeConversationOnce :: AppEnv -> Conversation.ConversationEnv -> Eff AppEffects ResumeSummary
-resumeConversationOnce _appEnv env =
+resumeConversationOnce appEnv env =
   resumeWorkflowsOnce
-    (shikigamiWorkflowResumeOptions (secondsToNominalDiffTime 300))
+    (shikigamiWorkflowResumeOptions appEnv (secondsToNominalDiffTime 300))
     (Conversation.conversationRegistry env)
 
 -- | Fire a due conversation idle-timeout timer through the same one loop the

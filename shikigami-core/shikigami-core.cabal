@@ -98,6 +98,7 @@ library
     Shikigami.Sink.Validate
     Shikigami.Sink.Wire
     Shikigami.Store.DelegationBudget
+    Shikigami.Telemetry.Metrics
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream

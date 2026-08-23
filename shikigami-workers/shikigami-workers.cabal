@@ -27,6 +27,7 @@ library
     Shikigami.Flow.SinkOutbox.Publisher
     Shikigami.Health.Worker
     Shikigami.Telemetry
+    Shikigami.Telemetry.Sampler
     Shikigami.Trigger.Consumer
     Shikigami.Trigger.Scheduler
     Shikigami.Trigger.Timer
@@ -128,6 +129,7 @@ test-suite shikigami-workers-test
     Shikigami.Health.WorkerSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
+    Shikigami.TelemetrySpec
     Shikigami.Workers.CommandSpec
     Shikigami.Workers.SupervisionSpec
 
@@ -139,6 +141,8 @@ test-suite shikigami-workers-test
     , containers
     , effectful
     , hasql-pool
+    , hs-opentelemetry-exporter-in-memory
+    , hs-opentelemetry-sdk
     , keiro
     , keiro-pgmq
     , kioku-api

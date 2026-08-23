@@ -280,7 +280,7 @@ runAgentRunWorkflow deps job =
         . withKirokuStore (connectionSettings env)
         . runStoreResource
         $ runWorkflowWith
-          shikigamiWorkflowRunOptions
+          (shikigamiWorkflowRunOptions env)
           agentRunWorkflowName
           (WorkflowId (jobIdempotencyKey job))
           (agentRunWorkflow deps (Just job))

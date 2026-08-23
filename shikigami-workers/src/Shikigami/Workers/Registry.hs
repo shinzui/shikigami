@@ -32,9 +32,10 @@ import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailur
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
-import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TimerLoop), registerReport, supervisedLoopVerdict)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
+import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
@@ -53,7 +54,8 @@ runWorkers env = do
         [ (QueueLoop, runQueueWorker env),
           (ResumeLoop, runResumeWorker env),
           (OutboxLoop, runOutboxPublisher env),
-          (TimerLoop, runTimerWorker env)
+          (TimerLoop, runTimerWorker env),
+          (TelemetryLoop, runTelemetrySampler env)
         ]
       directoryLoops = maybe [] (pure . (DirectoryLoop,)) (envDirectoryRefresher env)
   superviseLoops (envLogger env) (durableLoops <> directoryLoops)
