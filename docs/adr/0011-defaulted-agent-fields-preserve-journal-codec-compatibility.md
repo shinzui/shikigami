@@ -4,6 +4,9 @@ Date: 2026-08-19
 
 Status: accepted
 
+Scope: released declaration shapes. The one-time pre-v1 baseline exception is
+recorded in [ADR 0027](0027-the-first-release-establishes-one-clean-durable-baseline.md).
+
 
 ## Context
 
@@ -75,7 +78,7 @@ and newly written declarations with default policy retain the old encoded bytes.
 New policy values are durable and inspectable only when an author explicitly
 selects them.
 
-Future additions to `AgentDecl` must review both compatibility surfaces: Dhall
+After the first release, additions to `AgentDecl` must review both compatibility surfaces: Dhall
 record completion and the workflow-journal JSON codec. A field default is not
 complete until the old JSON shape and missing-key decode are tested.
 

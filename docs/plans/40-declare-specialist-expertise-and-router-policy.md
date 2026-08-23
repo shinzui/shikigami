@@ -40,9 +40,12 @@ This section must always reflect the actual current state of the work.
   Keiro 0.14 dependency cohort.
 - [x] (2026-08-23T14:41:54Z) Prerequisites verified: plans 33, 35, 36, 39, and 47 have
   landed. The implementation can begin in `shikigami-core` without waiting on another plan.
-- [ ] M1: add `Expertise`, routing-policy unions, and backward-compatible `expertise` / `routing` fields to `schema/Agent.dhall`.
-- [ ] M2: mirror the types in `Shikigami.Agent.Decl`, extend its manual JSON compatibility codec, and validate router-only invariants with bounded `Natural` conversion.
-- [ ] M2: prove every existing manifest and historical default JSON declaration decodes with `expertise = []` and `routing = None`.
+- [x] (2026-08-23T19:00:21Z) Reconciled the declaration work with the imminent first release:
+  keep Dhall manifest defaults, remove the pre-release JSON compatibility shim, and establish
+  one complete v1 declaration object under ADR 0027.
+- [ ] M1: add `Expertise`, routing-policy unions, and manifest-compatible `expertise` / `routing` fields to `schema/Agent.dhall`.
+- [ ] M2: mirror the types in `Shikigami.Agent.Decl`, establish one complete v1 JSON shape, and validate router-only invariants with bounded `Natural` conversion.
+- [ ] M2: prove every existing Dhall manifest decodes with `expertise = []` and `routing = None`, while the v1 JSON object encodes every declaration field explicitly.
 - [ ] M3: add router/specialist proof manifests and document authoring, authority boundaries, and diagnostics.
 - [ ] Final: `cabal test all` and validation of both proof manifests succeed.
 
@@ -55,10 +58,11 @@ implementation. Provide concise evidence.
 - The checked-in schema now includes `delegates`, `delegationBudget`, `sanctionedProfile`,
   `capabilityOverlays`, `identity`, `memory`, and `enabled`. The Haskell mirror moved from the
   deleted `Shikigami.Api.Agent` module to `Shikigami.Agent.Decl` in `shikigami-core`.
-- `AgentDecl` is journaled by the durable `lookup-agent` step and therefore has a hand-written
-  JSON codec. Dhall record completion alone is insufficient: default expertise/routing fields
-  must be omitted from JSON and restored when absent, exactly like the fields delivered by
-  plan 33.
+- `AgentDecl` is journaled by the durable `lookup-agent` step, but Shikigami has no users,
+  stored journals, queued declarations, or external wire consumers before its imminent first
+  release. The current hand-written omission/missing-key codec protects an empty pre-release
+  population. This plan removes that shim and establishes one complete derived v1 JSON shape;
+  after release, that complete shape becomes the compatibility baseline.
 
 
 ## Decision Log
@@ -67,8 +71,8 @@ Record every decision made while working on the plan.
 
 - Decision: Add `expertise : List Expertise` with default `[]` and
   `routing : Optional RouterPolicy` with default `None`.
-  Rationale: These defaults make every ordinary agent byte-compatible and keep routing an
-  explicit opt-in.
+  Rationale: These defaults keep every checked-in Dhall manifest source-compatible and keep
+  routing an explicit opt-in.
   Date: 2026-07-25
 
 - Decision: Keep `delegates` as the sole candidate authority and reject a router policy on an
@@ -92,8 +96,17 @@ Record every decision made while working on the plan.
 
 - Decision: Extend the manual `AgentDecl` JSON codec so default expertise and routing values
   preserve historical journal bytes and missing keys restore those defaults.
+  Status: Superseded on 2026-08-23 by the clean-v1 decision below.
   Rationale: `lookup-agent` values outlive the binary; source-compatible Dhall defaults do not
   make old JSON journal records decode or keep unchanged declarations byte-compatible.
+  Date: 2026-08-23
+
+- Decision: Remove the pre-release `AgentDecl` omission/missing-key codec and derive one complete
+  v1 JSON object containing every declaration field, including default values.
+  Rationale: Shikigami has no users or durable/external values encoded under the earlier shape,
+  and its first release is imminent. Carrying a compatibility shim into v1 would create debt for
+  an empty population. Dhall defaults continue to protect repository source manifests; the full
+  v1 JSON object becomes the durable baseline after release under ADR 0027.
   Date: 2026-08-23
 
 
@@ -123,8 +136,10 @@ also added `sanctionedProfile` and `capabilityOverlays`; preserve all of these f
 adds no delegation implementation.
 
 The relevant durable decisions are
-`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md`, which requires
-defaulted declaration fields to preserve old JSON bytes, and
+`docs/adr/0027-the-first-release-establishes-one-clean-durable-baseline.md`, which requires one
+complete pre-release declaration shape without compatibility paths for nonexistent data;
+`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md`, which governs
+future changes after v1; and
 `docs/adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md`, which makes `delegates`
 the authority boundary this routing metadata must not replace.
 
@@ -146,9 +161,10 @@ editing its body.
 
 Milestone 2 mirrors the declaration in
 `shikigami-core/src/Shikigami/Agent/Decl.hs` with strict, direct field names, explicit deriving
-strategies, and no type-name prefixes. Extend the existing manual `ToJSON` and `FromJSON`
-instances: omit `expertise = []` and `routing = Nothing`, restore both when their keys are
-missing, and encode complete non-default values. Add
+strategies, and no type-name prefixes. Remove the existing hand-written `ToJSON` and `FromJSON`
+instances and derive both classes for `AgentDecl`, producing one complete v1 object whose keys
+include default-valued `delegates`, `delegationBudget`, `sanctionedProfile`,
+`capabilityOverlays`, `identity`, `memory`, `enabled`, `expertise`, and `routing`. Add
 `shikigami-core/src/Shikigami/Router/Declaration.hs`. Validation rejects an expertise
 entry with an empty/duplicate normalized key, routing with no delegates, zero or more than 16
 selections, `maxSelections` greater than the number of distinct delegates, and duplicate
@@ -157,7 +173,7 @@ because `Priority` already owns `Low` and `High` in this module; record fields r
 and unprefixed. Keep Dhall/JSON decoding and semantic validation separate so diagnostics name
 the actual invariant. Add focused tests in
 `shikigami-core/test/Shikigami/RouterDeclarationSpec.hs`; extend
-`shikigami-core/test/Shikigami/AgentLoaderSpec.hs` with old/default/non-default JSON cases and
+`shikigami-core/test/Shikigami/AgentLoaderSpec.hs` with default/non-default complete-v1 JSON cases and
 the existing all-manifest regression. Register the new module in `shikigami-core-test`.
 
 Milestone 3 adds `agents/proof/architecture-practice-router.dhall` with routing enabled and
@@ -206,8 +222,9 @@ Both commands exit zero and print the decoded expertise/routing values. A test f
 
 Acceptance requires all existing valid manifests to load unchanged and decode to empty
 expertise/no router policy. The two proof manifests must load with their exact declared
-values. The historical default JSON fixture must decode with the same defaults, encoding that
-declaration must remain byte-identical, and non-default expertise/routing must round-trip.
+values. A default declaration must encode every v1 field, decode back to the same value, and
+the resulting complete object becomes the checked first-release fixture. Non-default
+expertise/routing must round-trip.
 Semantic tests must prove empty and duplicate expertise keys, duplicate delegates,
 router-without-delegates, zero/oversized selection bounds, and a selection bound larger than
 the allow-list are rejected. An ordinary manifest whose payload later contains an `agent`
@@ -223,16 +240,17 @@ The change is additive and contains no database migration. Formatting, validatio
 are safe to repeat. If a proof manifest fails, update its record completion against the current
 `Agent.default`; do not add a second default or duplicate any delivered field. If implementation
 stops after Dhall changes, Haskell compilation will fail until the mirror is updated. Complete
-the Dhall mirror, manual JSON codec, and compatibility tests in the same commit so no deploy can
-write a declaration shape that a later replay cannot read.
+the Dhall mirror, complete v1 JSON derivation, and declaration tests in the same commit so the
+first release exposes only one coherent declaration shape.
 
 
 ## Portfolio Reconciliation (2026-08-23)
 
 Plans 33, 35, 36, 39, and 47 are complete, so this first MasterPlan-8 child is ready to
-implement. Reuse plan 33's Dhall plus manual JSON declaration pattern, preserve plan 35's
-governed `delegates` authority, and target the delivered `Shikigami.Agent.Decl` module. Keep
-policy closed, bounded, and backward compatible through defaults; do not start runtime routing
+implement. Reuse plan 33's Dhall declaration pattern, preserve plan 35's governed `delegates`
+authority, and target the delivered `Shikigami.Agent.Decl` module. Keep
+policy closed, bounded, and source-compatible through Dhall defaults; replace the pre-release
+manual JSON pattern with the complete v1 shape, and do not start runtime routing
 here.
 
 
@@ -267,7 +285,9 @@ validateRouterDeclaration
 The exact `AgentDecl` record also contains `delegates`, `delegationBudget`,
 `sanctionedProfile`, `capabilityOverlays`, `identity`, `memory`, and `enabled`; this plan adds
 `expertise :: ![ExpertiseDecl]` and `routing :: !(Maybe RouterPolicy)`. All records use strict
-direct fields and the project's `DuplicateRecordFields` / Generic Lens convention.
+direct fields and the project's `DuplicateRecordFields` / Generic Lens convention. Its derived
+JSON codec writes all fields as the complete v1 durable shape; future post-release additions
+follow ADR 0011 rather than silently changing that baseline.
 Dependencies are Dhall decoding already used by `Shikigami.Agent.Loader`, the additive schema
 pattern in `docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md`,
 `delegates` from `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, and final
@@ -281,3 +301,7 @@ library or service is required.
 - 2026-08-23: Refreshed the plan after its external foundations landed. Corrected package and
   command paths, incorporated the manual `AgentDecl` journal codec and relevant ADRs, updated
   tests and commands, and marked the declaration child ready to implement.
+- 2026-08-23: Reconciled the plan with the imminent first release and confirmed absence of users
+  or durable/external declaration values. Replaced the planned extension of a pre-release
+  compatibility shim with one complete v1 JSON shape, retained Dhall defaults for checked-in
+  manifests, and adopted ADR 0027 as the release boundary.

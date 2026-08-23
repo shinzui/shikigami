@@ -37,13 +37,16 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] (2026-08-23T14:41:54Z) Refreshed this plan against governed Flow delegation, the
-  checked language-5 workspace, the workflow patch contract, current tracing ownership, and
+  checked language-5 workspace, the workflow evolution contract, current tracing ownership, and
   the repository's Keiro 0.14 cohort.
 - [x] (2026-08-23T14:41:54Z) External prerequisites verified: plans 24, 35, 36, 39, and 47
   have landed. Plans 37 and 38 retain only unrelated migration-CLI configuration cleanup.
+- [x] (2026-08-23T19:00:21Z) Reconciled durable routing with the imminent first release:
+  direct static route labels become the reported v1 baseline under ADR 0027, with no router
+  patch id or legacy branch for an empty pre-release population.
 - [ ] Prerequisites: child plans 40 and 41 have landed.
 - [ ] M1: define typed route outcomes/selections, strict JSON decoding, and policy validation.
-- [ ] M2: add static hyphenated catalog and decision operations behind one new checked workflow patch with a real legacy branch.
+- [ ] M2: add static hyphenated catalog and decision operations directly to the clean v1 workflow baseline, with no router patch or legacy branch.
 - [ ] M2: implement a replay-safe Routing Flow capability, a production evaluator seam, and a deterministic test evaluator.
 - [ ] M3: preflight every selection, atomically reserve the complete plan-35 batch, and delegate only through plan 35.
 - [ ] M3: preserve matched child results and operational failures without semantic coercion.
@@ -64,8 +67,9 @@ implementation. Provide concise evidence.
   later selection discovers budget exhaustion.
 - The July step spellings `route-catalog:<label>` and `route-decision:<label>` contain `:` and
   cannot appear in a declared Keiro workflow body. The checked specification accepts static
-  wire words, and ADR-0012 requires any declared body addition to sit in a new patch that the
-  runtime genuinely honors.
+  wire words. Keiro deliberately classifies their direct addition as `WorkflowBodyChanged`;
+  ADR-0027 permits that reported break only for the initial v1 baseline while there are no
+  users, durable values, or external consumers.
 - `FlowRuntime` now carries only acknowledgement configuration. Flow effects are installed as
   interpreters in `runFlowBehavior`; a routing environment belongs in a `Routing` interpreter,
   not in `FlowRuntime`.
@@ -101,15 +105,26 @@ Record every decision made while working on the plan.
 
 - Decision: Use static hyphenated step names for each registered routing call site and place
   the complete catalog/decision addition inside one new `shikigami-routing-steps-v1` patch.
+  Status: Superseded on 2026-08-23 by the clean-v1 baseline decision below.
   Rationale: colon-bearing or runtime-computed labels cannot be checked as workflow wire words;
   static names keep the durable inventory visible to `just keiro-gate`.
   Date: 2026-08-23
 
 - Decision: The patch's legacy branch fails a routing call as unavailable without resolving a
   catalog, evaluating a model, reserving budget, or spawning a child.
+  Status: Superseded on 2026-08-23 by the clean-v1 baseline decision below.
   Rationale: a pre-patch in-flight run must retain the old body shape. There was no routing
   capability in that shape, so performing new routing work on the false branch would defeat the
   patch.
+  Date: 2026-08-23
+
+- Decision: Add the static route catalog and decision labels directly to the first released
+  workflow body, without a router patch id or false branch.
+  Rationale: Shikigami has no users, resumable journals, queued/stored old payloads, or external
+  wire consumers, and v1 is imminent. A router patch would protect an empty population and ship
+  dead code in the first release. The direct change remains declared, generated, replay-tested,
+  and reported as the expected pre-v1 `WorkflowBodyChanged` under ADR 0027; after v1, ADR 0012
+  applies without this exception.
   Date: 2026-08-23
 
 - Decision: Add atomic `reserveDelegationSlots` beside plan 35's single-slot operation, then
@@ -155,9 +170,13 @@ does not create another ledger or child-registration implementation.
 
 `domain/shikigami.keiro-workspace` composes language-5 agent-run and conversation members. The
 repository is pinned to Keiro/keiro-dsl 0.14. `docs/workflow-versioning.md` and
-`docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` require every declared
-body addition to be inside a new patch, generated into the active patch set, honored by a real
-runtime branch, and validated with `just keiro-gate`.
+`docs/adr/0027-the-first-release-establishes-one-clean-durable-baseline.md` permit this one
+pre-release body reset because no durable population exists. The direct labels are still checked,
+generated, and honored by runtime code. `keiro-diff` must report the deliberate
+`WorkflowBodyChanged`, while `keiro-check`, `keiro-inspect`, deterministic scaffolding, generated
+conformance, replay tests, and the full suite must pass. After v1,
+`docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` again requires every
+declared addition to use a real patch branch.
 
 `docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md` creates
 `CandidateCatalog`, including unavailable entries and a stable version. A route
@@ -178,14 +197,15 @@ the minimum; selection count is within `maxSelections`; no-match has no executab
 ambiguous alternatives are advisory and spawn nothing. Reject undeclared, unavailable, low
 confidence, duplicate, oversized, and stale-catalog decisions with distinct errors.
 
-Milestone 2 updates `domain/shikigami-agent-run.keiro` through its workspace. Add one contiguous
-patch `shikigami-routing-steps-v1` containing the static labels used by the first registered
-router: `route-catalog-architecture-practice` and
-`route-decision-architecture-practice`. Regenerate the checked modules and conformance
-expectations. Add the same `PatchId` constant to `Shikigami.Agent.Workflow`, call `patch` once
-per run, and pass the result into the Routing interpreter. On the false branch, `route` returns
-a typed permanent `RoutingUnavailableForLegacyRun` before any side effect. Do not use colon
-labels and do not derive step names from payload data.
+Milestone 2 updates `domain/shikigami-agent-run.keiro` through its workspace. Add the static
+labels used by the first registered router directly to the v1 body:
+`route-catalog-architecture-practice` and `route-decision-architecture-practice`. Regenerate
+the checked modules and conformance expectations without changing the declared patch set. The
+runtime always installs the Routing interpreter; do not add a `PatchId`, a legacy-unavailable
+error, or a false branch for nonexistent pre-v1 runs. Do not use colon labels and do not derive
+step names from payload data. Before committing, re-confirm that no release/deployment or durable
+population has appeared, run every non-diff gate component, and capture the expected direct-body
+`WorkflowBodyChanged` report against the pre-reset revision.
 
 Create `shikigami-core/src/Shikigami/Flow/Routing.hs` beside `Flow/Delegate.hs`. Add `Routing`
 to `FlowEffects`. `route` takes a validated static `RouteLabel`; `runRouting` maps that label to
@@ -248,10 +268,16 @@ sed -n '1,180p' shikigami-core/src/Shikigami/Flow/Delegate.hs
 sed -n '680,740p' shikigami-core/src/Shikigami/Agent/Workflow.hs
 ```
 
-Check the complete durable topology and generated layer before compiling runtime changes:
+Check the complete durable topology and generated layer before compiling runtime changes. The
+first four commands must pass. The final diff command must exit non-zero only because the direct
+pre-v1 body growth is reported as `WorkflowBodyChanged`; record its report in this plan:
 
 ```bash
-nix develop -c just keiro-gate HEAD^
+nix develop -c just keiro-check
+nix develop -c just keiro-inspect
+nix develop -c just keiro-scaffold
+nix develop -c cabal test keiro-shikigami-conformance
+nix develop -c just keiro-diff <pre-v1-baseline-ref>
 ```
 
 Format and validate the implementation:
@@ -283,17 +309,20 @@ global budget. A batch with two new children and only one remaining slot writes 
 and spawns no child. Replaying a successfully reserved batch spends no additional slots. A
 runtime/evaluator/decoder/child failure remains an error. Replaying the same workflow after
 replacing the evaluator and lifecycle snapshot must return the original decision and child ids
-and create no duplicate child. A pre-patch workflow run that reaches a routing call returns the
-typed legacy-unavailable failure and records neither routing step. Existing non-router flows
-continue to run. `nix develop -c just keiro-gate HEAD^` and
-`nix develop -c cabal test all` exit zero.
+and create no duplicate child. There is no pre-patch routing scenario to preserve: every v1 run
+uses the same routing body because no pre-router durable population exists. Existing non-router
+flows continue to run. The declared patch set contains
+no `shikigami-routing-steps-v1` id. All non-diff gate components and
+`nix develop -c cabal test all` exit zero; `keiro-diff` against the pre-v1 baseline exits non-zero
+with the single expected direct-body `WorkflowBodyChanged` finding, which is captured in Progress
+and accepted under ADR 0027. A diff against the resulting v1 baseline is green.
 
 
 ## Idempotence and Recovery
 
-Both new workflow operations are additive labeled steps inside one new checked patch. The
-runtime reads that guard once and the false branch performs no new routing work. A crash before
-a step is recorded re-executes the operation; catalog and decision values are deterministic for
+Both new workflow operations are static declared labels in the clean v1 baseline. There is no
+router patch record or false branch. A crash before a step is recorded re-executes the operation;
+catalog and decision values are deterministic for
 their inputs. Batch budget reservation is keyed by deterministic child workflow ids, so retrying
 cannot spend twice. A crash after reservation but before one or more child registrations leaves
 safe reserved slots; replay calls the same governed `delegate` operations and repairs the same
@@ -306,7 +335,7 @@ by the gate and are not formatted manually.
 Plans 24, 35, 36, 39, and 47 are complete; plans 37 and 38 have delivered every surface used
 here, and their remaining migration-CLI cleanup is unrelated. This plan now waits only on child
 plans 40 and 41. Target the checked language-5 workspace and the repository's Keiro 0.14 cohort,
-honor the new routing patch at runtime, and reuse plan 35's allow-list, global budget, cycle,
+establish the direct routing labels as the reported pre-v1 baseline under ADR 0027, and reuse plan 35's allow-list, global budget, cycle,
 typed delegation, and child-operation paths.
 
 
@@ -383,3 +412,8 @@ guess at a changed workflow API.
   specified atomic batch reservation over the existing ledger, moved routing into its own Flow
   interpreter, corrected tracing/test/gate ownership, and updated the target from Keiro 0.4 to
   the repository's 0.14 cohort.
+- 2026-08-23: Reconciled the workflow shape with the imminent first release and the confirmed
+  absence of users or durable state. Superseded the router patch and legacy-unavailable branch,
+  made the static labels part of the direct v1 baseline, and replaced the impossible passing
+  pre-reset diff criterion with explicit component checks plus a captured expected
+  `WorkflowBodyChanged` report under ADR 0027.

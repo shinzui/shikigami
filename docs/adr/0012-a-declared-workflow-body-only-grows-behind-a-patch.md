@@ -4,6 +4,9 @@ Date: 2026-08-19
 
 Status: accepted
 
+Scope: released workflow baselines. The one-time pre-v1 baseline exception is
+recorded in [ADR 0027](0027-the-first-release-establishes-one-clean-durable-baseline.md).
+
 
 ## Context
 
@@ -54,7 +57,7 @@ the reasoning was missing.
 
 ## Decision
 
-**Adding, removing, or reordering a label in a declared workflow body requires a
+**After the first release, adding, removing, or reordering a label in a declared workflow body requires a
 new `patch` block containing the whole change, and the runtime must honour that
 guard with a real branch.**
 

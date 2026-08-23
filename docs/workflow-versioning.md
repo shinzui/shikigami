@@ -161,6 +161,26 @@ intended first consumer, in
 
 ## The rules
 
+### The one pre-v1 baseline exception
+
+ADR 0027 records that Shikigami has no users or durable state to preserve and is
+approaching its first release. Before that release only, a planned v1 surface may
+replace an unreleased declaration or workflow shape directly instead of creating
+a compatibility path for an empty population. The owning ExecPlan must recheck
+all four facts immediately before the change: no resumable workflow journals, no
+queued or stored payloads requiring the old codec, no external wire consumers,
+and no release or deployment that froze the old shape.
+
+For a declared workflow-body reset, run `keiro-check`, `keiro-inspect`,
+`keiro-scaffold`, generated conformance, replay tests, and the full suite. Also
+run `keiro-diff` against the pre-reset revision and record its expected
+`WorkflowBodyChanged` finding. That one finding is accepted as evidence of the
+deliberate baseline reset; it is not hidden behind an undeclared label, a fake
+patch, or a weakened gate. Subsequent work compares against the new baseline.
+
+This exception expires at the first release or deployment, whichever comes
+first. Every rule below then applies without exception.
+
 **1. Workflow names and workflow ids are permanent.** The name is the journal's
 stream name and the id is its key; changing either makes every existing instance
 invisible rather than migrated. Both names live in the checked specification —

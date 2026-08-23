@@ -35,7 +35,7 @@ repository watching, tool or sink authorization, source edits, and merge gating.
 ## Decomposition Strategy
 
 The request spans three functional concerns that are independently demonstrable. EP-1 owns
-the author-facing declaration language and compatibility proof. EP-2 turns those declarations
+the author-facing declaration language and complete v1 wire-format proof. EP-2 turns those declarations
 into a versioned, lifecycle-aware candidate catalog without running a model or spawning a
 child. EP-3 owns the durable workflow boundary: typed decisions, journaling, validation,
 delegation, and observability. This makes the schema reviewable before runtime work starts
@@ -52,7 +52,7 @@ unverifiable intermediate state.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | Not Started |
+| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | In Progress |
 | 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | Not Started |
 | 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | Not Started |
 
@@ -80,10 +80,12 @@ hard ordering is therefore EP-1, then EP-2, then EP-3.
 
 IP-1 — the canonical agent declaration. EP-1 owns additive `ExpertiseDecl` and
 `RouterPolicy` shapes in `schema/Agent.dhall` and their mirrors in
-`shikigami-core/src/Shikigami/Agent/Decl.hs`. Its default-value JSON encoder and missing-key
-decoder preserve old `lookup-agent` journal bytes as required by
-`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md`. EP-2 and EP-3
-only consume these shapes. The
+`shikigami-core/src/Shikigami/Agent/Decl.hs`. Dhall defaults keep every checked-in manifest
+valid, while EP-1 replaces the pre-release omission/missing-key JSON shim with one complete v1
+declaration shape under
+`docs/adr/0027-the-first-release-establishes-one-clean-durable-baseline.md`. After v1,
+`docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md` governs further
+evolution. EP-2 and EP-3 only consume these shapes. The
 fields use direct names under `DuplicateRecordFields`; no type-prefixed record fields are
 introduced.
 
@@ -112,8 +114,12 @@ live Meibo client. A future typed client may use `meibo-client` without changing
 algorithm.
 
 IP-6 — durable routing and observability. EP-3 owns statically declared, hyphenated catalog
-and decision step names under a new checked patch. The runtime honors the patch with a real
-legacy branch per `docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md`.
+and decision step names in the first released workflow baseline. Because Shikigami has no users,
+durable state, or external wire consumers before its imminent v1 release, the labels land directly
+without a patch id or unreachable legacy branch, following
+`docs/adr/0027-the-first-release-establishes-one-clean-durable-baseline.md`. EP-3 records the
+expected pre-v1 `WorkflowBodyChanged` report and passes every non-diff gate component; after v1,
+`docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md` applies normally.
 Routing attributes are added through the tracing effect already used by
 `Shikigami.Agent.Workflow`; the worker-only `Shikigami.Telemetry` module remains tracer setup,
 not domain policy. Payload document bodies are excluded from logs and traces.
@@ -124,8 +130,8 @@ not domain policy. Payload document bodies are excluded from logs and traces.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: Add backward-compatible expertise and router-policy declaration types.
-- [ ] EP-1 M2: Mirror and validate the types in Haskell and prove every existing manifest still loads.
+- [ ] EP-1 M1: Add manifest-compatible expertise and router-policy declaration types.
+- [ ] EP-1 M2: Mirror and validate the types in Haskell, establish the complete v1 JSON shape, and prove every existing manifest still loads.
 - [ ] EP-1 M3: Add router and specialist proof manifests plus author documentation.
 - [ ] EP-2 M1: Build a deterministic catalog from the router's declared delegates.
 - [ ] EP-2 M2: Apply enabled/Meibo lifecycle availability with explicit exclusion reasons.
@@ -159,7 +165,13 @@ interactions between child plans. Provide concise evidence.
   reservation before any routed child is spawned.
 - The July proposal's `route-catalog:<label>` and `route-decision:<label>` spellings cannot be
   declared by the checked Keiro language because `:` is not a workflow wire-word character.
-  EP-3 uses static hyphenated labels inside a new patch and runs `just keiro-gate`.
+  EP-3 uses static hyphenated labels in the v1 baseline. `keiro-diff` deliberately reports the
+  direct pre-v1 body growth as `WorkflowBodyChanged`; the owning plan records that report while
+  all structural, generated, conformance, replay, and full-suite checks remain mandatory.
+- Shikigami has no users and its first release is imminent. There are no historical
+  `lookup-agent` values or pre-router workflow generations to protect, so extending the old JSON
+  omission shim or adding a router patch would create first-release technical debt for an empty
+  population. ADR 0027 records the bounded pre-v1 exception and its release cutoff.
 
 
 ## Decision Log
@@ -211,6 +223,14 @@ plan.
   remaining budget.
   Date: 2026-08-23
 
+- Decision: Supersede the router-patch half of the preceding decision and establish both the
+  complete `AgentDecl` JSON object and route-step labels directly as the v1 baseline.
+  Rationale: Shikigami has no users, stored declarations, resumable workflows, or external wire
+  consumers, and the first release is imminent. Compatibility code would protect no state while
+  becoming debt in v1. Static labels remain declared and journaled; only the empty-population
+  migration branch is removed. ADR 0027 makes the exception expire at release.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -228,3 +248,7 @@ Compare the result against the original vision.
   false external blockers, corrected package and lifecycle ownership, made directory snapshot
   consistency and batch reservation explicit, and reconciled routing steps with the checked
   workflow patch contract.
+- 2026-08-23: Rebased the initiative on the imminent first release and confirmed absence of users
+  or durable state. Replaced pre-release declaration-codec and workflow-patch shims with one clean
+  v1 baseline, retained Dhall source defaults and replay journaling, and recorded the release
+  cutoff in ADR 0027.
