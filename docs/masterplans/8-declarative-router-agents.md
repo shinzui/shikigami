@@ -53,7 +53,7 @@ unverifiable intermediate state.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | Complete |
-| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | In Progress |
+| 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | Complete |
 | 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -93,7 +93,9 @@ IP-2 — the candidate catalog. EP-2 owns `Shikigami.Router.Catalog`, including 
 versioning, exclusion reasons, lifecycle-source attribution, and an atomic read-once directory
 snapshot. EP-3 journals the complete catalog before it evaluates a route. A catalog never
 performs one live lifecycle lookup per candidate because a background refresh could otherwise
-mix two directory snapshots in one decision boundary.
+mix two directory snapshots in one decision boundary. The durable authority, snapshot,
+redaction, and versioning rules are recorded in
+[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md).
 
 IP-3 — the route decision. EP-3 owns `RouteDecision`, `RouteSelection`, `RouteOutcome`, and
 their strict decoder/validator. A model-facing program may produce the JSON, but only the
@@ -136,9 +138,12 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   pinned the complete v1 JSON shape, and proved every live manifest still loads.
 - [x] (2026-08-23T19:20:10Z) EP-1 M3: Added router and specialist proof manifests,
   CLI diagnostics, and author documentation.
-- [ ] EP-2 M1: Build a deterministic catalog from the router's declared delegates.
-- [ ] EP-2 M2: Apply enabled/Meibo lifecycle availability with explicit exclusion reasons.
-- [ ] EP-2 M3: Version, redact, and test the catalog boundary.
+- [x] (2026-08-23T19:40:11Z) EP-2 M1: Built a deterministic catalog from the
+  router's declared delegates.
+- [x] (2026-08-23T19:40:11Z) EP-2 M2: Applied enabled/directory lifecycle
+  availability with explicit exclusion reasons and one immutable snapshot.
+- [x] (2026-08-23T19:40:11Z) EP-2 M3: Versioned, redacted, and tested the
+  catalog boundary across the full package suite.
 - [ ] EP-3 M1: Define and strictly decode the typed route decision.
 - [ ] EP-3 M2: Journal catalog and decision under stable checked Keiro step names.
 - [ ] EP-3 M3: Validate policy, lifecycle, allow-list, and budget before using plan 35 delegation.
@@ -179,6 +184,14 @@ interactions between child plans. Provide concise evidence.
   while Dhall record completion kept every source manifest unchanged. The complete v1 JSON value
   is pinned separately, so source compatibility and the durable release baseline are tested at
   their actual boundaries.
+- EP-2 can preserve the existing configured-directory API and still make attribution
+  non-forgeable by storing `DirectorySourceKind` inside the private `DirectoryHandle`. One
+  `readDirectorySnapshot` then returns both policy contents and source identity; EP-3 must journal
+  the resulting `CandidateCatalog` rather than reconstructing or relabeling it.
+- A candidate catalog needs no loader failure path or diagnostic to remain honest. The exact
+  missing delegate is excluded as `missing-declaration`, while the independent failed-manifest
+  count preserves operational evidence without inventing a relationship. ADR 0028 records this
+  boundary for EP-3 and future catalog consumers.
 
 
 ## Decision Log
@@ -247,11 +260,12 @@ plan.
 
 ## Outcomes & Retrospective
 
-EP-1 is complete. Shikigami now has an author-facing expertise and router-policy vocabulary,
-bounded semantic declaration validation, proof manifests, CLI diagnostics, and a pinned complete
-v1 declaration value. Existing Dhall manifests still load through defaults, and no compatibility
-shim was carried into the first release for an empty historical population. EP-2 and EP-3 remain:
-no candidate catalog, route decision, or routed workflow execution exists yet.
+EP-1 and EP-2 are complete. Shikigami now has an author-facing expertise and router-policy
+vocabulary plus a pure, delegate-bounded, lifecycle-aware candidate catalog. The catalog captures
+one declaration report and one immutable directory generation, exposes distinct typed exclusions,
+redacts behavior and loader internals, and carries deterministic source and catalog versions. The
+full package suite passes, and ADR 0028 preserves the authority/snapshot contract. EP-3 remains: no
+typed route decision or routed workflow execution exists yet.
 
 
 ## Revision Notes
@@ -269,3 +283,6 @@ no candidate catalog, route decision, or routed workflow execution exists yet.
 - 2026-08-23: Completed EP-1 with declaration types, bounded validation, proof manifests,
   documentation, a pinned complete v1 JSON fixture, and full-suite validation. Advanced the
   checkpoint to EP-2.
+- 2026-08-23: Completed EP-2 with immutable directory snapshots, delegate-bounded catalog
+  resolution, typed lifecycle/declaration exclusions, semantic UUIDv5 versions, redacted JSON,
+  full-suite validation, and ADR 0028. Advanced the checkpoint to EP-3.

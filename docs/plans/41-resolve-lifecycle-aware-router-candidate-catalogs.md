@@ -57,7 +57,8 @@ This section must always reflect the actual current state of the work.
   unassociated manifest-load count; never infer an agent identity from a failed file.
 - [x] (2026-08-23T19:37:35Z) M3: compute a deterministic catalog version,
   redact content bodies, and add pure/stubbed tests; all eight focused router-catalog cases pass.
-- [ ] Final: `cabal test all` proves stable ordering, versions, source attribution, and exclusions.
+- [x] (2026-08-23T19:40:11Z) Final: `nix develop -c cabal test all` passes
+  every package, including 482 core tests and all catalog cases.
 
 
 ## Surprises & Discoveries
@@ -80,6 +81,12 @@ implementation. Provide concise evidence.
 - `loadedAt` is intentionally private and must not become the catalog source version. A refresh
   of identical principal contents changes the timestamp without changing which specialists are
   available.
+- The existing configured-handle constructor is used by both file-backed production composition
+  and static tests. Keeping source attribution inside the private handle let the additive API
+  preserve those callers while preventing a catalog caller from choosing a source label.
+- Full-suite evidence after implementation is 482 passing core tests, plus passing conformance,
+  migration, agent, API, client, worker, and server suites. The focused additions are eight router
+  catalog cases and three new directory-snapshot cases.
 
 
 ## Decision Log
@@ -147,12 +154,21 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-Milestones 1 through 3 are implemented. One read distinguishes disabled, configured-valid, and
-configured-unavailable state and carries a semantic UUIDv5 version. The pure catalog preserves the
-validated delegate order, fails closed on missing/duplicate/lifecycle conditions, includes only
-bounded specialist metadata, and reports failed manifests only as a count. Identical inputs produce
-identical JSON and versions; content, lifecycle, or failure-count changes move the version. Eight
-focused router-catalog cases and fifteen directory cases pass. Full-suite validation remains.
+This child plan is complete. `Shikigami.Directory` now supplies one immutable, honestly attributed
+snapshot with a semantic version, and `Shikigami.Router.Catalog` resolves only a validated router's
+declared delegates against that value and one `AgentLoadReport`. Missing declarations, duplicate
+names, disabled agents, paused/deactivated principals, unknown principals, and directory
+unavailability remain distinct typed exclusions. Broken manifests contribute a count without paths,
+diagnostics, or fabricated identities.
+
+Catalog JSON contains bounded specialist metadata and availability, not behavior bodies, trigger
+payloads, credentials, tools, profiles, overlays, sinks, or loader diagnostics. Equal semantic inputs
+produce equal JSON and UUIDv5 versions; metadata, lifecycle, source, ordering, or failure-count
+changes move the version. Eight focused router-catalog cases, fifteen directory cases, 482 core tests,
+and every other package suite pass. Durable catalog authority, snapshot, redaction, and versioning
+rules are distilled in
+[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md). EP-3 can
+now journal and consume the catalog without rereading declarations or lifecycle state.
 
 
 ## Context and Orientation
@@ -376,3 +392,6 @@ No new network call is added to the routing hot path.
   versioning, honest file/disabled source attribution, and an unassociated failed-manifest
   count; removed the unsound assumption that a failed Dhall file has a decoded agent
   name.
+- 2026-08-23: Completed all milestones with immutable directory snapshots, pure delegate-bounded
+  catalog resolution, typed exclusions, deterministic semantic versions, redacted JSON, focused
+  tests, full-suite validation, and ADR 0028 distillation.
