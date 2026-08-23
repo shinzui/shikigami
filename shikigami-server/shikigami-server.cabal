@@ -34,12 +34,14 @@ library
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.RenderLifecycle
     Shikigami.Server.Command.Runs
+    Shikigami.Server.Command.StubKanmon
     Shikigami.Server.Command.StubKawa
     Shikigami.Server.Command.Validate
     Shikigami.Server.Config
     Shikigami.Server.RequestLog
     Shikigami.Server.Seam
     Shikigami.Server.Telemetry
+    Shikigami.Sink.KanmonStub
     Shikigami.Sink.KawaStub
     Shikigami.Sink.KawaStub.Republish
     Shikigami.Trigger.Publish
@@ -113,6 +115,7 @@ test-suite shikigami-server-test
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
+    Shikigami.Server.KanmonStubSpec
     Shikigami.Server.KawaStubSpec
     Shikigami.Server.ProblemSpec
     Shikigami.Server.RequestLogSpec

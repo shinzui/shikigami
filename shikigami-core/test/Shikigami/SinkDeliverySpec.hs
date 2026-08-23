@@ -25,13 +25,15 @@ import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Network.HTTP.Types (hContentType, status200, status204, status400, status404, status500)
+import Network.HTTP.Types (hAuthorization, hContentType, status200, status204, status400, status401, status403, status404, status500)
 import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Propagator.W3CTraceContext (decodeSpanContext)
 import OpenTelemetry.Trace.Core qualified as Otel
+import Settei (answer, defaultResolveOptions, resolve)
+import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (defaultApprovalEnv)
 import Shikigami.Agent.Decl
@@ -48,20 +50,22 @@ import Shikigami.Agent.Decl
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
-import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
+import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (Enqueued, SkippedLifecycle), SinkResult (..))
+import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore qualified as GrantStore
+import Shikigami.Sink.Http (credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Wire qualified as Wire
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Test.Tasty (TestTree, testGroup)
@@ -80,6 +84,8 @@ tests =
       testCase "invalid traceparent is unparented and restores ambient context" invalidTraceContextIsolation,
       testCase "publish records a delivered receipt with the downstream id" receiptRecording,
       testCase "ChannelEgress publication records the Kanmon activity id and suppresses re-send" egressReceiptRecording,
+      testCase "ChannelEgress 403 records a dead receipt and terminal publication" egressPermanentRejection,
+      testCase "ungranted ChannelEgress creates no outbox, receipt, or HTTP effect" egressDenied,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
       testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
       testCase "danwa post-failure retry reuses the started conversation" danwaReuse,
@@ -277,8 +283,19 @@ egressReceiptRecording = do
   testWithApplication (pure (kanmonApp requests)) \port ->
     withFixture "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
-      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
+      authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
+      let configuredDeps =
+            deps
+              { AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port},
+                AgentWorkflow.http = authenticatedHttp
+              }
       [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      before <- lookupReceipt pool row
+      assertEqual "enqueue atomically records pending" Delivery.Pending (Delivery.status before)
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+      case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
+        Success [SinkResult {outcome = Enqueued _}] -> pure ()
+        other -> assertFailure ("egress workflow did not journal Enqueued: " <> show other)
       first <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
       second <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
       assertEqual "first publication succeeds" Outbox.PublishSucceeded first
@@ -286,7 +303,45 @@ egressReceiptRecording = do
       receipt <- lookupReceipt pool row
       assertEqual "receipt is delivered" Delivery.Delivered (Delivery.status receipt)
       assertEqual "Kanmon activity id is retained" (Just "act_reply_1") (Delivery.detail receipt)
-      assertEqual "Kanmon receives one request" 1 . length =<< readIORef requests
+      observed <- readIORef requests
+      assertEqual "Kanmon receives one request" 1 (length observed)
+      case observed of
+        [Wire.EgressActionRequest {Wire.conversationKey, Wire.triggeringActivityId}] -> do
+          assertEqual "published conversation key" "conv_55012" conversationKey
+          assertEqual "published triggering activity" (Just "act_channel_1") triggeringActivityId
+        other -> assertFailure ("expected one decoded egress request, got " <> show other)
+
+egressPermanentRejection :: IO ()
+egressPermanentRejection = do
+  requests <- newIORef (0 :: Int)
+  testWithApplication (pure (rejectingKanmonApp requests)) \port ->
+    withFixture "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
+      [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      published <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
+      case published of
+        Outbox.PublishRejected _ -> pure ()
+        other -> assertFailure ("403 should terminally reject publication, got " <> show other)
+      receipt <- lookupReceipt pool row
+      assertEqual "403 receipt is dead" Delivery.Dead (Delivery.status receipt)
+      readIORef requests >>= assertEqual "one rejected HTTP request" 1
+
+egressDenied :: IO ()
+egressDenied = do
+  requests <- newIORef (0 :: Int)
+  testWithApplication (pure (rejectingKanmonApp requests)) \port ->
+    withFixture "egress-denied" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
+      rows <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      assertEqual "denied egress creates no outbox row" [] rows
+      receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey (idempotencyKey runJob <> ":sink:0"))
+      assertEqual "denied egress creates no receipt" (Right Nothing) receipt
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+      case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
+        Success [SinkResult {outcome = DeniedOutcome _}] -> pure ()
+        other -> assertFailure ("egress workflow did not journal DeniedOutcome: " <> show other)
+      readIORef requests >>= assertEqual "denied egress sends no HTTP request" 0
 
 receiptRecording :: IO ()
 receiptRecording = do
@@ -533,19 +588,35 @@ kizashiApp requests request respond =
 kanmonApp :: IORef [Wire.EgressActionRequest] -> Application
 kanmonApp requests request respond =
   case (requestMethod request, pathInfo request) of
-    ("POST", ["channels", "intercom", "actions", "reply_to_conversation"]) -> do
-      body <- strictRequestBody request
-      case eitherDecode body of
-        Left err -> respond (responseLBS status400 [] (LBS8.pack err))
-        Right actionRequest -> do
-          modifyIORef' requests (actionRequest :)
-          respond
-            ( responseLBS
-                status200
-                [(hContentType, "application/json")]
-                (encode (Wire.EgressActionResponse "act_reply_1" "conversation.reply_sent"))
-            )
+    ("POST", ["channels", "intercom", "actions", "reply_to_conversation"])
+      | lookup hAuthorization (requestHeaders request) /= Just "Bearer kanmon-e2e-token" ->
+          respond (responseLBS status401 [] "unauthorized")
+      | otherwise -> do
+          body <- strictRequestBody request
+          case eitherDecode body of
+            Left err -> respond (responseLBS status400 [] (LBS8.pack err))
+            Right actionRequest -> do
+              modifyIORef' requests (actionRequest :)
+              respond
+                ( responseLBS
+                    status200
+                    [(hContentType, "application/json")]
+                    (encode (Wire.EgressActionResponse "act_reply_1" "conversation.reply_sent"))
+                )
     _ -> respond (responseLBS status404 [] "not found")
+
+rejectingKanmonApp :: IORef Int -> Application
+rejectingKanmonApp requests _ respond = do
+  modifyIORef' requests (+ 1)
+  respond (responseLBS status403 [] "forbidden")
+
+kanmonTestConfig :: AppConfig
+kanmonTestConfig =
+  case answer (resolve defaultResolveOptions [source] appConfig) of
+    Right config -> config
+    Left failure -> error ("Kanmon E2E config did not resolve: " <> show failure)
+  where
+    source = environmentSource environmentBindings (envSnapshot [("SHIKIGAMI_KANMON_TOKEN", "kanmon-e2e-token")])
 
 flakyDanwaApp :: IORef Int -> IORef Int -> Application
 flakyDanwaApp starts posts request respond =

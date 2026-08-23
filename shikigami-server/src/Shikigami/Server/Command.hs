@@ -57,6 +57,7 @@ import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.Runs (runRunsShow)
+import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
 import System.Exit (ExitCode (..), exitWith)
@@ -136,6 +137,7 @@ adminSubcommands =
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
+    ("stub-kanmon", command "stub-kanmon" stubKanmonInfo),
     ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
@@ -325,6 +327,17 @@ stubKawaInfo =
         <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
         <*> optional (strOption (long "republish-topic" <> metavar "TOPIC" <> help "Re-publish accepted envelopes onto this Kafka topic"))
         <*> sourcesOf [brokerOption]
+
+stubKanmonInfo :: ParserInfo AdminAction
+stubKanmonInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Run the authenticated Kanmon channel-egress stub")
+  where
+    parser =
+      (\port conversations -> (runStubKanmonCmd port conversations, []))
+        <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
+        <*> many (strOption (long "allow-conversation" <> metavar "KEY" <> help "Conversation key the proof route may target (repeatable; default conv_55012)"))
 
 danwaSpikeInfo :: ParserInfo AdminAction
 danwaSpikeInfo =

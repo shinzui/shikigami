@@ -83,6 +83,11 @@ let Agent =
 | `expertise` | `List Expertise` | Routing metadata describing a specialist's knowledge | `[]` |
 | `routing` | `Optional RouterPolicy` | Bounded semantic-selection policy over `delegates` | `None` |
 
+The five sink variants are `KawaDigest`, `KizashiSignal`, `ReiAction`,
+`DanwaConversation`, and `ChannelEgress`. `ChannelEgress` sends an external conversation
+action through Kanmon; see [Sinks](./sinks.md#channelegress--act-through-kanmon) for its
+destination precedence and grant requirements.
+
 Because `sinks` defaults to `[]`, an agent with no sinks is legal — it runs its behavior and
 records a session, producing nothing outward. That's useful for a behavior whose only job is
 to learn (record memory) for later runs.
@@ -192,6 +197,7 @@ behavior  ×  trigger  ×  sinks
 - A **deterministic rule** on a **stream** trigger raising a **signal** → a cheap detector.
 - A **shikumi program** on a **schedule** writing a **kawa digest** → a recurring summarizer.
 - A **skill** on a public **event** trigger opening a **danwa conversation** → an addressed responder.
+- A **skill** on an external conversation activity using **ChannelEgress** → a guarded reply through Kanmon.
 
 You mix and match freely; the runtime dispatches on each part independently.
 

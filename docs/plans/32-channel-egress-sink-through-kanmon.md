@@ -69,8 +69,10 @@ opaque token.
 - [x] (2026-08-23) Milestone 3: added only resolved conversation and trigger identifiers to
   `SinkIntent`, centralized their preparation for every producer, dispatched through Kanmon,
   retained the acknowledged activity id, and proved replay-neutral workflow behavior.
-- [ ] Milestone 4: add the production-shaped `stub-kanmon` command, end-to-end tests, proof
-  manifest, user/operator docs, and optional real-Kanmon compatibility transcript.
+- [x] (2026-08-23) Milestone 4: added the production-shaped `stub-kanmon` command,
+  database-backed end-to-end coverage, hermetic live transcript, and user/operator docs.
+  The optional real-Kanmon comparison was not needed for acceptance and remains an
+  informative follow-up.
 - [ ] Run all focused and full validation, record results here, and distill any durable
   architectural decision that differs from the existing ADRs.
 
@@ -120,6 +122,12 @@ opaque token.
   edits as a stale generated layer even though every generated module was unchanged. Staging
   the reviewed source first let the same gate classify the change correctly as
   `replay-neutral: stored-data replay is unchanged` and pass conformance.
+
+- (2026-08-23) The long-lived developer database could not be migrated because its recorded
+  `mori://shinzui/kioku` migration 0011 checksum predates the currently mounted dependency
+  source. The live proof therefore used a freshly migrated, isolated
+  `shikigami_channel_egress_proof` database and removed it afterward, leaving the developer
+  database untouched. This was environment drift rather than a ChannelEgress failure.
 
 
 ## Decision Log
@@ -217,6 +225,16 @@ opaque token.
   `conversation.reply_sent`.
   Date: 2026-07-08; updated 2026-08-23.
 
+- Decision: The stub accepts only `intercom/reply_to_conversation`, authenticates before
+  parsing the body, obtains its optional token only from Settei, and keeps an in-memory
+  `(channel, idempotency_key)` map plus an accepted-effect count. Its logs contain only the
+  accepted/deduplicated classification, route segments, and bounded activity id; its state
+  clears on restart.
+  Rationale: this is the smallest inspectable mirror that proves the current Kanmon contract,
+  crash-window deduplication, and credential boundary without becoming a second general
+  egress service or retaining sensitive request data.
+  Date: 2026-08-23.
+
 
 ## Outcomes & Retrospective
 
@@ -253,6 +271,28 @@ already delivered row performs no HTTP request. `nix develop --command cabal tes
 shikigami-core-test` passes all 514 tests, and staged `just keiro-gate HEAD` reports
 replay-neutral compatibility and passes all generated conformance checks without a patch id or
 `continueAsNew`.
+
+Milestone 4 is complete. `shikigami stub-kanmon` serves the exact authenticated route with
+shared request/response DTOs, fixed destination authorization, RFC problem details for 401,
+bounded activity ids, and concurrency-safe in-memory deduplication without retaining or
+logging secrets, content, or conversation keys. Server tests cover success, authentication
+before parsing, 400/403/404 behavior, idempotent duplicates, and fresh requests without an
+idempotency key; command tests pin the flag surface and absence of a token option. The
+database-backed core proof covers the complete granted enqueue/publish/receipt path, local
+resend suppression, permanent 403 rejection, and denial without an outbox row.
+
+The focused command `nix develop --command cabal test shikigami-core-test
+shikigami-server-test shikigami-workers-test` passed: core reported all 516 tests passing,
+the server suite including all seven stub contract cases passed, and workers reported all 81
+tests passing. The live transcript used the isolated `shikigami_channel_egress_proof`
+database: the workflow journaled `Enqueued`, the stub logged one accepted action with no
+sensitive fields, and the receipt reached `delivered` with
+`act_01m0rb9fbreyxvv18yww8njqj3`. Re-enqueueing `channel-egress-proof-1` replayed the
+journaled result and caused no second stub effect. The scratch database was then removed.
+The optional real-Kanmon comparison was skipped because the shared wire DTOs, direct upstream
+contract inspection through `mori://shinzui/kanmon/repos/kanmon`, production-shaped stub,
+and hermetic tests provide the acceptance proof without coupling validation to another
+checkout.
 
 
 ## Context and Orientation

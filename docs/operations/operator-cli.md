@@ -25,8 +25,8 @@ from a config file, `--set database.connection_string=…`, or the
 Two halves, and it matters which is which when something behaves unexpectedly.
 
 **Shikigami's own**: `agents`, `runs`, and the pre-existing `validate`,
-`render-lifecycle`, `enqueue-run`, `publish-fixture`, `stub-kawa`, `danwa-spike`,
-and `grants`. These are defined in this repository.
+`render-lifecycle`, `enqueue-run`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
+`danwa-spike`, and `grants`. These are defined in this repository.
 
 **Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
 `snapshot`, and `stream`. These come from the `keiro-ops` package, whose command
@@ -83,6 +83,20 @@ An existing conflicting grant principal prints `CONFLICT`, leaves every grant
 row for that agent untouched, and makes the command exit non-zero. Repair the
 identity deliberately and rerun; a clean rerun is idempotent and reports
 `filled=0` with the verified count.
+
+**"How do I run the hermetic ChannelEgress downstream?"** — `stub-kanmon`.
+
+```bash
+SHIKIGAMI_KANMON_TOKEN=test-token \
+  cabal run shikigami -- stub-kanmon --port 8090 --allow-conversation conv_55012
+```
+
+`--allow-conversation` is repeatable and defaults to `conv_55012` when omitted. The stub
+accepts only `intercom/reply_to_conversation`, checks the token before parsing its body, and
+deduplicates `(channel, idempotency_key)` in memory. Its state clears on restart, matching
+Kanmon's current offline proof store. There is deliberately no token flag: the token comes
+only from the secret `credentials.sinks.kanmon.token` setting, whose environment binding is
+`SHIKIGAMI_KANMON_TOKEN`.
 
 **"What is running right now?"** — `wf list`.
 

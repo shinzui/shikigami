@@ -13,6 +13,8 @@ let Sink =
                             , extraContextTags : List Text }
       | ReiAction         : { intentionId : Text, note : Text }
       | DanwaConversation : { topic : Text }
+      | ChannelEgress     : { channel : Text, action : Text
+                            , conversationKey : Optional Text }
       >
 ```
 
@@ -20,8 +22,9 @@ let Sink =
 | --- | --- | --- |
 | **KawaDigest** | a digest activity written back into the stream | fully implemented (against the kawa stub) |
 | **KizashiSignal** | an awareness signal | fully implemented (against the kizashi client/stub) |
-| **ReiAction** | an action recorded against a `rei` intention | schema + stub handler (completed by `rei`'s plan) |
-| **DanwaConversation** | an opened/attached conversation | schema + stub handler (completed by EP-7) |
+| **ReiAction** | an action recorded against a `rei` intention | implemented when a Rei endpoint is configured; otherwise fails visibly |
+| **DanwaConversation** | an opened/attached conversation | fully implemented through the Danwa client |
+| **ChannelEgress** | a reply or other approved action on an external conversation | fully implemented through Kanmon |
 
 ## KawaDigest — write back to the stream
 
@@ -82,9 +85,9 @@ an action **against that target intention** through `rei`'s **command API** unde
 `shomei` identity — **never** by touching `rei`'s store directly. `intentionId` names the
 target intention; `note` is the action's content.
 
-This runtime *defines* the variant and stubs the handler; the real `rei` command-API call is
-completed by `rei`'s own plan. The contract is fixed: command API + shomei `act` claim, never
-the store.
+When `sinks.rei.base_url` is configured, the runtime POSTs the action to Rei's integration
+endpoint. With no endpoint, it reports a retryable non-delivery instead of claiming success.
+The contract remains an API handoff, never direct access to Rei's store.
 
 ## DanwaConversation — open/attach a conversation
 
@@ -92,8 +95,52 @@ the store.
 A.Sink.DanwaConversation { topic = "incident-42" }
 ```
 
-Opens or attaches a `shinzui/danwa` conversation on the given topic. Schema variant with a
-stub handler in this runtime; completed by its owning plan (EP-7).
+Opens or attaches a `shinzui/danwa` conversation on the given topic. An addressed
+conversation reply posts into its existing thread; an ordinary run starts a thread, joins the
+configured agent participant, and posts the behavior output. Delivery receipts retain a
+started conversation across retries.
+
+## ChannelEgress — act through Kanmon
+
+```dhall
+A.Sink.ChannelEgress
+  { channel = "intercom"
+  , action = "reply_to_conversation"
+  , conversationKey = None Text
+  }
+```
+
+Sends an approved channel action to Kanmon at
+`POST /channels/intercom/actions/reply_to_conversation`. Shikigami resolves the destination
+once, before durable enqueue, using the first non-empty value in this order:
+
+1. the declaration's `conversationKey`;
+2. a top-level `conversation_key` string in the behavior output; or
+3. the triggering activity's `subject.id`.
+
+If none exists, publication fails permanently without making a request. The request content
+comes from the first non-empty top-level `reply`, `content`, or `summary` string, then falls
+back to compact JSON. The stable `agent:runId:ordinal` sink identity becomes Kanmon's
+idempotency key, and the triggering activity id is carried separately. The full activity is
+not copied into the outbox row.
+
+The workflow journals only `Enqueued`. Delivery becomes true when Kanmon returns its
+`activity_id`; that id is stored in the delivery receipt. A delivered receipt suppresses a
+later local re-send, while Kanmon's idempotency store covers a crash after it accepted the
+action but before Shikigami recorded the acknowledgement.
+
+Grant the sink independently of declaring it:
+
+```bash
+cabal run shikigami -- grants grant channel-reply ChannelEgress --by operator
+```
+
+Shikigami authenticates with `credentials.sinks.kanmon.token` and never receives the
+Intercom or Zendesk provider credential. Kanmon owns destination authorization. HTTP 408,
+425, 429, 5xx, transport failures, and unavailable credential sources remain retryable;
+other 4xx responses, invalid routes or requests, oversized bodies, and malformed success
+responses become terminal delivery failures. Diagnostics and logs never contain the token,
+request content, conversation key, or raw response body.
 
 ## The permission gate
 
@@ -101,10 +148,11 @@ stub handler in this runtime; completed by its owning plan (EP-7).
 sink is **denied**, it is **logged and skipped** — the run still completes, and the session
 records the denial. A denied sink never crashes the agent.
 
-In this runtime the check consults a stub allow-list keyed by agent name; the seam is shaped
-so it can be swapped for a real `shomei` grant lookup with no schema change. Coarse scopes
-(`kawa:ingest`, `signal:raise`, …) live in `shomei`; fine-grained per-agent-per-sink grants
-live in a local grant table keyed by the verified subject.
+The check consults `shikigami.sink_grants` through the database-backed grant store. Operators
+use `shikigami grants grant`, `grants revoke`, and `grants list`; production does not use the
+compiled static fixture. The runtime checks at enqueue and again at publication, so a
+revocation after enqueue still prevents the external effect. A denial is journaled as
+`DeniedOutcome` and creates no outbox row or delivery receipt.
 
 This means you can **declare** sinks freely and control which ones an agent is actually
 permitted to fire through the grant layer — declaration and authorization are separate

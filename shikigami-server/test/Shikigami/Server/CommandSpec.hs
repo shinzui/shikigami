@@ -30,6 +30,7 @@ tests =
                 "enqueue-run",
                 "publish-fixture",
                 "stub-kawa",
+                "stub-kanmon",
                 "danwa-spike",
                 "grants",
                 "agents",
@@ -57,6 +58,23 @@ tests =
         mapM_
           (\flag -> assertBool ("stub-kawa help does not mention " <> flag) (flag `isInfixOf` rendered))
           ["--port", "--republish-topic", "--broker"],
+      testCase "stub-kanmon exposes only its port and repeatable destination allow-list" do
+        let rendered = helpTextOf ["stub-kanmon", "--help"]
+        mapM_
+          (\flag -> assertBool ("stub-kanmon help does not mention " <> flag) (flag `isInfixOf` rendered))
+          ["--port", "--allow-conversation"]
+        assertBool ("stub-kanmon must not accept a token argument:\n" <> rendered) (not ("--token" `isInfixOf` rendered))
+        case execParserPure adminPrefs adminInfo ["stub-kanmon", "--port", "8090", "--allow-conversation", "conv_1", "--allow-conversation", "conv_2"] of
+          Success (chosen, _) -> assertBool "stub-kanmon did not select an action" (not (isNothing chosen))
+          Failure failure ->
+            let (message, _) = renderFailure failure "shikigami"
+             in assertBool ("stub-kanmon options did not parse:\n" <> message) False
+          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
+      testCase "stub-kanmon rejects a token flag" $
+        case execParserPure adminPrefs adminInfo ["stub-kanmon", "--port", "8090", "--token", "secret"] of
+          Success _ -> assertBool "stub-kanmon accepted a plaintext token argument" False
+          Failure _ -> pure ()
+          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
       testCase "danwa-spike keeps its participant options" do
         let rendered = helpTextOf ["danwa-spike", "--help"]
         mapM_
