@@ -65,8 +65,11 @@ This section must always reflect the actual current state of the work.
       at-risk flow's three modelled branch sequences plus an invalid-order rejection, and
       documented the branch-to-command mapping beside the flow body. All 21 FlowLifecycle
       tests pass.
-- [ ] M4: Record the plan-19 reconciliation step and the sharedScope note for plan 34;
-      full suite green.
+- [x] (2026-08-23T18:25:09Z) M4: Verified plan 19's principal/recipient and delivery-receipt
+      semantics plus plan 28's trace context in `Shikigami.Sink.Intent`; documented that
+      `sharedScope` remains unused and is owned by plan 34. `nix fmt`, `cabal build all`,
+      `cabal test all -j1` (all nine suites, including 462 core and 81 worker tests), and
+      `just keiro-gate HEAD` pass with an unchanged scaffold.
 - [x] (2026-08-23T17:53:54Z) Implementation preflight: verified plans 19, 36, 39, and
       47 complete; verified plan 28's trace context is present in both sink-intent
       copies; `nix develop -c cabal build all` and `nix develop -c cabal test all -j1`
@@ -208,6 +211,18 @@ low risk, acknowledged high risk, and timed-out high risk are accepted, while ac
 before classification is rejected. The nearby mapping note keeps the correspondence—and its
 explicit decline limitation—visible when the flow changes.
 
+M4 reconciled the final module against the semantics that landed while this plan waited: lifecycle
+attribution and delivery truth from plan 19, and outbox trace propagation from plan 28. No workflow
+label, patch set, timer, awakeable, journal codec, or generated file changed, so no new workflow
+patch or deployment ordering is required. The ADR audit updated ADR 0001 for the hand-owned sink
+contract and ADR 0003 for the durable one-off CLI; no new architectural decision required a new
+record.
+
+The plan achieved its intended consolidation: one sink wire contract, one agent-run lifecycle,
+and an executable check for the modelled Keiki flow language. The one deliberate gap is visible
+rather than latent: the Keiki diagram still does not model the concrete decline branch, which is
+future lifecycle-modelling work rather than a reason to weaken the delivered conformance check.
+
 
 ## Context and Orientation
 
@@ -220,29 +235,17 @@ must preserve journaled step names and the sink wire format byte-for-byte, and p
 plan's diff is reviewed against. Plan 24 need not be merged first, but the discipline
 document is the acceptance yardstick.
 
-The duplicated sink intent, verified. `SinkIntent` is declared identically in two places:
-`shikigami-core/src/Shikigami/Flow/SinkOutbox.hs:33-43` and
-`shikigami-core/src/Shikigami/Agent/Workflow.hs:96-106` — the same seven fields (`agent`,
-`runId`, `ordinal`, `occurredAt`, `danwaTarget`, `sink`, `output`), the same
-`deriving (Eq, Show, Generic)` + `anyclass (ToJSON, FromJSON)`. Both modules also duplicate
-`PreparedSinkIntent`, `prepareSinkIntent`, `preparedSinkResult`,
-`enqueuePreparedSinkIntentTx`, `sinkIntentEvent`, and `deterministicOutboxIdForMessage`
-(`SinkOutbox.hs:45-159` vs `Agent/Workflow.hs:108-559`), plus `enqueueSinkIntentStep`
-(`SinkOutbox.hs:50-81` vs `Agent/Workflow.hs:442-473`). The flow copy's
-`enqueueSinkIntentStep` is called by the flow Sink capability
-(`shikigami-core/src/Shikigami/Flow/Capability.hs:39,124`); the agent-run copy is called by
-the conversation reply path (`shikigami-core/src/Shikigami/Agent/Conversation.hs` via
-`AgentWorkflow.prepareSinkIntent`, lines 399-414) and the agent-run sink dispatch
-(`Agent/Workflow.hs:enqueueSinkIntents`, lines 386-440, a bulk variant). The SINGLE
-consumer is `publishSinkIntent` (`Agent/Workflow.hs:561-583`): it decodes the outbox event
-with `decodeJsonIntegrationEvent` and, on failure, returns
-`PublishFailed (Text.pack (show err))` (line 565) — which the outbox publisher
-(`shikigami-core/src/Shikigami/Worker.hs:103-112`) turns into a dead-letter. The integration
-event is stamped with `eventType = "shikigami.sink.dispatch-requested"`, `schemaVersion = 1`
-(`SinkOutbox.hs:131-152`, identical in `Agent/Workflow.hs:523-544`). The two copies are
-equal today; nothing enforces that they stay equal.
+Before M1, `SinkIntent` and its preparation/enqueue helpers were duplicated in
+`shikigami-core/src/Shikigami/Flow/SinkOutbox.hs` and
+`shikigami-core/src/Shikigami/Agent/Workflow.hs`. At implementation preflight the two strict
+records had the same nine fields (`agent`, `principalId`, `runId`, `ordinal`, `occurredAt`,
+`danwaTarget`, `resolvedRecipient`, `sink`, `output`) and the same hand-written generic JSON
+policy with `omitNothingFields`. Both event producers fed the single `publishSinkIntent`
+consumer, which is why structural or codec drift would have become a real publication failure.
+M1 deleted the flow module and the workflow-local definition; all producers and the publisher now
+share `Shikigami.Sink.Intent`, whose golden pins the JSON and integration-event identity.
 
-The duplicated run lifecycle, verified. The durable version lives in
+Before M2, the duplicated run lifecycle had a durable version in
 `shikigami-core/src/Shikigami/Agent/Workflow.hs`: `runResolvedAgent` (lines 164-205) journals
 `open-session` (`openSession`, 248-275), `recall` (line 175), `run-behavior`,
 `dispatch-sinks`, `record` (`recordLearning`, 585-605), `complete` (`completeSession`,
@@ -254,28 +257,30 @@ plain IO with no journaling (no crash resume), and its metadata and error handli
 hand-written in parallel (e.g. it always returns `Left` on behavior failure, whereas the
 durable path returns `Right`-wrapped-`Left` inside a `Completed` outcome and journals the
 failure). Its ONLY caller is the demo CLI `agent-run`
-(`shikigami-cli/src/Shikigami/Cli/Commands/AgentRun.hs:14,54`). `runAgentWithMemory` also
+(`shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs`). `runAgentWithMemory` also
 duplicates the hardcoded memory metadata (`Run.hs:99-112`) that
-`recordLearning`/`Agent/Workflow.hs:590-603` hardcodes.
+`recordLearning` in the workflow hardcoded. M2 deleted that orchestrator; the CLI now invokes
+`runAgentRunWorkflow` and only the durable lifecycle remains.
 
-The keiki lifecycle transducer, verified. `shikigami-core/src/Shikigami/Flow/Lifecycle/AtRiskCustomer.hs`
+The Keiki lifecycle transducer lives in `shikigami-core/src/Shikigami/Flow/Lifecycle/AtRiskCustomer.hs`
 builds `atRiskCustomerLifecycle`, a `SymTransducer` with states
 `Observed | SettledLow | AwaitingAck | Acknowledged | Escalated` and commands
 `ClassifyLowRisk | ClassifyHighRisk | Acknowledge | DeadlineExpired` (lines 28-70). It is
 used only to render a Mermaid diagram and produce validation warnings
 (`Flow.hs:50-55`, surfaced by the `render-lifecycle` CLI and the FlowLifecycleSpec diagram
-tests, `FlowLifecycleSpec.hs:52-61`). Nothing checks that the actual flow
+tests. Before M3, nothing checked that the actual flow
 (`shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs`) only makes transitions the
-transducer permits: the flow classifies (low → return; high → emit + await ack), and on ack
-resolves, on decline declines, on timeout escalates (lines 41-60) — a command sequence that
-SHOULD be a subset of the transducer's language, but nothing asserts it. keiki's
+transducer permits. The flow classifies (low → return; high → emit + await ack), and on ack
+resolves, on decline declines, on timeout escalates. Keiki's
 `Keiki.Acceptor` (`/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Acceptor.hs:34-45`) exposes
 `inputAcceptor :: SymTransducer ... -> Acceptor ...` and
-`accepts :: Acceptor s a -> [a] -> Bool`, which answer exactly "is this command sequence in
-the transducer's input language?".
+`accepts :: Acceptor s a -> [a] -> Bool` answer exactly "is this command sequence in the
+transducer's input language?". M3 now asserts the three modelled branch sequences and rejects
+acknowledgement before classification; the source mapping explicitly calls out the unmodelled
+decline branch.
 
-`sharedScope` (`shikigami-core/src/Shikigami/Memory/Scope.hs:17-22`) is exported but has no
-non-test caller (`rg sharedScope` finds only its definition and export); it is dead code.
+`sharedScope` (`shikigami-core/src/Shikigami/Memory/Scope.hs`) is exported but has no caller. M4
+documents this beside the definition and defers removal or shared-memory semantics to plan 34.
 
 
 ## Plan of Work
@@ -554,10 +559,14 @@ Integration Points (cross-plan):
   once instead of moving old code and rebasing it immediately.
 - 2026-07-22: Added plan 39 as a hard predecessor and made topology/scaffold diff
   stability an explicit consolidation acceptance criterion.
-- [ ] Prerequisites: plans 36 and 39 complete; plans 19 and 28 land before final consolidation.
+- [x] (2026-08-23) Prerequisites: plans 36 and 39 complete; plans 19 and 28 landed before
+      final consolidation.
 
 
 ## Revision Notes
+
+- 2026-08-23: Implemented all four milestones, reconciled the parent MasterPlan, and recorded
+  final build, full-suite, CLI, wire-tripwire, and Keiro-gate evidence.
 
 - 2026-08-10: Re-grounded Milestone 1's byte-for-byte acceptance now that shikigami has no users.
 

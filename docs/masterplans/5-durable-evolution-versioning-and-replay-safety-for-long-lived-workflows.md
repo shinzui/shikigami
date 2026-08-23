@@ -124,7 +124,7 @@ consolidation reviewable against it.
 | 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Not Started |
 | 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1; cross-MP: plan 47 | None | Not Started |
 | 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1; cross-MP: plan 47; upstream Kioku IR-2 | None | Not Started |
-| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1; cross-MP: plan 47 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Not Started |
+| 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1; cross-MP: plan 47 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -241,10 +241,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-3 M2: versioned/cancelled idle-timeout timer ends only the intended idle generation and completes the kioku session.
 - [ ] EP-3 M3: Journal rotation via `continueAsNew` every N turns; generation-aware delivery and result loading.
 - [ ] EP-3 M4: Racing-message smoothing (pre-armed next-message awakeable; busy-path is not an error).
-- [ ] EP-4 M1: `Shikigami.Sink.Intent` shared module extracted; both former copies deleted; golden wire-format round-trip test.
-- [ ] EP-4 M2: `agent-run` CLI drives the durable workflow; `runAgentWithMemory` retired.
-- [ ] EP-4 M3: keiki lifecycle conformance test (flow branches accepted by the transducer).
-- [ ] EP-4 M4: Cross-plan reconciliation with plans 19 and 28 documented and verified; sharedScope disposition noted for plan 34.
+- [x] (2026-08-23) EP-4 M1: `Shikigami.Sink.Intent` shared module extracted; both former copies deleted; golden wire-format round-trip test.
+- [x] (2026-08-23) EP-4 M2: `agent-run` CLI drives the durable workflow; `runAgentWithMemory` retired.
+- [x] (2026-08-23) EP-4 M3: keiki lifecycle conformance test (modelled flow branches accepted by the transducer).
+- [x] (2026-08-23) EP-4 M4: Cross-plan reconciliation with plans 19 and 28 documented and verified; sharedScope disposition noted for plan 34.
 
 
 ## Surprises & Discoveries
@@ -336,10 +336,17 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+EP-4 (plan 27) completed on 2026-08-23. It delivered one hand-owned sink-intent contract with
+literal wire fixtures, routed the one-off CLI through the durable agent-run workflow, checked the
+modelled at-risk branch language through Keiki's input acceptor, and preserved the complete checked
+workflow topology. Plans 19 and 28's settled receipt, attribution, and trace semantics moved with
+the shared sink module; `sharedScope` remains explicitly deferred to plan 34.
 
 
 ## Revision Notes
+
+- 2026-08-23: Marked EP-4 / plan 27 complete with all four milestones and full-suite plus
+  `just keiro-gate` acceptance evidence.
 
 - 2026-07-30: Added plan 47, current Keiro 0.4 compatibility gates, and Kioku IR-2 for the
   indexed conversation-session milestone.

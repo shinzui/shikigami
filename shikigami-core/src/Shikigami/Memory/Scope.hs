@@ -18,5 +18,7 @@ agentScope :: Text -> MemoryScope
 agentScope agentName = ScopeEntity shikigamiNamespace (ScopeKind "agent") agentName
 
 -- | Cross-agent shared learnings any shikigami agent may consult.
+-- Currently unused; removal or declared semantics are deliberately deferred to
+-- @docs\/plans\/34-memory-lifecycle-distillation-retention-and-shared-scope.md@.
 sharedScope :: MemoryScope
 sharedScope = ScopeGlobal shikigamiNamespace
