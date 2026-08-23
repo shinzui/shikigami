@@ -88,8 +88,11 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   ADR-0024. Evidence: 29 server tests and 13 focused grant tests pass; the real CLI rendered
   joined, declared-only, principal-only, disabled, and failed states; one live file-backed
   handle passed an atomic `active → paused → active` refresh test.
-- [ ] Final: `nix develop -c cabal test all`, `nix develop -c just keiro-gate`, and the
-  manual acceptance transcript are green; durable decisions are distilled into `docs/adr/`.
+- [x] (2026-08-23T01:54:47Z) Final: `nix develop -c cabal test all -j1
+  --test-show-details=direct` passed every package suite (including 390 core, 78 worker, and 29
+  server tests); `nix develop -c just keiro-gate` passed and classified the stored-data diff
+  replay-neutral; the isolated operator transcript observed `heartbeat` as active, paused, and
+  active again; ADR-0024 records the durable cache and failure semantics.
 
 
 ## Surprises & Discoveries
@@ -278,6 +281,24 @@ principal-only, failed, and explicitly disabled states from one load report and 
 existing grant rows; reruns verify equal ids, conflicts preserve every row and fail visibly,
 and the command never creates grants or principals. ADR-0024 now carries the cached-directory
 failure policy beyond this plan.
+
+Final acceptance used an isolated file at `/tmp/shikigami-plan23-directory.json`, never a
+production source or operator database. With `SHIKIGAMI_DIRECTORY_MODE=file` and
+`SHIKIGAMI_DIRECTORY_FILE_PATH` pointing there, three `agents list --json` observations around
+file replacements contained these joined rows:
+
+```text
+active: {"name":"heartbeat","principal_id":"agent_heartbeat","lifecycle":"active","state":"loaded"}
+paused: {"name":"heartbeat","principal_id":"agent_heartbeat","lifecycle":"paused","state":"loaded"}
+active: {"name":"heartbeat","principal_id":"agent_heartbeat","lifecycle":"active","state":"loaded"}
+```
+
+The same output also retained `broken.dhall` with its full diagnostic, two loaded declarations
+with no principal, and `agent_directory_only` as `state=no-manifest`. The automated companion
+kept one `DirectoryHandle` alive while atomically replacing its file and observed
+`AllowRun → SkipRun → AllowRun`, which proves the no-restart behavior without mutating a shared
+development database. Ephemeral-Postgres tests proved load-state persistence, idempotent
+trigger/drain evidence, grant backfill, equal-id reruns, and conflict refusal.
 
 
 ## Context and Orientation
