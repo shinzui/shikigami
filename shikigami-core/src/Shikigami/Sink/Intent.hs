@@ -51,7 +51,8 @@ import Kioku.Id (SessionId, idText)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Activity (ActivityEnvelope)
-import Shikigami.Agent.Decl (Sink)
+import Shikigami.Activity qualified as Activity
+import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
@@ -65,6 +66,7 @@ import Shikigami.Sink
     sinkKindOf,
   )
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.KanmonClient (resolveConversationKey)
 import Shikigami.Sink.Permission
   ( AgentIdentity (AgentIdentity),
     Denied (..),
@@ -84,6 +86,8 @@ data SinkIntent = SinkIntent
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
     resolvedRecipient :: !(Maybe Text),
+    conversationKey :: !(Maybe Text),
+    triggeringActivityId :: !(Maybe Text),
     sink :: !Sink,
     output :: !Value
   }
@@ -157,7 +161,8 @@ enqueueSinkIntents directoryHandle grantSource agentName declaredPrincipalId job
             Left (Denied reason) ->
               (SinkResult kind (DeniedOutcome reason), Nothing)
             Right () ->
-              let intent =
+              let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink (Just activity) output
+                  intent =
                     SinkIntent
                       { agent = agentName,
                         principalId = resolvedPrincipalId,
@@ -166,6 +171,8 @@ enqueueSinkIntents directoryHandle grantSource agentName declaredPrincipalId job
                         occurredAt = Just jobOccurredAt,
                         danwaTarget = Nothing,
                         resolvedRecipient = resolveSinkRecipient sink (Just activity),
+                        conversationKey = resolvedConversationKey,
+                        triggeringActivityId = resolvedTriggeringActivityId,
                         sink,
                         output
                       }
@@ -190,15 +197,15 @@ enqueueSinkIntentStep ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
-  Maybe Text ->
+  Maybe ActivityEnvelope ->
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId stepName agentName runIdText ordinal occurredAt danwaTarget resolvedRecipient sink output = do
+enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget resolvedRecipient sink output now)
+  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -229,12 +236,12 @@ prepareSinkIntent ::
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
-  Maybe Text ->
+  Maybe ActivityEnvelope ->
   Sink ->
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget resolvedRecipient sink output now = do
+prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now = do
   capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
@@ -258,7 +265,8 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
               deliveryReceipt = Nothing
             }
         Right () ->
-          let intent =
+          let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink activity output
+              intent =
                 SinkIntent
                   { agent = agentName,
                     principalId = resolvedPrincipalId,
@@ -266,7 +274,9 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
                     ordinal,
                     occurredAt,
                     danwaTarget,
-                    resolvedRecipient,
+                    resolvedRecipient = resolveSinkRecipient sink activity,
+                    conversationKey = resolvedConversationKey,
+                    triggeringActivityId = resolvedTriggeringActivityId,
                     sink,
                     output
                   }
@@ -277,6 +287,14 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
                   outboxMessage = Just (OutboxMessage outboxId event),
                   deliveryReceipt = Just receipt
                 }
+
+egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe Text, Maybe Text)
+egressMetadata sink activity output = case sink of
+  ChannelEgress {} ->
+    ( resolveConversationKey sink activity output,
+      Activity.activityId <$> activity
+    )
+  _ -> (Nothing, Nothing)
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult

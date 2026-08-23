@@ -843,7 +843,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right intent@SinkIntent {agent, principalId, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, sink, output} -> liftIO do
+        Right intent@SinkIntent {agent, principalId, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} -> liftIO do
           let messageId = Integration.messageId integrationEvent
               kind = sinkKindOf sink
               publish =
@@ -866,8 +866,8 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                             traceHeaders = maybe [] TraceContext.traceHeaders currentTraceContext,
                             danwaTarget = danwaTarget,
                             recipientOverride = resolvedRecipient,
-                            conversationKey = Nothing,
-                            triggeringActivityId = Nothing,
+                            conversationKey,
+                            triggeringActivityId,
                             occurredAt = occurredAt,
                             receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
                             grants = intentGrants,

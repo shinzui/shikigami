@@ -1260,9 +1260,9 @@ prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg@Addr
             parentMessageId = Just msgMessageId
           }
     )
-    -- No resolved recipient: a conversation reply is a danwa sink, which has no
-    -- recipientFrom strategy, and the turn was triggered by an addressed message
-    -- rather than by an activity envelope.
+    -- No activity envelope: the turn was triggered by an addressed message.
+    -- The shared intent preparation path therefore derives no activity-backed
+    -- recipient or channel-egress metadata.
     Nothing
     Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
     (Aeson.object ["reply" Aeson..= replyText])

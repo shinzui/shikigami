@@ -36,13 +36,14 @@ import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwaWithHead
 import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
 import Shikigami.Sink.Http (HttpFailure)
 import Shikigami.Sink.Http qualified as Http
+import Shikigami.Sink.KanmonClient (KanmonError (..), buildEgressRequest, postEgressWithHeaders, renderKanmonError)
 import Shikigami.Sink.KawaClient (KawaError (..), buildEnvelope, postEnvelopeWithHeaders, renderKawaError)
 import Shikigami.Sink.KizashiClient (KizashiError (..), buildSignalReq, postSignalWithHeaders, renderKizashiError)
 import Shikigami.Sink.Permission
 import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (runReiAction)
 import Shikigami.Sink.Types
-import Shikigami.Sink.Wire (SignalResponse (..))
+import Shikigami.Sink.Wire (EgressActionResponse (..), SignalResponse (..))
 
 -- | Map a sink to its permission kind.
 sinkKindOf :: Sink -> SinkKind
@@ -118,8 +119,12 @@ runSink ctx sink output = case sink of
   DanwaConversation {} -> do
     r <- runDanwaWithHeaders (http ctx ^. #danwa) (traceHeaders ctx) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
     pure (either danwaFailure Delivered r)
-  ChannelEgress {} ->
-    pure (PermanentFailure "ChannelEgress is not wired")
+  ChannelEgress {channel, action} ->
+    case buildEgressRequest ctx output of
+      Left failure -> pure (PermanentFailure failure)
+      Right request -> do
+        result <- postEgressWithHeaders (http ctx ^. #kanmon) (traceHeaders ctx) (kanmon ctx) channel action request
+        pure (either kanmonFailure (Delivered . activityId) result)
 
 kawaFailure :: KawaError -> SinkOutcome
 kawaFailure failure = case failure of
@@ -136,6 +141,12 @@ danwaFailure failure = case failure of
   DanwaHttpError httpFailure -> classifiedFailure httpFailure
   DanwaReceiptFailure _ -> Failed (renderDanwaError failure)
   DanwaUsageError _ -> PermanentFailure (renderDanwaError failure)
+
+kanmonFailure :: KanmonError -> SinkOutcome
+kanmonFailure failure = case failure of
+  KanmonHttpError httpFailure -> classifiedFailure httpFailure
+  KanmonDecodeError _ -> PermanentFailure (renderKanmonError failure)
+  KanmonUsageError _ -> PermanentFailure (renderKanmonError failure)
 
 classifiedFailure :: HttpFailure -> SinkOutcome
 classifiedFailure failure

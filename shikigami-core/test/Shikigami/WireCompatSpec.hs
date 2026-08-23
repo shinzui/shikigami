@@ -235,6 +235,10 @@ outboxTests =
       testCase "a pre-upgrade row carries no principal id" do
         SinkIntent {principalId} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
         principalId @?= Nothing,
+      testCase "a pre-upgrade row carries no egress metadata" do
+        SinkIntent {conversationKey, triggeringActivityId} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
+        conversationKey @?= Nothing
+        triggeringActivityId @?= Nothing,
       testCase "an intent that resolved a recipient says so" do
         let resolved = sampleSinkIntent {resolvedRecipient = Just "person:nadeem"}
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
@@ -258,6 +262,8 @@ sampleSinkIntent =
       -- after those rows were written, and @omitNothingFields@ is what keeps an
       -- intent that does not use it byte-identical to one that predates it.
       resolvedRecipient = Nothing,
+      conversationKey = Nothing,
+      triggeringActivityId = Nothing,
       sink = sampleSink,
       output = outputValue
     }

@@ -66,8 +66,9 @@ opaque token.
 - [x] (2026-08-23) Milestone 2: added Kanmon wire DTOs, a route-safe authenticated client,
   Settei base-URL and secret-token settings, shared-manager `HttpEnv` wiring, worker CLI and
   diagnostics, and strict process-level dependency plumbing.
-- [ ] Milestone 3: carry only the resolved egress metadata on `SinkIntent`, dispatch through
-  Kanmon, and prove delivery-receipt and workflow-versioning behavior.
+- [x] (2026-08-23) Milestone 3: added only resolved conversation and trigger identifiers to
+  `SinkIntent`, centralized their preparation for every producer, dispatched through Kanmon,
+  retained the acknowledged activity id, and proved replay-neutral workflow behavior.
 - [ ] Milestone 4: add the production-shaped `stub-kanmon` command, end-to-end tests, proof
   manifest, user/operator docs, and optional real-Kanmon compatibility transcript.
 - [ ] Run all focused and full validation, record results here, and distill any durable
@@ -112,6 +113,13 @@ opaque token.
   `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`, but
   ADR 0022 and the implemented terminal-outcome comment already pin that canonical URI. The
   registry lag is not a reason to replace it with an ambiguous plan number or checkout path.
+
+- (2026-08-23) `just keiro-gate HEAD` runs `keiro-scaffold`, whose cleanliness assertion is
+  a worktree-versus-index `git diff` over all of `shikigami-core/src`, not only generated
+  modules. Running it with the implementation unstaged therefore reported the intended source
+  edits as a stale generated layer even though every generated module was unchanged. Staging
+  the reviewed source first let the same gate classify the change correctly as
+  `replay-neutral: stored-data replay is unchanged` and pass conformance.
 
 
 ## Decision Log
@@ -234,6 +242,17 @@ passes all 508 tests and `nix develop --command cabal test shikigami-workers-tes
 `shikigami-worker --check-config` reports `configuration valid` without opening the runtime
 database. Milestone 3 will move the already modelled optional egress metadata onto the
 durable intent and replace the temporary dispatcher failure with this client.
+
+Milestone 3 is complete. The shared intent-preparation owner now derives egress metadata from
+the declared key, behavior output, or actual triggering activity and stores only
+`conversationKey` and `triggeringActivityId`; non-egress encodings remain byte-for-byte
+unchanged and old rows decode both fields as `Nothing`. Publication builds the Kanmon request,
+preserves transient HTTP failures for retry, terminally rejects deterministic failures, and
+records the returned Kanmon activity id in the delivered receipt. A second publication of an
+already delivered row performs no HTTP request. `nix develop --command cabal test
+shikigami-core-test` passes all 514 tests, and staged `just keiro-gate HEAD` reports
+replay-neutral compatibility and passes all generated conformance checks without a patch id or
+`continueAsNew`.
 
 
 ## Context and Orientation

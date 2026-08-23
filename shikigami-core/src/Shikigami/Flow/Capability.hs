@@ -52,7 +52,6 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
 import Shikigami.Sink.Intent (enqueueSinkIntentStep)
-import Shikigami.Sink.Recipient (resolveSinkRecipient)
 import Shikigami.Sink.Types (DanwaTarget, SinkResult)
 
 newtype MemoryQuery = MemoryQuery {query :: Text}
@@ -380,7 +379,7 @@ runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, direct
           let stepName
                 | useLabels = StepName ("emit-signal:" <> label)
                 | otherwise = StepName ("emit-signal:" <> Text.pack (show ordinal))
-          enqueueSinkIntentStep directory grants principalId stepName agent runId ordinal occurredAt danwaTarget (resolveSinkRecipient sink activity) sink output
+          enqueueSinkIntentStep directory grants principalId stepName agent runId ordinal occurredAt danwaTarget activity sink output
     )
     action
 

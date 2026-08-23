@@ -3,6 +3,7 @@ module Shikigami.SinkDeliverySpec (tests) where
 import Control.Exception (bracket)
 import Control.Monad (filterM, void)
 import Data.Aeson (Result (..), eitherDecode, encode, fromJSON, object, (.=))
+import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LBS8
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
@@ -31,6 +32,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Propagator.W3CTraceContext (decodeSpanContext)
 import OpenTelemetry.Trace.Core qualified as Otel
+import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (defaultApprovalEnv)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -56,9 +58,10 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
-import Shikigami.Sink (GrantSource (DbGrants), SinkOutcome (Enqueued, SkippedLifecycle), SinkResult (..))
+import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.GrantStore qualified as GrantStore
 import Shikigami.Sink.Wire qualified as Wire
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Test.Tasty (TestTree, testGroup)
@@ -69,12 +72,14 @@ tests =
   testGroup
     "SinkDelivery"
     [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" journalTruth,
+      testCase "ChannelEgress enqueue snapshots minimal activity metadata" egressIntentMetadata,
       testCase "paused enqueue journals a lifecycle skip without outbox or receipt" pausedEnqueue,
       testCase "pause before publish records a terminal non-send without HTTP" pauseBeforePublish,
       testCase "permanent failure becomes a bounded terminal rejection" permanentRejection,
       testCase "outbox trace context parents sink.publish and its HTTP traceparent" tracePropagation,
       testCase "invalid traceparent is unparented and restores ambient context" invalidTraceContextIsolation,
       testCase "publish records a delivered receipt with the downstream id" receiptRecording,
+      testCase "ChannelEgress publication records the Kanmon activity id and suppresses re-send" egressReceiptRecording,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
       testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
       testCase "danwa post-failure retry reuses the started conversation" danwaReuse,
@@ -240,6 +245,48 @@ journalTruth =
       Success [SinkResult {outcome = Enqueued detail}] ->
         assertBool ("enqueue detail should name the outbox row: " <> Text.unpack detail) ("outbox:" `Text.isPrefixOf` detail)
       other -> assertFailure ("expected one Enqueued result, got " <> show other)
+
+egressIntentMetadata :: IO ()
+egressIntentMetadata =
+  withFixture "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+    [row] <- runWorkflowAndRows deps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+    case Integration.decodeJsonIntegrationEvent (rowEvent row) of
+      Right AgentWorkflow.SinkIntent {AgentWorkflow.conversationKey, AgentWorkflow.triggeringActivityId} -> do
+        assertEqual "activity subject becomes the durable conversation key" (Just "conv_55012") conversationKey
+        assertEqual "activity id is retained without the envelope" (Just "act_channel_1") triggeringActivityId
+      other -> assertFailure ("ChannelEgress intent should decode, got " <> show other)
+
+triggeringActivity :: Activity.ActivityEnvelope
+triggeringActivity =
+  Activity.ActivityEnvelope
+    { Activity.activityId = "act_channel_1",
+      Activity.occurredAt = "2026-08-23T12:00:00Z",
+      Activity.source = "external/intercom",
+      Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person_42", Activity.session = Nothing},
+      Activity.subject = Activity.Subject {Activity.subjectType = "conversation", Activity.subjectId = "conv_55012"},
+      Activity.verb = "conversation.message_received",
+      Activity.payload = object ["text" .= ("Could I get an update?" :: Text)],
+      Activity.contextRefs = [],
+      Activity.idempotencyKey = "intercom-message-1"
+    }
+
+egressReceiptRecording :: IO ()
+egressReceiptRecording = do
+  requests <- newIORef []
+  testWithApplication (pure (kanmonApp requests)) \port ->
+    withFixture "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
+      [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      first <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
+      second <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
+      assertEqual "first publication succeeds" Outbox.PublishSucceeded first
+      assertEqual "delivered receipt suppresses the second HTTP request" Outbox.PublishSucceeded second
+      receipt <- lookupReceipt pool row
+      assertEqual "receipt is delivered" Delivery.Delivered (Delivery.status receipt)
+      assertEqual "Kanmon activity id is retained" (Just "act_reply_1") (Delivery.detail receipt)
+      assertEqual "Kanmon receives one request" 1 . length =<< readIORef requests
 
 receiptRecording :: IO ()
 receiptRecording = do
@@ -481,6 +528,23 @@ kizashiApp requests request respond =
           if requestedIntent == "fail"
             then respond (responseLBS status500 [] "retry")
             else respond (responseLBS status200 [(hContentType, "application/json")] (encode (Wire.SignalResponse "sig_stub" "active")))
+    _ -> respond (responseLBS status404 [] "not found")
+
+kanmonApp :: IORef [Wire.EgressActionRequest] -> Application
+kanmonApp requests request respond =
+  case (requestMethod request, pathInfo request) of
+    ("POST", ["channels", "intercom", "actions", "reply_to_conversation"]) -> do
+      body <- strictRequestBody request
+      case eitherDecode body of
+        Left err -> respond (responseLBS status400 [] (LBS8.pack err))
+        Right actionRequest -> do
+          modifyIORef' requests (actionRequest :)
+          respond
+            ( responseLBS
+                status200
+                [(hContentType, "application/json")]
+                (encode (Wire.EgressActionResponse "act_reply_1" "conversation.reply_sent"))
+            )
     _ -> respond (responseLBS status404 [] "not found")
 
 flakyDanwaApp :: IORef Int -> IORef Int -> Application

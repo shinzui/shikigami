@@ -1,6 +1,7 @@
 module Shikigami.SinkIntentSpec (tests) where
 
 import Data.Aeson (Value, eitherDecodeStrict, encode)
+import Data.ByteString.Char8 qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.Foldable (traverse_)
@@ -29,6 +30,13 @@ tests =
         traverse_ assertRoundTrip representativeSinks,
       testCase "canonical intent encodes to the pinned wire bytes" do
         encode (intentFor canonicalSink) @?= canonicalWireBytes,
+      testCase "ChannelEgress round-trips only its resolved metadata" do
+        let encoded = encode egressIntent
+        eitherDecodeStrict (LazyByteString.toStrict encoded) @?= Right egressIntent
+        let strict = LazyByteString.toStrict encoded
+        ByteString.isInfixOf "\"conversationKey\":\"conv_55012\"" strict @?= True
+        ByteString.isInfixOf "\"triggeringActivityId\":\"act_1\"" strict @?= True
+        ByteString.isInfixOf "\"activity\":" strict @?= False,
       testCase "the integration-event identity stays stable" do
         let IntegrationEvent {eventType, schemaVersion} = eventFor (intentFor canonicalSink)
         eventType @?= "shikigami.sink.dispatch-requested"
@@ -55,7 +63,25 @@ intentFor sink =
       occurredAt = Just sampleTime,
       danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
       resolvedRecipient = Nothing,
+      conversationKey = Nothing,
+      triggeringActivityId = Nothing,
       sink,
+      output = outputValue
+    }
+
+egressIntent :: SinkIntent
+egressIntent =
+  SinkIntent
+    { agent = "channel-reply",
+      principalId = Just "agent_channel_reply",
+      runId = "run_egress_1",
+      ordinal = 0,
+      occurredAt = Just sampleTime,
+      danwaTarget = Nothing,
+      resolvedRecipient = Nothing,
+      conversationKey = Just "conv_55012",
+      triggeringActivityId = Just "act_1",
+      sink = ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing},
       output = outputValue
     }
 
