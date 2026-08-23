@@ -37,6 +37,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -230,6 +231,7 @@ withFixture label sinks kizashi danwa use =
     withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
       tracer <- noopTracer
       behaviorEnv <- newBehaviorEnv
+      sinkHttp <- testSinkHttpFor danwa
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
           pool = Kiroku.Store.Connection.pool kirokuStore
           declaration = agentDeclaration sinks
@@ -243,6 +245,7 @@ withFixture label sinks kizashi danwa use =
                 AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
                 AgentWorkflow.danwa = danwa,
                 AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
+                AgentWorkflow.http = sinkHttp,
                 AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
                 AgentWorkflow.approval = defaultApprovalEnv,
                 AgentWorkflow.deadline = Nothing,

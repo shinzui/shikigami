@@ -83,6 +83,7 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
+import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -1591,6 +1592,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = ReiConfig {baseUrl = Nothing},
+      http = testSinkHttp,
       hooks,
       approval = defaultApprovalEnv,
       deadline = Nothing,
@@ -1618,6 +1620,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = ReiConfig {baseUrl = Nothing},
+      http = testSinkHttp,
       hooks,
       approval,
       deadline,

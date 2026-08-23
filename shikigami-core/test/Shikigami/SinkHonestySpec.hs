@@ -39,6 +39,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink
   ( AgentIdentity (..),
@@ -351,6 +352,7 @@ ctxWithIdentity agentIdentity rei =
       kawa = KawaConfig {baseUrl = unreachable, sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
       rei,
+      http = testSinkHttp,
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,

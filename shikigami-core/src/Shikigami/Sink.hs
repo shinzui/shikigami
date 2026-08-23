@@ -26,14 +26,18 @@ where
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
+import Shikigami.Prelude ((^.))
 import Shikigami.Sink.Config
-import Shikigami.Sink.Danwa (runDanwa)
+import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwa)
 import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
-import Shikigami.Sink.KawaClient (buildEnvelope, postEnvelope, renderKawaError)
-import Shikigami.Sink.KizashiClient (buildSignalReq, postSignal)
+import Shikigami.Sink.Http (HttpFailure)
+import Shikigami.Sink.Http qualified as Http
+import Shikigami.Sink.KawaClient (KawaError (..), buildEnvelope, postEnvelope, renderKawaError)
+import Shikigami.Sink.KizashiClient (KizashiError (..), buildSignalReq, postSignal, renderKizashiError)
 import Shikigami.Sink.Permission
 import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (runReiAction)
@@ -85,8 +89,8 @@ runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome
 runSink ctx sink output = case sink of
   KawaDigest {} -> do
     env <- buildEnvelope ctx sink output
-    r <- postEnvelope (kawa ctx) env
-    pure (either (Failed . renderKawaError) Delivered r)
+    r <- postEnvelope (http ctx ^. #kawa) (kawa ctx) env
+    pure (either kawaFailure Delivered r)
   KizashiSignal {} -> do
     -- A strategy that was declared and could not be honored is said out loud;
     -- the alternative is a signal quietly reaching whoever the fallback names.
@@ -105,11 +109,32 @@ runSink ctx sink output = case sink of
     case buildSignalReq (kizashi ctx) (recipientOverride ctx) sink (identity ctx) output of
       Left e -> pure (Failed e)
       Right req -> do
-        r <- postSignal (kizashi ctx) req
-        pure (either Failed (Delivered . signalId) r)
+        r <- postSignal (http ctx ^. #kizashi) (kizashi ctx) req
+        pure (either kizashiFailure (Delivered . signalId) r)
   ReiAction {} -> do
-    r <- runReiAction (rei ctx) ctx sink output
+    r <- runReiAction (Http.unauthenticatedHttpEnv (http ctx ^. #kawa)) (rei ctx) ctx sink output
     pure (either Failed Delivered r)
   DanwaConversation {} -> do
-    r <- runDanwa (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
-    pure (either Failed Delivered r)
+    r <- runDanwa (http ctx ^. #danwa) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
+    pure (either danwaFailure Delivered r)
+
+kawaFailure :: KawaError -> SinkOutcome
+kawaFailure failure = case failure of
+  KawaHttpError httpFailure -> classifiedFailure httpFailure
+  KawaDecodeError _ -> PermanentFailure (renderKawaError failure)
+
+kizashiFailure :: KizashiError -> SinkOutcome
+kizashiFailure failure = case failure of
+  KizashiHttpError httpFailure -> classifiedFailure httpFailure
+  KizashiDecodeError _ -> PermanentFailure (renderKizashiError failure)
+
+danwaFailure :: DanwaError -> SinkOutcome
+danwaFailure failure = case failure of
+  DanwaHttpError httpFailure -> classifiedFailure httpFailure
+  DanwaReceiptFailure _ -> Failed (renderDanwaError failure)
+  DanwaUsageError _ -> PermanentFailure (renderDanwaError failure)
+
+classifiedFailure :: HttpFailure -> SinkOutcome
+classifiedFailure failure
+  | Http.httpFailureIsPermanent failure = PermanentFailure (Http.renderHttpFailure failure)
+  | otherwise = Failed (Http.renderHttpFailure failure)

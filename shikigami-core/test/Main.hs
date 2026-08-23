@@ -31,6 +31,7 @@ import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
+import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
@@ -55,6 +56,7 @@ import Shikigami.Sink
   )
 import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
 import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
@@ -95,6 +97,7 @@ main =
           RunEvidenceSpec.tests,
           SinkDeliverySpec.tests,
           SinkHonestySpec.tests,
+          SinkAuthSpec.tests,
           FlowLifecycleSpec.tests,
           AgentWorkflowSpec.tests,
           SpikeWorkflowSpec.tests,
@@ -236,6 +239,7 @@ ctxFor ident kz kw =
       kawa = kw,
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       rei = Sink.ReiConfig {baseUrl = Nothing},
+      http = testSinkHttp,
       danwaTarget = Nothing,
       recipientOverride = Nothing,
       occurredAt = Nothing,
@@ -250,12 +254,16 @@ dummyKawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui
 dummyKizashi :: KizashiConfig
 dummyKizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
 
-ctxForDanwa :: AgentIdentity -> DanwaConfig -> Maybe DanwaTarget -> SinkContext
-ctxForDanwa ident danwa target =
-  (ctxFor ident dummyKizashi dummyKawa)
-    { danwa = danwa,
-      danwaTarget = target
-    }
+ctxForDanwa :: AgentIdentity -> DanwaConfig -> Maybe DanwaTarget -> IO SinkContext
+ctxForDanwa ident danwa target = do
+  sinkHttp <- testSinkHttpFor danwa
+  pure
+    ( (ctxFor ident dummyKizashi dummyKawa)
+        { danwa = danwa,
+          http = sinkHttp,
+          danwaTarget = target
+        }
+    )
 
 kizashiTests :: TestTree
 kizashiTests =
@@ -371,8 +379,8 @@ danwaTests =
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
-              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg target
               sink = DanwaConversation {topic = "support"}
+          ctx <- ctxForDanwa (AgentIdentity "heartbeat") cfg target
           r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
           outcome r @?= Delivered "msg_reply"
           reqs <- readIORef ref
@@ -385,8 +393,8 @@ danwaTests =
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
-              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
               sink = DanwaConversation {topic = "support"}
+          ctx <- ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
           r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
           outcome r @?= Delivered "msg_stub"
           reqs <- readIORef ref
@@ -396,8 +404,8 @@ danwaTests =
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
-              ctx = ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
               sink = DanwaConversation {topic = ""}
+          ctx <- ctxForDanwa (AgentIdentity "heartbeat") cfg Nothing
           _ <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
           reqs <- readIORef ref
           postedContent reqs @?= Just "fresh thread text"

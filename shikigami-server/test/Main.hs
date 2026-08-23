@@ -9,6 +9,7 @@ import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Server.CommandSpec qualified as CommandSpec
 import Shikigami.Server.DispatchSpec qualified as DispatchSpec
+import Shikigami.Server.KawaStubSpec qualified as KawaStubSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
 import Test.Tasty (defaultMain, testGroup)
 
@@ -21,6 +22,7 @@ main =
           AgentsSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
+          KawaStubSpec.tests,
           ProblemSpec.tests
         ]
     )

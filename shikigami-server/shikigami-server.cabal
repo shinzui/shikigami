@@ -105,6 +105,7 @@ test-suite shikigami-server-test
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
+    Shikigami.Server.KawaStubSpec
     Shikigami.Server.ProblemSpec
 
   -- The probe conformance kit and the WAI round-trip tests run a real Warp
@@ -114,6 +115,7 @@ test-suite shikigami-server-test
     , aeson
     , base
     , bytestring
+    , containers
     , http-client
     , http-types
     , lens
@@ -123,6 +125,8 @@ test-suite shikigami-server-test
     , servant-health
     , servant-health:testkit
     , servant-server
+    , settei
+    , settei-env
     , shikigami-api
     , shikigami-core
     , shikigami-server

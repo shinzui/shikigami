@@ -18,7 +18,9 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
+import Shikigami.Prelude (Text)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Telemetry (withRunTracer)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
@@ -55,6 +57,37 @@ runWorkerCmd config = do
       agents <- enabledAgentsFromReport logger report
       Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
       refuseUndeployableAgents logger agents
+      let kizashiConfig =
+            KizashiConfig
+              { baseUrl = Config.kizashiBaseUrl config,
+                defaultRecipient = Config.kizashiDefaultRecipient config
+              }
+          kawaConfig =
+            KawaConfig
+              { baseUrl = Config.kawaBaseUrl config,
+                sourceSegment = Config.kawaSourceSegment config
+              }
+          danwaConfig =
+            DanwaConfig
+              { baseUrl = Config.danwaBaseUrl config,
+                agentParticipant = Config.danwaAgentParticipant config
+              }
+          httpLimits =
+            HttpLimits
+              { requestBytes = Config.httpRequestMaxBytes config,
+                responseBytes = Config.httpResponseMaxBytes config
+              }
+      sinkHttp <-
+        newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
+          Left failure -> refuseInvalidSinkHttp logger failure
+          Right clients -> pure clients
+      Log.logInfo
+        logger
+        "worker.sink_credentials.configured"
+        [ "kawa" Aeson..= credentialPresence (Config.kawaToken config),
+          "kizashi" Aeson..= credentialPresence (Config.kizashiToken config),
+          "danwa" Aeson..= credentialPresence (Config.danwaToken config)
+        ]
       -- Resolved here, at the composition root, so an unparseable cron is
       -- reported (and under agents.strict refused) once at boot rather than
       -- dropped silently on every pass of the timer loop.
@@ -85,22 +118,11 @@ runWorkerCmd config = do
                 conversationIdleTimeout = Config.conversationIdleTimeout config,
                 catchUpPolicy = Config.schedulerCatchUp config,
                 schedules,
-                kizashi =
-                  KizashiConfig
-                    { baseUrl = Config.kizashiBaseUrl config,
-                      defaultRecipient = Config.kizashiDefaultRecipient config
-                    },
-                kawa =
-                  KawaConfig
-                    { baseUrl = Config.kawaBaseUrl config,
-                      sourceSegment = Config.kawaSourceSegment config
-                    },
-                danwa =
-                  DanwaConfig
-                    { baseUrl = Config.danwaBaseUrl config,
-                      agentParticipant = Config.danwaAgentParticipant config
-                    },
+                kizashi = kizashiConfig,
+                kawa = kawaConfig,
+                danwa = danwaConfig,
                 rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
+                http = sinkHttp,
                 logger,
                 -- The C11 gate reads shikigami.sink_grants over the same pool
                 -- the rest of the process uses, so a grant change is visible on
@@ -117,6 +139,14 @@ runWorkerCmd config = do
         storePool
         registry
         (runWorkers env)
+
+credentialPresence :: Maybe a -> Text
+credentialPresence = maybe "none" (const "token")
+
+refuseInvalidSinkHttp :: Log.Logger -> SinkHttpError -> IO SinkHttp
+refuseInvalidSinkHttp logger failure = do
+  Log.logError logger "worker.sink_http.invalid" ["error" Aeson..= show failure]
+  Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.

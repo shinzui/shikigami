@@ -36,8 +36,13 @@ data CredentialFailureReason
 -- | Where bearer tokens come from.
 --
 -- Configuration supplies a constant today. A future shomei-backed source can
--- fetch a scoped service token, cache it until expiry, and refresh it behind
--- this same interface, leaving every sink client unchanged.
+-- fetch a scoped service token, such as @kawa:ingest@ or @signal:raise@, cache
+-- the token and its expiry in an @MVar@, and refresh it ahead of expiry behind
+-- this same interface, leaving every sink client unchanged. That implementation
+-- belongs in a separate @Shikigami.Sink.Auth.Shomei@ module once scoped service
+-- token issuance exists in @mori://shinzui/shomei@ (its current request is IR-2
+-- in project-relative @docs/initial-spec.md@; an artifact URI is pending Mori
+-- coverage). The raw JWT must remain confined to the internal header renderer.
 newtype TokenSource = TokenSource
   { fetchToken :: IO (Either CredentialFailure BearerToken)
   }

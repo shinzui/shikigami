@@ -137,6 +137,14 @@ tests =
         assertBool
           ("provider adapters belong in leaf composition packages; core links " <> show linkedAdapters)
           (null linkedAdapters),
+      testCase "the credential renderer stays an internal core module" do
+        root <- repositoryRoot
+        contents <- TIO.readFile (cabalPathIn root "shikigami-core")
+        let internalModule = "Shikigami.Sink.Auth.Internal"
+            exposedModules = cabalFieldEntries "exposed-modules:" contents
+            otherModules = cabalFieldEntries "other-modules:" contents
+        assertBool "the authorization renderer must not be publicly importable" (internalModule `notElem` exposedModules)
+        assertBool "the authorization renderer must remain declared as an internal module" (internalModule `elem` otherModules),
       -- The check that would have caught the regression plan 55 exists to fix.
       --
       -- The sibling-edge case above looks at what a *library* declares. It
@@ -188,6 +196,21 @@ tests =
               ]
         assertBool ("packages with a library but no test suite: " <> show untested) (null untested)
     ]
+
+-- | Read the indented entries following a Cabal field. The package files are
+-- treefmt-owned, so a field ends at the next line indented no deeper than the
+-- field itself.
+cabalFieldEntries :: Text -> Text -> [Text]
+cabalFieldEntries field contents =
+  case dropWhile ((/= field) . Text.strip) (Text.lines contents) of
+    [] -> []
+    (_ : rest) ->
+      filter (not . Text.null)
+        . fmap Text.strip
+        . takeWhile isContinuation
+        $ rest
+  where
+    isContinuation line = Text.null (Text.strip line) || Text.length (Text.takeWhile (== ' ') line) > 2
 
 -- ── Reading the packages ────────────────────────────────────────────────────
 

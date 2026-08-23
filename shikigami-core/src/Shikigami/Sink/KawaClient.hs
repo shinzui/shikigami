@@ -23,16 +23,16 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KawaConfig (..))
-import Shikigami.Sink.Http (postJSON)
+import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSON, renderHttpFailure)
 import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
 import Shikigami.Sink.Wire (IngestRequest (..), IngestResponse (..))
 
-data KawaError = KawaHttpError !Text | KawaDecodeError !Text
+data KawaError = KawaHttpError !HttpFailure | KawaDecodeError !Text
   deriving stock (Eq, Show)
 
 renderKawaError :: KawaError -> Text
-renderKawaError (KawaHttpError t) = t
+renderKawaError (KawaHttpError failure) = renderHttpFailure failure
 renderKawaError (KawaDecodeError t) = "decode IngestResponse: " <> t
 
 -- | Build the nine-field C1 envelope for a @KawaDigest@ sink: mint the @act_@ id,
@@ -83,11 +83,11 @@ projectIngest (ActivityEnvelope {verb = vb, actor = ac, subject = sj, payload = 
 
 -- | POST the envelope (projected to an @IngestRequest@) to @/v1/sources/{source}/events@
 -- and return the canonical activity id.
-postEnvelope :: KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
-postEnvelope KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
+postEnvelope :: HttpEnv -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
+postEnvelope http KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
   let req = projectIngest env
       url = cfgBaseUrl <> "/v1/sources/" <> Text.replace "/" "%2F" cfgSourceSegment <> "/events"
-  respE <- postJSON url req
+  respE <- postJSON http url req
   pure $ case respE of
     Left e -> Left (KawaHttpError e)
     Right body -> case eitherDecode body of

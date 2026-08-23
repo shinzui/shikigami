@@ -16,7 +16,16 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Shikigami agents deliver their outputs to other services over HTTP ("sinks"): activity digests to kawa, signals to kizashi, and conversation messages to danwa. Today every one of those requests goes out with no credentials at all — the only header the HTTP helper sends is `content-type` (`shikigami-core/src/Shikigami/Sink/Http.hs`), and the local kawa stub explicitly omits the real doorway's auth gate (`shikigami-server/src/Shikigami/Sink/KawaStub.hs`). The real kawa/kizashi/danwa services will require shomei-issued bearer tokens (`docs/initial-spec.md`, IR-2, lines 889-900), so the moment shikigami points at a real endpoint, every sink delivery would fail with 401 — and there is nowhere to configure a credential.
+Shikigami agents deliver their outputs to other services over HTTP ("sinks"): activity
+digests to kawa, signals to kizashi, and conversation messages to danwa. Before this plan,
+every one of those requests went out with no credentials at all — the only header the HTTP
+helper sent was `content-type` (`shikigami-core/src/Shikigami/Sink/Http.hs`), and the local
+kawa stub explicitly omitted the real doorway's auth gate
+(`shikigami-server/src/Shikigami/Sink/KawaStub.hs`). The real services require bearer-token
+authentication, while scoped service-token issuance remains the Shomei project's request IR-2
+under `mori://shinzui/shomei` (project-relative `docs/initial-spec.md`; an artifact URI is
+pending Mori coverage). Without this work, pointing Shikigami at a real endpoint would fail
+with 401 and there would be nowhere to configure a credential.
 
 After this plan, each sink client sends `Authorization: Bearer <token>` when a per-sink
 credential is resolved through plan 37's Settei application config (a static secret
@@ -39,11 +48,11 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
 - [x] (2026-08-23T15:08:41Z) Prerequisites: plans 19, 36, and 47 are complete; plan 37's application configuration, redaction, and source composition are complete. Its only open item is the migration package cycle and does not block sink authentication.
 - [x] (2026-08-23T15:08:41Z) Refreshed every affected plan section onto the current package boundaries, Settei secret types, dependency releases, local ADRs, and applicable Haskell Jitsurei standards before changing code.
 - [x] (2026-08-23T15:22:16Z) Foundation: added validated 1 KiB–64 MiB `ByteLimit` settings (8 MiB defaults), optional redacted Settei secrets with the three exact legacy token bindings, and the opaque `BearerToken`/`TokenSource` API with constant-time header comparison. All 442 core tests pass.
-- [ ] Milestone 1: shared TLS-capable `Manager` with timeouts and bounded request/response bodies; `postJSON` takes an `HttpEnv`, injects auth, and preserves typed failure class; kawa/kizashi clients rewired.
-- [ ] Milestone 2: optional Settei secret settings with explicit legacy bindings, converted to opaque tokens and threaded from composition root to dispatch; secret types have no `Show`/JSON instances; boot log states which sinks have credentials (never values).
-- [ ] Milestone 3: danwa client path authenticated (local servant runner over the shared token-injecting manager, replacing `Danwa.runDanwa`).
-- [ ] Milestone 4: server-owned stub-kawa token enforcement plus tests (header asserted by a stub server; RFC 9457 401 path exercised).
-- [ ] Milestone 5: shomei token-source seam documented and typed (`TokenSource`), static implementation shipped; `cabal test all` green.
+- [x] (2026-08-23T15:53:05Z) Milestone 1: added a shared TLS-capable `Manager`, 30-second timeout, bounded request/response streaming, auth-aware `HttpEnv`, typed failure classes, redirect refusal, and rewired kawa/kizashi clients. Focused exact-boundary, one-byte-over, status, and redirect tests pass.
+- [x] (2026-08-23T15:53:05Z) Milestone 2: converted the optional Settei secrets to opaque static sources at boot, threaded `SinkHttp` through the strict nonserialized dependency records, and added presence-only structured worker diagnostics.
+- [x] (2026-08-23T15:53:05Z) Milestone 3: replaced the sink path's per-operation `Danwa.runDanwa` with a boot-time `ClientEnv` over its own fail-closed, bounded, token-injecting manager. Focused Danwa auth and body-limit tests pass.
+- [x] (2026-08-23T15:53:05Z) Milestone 4: production `stub-kawa` enforces the resolved opaque token before reading the body, answers missing/wrong credentials with the shared RFC 9457 401 problem shape, and has server-package acceptance tests. The package architecture suite pins `Auth.Internal` as non-exposed.
+- [x] (2026-08-23T15:59:17Z) Milestone 5: documented the future scoped Shomei cache/refresh adapter at the `TokenSource` seam, recorded ADR 0026, completed `cabal build all`, and passed the complete test matrix sequentially with `cabal test all -j1`.
 
 
 ## Surprises & Discoveries
@@ -62,6 +71,23 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
 
 - Observation: The draft's strict field annotation on the `TokenSource` `newtype` is rejected by GHC; newtype constructors cannot carry field strictness because their representation is already the wrapped value. The standards-compliant definition therefore keeps the direct `fetchToken` field but omits the impossible bang.
   Evidence: GHC 9.12.4 rejected the draft signature during the first compile; the corrected module and all 442 core tests compile and pass.
+
+- Observation: Although `http-client-tls` 0.4.0 is the current release, this repository's pinned Baikai 0.5 cohort requires `http-client-tls ^>=0.3`. The newest compatible Hackage revision, 0.3.6.4, then fails to build against the selected `crypton` 1.1.4 because its `memory`/`ram` constraints belong to a different solver cohort. The already-verified project environment contains 0.3.6.1 built against the current cohort, so the direct dependency must pin that version rather than force an incompatible upgrade.
+  Evidence: Cabal's 0.4.0 solver conflict names Baikai's bound; a source build of 0.3.6.4 fails in the crypton/memory API; Hackage and the upstream `http-client-tls-0.3.6.1` tag verify the selected release.
+
+- Observation: Exceptions raised by `managerModifyRequest` and `managerModifyResponse` are not guaranteed to arrive as Servant `ConnectionError`; the private Danwa limit/credential exceptions can escape `runClientM` directly.
+  Evidence: the focused oversized-request test observed the exception outside the returned `Either`. `runDanwaClient` now catches the whole generated-client boundary and maps both escaped private exceptions and returned `ClientError` values to the same safe `HttpFailure` algebra.
+
+- Observation: Threading `SinkHttp` through `AgentRunDeps` and `SinkContext` changes only nonserialized dependencies used by an existing publish action. It does not add, remove, rename, or reorder Keiro steps and changes no journaled argument/result type.
+  Evidence: review against `docs/workflow-versioning.md` and the `Agent/Workflow.hs` diff. No patch id or `continueAsNew` gate is required.
+
+- Observation: The repository's timing-sensitive worker heartbeat-cancellation test can fail
+  under the resource contention of Cabal's parallel all-package test run; it passed immediately
+  in isolation and as part of the complete worker suite. The full all-package matrix passes
+  with one test job.
+  Evidence: the first `cabal test all` run had 453/453 core tests and every changed suite green
+  but failed `heartbeat failure cancels work and escapes`; the isolated case, all 78 worker
+  tests, and `cabal test all -j1` then passed without a code change.
 
 
 ## Decision Log
@@ -91,6 +117,15 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
   endpoint moves from a local HTTP stub to HTTPS.
   Date: 2026-07-08
 
+- Decision: Pin core's direct `http-client-tls` dependency to `==0.3.6.1` for this
+  implementation rather than selecting the current 0.4 series.
+  Rationale: Baikai 0.5, already pinned by this repository, declares `^>=0.3`; 0.4 cannot
+  solve with it. Version 0.3.6.4 in turn belongs to an incompatible crypton/memory source
+  cohort, while 0.3.6.1 is the TLS-capable release already built and exercised with the
+  repository's selected dependency set. This is a compatibility pin, not a claim that
+  0.3.6.1 is the newest upstream release, and should be reconsidered with the Baikai cohort.
+  Date: 2026-08-23
+
 - Decision: Bound encoded request and decoded response bytes in the HTTP layer with validated
   `HttpLimits`; never use an unbounded lazy-body helper for remote responses.
   Rationale: a timeout does not cap memory. A compromised or broken service can stream an
@@ -117,6 +152,14 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
   authentication supplied by `TokenSource` compose with caller headers without exposing
   bearer tokens in serializable configs or creating three similar functions.
   Date: 2026-07-22
+
+- Decision: Caller-supplied headers cannot override `Authorization` or `Content-Type` in
+  `postJSONWithHeaders`; the helper strips both names before installing its policy-owned
+  values.
+  Rationale: authentication must come only from the opaque `TokenSource`, and the encoded
+  body is always JSON. Allowing an arbitrary caller header to win would reopen credential
+  injection and make the wire contract disagree with the bytes produced by the helper.
+  Date: 2026-08-23
 - Decision: Preserve HTTP failure class. Treat malformed/oversized requests, oversized
   responses, redirects, and 4xx responses as permanent by default; 408, 425, and 429 are
   transient, and a client may give a documented endpoint-specific meaning to 409. Treat
@@ -126,6 +169,13 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
   throttling and service outages do. A typed `HttpFailure` keeps this distinction consistent
   for kawa, kizashi, danwa, approvals, and kanmon.
   Date: 2026-07-22
+
+- Decision: Catch and classify only synchronous HTTP/client exceptions; rethrow
+  `SomeAsyncException` unchanged at both direct and Servant client boundaries.
+  Rationale: Keiro cancellation, worker shutdown, and process supervision must be able to stop
+  in-flight sink IO. Converting asynchronous cancellation to `TransportFailure` would keep a
+  cancelled workflow attempt alive and misreport control flow as a retryable network fault.
+  Date: 2026-08-23
 
 - Decision: Refresh the plan onto the current package boundaries: the reusable auth and
   HTTP client types remain in `shikigami-core`; worker construction and boot diagnostics
@@ -170,10 +220,55 @@ cabal run shikigami-worker -- --config config/worker-auth.yaml
   plaintext 401 would create a second error dialect.
   Date: 2026-08-23
 
+- Decision: Do not introduce a workflow patch id for the `AgentRunDeps`/`SinkContext`
+  threading in this plan.
+  Rationale: `SinkHttp` is a process-lifetime dependency consumed inside the already-existing
+  publish action. The workflow step sequence and every journaled parameter/result remain
+  unchanged, which `docs/workflow-versioning.md` classifies as deploy-safe implementation
+  wiring rather than a step-shape change.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The plan delivered authenticated, bounded, process-lifetime clients for all three implemented
+HTTP sink paths. Kawa and Kizashi share one manager while retaining independent credentials;
+Danwa uses a dedicated Servant manager so its request hook cannot authenticate another host.
+Configured lookup failure is fail-closed, caller headers cannot override authentication, and
+redirects are terminal without a follow-up request. Exact-boundary and one-byte-over tests
+exercise both direct and Servant request/response paths.
+
+Credential material remains outside durable data. Settei owns the optional secret settings and
+their exact legacy environment bindings; `BearerToken` has a private constructor and no render
+or serialization instances; its sole renderer is a non-exposed Cabal module pinned by an
+architecture test. Worker diagnostics report only `"token"` or `"none"`. Production
+`stub-kawa` proves the same opaque credential end to end and returns the repository's shared RFC
+9457 problem shape for missing or wrong credentials.
+
+The implementation preserved delivery truth by carrying typed permanent/transient failures
+through kawa, kizashi, and danwa client-specific errors to `SinkOutcome`. It retains no remote
+body, arbitrary header, or exception rendering in those failures. Rei reuses the shared pool
+through an explicitly unauthenticated environment, preventing the Kawa token from bleeding into
+that separate endpoint.
+
+The main plan refresh was necessary in two places: the repository now has seven packages with
+the production stub in `shikigami-server`, and current `http-client-tls` 0.4 cannot solve with
+the pinned Baikai 0.5 cohort. The implementation therefore uses the verified compatible
+`http-client-tls ==0.3.6.1` and records that as a cohort pin to revisit, not an upstream-current
+claim.
+
+The only edit under `Shikigami.Agent` adds process dependency wiring to an existing publish
+action. Review against `docs/workflow-versioning.md` confirmed no workflow patch or
+`continueAsNew` is needed. The new records, imports, error response, and record access follow
+the applicable Haskell Jitsurei core, custom-prelude, record, and RFC 9457 standards.
+
+Validation completed with `cabal build all` and `cabal test all -j1`: 454 core tests, 32 server
+tests, 78 worker tests, and every agent, API, client, migration, and Keiro conformance suite
+passed. One parallel all-suite attempt exposed an unrelated timing-sensitive worker test under
+contention; that case passed immediately in isolation, in its full package suite, and in the
+sequential complete matrix. ADR 0026 now carries the durable security and HTTP-client policy;
+the remaining future work is only the Shomei-backed `TokenSource` implementation after scoped
+service-token issuance exists.
 
 
 ## Context and Orientation
@@ -599,12 +694,14 @@ outcome and Keiro terminal mapping; plan 37 supplies application config and the 
 boundary. Plan 13 no longer defines configuration conventions.
 
 Dependency changes: `http-client` and `http-types` are already direct core dependencies. Add
-`http-client-tls >=0.4 && <0.5` and `servant-client >=0.20 && <0.21` to
-`shikigami-core`; add test-only dependencies only where compilation proves they are direct.
-The 2026-08-23 registry audit verified Hackage releases `http-client` 0.7.19,
+`http-client-tls ==0.3.6.1` and `servant-client >=0.20 && <0.21` to `shikigami-core`;
+add test-only dependencies only where compilation proves they are direct. The 2026-08-23
+registry audit verified the current Hackage releases `http-client` 0.7.19,
 `http-client-tls` 0.4.0, and `servant-client` 0.20.3.0 against upstream tags after Mori
 located `mori://snoyberg/http-client`, `mori://haskell-servant/servant`, and
-`mori://shinzui/danwa/packages/danwa-client`. No new external service is required.
+`mori://shinzui/danwa/packages/danwa-client`. The older TLS pin is deliberate compatibility
+with the repository's Baikai 0.5 and crypton/memory cohort, as recorded above. No new
+external service is required.
 
 Signatures that must exist at the end (full module paths):
 
@@ -671,6 +768,13 @@ independent.
 
 
 ## Revision Notes
+
+- 2026-08-23: Implemented all five milestones. Added opaque static credential sources,
+  process-lifetime bounded TLS clients, typed retry classification, authenticated Danwa,
+  production stub enforcement, focused client/server/architecture tests, and ADR 0026.
+  Corrected the TLS dependency plan to the Baikai-compatible `http-client-tls ==0.3.6.1`,
+  recorded Servant manager-hook exception behavior, and confirmed the workflow dependency
+  threading changes no durable step shape. `cabal build all` and `cabal test all -j1` pass.
 
 - 2026-08-23: Refreshed the plan before implementation against the current seven-package
   tree. Moved worker and production-stub work to `shikigami-workers` and

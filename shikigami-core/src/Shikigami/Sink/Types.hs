@@ -16,6 +16,7 @@ import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
+import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
 
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
@@ -48,6 +49,9 @@ data SinkContext = SinkContext
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
+    -- | Process-lifetime authenticated HTTP clients. This is dependency wiring,
+    -- not durable input, and is never serialized into a sink intent.
+    http :: !SinkHttp,
     danwaTarget :: !(Maybe DanwaTarget),
     -- | The recipient a @KizashiSignal@'s @recipientFrom@ strategy resolved to,
     -- decided upstream where the trigger activity is in scope and carried here

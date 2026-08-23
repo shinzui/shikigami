@@ -31,7 +31,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (ReiConfig (..))
-import Shikigami.Sink.Http (postJSON)
+import Shikigami.Sink.Http (HttpEnv, postJSON, renderHttpFailure)
 import Shikigami.Sink.Types (SinkContext, mkSourceEventId)
 import Shikigami.Sink.Wire (ReiActionReq (..))
 
@@ -44,8 +44,8 @@ reiActionPath = "/v1/agent-actions"
 -- @Left@ becomes a @Failed@ outcome and therefore a failed outbox publish. Both
 -- branches are real: unconfigured is a genuine non-delivery, and a configured
 -- endpoint that refuses the request is a genuine transport failure.
-runReiAction :: ReiConfig -> SinkContext -> Sink -> Value -> IO (Either Text Text)
-runReiAction ReiConfig {baseUrl} ctx sink output =
+runReiAction :: HttpEnv -> ReiConfig -> SinkContext -> Sink -> Value -> IO (Either Text Text)
+runReiAction http ReiConfig {baseUrl} ctx sink output =
   case sink of
     ReiAction {intentionId = iid, note = nt} ->
       case baseUrl of
@@ -58,8 +58,8 @@ runReiAction ReiConfig {baseUrl} ctx sink output =
                     output,
                     sourceEventId = mkSourceEventId ctx
                   }
-          result <- postJSON (url <> reiActionPath) req
-          pure (fmap (const ("rei-action recorded for intention " <> iid)) result)
+          result <- postJSON http (url <> reiActionPath) req
+          pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> iid))) result)
     _ -> pure (Left "runReiAction: not a ReiAction sink")
 
 -- | What an operator reads when a finding could not be handed to rei because no

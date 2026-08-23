@@ -12,7 +12,6 @@ where
 
 import Data.Aeson (encode)
 import Data.ByteString.Lazy qualified as LBS
-import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Effectful (runEff)
 import Effectful.Error.Static (runError)
@@ -27,7 +26,6 @@ import Kafka.Producer
 import Kafka.Types (KafkaError, headersFromList)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Prelude
-import Shikigami.Sink.KawaClient (KawaError (..), renderKawaError)
 import Shikigami.Sink.Wire (IngestRequest (..))
 import System.IO (hPutStrLn, stderr)
 
@@ -37,13 +35,13 @@ mkRepublisher :: Text -> Text -> (IngestRequest -> Text -> IO ())
 mkRepublisher broker topic ingest actId = do
   r <- republish broker topic ingest actId
   case r of
-    Left e -> hPutStrLn stderr ("[stub-kawa] republish failed: " <> Text.unpack (renderKawaError e))
+    Left e -> hPutStrLn stderr ("[stub-kawa] republish failed: " <> e)
     Right () -> pure ()
 
 -- | Re-assemble the envelope from the doorway request + minted id, and publish it with
 -- kawa's producer shape (value = envelope JSON, key = @"<subject.type>:<subject.id>"@,
 -- the @keiro-*@ header set).
-republish :: Text -> Text -> IngestRequest -> Text -> IO (Either KawaError ())
+republish :: Text -> Text -> IngestRequest -> Text -> IO (Either String ())
 republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payload = pl, contextRefs = crs, sourceEventId = sevid, occurredAt = oat}) actId = do
   let Subject {subjectType = sty, subjectId = sid} = sj
       env =
@@ -84,5 +82,5 @@ republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payl
     _ <- produceMessageSync record
     pure ()
   pure $ case result of
-    Left (_cs, err) -> Left (KawaHttpError ("kafka republish: " <> Text.pack (show err)))
+    Left _ -> Left "Kafka publish failed"
     Right () -> Right ()

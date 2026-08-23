@@ -53,6 +53,7 @@ import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 import System.Exit (exitFailure)
@@ -98,6 +99,7 @@ data WorkerEnv = WorkerEnv
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
+    http :: !SinkHttp,
     -- | Which grant source every C11 check in this process consults. Built once
     -- at boot as 'DbGrants' over the store pool, so a grant or revocation takes
     -- effect on the next dispatch with no restart.
@@ -168,6 +170,7 @@ agentRunDeps env =
       AgentWorkflow.kawa = kawa env,
       AgentWorkflow.danwa = danwa env,
       AgentWorkflow.rei = rei env,
+      AgentWorkflow.http = http env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Just (envApprovalDeadline env),

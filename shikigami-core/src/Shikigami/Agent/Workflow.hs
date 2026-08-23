@@ -115,6 +115,7 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, DanwaTarget, DeliveryGuard (..), GrantSource, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), checkGrant, dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), Denied (..), SinkKind, sinkKindText)
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
@@ -130,6 +131,9 @@ data AgentRunDeps = AgentRunDeps
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
     rei :: !ReiConfig,
+    -- | Process-lifetime sink clients. This dependency never crosses a journal
+    -- or outbox serialization boundary.
+    http :: !SinkHttp,
     hooks :: !AgentRunHooks,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime),
@@ -1083,7 +1087,7 @@ deterministicOutboxIdForMessage messageId =
       nameBytes ("shikigami:sink:" <> messageId)
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeJsonIntegrationEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -1101,6 +1105,7 @@ publishSinkIntent AgentRunDeps {kizashi = depsKizashi, kawa = depsKawa, danwa = 
                     kawa = depsKawa,
                     danwa = depsDanwa,
                     rei = depsRei,
+                    http = sinkHttp,
                     danwaTarget = danwaTarget,
                     recipientOverride = resolvedRecipient,
                     occurredAt = occurredAt,

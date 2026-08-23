@@ -2,8 +2,10 @@
 -- and the behavior output, and POST it to a kizashi base URL (the C4 contract). Built
 -- against a stub kizashi server; swapping the real kizashi base URL needs no code change.
 module Shikigami.Sink.KizashiClient
-  ( buildSignalReq,
+  ( KizashiError (..),
+    buildSignalReq,
     postSignal,
+    renderKizashiError,
   )
 where
 
@@ -13,10 +15,18 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
-import Shikigami.Sink.Http (postJSON)
+import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSON, renderHttpFailure)
 import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Recipient (recipientFor)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
+
+data KizashiError = KizashiHttpError !HttpFailure | KizashiDecodeError !Text
+  deriving stock (Eq, Show)
+
+renderKizashiError :: KizashiError -> Text
+renderKizashiError = \case
+  KizashiHttpError failure -> renderHttpFailure failure
+  KizashiDecodeError detail -> "decode SignalResponse: " <> detail
 
 -- | Build the C4 request from a @KizashiSignal@ sink + the behavior output. Fails for
 -- any other sink variant.
@@ -60,12 +70,12 @@ activityRefTags (Object o) =
 activityRefTags _ = []
 
 -- | POST the request to @<baseUrl>/v1/signals@ and decode the response.
-postSignal :: KizashiConfig -> CreateSignalReq -> IO (Either Text SignalResponse)
-postSignal cfg req = do
+postSignal :: HttpEnv -> KizashiConfig -> CreateSignalReq -> IO (Either KizashiError SignalResponse)
+postSignal http cfg req = do
   let url = baseUrl cfg <> "/v1/signals"
-  respE <- postJSON url req
+  respE <- postJSON http url req
   pure $ case respE of
-    Left e -> Left e
+    Left failure -> Left (KizashiHttpError failure)
     Right body -> case eitherDecode body of
-      Left de -> Left ("decode SignalResponse: " <> Text.pack de)
+      Left de -> Left (KizashiDecodeError (Text.pack de))
       Right sr -> Right sr

@@ -6,6 +6,7 @@ where
 import Data.Text qualified as Text
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
+import Shikigami.Sink.Auth (credentialToken)
 import Shikigami.Sink.KawaStub (StubKawaOptions (..), runStubKawa)
 
 -- | @stub-kawa --port <n> [--republish-topic <t> --broker <host:port>]@: run the kawa
@@ -23,5 +24,6 @@ runStubKawaCmd listenPort mtopic config =
     StubKawaOptions
       { port = listenPort,
         republishTopic = Text.pack <$> mtopic,
-        broker = Just (Config.kafkaBroker config)
+        broker = Just (Config.kafkaBroker config),
+        requireToken = credentialToken <$> Config.kawaToken config
       }
