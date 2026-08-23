@@ -42,8 +42,10 @@ This section must always reflect the actual current state of the work.
       explicit descriptor JSON, and deterministically ordered resolved snapshots.
 - [x] (2026-08-22) Added `capabilityOverlays` to Dhall and `AgentDecl`; empty requests
       retain the old five-key JSON bytes and missing keys decode to `[]`.
-- [ ] Implement collision-rejecting catalog construction and fail-closed pure resolution.
-- [ ] Add loader, JSON-wire, catalog, and policy tests plus a proof declaration.
+- [x] (2026-08-22) Implemented collision-rejecting catalog construction and pure,
+      fail-closed resolution for identity, policy, behavior, and durable-operation rules.
+- [x] (2026-08-22) Added loader, JSON-wire, catalog, policy, ordering, and malformed-input
+      tests plus the `workspace.read` proof declaration; 406 focused tests pass.
 - [ ] Document the overlay/base boundary and update the dependency plan assumptions.
 
 
@@ -93,6 +95,12 @@ Record every decision made while working on the plan.
 - Decision: Keep the catalog API pure and keep provider factories out of this plan.
   Rationale: Resolution and authorization should be testable without resources or `IO`.
   Plan 57 will pair immutable descriptors with acquisition functions in a separate registry.
+  Date: 2026-08-22
+
+- Decision: Give permanent resolution refusals an explicit tagged JSON object and encode a
+  resolved set as a canonically sorted descriptor array.
+  Rationale: Plan 58 will journal both results. Explicit tags pin readable failure bytes, and
+  sorting inside the resolved-set constructor makes request order semantically irrelevant.
   Date: 2026-08-22
 
 

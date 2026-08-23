@@ -170,7 +170,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] (2026-08-22) EP-1: Added the defaulted declaration field and byte-compatibility
       fixtures.
-- [ ] EP-1: Add pure catalog resolution, authorization, descriptor pinning, and validation.
+- [x] (2026-08-22) EP-1: Added pure catalog resolution, authorization, descriptor pinning,
+      and validation.
 - [ ] EP-2: Add provider/lease acquisition with partial rollback and collision rejection.
 - [ ] EP-2: Run `Skill` behaviors through one bounded tool loop while preserving the empty path.
 - [ ] EP-3: Declare, scaffold, and runtime-gate the durable resolution step.

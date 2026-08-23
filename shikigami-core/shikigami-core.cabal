@@ -55,6 +55,7 @@ library
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
+    Shikigami.Capability.Catalog
     Shikigami.Capability.Overlay
     Shikigami.Core
     Shikigami.Directory
