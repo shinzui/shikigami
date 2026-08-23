@@ -31,7 +31,7 @@ binary linking PGMQ and Kafka to prove it does not use them; see
 shikigami-run \
   --agent reviewer \
   --agent-root "$HOME/.config/shikigami" \
-  --permission workspace-write \
+  --permission edit-workspace \
   "fix the failing parser test and explain the change"
 ```
 
@@ -46,7 +46,7 @@ resolved worktree unless a future plan adds a separate, explicit capability.
 The end-to-end proof runs the installed flake app from a temporary fixture repository while
 the agent manifest and skill live in a different directory. A scripted model first reads and
 searches the fixture, is denied a write in read-only mode, then succeeds in
-`workspace-write` mode, runs one allow-listed test command, and leaves a visible uncommitted
+`edit-workspace` mode, runs one allow-listed test command, and leaves a visible uncommitted
 diff. A traversal path, symlink escape, shell interpreter, unapproved command, `git commit`,
 and `git push` are each rejected with typed errors.
 
@@ -57,15 +57,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: plans 12, 13, 15, 31, 36, 37, and 47 are complete, including all
+- [ ] Prerequisites: plans 13, 15, 31, 36, 37, 47, 56, 57, and 59 are complete, including all
       hard upstream dependencies recorded by those plans.
-- [ ] **M0 (added 2026-08-10): rewrite Milestone 1 against `Baikai.Agent`.** `baikai 0.5.0.0`
+- [x] (2026-08-10) **M0: rewrote Milestone 1 against `Baikai.Agent`.** `baikai 0.5.0.0`
       publishes the permission, capability, safety, command, result, and error vocabulary this
       plan was going to invent, plus an operator policy ceiling. Do not start M1 before reading
       Surprises & Discoveries; roughly half of M1 as written is now an import.
-- [ ] M0 (gate): `baikai 0.5.0.0` in the cohort, currently excluded by `kioku-core 0.3.0.0`'s
-      `baikai ^>=0.4.1.0`. `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md`
-      owns requesting the kioku release that lifts it.
+- [x] (2026-08-23) M0 gate cleared: the current cohort pins `baikai 0.5.0.0` and
+      `kioku-core 0.5.0.0`; no local compatibility vocabulary is needed.
 - [ ] M1: define the canonical workspace, task, and result types **that baikai does not already
       provide**, and implement Git-worktree and agent-root resolution with escape tests. Import
       `AgentRunRequest`, `AgentRunResult`, `AgentCapability`, `AgentSafety`, `AgentOutputMode`,
@@ -74,15 +73,18 @@ This section must always reflect the actual current state of the work.
 - [ ] M1: map the `--permission` flag onto baikai's `AgentCapability` (`read-only`,
       `edit-workspace`, `full-access`) and enforce the operator ceiling with `applyAgentCeiling`,
       which reports every violation rather than clamping an over-broad request.
-- [ ] M2: register bounded read/search/status/diff tools and stale-write-safe
-      edit/create/delete tools in the plan-12 `ToolRegistry`; enforce read-only mode,
+- [x] (2026-08-23) M2 read-only slice: Plan 59 delivered the immutable `workspace.read`
+      revision `1` provider with bounded, contained read/grep/glob tools, lazy one-off opt-in,
+      symlink refusal, and the external-worktree scripted proof.
+- [ ] M2 remaining: extend the overlay provider family with status/diff and stale-write-safe
+      edit/create/delete tools behind new immutable descriptors; enforce write permission,
       instruction discovery, path containment, symlink protection, and output limits.
 - [ ] M3: add structured approved-command execution without a shell; enforce exact
       executable/argument-prefix policy, a fail-closed platform sandbox, timeout/output
       limits, workspace cwd, forbidden Git/network/destructive operations, and an invocation
       audit.
 - [ ] M4: add the `shikigami-run` executable and Settei configuration, compose the task,
-      workspace context, provider, MCP tools, and workspace tools, and produce text/JSON
+      workspace context, provider, capability overlays, and optional MCP tools, and produce text/JSON
       results without database, trigger, sink, or durable-workflow effects.
 - [ ] M5: add an installable `apps.shikigami-run` flake output, user documentation, a
       deterministic external-worktree fixture, CLI/security tests, and one optional live
@@ -129,28 +131,27 @@ re-exported from the umbrella `Baikai` module, because its field accessors colli
 `Baikai.Interactive`; import `Baikai.Agent` explicitly, and expect `import Baikai` to keep
 compiling unchanged.
 
-**Effect on this plan's size.** Milestone 1 shrinks to workspace and agent-root *resolution* —
-the Git-worktree discovery, the escape tests, the separation of workspace root from agent-resource
-root — which is the genuinely shikigami-specific part and is unaffected. The type-definition half
-of M1 becomes an import list. Milestones 2, 3, and 5 keep their substance: bounded workspace
-tools in plan 12's `ToolRegistry`, path containment and symlink protection, the no-shell
-execution policy and platform sandbox, the flake app, and the fixture-repository proof are all
-still this plan's work.
+**Effect on this plan's size.** Milestone 1 now extends Plan 59's canonical Git-worktree scope
+with agent-resource roots and invocation metadata rather than implementing discovery twice. The
+type-definition half of M1 becomes an import list. Plan 59 also delivered M2's read-only
+read/grep/glob slice. Milestones 2, 3, and 5 retain the remaining substance: Git inspection,
+stale-write-safe mutation, instruction discovery, no-shell execution policy and platform sandbox,
+the flake app, and the full writable fixture-repository proof.
 
-**Gate.** `kioku-core 0.3.0.0` caps `baikai ^>=0.4.1.0`, so the cohort cannot take 0.5 yet. This
-is the same gate as plans 51 and 52, and plan 53 owns requesting the kioku release that lifts it.
-Do not work around it by defining the vocabulary locally "for now" — that is precisely the
-duplicate this discovery exists to prevent. If the harness is urgently wanted before the gate
-clears, build Milestone 1's resolution logic, which needs none of these types.
+**Gate resolution.** The gate described in the 2026-08-10 revision has cleared:
+`cabal.project` and `docs/dependency-cohort.md` now select `baikai 0.5.0.0` with
+`kioku-core 0.5.0.0`. Keep importing the released vocabulary; do not recreate it locally.
 
 - The current `run-behavior` command already accepts an arbitrary manifest path and works
   when invoked outside this checkout, but `Shikigami.Behavior.Skill` interprets the
   declaration's skill path relative to the process working directory. Portability therefore
   requires separate explicit workspace and agent-resource roots; changing the process cwd
   would conflate the repository being acted on with the bundle defining the agent.
-- Plan 12 supplies the model-facing `ToolRegistry`, MCP connection bracket, per-tool
-  authorization, and bounded tool-call loop. This plan must add local workspace tools to that
-  registry, not create a second tool protocol or completion loop.
+- Plans 56 and 57 supply the declaration/catalog contract, model-facing `ToolRegistry`,
+  collision-safe composition, provider lease bracket, and bounded tool-call loop. Plan 59 supplies
+  the first `workspace.read` provider. This plan extends those seams instead of creating a second
+  tool protocol or completion loop. Plan 12 is relevant only when the harness also enables an MCP
+  provider.
 - Plan 31 packages long-running NixOS services but does not define a `nix run` application
   for an ephemeral repository command. This plan extends its settled flake rather than
   changing the NixOS service module.
@@ -164,12 +165,12 @@ clears, build Milestone 1's resolution logic, which needs none of these types.
 
 Record every decision made while working on the plan.
 
-- Decision: Add a dedicated `shikigami-run` executable to `shikigami-workers`; do not add a
+- Decision: Add a dedicated `shikigami-run` executable to `shikigami-agent`; do not add a
   cross-package umbrella subcommand.
-  Rationale: Plan 36 assigns behavior-running executables to the workers package and forbids
-  an umbrella dispatcher that imports both server and worker implementations. A dedicated
-  binary is independently installable and preserves that package boundary.
-  Date: 2026-07-30
+  Rationale: Plan 55 established the light leaf for one-off behavior entry points. A dedicated
+  binary is independently installable without linking the platform runtime and preserves that
+  package boundary.
+  Date: 2026-08-19
 
 - Decision: Make the current Git worktree the default workspace and keep `--workspace` as an
   explicit override; require a Git worktree in the first release.
@@ -197,19 +198,27 @@ Record every decision made while working on the plan.
   Date: 2026-07-30
 
 - Decision: Default to `read-only`; enable local writes only with
-  `--permission workspace-write`; require command authorization from typed Settei policy in
+  `--permission edit-workspace`; require command authorization from typed Settei policy in
   both modes. There is no blanket `--yes`, arbitrary shell-string, commit, or push option.
   Rationale: An invocation flag can authorize bounded workspace mutation, but it must not
   silently grant arbitrary process or remote authority. Exact structured command rules are
   reviewable and cannot be widened by shell parsing.
   Date: 2026-07-30
 
-- Decision: Reuse plan 12's `ToolRegistry`, tool-call loop, MCP authorization wrapper, and
-  principal handling. Workspace permission is an additional local scope check and never
-  grants an MCP server or remote tool.
-  Rationale: One registry gives the model one collision-checked capability catalog, while
-  keeping local invocation consent distinct from identity-based remote authorization.
-  Date: 2026-07-30
+- Decision: Reuse Plans 56 and 57 for capability resolution, `ToolRegistry` composition, the
+  bounded tool-call loop, provider leases, and principal handling; consume Plan 59's
+  `workspace.read` provider. Plan 12 remains an optional MCP adapter only.
+  Rationale: One generic overlay registry gives the model one collision-checked capability
+  catalog without making local workspace authority depend on a remote transport. Local invocation
+  consent remains distinct from identity-based MCP authorization.
+  Date: 2026-08-23
+
+- Decision: Never add writable or command tools to the released `workspace.read` revision `1`
+  descriptor in place.
+  Rationale: Capability descriptors are immutable public semantics. This plan must publish a new
+  read descriptor revision for additive observations and separate write/exec capability ids for
+  stronger authority, retaining old revisions while any durable journal can name them.
+  Date: 2026-08-23
 
 - Decision: Use optimistic, hash-checked file mutation rather than an unrestricted write or
   external patch command.
@@ -231,7 +240,7 @@ Compare the result against the original purpose.
 
 Shikigami is a declared-agent runtime. An agent declaration is a typed Dhall file whose
 `behavior` selects a Skill, a named Shikumi program, or a durable Flow. Today
-`shikigami-cli/src/Shikigami/Cli/Commands/RunBehavior.hs` loads a manifest, constructs a
+`shikigami-agent/src/Shikigami/Agent/Command/RunBehavior.hs` loads a manifest, constructs a
 `BehaviorEnv`, passes a JSON payload to `runBehavior`, and prints JSON. It does not use a
 database or sinks. `shikigami-core/src/Shikigami/Agent/Loader.hs` wraps Dhall's
 `inputFile`; relative Dhall imports already follow the manifest, but the decoded
@@ -259,10 +268,12 @@ completed implementations—not today's legacy paths—as the source of truth:
   defines the behavior input/context assembly used by both Skill and Shikumi arms. This plan
   supplies a one-off task and workspace summary through that interface instead of building a
   second prompt format.
-- `docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md` adds
-  `ToolRegistry`, `withTools`, the MCP lifecycle bracket, authorization, and a bounded
-  model/tool loop to both synchronous behavior arms. Workspace tools are ordinary
-  `SomeTool` values registered under reserved `workspace__*` names.
+- `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md`
+  adds the agent request, immutable descriptor, catalog, and pure authorization vocabulary.
+  `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` adds the
+  provider registry, collision-safe tool composition, lease bracket, and bounded model/tool
+  loop. Plan 59 supplies the first concrete `workspace.read` revision `1` provider in
+  `shikigami-agent`. Plan 12 is an optional MCP-provider concern only.
 - `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
   settles `flake.module.nix`, package outputs, and NixOS deployment. This plan adds an app
   output for the existing package; it does not create another NixOS service.
@@ -270,15 +281,16 @@ completed implementations—not today's legacy paths—as the source of truth:
 A **workspace** is the canonical root of one local Git worktree plus the invocation's
 starting directory. A **resource root** is the canonical directory under which the agent
 manifest's non-Dhall assets, such as `agents/skills/reviewer/SKILL.md`, are resolved. They
-may be different. A **workspace tool** is a typed local capability registered in the same
-tool registry as MCP tools. A **command policy** is a bounded list of exact executable plus
+may be different. A **workspace provider** is an operator-owned capability provider whose
+logical tools enter the same run-local registry as other overlays. A **command policy** is a bounded list of exact executable plus
 argument-prefix rules; it is not a shell allow-list and does not perform substring matching.
 
 The runtime must preserve three trust boundaries. Repository content other than applicable
 `AGENTS.md` files is untrusted model input. Agent instructions and declared remote tools do
 not grant local filesystem or process authority. The CLI user's permission and Settei
-command policy grant only the bounded local actions described here; plan 12's authorization
-still governs every MCP connection and dispatch.
+command policy grant only the bounded local actions described here; overlay authorization
+still governs every local provider, and Plan 12 governs an optional MCP provider and its
+dispatch.
 
 
 ## Plan of Work
@@ -291,14 +303,16 @@ release tags.
 
 ### Milestone 1 — workspace and invocation domain
 
-Create `shikigami-core/src/Shikigami/OneOff/Types.hs` and
-`shikigami-core/src/Shikigami/OneOff/Workspace.hs`. Define strict domain types for the
+Extend the canonical workspace scope already implemented in
+`shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs`, and add focused one-off
+domain modules in `shikigami-agent` as needed. Define strict domain types for the
 canonical workspace root, starting directory, resource root, task, permission, bounded
 limits, command rule, invocation report, and typed errors. Use direct record fields under
 `DuplicateRecordFields`; do not prefix them with their type.
 
-`resolveWorkspace` canonicalizes `--workspace` or the current directory, runs Git with
-structured arguments to obtain the containing worktree root and full `HEAD` when available,
+Plan 59's `resolveWorkspaceScope` already canonicalizes `--workspace` or the current
+directory and runs Git with structured arguments to obtain the containing worktree root.
+Extend that value to record the full `HEAD` when available,
 and records dirty/untracked status. A repository with no commit is valid and records no
 revision; a directory outside a Git worktree is a typed startup error. Resolve
 `--agent-root` separately. `resolveAgent` maps a bare name to
@@ -319,27 +333,28 @@ missing manifest, root escape, and resource escape fail with distinct errors.
 
 ### Milestone 2 — bounded workspace file tools
 
-Create `shikigami-core/src/Shikigami/OneOff/Tools.hs` and focused modules under
-`Shikigami.OneOff.Tools.*` if the implementation would otherwise become monolithic. Register
-these collision-checked `SomeTool` names into plan 12's registry:
+Extend the provider family in `shikigami-agent/src/Shikigami/Agent/Capability/`. Preserve
+the released `workspace.read` revision `1` descriptor exactly: its logical `read`, `grep`, and
+`glob` observations appear on the wire as:
 
 ```text
-workspace__list
-workspace__search
-workspace__read
-workspace__git_status
-workspace__git_diff
-workspace__edit
-workspace__create
-workspace__delete
+overlay__workspace-read__read
+overlay__workspace-read__grep
+overlay__workspace-read__glob
 ```
+
+Publish a new read descriptor revision before adding status or diff observations, and retain
+revision `1` while any durable snapshot can name it. Put edit/create/delete tools under a
+separate immutable write capability id so an observation request can never gain mutation by
+provider upgrade. Compose every provider through Plan 57's collision-checked run-local
+registry; do not merge raw maps or reserve ad-hoc global names.
 
 Every request uses a normalized workspace-relative path. Centralize containment in one
 function that rejects absolute input, `..`, NUL, `.git` internals, and any canonical result
 outside the worktree. Do not traverse or write through a symlink whose resolved target is
 outside the worktree. Bound directory entries, search matches, bytes per file, total tool
 result bytes, and write size with validated types from plan 37's configuration idiom.
-`workspace__search` uses a library API or a structured `rg` process with fixed flags and
+Search uses a library API or a structured `rg` process with fixed flags and
 separate arguments; never concatenate a shell command.
 
 At invocation start, load `AGENTS.md` from the worktree root when present and include it in
@@ -351,10 +366,10 @@ instructions visible before mutation without preloading the entire repository. A
 instruction chain over the configured bound fails closed with `InstructionsTooLarge`; never
 truncate an instruction file and then act as if the complete policy was applied.
 
-Reads return a content hash. `workspace__edit` accepts that expected hash plus a non-empty
+Reads return a content hash. The write provider's edit tool accepts that expected hash plus a non-empty
 list of exact old/new replacements; each old value must match exactly once unless the
-request explicitly sets a bounded `replaceAll`. `workspace__create` fails if the path
-exists. `workspace__delete` requires the current expected hash and operates on regular
+request explicitly sets a bounded `replaceAll`. Its create tool fails if the path
+exists. Its delete tool requires the current expected hash and operates on regular
 files only. Write to a sibling temporary file and atomically rename for edit/create; preserve
 the original mode where applicable. All three mutations are absent from the registry in
 read-only mode rather than being advertised and denied after model selection.
@@ -365,8 +380,10 @@ tests for stale hashes, duplicate replacement text, size limits, traversal, abso
 
 ### Milestone 3 — structured command execution
 
-Add `shikigami-core/src/Shikigami/OneOff/Command.hs`. Register
-`workspace__exec` only when at least one command rule is configured. Its input is structured:
+Add the command adapter to `shikigami-agent` and publish a separate immutable
+`workspace.exec` descriptor. Its logical `exec` tool appears as
+`overlay__workspace-exec__exec` and is installed only when at least one command rule is
+configured. Its input is structured:
 
 ```json
 {
@@ -393,7 +410,7 @@ to launch the selected executable, a private temporary directory, and read/write
 to the canonical workspace. Deny network access, device access, process inspection, and
 filesystem access outside those roots. The adapter builds its own structured argument
 vector; it does not accept model-authored policy text. Probe the backend before advertising
-`workspace__exec`; if no tested backend is present, omit the tool and report
+`overlay__workspace-exec__exec`; if no tested backend is present, omit the tool and report
 `SandboxUnavailable` at startup when command rules were requested. There is no unsandboxed
 fallback or override in this plan. Package the selected backend where the platform permits
 and add policy tests that attempt outside reads, outside writes, and network access.
@@ -401,8 +418,8 @@ and add policy tests that attempt outside reads, outside writes, and network acc
 Regardless of configured rules, reject Git mutation or remote operations (`commit`, `push`,
 `fetch`, `pull`, `reset`, `clean`, worktree removal), package publication, privilege
 escalation, and commands targeting paths outside the workspace. The initial version does not
-provide an override for this deny set. Advertise `workspace__exec` only in
-`workspace-write` mode because even a sandboxed compiler or test may write build artifacts
+provide an override for this deny set. Advertise `workspace.exec` only in
+`edit-workspace` mode because even a sandboxed compiler or test may write build artifacts
 inside the worktree. Read-only mode therefore exposes no local mutation or process tool.
 
 Record executable, arguments, relative cwd, start/end time, exit status, timeout, and
@@ -413,10 +430,9 @@ timeout cleanup, bounded output, cwd escape, and redacted environment behavior.
 
 ### Milestone 4 — one-off composition and CLI
 
-Create `shikigami-workers/src/Shikigami/OneOff/Run.hs`,
-`shikigami-workers/src/Shikigami/OneOff/Cli.hs`, and the executable component prescribed by
-the post-plan-36 package layout, for example
-`shikigami-workers/app/one-off/Main.hs`. Name the executable `shikigami-run`.
+Add `Shikigami.Agent.Command.Run` and focused capability modules to `shikigami-agent`, plus
+an executable entry point under `shikigami-agent/app/`. Register a third `RoleInfo` beside
+the two existing one-off commands and name the executable `shikigami-run`.
 
 The parser accepts:
 
@@ -425,7 +441,7 @@ shikigami-run
   --agent NAME|FILE
   [--agent-root DIR]
   [--workspace DIR]
-  [--permission read-only|workspace-write]
+  [--permission read-only|edit-workspace]
   [--task-file FILE | --stdin | TASK]
   [--json]
   [Settei --config/--set/diagnostic options]
@@ -446,8 +462,9 @@ Build one `OneOffInput` JSON/context value containing the task, worktree-relativ
 directory, optional full revision, dirty flag, root `AGENTS.md`, permission, and explicitly
 non-secret invocation metadata. Do not include an unbounded tree, file contents, environment,
 or Git diff in the initial prompt; the model obtains those through tools. Construct the
-plan-13 real `BehaviorEnv`, bracket plan-12 MCP tools, merge in workspace tools under
-`workspace__*`, and call the plan-15 behavior-context seam. Reject Flow behavior with a
+plan-13 real `BehaviorEnv`, resolve and bracket declared capability providers through Plans
+56 and 57, optionally include an authorized Plan-12 MCP provider, and call the plan-15
+behavior-context seam. Reject Flow behavior with a
 typed message directing the user to the durable worker. Support Skill and synchronous
 Shikumi behaviors through their shared tool loop.
 
@@ -468,7 +485,7 @@ endpoint is touched.
 Extend the flake settled by plan 31 with `packages.shikigami` as the installable package
 containing the command-line binaries and `apps.shikigami-run` pointing at its
 `shikigami-run` executable. These outputs may alias an existing package derivation; do not
-duplicate the Cabal build or create a seventh Haskell package. Prove both:
+duplicate the Cabal build or create an eighth Haskell package. Prove both:
 
 ```bash
 nix run .#shikigami-run -- --help
@@ -501,7 +518,7 @@ Run all implementation commands from
 `/Users/shinzui/Keikaku/bokuno/shikigami`. First verify prerequisites:
 
 ```bash
-for plan in 12 13 15 31 36 37 47; do
+for plan in 13 15 31 36 37 47 56 57 59; do
   file=$(rg --files docs/plans | rg "/${plan}-[^/]+\\.md$")
   printf '%s ' "$file"
   if rg -q '^- \[ \]' "$file"; then
@@ -515,13 +532,15 @@ done
 Expected before implementation:
 
 ```text
-docs/plans/12-... COMPLETE
 docs/plans/13-... COMPLETE
 docs/plans/15-... COMPLETE
 docs/plans/31-... COMPLETE
 docs/plans/36-... COMPLETE
 docs/plans/37-... COMPLETE
 docs/plans/47-... COMPLETE
+docs/plans/56-... COMPLETE
+docs/plans/57-... COMPLETE
+docs/plans/59-... COMPLETE
 ```
 
 Locate dependency source before using APIs:
@@ -538,11 +557,11 @@ only to the final plan-36 layout:
 
 ```bash
 nix develop --command fourmolu -i \
-  shikigami-core/src/Shikigami/OneOff \
-  shikigami-workers/src/Shikigami/OneOff
+  shikigami-agent/src/Shikigami/Agent/Capability \
+  shikigami-agent/src/Shikigami/Agent/Command/Run.hs
 nix develop --command cabal test shikigami-core-test \
   --test-options='-p "one-off"' --test-show-details=direct
-nix develop --command cabal test shikigami-workers-test \
+nix develop --command cabal test shikigami-agent-test \
   --test-options='-p "one-off"' --test-show-details=direct
 ```
 
@@ -563,11 +582,11 @@ just test-one-off
 Its concise transcript must have this shape:
 
 ```text
-[read-only] workspace__read ok
-[read-only] workspace__edit unavailable
-[workspace-write] workspace__read ok
-[workspace-write] workspace__edit changed src/Parser.txt
-[workspace-write] workspace__exec test-pass exit=0
+[read-only] overlay__workspace-read__read ok
+[read-only] workspace write capability unavailable
+[edit-workspace] overlay__workspace-read__read ok
+[edit-workspace] workspace write tool changed src/Parser.txt
+[edit-workspace] overlay__workspace-exec__exec test-pass exit=0
 changed: src/Parser.txt
 commits created: 0
 ```
@@ -600,10 +619,10 @@ The plan is complete only when all of the following are observable:
    and ambiguous/escaping agent resources fail before provider construction with distinct
    typed errors.
 3. Read-only mode advertises read/search/status/diff but no edit/create/delete/exec tools. In
-   workspace-write mode, a hash-matched edit creates an uncommitted diff; stale hashes,
+   edit-workspace mode, a hash-matched edit creates an uncommitted diff; stale hashes,
    traversal, absolute paths, `.git`, outside symlinks, oversized values, and unapplied
    nested instructions are rejected.
-4. `workspace__exec` runs only an exact configured executable/argument prefix in a contained
+4. `overlay__workspace-exec__exec` runs only an exact configured executable/argument prefix in a contained
    cwd. Near matches, interpreters, Git mutation/remotes, publication, privilege escalation,
    outside targets, unavailable sandbox, outside reads/writes, network access, excessive
    timeout, and excessive output fail safely. Timed-out child process groups do not remain
@@ -640,8 +659,8 @@ directory they created.
 
 Process timeout sends termination to the created process group, waits for the configured
 grace bound, then kills that group. It never targets a pid it did not create. Truncated
-stdout/stderr is marked in the command audit. Provider or MCP failure closes plan-12
-connections through the existing bracket and still renders the local invocation report.
+stdout/stderr is marked in the command audit. Provider or MCP failure closes every Plan-57
+lease through the existing bracket and still renders the local invocation report.
 
 Implementation should land in milestone-sized commits. If a prerequisite interface differs
 from this plan, update this document's Context, Decision Log, Interfaces, and validation
@@ -664,7 +683,7 @@ workspace — a requirement of both
 `docs/improvement-requests/attest-sanctioned-agent-execution.md` and the shared upstream contract
 `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`, whose reasoning is that a signature
 produced by the same unrestricted process that could fabricate the evidence offers weaker assurance.
-This plan owns the workspace, the command policy, and the `OneOffPermission` boundary that such a key
+This plan owns the workspace, the command policy, and the `AgentCapability` boundary that such a key
 must sit outside of. When implementing the permission model, treat "no path by which workspace-scoped
 code reaches a signing credential" as an explicit property to assert in a test, in the same spirit as
 the existing rule that a declaration is never authorization. Plan 52 asserts the exclusion against its
@@ -685,21 +704,28 @@ This is a standalone cross-cutting ExecPlan. Its hard prerequisites are:
   selection and provider construction.
 - `docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md` for one
   shared behavior input/context assembly.
-- `docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md` for `ToolRegistry`,
-  the bounded model/tool loop, MCP lifecycle, and remote tool authorization. Completion
-  includes its recorded upstream Baikai, Shikumi, and per-action authorization prerequisites.
+- `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md`
+  for declaration requests, immutable descriptors, catalog resolution, and policy.
+- `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` for the
+  provider registry, collision-safe `ToolRegistry` composition, bounded model/tool loop,
+  and lease bracket.
+- `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md`
+  for the canonical worktree scope, `workspace.read` revision `1`, and one-off composition
+  helper.
 - `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
   for the final flake/package/configuration surface this plan extends.
 
 These are hard edges, not suggested landing order. Do not begin M1 while any remains
 incomplete. Their own hard dependencies are transitive and remain authoritative.
 MasterPlans 8 and 9 are not prerequisites: their router and architecture-review domains may
-later consume this harness, but the harness must remain domain-neutral.
+later consume this harness, but the harness must remain domain-neutral. Plan 12 is an
+optional soft dependency only when this harness also enables an MCP provider.
 
-The final core interface should be equivalent to:
+The final `shikigami-agent` interface should be equivalent to:
 
 ```haskell
-data OneOffPermission = ReadOnly | WorkspaceWrite
+-- Imported from Baikai.Agent; shown here only to make the boundary concrete.
+data AgentCapability = ReadOnly | EditWorkspace | FullAccess
 
 data Workspace = Workspace
   { root :: !WorkspaceRoot
@@ -717,7 +743,7 @@ data OneOffRequest = OneOffRequest
   { task :: !OneOffTask
   , workspace :: !Workspace
   , resources :: !AgentResources
-  , permission :: !OneOffPermission
+  , permission :: !AgentCapability
   }
 
 data CommandRule = CommandRule
@@ -730,7 +756,7 @@ data OneOffResult = OneOffResult
   , agent :: !Text
   , workspace :: !WorkspaceRoot
   , revision :: !(Maybe Revision)
-  , permission :: !OneOffPermission
+  , permission :: !AgentCapability
   , provider :: !Text
   , response :: !(Maybe Value)
   , changedPaths :: ![RelativePath]
@@ -751,8 +777,8 @@ resolveAgentResources ::
 workspaceTools ::
   OneOffConfig ->
   Workspace ->
-  OneOffPermission ->
-  IO (Either WorkspaceToolError ToolRegistry)
+  AgentCapability ->
+  IO (Either WorkspaceToolError [CapabilityProvider])
 
 runOneOff ::
   OneOffRuntime ->
@@ -760,10 +786,10 @@ runOneOff ::
   IO OneOffResult
 ```
 
-Use the exact final plan-12 registry combination API; if none exists, add a
-collision-rejecting `unionTools :: ToolRegistry -> ToolRegistry -> Either ToolRegistryError
-ToolRegistry` to the package that owns `ToolRegistry`, not a Shikigami-specific map merge.
-Reserved local names are `workspace__*`; MCP names remain `mcp__*`.
+Use Plan 57's exact provider registry and lease combination API. Each descriptor publishes
+logical tool names; the shared runtime derives collision-checked wire names such as
+`overlay__workspace-read__read`. Do not add a Shikigami-specific map merge or bypass the
+run-scoped active capability set.
 
 The implementation may add a released process dependency after using Mori and verifying
 the current registry/tag, but it must use argument-vector execution, process groups, bounded
@@ -773,12 +799,12 @@ Never search or read `/nix/store`; dependency source comes from Mori. File APIs 
 `directory`/`filepath` or an already selected coherent library.
 
 Configuration extends the plan-37 `Config` with strict bounded values and secret-free
-command rules. `shikigami-workers` owns CLI source assembly. No new environment variable
+command rules. `shikigami-agent` owns CLI source assembly. No new environment variable
 read, configuration parser, Haskell package, HTTP server, database table, queue, or public
 API route is introduced.
 
 Every Haskell record follows
-`/Users/shinzui/Keikaku/bokuno/haskell-jitsurei/core/record-patterns.md`: direct,
+`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`: direct,
 unprefixed fields, `DuplicateRecordFields`, strict fields, explicit deriving strategies,
 and generic-lens access/update where the final package conventions require it.
 
@@ -819,8 +845,8 @@ Intention: intention_01kyv7saq6ew2a2k5vw230pw1f
   vocabulary and pure policy algebra only — it spawns no process and renders no flags, which live
   in the vendor packages and the separate `baikai-agent` package. So Milestone 1's Git-worktree
   discovery, escape tests, and the separation of workspace root from agent-resource root are
-  untouched, and Milestones 2, 3, and 5 keep their substance: bounded workspace tools in plan 12's
-  `ToolRegistry`, path containment and symlink protection, no-shell execution with a fail-closed
+  untouched, and Milestones 2, 3, and 5 keep their substance: bounded workspace providers in
+  Plan 57's run-local `ToolRegistry`, path containment and symlink protection, no-shell execution with a fail-closed
   platform sandbox, the flake app, and the external-fixture proof.
 
   One import caution recorded in Surprises & Discoveries: `Baikai.Agent` is deliberately not
@@ -831,6 +857,13 @@ Intention: intention_01kyv7saq6ew2a2k5vw230pw1f
   same gate as plans 51 and 52, owned by plan 53. The plan explicitly rejects working around it by
   defining the vocabulary locally "for now", since that produces exactly the duplicate this
   revision exists to prevent.
+
+- 2026-08-23: Consumed Plan 59's delivered `workspace.read` revision `1`, canonical Git
+  worktree scope, lazy one-off resolution, and behavior-scoped provider lease. The remaining
+  harness work extends that provider family in `shikigami-agent`: additive observations need
+  a new read revision, while mutations and command execution need separate capability ids.
+  Plan 12 is now only an optional MCP-provider integration, not the generic tool registry or
+  lifecycle prerequisite.
 
 
 ## Reconciliation with plan 55 (2026-08-19)

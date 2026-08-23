@@ -105,6 +105,19 @@ Run only its behavior with deterministic stubs, without a database or model key:
 cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
 ```
 
+Run an identity-bearing Skill agent with its declared, bounded read-only view of a Git
+worktree:
+
+```sh
+cabal run shikigami-run-behavior -- \
+  --agent agents/proof/workspace-read.dhall \
+  --workspace . \
+  --payload '{"task":"read README.md and report its first heading"}'
+```
+
+The workspace is resolved only when the agent requests `workspace.read`; other agents keep
+the original database-free behavior and do not invoke Git.
+
 Create and migrate the local development database for session, memory, queue, and
 worker paths:
 
@@ -132,8 +145,8 @@ shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>]
 shikigami grants list|grant|revoke
 
-shikigami-run-behavior --agent <FILE>  # one-off, from shikigami-agent
-shikigami-agent-run --agent <NAME|FILE>
+shikigami-run-behavior --agent <FILE> [--workspace <DIR>]  # one-off, from shikigami-agent
+shikigami-agent-run --agent <NAME|FILE> [--workspace <DIR>]
 
 shikigami-worker [--agents <DIR>]      # long-running, from shikigami-workers
 shikigami-scheduler [--agents <DIR>]
@@ -147,7 +160,9 @@ shikigami-migrate up                   # database migrations
 `shikigami-run-behavior` and `shikigami-agent-run` live in `shikigami-agent`, which depends
 only on `shikigami-core`. A consumer who is not running the Kikan platform can build and use
 just those two without acquiring the messaging, queueing, or telemetry stack the deployed
-service needs.
+service needs. Both commands can expose the operator-owned `workspace.read` overlay to a
+Skill agent that explicitly requests it. Its namespaced read, grep, and glob tools are
+bounded to one canonical Git worktree and are acquired only for the behavior call.
 
 See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
 

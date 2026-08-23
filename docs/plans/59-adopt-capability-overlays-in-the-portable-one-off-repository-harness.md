@@ -41,14 +41,15 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Add Git-worktree scope discovery and containment-safe read-only `ToolEnv` operations.
-- [ ] Register the immutable `workspace.read` descriptor/provider in the one-off composition
+- [x] (2026-08-23) Added Git-worktree scope discovery and containment-safe, bounded read-only
+      operations.
+- [x] (2026-08-23) Registered the immutable `workspace.read` descriptor/provider in the one-off composition
       root with an explicit local authorization rule.
-- [ ] Add optional `--workspace DIR` to both one-off executables and resolve it only for agents
+- [x] (2026-08-23) Added optional `--workspace DIR` to both one-off executables; it resolves only for agents
       that request the overlay.
-- [ ] Run both behavior paths through Plan 57's acquire/derive/release helper.
-- [ ] Add traversal, symlink, bounds, opt-in isolation, scripted-model, and CLI tests.
-- [ ] Reconcile Plan 48 so it consumes the overlay seam and retains only its broader writable
+- [x] (2026-08-23) Ran both behavior paths through Plan 57's acquire/derive/release helper.
+- [x] (2026-08-23) Added traversal, symlink, bounds, opt-in isolation, scripted-model, and CLI tests.
+- [x] (2026-08-23) Reconciled Plan 48 so it consumes the overlay seam and retains only its broader writable
       harness scope.
 
 
@@ -67,6 +68,11 @@ implementation. Provide concise evidence.
   a `ToolEnv`. Its `localToolEnv` is explicitly unrestricted and must not be used. A confined
   environment can reuse the typed definitions only if every reachable operation is rooted,
   bounded, and its fast-path process executor cannot escape the root.
+- The released built-in fallback caps traversal depth and returned results but does not cap
+  the total number of visited files or total response bytes. A confined `ToolEnv` therefore
+  cannot establish every V1 bound without state leaking across tool calls. Evidence: the
+  `shikumi-tools-0.3.0.2` `walkFiles` implementation recursively concatenates every visited
+  path before applying `capResults`.
 
 
 ## Decision Log
@@ -105,6 +111,13 @@ Record every decision made while working on the plan.
   duplicating Plan 48's broader CLI, output, packaging, and mutable-workspace work.
   Date: 2026-08-22
 
+- Decision: Implement the three read-only tools locally with `Shikumi.Tool.mkTool` instead of
+  wrapping `Shikumi.Tool.Builtin.Fs`.
+  Rationale: The released fallback cannot enforce a total visited-file or response-byte cap
+  through `ToolEnv`; local traversal can enforce all bounds before accumulating results while
+  retaining the released registry, dispatch, and model-loop protocol.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
@@ -113,7 +126,33 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-23. `shikigami-agent` now owns an operator-installed
+`workspace.read` revision `1` provider with exactly three namespaced observations. Its local
+`mkTool` implementation confines every call to a canonical Git worktree, refuses symlinks
+and excluded paths, skips binary and non-regular files, and bounds read bytes, searched file
+bytes, traversal depth and count, matches, results, and encoded responses. It exposes no
+mutation or process authority.
+
+Both one-off commands accept `--workspace`. The shared helper preserves the original empty
+path without catalog or Git work, and the memory-backed command's new callback seam limits
+the lease to behavior execution after recall and before record/complete. This is ordinary
+one-off lifecycle code, not a change to a durable workflow body, so no Keiro patch or domain
+regeneration was required under `docs/workflow-versioning.md`.
+
+The deterministic external-worktree proof uses two otherwise-identical Skill agents. Only
+the identity-bearing agent requesting `workspace.read` receives the three tools and reads the
+fixture through the scripted model loop; the other sees an empty registry. Lifecycle logs
+show acquisition and release without file content, and fixture and outside-file bytes remain
+unchanged. The 27-test leaf suite, 438-test core suite, and complete Cabal test matrix pass;
+both real executable help surfaces include `--workspace`; direct treefmt and pre-commit flake
+checks pass. `nix flake check` reaches the unchanged Plan-31 default-package failure because
+`cabal2nix` is still pointed at the multi-package repository root with no root Cabal file. The
+new code does not touch that packaging path.
+
+Plan 48 now consumes Plans 56, 57, and this plan for generic overlays and the delivered read
+slice. It remains incomplete and retains stale-write-safe mutation, structured sandboxed
+commands, the dedicated `shikigami-run` executable, installation, audit/JSON output, and the
+full writable proof.
 
 
 ## Context and Orientation

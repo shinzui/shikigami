@@ -14,17 +14,18 @@ import Kioku.App (AppEnv (..), noopTracer)
 import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord, runAgentWithMemory)
+import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord, runAgentWithMemoryUsing)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (postgresProfileStore, renderProfileResolutionError, resolveProfile)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor, newBehaviorEnvForProfileWithLogger, renderProfileViolation)
-import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Behavior.Run (BehaviorEnv, runBehavior)
 import Shikigami.Log qualified as Log
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -35,8 +36,8 @@ import System.IO (hPutStrLn, stderr)
 -- @--from-activity@ — map an @activity.v1@ envelope into a memory under the agent
 -- scope. The connection string comes from @database.connection_string@, which the
 -- development shell still supplies as @PG_CONNECTION_STRING@.
-runAgentRun :: String -> Maybe FilePath -> AppConfig -> IO ()
-runAgentRun agentArg mActivity config = do
+runAgentRun :: String -> Maybe FilePath -> Maybe FilePath -> AppConfig -> IO ()
+runAgentRun agentArg mActivity workspace config = do
   logger <- Log.newStderrLogger Log.Info
   let path = resolvePath agentArg
   declE <- loadAgent path
@@ -67,7 +68,14 @@ runAgentRun agentArg mActivity config = do
             behEnv <- case behEnvE of
               Left err -> hPutStrLn stderr ("agent-run: " <> Text.unpack err) >> exitFailure
               Right env -> pure env
-            resultE <- runAgentWithMemory appEnv behEnv decl Aeson.Null
+            resultE <-
+              runAgentWithMemoryUsing appEnv behEnv decl Aeson.Null \input -> do
+                overlayResult <-
+                  withOneOffCapabilityOverlays logger workspace decl behEnv \derivedEnv ->
+                    runBehavior derivedEnv decl input
+                pure case overlayResult of
+                  Left err -> Left (renderOneOffCapabilityError err)
+                  Right behaviorResult -> first (Text.pack . show) behaviorResult
             case resultE of
               Left e -> do
                 hPutStrLn stderr ("agent-run: " <> Text.unpack e)

@@ -4,9 +4,9 @@ version:       0.1.0.0
 synopsis:      One-off agent runs, without the platform
 description:
   The command-line surface for running a declared Shikigami agent once, for
-  consumers who are not operating the Kikan platform. It depends on
-  shikigami-core and nothing else, so it links none of the messaging, queueing,
-  or telemetry-export stack the deployed service needs. See
+  consumers who are not operating the Kikan platform. Its only Shikigami
+  sibling dependency is shikigami-core, so it links none of the messaging,
+  queueing, or telemetry-export stack the deployed service needs. See
   docs/architecture/packages.md.
 
 build-type:    Simple
@@ -29,18 +29,28 @@ library
   import:          common
   hs-source-dirs:  src
   exposed-modules:
+    Shikigami.Agent.Capability.OneOff
+    Shikigami.Agent.Capability.Workspace
     Shikigami.Agent.Command
     Shikigami.Agent.Command.AgentRun
     Shikigami.Agent.Command.RunBehavior
 
   build-depends:
     , aeson                 >=2.2
-    , base                  >=4.21 && <5
+    , base                  >=4.21    && <5
+    , bytestring
+    , directory
+    , effectful
+    , filepath
     , kioku-api
     , kioku-core
     , kiroku-store
-    , optparse-applicative  >=0.19 && <0.20
+    , optparse-applicative  >=0.19    && <0.20
+    , process
+    , regex-tdfa
     , shikigami-core
+    , shikumi               ==0.3.0.2
+    , shikumi-tools         ==0.3.0.2
     , text                  >=2.1
     , time
 
@@ -67,12 +77,29 @@ test-suite shikigami-agent-test
   type:           exitcode-stdio-1.0
   main-is:        Main.hs
   hs-source-dirs: test
-  other-modules:  Shikigami.Agent.CommandSpec
+  other-modules:
+    Shikigami.Agent.Capability.OneOffSpec
+    Shikigami.Agent.Capability.WorkspaceSpec
+    Shikigami.Agent.CommandSpec
+
   build-depends:
+    , aeson
+    , baikai
     , base
+    , bytestring
+    , containers
+    , directory
+    , effectful
+    , filepath
+    , generic-lens
+    , lens
     , optparse-applicative
+    , process
     , shikigami-agent
     , shikigami-core
+    , shikumi
+    , shikumi-tools
     , tasty
     , tasty-hunit
     , text
+    , vector

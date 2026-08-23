@@ -69,6 +69,28 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Du
 admit only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
+The first concrete one-off provider is the immutable `workspace.read` revision `1` descriptor
+in `shikigami-agent`. It contains exactly the logical `read`, `grep`, and `glob` observations.
+The one-off composition root installs that descriptor and provider as operator-owned code,
+requires a non-empty declared identity and Skill behavior, and resolves an explicit
+`--workspace` or the current directory's canonical Git worktree. Resolution is lazy: an
+empty declaration bypasses catalog construction and Git entirely. The provider exposes no
+write, edit, delete, shell, or process tool, and model-authored arguments never become a
+process command.
+
+`workspace.read` accepts only relative slash-separated paths beneath that worktree and
+refuses absolute paths, traversal, symlinks, Git or VCS internals, and noisy dependency/build
+directories. It skips non-regular and binary files and enforces fixed V1 limits: 256 KiB per
+read, 1 MiB per searched file, 2,000 visited files, traversal depth 16, 100 grep matches, 500
+glob results, and 128 KiB per encoded response. Those semantics cannot be widened in place;
+additive observations require a new read revision, and writes or command execution require
+separate capability ids.
+
+Both one-off executables use the same composition helper. The database-free behavior command
+brackets only `runBehavior`. The memory-backed command supplies a callback at the behavior
+boundary, so acquisition happens after session open and recall and release happens before
+memory record and session completion. The activity-ingest branch does not acquire overlays.
+
 An `AgentRun` resolves that request after its sanctioned profile and before opening a memory
 session. The `shikigami-capability-overlays-v1` workflow patch gates a
 `resolve-capability-overlays` step whose value is the explicit resolution result. Fresh runs
@@ -122,6 +144,11 @@ Provider registries must key factories by the exact `(CapabilityId, CapabilityRe
 must acquire only the descriptors already resolved. Concrete adapters such as the first
 read-only workspace provider live at the leaf package that owns their runtime resources;
 generic resolution and lifecycle contracts remain in `shikigami-core`.
+
+The V1 workspace adapter deliberately implements its three tools locally on Shikumi's public
+`mkTool` and registry protocol. The released built-in filesystem fallback bounded returned
+results but not total files visited or final encoded response bytes, so wrapping it could not
+establish the descriptor's confinement contract.
 
 Providers must pair every successful acquisition with its inverse in the returned lease.
 The lifecycle bracket can release resources but cannot reverse writes or emissions performed

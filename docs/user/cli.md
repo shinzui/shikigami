@@ -31,8 +31,8 @@ queueing, or telemetry stack, so a consumer who is not running the Kikan platfor
 use just these:
 
 ```text
-shikigami-run-behavior --agent <FILE> [--payload <JSON>]
-shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+shikigami-run-behavior --agent <FILE> [--payload <JSON>] [--workspace <DIR>]
+shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>]
 ```
 
 **Long-running roles** — from `shikigami-workers`:
@@ -101,19 +101,28 @@ for that flow's Keiki transducer. **No DB or key.**
 ## `shikigami-run-behavior`
 
 ```bash
-$ shikigami-run-behavior --agent <FILE> [--payload <JSON>]
+$ shikigami-run-behavior --agent <FILE> [--payload <JSON>] [--workspace <DIR>]
 ```
 
 Load a manifest and run **only its behavior** with deterministic stubs, printing the output
 JSON. Does not touch the DB or dispatch sinks. `--payload` supplies the trigger payload as
 JSON (defaults to `null`; invalid JSON exits non-zero). **No DB or key.**
 
+An identity-bearing Skill agent may request the `workspace.read` capability overlay. Only
+then does the command resolve `--workspace` (or the Git worktree containing the current
+directory) and advertise the bounded observation tools
+`overlay__workspace-read__read`, `overlay__workspace-read__grep`, and
+`overlay__workspace-read__glob`. Paths must be relative to that worktree; absolute paths,
+traversal, symlinks, Git internals, noisy build directories, binary files, and excessive
+input or output are refused. Agents without the request receive no workspace tools, and the
+command performs no Git discovery for them.
+
 → See [Behaviors](./behaviors.md).
 
 ## `shikigami-agent-run`
 
 ```bash
-$ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>]
+$ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>]
 ```
 
 Run an agent through the full **kioku** lifecycle — open session, recall prior learnings, run
@@ -123,6 +132,11 @@ resolves to `agents/<NAME>.dhall`; a path (contains `/` or ends in `.dhall`) is 
 With `--from-activity <FILE>`, instead of running the behavior it folds an `activity.v1`
 envelope (JSON) directly into the agent's memory (payload → content; verb/subject → tags).
 **Needs the DB** (`database.connection_string`).
+
+For a normal behavior run, `--workspace` enables the same opt-in `workspace.read` overlay as
+`shikigami-run-behavior`. Its provider lease exists only around the behavior call: workspace
+tools are acquired after memory recall and released before learning is recorded and the
+session is completed. The activity-ingest branch does not resolve or use a workspace.
 
 → See [Memory & Sessions](./memory.md).
 

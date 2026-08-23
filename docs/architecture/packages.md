@@ -114,9 +114,12 @@ stanzas.
 Capability overlays follow the same domain/leaf split. `shikigami-core` owns the pure
 `Shikigami.Capability.Overlay` vocabulary and `Shikigami.Capability.Catalog` resolution
 contract because both durable workflows and one-off runs consume them. The generic
-provider-registry and lease bracket also belong in core when added; they contain no concrete
-workspace, MCP, queue, or server adapter. A concrete portable workspace provider and its CLI
-wiring belong in `shikigami-agent`. Base capabilities — including Flow, Memory, Sink,
+provider-registry and lease bracket also belong in core; they contain no concrete workspace,
+MCP, queue, or server adapter. The immutable `workspace.read` revision `1` descriptor,
+canonical Git-worktree scope, bounded local read/grep/glob provider, and one-off CLI wiring
+live in `shikigami-agent`. That provider uses only observation tools, resolves the worktree
+lazily for a requesting identity-bearing Skill, and never enters `FlowEffects`. Base
+capabilities — including Flow, Memory, Sink,
 Workflow, profile enforcement, and provider selection — stay structurally outside the
 overlay registry and cannot be replaced by an adapter.
 
@@ -170,8 +173,8 @@ their role and live in the package that owns that role.
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
 | `shikigami-consume-stream` | `shikigami-workers` | Consumes `activity.v1` and enqueues matching run jobs. |
 | `shikigami-consume-events` | `shikigami-workers` | Consumes public integration events and enqueues addressed run jobs. |
-| `shikigami-run-behavior` | `shikigami-agent` | Runs one agent's behavior with deterministic stubs (no database, no key). |
-| `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle. |
+| `shikigami-run-behavior` | `shikigami-agent` | Runs one agent's behavior with deterministic stubs (no database, no key), optionally with its declared bounded workspace overlay. |
+| `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle; a workspace overlay lease covers only the behavior call. |
 | `shikigami-migrate` | `shikigami-migrations` | Applies database migrations. |
 | `shikigami-client` | `shikigami-client` | Calls a running server through the typed client. |
 | `shikigami-openapi` | `shikigami-api` | Regenerates `docs/api/openapi.json` from the served route proxy. |

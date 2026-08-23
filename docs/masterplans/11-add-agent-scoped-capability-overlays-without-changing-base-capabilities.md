@@ -92,7 +92,7 @@ from `mori://shinzui/baikai/packages/baikai` and
 | EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | Complete |
 | EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | Complete |
 | EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | Complete |
-| EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Not Started |
+| EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -179,8 +179,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] (2026-08-23) EP-3: Declared, scaffolded, and runtime-gated the durable resolution step.
 - [x] (2026-08-23) EP-3: Proved fresh-run pinning, old-run compatibility, exact-version
       retries, cleanup, and conversation fail-closed behavior.
-- [ ] EP-4: Supply a confined read-only workspace provider in `shikigami-agent`.
-- [ ] EP-4: Prove agent-specific opt-in through the database-free one-off command and reconcile
+- [x] (2026-08-23) EP-4: Supplied a confined read-only workspace provider in `shikigami-agent`.
+- [x] (2026-08-23) EP-4: Proved agent-specific opt-in through the database-free one-off command and reconciled
       the older MCP/repository plan assumptions.
 
 
@@ -213,6 +213,9 @@ interactions between child plans. Provide concise evidence.
 - Exact-revision restoration does not require the current catalog to point back to the old
   descriptor. The provider registry may retain `v1` while the catalog selects `v2`; a resumed
   run reacquires journaled `v1`, while a new run resolves and acquires `v2`.
+- The released Shikumi filesystem fallback bounds depth and returned results but not the total
+  visited-file set or encoded response size. EP-4 therefore uses the released `mkTool`,
+  registry, and dispatch protocol while implementing the three confined operations locally.
 
 
 ## Decision Log
@@ -257,6 +260,13 @@ plan.
   Rationale: A local, read-only provider can exercise declaration, resolution, acquisition,
   dispatch, and cleanup without an unavailable upstream MCP adapter or secret-bearing test.
   Date: 2026-08-22
+
+- Decision: Keep `workspace.read` revision `1` immutable and put future mutation or command
+  authority behind separate capability ids.
+  Rationale: Adding stronger operations to an installed observation descriptor would silently
+  widen old declarations and durable snapshots. A new read revision can carry additive
+  observations; write and exec remain independently authorizable requests.
+  Date: 2026-08-23
 
 
 ## Outcomes & Retrospective
@@ -304,5 +314,25 @@ The Keiro gate passes from merge base `af3de569fe4f91238fefed57e2ef57575570d8ff`
 the patch additive and replay-neutral. All 601 repository tests pass, including 438 core
 tests. `nix flake check` retains only the previously documented Plan 31 default-package
 failure at the multi-package root; direct `treefmt` and `pre-commit` flake checks pass. ADR
-0025 records the durable replay and provider-retention contract. EP-4 is now the sole
-remaining child and is dependency-ready.
+0025 records the durable replay and provider-retention contract. EP-4 then became the sole
+remaining child and was dependency-ready.
+
+EP-4 completed on 2026-08-23. An identity-bearing one-off Skill may now request the immutable
+`workspace.read` revision `1` and receive only namespaced, bounded read, grep, and glob
+observations rooted at an explicit or discovered Git worktree. The empty declaration path
+does no catalog or workspace work. Both one-off commands share the same provider lease
+boundary; the memory-backed path acquires after recall and releases before record and session
+completion. A scripted external-worktree proof demonstrates opt-in isolation, tool dispatch,
+cleanup, log redaction, and unchanged bytes inside and outside the fixture.
+
+Plan 48 was reconciled to consume the generic overlay catalog/provider seams and the delivered
+read-only slice while retaining its larger writable and sandboxed-command scope. ADR 0025 now
+records the concrete V1 provider, limits, package placement, lazy resolution, and immutable
+revision rule. The 27-test agent suite, 438-test core suite, and complete Cabal test matrix
+pass; both executable help surfaces expose `--workspace`; direct treefmt and pre-commit flake
+checks pass. `nix flake check`
+retains only the already documented Plan-31 default-package failure at the multi-package root.
+
+All four ExecPlans are complete. The initiative delivered additive agent-scoped model tools
+without placing base capabilities in the overlay registry, widening `FlowEffects`, or changing
+the empty-run behavior path.

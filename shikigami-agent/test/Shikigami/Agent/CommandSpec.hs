@@ -64,9 +64,9 @@ tests =
       testCase "every one-off executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) agentRoles,
       testCase "run-behavior keeps its agent and payload options" $
-        assertHasAll runBehaviorRoleInfo ["--agent", "--payload"],
+        assertHasAll runBehaviorRoleInfo ["--agent", "--payload", "--workspace"],
       testCase "agent-run keeps its agent and activity options" $
-        assertHasAll agentRunRoleInfo ["--agent", "--from-activity"],
+        assertHasAll agentRunRoleInfo ["--agent", "--from-activity", "--workspace"],
       testCase "run-behavior accepts a declaration with no profile" $
         profileRequirementRefusal (testDecl Nothing) @?= Nothing,
       testCase "run-behavior refuses a profile it cannot resolve before dispatch" $

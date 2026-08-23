@@ -10,6 +10,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
+import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig)
@@ -30,8 +31,8 @@ import System.IO (hPutStrLn, stderr)
 -- happened, so the two are never confused. That line is a structured
 -- @behavior.provider.selected@ event on standard error; the command's own output
 -- stays on standard out, so piping the result to @jq@ is unaffected.
-runRunBehavior :: FilePath -> Maybe String -> AppConfig -> IO ()
-runRunBehavior path mpayload config = do
+runRunBehavior :: FilePath -> Maybe String -> Maybe FilePath -> AppConfig -> IO ()
+runRunBehavior path mpayload workspace config = do
   logger <- Log.newStderrLogger Log.Info
   payload <- case mpayload of
     Nothing -> pure Aeson.Null
@@ -54,12 +55,17 @@ runRunBehavior path mpayload config = do
           env <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
-          resultE <- runBehavior env decl (triggerOnly payload)
+          resultE <-
+            withOneOffCapabilityOverlays logger workspace decl env \derivedEnv ->
+              runBehavior derivedEnv decl (triggerOnly payload)
           case resultE of
-            Left runErr -> do
+            Left overlayErr -> do
+              hPutStrLn stderr ("run-behavior: " <> Text.unpack (renderOneOffCapabilityError overlayErr))
+              exitFailure
+            Right (Left runErr) -> do
               hPutStrLn stderr ("run-behavior: " <> show runErr)
               exitFailure
-            Right v -> TLIO.putStrLn (encodeToLazyText v)
+            Right (Right v) -> TLIO.putStrLn (encodeToLazyText v)
 
 -- | This command deliberately opens no database, so it cannot honestly run an
 -- agent whose policy must first be resolved. Refuse before constructing the

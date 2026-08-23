@@ -11,6 +11,7 @@ module Shikigami.Agent.Run
     recallQuery,
     renderLearning,
     runAgentWithMemory,
+    runAgentWithMemoryUsing,
     recordActivityAsMemory,
     renderMemoryRecord,
   )
@@ -19,6 +20,7 @@ where
 import Data.Aeson (Value (..))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -64,7 +66,26 @@ data AgentRunResult = AgentRunResult
 -- session and persisted no memory.
 runAgentWithMemory ::
   AppEnv -> BehaviorEnv -> AgentDecl -> Value -> IO (Either Text AgentRunResult)
-runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = MemoryPolicy {recallLimit = declaredRecallLimit, recordPolicy = declaredRecordPolicy}} payload = do
+runAgentWithMemory appEnv behEnv decl payload =
+  runAgentWithMemoryUsing
+    appEnv
+    behEnv
+    decl
+    payload
+    (fmap (first (Text.pack . show)) . runBehavior behEnv decl)
+
+-- | The straight-through one-off lifecycle with the behavior action supplied at
+-- its exact boundary. A leaf composition package can acquire callback-scoped
+-- resources after recall and release them before recording or completing the
+-- session, while the default entry point above retains its original behavior.
+runAgentWithMemoryUsing ::
+  AppEnv ->
+  BehaviorEnv ->
+  AgentDecl ->
+  Value ->
+  (BehaviorInput -> IO (Either Text Value)) ->
+  IO (Either Text AgentRunResult)
+runAgentWithMemoryUsing appEnv behEnv decl@AgentDecl {name = agentName', memory = MemoryPolicy {recallLimit = declaredRecallLimit, recordPolicy = declaredRecordPolicy}} payload runBehaviorOnce = do
   let scope' = agentScope agentName'
       focusTxt = behaviorKindText (behavior decl)
   startedAt' <- getCurrentTime
@@ -93,10 +114,9 @@ runAgentWithMemory appEnv behEnv decl@AgentDecl {name = agentName', memory = Mem
       -- 2. recall what this agent already knows (empty on the first ever run)
       prior <- recallPriorLearnings appEnv declaredRecallLimit scope' (recallQuery decl focusTxt payload)
       -- 3. run the behavior, on what triggered it and what it already knows
-      behaviorE <- runBehavior behEnv decl BehaviorInput {payload = payload, recalled = prior}
+      behaviorE <- runBehaviorOnce BehaviorInput {payload = payload, recalled = prior}
       case behaviorE of
-        Left runErr -> do
-          let runErrText = Text.pack (show runErr)
+        Left runErrText -> do
           when (declaredRecordPolicy == Always) $
             recordFailureLearningBestEffort appEnv agentName' sid scope' runErrText
           failedAt' <- getCurrentTime

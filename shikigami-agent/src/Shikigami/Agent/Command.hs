@@ -63,6 +63,7 @@ runBehaviorRoleInfo =
           ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
               <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
+              <*> optional (strOption (long "workspace" <> metavar "DIR" <> help "Git worktree for requested capability overlays"))
           )
           (pure [])
     }
@@ -84,6 +85,7 @@ agentRunRoleInfo =
           ( runAgentRun
               <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
               <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
+              <*> optional (strOption (long "workspace" <> metavar "DIR" <> help "Git worktree for requested capability overlays"))
           )
           (pure [])
     }
