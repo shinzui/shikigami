@@ -465,6 +465,10 @@ conversation  (workflow "shikigami.danwa-conversation",
 flow capabilities  (run inside the agent-run workflow)
   classify                         Shikigami/Flow/AtRiskCustomer.hs:45
   await-ack                        Shikigami/Flow/AtRiskCustomer.hs:50
+  route-catalog-architecture-practice
+                                   Shikigami/Flow/Routing.hs -- declared; direct pre-v1 baseline
+  route-decision-architecture-practice
+                                   Shikigami/Flow/Routing.hs -- declared; direct pre-v1 baseline
   recall-<label>                   Shikigami/Flow/Capability.hs   -- declared; post-patch
   remember-<label>                 Shikigami/Flow/Capability.hs   -- declared; post-patch
   <step>:notify                    Shikigami/Agent/Approval.hs:157
@@ -499,7 +503,11 @@ flow-side journal names this service can gate rather than merely keep stable by
 convention. `runMemory` journals a flow's `recall` and `remember` under the
 caller's label, and the labels every *registered* flow reaches are declared in
 `domain/shikigami-agent-run.keiro` — today `recall-risk-history`,
-`remember-acknowledged`, `remember-declined`, and `remember-escalated`. Adding a
+`remember-acknowledged`, `remember-declined`, and `remember-escalated`. The first
+router similarly owns the static `route-catalog-architecture-practice` and
+`route-decision-architecture-practice` labels. Under ADR-0027 those two labels
+enter the unreleased v1 body directly: there is no prior durable population to
+preserve and therefore no legacy branch to model. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
 
@@ -514,9 +522,10 @@ reads it once per interpreted flow run, and an instance already in flight keeps
 the un-journaled behavior its journal was written under. Every step ever added to
 `domain/shikigami-agent-run.keiro` arrived this way: `resolve-profile` inside
 `shikigami-resolve-profile-v1`, `run-behavior-v2` inside
-`shikigami-behavior-retry-v1`. Budget for a patch id whenever a declared body
-grows, and delete the guard and its `False` branch together once no pre-change
-instance can resume.
+`shikigami-behavior-retry-v1`. Outside ADR-0027's explicitly verified
+pre-release reset, budget for a patch id whenever a declared body grows, and
+delete the guard and its `False` branch together once no pre-change instance can
+resume.
 
 Two ordinal-derived names remain, and this document records their owners.
 that they are governed by rule 5 and names their owners.

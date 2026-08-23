@@ -57,12 +57,15 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (defaultGrantTable)
@@ -474,11 +477,31 @@ runFlow ::
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value))
 runFlow appEnv runtime options FlowDef {run} workflowId =
-  runEff
-    . runErrorNoCallStack
-    . withKirokuStore (connectionSettings appEnv)
-    . runStoreResource
-    $ runWorkflowWith options flowWorkflowName workflowId body
+  newBehaviorEnv >>= \behaviorEnv ->
+    runEff
+      . runErrorNoCallStack
+      . withKirokuStore (connectionSettings appEnv)
+      . runStoreResource
+      $ runWorkflowWith
+        options
+        flowWorkflowName
+        workflowId
+        ( runActivity sampleActivity
+            . runMemory memoryEnv
+            . runSink sinkEnv
+            . FlowDelegate.runDelegate delegateEnv
+            . Routing.runRouting
+              Routing.RoutingEnv
+                { Routing.agent = flowAgentDecl,
+                  Routing.behaviorEnv = behaviorEnv,
+                  Routing.runtime =
+                    Routing.routingRuntime
+                      (AgentLoadReport [AgentLoaded "flow-versioning.dhall" flowAgentDecl])
+                      disabledDirectoryHandle
+                }
+            . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            $ run highRiskPayload
+        )
   where
     memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, sessionId = Nothing}
     delegateEnv =
@@ -506,13 +529,6 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
           directory = disabledDirectoryHandle,
           principalId = Nothing
         }
-    body =
-      runActivity sampleActivity
-        . runMemory memoryEnv
-        . runSink sinkEnv
-        . FlowDelegate.runDelegate delegateEnv
-        . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
-        $ run highRiskPayload
 
 fireDueApprovalTimer :: AppEnv -> IO ()
 fireDueApprovalTimer appEnv = do

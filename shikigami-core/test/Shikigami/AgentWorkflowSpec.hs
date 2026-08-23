@@ -55,7 +55,7 @@ import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
@@ -86,6 +86,7 @@ import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDi
 import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -1603,6 +1604,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
+      routing = testRoutingRuntime agentDecls,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -1631,9 +1633,20 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
+      routing = testRoutingRuntime [decl],
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
+
+testRoutingRuntime :: [AgentDecl] -> Routing.RoutingRuntime
+testRoutingRuntime declarations =
+  Routing.routingRuntime
+    ( AgentLoadReport
+        [ AgentLoaded ("agent-" <> show position <> ".dhall") declaration
+        | (position, declaration) <- zip [(1 :: Int) ..] declarations
+        ]
+    )
+    disabledDirectoryHandle
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> ApprovalEnv
 approvalEnv aidRef currentSession =

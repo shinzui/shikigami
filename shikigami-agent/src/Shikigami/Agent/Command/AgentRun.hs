@@ -17,7 +17,7 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -27,6 +27,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
@@ -133,6 +134,10 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.delegationBudget = Config.delegationBudget config,
             AgentWorkflow.grants = DbGrants pool,
             AgentWorkflow.directory = disabledDirectoryHandle,
+            AgentWorkflow.routing =
+              Routing.routingRuntime
+                (AgentLoadReport [AgentLoaded {path = "<agent-run>", declaration = decl}])
+                disabledDirectoryHandle,
             AgentWorkflow.deliveryPool = Just pool,
             AgentWorkflow.logger = logger,
             AgentWorkflow.resolveRunProfile = \profileId version -> do

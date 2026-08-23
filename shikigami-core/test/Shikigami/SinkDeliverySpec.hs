@@ -43,6 +43,7 @@ import Shikigami.Agent.Decl
     defaultDelegationBudget,
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
@@ -50,6 +51,7 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -361,6 +363,10 @@ withFixtureUsingTracer tracer label sinks kizashi danwa use =
                 AgentWorkflow.delegationBudget = defaultDelegationBudget,
                 AgentWorkflow.grants = DbGrants pool,
                 AgentWorkflow.directory = disabledDirectoryHandle,
+                AgentWorkflow.routing =
+                  Routing.routingRuntime
+                    (AgentLoadReport [AgentLoaded "sink-test.dhall" declaration])
+                    disabledDirectoryHandle,
                 AgentWorkflow.deliveryPool = Just pool,
                 AgentWorkflow.logger = Log.silentLogger,
                 AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))

@@ -111,6 +111,7 @@ runWorkerCmd config = do
               { pool = storePool,
                 appEnv,
                 agents,
+                agentReport = report,
                 behaviorEnv = behEnv,
                 runTimeout = Config.runTimeout config,
                 delegationBudget = Config.delegationBudget config,

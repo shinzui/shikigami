@@ -15,6 +15,7 @@ module Shikigami.Flow
 where
 
 import Data.Aeson (Value)
+import Data.Aeson qualified as Aeson
 import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -29,6 +30,8 @@ import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
+import Shikigami.Flow.Routing (Routing)
+import Shikigami.Flow.Routing qualified as Routing
 
 -- | Everything a flow body may do, and therefore everything it may not.
 --
@@ -48,7 +51,7 @@ import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCus
 --
 -- Adding an effect here widens what every flow may do. Add a capability instead.
 type FlowEffects es =
-  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es, Delegate :> es)
+  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es, Delegate :> es, Routing :> es)
 
 -- | What 'Shikigami.Flow.Acknowledgement.runAcknowledgement' needs to interpret
 -- a flow's parks.
@@ -113,6 +116,15 @@ flowRegistry =
               validationWarnings = []
             },
         run = delegationProofFlow
+      },
+    FlowDef
+      { name = "architecture-practice-router",
+        lifecycle =
+          LifecycleDiagram
+            { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
+              validationWarnings = []
+            },
+        run = architecturePracticeRouterFlow
       }
   ]
 
@@ -123,6 +135,13 @@ delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value
 delegationProofFlow payload = do
   child <- Delegate.delegate "web-researcher" "web-researcher" payload
   Delegate.awaitOne child
+
+-- | First registered routing call site.  Milestone 3 maps a validated matched
+-- decision to governed batch delegation; at this checkpoint the observable
+-- output is the already journaled and validated semantic decision.
+architecturePracticeRouterFlow :: (FlowEffects es) => Value -> Eff es Value
+architecturePracticeRouterFlow payload =
+  Aeson.toJSON <$> Routing.route Routing.ArchitecturePractice payload
 
 -- | The name of every registered flow.
 --

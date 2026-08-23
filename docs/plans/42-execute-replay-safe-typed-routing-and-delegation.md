@@ -47,8 +47,12 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-23T19:44:44Z) Prerequisites: child plans 40 and 41 have landed.
 - [x] (2026-08-23T19:52:47Z) M1: Defined typed route outcomes/selections, strict JSON
   decoding, and catalog/policy validation; all six focused decision tests pass.
-- [ ] M2: add static hyphenated catalog and decision operations directly to the clean v1 workflow baseline, with no router patch or legacy branch.
-- [ ] M2: implement a replay-safe Routing Flow capability, a production evaluator seam, and a deterministic test evaluator.
+- [x] (2026-08-23T20:04:03Z) M2: Added the static hyphenated catalog and decision
+  operations directly to the clean v1 workflow baseline, regenerated its facts and accepted
+  conformance expectation, and retained the existing patch set unchanged.
+- [x] (2026-08-23T20:04:03Z) M2: Implemented the replay-safe Routing Flow capability,
+  production model evaluator seam, worker/CLI runtime wiring, and deterministic injectable test
+  runtime. Core, worker, agent, Keiro component, conformance, and proof-manifest checks pass.
 - [ ] M3: preflight every selection, atomically reserve the complete plan-35 batch, and delegate only through plan 35.
 - [ ] M3: preserve matched child results and operational failures without semantic coercion.
 - [ ] M4: add bounded routing telemetry and real-Postgres replay/authorization tests.
@@ -81,6 +85,11 @@ implementation. Provide concise evidence.
   `capabilityOverlays` with non-empty `delegates`. A router therefore evaluates with the active
   model/provider environment and no overlay tools; changing that authority boundary is outside
   this initiative.
+- Against pre-reset revision `9000b96`, `just keiro-diff` reports the single expected
+  `WorkflowBodyChanged` finding for `AgentRun.workflow-body` and then reports
+  `replay-neutral: stored-data replay is unchanged by this diff`. This is the deliberate
+  ADR-0027 clean-v1 reset; `keiro-check`, `keiro-inspect`, regenerated conformance, and the
+  proof declaration all pass.
 
 
 ## Decision Log

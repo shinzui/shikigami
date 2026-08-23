@@ -99,6 +99,8 @@ import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Routing (RoutingRuntime)
+import Shikigami.Flow.Routing qualified as FlowRouting
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
@@ -149,6 +151,9 @@ data AgentRunDeps = AgentRunDeps
     -- | Cached principal lifecycle and attribution view shared with trigger and
     -- drain gates.
     directory :: !DirectoryHandle,
+    -- | Process-local catalog/evaluator seam. Catalog and raw decision values
+    -- cross the workflow journal before they can influence delegation.
+    routing :: !RoutingRuntime,
     -- | The Shikigami receipt store used only by the asynchronous publisher.
     -- Production always supplies it; focused workflow tests may opt out because
     -- they never cross the publisher boundary.
@@ -195,6 +200,9 @@ depsGrants AgentRunDeps {grants = g} = g
 
 depsDirectory :: AgentRunDeps -> DirectoryHandle
 depsDirectory AgentRunDeps {directory = value} = value
+
+depsRouting :: AgentRunDeps -> RoutingRuntime
+depsRouting AgentRunDeps {routing = value} = value
 
 declaredPrincipalId :: AgentDecl -> Maybe Text
 declaredPrincipalId AgentDecl {identity} = declared <$> identity
@@ -337,6 +345,8 @@ behaviorEnvForProfile ::
   BehaviorEnv ->
   Either ProfileViolation BehaviorEnv
 behaviorEnvForProfile AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
+  constrainBehaviorEnv resolvedProfile
+behaviorEnvForProfile AgentDecl {routing = Just _} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
 behaviorEnvForProfile _decl _resolvedProfile = Right
 
@@ -656,7 +666,7 @@ runBehaviorStep ::
   Eff es (Either Text Value)
 runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
-    Flow {name = flowName} -> runFlowBehavior deps sid decl job flowName
+    Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv sid decl job flowName
     _
       | not (null (delegates decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
@@ -668,12 +678,13 @@ runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBeh
 runFlowBehavior ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
+  BehaviorEnv ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   Text ->
   Eff es (Either Text Value)
-runFlowBehavior deps sid decl job flowName =
+runFlowBehavior deps activeBehaviorEnv sid decl job flowName =
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
@@ -682,12 +693,14 @@ runFlowBehavior deps sid decl job flowName =
           . FlowCapability.runMemory memoryEnv
           . FlowCapability.runSink sinkEnv
           . FlowDelegate.runDelegate delegateEnv
+          . FlowRouting.runRouting routingEnv
           . runAcknowledgement (approval deps sid) (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
           $ run (triggerPayload job)
       pure (Right output)
   where
     memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
     delegateEnv = FlowDelegate.DelegateEnv {FlowDelegate.agent = decl, FlowDelegate.context = delegateContext deps decl sid job}
+    routingEnv = FlowRouting.RoutingEnv {FlowRouting.agent = decl, FlowRouting.behaviorEnv = activeBehaviorEnv, FlowRouting.runtime = depsRouting deps}
     sinkEnv =
       FlowCapability.SinkEnv
         { FlowCapability.agent = agentName job,

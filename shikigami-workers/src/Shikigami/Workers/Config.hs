@@ -52,6 +52,7 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -84,6 +85,10 @@ data WorkerEnv = WorkerEnv
   { pool :: !Pool,
     appEnv :: !AppEnv,
     agents :: ![AgentDecl],
+    -- | The exact completed startup report, retained because routing catalogs
+    -- must include disabled declarations and the bounded failure count rather
+    -- than reconstructing a less truthful view from enabled agents.
+    agentReport :: !AgentLoadReport,
     behaviorEnv :: !BehaviorEnv,
     runTimeout :: !NominalDiffTime,
     delegationBudget :: !DelegationBudget,
@@ -194,6 +199,7 @@ agentRunDeps env =
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.directory = envDirectory env,
+      AgentWorkflow.routing = Routing.routingRuntime (agentReport env) (envDirectory env),
       AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime

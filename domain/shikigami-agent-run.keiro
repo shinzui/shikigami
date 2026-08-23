@@ -67,6 +67,14 @@ workflow AgentRun
     }
     step classify -> RiskVerdict
     await await-ack -> ApprovalDecision
+    # The first registered router uses these two static call-site labels.
+    # Shikigami.Flow.Routing journals the complete bounded catalog before the
+    # raw evaluator value, then validates the latter against the former. They
+    # enter directly as part of the pre-release v1 baseline under ADR 0027;
+    # there is deliberately no patch id or legacy branch for an empty durable
+    # population.
+    step route-catalog-architecture-practice -> CandidateCatalog
+    step route-decision-architecture-practice -> RouteDecision
     # The flow path's memory labels. Shikigami.Flow.Capability.runMemory
     # journals a flow's `recall` and `remember` under the label the flow passes
     # it, so `recall-risk-history` and the three `remember-*` steps are the

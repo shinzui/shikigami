@@ -68,6 +68,7 @@ library
     Shikigami.Flow.Capability
     Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
+    Shikigami.Flow.Routing
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Id.Name

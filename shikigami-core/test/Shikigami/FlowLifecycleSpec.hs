@@ -31,6 +31,8 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
@@ -58,6 +60,7 @@ import Shikigami.Flow.Lifecycle.AtRiskCustomer
     atRiskCustomerMermaid,
     atRiskCustomerValidationWarnings,
   )
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
@@ -530,15 +533,31 @@ runFlowBody ::
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
 runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
-  runEff
-    . runErrorNoCallStack
-    . withKirokuStore (connectionSettings appEnv)
-    . runStoreResource
-    $ runWorkflowWith
-      (shikigamiWorkflowRunOptions appEnv)
-      (WorkflowName "shikigami.flow.spike")
-      workflowId
-      body
+  newBehaviorEnv >>= \behaviorEnv ->
+    runEff
+      . runErrorNoCallStack
+      . withKirokuStore (connectionSettings appEnv)
+      . runStoreResource
+      $ runWorkflowWith
+        (shikigamiWorkflowRunOptions appEnv)
+        (WorkflowName "shikigami.flow.spike")
+        workflowId
+        ( runActivity sampleActivity
+            . runMemory memoryEnv
+            . runSink sinkEnv
+            . FlowDelegate.runDelegate delegateEnv
+            . Routing.runRouting
+              Routing.RoutingEnv
+                { Routing.agent = flowDecl,
+                  Routing.behaviorEnv = behaviorEnv,
+                  Routing.runtime =
+                    Routing.routingRuntime
+                      (AgentLoadReport [AgentLoaded "flow-test.dhall" flowDecl])
+                      disabledDirectoryHandle
+                }
+            . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            $ run input
+        )
   where
     flowDecl = flowAgentDecl flowAgent
     memoryEnv = MemoryEnv {appEnv, agent = flowDecl, sessionId = Nothing}
@@ -569,13 +588,6 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
           directory = disabledDirectoryHandle,
           principalId = Nothing
         }
-    body =
-      runActivity sampleActivity
-        . runMemory memoryEnv
-        . runSink sinkEnv
-        . FlowDelegate.runDelegate delegateEnv
-        . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
-        $ run input
 
 -- | The runtime is handed to the test rather than consumed by 'lookupFlow',
 -- because 'lookupFlow' no longer takes one: it configures

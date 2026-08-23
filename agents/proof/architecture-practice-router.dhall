@@ -4,13 +4,7 @@ in  A.Agent::{
     , name = "architecture-practice-router"
     , description =
         "Routes architecture-practice payloads to declared specialists"
-    , behavior =
-        A.Behavior.ShikumiProgram
-          { task = "noop-summary"
-          , preferEnrichment = False
-          , grounding = None Text
-          , enabledBy = None Text
-          }
+    , behavior = A.Behavior.Flow { name = "architecture-practice-router" }
     , trigger = A.Trigger.Event { eventType = "proof.architecture-practice" }
     , delegates = [ "opentelemetry-practice-reviewer", "code-researcher" ]
     , delegationBudget = Some 4

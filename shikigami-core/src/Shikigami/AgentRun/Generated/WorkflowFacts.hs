@@ -20,7 +20,7 @@ workflowFacts =
     { workflowFactName = "shikigami.agent-run"
     , workflowFactIdVia = "idText"
     , workflowFactIdField = "idempotencyKey"
-    , workflowFactBody = ["step:ingest-job", "step:lookup-agent", "patch:shikigami-resolve-profile-v1(step:resolve-profile)", "patch:shikigami-capability-overlays-v1(step:resolve-capability-overlays)", "step:open-session", "step:recall", "step:run-behavior", "patch:shikigami-behavior-retry-v1(step:run-behavior-v2)", "step:classify", "await:await-ack", "patch:shikigami-flow-memory-steps-v1(step:recall-risk-history,step:remember-acknowledged,step:remember-declined,step:remember-escalated)", "patch:shikigami-emit-signal-labels-v1()", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
+    , workflowFactBody = ["step:ingest-job", "step:lookup-agent", "patch:shikigami-resolve-profile-v1(step:resolve-profile)", "patch:shikigami-capability-overlays-v1(step:resolve-capability-overlays)", "step:open-session", "step:recall", "step:run-behavior", "patch:shikigami-behavior-retry-v1(step:run-behavior-v2)", "step:classify", "await:await-ack", "step:route-catalog-architecture-practice", "step:route-decision-architecture-practice", "patch:shikigami-flow-memory-steps-v1(step:recall-risk-history,step:remember-acknowledged,step:remember-declined,step:remember-escalated)", "patch:shikigami-emit-signal-labels-v1()", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
     , workflowFactAwaitLabels = ["await-ack"]
     , workflowFactPatchIds = ["shikigami-resolve-profile-v1", "shikigami-capability-overlays-v1", "shikigami-behavior-retry-v1", "shikigami-flow-memory-steps-v1", "shikigami-emit-signal-labels-v1"]
     }
