@@ -20,10 +20,17 @@ tests =
     [ testCase "disabled mode preserves compatibility" $
         consultLifecycle disabledDirectoryHandle (Just "agent_missing") "missing"
           >>= (@?= AllowRun Nothing),
+      testCase "disabled mode has an explicit immutable snapshot" do
+        readDirectorySnapshot disabledDirectoryHandle >>= \case
+          DirectoryDisabledSnapshot {} -> pure ()
+          other -> assertFailure ("expected disabled snapshot, got " <> show other),
       testCase "configured mode without a valid snapshot fails closed" do
         directoryHandle <- newDirectoryHandle (pure (Left "meibo unavailable"))
         consultLifecycle directoryHandle Nothing "heartbeat"
           >>= (@?= DirectoryUnavailable "directory has no valid snapshot")
+        readDirectorySnapshot directoryHandle >>= \case
+          DirectoryUnavailableSnapshot {source = DirectoryFileSource} -> pure ()
+          other -> assertFailure ("expected file-backed unavailable snapshot, got " <> show other)
         refreshDirectory directoryHandle >>= (@?= Left "meibo unavailable")
         consultLifecycle directoryHandle Nothing "heartbeat"
           >>= (@?= DirectoryUnavailable "meibo unavailable"),
@@ -74,10 +81,20 @@ tests =
           \filePath -> do
             directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
             refreshDirectory directoryHandle >>= (@?= Right ())
+            beforeFailure <- readDirectorySnapshot directoryHandle
             BS.writeFile filePath duplicateHandleDirectory
             refreshDirectory directoryHandle >>= assertLeftContaining "duplicate normalized handle"
+            readDirectorySnapshot directoryHandle >>= (@?= beforeFailure)
             consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
               >>= (@?= AllowRun (Just heartbeat)),
+      testCase "identical refreshes preserve the semantic snapshot version" $
+        withDirectoryFile activeDirectory do
+          \filePath -> do
+            directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
+            refreshDirectory directoryHandle >>= (@?= Right ())
+            first <- readDirectorySnapshot directoryHandle
+            refreshDirectory directoryHandle >>= (@?= Right ())
+            readDirectorySnapshot directoryHandle >>= (@?= first),
       testCase "one live handle observes pause and reactivation after file refresh" $
         withDirectoryFile activeDirectory do
           \filePath -> do

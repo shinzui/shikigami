@@ -11,6 +11,9 @@ module Shikigami.Directory
     DirectoryView,
     DirectorySource,
     DirectoryHandle,
+    DirectorySnapshotVersion (..),
+    DirectorySourceKind (..),
+    DirectorySnapshot (..),
     LifecycleDecision (..),
     DirectoryRuntime (..),
     fileDirectorySource,
@@ -25,6 +28,8 @@ module Shikigami.Directory
     principalAttribution,
     lookupPrincipal,
     directoryPrincipals,
+    readDirectorySnapshot,
+    renderDirectorySourceKind,
   )
 where
 
@@ -40,7 +45,10 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime, getCurrentTime, nominalDiffTimeToSeconds)
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import GHC.Generics (Generic)
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import System.IO.Error (tryIOError)
 
@@ -100,7 +108,52 @@ data DirectoryState = DirectoryState
 -- configured source that has not produced a valid snapshot yet.
 data DirectoryHandle
   = DisabledDirectory
-  | ConfiguredDirectory !DirectorySource !(IORef DirectoryState)
+  | ConfiguredDirectory !DirectorySourceKind !DirectorySource !(IORef DirectoryState)
+
+-- | A stable identifier for the semantic contents of one directory snapshot.
+-- Refresh timestamps and source errors are deliberately excluded.
+newtype DirectorySnapshotVersion = DirectorySnapshotVersion {value :: Text}
+  deriving stock (Generic, Eq, Ord, Show)
+
+instance Aeson.ToJSON DirectorySnapshotVersion where
+  toJSON (DirectorySnapshotVersion version) = Aeson.String version
+
+instance FromJSON DirectorySnapshotVersion where
+  parseJSON = withText "directory snapshot version" (pure . DirectorySnapshotVersion)
+
+-- | Honest attribution for the lifecycle policy consulted by a catalog.
+data DirectorySourceKind
+  = DirectoryDisabledSource
+  | DirectoryFileSource
+  | MeiboClientSource
+  deriving stock (Generic, Eq, Ord, Show)
+
+instance Aeson.ToJSON DirectorySourceKind where
+  toJSON = Aeson.String . renderDirectorySourceKind
+
+instance FromJSON DirectorySourceKind where
+  parseJSON = withText "directory source kind" \case
+    "local-enabled" -> pure DirectoryDisabledSource
+    "directory-file" -> pure DirectoryFileSource
+    "meibo-client" -> pure MeiboClientSource
+    other -> fail ("unknown directory source kind: " <> Text.unpack other)
+
+-- | One read-only projection of the handle. Callers can retain this value while
+-- the mutable handle advances to a newer complete generation.
+data DirectorySnapshot
+  = DirectoryDisabledSnapshot
+      { version :: !DirectorySnapshotVersion
+      }
+  | DirectoryConfiguredSnapshot
+      { source :: !DirectorySourceKind,
+        version :: !DirectorySnapshotVersion,
+        principals :: ![PrincipalRecord]
+      }
+  | DirectoryUnavailableSnapshot
+      { source :: !DirectorySourceKind,
+        version :: !DirectorySnapshotVersion
+      }
+  deriving stock (Generic, Eq, Show)
 
 -- | Result of consulting lifecycle immediately before a side effect.
 data LifecycleDecision
@@ -146,9 +199,12 @@ staticDirectorySource principals = do
 
 -- | Make a configured handle with no initial snapshot.
 newDirectoryHandle :: DirectorySource -> IO DirectoryHandle
-newDirectoryHandle source = do
+newDirectoryHandle = newDirectoryHandleFor DirectoryFileSource
+
+newDirectoryHandleFor :: DirectorySourceKind -> DirectorySource -> IO DirectoryHandle
+newDirectoryHandleFor sourceKind source = do
   state <- newIORef DirectoryState {snapshot = Nothing, lastError = Nothing}
-  pure (ConfiguredDirectory source state)
+  pure (ConfiguredDirectory sourceKind source state)
 
 -- | Compatibility mode: lifecycle checks allow work and attach no principal.
 disabledDirectoryHandle :: DirectoryHandle
@@ -161,7 +217,7 @@ disabledDirectoryHandle = DisabledDirectory
 -- or the new complete view, never an invalid or partially-built candidate.
 refreshDirectory :: DirectoryHandle -> IO (Either Text ())
 refreshDirectory DisabledDirectory = pure (Right ())
-refreshDirectory (ConfiguredDirectory source stateRef) = do
+refreshDirectory (ConfiguredDirectory _ source stateRef) = do
   candidate <- source
   atomicModifyIORef' stateRef \state ->
     case candidate of
@@ -188,7 +244,7 @@ startDirectoryWithHeartbeat _ _ DirectoryDisabled =
 startDirectoryWithHeartbeat logger heartbeat (DirectoryFile filePath interval)
   | interval <= 0 = pure (Left "directory.refresh_interval_seconds must be positive")
   | otherwise = do
-      directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
+      directoryHandle <- newDirectoryHandleFor DirectoryFileSource (fileDirectorySource filePath)
       refreshDirectory directoryHandle >>= \case
         Left problem -> pure (Left problem)
         Right () ->
@@ -207,7 +263,7 @@ startDirectoryWithHeartbeat logger heartbeat (DirectoryFile filePath interval)
 -- different principal with a matching human-readable handle.
 consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
 consultLifecycle DisabledDirectory _ _ = pure (AllowRun Nothing)
-consultLifecycle directoryHandle@(ConfiguredDirectory _ stateRef) declaredPrincipalId agentHandle = do
+consultLifecycle directoryHandle@(ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
   case snapshot state of
     Nothing -> pure (DirectoryUnavailable (maybe "directory has no valid snapshot" id (lastError state)))
@@ -249,7 +305,7 @@ principalAttribution directoryHandle declaredPrincipalId agentHandle = do
 -- no id was declared.
 lookupPrincipal :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
 lookupPrincipal DisabledDirectory _ _ = pure Nothing
-lookupPrincipal (ConfiguredDirectory _ stateRef) declaredPrincipalId agentHandle = do
+lookupPrincipal (ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
   pure do
     view <- snapshot state
@@ -260,11 +316,41 @@ lookupPrincipal (ConfiguredDirectory _ stateRef) declaredPrincipalId agentHandle
 -- | Principals in deterministic handle order, for inspection and sync commands.
 directoryPrincipals :: DirectoryHandle -> IO [PrincipalRecord]
 directoryPrincipals DisabledDirectory = pure []
-directoryPrincipals (ConfiguredDirectory _ stateRef) = do
+directoryPrincipals (ConfiguredDirectory _ _ stateRef) = do
   state <- readIORef stateRef
   pure case snapshot state of
     Nothing -> []
     Just view -> sortOn (normalizeHandle . principalHandle) (Map.elems (byPrincipalId view))
+
+-- | Capture one complete directory generation for a larger decision boundary.
+-- A refresh after this read cannot alter the returned value.
+readDirectorySnapshot :: DirectoryHandle -> IO DirectorySnapshot
+readDirectorySnapshot DisabledDirectory =
+  pure
+    DirectoryDisabledSnapshot
+      { version = directorySnapshotVersion DirectoryDisabledSource "disabled" []
+      }
+readDirectorySnapshot (ConfiguredDirectory sourceKind _ stateRef) = do
+  state <- readIORef stateRef
+  pure case snapshot state of
+    Nothing ->
+      DirectoryUnavailableSnapshot
+        { source = sourceKind,
+          version = directorySnapshotVersion sourceKind "unavailable" []
+        }
+    Just view ->
+      let principals = Map.elems (byPrincipalId view)
+       in DirectoryConfiguredSnapshot
+            { source = sourceKind,
+              version = directorySnapshotVersion sourceKind "available" principals,
+              principals
+            }
+
+renderDirectorySourceKind :: DirectorySourceKind -> Text
+renderDirectorySourceKind = \case
+  DirectoryDisabledSource -> "local-enabled"
+  DirectoryFileSource -> "directory-file"
+  MeiboClientSource -> "meibo-client"
 
 refreshLoop :: Log.Logger -> IO () -> DirectoryHandle -> FilePath -> NominalDiffTime -> IO ()
 refreshLoop logger heartbeat directoryHandle filePath interval = forever do
@@ -314,3 +400,36 @@ normalizeHandle = Text.toCaseFold . Text.strip
 
 principalHandle :: PrincipalRecord -> Text
 principalHandle PrincipalRecord {handle = value} = value
+
+directorySnapshotVersion :: DirectorySourceKind -> Text -> [PrincipalRecord] -> DirectorySnapshotVersion
+directorySnapshotVersion sourceKind state principals =
+  DirectorySnapshotVersion
+    ( Text.pack
+        ( UUID.toString
+            ( UUID.V5.generateNamed
+                UUID.V5.namespaceURL
+                ( nameBytes
+                    ( canonicalValues
+                        ( ["shikigami-directory-snapshot-v1", renderDirectorySourceKind sourceKind, state]
+                            <> concatMap principalValues (sortOn principalId principals)
+                        )
+                    )
+                )
+            )
+        )
+    )
+  where
+    principalValues PrincipalRecord {principalId, handle, lifecycle} =
+      [principalId, normalizeHandle handle, renderLifecycle lifecycle]
+
+canonicalValues :: [Text] -> Text
+canonicalValues = Text.concat . fmap canonicalValue
+
+canonicalValue :: Text -> Text
+canonicalValue value = Text.pack (show (Text.length value)) <> ":" <> value
+
+renderLifecycle :: Lifecycle -> Text
+renderLifecycle = \case
+  Active -> "active"
+  Paused -> "paused"
+  Deactivated -> "deactivated"

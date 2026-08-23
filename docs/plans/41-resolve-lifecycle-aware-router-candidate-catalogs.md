@@ -41,8 +41,12 @@ This section must always reflect the actual current state of the work.
   file-backed `DirectoryHandle`, last-known-valid lifecycle policy, and six-package layout.
 - [x] (2026-08-23T14:41:54Z) External prerequisites verified: plans 23, 33, 35, 36, and 47
   have landed. Only child plan 40 remains as the hard prerequisite.
-- [ ] Prerequisite: `docs/plans/40-declare-specialist-expertise-and-router-policy.md` has landed.
-- [ ] M1: define candidate, availability, exclusion, source, load-failure-count, immutable directory-snapshot, and catalog-version types.
+- [x] (2026-08-23T19:28:46Z) Prerequisite:
+  `docs/plans/40-declare-specialist-expertise-and-router-policy.md` has landed.
+- [x] (2026-08-23T19:28:46Z) M1: added the read-once immutable directory
+  snapshot, explicit source-kind attribution, and content-derived snapshot version; 15 focused
+  directory tests pass.
+- [ ] M1: define candidate, availability, exclusion, load-failure-count, and catalog-version types.
 - [ ] M1: resolve candidates only from the router's validated `delegates` order using the exact names enforced by plan 35.
 - [ ] M2: read one directory snapshot, then distinguish duplicate declaration, disabled, paused, deactivated, unknown principal, unavailable directory, and explicit directory-disabled compatibility mode.
 - [ ] M2: keep missing candidates distinct from the unassociated manifest-load count; never infer an agent identity from a failed file.
@@ -123,13 +127,24 @@ Record every decision made while working on the plan.
   claiming the same delegation target.
   Date: 2026-08-23
 
+- Decision: Store configured source attribution inside the private `DirectoryHandle`; preserve
+  the existing `newDirectoryHandle` test/adapter API by assigning its only currently shipped
+  configured kind, `DirectoryFileSource`.
+  Rationale: a catalog caller cannot relabel a handle, while existing lifecycle tests and adapters
+  remain source-compatible. A future typed client must construct its distinct kind at the
+  directory composition boundary.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Milestone 1's directory half is complete. One read now distinguishes disabled, configured-valid,
+and configured-unavailable state and carries a semantic UUIDv5 version. Identical refreshes and
+failed refreshes that retain the last valid view preserve the version; timestamps and diagnostics
+do not leak into the projection. Catalog domain types and resolution remain in progress.
 
 
 ## Context and Orientation
