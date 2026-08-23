@@ -1,20 +1,24 @@
 module Shikigami.AgentLoaderSpec (tests) where
 
 import Control.Exception (try)
-import Data.Aeson (Value (Object), eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson (Value (Object), eitherDecode, eitherDecodeStrict, encode, toJSON)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
+import Data.Foldable (traverse_)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
-import Data.List (find)
+import Data.List (find, isSuffixOf, sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
+    ExpertiseDecl (..),
     IdentityDecl (..),
     MemoryPolicy (..),
     MemoryScopeDecl (AgentScope),
     RecordPolicy (Never, OnSuccess),
+    RouterConfidence (RoutingMedium),
+    RouterPolicy (..),
     delegationBudgetNatural,
     recallLimitNatural,
   )
@@ -30,7 +34,9 @@ import Shikigami.Agent.Loader
   )
 import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
+import System.FilePath (takeExtension, (</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -75,24 +81,52 @@ tests =
         AgentDecl {delegates, delegationBudget} <- expectLoaded "../agents/proof/research-supervisor.dhall"
         delegates @?= ["web-researcher", "code-researcher"]
         fmap delegationBudgetNatural delegationBudget @?= Just 8,
-      testCase "default declarations retain their old JSON shape and decode it" do
+      testCase "decodes the router policy proof declaration" do
+        decl <- expectLoaded "../agents/proof/architecture-practice-router.dhall"
+        case decl of
+          AgentDecl {delegates, routing = Just RouterPolicy {maxSelections, minimumConfidence}} -> do
+            delegates @?= ["opentelemetry-practice-reviewer", "code-researcher"]
+            maxSelections @?= 2
+            minimumConfidence @?= RoutingMedium
+          other -> assertFailure ("unexpected router declaration: " <> show other),
+      testCase "decodes the specialist expertise proof declaration" do
+        decl <- expectLoaded "../agents/proof/opentelemetry-practice-reviewer.dhall"
+        case decl of
+          AgentDecl {expertise = [ExpertiseDecl {key, aliases, evidenceHints}]} -> do
+            key @?= "opentelemetry"
+            aliases @?= ["otel", "telemetry"]
+            evidenceHints @?= ["traceparent", "service.name", "instrumentation scope"]
+          other -> assertFailure ("unexpected specialist declaration: " <> show other),
+      testCase "the v1 declaration JSON shape contains every field and round-trips" do
         decl <- expectLoaded "../agents/heartbeat.dhall"
-        let oldShape =
-              object
-                [ "name" .= name decl,
-                  "description" .= description decl,
-                  "trigger" .= trigger decl,
-                  "behavior" .= behavior decl,
-                  "sinks" .= sinks decl
-                ]
+        fixtureBytes <- ByteString.Char8.readFile "test/fixtures/wire/agent-decl-v1.json"
+        fixtureValue <-
+          either
+            (assertFailure . ("could not decode the v1 declaration fixture: " <>))
+            pure
+            (eitherDecodeStrict @Value fixtureBytes)
+        toJSON decl @?= fixtureValue
+        eitherDecodeStrict @AgentDecl fixtureBytes @?= Right decl
         case toJSON decl of
           Object fields -> do
-            assertBool "identity is omitted" (not (KeyMap.member "identity" fields))
-            assertBool "memory is omitted" (not (KeyMap.member "memory" fields))
-            assertBool "enabled is omitted" (not (KeyMap.member "enabled" fields))
-            assertBool "capability overlays are omitted" (not (KeyMap.member "capabilityOverlays" fields))
+            sort (KeyMap.keys fields)
+              @?= sort
+                [ "behavior",
+                  "capabilityOverlays",
+                  "delegates",
+                  "delegationBudget",
+                  "description",
+                  "enabled",
+                  "expertise",
+                  "identity",
+                  "memory",
+                  "name",
+                  "routing",
+                  "sanctionedProfile",
+                  "sinks",
+                  "trigger"
+                ]
           other -> assertFailure ("declaration must encode as an object: " <> show other)
-        encode decl @?= encode oldShape
         eitherDecode (encode decl) @?= Right decl,
       testCase "non-default declarations retain their policy in JSON" do
         decl <- expectLoaded "../agents/proof/declared-identity.dhall"
@@ -113,6 +147,9 @@ tests =
       testCase "rejects recall limits before runtime conversion" do
         expectBoundError "test/fixtures/agents/invalid-recall-limit-zero.dhall" "got 0"
         expectBoundError "test/fixtures/agents/invalid-recall-limit-too-large.dhall" "got 1001",
+      testCase "every live manifest still decodes through record-completion defaults" do
+        paths <- filter isLiveManifest <$> dhallFilesRecursively "../agents"
+        traverse_ (fmap (const ()) . expectLoaded) paths,
       testCase "directory reports preserve a broken manifest" do
         report@AgentLoadReport {entries} <- loadAgentsReport "../agents"
         let broken = find isBroken entries
@@ -206,3 +243,20 @@ isFailure AgentLoaded {} = False
 
 agentName :: AgentDecl -> Text
 agentName AgentDecl {name} = name
+
+dhallFilesRecursively :: FilePath -> IO [FilePath]
+dhallFilesRecursively directory = do
+  names <- sort <$> listDirectory directory
+  fmap concat $ traverse visit names
+  where
+    visit name = do
+      let path = directory </> name
+      isDirectory <- doesDirectoryExist path
+      if isDirectory
+        then dhallFilesRecursively path
+        else pure [path | takeExtension path == ".dhall"]
+
+isLiveManifest :: FilePath -> Bool
+isLiveManifest path =
+  not ("/broken.dhall" `isSuffixOf` path)
+    && not ("/detectors/schema.dhall" `isSuffixOf` path)

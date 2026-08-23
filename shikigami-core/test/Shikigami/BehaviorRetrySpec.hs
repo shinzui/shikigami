@@ -92,5 +92,7 @@ missingTaskAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }

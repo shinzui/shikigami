@@ -2,10 +2,12 @@ module Shikigami.AgentWorkflowSpec (tests) where
 
 import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
 import Control.Exception (SomeException, throwIO, try)
+import Control.Lens ((.~))
 import Control.Monad (forM_, void, when)
 import Data.Aeson (Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (elemIndex)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -50,7 +52,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -2041,7 +2043,9 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       capabilityOverlays = overlays,
       identity = agentIdentity,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 agentDeclNameForTest :: AgentDecl -> Text
@@ -2113,7 +2117,9 @@ decl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 missingTaskDecl :: AgentDecl
@@ -2136,7 +2142,9 @@ missingTaskDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 profiledDecl :: AgentDecl
@@ -2164,7 +2172,9 @@ profiledDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 profiledSkillDecl :: AgentDecl
@@ -2186,7 +2196,9 @@ profiledSkillDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 flowDecl :: AgentDecl
@@ -2203,7 +2215,9 @@ flowDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 flowDelegationDecl :: AgentDecl
@@ -2220,7 +2234,9 @@ flowDelegationDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 collectionSupervisorDecl :: AgentDecl
@@ -2239,21 +2255,7 @@ conversationDecl =
     }
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
-withRecordPolicy recordPolicy AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory = MemoryPolicy {scope, recallLimit}, enabled} =
-  AgentDecl
-    { name,
-      description,
-      trigger,
-      behavior,
-      sinks,
-      delegates,
-      delegationBudget,
-      sanctionedProfile,
-      capabilityOverlays,
-      identity,
-      memory = MemoryPolicy {scope, recallLimit, recordPolicy},
-      enabled
-    }
+withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy
 
 firstAddressedMessage :: AddressedMessage
 firstAddressedMessage =

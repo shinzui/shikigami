@@ -42,6 +42,7 @@ import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
+import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
 import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
 import Shikigami.Sink
   ( AgentIdentity (..),
@@ -96,6 +97,7 @@ main =
           PackageArchitectureSpec.tests,
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,
+          RouterDeclarationSpec.tests,
           RunEvidenceSpec.tests,
           SinkDeliverySpec.tests,
           SinkHonestySpec.tests,

@@ -17,6 +17,11 @@ module Shikigami.Agent.Decl
     delegationBudgetInt,
     defaultDelegationBudget,
     defaultMemoryPolicy,
+    ExpertiseDecl (..),
+    RouterConfidence (..),
+    NoMatchPolicy (..),
+    AmbiguousPolicy (..),
+    RouterPolicy (..),
     Behavior (..),
     Trigger (..),
     StreamMatch (..),
@@ -28,7 +33,6 @@ module Shikigami.Agent.Decl
   )
 where
 
-import Data.Aeson qualified as Aeson
 import Data.Map.Strict (Map)
 import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
@@ -155,6 +159,36 @@ defaultMemoryPolicy =
       recordPolicy = OnSuccess
     }
 
+data ExpertiseDecl = ExpertiseDecl
+  { key :: !Text,
+    description :: !Text,
+    aliases :: ![Text],
+    evidenceHints :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+data RouterConfidence = RoutingLow | RoutingMedium | RoutingHigh
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+data NoMatchPolicy = ReturnNoMatch | ReturnUnresolved
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+data AmbiguousPolicy = ReturnAmbiguous | SelectAllWithinBound
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+data RouterPolicy = RouterPolicy
+  { maxSelections :: !Natural,
+    minimumConfidence :: !RouterConfidence,
+    onNoMatch :: !NoMatchPolicy,
+    onAmbiguous :: !AmbiguousPolicy
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromDhall, ToJSON, FromJSON)
+
 data SignalType
   = Notification
   | Alert
@@ -241,47 +275,9 @@ data AgentDecl = AgentDecl
     capabilityOverlays :: ![CapabilityId],
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
-    enabled :: !Bool
+    enabled :: !Bool,
+    expertise :: ![ExpertiseDecl],
+    routing :: !(Maybe RouterPolicy)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall)
-
--- | Keep declarations carrying only defaulted optional policy byte-compatible
--- with values journaled before those fields existed. Non-default declarations
--- still carry their complete policy in the workflow journal.
-instance ToJSON AgentDecl where
-  toJSON AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory, enabled} =
-    Aeson.object
-      ( [ "name" Aeson..= name,
-          "description" Aeson..= description,
-          "trigger" Aeson..= trigger,
-          "behavior" Aeson..= behavior,
-          "sinks" Aeson..= sinks
-        ]
-          <> ["delegates" Aeson..= delegates | not (null delegates)]
-          <> maybe [] (\budget -> ["delegationBudget" Aeson..= budget]) delegationBudget
-          <> maybe [] (\profile -> ["sanctionedProfile" Aeson..= profile]) sanctionedProfile
-          <> ["capabilityOverlays" Aeson..= capabilityOverlays | not (null capabilityOverlays)]
-          <> maybe [] (\declaredIdentity -> ["identity" Aeson..= declaredIdentity]) identity
-          <> ["memory" Aeson..= memory | memory /= defaultMemoryPolicy]
-          <> ["enabled" Aeson..= False | not enabled]
-      )
-
--- | Missing fields decode to the pre-schema-evolution behavior. This is needed
--- for replaying old @lookup-agent@ workflow step values as well as for ordinary
--- JSON compatibility.
-instance FromJSON AgentDecl where
-  parseJSON = Aeson.withObject "AgentDecl" \value -> do
-    name <- value Aeson..: "name"
-    description <- value Aeson..: "description"
-    trigger <- value Aeson..: "trigger"
-    behavior <- value Aeson..: "behavior"
-    sinks <- value Aeson..: "sinks"
-    delegates <- value Aeson..:? "delegates" Aeson..!= []
-    delegationBudget <- value Aeson..:? "delegationBudget"
-    sanctionedProfile <- value Aeson..:? "sanctionedProfile"
-    capabilityOverlays <- value Aeson..:? "capabilityOverlays" Aeson..!= []
-    identity <- value Aeson..:? "identity"
-    memory <- value Aeson..:? "memory" Aeson..!= defaultMemoryPolicy
-    enabled <- value Aeson..:? "enabled" Aeson..!= True
-    pure AgentDecl {name, description, trigger, behavior, sinks, delegates, delegationBudget, sanctionedProfile, capabilityOverlays, identity, memory, enabled}
+  deriving anyclass (FromDhall, ToJSON, FromJSON)

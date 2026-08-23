@@ -56,7 +56,9 @@ packageBoundaryTests =
                   capabilityOverlays = [],
                   identity = Nothing,
                   memory = defaultMemoryPolicy,
-                  enabled = True
+                  enabled = True,
+                  expertise = [],
+                  routing = Nothing
                 }
         let AgentDecl {name = declaredName} = decl
         declaredName @?= ("boundary-probe" :: Text)

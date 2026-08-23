@@ -193,7 +193,9 @@ agentWith sinks =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 signalWith :: RecipientFrom -> Maybe Text -> Sink

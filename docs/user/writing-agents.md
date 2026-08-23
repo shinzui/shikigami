@@ -36,15 +36,23 @@ let Agent =
           , trigger : Trigger          -- one of three classes
           , behavior : Behavior         -- one of three arms
           , sinks : List Sink           -- zero or more producer outputs
+          , delegates : List Text
+          , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
+          , capabilityOverlays : List Text
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
+          , expertise : List Expertise
+          , routing : Optional RouterPolicy
           }
       , default =
           { description = ""
           , sinks = [] : List Sink
+          , delegates = [] : List Text
+          , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
+          , capabilityOverlays = [] : List Text
           , identity = None Identity
           , memory =
               { scope = MemoryScope.AgentScope
@@ -52,6 +60,8 @@ let Agent =
               , recordPolicy = RecordPolicy.OnSuccess
               }
           , enabled = True
+          , expertise = [] : List Expertise
+          , routing = None RouterPolicy
           }
       }
 ```
@@ -63,10 +73,15 @@ let Agent =
 | `trigger` | `Trigger` | When the agent fires — see **[Triggers](./triggers.md)** | — (required) |
 | `behavior` | `Behavior` | What the agent does — see **[Behaviors](./behaviors.md)** | — (required) |
 | `sinks` | `List Sink` | What the agent produces — see **[Sinks](./sinks.md)** | `[]` |
+| `delegates` | `List Text` | Exact allow-list of child agents this declaration may launch | `[]` |
+| `delegationBudget` | `Optional Natural` | Optional root-run-wide child budget | platform default |
 | `sanctionedProfile` | `Optional ProfileRequirement` | Execution profile the run must resolve and satisfy | `None` |
+| `capabilityOverlays` | `List Text` | Additive model-tool capabilities requested by this agent | `[]` |
 | `identity` | `Optional Identity` | Stable meibo principal whose authority the agent will use | `None` |
 | `memory` | `MemoryPolicy` | Recall scope, recall bound, and automatic recording policy | agent scope, 10 results, record on success |
 | `enabled` | `Bool` | Whether long-running worker roles load the agent | `True` |
+| `expertise` | `List Expertise` | Routing metadata describing a specialist's knowledge | `[]` |
+| `routing` | `Optional RouterPolicy` | Bounded semantic-selection policy over `delegates` | `None` |
 
 Because `sinks` defaults to `[]`, an agent with no sinks is legal — it runs its behavior and
 records a session, producing nothing outward. That's useful for a behavior whose only job is
@@ -125,6 +140,45 @@ Set `enabled = False` to keep a manifest on disk while excluding it from workers
 schedulers, and stream/event consumers. Each loader prints a stderr line naming the skipped
 agent and manifest. Single-agent commands still load disabled declarations deliberately, so
 you can validate or hand-run a parked agent; `validate` calls out its disabled state.
+
+## Specialist expertise and router policy
+
+`expertise` describes what a specialist knows. It is metadata for candidate selection; it does
+not grant tools, sinks, or permission to launch the specialist:
+
+```dhall
+, expertise =
+    [ { key = "opentelemetry"
+      , description = "OpenTelemetry signals, propagation, and SDK architecture"
+      , aliases = [ "otel", "telemetry" ]
+      , evidenceHints = [ "traceparent", "service.name" ]
+      }
+    ]
+```
+
+Keys are trimmed and case-folded for uniqueness. Empty keys and duplicates such as
+`OpenTelemetry` plus `opentelemetry` are declaration errors.
+
+A router opts in with `routing`, but its candidates still come only from the existing
+`delegates` allow-list:
+
+```dhall
+, delegates = [ "opentelemetry-practice-reviewer", "code-researcher" ]
+, routing =
+    Some
+      { maxSelections = 2
+      , minimumConfidence = A.RouterConfidence.RoutingMedium
+      , onNoMatch = A.NoMatchPolicy.ReturnNoMatch
+      , onAmbiguous = A.AmbiguousPolicy.ReturnAmbiguous
+      }
+```
+
+`maxSelections` must be between 1 and 16 inclusive and cannot exceed the number of distinct
+delegates. A routing policy with no delegates and duplicate delegate names are rejected.
+`minimumConfidence` is a semantic threshold, while `onNoMatch` and `onAmbiguous` make the two
+non-selection outcomes explicit. None of these values authorizes a child by itself: durable
+delegation still enforces the allow-list, lineage, depth, and root-run budget at the spawn
+boundary.
 
 ## The three axes
 

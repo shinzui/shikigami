@@ -246,7 +246,9 @@ testDecl capabilityOverlays =
       capabilityOverlays,
       identity = Just IdentityDecl {principal = "principal_workspace_test"},
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 fixtureScope :: Fixture -> IO WorkspaceScope

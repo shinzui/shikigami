@@ -10,6 +10,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Agent.Skill (validateSkill)
 import Shikigami.Flow (flowDeclarationErrors)
+import Shikigami.Router.Declaration (renderRouterDeclarationError, routerDeclarationErrors)
 import Shikigami.Sink.Validate (sinkDeclarationErrors)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -36,6 +37,11 @@ runValidate path = do
     Right decl -> do
       print decl -- the Show-rendered manifest
       when (not (enabled decl)) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
+      case routerDeclarationErrors decl of
+        errors@(_ : _) -> do
+          traverse_ (\err -> hPutStrLn stderr ("validate: router error: " <> Text.unpack (renderRouterDeclarationError err))) errors
+          exitFailure
+        [] -> pure ()
       case sinkDeclarationErrors decl of
         errors@(_ : _) -> do
           traverse_ (\err -> hPutStrLn stderr ("validate: sink error: " <> Text.unpack err)) errors

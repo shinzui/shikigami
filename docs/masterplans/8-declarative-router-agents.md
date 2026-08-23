@@ -52,7 +52,7 @@ unverifiable intermediate state.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | In Progress |
+| 1 | Declare specialist expertise and router policy | docs/plans/40-declare-specialist-expertise-and-router-policy.md | delivered foundations: plans 33, 35, 36, and 47 | None | Complete |
 | 2 | Resolve lifecycle-aware router candidate catalogs | docs/plans/41-resolve-lifecycle-aware-router-candidate-catalogs.md | EP-1; delivered foundations: plans 23 and 33 | None | Not Started |
 | 3 | Execute replay-safe typed routing and delegation | docs/plans/42-execute-replay-safe-typed-routing-and-delegation.md | EP-1, EP-2; delivered foundations: plans 24, 35, and 39 | None | Not Started |
 
@@ -130,9 +130,12 @@ not domain policy. Payload document bodies are excluded from logs and traces.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: Add manifest-compatible expertise and router-policy declaration types.
-- [ ] EP-1 M2: Mirror and validate the types in Haskell, establish the complete v1 JSON shape, and prove every existing manifest still loads.
-- [ ] EP-1 M3: Add router and specialist proof manifests plus author documentation.
+- [x] (2026-08-23T19:20:10Z) EP-1 M1: Added manifest-compatible expertise and
+  router-policy declaration types.
+- [x] (2026-08-23T19:20:10Z) EP-1 M2: Mirrored and validated the types in Haskell,
+  pinned the complete v1 JSON shape, and proved every live manifest still loads.
+- [x] (2026-08-23T19:20:10Z) EP-1 M3: Added router and specialist proof manifests,
+  CLI diagnostics, and author documentation.
 - [ ] EP-2 M1: Build a deterministic catalog from the router's declared delegates.
 - [ ] EP-2 M2: Apply enabled/Meibo lifecycle availability with explicit exclusion reasons.
 - [ ] EP-2 M3: Version, redact, and test the catalog boundary.
@@ -172,6 +175,10 @@ interactions between child plans. Provide concise evidence.
   `lookup-agent` values or pre-router workflow generations to protect, so extending the old JSON
   omission shim or adding a router patch would create first-release technical debt for an empty
   population. ADR 0027 records the bounded pre-v1 exception and its release cutoff.
+- EP-1's strict Haskell fields made every direct `AgentDecl` test constructor compile-visible,
+  while Dhall record completion kept every source manifest unchanged. The complete v1 JSON value
+  is pinned separately, so source compatibility and the durable release baseline are tested at
+  their actual boundaries.
 
 
 ## Decision Log
@@ -231,13 +238,20 @@ plan.
   migration branch is removed. ADR 0027 makes the exception expire at release.
   Date: 2026-08-23
 
+- Decision: Treat the checked complete `AgentDecl` JSON fixture as the post-release baseline for
+  future declaration evolution.
+  Rationale: a concrete fixture makes the first durable contract explicit without retaining a
+  decoder for nonexistent pre-release values.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original vision.
-
-(To be filled during and after implementation.)
+EP-1 is complete. Shikigami now has an author-facing expertise and router-policy vocabulary,
+bounded semantic declaration validation, proof manifests, CLI diagnostics, and a pinned complete
+v1 declaration value. Existing Dhall manifests still load through defaults, and no compatibility
+shim was carried into the first release for an empty historical population. EP-2 and EP-3 remain:
+no candidate catalog, route decision, or routed workflow execution exists yet.
 
 
 ## Revision Notes
@@ -252,3 +266,6 @@ Compare the result against the original vision.
   or durable state. Replaced pre-release declaration-codec and workflow-patch shims with one clean
   v1 baseline, retained Dhall source defaults and replay journaling, and recorded the release
   cutoff in ADR 0027.
+- 2026-08-23: Completed EP-1 with declaration types, bounded validation, proof manifests,
+  documentation, a pinned complete v1 JSON fixture, and full-suite validation. Advanced the
+  checkpoint to EP-2.

@@ -347,7 +347,9 @@ declFor capabilityOverlays behavior =
       capabilityOverlays,
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 toolModel :: Api -> Model

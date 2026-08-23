@@ -316,7 +316,9 @@ triageDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 heartbeatDecl :: AgentDecl
@@ -339,7 +341,9 @@ heartbeatDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 epoch :: UTCTime

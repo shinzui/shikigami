@@ -43,11 +43,17 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-23T19:00:21Z) Reconciled the declaration work with the imminent first release:
   keep Dhall manifest defaults, remove the pre-release JSON compatibility shim, and establish
   one complete v1 declaration object under ADR 0027.
-- [ ] M1: add `Expertise`, routing-policy unions, and manifest-compatible `expertise` / `routing` fields to `schema/Agent.dhall`.
-- [ ] M2: mirror the types in `Shikigami.Agent.Decl`, establish one complete v1 JSON shape, and validate router-only invariants with bounded `Natural` conversion.
-- [ ] M2: prove every existing Dhall manifest decodes with `expertise = []` and `routing = None`, while the v1 JSON object encodes every declaration field explicitly.
-- [ ] M3: add router/specialist proof manifests and document authoring, authority boundaries, and diagnostics.
-- [ ] Final: `cabal test all` and validation of both proof manifests succeed.
+- [x] (2026-08-23T19:20:10Z) M1: added `Expertise`, routing-policy unions, and
+  manifest-compatible `expertise` / `routing` fields to `schema/Agent.dhall`.
+- [x] (2026-08-23T19:20:10Z) M2: mirrored the types in `Shikigami.Agent.Decl`,
+  established one complete v1 JSON shape, and added bounded router declaration validation.
+- [x] (2026-08-23T19:20:10Z) M2: proved every live Dhall manifest still decodes
+  through defaults and pinned the complete default declaration in
+  `shikigami-core/test/fixtures/wire/agent-decl-v1.json`.
+- [x] (2026-08-23T19:20:10Z) M3: added router/specialist proof manifests, CLI
+  diagnostics, and author documentation covering metadata versus delegation authority.
+- [x] (2026-08-23T19:20:10Z) Final: focused router tests, both valid proof
+  manifests, the invalid-bound CLI proof, and the serial full package suite pass.
 
 
 ## Surprises & Discoveries
@@ -63,6 +69,14 @@ implementation. Provide concise evidence.
   release. The current hand-written omission/missing-key codec protects an empty pre-release
   population. This plan removes that shim and establishes one complete derived v1 JSON shape;
   after release, that complete shape becomes the compatibility baseline.
+- Adding strict fields to `AgentDecl` made every direct test constructor across the package tree
+  fail to compile until it stated `expertise = []` and `routing = Nothing`. That compile-visible
+  migration complements Dhall record-completion defaults and prevents accidental partial domain
+  values in tests.
+- The first parallel `cabal test all` run passed every changed test but one existing database
+  concurrency case timed out while starting its temporary PostgreSQL connection. The exact case
+  passed immediately in isolation, and `cabal test all --jobs=1` then passed all packages,
+  including 472 core tests.
 
 
 ## Decision Log
@@ -109,13 +123,29 @@ Record every decision made while working on the plan.
   v1 JSON object becomes the durable baseline after release under ADR 0027.
   Date: 2026-08-23
 
+- Decision: Pin a complete default `AgentDecl` JSON fixture in addition to checking its key set
+  and round trip.
+  Rationale: the first-release durable baseline should be reviewable as concrete checked data;
+  regenerating the expected value with the current encoder would not detect an accidental shape
+  change.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+This child plan is complete. Agent authors can declare normalized specialist expertise and an
+optional, bounded router policy while all existing manifests remain source-compatible through
+`Agent.default`. The Haskell mirror exposes strict direct fields, and
+`Shikigami.Router.Declaration` rejects empty or duplicate expertise keys, duplicate delegates,
+empty router allow-lists, and invalid selection bounds before later catalog/runtime code can
+consume the declaration.
 
-(To be filled during and after implementation.)
+The first-release durability baseline is now one derived, complete JSON object pinned by
+`shikigami-core/test/fixtures/wire/agent-decl-v1.json`; no compatibility branch remains for
+pre-release data that does not exist. Both proof manifests print their decoded values through
+`shikigami validate`, while the zero-selection fixture exits non-zero with the promised
+diagnostic. The serial full suite passes. This plan intentionally adds no catalog selection,
+model routing, workflow step, or child spawn; those remain owned by plans 41 and 42.
 
 
 ## Context and Orientation
@@ -305,3 +335,5 @@ library or service is required.
   or durable/external declaration values. Replaced the planned extension of a pre-release
   compatibility shim with one complete v1 JSON shape, retained Dhall defaults for checked-in
   manifests, and adopted ADR 0027 as the release boundary.
+- 2026-08-23: Completed declaration implementation, semantic validation, proof manifests,
+  author documentation, a pinned v1 JSON fixture, CLI refusal proof, and full-suite validation.

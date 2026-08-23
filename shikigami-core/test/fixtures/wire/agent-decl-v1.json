@@ -1,0 +1,35 @@
+{
+  "name": "heartbeat",
+  "description": "",
+  "trigger": {
+    "tag": "Schedule",
+    "cron": "* * * * *"
+  },
+  "behavior": {
+    "tag": "ShikumiProgram",
+    "task": "noop-summary",
+    "preferEnrichment": false,
+    "grounding": null,
+    "enabledBy": null
+  },
+  "sinks": [
+    {
+      "tag": "KawaDigest",
+      "subjectType": "heartbeat",
+      "verb": "heartbeat.tick"
+    }
+  ],
+  "delegates": [],
+  "delegationBudget": null,
+  "sanctionedProfile": null,
+  "capabilityOverlays": [],
+  "identity": null,
+  "memory": {
+    "scope": "AgentScope",
+    "recallLimit": 10,
+    "recordPolicy": "OnSuccess"
+  },
+  "enabled": true,
+  "expertise": [],
+  "routing": null
+}

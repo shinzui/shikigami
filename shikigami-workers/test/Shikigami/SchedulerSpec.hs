@@ -282,7 +282,9 @@ scheduledAgent agentName cron =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.

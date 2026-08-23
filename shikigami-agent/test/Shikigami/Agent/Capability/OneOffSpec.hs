@@ -201,7 +201,9 @@ declForIdentity identity capabilityOverlays =
       capabilityOverlays,
       identity,
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 apiProvider :: Api -> (Model -> Context -> Options -> IO Response) -> ApiProvider

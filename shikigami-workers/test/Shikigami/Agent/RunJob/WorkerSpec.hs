@@ -364,7 +364,9 @@ drainAgent =
       capabilityOverlays = [],
       identity = Just IdentityDecl {principal = "agent_codec"},
       memory = defaultMemoryPolicy,
-      enabled = True
+      enabled = True,
+      expertise = [],
+      routing = Nothing
     }
 
 principalRecord :: Lifecycle -> PrincipalRecord

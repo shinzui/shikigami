@@ -79,6 +79,26 @@ let defaultMemoryPolicy =
       , recordPolicy = RecordPolicy.OnSuccess
       }
 
+let Expertise =
+      { key : Text
+      , description : Text
+      , aliases : List Text
+      , evidenceHints : List Text
+      }
+
+let RouterConfidence = < RoutingLow | RoutingMedium | RoutingHigh >
+
+let NoMatchPolicy = < ReturnNoMatch | ReturnUnresolved >
+
+let AmbiguousPolicy = < ReturnAmbiguous | SelectAllWithinBound >
+
+let RouterPolicy =
+      { maxSelections : Natural
+      , minimumConfidence : RouterConfidence
+      , onNoMatch : NoMatchPolicy
+      , onAmbiguous : AmbiguousPolicy
+      }
+
 let Agent =
       { Type =
           { name : Text
@@ -93,6 +113,8 @@ let Agent =
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
+          , expertise : List Expertise
+          , routing : Optional RouterPolicy
           }
       , default =
           { description = ""
@@ -104,6 +126,8 @@ let Agent =
           , identity = None Identity
           , memory = defaultMemoryPolicy
           , enabled = True
+          , expertise = [] : List Expertise
+          , routing = None RouterPolicy
           }
       }
 
@@ -119,5 +143,10 @@ in  { SignalType
     , MemoryScope
     , RecordPolicy
     , MemoryPolicy
+    , Expertise
+    , RouterConfidence
+    , NoMatchPolicy
+    , AmbiguousPolicy
+    , RouterPolicy
     , Agent
     }
