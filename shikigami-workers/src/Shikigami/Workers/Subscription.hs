@@ -25,6 +25,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
+import Shikigami.Workers.Config (persistAgentLoadReport)
 
 -- | Run the @activity.v1@ stream consumer; for each declared stream agent that
 -- matches an incoming envelope, log the match and enqueue a run job (the
@@ -40,20 +41,27 @@ runConsumeStream config = do
   let include = if Config.kafkaIncludeAgentActors config then IncludeAgentActors else ExcludeAgentActors
       broker = Config.kafkaBroker config
       topic = Config.kafkaActivityTopic config
-  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
-  agents <- enabledAgentsFromReport logger report
-  Log.logInfo
-    logger
-    "stream.consumer.started"
-    ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> do
-    queueResult <- ensureRunQueue (pool st)
+    let manifestDirectory = Config.agentsDirectory config
+        storePool = pool st
+    report <-
+      loadAgentsLoud
+        logger
+        manifestDirectory
+        (Config.agentsStrict config)
+        (persistAgentLoadReport logger storePool manifestDirectory)
+    agents <- enabledAgentsFromReport logger report
+    Log.logInfo
+      logger
+      "stream.consumer.started"
+      ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+    queueResult <- ensureRunQueue storePool
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue (pool st) (Config.kafkaDeadLetterQueue config)
+    deadLetterResult <- ensureDeadLetterQueue storePool (Config.kafkaDeadLetterQueue config)
     case deadLetterResult of
       Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
       Right () -> pure ()
@@ -74,7 +82,7 @@ runConsumeStream config = do
       logger
       (Config.httpHost config)
       (Config.healthPortFor StreamConsumerRole config)
-      (pool st)
+      storePool
       registry
       (subscribeActivityStream logger (consumerSupervisor registry) appEnv cfg include agents onHit)
 
@@ -89,20 +97,27 @@ runConsumeEvents config = do
   logger <- Log.newStderrLogger Log.Info
   let broker = Config.kafkaBroker config
       topic = Config.kafkaEventsTopic config
-  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
-  agents <- enabledAgentsFromReport logger report
-  Log.logInfo
-    logger
-    "events.consumer.started"
-    ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> do
-    queueResult <- ensureRunQueue (pool st)
+    let manifestDirectory = Config.agentsDirectory config
+        storePool = pool st
+    report <-
+      loadAgentsLoud
+        logger
+        manifestDirectory
+        (Config.agentsStrict config)
+        (persistAgentLoadReport logger storePool manifestDirectory)
+    agents <- enabledAgentsFromReport logger report
+    Log.logInfo
+      logger
+      "events.consumer.started"
+      ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+    queueResult <- ensureRunQueue storePool
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue (pool st) (Config.kafkaDeadLetterQueue config)
+    deadLetterResult <- ensureDeadLetterQueue storePool (Config.kafkaDeadLetterQueue config)
     case deadLetterResult of
       Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
       Right () -> pure ()
@@ -128,7 +143,7 @@ runConsumeEvents config = do
       logger
       (Config.httpHost config)
       (Config.healthPortFor EventConsumerRole config)
-      (pool st)
+      storePool
       registry
       (subscribeIntegrationEventStream logger (consumerSupervisor registry) appEnv cfg agents onHit)
 

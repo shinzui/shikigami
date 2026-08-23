@@ -21,6 +21,7 @@ module Shikigami.Workers.Config
     envHeartbeats,
     agentRunDeps,
     conversationEnv,
+    persistAgentLoadReport,
     schedulerSchedules,
     schedulerEnv,
   )
@@ -36,9 +37,11 @@ import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, Trigger (..))
+import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
+import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Health.Worker (Heartbeats)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -46,6 +49,23 @@ import Shikigami.Sink (DanwaConfig, GrantSource, KawaConfig, KizashiConfig, ReiC
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 import System.Exit (exitFailure)
+
+-- | Persist the one completed loader report before strict mode may refuse boot.
+--
+-- A failure is fatal and structured: continuing would recreate the invisible
+-- manifest failure that durable load state exists to eliminate.
+persistAgentLoadReport :: Log.Logger -> Pool -> FilePath -> AgentLoadReport -> IO ()
+persistAgentLoadReport logger pool directory report =
+  recordLoadStates pool directory report >>= \case
+    Right () -> pure ()
+    Left problem -> do
+      Log.logError
+        logger
+        "agents.manifest.persistence_failed"
+        [ "directory" Aeson..= directory,
+          "error" Aeson..= problem
+        ]
+      exitFailure
 
 -- | Everything the worker loops need.
 data WorkerEnv = WorkerEnv

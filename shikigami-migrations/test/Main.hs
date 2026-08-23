@@ -1,6 +1,8 @@
 module Main (main) where
 
+import Data.ByteString.Char8 qualified as ByteString
 import Data.List (isInfixOf, isPrefixOf)
+import Data.List.NonEmpty qualified as NonEmpty
 import Shikigami.Migrations
   ( embeddedMigrationEntries,
     shikigamiMigrationPlan,
@@ -43,6 +45,13 @@ compositionTests =
         assertBool
           "no SQL was embedded from sql-migrations/manifest"
           (not (null (foldr (:) [] embeddedMigrationEntries))),
+      testCase "the lifecycle evidence migration is appended with both tables" do
+        let filename = "2026-08-23-00-41-28-agent-load-state-and-run-skips.sql"
+        case lookup filename (NonEmpty.toList embeddedMigrationEntries) of
+          Nothing -> assertFailure (filename <> " is missing from the embedded manifest")
+          Just sql -> do
+            assertBool "agent_load_state DDL is missing" ("shikigami.agent_load_state" `ByteString.isInfixOf` sql)
+            assertBool "run_skips DDL is missing" ("shikigami.run_skips" `ByteString.isInfixOf` sql),
       testCase "the plan orders all four components by dependency" do
         plan <- either (fail . show) pure shikigamiMigrationPlan
         let rendered = show plan

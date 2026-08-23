@@ -29,7 +29,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import Shikigami.Workers.Config (schedulerSchedules)
+import Shikigami.Workers.Config (persistAgentLoadReport, schedulerSchedules)
 import System.Exit (exitFailure)
 
 -- | Arm every scheduled agent and drive keiro timer firing.
@@ -40,21 +40,28 @@ import System.Exit (exitFailure)
 runSchedulerCmd :: AppConfig -> IO ()
 runSchedulerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
-  agents <- enabledAgentsFromReport logger report
-  -- The same resolution the worker's timer loop uses, so both processes report a
-  -- bad cron the same way instead of one raising an ioError and the other
-  -- dropping the agent in silence.
-  scheduleMap <- schedulerSchedules logger (Config.agentsStrict config) agents
-  let schedules = Map.toList scheduleMap
-  Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
   StoreConnection.withStore settings \st -> do
+    let manifestDirectory = Config.agentsDirectory config
+        storePool = StoreConnection.pool st
+    report <-
+      loadAgentsLoud
+        logger
+        manifestDirectory
+        (Config.agentsStrict config)
+        (persistAgentLoadReport logger storePool manifestDirectory)
+    agents <- enabledAgentsFromReport logger report
+    -- The same resolution the worker's timer loop uses, so both processes
+    -- report a bad cron the same way instead of one raising an ioError and the
+    -- other dropping the agent in silence.
+    scheduleMap <- schedulerSchedules logger (Config.agentsStrict config) agents
+    let schedules = Map.toList scheduleMap
+    Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
     -- The other startup path that used to rely on the per-send createQueue
     -- inside enqueueRunJob. A timer that fires into a queue that does not exist
     -- is a run that never happens.
-    queueResult <- ensureRunQueue (StoreConnection.pool st)
+    queueResult <- ensureRunQueue storePool
     case queueResult of
       Left err -> do
         Log.logError logger "scheduler.queue.failed" ["error" Aeson..= Text.pack (show err)]
@@ -65,7 +72,7 @@ runSchedulerCmd config = do
     let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
         env =
           SchedulerEnv
-            { pool = StoreConnection.pool st,
+            { pool = storePool,
               schedules = scheduleMap,
               catchUpPolicy = Config.schedulerCatchUp config,
               logger
@@ -76,7 +83,7 @@ runSchedulerCmd config = do
       logger
       (Config.httpHost config)
       (Config.healthPortFor SchedulerRole config)
-      (StoreConnection.pool st)
+      storePool
       registry
       $ forever do
         now <- getCurrentTime

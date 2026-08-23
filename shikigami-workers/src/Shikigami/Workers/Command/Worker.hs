@@ -19,7 +19,7 @@ import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TimerLoop), new
 import Shikigami.Log qualified as Log
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Telemetry (withRunTracer)
-import Shikigami.Workers.Config (WorkerEnv (..), schedulerSchedules)
+import Shikigami.Workers.Config (WorkerEnv (..), persistAgentLoadReport, schedulerSchedules)
 import Shikigami.Workers.Registry (runWorkers)
 import System.Exit qualified as Exit
 
@@ -38,19 +38,26 @@ import System.Exit qualified as Exit
 runWorkerCmd :: AppConfig -> IO ()
 runWorkerCmd config = do
   logger <- Log.newStderrLogger Log.Info
-  report <- loadAgentsLoud logger (Config.agentsDirectory config) (Config.agentsStrict config)
-  agents <- enabledAgentsFromReport logger report
-  Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
-  refuseUndeployableAgents logger agents
-  -- Resolved here, at the composition root, so an unparseable cron is reported
-  -- (and under agents.strict refused) once at boot rather than dropped silently
-  -- on every pass of the timer loop.
-  schedules <- schedulerSchedules logger (Config.agentsStrict config) agents
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTracer \tr -> do
     behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
+      let manifestDirectory = Config.agentsDirectory config
+          storePool = StoreConnection.pool st
+      report <-
+        loadAgentsLoud
+          logger
+          manifestDirectory
+          (Config.agentsStrict config)
+          (persistAgentLoadReport logger storePool manifestDirectory)
+      agents <- enabledAgentsFromReport logger report
+      Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
+      refuseUndeployableAgents logger agents
+      -- Resolved here, at the composition root, so an unparseable cron is
+      -- reported (and under agents.strict refused) once at boot rather than
+      -- dropped silently on every pass of the timer loop.
+      schedules <- schedulerSchedules logger (Config.agentsStrict config) agents
       -- Registered before the loops start, so a loop that never gets going is a
       -- stale heartbeat rather than an absent one the probe would skip.
       --
@@ -61,7 +68,7 @@ runWorkerCmd config = do
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
           env =
             WorkerEnv
-              { pool = StoreConnection.pool st,
+              { pool = storePool,
                 appEnv,
                 agents,
                 behaviorEnv = behEnv,
@@ -91,14 +98,14 @@ runWorkerCmd config = do
                 -- The C11 gate reads shikigami.sink_grants over the same pool
                 -- the rest of the process uses, so a grant change is visible on
                 -- the next dispatch without a restart.
-                grants = DbGrants (StoreConnection.pool st),
+                grants = DbGrants storePool,
                 heartbeats = registry
               }
       serveProbesWith
         logger
         (Config.httpHost config)
         (Config.healthPortFor WorkerRole config)
-        (StoreConnection.pool st)
+        storePool
         registry
         (runWorkers env)
 

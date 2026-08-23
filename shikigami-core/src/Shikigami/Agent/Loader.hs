@@ -73,8 +73,8 @@ loadAgentsReport dir = do
 -- The logger is a parameter rather than a bare @stderr@ write because these are
 -- lines a long-running process emits, and plan 28's rule is that every one of
 -- those is a single JSON object an operator can filter with @jq@.
-loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> IO AgentLoadReport
-loadAgentsLoud logger dir strictMode = do
+loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> (AgentLoadReport -> IO ()) -> IO AgentLoadReport
+loadAgentsLoud logger dir strictMode afterReport = do
   report@AgentLoadReport {entries} <- loadAgentsReport dir
   traverse_ reportFailure entries
   let loadedCount = length [() | AgentLoaded {} <- entries]
@@ -88,6 +88,11 @@ loadAgentsLoud logger dir strictMode = do
   if failedCount > 0
     then Log.logError logger "agents.manifest.loaded" summary
     else Log.logInfo logger "agents.manifest.loaded" summary
+  -- Persistence and other whole-report effects belong here: after every entry
+  -- has been logged, but before strict mode can terminate the process. The
+  -- callback receives the same report callers later select from, so no second
+  -- directory traversal can observe a different set of files.
+  afterReport report
   when (strictMode && failedCount > 0) do
     Log.logError
       logger

@@ -5,7 +5,7 @@ import Data.Aeson (Value (Object), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -113,7 +113,7 @@ tests =
       -- @agents/detectors/schema.dhall@ is never opened.
       testCase "loadAgentsLoud reports the broken manifest through the logger" do
         (logger, captured) <- capturingLogger
-        report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" False
+        report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" False (const (pure ()))
         lines' <- readIORef captured
         assertBool
           ("expected agents.manifest.load_failed in " <> show lines')
@@ -132,10 +132,12 @@ tests =
       -- call site hard-coded False and the refusal was unreachable.
       testCase "strict mode refuses to start when a manifest fails" do
         (logger, captured) <- capturingLogger
-        outcome <- try @ExitCode (loadAgentsLoud logger "../agents" True)
+        persisted <- newIORef False
+        outcome <- try @ExitCode (loadAgentsLoud logger "../agents" True (const (writeIORef persisted True)))
         case outcome of
           Left code -> code @?= ExitFailure 1
           Right _ -> assertFailure "strict mode must refuse to start when a manifest fails"
+        readIORef persisted >>= (@?= True)
         lines' <- readIORef captured
         assertBool
           ("the failures are reported before the refusal: " <> show lines')
@@ -145,7 +147,7 @@ tests =
           (any (ByteString.Char8.isInfixOf "\"event\":\"agents.manifest.strict_refused\"") lines'),
       testCase "strict mode starts when every manifest loads" do
         (logger, _captured) <- capturingLogger
-        AgentLoadReport {entries} <- loadAgentsLoud logger "../agents/proof" True
+        AgentLoadReport {entries} <- loadAgentsLoud logger "../agents/proof" True (const (pure ()))
         assertBool "the proof directory has no failing manifest" (not (any isFailure entries))
     ]
 

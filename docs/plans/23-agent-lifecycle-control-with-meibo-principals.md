@@ -64,9 +64,12 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   last-known-valid refresh, operator documentation, and focused tests. Evidence:
   `nix develop -c cabal build lib:shikigami-core test:shikigami-core-test`, 12 principal
   directory tests, and 49 configuration/provider tests passed.
-- [ ] Milestone 2: add the pg-migrate change for `shikigami.agent_load_state` and
-  `shikigami.run_skips`; implement transactional persistence and persist load reports before
-  strict-mode refusal.
+- [x] (2026-08-23T00:49:00Z) Milestone 2: appended the pg-migrate change for
+  `shikigami.agent_load_state` and `shikigami.run_skips`, implemented complete-view and
+  idempotent skip persistence, added the loader's before-refusal hook, and wired that hook
+  through the combined worker, standalone scheduler, and both consumers. Evidence: four pure
+  migration tests, two real-Postgres migration smoke tests, three real-Postgres directory
+  store tests, and all 11 loader tests passed; the core and workers libraries build.
 - [ ] Milestone 3: enforce lifecycle at schedule, Kafka trigger, and run-job drain boundaries;
   supervise refresh loops in every configured worker role; prove transactional skip auditing.
 - [ ] Milestone 4: enforce lifecycle at sink enqueue and publish boundaries, carry the
@@ -111,6 +114,11 @@ checks, cost/model capture, and the plan-54 durable identity migration remain ou
   `Shikigami.Agent.Workflow` and `Shikigami.Flow.SinkOutbox`; plan 27 has not consolidated it.
   Both copies must carry the optional principal id and retain byte-identical codecs, as
   enforced by `Shikigami.WireCompatSpec`. (2026-08-22)
+
+- The mounted pg-migrate `new` command no longer accepts the positional spelling retained in
+  the earlier concrete transcript. It requires `--manifest` and `--description`, and this
+  timestamp-style manifest also needs an explicit `--name`; the implementation used the
+  mounted CLI's help and authoring contract. (2026-08-22)
 
 
 ## Decision Log
@@ -196,7 +204,11 @@ Milestone 1 established the reusable enforcement seam without adding a Meibo pac
 configured processes require one valid file snapshot, later malformed candidates cannot
 replace it, and disabled mode remains visibly distinct from an unavailable source. The Settei
 schema and operator guide now expose the conditional file path and bounded refresh interval.
-Milestones 2–5 remain.
+
+Milestone 2 made the loader report and lifecycle refusals durable. One transaction replaces
+the complete observed state for a manifest directory, strict startup persists before refusal,
+and `(stage, idempotency_key)` makes retried trigger/drain evidence safe. Milestones 3–5
+remain.
 
 
 ## Context and Orientation
@@ -433,9 +445,12 @@ nix develop -c just keiro-gate
 Create the migration through the owning CLI:
 
 ```bash
-nix develop -c cabal run shikigami-migrate -- new agent-load-state-and-run-skips
-# Edit the generated SQL and append its basename to
-# shikigami-migrations/sql-migrations/manifest.
+DATABASE_URL=postgresql:///unused nix develop -c cabal run shikigami-migrate -- \
+  new \
+  --manifest shikigami-migrations/sql-migrations/manifest \
+  --name 2026-08-23-00-41-28-agent-load-state-and-run-skips \
+  --description 'Persist agent load state and lifecycle admission skips'
+# Edit only the generated SQL; the authoring command appends its basename to the manifest.
 nix develop -c cabal test shikigami-migrations
 nix develop -c cabal test shikigami-migrations:shikigami-migrations-smoke
 ```

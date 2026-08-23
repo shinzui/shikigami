@@ -57,6 +57,7 @@ library
     Shikigami.Behavior.StubProvider
     Shikigami.Core
     Shikigami.Directory
+    Shikigami.Directory.Store
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
@@ -181,6 +182,7 @@ test-suite shikigami-core-test
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectorySpec
+    Shikigami.DirectoryStoreSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.Fixture.KawaStub
     Shikigami.FlowLifecycleSpec
@@ -212,6 +214,7 @@ test-suite shikigami-core-test
     , handan-core
     , hasql
     , hasql-pool
+    , hasql-transaction
     , http-types
     , keiki
     , keiro
