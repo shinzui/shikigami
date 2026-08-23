@@ -79,6 +79,11 @@ implementation. Provide concise evidence.
 - The completed behavior milestone passes all 431 core tests. Its bracketed end-to-end case
   records two traced model turns, carries the namespaced tool result into the second context,
   returns the unchanged `{"reply": ...}` shape, and releases the provider afterward.
+- Repository-wide Cabal validation passes all 594 tests. The flake's treefmt and pre-commit
+  checks also pass. The full `nix flake check` still reaches the pre-existing default-package
+  failure: `nix/haskell.nix` points `callCabal2nix` at the multi-package repository root,
+  which has no root `.cabal` or `package.yaml`. The same definition is present on
+  `origin/master`, is owned by Plan 31, and was not changed by this plan.
 
 
 ## Decision Log
@@ -140,7 +145,24 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-08-22. A resolved capability set now crosses exactly one live boundary:
+exact-revision providers return run-scoped leases, collision-safe composition produces an
+immutable derived tool registry, and masked cleanup releases every acquired lease in LIFO
+order on success, refusal, exception, or cancellation. The base registry never changes.
+
+`BehaviorEnv` now defaults to no tools and no active overlays. Its declaration guard refuses
+missing, extra, and duplicate ids before behavior dispatch. Tool-enabled Skills advertise the
+derived registry, dispatch typed Shikumi tools through Baikai's public result protocol, trace
+every model turn, and stop after eight model turns by default. Empty registries keep the
+original one-completion request and `{"reply": ...}` response shape.
+
+Validation covered normal and partial acquisition, exact descriptor selection, collision
+refusal, callback exception and timeout cleanup, continued cleanup after release failure,
+concurrent isolation, empty-path compatibility, unknown tool recovery, infrastructure error
+classification, bounded looping, tracing, and end-to-end release after the final response.
+All 431 core tests and all 594 repository tests pass. The flake's directly addressable
+treefmt/pre-commit checks pass; the unrelated root-package output remains broken as described
+under Surprises & Discoveries.
 
 
 ## Context and Orientation

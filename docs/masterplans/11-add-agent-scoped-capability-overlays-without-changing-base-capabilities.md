@@ -90,7 +90,7 @@ from `mori://shinzui/baikai/packages/baikai` and
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Declare agent capability overlay requirements and the operator catalog | `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md` | None | None | Complete |
-| EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | In Progress |
+| EP-2 | Acquire and release overlay leases around one behavior run | `docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md` | EP-1 | None | Complete |
 | EP-3 | Resolve and pin capability overlays in durable agent runs | `docs/plans/58-resolve-and-pin-capability-overlays-in-durable-agent-runs.md` | EP-1, EP-2 | None | Not Started |
 | EP-4 | Adopt capability overlays in the portable one-off repository harness | `docs/plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md` | EP-1, EP-2 | EP-3 | Not Started |
 
@@ -172,8 +172,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
       fixtures.
 - [x] (2026-08-22) EP-1: Added pure catalog resolution, authorization, descriptor pinning,
       and validation.
-- [ ] EP-2: Add provider/lease acquisition with partial rollback and collision rejection.
-- [ ] EP-2: Run `Skill` behaviors through one bounded tool loop while preserving the empty path.
+- [x] (2026-08-22) EP-2: Add provider/lease acquisition with partial rollback and collision
+      rejection.
+- [x] (2026-08-22) EP-2: Run `Skill` behaviors through one bounded tool loop while preserving
+      the empty path.
 - [ ] EP-3: Declare, scaffold, and runtime-gate the durable resolution step.
 - [ ] EP-3: Prove fresh-run pinning, old-run compatibility, exact-version retries, and cleanup.
 - [ ] EP-4: Supply a confined read-only workspace provider in `shikigami-agent`.
@@ -199,6 +201,10 @@ interactions between child plans. Provide concise evidence.
   `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` both assign ownership of
   the future registry and loop to the MCP plan. The generic ownership must move to EP-2 to
   avoid making every non-MCP overlay depend on MCP.
+- Released `Shikumi.Tool.Tool` is existentially wrapped but does not derive `Generic`, so
+  namespacing must reconstruct its constructor rather than use the repository's normal lens
+  update. The operation preserves its dictionaries, description, and rank-2 body and changes
+  only the wire name.
 
 
 ## Decision Log
@@ -261,6 +267,18 @@ formatting and pre-commit checks pass; its old default-package output still fail
 points `cabal2nix` at a multi-package root with no root `.cabal` file, a packaging concern
 already owned by Plan 31 and unchanged by EP-1.
 
-EP-2 (Plan 57) is now the next unblocked child. It can implement provider leases, reverse-order
-release, collision-free tool composition, and the bounded `Skill` tool loop against EP-1's
-completed public contract. The MasterPlan remains active until EP-2 through EP-4 complete.
+EP-2 completed on 2026-08-22 in commits `83f1adb`, `b5e29e9`, and `7d66944`. Exact-revision
+providers now return run-scoped leases; acquisition is deterministic and masked; partial and
+exceptional exits release in LIFO order; collision-safe namespacing produces one immutable
+derived registry; and every existing `BehaviorEnv` constructor defaults to empty overlay
+state. Tool-enabled Skills use a traced eight-turn model/tool loop, while empty registries
+retain the original single-completion path. A permanent pre-dispatch guard requires requested
+overlay ids to be unique and exactly equal the environment's active ids.
+
+All 594 repository tests pass, including 431 core tests. Direct flake treefmt and pre-commit
+checks pass. The unchanged default-package output still fails because the seihou-managed
+`callCabal2nix` target points at a multi-package root with no root Cabal file; that existing
+Plan 31 packaging issue does not affect the Cabal test matrix. ADR 0025 now records the final
+lease, registry, guard, loop, and cleanup boundaries.
+
+EP-3 and EP-4 are now unblocked. The MasterPlan remains active until both complete.
