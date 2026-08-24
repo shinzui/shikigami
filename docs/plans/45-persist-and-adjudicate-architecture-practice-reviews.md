@@ -16,17 +16,21 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Every specialist verdict becomes an immutable provisional Kioku memory, and every authorized
-human resolution becomes a second immutable memory that supersedes the provisional result.
-Accepted and narrowed resolutions guide later reviews only inside their applicability;
-rejected findings remain auditable and suppress repetition of the same unsupported claim;
-new target/reference revisions create new findings that supersede the prior active conclusion
-without deleting history.
+Every validated specialist verdict becomes one immutable provisional Kioku memory identified by
+the review's stable `ReviewId`. An explicit resolution becomes a second immutable memory containing
+both the original verdict and the validated resolution, then retires the provisional memory with
+Kioku's separate supersession command. Accepted and narrowed resolutions guide later reviews only
+inside their applicability. Rejected findings remain auditable and suppress repetition of the same
+unsupported claim. A review of materially newer target or reference evidence can retire the prior
+active conclusion without deleting any row.
 
-The proof records a provisional finding, replays the workflow without duplication, applies
-accepted/rejected/narrowed/superseded resolutions, and queries the resulting active view and
-full supersession chain. It also proves that a Kizashi acknowledgement cannot call the
-resolution function and that competing resolutions produce a visible conflict.
+After this change, a Flow can use one review-specific capability to record, resolve, recall, and
+inspect a review chain without receiving raw IO, a Kioku environment, or generic store access. The
+observable proof uses migrated PostgreSQL: replaying the same provisional or resolution operation
+does not duplicate a row; accepted, rejected, narrowed, and superseded outcomes produce the right
+active view; an out-of-scope rule is excluded; malformed content becomes a diagnostic; the complete
+chain remains readable; and competing resolutions converge on one active winner while returning a
+typed conflict to the loser.
 
 
 ## Progress
@@ -35,14 +39,26 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: `docs/plans/43-define-architecture-practice-review-contracts.md` and `docs/plans/25-replay-safe-flow-memory-capabilities.md` have landed.
-- [ ] M1: define versioned provisional/resolution memory envelopes, deterministic labels, options, and tags.
-- [ ] M1: record one provisional memory idempotently from a validated verdict.
-- [ ] M2: apply accepted/rejected/narrowed/superseded resolutions with Kioku supersession.
-- [ ] M2: supersede prior active conclusions when material revisions create a new review.
-- [ ] M3: recall and decode only applicable active outcomes while retaining rejected/audit context.
-- [ ] M3: add real-Postgres replay, scope, chain, and concurrent-resolution tests.
-- [ ] Final: no Kioku schema change; `cabal test all` passes.
+- [x] (2026-08-24T13:32:21Z) Prerequisites landed: plans 25, 43, and 47 are complete, and the
+      workspace selects released `kioku-api`/`kioku-core` 0.5.0.0.
+- [x] (2026-08-24T13:32:21Z) Refresh the July plan against the landed Flow capability, checked
+      workflow rules, practice-review contracts, ADR corpus, and Kioku 0.5.0.0 source and release
+      tag. The refreshed design is recorded in the 2026-08-24 Revision Note.
+- [ ] M1: define and round-trip version-1 provisional/resolved envelopes, logical Kioku IDs,
+      review scope, deterministic tags, recall context, applicability, diagnostics, and chain
+      entries.
+- [ ] M1: record one provisional memory idempotently from a validated verdict, including optional
+      retirement of the previous active conclusion.
+- [ ] M2: add the replay-safe `PracticeReviewMemory` Flow capability and declare its four static
+      step labels behind `shikigami-practice-review-memory-v1`.
+- [ ] M2: apply accepted/rejected/narrowed/superseded resolutions with a separate Kioku retirement,
+      clean up a losing concurrent candidate, and return a typed conflict.
+- [ ] M3: recall only applicable active outcomes into guiding, do-not-repeat, pending, and retired
+      collections while retaining malformed-content diagnostics and the full audit chain.
+- [ ] M3: add real-Postgres replay, metadata, scope, chain, revision-supersession, malformed-content,
+      acknowledgement-boundary, and concurrent-resolution tests.
+- [ ] Final: run the Keiro gate and focused/full test suites; add no Kioku schema or migration;
+      distill durable architectural context into `docs/adr/`.
 
 
 ## Surprises & Discoveries
@@ -50,11 +66,25 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-- Kioku already records content, confidence, type, tags, session, and `supersedes`, and its
-  `record` operation is idempotent by memory id while rejecting a conflicting payload. The
-  first slice can therefore remain a Shikigami-owned typed content convention.
-- Plan 25's planned `rememberWith` is the critical Flow seam. The current interpreter uses a
-  random id and raw IO, so this plan must not ship on the pre-plan-25 implementation.
+- Kioku 0.5.0.0 already records content, confidence, type, tags, session, and lineage, and its
+  `recordWithContext` operation accepts the same semantic payload under one memory id while
+  rejecting a changed payload. A Shikigami-owned versioned content convention therefore still
+  needs no Kioku schema change. Evidence: Hackage lists 0.5.0.0 as normal, upstream tag
+  `v0.5.0.0` resolves to commit `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad`, and the workspace
+  pins both Kioku packages to 0.5.0.0.
+- Landed plan 25 deliberately makes `RememberOptions.supersedes` lineage-only. It does not retire
+  the target; Kioku requires a distinct `supersedeWithContext` command. The July plan's claim that
+  `rememberWith` alone creates one active conclusion was therefore false.
+- `deterministicFlowMemoryId` is keyed by workflow name, workflow id, generation, and static step
+  label. It makes one workflow replay-safe but cannot make two different resolution workflows
+  converge on a review-level identity. Review memories need their own UUIDv5-derived Kioku IDs
+  from `ReviewId` and `ResolutionId`.
+- A resolution needs the original verdict as well as `PracticeReviewResolution`. The resolution
+  contract alone carries outcome and applicability but not the evidence and claims later reviews
+  must reuse or avoid repeating. The resolved envelope therefore stores both validated values.
+- The landed contract has no expiry field. Applicability can be bounded by project, path,
+  dependency, and practice; re-review is driven by explicit revision lineage and
+  `ReReviewCondition`, not by an invented clock-based expiry rule.
 
 
 ## Decision Log
@@ -73,10 +103,40 @@ Record every decision made while working on the plan.
   Date: 2026-07-25
 
 - Decision: Treat the first successful resolution superseding a provisional memory as the
-  winner and return a conflict for a different concurrent resolution.
-  Rationale: Silently accepting two active truths would make recall nondeterministic; Kioku's
-  idempotent/conflict semantics provide a clear boundary.
+  winner, retire a losing resolution candidate under that winner, and return a typed conflict
+  containing the winner id.
+  Rationale: Kioku arbitrates the provisional aggregate atomically, but recording the candidate
+  and retiring the provisional are two aggregate commands. Cleaning up the loser before returning
+  prevents it from remaining an active rule after the race while preserving its audit row.
   Date: 2026-07-25
+
+- Decision: Replace the July draft's generic-`Memory` helpers with a review-specific
+  `PracticeReviewMemory` Flow capability whose interpreter owns the multi-command Kioku transition.
+  Rationale: generic `rememberWith` performs one record command, deliberately cannot retire another
+  aggregate, and derives workflow-scoped ids. The review transition requires logical ids, a
+  record-plus-retire protocol, typed conflict cleanup, exact scope reads, and chain reads. Keeping
+  those operations behind one narrow capability preserves the no-IO Flow boundary from
+  [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md).
+  Date: 2026-08-24
+
+- Decision: Derive provisional memory ids from `ReviewId` and resolved memory ids from
+  `ResolutionId` under a frozen Shikigami UUIDv5 namespace.
+  Rationale: retries and separate workflow instances representing the same logical command must
+  target the same Kioku aggregate. Static Keiro labels remain operation names, not data identities.
+  Date: 2026-08-24
+
+- Decision: Store both the validated verdict and validated resolution in a resolved envelope.
+  Rationale: later review guidance and rejection suppression need the evidence and claim graph from
+  the verdict, while the resolution supplies the human outcome and narrowed applicability.
+  Date: 2026-08-24
+
+- Decision: Journal four fixed capability operations behind a new declared patch:
+  `practice-review-remember-provisional`, `practice-review-resolve`, `practice-review-recall`, and
+  `practice-review-chain`.
+  Rationale: static names obey the checked workflow vocabulary and remain stable as review data
+  changes. [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) requires the
+  entire declared body addition inside a new patch with a real runtime branch.
+  Date: 2026-08-24
 
 
 ## Outcomes & Retrospective
@@ -89,61 +149,165 @@ Compare the result against the original purpose.
 
 ## Context and Orientation
 
-The current memory effect lives in
-`shikigami-core/src/Shikigami/Flow/Capability.hs`. Plan 25 changes it to labeled Keiro steps
-and adds `RememberOptions` with priority, confidence, memory type, tags, and `supersedes`.
-It derives deterministic memory ids from workflow identity and the label. This plan builds
-domain helpers on that capability; it does not call `Kioku.Memory.record` directly from a Flow.
+The pure review contract is `shikigami-core/src/Shikigami/PracticeReview.hs`. Plan 43 has landed:
+it defines `ReviewId`, `ResolutionId`, `Applicability`, `PracticeReviewVerdict`,
+`PracticeReviewResolution`, and opaque validated wrappers. A verdict contains pinned evidence,
+claims, classification, confidence, re-review condition, and applicability. A resolution contains
+the human outcome, resolver, reason, time, optional narrowed applicability, and optional
+superseding review. The new persistence module belongs beside it at
+`shikigami-core/src/Shikigami/PracticeReview/Memory.hs`; no `shikigami-domain` package exists in the
+current seven-package workspace.
 
-Mori located Kioku at `/Users/shinzui/Keikaku/bokuno/kioku`. Its
-`kioku-core/src/Kioku/Memory.hs` exposes idempotent `record`, `supersede`, active queries, and
-supersession-chain queries. `RecordMemoryData` in
-`kioku-core/src/Kioku/Memory/Domain.hs` already has all requested metadata. A memory with a
-`supersedes` link retires the older active conclusion according to the plan-25 integration
-contract.
+The existing generic Flow memory effect is
+`shikigami-core/src/Shikigami/Flow/Capability.hs`. It journals `recall` and `rememberWith`, derives a
+memory id from workflow identity and a static label, and writes exactly one Kioku aggregate.
+[ADR 0015](../adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md)
+requires the interpreter to preserve Kioku's domain answer rather than conflating a refusal with a
+store failure. Its documentation also states that `RememberOptions.supersedes` records lineage
+only. Do not weaken or reinterpret that generic effect. This plan adds a separate capability whose
+interpreter can perform the review-specific record/retire protocol while Flow code remains unable
+to call IO or Kioku directly, as required by
+[ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md).
 
-"Active" means the latest memory eligible to guide a review, not the only audit row. A
-superseded/rejected row remains queryable in the chain. "Applicable" means the current
-practice, target repo/path, dependency range, and optional expiry satisfy the resolution's
-explicit scope.
+`shikigami-core/src/Shikigami/Flow.hs` defines `FlowEffects`, the complete effect row available to a
+registered Flow. `shikigami-core/src/Shikigami/Agent/Workflow.hs:runFlowBehavior` installs every
+interpreter around a Flow body. Adding `PracticeReviewMemory` to that row and interpreter chain is
+a durable workflow-body change governed by `docs/workflow-versioning.md` and
+[ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md). Add the four fixed
+step labels inside a new `shikigami-practice-review-memory-v1` patch block in
+`domain/shikigami-agent-run.keiro`, regenerate the AgentRun artifacts, update the hand-owned Keiro
+conformance expectation, and run `just keiro-gate`. The interpreter reads the patch once. Fresh
+instances journal each operation; a pre-patch instance takes a real unjournaled compatibility
+branch. No current Flow calls the new capability, but the branch and declaration must still agree.
+
+Mori identifies the dependency as `mori://shinzui/kioku`; `mori registry show shinzui/kioku --full`
+locates its source at `/Users/shinzui/Keikaku/bokuno/kioku`. The workspace selects released
+`kioku-api` and `kioku-core` 0.5.0.0. The authoritative Hackage preferred-version document and
+upstream `v0.5.0.0` tag agree. At that tag, `Kioku.Memory.recordWithContext` is idempotent by memory
+id and rejects semantic drift, `supersedeWithContext` retires one active row under a winner and
+rejects a different later winner, `getActiveRowsByScope` returns exact active rows, and
+`getSupersessionChain` walks both lineage directions. `Kioku.Memory.Domain.RecordMemoryData` already
+holds session, scope, type, content, priority, confidence, tags, and lineage. Use
+`Shikigami.Memory.Access.shikigamiWriteContext` for both record and forget permissions; do not add a
+new deprecated unsuffixed Kioku call.
+
+Review memories use a shared entity scope in the existing `shikigami` namespace, keyed by normalized
+practice, rather than an agent-private scope. This lets later specialist runs for the same practice
+see the same adjudication even when agent declarations evolve. Tags duplicate bounded lookup and
+audit identities: version, state, practice, review, optional resolution, classification/outcome,
+target repository, path, and dependency. Tags are not the authority for decoding; the versioned
+content envelope is.
+
+"Active" means Kioku has not retired the row. "Guiding" is narrower: an active accepted or narrowed
+resolved envelope whose applicability matches the current review context. "Do not repeat" is an
+active rejected resolution matching the original verdict's applicability; it is audit evidence
+against repeating the same unsupported claim, not a positive rule. "Pending" is an applicable
+active provisional verdict. "Retired outcome" is an active `superseded` resolution fact, which is
+kept separate from guidance and rejection. "Applicable" means every non-empty dimension in
+`Applicability` matches: repository identity exactly, practice key exactly, dependency token after
+trim/case-fold normalization, and path by normalized segment-boundary prefix. An empty dimension is
+a wildcard. The contract has no expiry field, so no time comparison belongs here.
+
+[ADR 0008](../adr/0008-repository-provenance-is-shared-domain-vocabulary.md) owns repository identity
+and normalized path semantics; use `RepositoryId` and `RelativePath` rather than local text
+lookalikes. `docs/adr/` is an ordinary filesystem ADR corpus, not a profiled OKF bundle according to
+`mori show --full`, so any durable decision distilled at completion follows the existing numbered
+Markdown convention.
 
 
 ## Plan of Work
 
-Milestone 1 creates `Shikigami.PracticeReview.Memory` in the plan-36 core package. Define a
-versioned `PracticeReviewMemory` sum with `ProvisionalReview` and `ResolvedReview` envelopes
-containing the complete values validated by
-`docs/plans/43-define-architecture-practice-review-contracts.md`. Encode with canonical JSON text and reject
-unknown versions on decode. Build stable labels from review id and resolution id. Build tags
-for `practice:<key>`, `project:<repoId>`, `review:<id>`, `state:provisional|resolved`,
-classification/outcome, and normalized applicability keys. `rememberProvisional` calls
-plan 25's `rememberWith` with the verdict-derived confidence, `MemoryPattern`, session
-linkage, and optional prior active memory in `supersedes`.
+### Milestone 1 — freeze the review-memory wire and pure behavior
 
-Milestone 2 implements `resolveReview`. Require a resolution command validated by
-`docs/plans/43-define-architecture-practice-review-contracts.md` carrying
-an authorized resolver principal and stable resolution id. Derive the provisional memory id
-from the original review label, then call `rememberWith` for the resolution with
-`supersedes = Just provisionalMemoryId`. Accepted/narrowed records become high-confidence
-`MemoryConstraint`; rejected/superseded records become high-confidence `MemoryFact` and
-carry the negative/new-lineage explanation. A new material-revision verdict may supersede the
-previous active resolved memory supplied by recall. Do not mutate tags/content on older rows.
-Return a typed conflict when an existing deterministic id has different content or another
-resolution already won.
+Create `shikigami-core/src/Shikigami/PracticeReview/Memory.hs`. Define a version-1 envelope sum with
+`ProvisionalReview` containing one `ValidatedPracticeReviewVerdict` and `ResolvedReview` containing
+both that verdict and one `ValidatedPracticeReviewResolution`. Encode compact deterministic JSON
+text with an explicit envelope version and kind; the decoder must validate the nested contract
+values again and reject an unknown envelope version or kind. The constructor surface must not let a
+decoded invalid verdict or resolution enter a recalled result.
 
-Milestone 3 implements `recallPracticeReviews` through plan 25's labeled `recall`. Use a
-bounded query containing practice and target identities, decode only recognized typed
-content, and sort/filter deterministically. Accepted/narrowed results guide only when
-`appliesTo` succeeds. Rejected results are returned in a separate `doNotRepeat` collection
-and never treated as a rule. Provisional unresolved results are audit/pending context, not
-accepted knowledge. Add real-Postgres tests using the repository migration support: replay
-same provisional/resolution, accept, reject, narrow scope, new revision supersession, full
-chain retention, outside-scope exclusion, expired re-review condition, malformed legacy
-memory ignored with diagnostic, and concurrent conflicting resolutions.
-Place the integration cases in
-`shikigami-core/test/Shikigami/PracticeReviewMemorySpec.hs` (or the exact plan-36 core
-integration test package), use `withShikigamiMigratedDatabase`, and register the module in
-the test component.
+Freeze two UUIDv5 identity functions: `provisionalMemoryId :: ReviewId -> MemoryId` and
+`resolvedMemoryId :: ResolutionId -> MemoryId`. Use a module-local namespace derived from
+`mori://shinzui/shikigami/contracts/practice-review-memory/v1`, length-prefix identity parts, and
+`KindID.decorateKindID`, matching the established ReviewId and Flow-memory precedents. Add pinned
+test vectors so a refactor cannot silently orphan persisted memory.
+
+Define `ReviewRecallContext`, `AdjudicatedPracticeReview`, `RecalledPracticeReviews`,
+`ReviewMemoryDiagnostic`, `PracticeReviewChainEntry`, `PracticeReviewChain`, and
+`ReviewMemoryError`. Implement pure confidence mapping, tags, review scope, envelope codecs, and
+`appliesTo`. Map verdict confidence 80–100 to Kioku high, 50–79 to medium, and 0–49 to low.
+Provisional rows are `MemoryPattern`. Accepted and narrowed rows are high-confidence
+`MemoryConstraint`; rejected and superseded rows are high-confidence `MemoryFact`. Pure tests prove
+unknown-version rejection, id vectors, tag determinism, path boundary behavior (`src/Foo` matches
+`src/Foo/Bar.hs` but not `src/Foobar.hs`), wildcard dimensions, and project/practice/dependency
+exclusion.
+
+At the end of this milestone, the wire and pure state classification exist and are independently
+testable, but no Flow has acquired a new external capability yet. Run the focused pure tests and
+record their result in Progress.
+
+### Milestone 2 — make record and adjudication replay-safe
+
+Define the dynamic `PracticeReviewMemory` effect and a `PracticeReviewMemoryEnv` holding Kioku's
+`AppEnv`, the current `AgentDecl`, and optional `SessionId`. Expose four operations with no
+caller-supplied labels: `rememberProvisional`, `resolveReview`, `recallPracticeReviews`, and
+`recallPracticeReviewChain`. Its interpreter reads patch
+`shikigami-practice-review-memory-v1` once, journals the operations under the four fixed names for a
+fresh instance, and performs the same idempotent action directly in the legacy branch. Add the
+effect to `FlowEffects` and install the interpreter in both production
+`Shikigami.Agent.Workflow.runFlowBehavior` and the Flow test harness.
+
+Declare those fixed names in a new patch block in `domain/shikigami-agent-run.keiro`. Run
+`just keiro-scaffold`, update
+`shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`,
+and add a deploy-simulation case to `Shikigami.WorkflowVersioningSpec`: an old-shape instance takes
+the real direct branch, a fresh instance journals the new step, and the generated patch set contains
+the id. Update `docs/workflow-versioning.md`'s inventory.
+
+`rememberProvisional` records a deterministic provisional row with the current session, shared
+practice scope, verdict-derived confidence, `MemoryPattern`, envelope text, tags, and optional
+`supersedes = priorActiveMemoryId`. With no prior id, one `recordWithContext` completes the
+operation. With a prior id, record the candidate, then call `supersedeWithContext prior candidate`.
+If another new review already won, retire this candidate under the recorded winner before returning
+a typed conflict. Identical replay succeeds; changed content under the same ReviewId is a conflict.
+
+`resolveReview` loads and decodes the provisional row named by its `MemoryId`, verifies that its
+verdict ReviewId equals the resolution ReviewId, constructs the resolved envelope, records the
+deterministic resolution candidate, and separately retires the provisional under that candidate.
+If a different resolution already retired the provisional, re-read its `supersededBy`, retire the
+losing candidate under that winner, and return `ResolutionConflict winner`. Infrastructure failures
+remain exceptions from the interpreter; missing/malformed/mismatched memories and Kioku domain
+refusals become `ReviewMemoryError`. The caller of this capability must already have authenticated
+and authorized the resolution event; plan 46 owns that process boundary. A Kizashi acknowledgement
+cannot inhabit `ValidatedPracticeReviewResolution`, and a JSON boundary test proves it fails before
+the capability runs.
+
+At the end of this milestone, replay and concurrency converge without mutating old content or tags.
+Run the focused PostgreSQL transition tests and `just keiro-gate <merge-base>`.
+
+### Milestone 3 — expose the active view and immutable audit chain
+
+`recallPracticeReviews` reads active rows by the exact shared practice scope, then performs bounded
+project/path/dependency/practice filtering in Shikigami. Decode only version-1 envelopes. Sort every
+result by logical review id and memory id so database ordering cannot change a journal result.
+Accepted/narrowed resolved envelopes enter `guiding` only when their resulting applicability
+matches. Rejected envelopes enter `doNotRepeat` only when the original verdict applicability
+matches. Applicable provisional envelopes enter `pending`. Superseded resolution facts enter
+`retired`. A malformed, unknown-version, wrong-scope, or contract-invalid row never guides; it
+produces a diagnostic with memory id and stable code.
+
+`recallPracticeReviewChain` derives the provisional id from `ReviewId`, calls Kioku's full-chain
+read, and returns every row in creation/id order with status, linkage ids, decoded envelope when
+recognized, and diagnostic when not. It includes inactive rows. This is the operator/audit view and
+is separate from active recall.
+
+Add `shikigami-core/test/Shikigami/PracticeReviewMemorySpec.hs`, register it in
+`shikigami-core/test/Main.hs` and the Cabal test component, and use
+`withShikigamiMigratedDatabase`. Cover provisional replay, metadata, all four resolution outcomes,
+resolution replay, rejection separation, narrowed path inclusion/exclusion, new-review retirement,
+full-chain retention, malformed content, changed-payload conflict, and two concurrently executed
+different resolutions. The race must finish with one active resolution, one retired loser, one
+retired provisional, and one typed conflict naming the winner. No migration file is added.
 
 
 ## Concrete Steps
@@ -152,92 +316,195 @@ Run from `/Users/shinzui/Keikaku/bokuno/shikigami`.
 
 ```bash
 mori registry show shinzui/kioku --full
-sed -n '230,390p' docs/plans/25-replay-safe-flow-memory-capabilities.md
-sed -n '1,220p' /Users/shinzui/Keikaku/bokuno/kioku/kioku-core/src/Kioku/Memory/Domain.hs
+mori registry docs shinzui/kioku
+git -C /Users/shinzui/Keikaku/bokuno/kioku show v0.5.0.0:kioku-core/src/Kioku/Memory.hs
+git -C /Users/shinzui/Keikaku/bokuno/kioku show v0.5.0.0:kioku-core/src/Kioku/Memory/Domain.hs
+git -C /Users/shinzui/Keikaku/bokuno/kioku show v0.5.0.0:kioku-core/src/Kioku/Memory/ReadModel.hs
+sed -n '1,260p' docs/workflow-versioning.md
+sed -n '1,220p' docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md
+sed -n '1,220p' docs/adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md
+sed -n '1,180p' docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md
 ```
 
-After plan 25 has landed, verify its exact signatures, then format and test:
+Implement the pure module and focused tests first. Then add the capability, declaration, generated
+artifacts, and integration tests. Format only hand-owned Haskell; generated modules are not
+formatted.
 
 ```bash
-rg -n 'rememberWith|RememberOptions|deterministicFlowMemoryId' shikigami-core/src
 nix develop -c fourmolu -i shikigami-core/src/Shikigami/PracticeReview/Memory.hs
-nix develop -c cabal test shikigami-core-test --test-options='-p "practice review memory"' --test-show-details=direct
+nix develop -c fourmolu -i shikigami-core/test/Shikigami/PracticeReviewMemorySpec.hs
+nix develop -c fourmolu -i shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs
+just keiro-scaffold
+nix develop -c cabal test shikigami-core-test --test-options='-p "PracticeReviewMemory"' --test-show-details=direct
+just keiro-gate HEAD^
 nix develop -c cabal test all --test-show-details=direct
 ```
 
-The focused transcript must show one provisional row after replay, one active resolution,
-the provisional row marked superseded, and a chain containing both ids.
+If milestone commits mean `HEAD^` is not the revision before the workflow declaration changed, pass
+that actual merge-base to `just keiro-gate`. The focused transcript must show one provisional row
+after replay; one active resolution after resolution replay; the provisional row marked
+`superseded`; a chain containing both logical ids; and, in the race, exactly one active winner plus
+one retired loser and one typed conflict.
 
 
 ## Validation and Acceptance
 
-Record a reference-suspect verdict twice under the same workflow/label. Kioku must contain one
-provisional memory with matching content, session, confidence, tags, and review id. Apply an
-accepted resolution twice: both calls return the same memory id, the resolution is the sole
-active guiding memory, and the supersession chain contains the provisional and resolution.
+Acceptance is behavioral and uses the released Kioku 0.5.0.0 API through migrated PostgreSQL.
 
-Repeat with rejection and narrowing. Rejection appears only in `doNotRepeat`; narrowing
-guides a matching path/dependency and not a nonmatching one. A newer target or reference
-revision creates a new review memory that supersedes the prior active conclusion without
-changing the old content. A second different resolver/outcome racing for the same provisional
-review returns a conflict and does not create two active rules. Passing a Kizashi
-acknowledgement value fails resolution decoding from
-`docs/plans/43-define-architecture-practice-review-contracts.md` before any memory step. Full tests exit
-zero and no migration is added.
+First, record one validated reference-suspect verdict twice, including a second workflow execution
+with the same ReviewId. Both calls return the pinned provisional memory id. Kioku contains one row
+whose content decodes to the same verdict, whose session and practice scope match the environment,
+whose confidence/type/tags match the documented mapping, and whose journal contains the fixed
+remember step once. Reusing the ReviewId with changed semantic content returns a typed conflict and
+does not overwrite the row.
+
+Apply an accepted resolution twice. Both calls return the pinned resolved memory id. The resolution
+is the sole active guiding memory for a matching context; the provisional is `superseded`; and the
+chain contains both immutable envelopes. Repeat with rejection, narrowing, and superseded.
+Rejection appears only in `doNotRepeat`. Narrowing guides `src/Regulated/Adapter.hs` when scoped to
+`src/Regulated` and does not guide `src/Public/Adapter.hs`. A superseded resolution appears only in
+`retired` and never guides.
+
+Record a newer material-review provisional with the prior active resolution id. The newer row is
+active, the prior resolution is retired under it, both contents are unchanged, and the chain
+contains the earlier provisional, its resolution, and the new provisional. A malformed or
+unknown-version memory in the same practice scope is ignored by guidance and returned as one stable
+diagnostic. Passing a Kizashi acknowledgement-shaped JSON value fails
+`PracticeReviewResolution`/validated-resolution decoding before any practice-review memory step is
+journaled.
+
+Race two different valid resolutions for one provisional from separate executions. Exactly one
+candidate retires the provisional and remains active. The losing call returns
+`ResolutionConflict` naming that winner and retires its own candidate under the winner before it
+returns. Active recall never returns both as guidance, while the chain retains all three rows for
+audit.
+
+`just keiro-gate` reports no breaking workflow change, the focused test exits zero, `cabal test all`
+exits zero, `git diff --name-only -- shikigami-migrations` is empty, and no new dependency bound is
+introduced.
 
 
 ## Idempotence and Recovery
 
-Plan 25 journals every recall/remember label and derives deterministic memory ids. Kioku also
-accepts an identical record by id, covering the crash window between database write and
-Keiro step recording. A retry with changed semantic content returns `MemoryConflict` rather
-than overwriting. No delete or in-place mutation is used. If a run stops between provisional
-and resolution, the provisional remains pending and a later explicit resolution can resume
-from its deterministic id. Tests provision isolated migrated Postgres databases and are safe
-to repeat.
+Each logical record uses a deterministic memory id independent of workflow identity. Each capability
+operation is also one fixed Keiro step. The step action is at-least-once, so every multi-command
+transition is deliberately ordered and retryable: record the deterministic candidate, retire the
+prior row under it, and, after a competing-winner conflict, retire the losing candidate under the
+winner. Kioku ignores call-time timestamps when comparing an otherwise identical retry, so a crash
+after any command converges on replay. A changed semantic payload under the same logical id is a
+conflict rather than an overwrite.
+
+No delete, content update, tag update, or schema mutation is used. Kioku's status projection changes
+only through its append-only `supersedeWithContext` command. If a run stops after the provisional
+record, it remains pending. If it stops after recording a resolution candidate but before retiring
+the provisional, replay reuses the candidate and finishes the retirement. If it stops while
+cleaning up a race loser, replay observes the same winner and repeats the same idempotent cleanup.
+The full chain exposes every intermediate row.
+
+The pre-patch capability branch performs the same deterministic IO without a new step, so an
+in-flight old-shape instance cannot acquire a result under a label it did not start with. The patch
+id, runtime branch, declaration, generated active set, conformance expectation, and workflow
+inventory must be added and later retired together according to `docs/workflow-versioning.md`.
+
+Tests provision isolated migrated PostgreSQL databases and are safe to repeat. A failed Keiro gate
+must be fixed by correcting the patch/declaration/runtime agreement; do not waive it or hide a label.
+Formatting and scaffolding are deterministic and may be rerun.
 
 
 ## Portfolio Reconciliation (2026-07-30)
 
-This plan hard-depends on plans 25, 43, and 47. It consumes plan 25's labeled
-`rememberWith` and deterministic memory ids, then owns review persistence/adjudication. Keep
-external evidence acquisition behind plan 44's interface; this plan can be built against its stub
-bundle.
+This plan hard-depends on plans 25, 43, and 47, all now complete. It preserves plan 25's generic
+memory capability unchanged and adds a narrower sibling capability because review transitions need
+review-level ids, exact active/chain reads, and a record-plus-retire protocol. Plan 44 remains the
+owner of external evidence acquisition; this plan consumes only already validated verdicts and can
+be implemented before plan 44's live adapter. Plan 46 must be refreshed before implementation: its
+July advice to derive step labels from review/resolution data conflicts with the landed static-label
+workflow rules, and it should consume the four operations delivered here.
 
 
 ## Interfaces and Dependencies
 
-The domain helper surface is:
+The public surface in `Shikigami.PracticeReview.Memory` is expected to have this shape. Exact
+constructor ordering may follow Fourmolu, but the semantic inputs and results are fixed.
 
 ```haskell
+data PracticeReviewMemory :: Effect
+
+data PracticeReviewMemoryEnv = PracticeReviewMemoryEnv
+  { appEnv :: !AppEnv
+  , agent :: !AgentDecl
+  , sessionId :: !(Maybe SessionId)
+  }
+
+data ReviewRecallContext = ReviewRecallContext
+  { project :: !ProjectRef
+  , path :: !(Maybe RelativePath)
+  , dependencies :: !(Set Text)
+  , practice :: !PracticeKey
+  }
+
+data AdjudicatedPracticeReview = AdjudicatedPracticeReview
+  { verdict :: !ValidatedPracticeReviewVerdict
+  , resolution :: !ValidatedPracticeReviewResolution
+  }
+
 data RecalledPracticeReviews = RecalledPracticeReviews
-  { guiding :: ![ValidatedPracticeReviewResolution]
-  , doNotRepeat :: ![ValidatedPracticeReviewResolution]
+  { guiding :: ![AdjudicatedPracticeReview]
+  , doNotRepeat :: ![AdjudicatedPracticeReview]
   , pending :: ![ValidatedPracticeReviewVerdict]
+  , retired :: ![AdjudicatedPracticeReview]
   , diagnostics :: ![ReviewMemoryDiagnostic]
   }
 
+provisionalMemoryId :: ReviewId -> MemoryId
+resolvedMemoryId :: ResolutionId -> MemoryId
+
 rememberProvisional
-  :: (Memory :> es)
+  :: (PracticeReviewMemory :> es)
   => Maybe MemoryId
   -> ValidatedPracticeReviewVerdict
-  -> Eff es MemoryId
+  -> Eff es (Either ReviewMemoryError MemoryId)
 
 resolveReview
-  :: (Memory :> es)
+  :: (PracticeReviewMemory :> es)
   => MemoryId
   -> ValidatedPracticeReviewResolution
-  -> Eff es (Either ReviewResolutionError MemoryId)
+  -> Eff es (Either ReviewMemoryError MemoryId)
 
 recallPracticeReviews
-  :: (Memory :> es)
+  :: (PracticeReviewMemory :> es)
   => ReviewRecallContext
   -> Eff es RecalledPracticeReviews
 
+recallPracticeReviewChain
+  :: (PracticeReviewMemory :> es)
+  => ReviewId
+  -> Eff es PracticeReviewChain
+
 appliesTo :: Applicability -> ReviewRecallContext -> Bool
+
+runPracticeReviewMemory
+  :: (Workflow :> es, IOE :> es)
+  => PracticeReviewMemoryEnv
+  -> Eff (PracticeReviewMemory : es) a
+  -> Eff es a
 ```
 
-The hard dependency is `docs/plans/25-replay-safe-flow-memory-capabilities.md`; use its landed
-labels/options rather than a duplicate effect. Kioku APIs and behavior were verified through
-Mori and its source. The initial slice uses existing Kioku records and introduces no package
-bound, schema, direct SQL, or new memory store.
+The code depends only on packages already present in `shikigami-core`: `aeson`, `effectful`,
+`generic-lens`, `keiro`, `kioku-api`, `kioku-core`, `kindid`, `text`, `time`, and `uuid`. Do not add a
+version bound, schema, direct SQL statement, or new memory store. Use Kioku 0.5.0.0's public
+`recordWithContext`, `supersedeWithContext`, `getMemoryRowById`, `getActiveRowsByScope`, and
+`getSupersessionChain` surfaces discovered through Mori and verified at upstream tag
+`v0.5.0.0`; do not rely on the local Kioku checkout's three post-tag commits.
+
+
+## Revision Notes
+
+- 2026-08-24: Refreshed the plan before implementation against completed plans 25, 43, and 47,
+  released Kioku 0.5.0.0, the current seven-package tree, and the checked workflow/ADR rules. The
+  refresh corrects two stale assumptions: `rememberWith.supersedes` records lineage without
+  retirement, and Flow-derived memory ids are workflow-scoped rather than review-scoped. It replaces
+  the generic-memory helper design with a narrow `PracticeReviewMemory` capability, freezes static
+  labels and logical ids, specifies record-plus-retire race cleanup, stores the verdict beside the
+  resolution, removes the nonexistent expiry rule, and expands acceptance to the active view and
+  full audit chain.
