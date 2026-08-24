@@ -43,6 +43,12 @@ worker:
   run_timeout_seconds: 300
 
 approval:
+  # Comma-separated sink kinds that require a human decision. Accepted values:
+  # KawaDigest, KizashiSignal, ReiAction, DanwaConversation, ChannelEgress.
+  # Empty preserves ordinary sink auto-approval.
+  require: ""
+  # Where approval asks are sent: danwa or kizashi.
+  channel: danwa
   # Bounds ordinary approval waits and flow acknowledgement waits. Whole
   # seconds, 1-86400.
   deadline_seconds: 900

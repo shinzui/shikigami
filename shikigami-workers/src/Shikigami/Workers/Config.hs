@@ -94,6 +94,8 @@ data WorkerEnv = WorkerEnv
     runTimeout :: !NominalDiffTime,
     delegationBudget :: !DelegationBudget,
     approvalDeadline :: !NominalDiffTime,
+    approvalPolicy :: !Approval.ApprovalPolicySnapshot,
+    approvalNotifier :: !ApprovalWorkflow.ApprovalNotifier,
     -- | How long a parked conversation waits for its next message before its
     -- epoch ends and its kioku session is completed. Resolved from
     -- @conversation.idle_timeout_seconds@.
@@ -175,6 +177,12 @@ envCatchUpPolicy WorkerEnv {catchUpPolicy = policy} = policy
 envApprovalDeadline :: WorkerEnv -> NominalDiffTime
 envApprovalDeadline WorkerEnv {approvalDeadline = deadline} = deadline
 
+envApprovalPolicy :: WorkerEnv -> Approval.ApprovalPolicySnapshot
+envApprovalPolicy WorkerEnv {approvalPolicy = policy} = policy
+
+envApprovalNotifier :: WorkerEnv -> ApprovalWorkflow.ApprovalNotifier
+envApprovalNotifier WorkerEnv {approvalNotifier = notifier} = notifier
+
 -- | Named for the same reason as 'envLogger': 'Conversation.ConversationEnv'
 -- also carries a @conversationIdleTimeout@-shaped field.
 envConversationIdleTimeout :: WorkerEnv -> NominalDiffTime
@@ -195,8 +203,8 @@ agentRunDeps env =
       AgentWorkflow.rei = rei env,
       AgentWorkflow.http = http env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-      AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy (envApprovalDeadline env),
-      AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
+      AgentWorkflow.approvalPolicy = envApprovalPolicy env,
+      AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Just (envApprovalDeadline env),
       AgentWorkflow.runTimeout = envRunTimeout env,

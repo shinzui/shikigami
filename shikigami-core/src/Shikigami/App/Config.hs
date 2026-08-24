@@ -99,6 +99,8 @@ module Shikigami.App.Config
     httpResponseMaxBytesKey,
     healthPortKey,
     workerRunTimeoutSecondsKey,
+    approvalRequireKey,
+    approvalChannelKey,
     approvalDeadlineSecondsKey,
     conversationIdleTimeoutSecondsKey,
     behaviorProviderKey,
@@ -123,6 +125,8 @@ where
 import Baikai.Api (Api (AnthropicMessages))
 import Baikai.Model (Model, api, modelId, provider)
 import Baikai.Models.Generated (allModels, anthropic_claude_sonnet_4_6)
+import Data.Bifunctor (first)
+import Data.Set (Set)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
@@ -130,6 +134,13 @@ import GHC.Generics (Generic)
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
+import Shikigami.Agent.Approval
+  ( ApprovalChannel (ViaDanwa),
+    parseApprovalChannel,
+    parseRequiredSinkKinds,
+    renderApprovalChannel,
+    renderRequiredSinkKinds,
+  )
 import Shikigami.Agent.Decl
   ( DelegationBudget,
     defaultDelegationBudget,
@@ -137,6 +148,7 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Directory (DirectorySettings (..))
+import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -346,6 +358,8 @@ data AppConfig = AppConfig
     -- | Maximum duration of one synchronous external behavior attempt.
     runTimeout :: !NominalDiffTime,
     -- | Maximum duration an approval or flow acknowledgement may remain open.
+    approvalRequiredSinks :: !(Set SinkKind),
+    approvalChannel :: !ApprovalChannel,
     approvalDeadline :: !NominalDiffTime,
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch and completing its kioku session.
@@ -426,6 +440,8 @@ appConfig =
     <*> withDefault httpResponseMaxBytesSetting (constant "http-response-limit" "Bound sink response bodies to 8 MiB" (ByteLimit 8_388_608))
     <*> optional healthPortSetting
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
+    <*> withDefault approvalRequireSetting (constant "approval-auto-approve" "Ordinary sinks do not require approval" mempty)
+    <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
@@ -726,6 +742,39 @@ approvalDeadlineSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
+approvalRequireSetting :: Setting (Set SinkKind)
+approvalRequireSetting =
+  publicSettingWithRenderer
+    approvalRequireKey
+    "Comma-separated sink kinds requiring approval; empty means auto-approve"
+    (decoder decodeRequiredSinks)
+    renderRequiredSinkKinds
+  where
+    decodeRequiredSinks key raw =
+      case runDecoder textDecoder key raw of
+        Left _ -> Left (decodeFailure key approvalRequireExpectation)
+        Right value -> first (const (decodeFailure key approvalRequireExpectation)) (parseRequiredSinkKinds value)
+
+approvalChannelSetting :: Setting ApprovalChannel
+approvalChannelSetting =
+  publicSettingWithRenderer
+    approvalChannelKey
+    "Channel used for human approval asks (danwa or kizashi)"
+    (decoder decodeChannel)
+    renderApprovalChannel
+  where
+    decodeChannel key raw =
+      case runDecoder textDecoder key raw of
+        Left _ -> Left (decodeFailure key approvalChannelExpectation)
+        Right value -> first (const (decodeFailure key approvalChannelExpectation)) (parseApprovalChannel value)
+
+approvalRequireExpectation :: Text
+approvalRequireExpectation =
+  "an empty value or a comma-separated unique set of KawaDigest, KizashiSignal, ReiAction, DanwaConversation, ChannelEgress"
+
+approvalChannelExpectation :: Text
+approvalChannelExpectation = "one of danwa, kizashi"
+
 conversationIdleTimeoutSecondsSetting :: Setting NominalDiffTime
 conversationIdleTimeoutSecondsSetting =
   publicSettingWithRenderer
@@ -910,6 +959,12 @@ healthPortKey = stableKey "health.port"
 workerRunTimeoutSecondsKey :: Key
 workerRunTimeoutSecondsKey = stableKey "worker.run_timeout_seconds"
 
+approvalRequireKey :: Key
+approvalRequireKey = stableKey "approval.require"
+
+approvalChannelKey :: Key
+approvalChannelKey = stableKey "approval.channel"
+
 approvalDeadlineSecondsKey :: Key
 approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
 
@@ -1023,6 +1078,8 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES") httpResponseMaxBytesKey,
           binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
+          binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE") approvalRequireKey,
+          binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
           binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,

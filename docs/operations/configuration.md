@@ -116,6 +116,8 @@ nested under `kafka`.
 | `directory.refresh_interval_seconds` | `5` in file mode | `SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS` | Seconds between attempts to atomically refresh the principal snapshot. |
 | `scheduler.catch_up` | `skip_missed` | `SHIKIGAMI_SCHEDULER_CATCH_UP` | What the scheduler does about cron minutes that passed while it was down. `skip_missed` arms the first tick after now, so waking a day late produces one run. `fire_all` arms from the tick that just fired, replaying every missed minute — the pre-policy behavior. |
 | `worker.run_timeout_seconds` | `300` | `SHIKIGAMI_RUN_TIMEOUT_SECONDS` | Maximum duration of one synchronous external behavior attempt. |
+| `approval.require` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE` | Comma-separated unique sink kinds requiring human approval: `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, or `ChannelEgress`. Surrounding whitespace is ignored; empty preserves ordinary sink auto-approval. |
+| `approval.channel` | `danwa` | `SHIKIGAMI_APPROVAL_CHANNEL` | Human approval notification channel: exactly `danwa` or `kizashi`. Explicit Flow acknowledgements always use this channel even when `approval.require` is empty. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
 | `kafka.broker` | `127.0.0.1:9092` | `SHIKIGAMI_KAFKA_BROKER` | Bootstrap broker, `HOST:PORT`. |
 | `kafka.activity.topic` | `activity.v1` | `SHIKIGAMI_KAFKA_ACTIVITY_TOPIC` | Topic carrying `activity.v1` envelopes. |
@@ -379,6 +381,8 @@ worker:
   run_timeout_seconds: 300
 
 approval:
+  require: KawaDigest
+  channel: danwa
   deadline_seconds: 900
 
 kafka:

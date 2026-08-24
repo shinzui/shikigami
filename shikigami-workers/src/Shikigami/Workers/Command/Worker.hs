@@ -6,8 +6,12 @@ where
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
+import Data.Set qualified as Set
+import Data.Time (nominalDiffTimeToSeconds)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
+import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
+import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (WorkerRole))
@@ -21,6 +25,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Prelude (Text)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
+import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
@@ -83,6 +88,22 @@ runWorkerCmd config = do
         newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
           Left failure -> refuseInvalidSinkHttp logger failure
           Right clients -> pure clients
+      let policy =
+            ApprovalPolicySnapshot
+              { requireFor = Config.approvalRequiredSinks config,
+                channel = Config.approvalChannel config,
+                deadline = Config.approvalDeadline config
+              }
+          notifier = ApprovalNotification.approvalNotifier logger sinkHttp danwaConfig kizashiConfig
+          requiredKinds = sinkKindText <$> Set.toAscList (Config.approvalRequiredSinks config)
+      Log.logInfo
+        logger
+        "worker.approval.policy"
+        [ "mode" Aeson..= if null requiredKinds then ("auto_approve" :: Text) else "required",
+          "required_sink_kinds" Aeson..= requiredKinds,
+          "channel" Aeson..= renderApprovalChannel (Config.approvalChannel config),
+          "deadline_seconds" Aeson..= (floor (nominalDiffTimeToSeconds (Config.approvalDeadline config)) :: Integer)
+        ]
       Log.logInfo
         logger
         "worker.sink_credentials.configured"
@@ -119,6 +140,8 @@ runWorkerCmd config = do
                 runTimeout = Config.runTimeout config,
                 delegationBudget = Config.delegationBudget config,
                 approvalDeadline = Config.approvalDeadline config,
+                approvalPolicy = policy,
+                approvalNotifier = notifier,
                 conversationIdleTimeout = Config.conversationIdleTimeout config,
                 catchUpPolicy = Config.schedulerCatchUp config,
                 schedules,

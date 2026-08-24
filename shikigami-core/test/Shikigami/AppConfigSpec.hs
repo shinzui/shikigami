@@ -29,6 +29,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString
 import Data.List (sort)
 import Data.Maybe (isNothing)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
@@ -46,10 +47,12 @@ import Settei
 import Settei.Env (EnvName (..), EnvSnapshot, bindingKey, bindingName, bindingsList, envSnapshot, environmentSource)
 import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
+import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
+import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -76,7 +79,9 @@ surfaceTests =
         fmap renderKey declaredKeys
           @?= [ "agents.directory",
                 "agents.strict",
+                "approval.channel",
                 "approval.deadline_seconds",
+                "approval.require",
                 "behavior.model",
                 "behavior.provider",
                 "conversation.idle_timeout_seconds",
@@ -122,7 +127,9 @@ surfaceTests =
               ("PG_CONNECTION_STRING", "database.connection_string"),
               ("SHIKIGAMI_AGENTS_DIRECTORY", "agents.directory"),
               ("SHIKIGAMI_AGENTS_STRICT", "agents.strict"),
+              ("SHIKIGAMI_APPROVAL_CHANNEL", "approval.channel"),
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "approval.deadline_seconds"),
+              ("SHIKIGAMI_APPROVAL_REQUIRE", "approval.require"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
@@ -174,6 +181,8 @@ surfaceTests =
         byteLimitBytes (httpRequestMaxBytes defaultAppConfig) @?= 8_388_608
         byteLimitBytes (httpResponseMaxBytes defaultAppConfig) @?= 8_388_608
         runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300
+        approvalRequiredSinks defaultAppConfig @?= Set.empty
+        approvalChannel defaultAppConfig @?= ViaDanwa
         approvalDeadline defaultAppConfig @?= secondsToNominalDiffTime 900
         kafkaBroker defaultAppConfig @?= "127.0.0.1:9092"
         kafkaActivityTopic defaultAppConfig @?= "activity.v1"
@@ -274,6 +283,29 @@ precedenceTests =
             ]
         runTimeout config @?= secondsToNominalDiffTime 240
         approvalDeadline config @?= secondsToNominalDiffTime 840,
+      testCase "approval policy resolves in YAML, environment, then CLI precedence" do
+        config <-
+          resolveOrFail
+            ( optionsWith
+                []
+                [ cliOverride approvalRequireKey "KizashiSignal, DanwaConversation",
+                  cliOverride approvalChannelKey "danwa"
+                ]
+            )
+            [yaml "file" "approval:\n  require: KawaDigest\n  channel: danwa\n"]
+            [ ("SHIKIGAMI_APPROVAL_REQUIRE", "ReiAction"),
+              ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")
+            ]
+        approvalRequiredSinks config @?= Set.fromList [SKizashiSignal, SDanwaConversation]
+        approvalChannel config @?= ViaDanwa,
+      testCase "an empty approval requirement preserves auto-approval" do
+        config <-
+          resolveOrFail
+            (optionsWith [] [])
+            []
+            [("SHIKIGAMI_APPROVAL_REQUIRE", ""), ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")]
+        approvalRequiredSinks config @?= Set.empty
+        approvalChannel config @?= ViaKizashi,
       testCase "file directory settings resolve as one conditional value" do
         config <-
           resolveOrFail
@@ -329,6 +361,30 @@ strictnessTests =
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
         runTimeout low @?= secondsToNominalDiffTime 1
         approvalDeadline high @?= secondsToNominalDiffTime 86_400,
+      testCase "approval policy rejects duplicates, unknown sink kinds, and unknown channels" do
+        mapM_
+          (\bad -> exitCode (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
+          ["KawaDigest,KawaDigest", "KawaDigest,Unknown", ","]
+        exitCode (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
+      testCase "a malformed winning approval policy does not fall back" do
+        let run =
+              runWith
+                (optionsWith [] [cliOverride approvalRequireKey "Unknown"])
+                []
+                [("SHIKIGAMI_APPROVAL_REQUIRE", "KawaDigest")]
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the failure should name the key and every valid sink kind:\n" <> Text.unpack (standardError run))
+          ( all
+              (`Text.isInfixOf` standardError run)
+              [ "approval.require",
+                "KawaDigest",
+                "KizashiSignal",
+                "ReiAction",
+                "DanwaConversation",
+                "ChannelEgress"
+              ]
+          ),
       testCase "file directory mode requires a path" do
         let run = runWith (optionsWith [] [cliOverride directoryModeKey "file"]) [] []
         exitCode run @?= resolutionExitCode
@@ -498,7 +554,7 @@ diagnosticTests =
               assertBool (Text.unpack key <> " missing from schema") (key `Text.isInfixOf` schema)
               assertBool (Text.unpack key <> " missing from explanation") (key `Text.isInfixOf` explained)
           )
-          ["worker.run_timeout_seconds", "approval.deadline_seconds", "directory.refresh_interval_seconds"],
+          ["worker.run_timeout_seconds", "approval.require", "approval.channel", "approval.deadline_seconds", "directory.refresh_interval_seconds"],
       testCase "with no diagnostic, a valid configuration lets the process continue" do
         let run = runWith (optionsWith [] []) [] []
         exitCode run @?= 0

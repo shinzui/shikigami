@@ -13,6 +13,10 @@ module Shikigami.Agent.Approval
     approvalPolicyChannel,
     approvalPolicyDeadline,
     autoApprovePolicy,
+    parseRequiredSinkKinds,
+    renderRequiredSinkKinds,
+    parseApprovalChannel,
+    renderApprovalChannel,
     ApprovalEnv (..),
     defaultApprovalEnv,
     awaitApproval,
@@ -63,7 +67,7 @@ import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
-import Shikigami.Sink.Permission (AgentIdentity, SinkKind)
+import Shikigami.Sink.Permission (AgentIdentity, SinkKind (..), sinkKindText)
 
 data ApprovalRequest = ApprovalRequest
   { prompt :: !Text,
@@ -159,6 +163,50 @@ autoApprovePolicy deadline =
       channel = ViaDanwa,
       deadline
     }
+
+parseRequiredSinkKinds :: Text -> Either Text (Set SinkKind)
+parseRequiredSinkKinds raw
+  | Text.null (Text.strip raw) = Right Set.empty
+  | otherwise = do
+      parsed <- traverse parseKind pieces
+      let selected = Set.fromList parsed
+      if Set.size selected == length parsed
+        then Right selected
+        else Left ("approval.require contains a duplicate; expected unique values from " <> validSinkKinds)
+  where
+    pieces = fmap Text.strip (Text.splitOn "," raw)
+    parseKind name =
+      maybe
+        (Left ("unknown approval sink kind; expected one of " <> validSinkKinds))
+        Right
+        (lookup name sinkKindChoices)
+
+renderRequiredSinkKinds :: Set SinkKind -> Text
+renderRequiredSinkKinds selected =
+  Text.intercalate "," [sinkKindText kind | (_, kind) <- sinkKindChoices, Set.member kind selected]
+
+parseApprovalChannel :: Text -> Either Text ApprovalChannel
+parseApprovalChannel = \case
+  "danwa" -> Right ViaDanwa
+  "kizashi" -> Right ViaKizashi
+  _ -> Left "approval.channel must be one of danwa, kizashi"
+
+renderApprovalChannel :: ApprovalChannel -> Text
+renderApprovalChannel = \case
+  ViaDanwa -> "danwa"
+  ViaKizashi -> "kizashi"
+
+sinkKindChoices :: [(Text, SinkKind)]
+sinkKindChoices =
+  [ (sinkKindText SKawaDigest, SKawaDigest),
+    (sinkKindText SKizashiSignal, SKizashiSignal),
+    (sinkKindText SReiAction, SReiAction),
+    (sinkKindText SDanwaConversation, SDanwaConversation),
+    (sinkKindText SChannelEgress, SChannelEgress)
+  ]
+
+validSinkKinds :: Text
+validSinkKinds = Text.intercalate ", " (fmap fst sinkKindChoices)
 
 data ApprovalTimeoutPayload = ApprovalTimeoutPayload
   { kind :: !Text,
