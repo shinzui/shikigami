@@ -6,6 +6,11 @@
 -- capability. A review transition owns logical ids, typed envelopes, an exact
 -- practice scope, and Kioku's separate record/retire protocol. Flow code gets
 -- those four operations and no Kioku environment or IO capability.
+--
+-- This module does not install the effect into the production Flow row. The
+-- specialist Flow introduced by plan 46 must add the interpreter, the four
+-- static step declarations, and 'practiceReviewMemoryPatch' in the same
+-- workflow-versioned change that first calls the capability.
 module Shikigami.PracticeReview.Memory
   ( PracticeReviewMemory,
     PracticeReviewMemoryEnv (..),
@@ -537,20 +542,22 @@ retireMemory PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agentNam
   runAppIO appEnv (Memory.supersedeWithContext (shikigamiWriteContext agentName) command) >>= \case
     Left storeError -> ioError (userError ("failed to supersede practice-review memory: " <> show storeError))
     Right (Right stored) -> pure (Right stored)
-    Right (Left (MemoryConflict _)) -> lookupRecordedWinner appEnv loser
-    Right (Left err) -> pure (Left (ReviewMemoryRefused (Text.pack (show err))))
+    Right (Left err) ->
+      lookupRecordedWinner appEnv loser >>= \case
+        Left readError -> pure (Left readError)
+        Right (Just recordedWinner) -> pure (Left (ResolutionConflict recordedWinner))
+        Right Nothing -> pure (Left (ReviewMemoryRefused (Text.pack (show err))))
 
-lookupRecordedWinner :: AppEnv -> MemoryId -> IO (Either ReviewMemoryError MemoryId)
+lookupRecordedWinner :: AppEnv -> MemoryId -> IO (Either ReviewMemoryError (Maybe MemoryId))
 lookupRecordedWinner appEnv loser =
   readMemoryRow appEnv loser >>= \case
     Left err -> pure (Left err)
     Right Nothing -> pure (Left (ReviewMemoryNotFound (idText loser)))
-    Right (Just MemoryRow {supersededBy = Nothing}) ->
-      pure (Left (ReviewMemoryRefused ("memory conflict had no recorded winner: " <> idText loser)))
+    Right (Just MemoryRow {supersededBy = Nothing}) -> pure (Right Nothing)
     Right (Just MemoryRow {supersededBy = Just winnerText}) ->
       case parseId winnerText of
         Left err -> pure (Left (ReviewMemoryMalformed (idText loser) err))
-        Right winner -> pure (Left (ResolutionConflict winner))
+        Right winner -> pure (Right (Just winner))
 
 loadEnvelope :: PracticeReviewMemoryEnv -> MemoryId -> IO (Either ReviewMemoryError PracticeReviewMemoryEnvelope)
 loadEnvelope PracticeReviewMemoryEnv {appEnv} memoryId =
@@ -624,14 +631,24 @@ data ClassifiedRow
   | DiagnosticRow !ReviewMemoryDiagnostic
 
 classifyRow :: ReviewRecallContext -> MemoryRow -> ClassifiedRow
-classifyRow context MemoryRow {memoryId, content} =
+classifyRow context@ReviewRecallContext {practice = wantedPractice} MemoryRow {memoryId, content} =
   case decodePracticeReviewMemory content of
     Left err -> DiagnosticRow (ReviewMemoryDiagnostic memoryId "invalid-envelope" err)
-    Right (ProvisionalReview verdict) ->
+    Right (ProvisionalReview verdict) -> classifyVerdict verdict (classifyProvisional verdict)
+    Right (ResolvedReview verdict resolution) -> classifyVerdict verdict (classifyResolved verdict resolution)
+  where
+    classifyVerdict verdict classified =
+      let PracticeReviewVerdict {practice} = validatedVerdictValue verdict
+       in if matchesPractices [practice] wantedPractice
+            then classified
+            else DiagnosticRow (ReviewMemoryDiagnostic memoryId "scope-mismatch" "envelope practice does not match the queried practice scope")
+
+    classifyProvisional verdict =
       if verdictMatchesContext context verdict
         then PendingRow (reviewSortKey verdict memoryId) verdict
         else IgnoredRow
-    Right (ResolvedReview verdict resolution) ->
+
+    classifyResolved verdict resolution =
       let adjudicated = AdjudicatedPracticeReview {verdict, resolution}
           PracticeReviewResolution {outcome, resultingApplicability} = validatedResolutionValue resolution
           matchesOriginal = verdictMatchesContext context verdict
@@ -667,12 +684,12 @@ recallPracticeReviewChainIO PracticeReviewMemoryEnv {appEnv} reviewId =
           { entries = [],
             diagnostics = [ReviewMemoryDiagnostic (idText (provisionalMemoryId reviewId)) "chain-read-failed" (Text.pack (show readError))]
           }
-    Right (Right rows) ->
-      pure
-        PracticeReviewChain
-          { entries = chainEntry <$> rows,
-            diagnostics = []
-          }
+    Right (Right rows) -> do
+      let orderedEntries = chainEntry <$> sortOn chainRowKey rows
+          diagnostics = [entryDiagnostic | PracticeReviewChainEntry {diagnostic = Just entryDiagnostic} <- orderedEntries]
+      pure PracticeReviewChain {entries = orderedEntries, diagnostics}
+  where
+    chainRowKey MemoryRow {createdAt, memoryId} = (createdAt, memoryId)
 
 chainEntry :: MemoryRow -> PracticeReviewChainEntry
 chainEntry MemoryRow {memoryId, status, supersededBy, supersedes, content} =

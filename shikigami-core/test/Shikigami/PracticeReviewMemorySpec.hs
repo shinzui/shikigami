@@ -1,11 +1,45 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Shikigami.PracticeReviewMemorySpec (tests) where
 
-import Data.Aeson (FromJSON, eitherDecodeStrict')
+import Control.Concurrent (forkFinally)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar, takeMVar)
+import Control.Exception (SomeException, displayException)
+import Control.Lens ((&), (.~))
+import Data.Aeson (FromJSON, Value, eitherDecode, eitherDecodeStrict', encode, object, (.=))
 import Data.ByteString qualified as ByteString
+import Data.Generics.Labels ()
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Kioku.Id (idText)
+import Data.Time.Clock (getCurrentTime)
+import Effectful (Eff, (:>))
+import Keiro.Workflow
+  ( WorkflowId (..),
+    WorkflowName (..),
+    WorkflowOutcome (..),
+    WorkflowRunOptions (..),
+    defaultWorkflowRunOptions,
+    loadStepIndex,
+    runWorkflowWith,
+  )
+import Kioku.Api.Types qualified as Kioku
+import Kioku.App (AppEnv (..), noopTracer, runAppIO)
+import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
+import Kioku.Memory qualified as Memory
+import Kioku.Memory.Domain (RecordMemoryData (..))
+import Kioku.Memory.ReadModel (MemoryRow (..))
+import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
+import Kiroku.Store.Error (StoreError)
+import Shikigami.Agent.Decl
+  ( AgentDecl (..),
+    Behavior (..),
+    Trigger (..),
+    defaultMemoryPolicy,
+  )
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
+import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.PracticeReview
   ( Applicability (..),
     PracticeKey (..),
@@ -13,23 +47,39 @@ import Shikigami.PracticeReview
     PracticeReviewVerdict (..),
     ProjectRef (..),
     ResolutionId (..),
+    ResolutionOutcome (..),
     ReviewId (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewVerdict,
+    deriveResolutionId,
     validateResolution,
     validateVerdict,
     validatedResolutionValue,
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview.Memory
-  ( PracticeReviewMemoryEnvelope (..),
+  ( PracticeReviewChain (..),
+    PracticeReviewChainEntry (..),
+    PracticeReviewMemory,
+    PracticeReviewMemoryEnv (..),
+    PracticeReviewMemoryEnvelope (..),
+    RecalledPracticeReviews (..),
+    ReviewMemoryDiagnostic (..),
+    ReviewMemoryError (..),
     ReviewRecallContext (..),
     appliesTo,
     decodePracticeReviewMemory,
     encodePracticeReviewMemory,
+    practiceReviewMemoryPatch,
+    practiceReviewScope,
     practiceReviewTags,
     provisionalMemoryId,
+    recallPracticeReviewChain,
+    recallPracticeReviews,
+    rememberProvisional,
+    resolveReview,
     resolvedMemoryId,
+    runPracticeReviewMemory,
   )
 import Shikigami.Repository (RelativePath, RepositoryId (..), mkRelativePath)
 import System.Directory (doesFileExist)
@@ -44,7 +94,8 @@ tests =
     [ envelopeTests,
       identityTests,
       applicabilityTests,
-      tagTests
+      tagTests,
+      postgresTests
     ]
 
 envelopeTests :: TestTree
@@ -70,7 +121,12 @@ envelopeTests =
         verdict <- itemAt "target-suspect verdict" 1 verdicts
         rejectedForAnotherReview <- itemAt "rejected resolution" 1 resolutions
         let malformed = encodePracticeReviewMemory (ResolvedReview verdict rejectedForAnotherReview)
-        assertBool "mismatched review ids must fail" (isLeft (decodePracticeReviewMemory malformed))
+        assertBool "mismatched review ids must fail" (isLeft (decodePracticeReviewMemory malformed)),
+      testCase "an acknowledgement-shaped value cannot decode as a resolution" do
+        let acknowledgement = object ["status" .= ("acknowledged" :: Text), "by" .= ("operator" :: Text)]
+        assertBool
+          "acknowledgement JSON must fail the resolution boundary"
+          (isLeft (eitherDecode (encode acknowledgement) :: Either String PracticeReviewResolution))
     ]
 
 identityTests :: TestTree
@@ -140,6 +196,462 @@ tagTests =
         assertBool "accepted outcome" (Set.member "outcome:accepted" tags)
     ]
 
+postgresTests :: TestTree
+postgresTests =
+  testGroup
+    "PostgreSQL transitions"
+    [ testCase "journals provisional replay with one row and refuses semantic drift" do
+        withReviewEnv \appEnv session -> do
+          (verdicts, _) <- readValidatedContracts
+          verdict <- itemAt "target-suspect verdict" 1 verdicts
+          let workflowId = WorkflowId "practice-review-provisional-replay"
+              expectedId = verdictProvisionalId verdict
+          first <- runReviewOperation appEnv session workflowId (rememberProvisional Nothing verdict)
+          firstId <- expectCompletedRight first
+          firstId @?= expectedId
+          replayed <- runReviewOperation appEnv session workflowId (rememberProvisional Nothing verdict)
+          replayedId <- expectCompletedRight replayed
+          replayedId @?= expectedId
+          crossWorkflow <-
+            runReviewOperation
+              appEnv
+              session
+              (WorkflowId "practice-review-provisional-logical-replay")
+              (rememberProvisional Nothing verdict)
+          crossWorkflowId <- expectCompletedRight crossWorkflow
+          crossWorkflowId @?= expectedId
+          legacy <-
+            runReviewOperationWith
+              defaultWorkflowRunOptions
+              appEnv
+              session
+              (WorkflowId "practice-review-provisional-legacy-branch")
+              (rememberProvisional Nothing verdict)
+          legacyId <- expectCompletedRight legacy
+          legacyId @?= expectedId
+
+          row <- requireMemoryRow appEnv expectedId
+          let MemoryRow
+                { status,
+                  memoryType,
+                  confidence,
+                  sessionId,
+                  tags,
+                  content
+                } = row
+          status @?= "active"
+          memoryType @?= Kioku.memoryTypeToText Kioku.MemoryPattern
+          confidence @?= Kioku.confidenceToText Kioku.HighConfidence
+          sessionId @?= Just (idText session)
+          tags @?= practiceReviewTags (ProvisionalReview verdict)
+          decodePracticeReviewMemory content @?= Right (ProvisionalReview verdict)
+
+          scopeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          length scopeRows @?= 1
+          journal <- loadReviewStepIndex appEnv workflowId
+          assertBool "fixed remember step is journaled" (Map.member "practice-review-remember-provisional" journal)
+          legacyJournal <- loadReviewStepIndex appEnv (WorkflowId "practice-review-provisional-legacy-branch")
+          assertBool
+            "legacy branch performs the same write without the future operation step"
+            (not (Map.member "practice-review-remember-provisional" legacyJournal))
+
+          let changedRaw = validatedVerdictValue verdict & #recommendedAction .~ "semantically changed action"
+          changed <- expectRight (validateVerdict changedRaw)
+          changedResult <-
+            runReviewOperation
+              appEnv
+              session
+              (WorkflowId "practice-review-provisional-conflict")
+              (rememberProvisional Nothing changed)
+          expectCompleted changedResult >>= \case
+            Left (ReviewContentConflict conflictedId _) -> conflictedId @?= expectedId
+            other -> assertFailure ("expected changed-content conflict, got " <> show other),
+      testCase "classifies all four resolved outcomes and scope-narrows guidance" do
+        withReviewEnv \appEnv session -> do
+          (verdicts, resolutions) <- readValidatedContracts
+          pairs <- traverse (pairAt verdicts resolutions) [(1, 0), (2, 1), (3, 2), (4, 3)]
+          resolvedIds <-
+            traverse
+              (\(ordinal, (verdict, resolution)) -> recordAndResolve appEnv session ordinal verdict resolution)
+              (zip [(0 :: Int) ..] pairs)
+
+          (acceptedVerdict, acceptedResolution) <- itemAt "accepted pair" 0 pairs
+          acceptedReplay <-
+            runReviewOperation
+              appEnv
+              session
+              (WorkflowId "practice-review-resolve-accepted-replay")
+              (resolveReview (verdictProvisionalId acceptedVerdict) acceptedResolution)
+          acceptedReplayId <- expectCompletedRight acceptedReplay
+          acceptedReplayId @?= resolutionMemoryId acceptedResolution
+
+          acceptedPath <- expectRight (mkRelativePath "docs/adr/0009-disable-propagation.md")
+          acceptedView <- runRecall appEnv session (WorkflowId "practice-review-recall-accepted") (recallContext (Just acceptedPath) Set.empty)
+          let RecalledPracticeReviews
+                { guiding,
+                  doNotRepeat,
+                  pending,
+                  retired,
+                  diagnostics
+                } = acceptedView
+          length guiding @?= 1
+          length doNotRepeat @?= 1
+          length pending @?= 0
+          length retired @?= 1
+          diagnostics @?= []
+
+          narrowedPath <- expectRight (mkRelativePath "src/Regulated/Adapter.hs")
+          narrowedView <- runRecall appEnv session (WorkflowId "practice-review-recall-narrowed") (recallContext (Just narrowedPath) Set.empty)
+          let RecalledPracticeReviews {guiding = narrowedGuidance} = narrowedView
+          length narrowedGuidance @?= 1
+
+          outsidePath <- expectRight (mkRelativePath "src/Public/Adapter.hs")
+          outsideView <- runRecall appEnv session (WorkflowId "practice-review-recall-outside") (recallContext (Just outsidePath) Set.empty)
+          let RecalledPracticeReviews {guiding = outsideGuidance} = outsideView
+          length outsideGuidance @?= 0
+
+          activeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          Set.fromList (idText <$> resolvedIds) @?= Set.fromList (rowMemoryId <$> activeRows),
+      testCase "a newer review retires the prior resolution and preserves the full chain" do
+        withReviewEnv \appEnv session -> do
+          (verdicts, resolutions) <- readValidatedContracts
+          original <- itemAt "target-suspect verdict" 1 verdicts
+          accepted <- itemAt "accepted resolution" 0 resolutions
+          priorResolution <- recordAndResolve appEnv session 0 original accepted
+          newer <- itemAt "consistent newer verdict" 0 verdicts
+          let newerId = verdictProvisionalId newer
+          recorded <-
+            runReviewOperation
+              appEnv
+              session
+              (WorkflowId "practice-review-newer-provisional")
+              (rememberProvisional (Just priorResolution) newer)
+          recordedId <- expectCompletedRight recorded
+          recordedId @?= newerId
+
+          priorRow <- requireMemoryRow appEnv priorResolution
+          let MemoryRow {status = priorStatus, supersededBy = priorSupersededBy} = priorRow
+          priorStatus @?= "superseded"
+          priorSupersededBy @?= Just (idText newerId)
+          newerRow <- requireMemoryRow appEnv newerId
+          let MemoryRow {status = newerStatus, supersedes = newerSupersedes} = newerRow
+          newerStatus @?= "active"
+          newerSupersedes @?= Just (idText priorResolution)
+
+          let PracticeReviewVerdict {reviewId = originalReviewId} = validatedVerdictValue original
+          chain <- runChain appEnv session (WorkflowId "practice-review-chain-newer") originalReviewId
+          let PracticeReviewChain {entries} = chain
+          length entries @?= 3
+          [status | PracticeReviewChainEntry {status} <- entries]
+            @?= ["superseded", "superseded", "active"],
+      testCase "malformed active content is diagnostic and never guidance" do
+        withReviewEnv \appEnv session -> do
+          malformedId <- seedMalformedMemory appEnv session
+          path <- expectRight (mkRelativePath "docs/adr/0001.md")
+          recalled <- runRecall appEnv session (WorkflowId "practice-review-recall-malformed") (recallContext (Just path) Set.empty)
+          let RecalledPracticeReviews {guiding, doNotRepeat, pending, retired, diagnostics} = recalled
+          guiding @?= []
+          doNotRepeat @?= []
+          pending @?= []
+          retired @?= []
+          case diagnostics of
+            [ReviewMemoryDiagnostic {memoryId, code}] -> do
+              memoryId @?= idText malformedId
+              code @?= "invalid-envelope"
+            other -> assertFailure ("expected one malformed diagnostic, got " <> show other),
+      testCase "valid content stored under the wrong practice scope is diagnostic" do
+        withReviewEnv \appEnv session -> do
+          (verdicts, _) <- readValidatedContracts
+          verdict <- itemAt "target-suspect verdict" 1 verdicts
+          misplacedId <-
+            seedReviewContent
+              appEnv
+              session
+              (PracticeKey "logging")
+              (encodePracticeReviewMemory (ProvisionalReview verdict))
+          recalled <-
+            runRecall
+              appEnv
+              session
+              (WorkflowId "practice-review-recall-wrong-scope")
+              (recallContextFor (PracticeKey "logging") Nothing Set.empty)
+          let RecalledPracticeReviews {guiding, doNotRepeat, pending, retired, diagnostics} = recalled
+          guiding @?= []
+          doNotRepeat @?= []
+          pending @?= []
+          retired @?= []
+          case diagnostics of
+            [ReviewMemoryDiagnostic {memoryId, code}] -> do
+              memoryId @?= idText misplacedId
+              code @?= "scope-mismatch"
+            other -> assertFailure ("expected one scope diagnostic, got " <> show other),
+      testCase "competing resolutions converge on one active winner and retain the loser" do
+        withReviewEnv \appEnv session -> do
+          (verdicts, resolutions) <- readValidatedContracts
+          verdict <- itemAt "target-suspect verdict" 1 verdicts
+          accepted <- itemAt "accepted resolution" 0 resolutions
+          _ <-
+            runReviewOperation
+              appEnv
+              session
+              (WorkflowId "practice-review-race-provisional")
+              (rememberProvisional Nothing verdict)
+              >>= expectCompletedRight
+          rejected <- competingRejected accepted
+
+          gate <- newEmptyMVar
+          acceptedResult <- newEmptyMVar
+          rejectedResult <- newEmptyMVar
+          let provisionalId = verdictProvisionalId verdict
+          _ <-
+            forkFinally
+              (readMVar gate >> runReviewOperation appEnv session (WorkflowId "practice-review-race-accepted") (resolveReview provisionalId accepted))
+              (putMVar acceptedResult)
+          _ <-
+            forkFinally
+              (readMVar gate >> runReviewOperation appEnv session (WorkflowId "practice-review-race-rejected") (resolveReview provisionalId rejected))
+              (putMVar rejectedResult)
+          putMVar gate ()
+          acceptedOutcome <- takeMVar acceptedResult >>= expectThread
+          rejectedOutcome <- takeMVar rejectedResult >>= expectThread
+          outcomes <- traverse expectCompleted [acceptedOutcome, rejectedOutcome]
+          let winners = [memoryId | Right memoryId <- outcomes]
+              conflicts = [winner | Left (ResolutionConflict winner) <- outcomes]
+          case (winners, conflicts) of
+            ([winner], [conflictWinner]) -> conflictWinner @?= winner
+            other -> assertFailure ("expected one winner and one typed conflict, got " <> show other)
+
+          activeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          length activeRows @?= 1
+          let PracticeReviewVerdict {reviewId} = validatedVerdictValue verdict
+          chain <- runChain appEnv session (WorkflowId "practice-review-race-chain") reviewId
+          let PracticeReviewChain {entries} = chain
+          length entries @?= 3
+          length [() | PracticeReviewChainEntry {status = "active"} <- entries] @?= 1
+          length [() | PracticeReviewChainEntry {status = "superseded"} <- entries] @?= 2
+    ]
+
+reviewWorkflowName :: WorkflowName
+reviewWorkflowName = WorkflowName "shikigami.practice-review-memory.test"
+
+withReviewEnv :: (AppEnv -> SessionId -> IO value) -> IO value
+withReviewEnv action =
+  withShikigamiMigratedDatabase \connectionString ->
+    withStore (defaultConnectionSettings connectionString) \_store -> do
+      tracer <- noopTracer
+      session <- genSessionId
+      let appEnv =
+            AppEnv
+              { connectionSettings = defaultConnectionSettings connectionString,
+                tracer,
+                metrics = Nothing
+              }
+      action appEnv session
+
+runReviewOperation ::
+  AppEnv ->
+  SessionId ->
+  WorkflowId ->
+  (forall es. (PracticeReviewMemory :> es) => Eff es result) ->
+  IO (Either StoreError (WorkflowOutcome result))
+runReviewOperation = runReviewOperationWith reviewRunOptions
+
+runReviewOperationWith ::
+  WorkflowRunOptions ->
+  AppEnv ->
+  SessionId ->
+  WorkflowId ->
+  (forall es. (PracticeReviewMemory :> es) => Eff es result) ->
+  IO (Either StoreError (WorkflowOutcome result))
+runReviewOperationWith runOptions appEnv session workflowId operation =
+  runAppIO appEnv $
+    runWorkflowWith
+      runOptions
+      reviewWorkflowName
+      workflowId
+      (runPracticeReviewMemory reviewEnv operation)
+  where
+    reviewEnv =
+      PracticeReviewMemoryEnv
+        { appEnv,
+          agent = reviewAgentDecl,
+          sessionId = Just session
+        }
+
+reviewRunOptions :: WorkflowRunOptions
+reviewRunOptions =
+  defaultWorkflowRunOptions
+    & #activePatches
+      .~ Set.singleton practiceReviewMemoryPatch
+
+reviewAgentDecl :: AgentDecl
+reviewAgentDecl =
+  AgentDecl
+    { name = "opentelemetry-practice-reviewer",
+      description = "practice-review memory integration test agent",
+      trigger = Event {eventType = "architecture.practice-review.test"},
+      behavior = Deterministic {rule = "practice-review-memory-test", params = mempty},
+      sinks = [],
+      delegates = [],
+      delegationBudget = Nothing,
+      sanctionedProfile = Nothing,
+      capabilityOverlays = [],
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = True,
+      expertise = [],
+      routing = Nothing
+    }
+
+loadReviewStepIndex :: AppEnv -> WorkflowId -> IO (Map.Map Text Value)
+loadReviewStepIndex appEnv workflowId =
+  runAppIO appEnv (loadStepIndex reviewWorkflowName workflowId 0) >>= \case
+    Left err -> assertFailure ("failed to load review workflow journal: " <> show err)
+    Right index -> pure index
+
+expectCompleted :: (Show result) => Either StoreError (WorkflowOutcome result) -> IO result
+expectCompleted = \case
+  Left err -> assertFailure ("review workflow failed: " <> show err)
+  Right (Completed result) -> pure result
+  Right outcome -> assertFailure ("review workflow did not complete: " <> show outcome)
+
+expectCompletedRight :: Either StoreError (WorkflowOutcome (Either ReviewMemoryError MemoryId)) -> IO MemoryId
+expectCompletedRight outcome =
+  expectCompleted outcome >>= \case
+    Left err -> assertFailure ("review memory operation failed: " <> show err)
+    Right memoryId -> pure memoryId
+
+recordAndResolve ::
+  AppEnv ->
+  SessionId ->
+  Int ->
+  ValidatedPracticeReviewVerdict ->
+  ValidatedPracticeReviewResolution ->
+  IO MemoryId
+recordAndResolve appEnv session ordinal verdict resolution = do
+  let suffix = Text.pack (show ordinal)
+      provisional = verdictProvisionalId verdict
+  _ <-
+    runReviewOperation
+      appEnv
+      session
+      (WorkflowId ("practice-review-record-" <> suffix))
+      (rememberProvisional Nothing verdict)
+      >>= expectCompletedRight
+  runReviewOperation
+    appEnv
+    session
+    (WorkflowId ("practice-review-resolve-" <> suffix))
+    (resolveReview provisional resolution)
+    >>= expectCompletedRight
+
+runRecall :: AppEnv -> SessionId -> WorkflowId -> ReviewRecallContext -> IO RecalledPracticeReviews
+runRecall appEnv session workflowId context =
+  runReviewOperation appEnv session workflowId (recallPracticeReviews context)
+    >>= expectCompleted
+
+runChain :: AppEnv -> SessionId -> WorkflowId -> ReviewId -> IO PracticeReviewChain
+runChain appEnv session workflowId reviewId =
+  runReviewOperation appEnv session workflowId (recallPracticeReviewChain reviewId)
+    >>= expectCompleted
+
+verdictProvisionalId :: ValidatedPracticeReviewVerdict -> MemoryId
+verdictProvisionalId verdict =
+  let PracticeReviewVerdict {reviewId} = validatedVerdictValue verdict
+   in provisionalMemoryId reviewId
+
+resolutionMemoryId :: ValidatedPracticeReviewResolution -> MemoryId
+resolutionMemoryId resolution =
+  let PracticeReviewResolution {resolutionId} = validatedResolutionValue resolution
+   in resolvedMemoryId resolutionId
+
+pairAt ::
+  [ValidatedPracticeReviewVerdict] ->
+  [ValidatedPracticeReviewResolution] ->
+  (Int, Int) ->
+  IO (ValidatedPracticeReviewVerdict, ValidatedPracticeReviewResolution)
+pairAt verdicts resolutions (verdictIndex, resolutionIndex) = do
+  verdict <- itemAt "paired verdict" verdictIndex verdicts
+  resolution <- itemAt "paired resolution" resolutionIndex resolutions
+  pure (verdict, resolution)
+
+activePracticeRows :: AppEnv -> PracticeKey -> IO [MemoryRow]
+activePracticeRows appEnv practice =
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (practiceReviewScope practice)) >>= \case
+    Left err -> assertFailure ("failed to query active practice-review rows: " <> show err)
+    Right (Left err) -> assertFailure ("active practice-review query was refused: " <> show err)
+    Right (Right rows) -> pure rows
+
+requireMemoryRow :: AppEnv -> MemoryId -> IO MemoryRow
+requireMemoryRow appEnv memoryId =
+  runAppIO appEnv (Memory.getMemoryRowById shikigamiMemorySpace memoryId) >>= \case
+    Left err -> assertFailure ("failed to read practice-review row: " <> show err)
+    Right (Left err) -> assertFailure ("practice-review row query was refused: " <> show err)
+    Right (Right Nothing) -> assertFailure ("practice-review row is missing: " <> Text.unpack (idText memoryId))
+    Right (Right (Just row)) -> pure row
+
+rowMemoryId :: MemoryRow -> Text
+rowMemoryId MemoryRow {memoryId} = memoryId
+
+seedMalformedMemory :: AppEnv -> SessionId -> IO MemoryId
+seedMalformedMemory appEnv session =
+  seedReviewContent
+    appEnv
+    session
+    (PracticeKey "opentelemetry")
+    "{\"schemaVersion\":99}"
+
+seedReviewContent :: AppEnv -> SessionId -> PracticeKey -> Text -> IO MemoryId
+seedReviewContent appEnv session practice content = do
+  memoryId <- genMemoryId
+  recordedAt <- getCurrentTime
+  let agentName = "opentelemetry-practice-reviewer"
+      command =
+        RecordMemoryData
+          { memoryId,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor agentName,
+            ownerPrincipal = Nothing,
+            agentId = agentName,
+            sessionId = Just session,
+            scope = practiceReviewScope practice,
+            memoryType = Kioku.MemoryConstraint,
+            content,
+            priority = 100,
+            confidence = Kioku.HighConfidence,
+            tags = Set.fromList ["practice-review", "state:fixture"],
+            supersedes = Nothing,
+            recordedAt
+          }
+  runAppIO appEnv (Memory.recordWithContext (shikigamiWriteContext agentName) command) >>= \case
+    Left err -> assertFailure ("failed to seed malformed review memory: " <> show err)
+    Right (Left err) -> assertFailure ("malformed review seed was refused: " <> show err)
+    Right (Right stored) -> pure stored
+
+competingRejected :: ValidatedPracticeReviewResolution -> IO ValidatedPracticeReviewResolution
+competingRejected accepted = do
+  let acceptedValue = validatedResolutionValue accepted
+      PracticeReviewResolution {reviewId} = acceptedValue
+      commandKey = "race-rejected"
+      rejectedValue =
+        acceptedValue
+          & #resolutionId
+            .~ deriveResolutionId reviewId commandKey
+          & #idempotencyKey
+            .~ commandKey
+          & #outcome
+            .~ Rejected
+          & #reason
+            .~ "the competing reviewer rejected the practice"
+          & #resultingApplicability
+            .~ Nothing
+  expectRight (validateResolution rejectedValue)
+
+expectThread :: Either SomeException value -> IO value
+expectThread = \case
+  Left err -> assertFailure ("concurrent review operation failed: " <> displayException err)
+  Right value -> pure value
+
 boundedApplicability :: RelativePath -> Applicability
 boundedApplicability path =
   Applicability
@@ -156,12 +668,15 @@ emptyApplicability :: Applicability
 emptyApplicability = Applicability [] [] [] []
 
 recallContext :: Maybe RelativePath -> Set.Set Text -> ReviewRecallContext
-recallContext path dependencies =
+recallContext = recallContextFor (PracticeKey "opentelemetry")
+
+recallContextFor :: PracticeKey -> Maybe RelativePath -> Set.Set Text -> ReviewRecallContext
+recallContextFor practice path dependencies =
   ReviewRecallContext
     { project = ProjectRef "target" (RepositoryId "repo_target"),
       path,
       dependencies,
-      practice = PracticeKey "opentelemetry"
+      practice
     }
 
 readValidatedContracts :: IO ([ValidatedPracticeReviewVerdict], [ValidatedPracticeReviewResolution])

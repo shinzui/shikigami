@@ -49,18 +49,25 @@ This section must always reflect the actual current state of the work.
       diagnostics, and chain entries. The 10 focused pure tests pass.
 - [x] (2026-08-24T13:45:06Z) M1 implementation: add deterministic provisional recording and
       optional prior-conclusion retirement through Kioku's context-aware APIs.
-- [ ] M1 verification: prove provisional replay, metadata, semantic-conflict, and prior-retirement
-      behavior against migrated PostgreSQL.
-- [ ] M2: add the replay-safe `PracticeReviewMemory` Flow capability and declare its four static
-      step labels behind `shikigami-practice-review-memory-v1`.
-- [ ] M2: apply accepted/rejected/narrowed/superseded resolutions with a separate Kioku retirement,
+- [x] (2026-08-24T14:00:41Z) M1 verification: prove same-workflow, cross-workflow, and legacy-branch
+      provisional replay, metadata, semantic-conflict, and prior-retirement behavior against
+      migrated PostgreSQL.
+- [x] (2026-08-24T14:00:41Z) M2: prove the replay-safe `PracticeReviewMemory` capability and its four static labels in an
+      isolated Keiro workflow; leave production `FlowEffects` and AgentRun declarations unchanged
+      until plan 46 registers the specialist Flow that actually calls them.
+- [x] (2026-08-24T14:00:41Z) M2: apply accepted/rejected/narrowed/superseded resolutions with a separate Kioku retirement,
       clean up a losing concurrent candidate, and return a typed conflict.
-- [ ] M3: recall only applicable active outcomes into guiding, do-not-repeat, pending, and retired
+- [x] (2026-08-24T14:00:41Z) M3: recall only applicable active outcomes into guiding, do-not-repeat, pending, and retired
       collections while retaining malformed-content diagnostics and the full audit chain.
-- [ ] M3: add real-Postgres replay, metadata, scope, chain, revision-supersession, malformed-content,
-      acknowledgement-boundary, and concurrent-resolution tests.
-- [ ] Final: run the Keiro gate and focused/full test suites; add no Kioku schema or migration;
-      distill durable architectural context into `docs/adr/`.
+- [x] (2026-08-24T14:00:41Z) M3: add real-Postgres replay, metadata, scope, chain, revision-supersession,
+      malformed-content, wrong-scope, acknowledgement-boundary, and concurrent-resolution tests.
+      All 17 focused tests pass.
+- [x] (2026-08-24T14:00:41Z) Distill the logical-id, immutable-envelope, and record-then-retire
+      boundary into [ADR 0031](../adr/0031-practice-review-adjudication-is-a-logical-memory-transition.md).
+- [x] (2026-08-24T14:04:24Z) Final: all nine workspace test suites pass (753 tests); ADR 0031
+      follows the corpus's sequential plain-Markdown convention; `git diff --check` passes; and the
+      plan range contains no production Flow/AgentRun body, domain, migration, Kioku schema, or
+      dependency-bound change.
 
 
 ## Surprises & Discoveries
@@ -87,6 +94,17 @@ implementation. Provide concise evidence.
 - The landed contract has no expiry field. Applicability can be bounded by project, path,
   dependency, and practice; re-review is driven by explicit revision lineage and
   `ReReviewCondition`, not by an invented clock-based expiry rule.
+- [ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) forbids declaring the four
+  review-memory step labels before a registered Flow can execute them. No current Flow has a
+  validated verdict or resolution to pass to this capability; the specialist Flow is plan 46's
+  work. Plan 45 therefore proves the labels in an isolated Keiro workflow and leaves production
+  `FlowEffects`, `Shikigami.Agent.Workflow`, and `domain/shikigami-agent-run.keiro` unchanged.
+- A supersession race is not represented by one stable Kioku refusal constructor. Depending on
+  whether the competing command is observed before command handling or while appending, the loser
+  can receive an ordinary memory conflict or a command rejection. The transition therefore rereads
+  `supersededBy` after any retirement refusal and classifies a recorded winner as the same typed
+  `ResolutionConflict`. Evidence: the migrated-PostgreSQL concurrent test converges with one active
+  winner and two retired rows.
 
 
 ## Decision Log
@@ -132,12 +150,22 @@ Record every decision made while working on the plan.
   the verdict, while the resolution supplies the human outcome and narrowed applicability.
   Date: 2026-08-24
 
-- Decision: Journal four fixed capability operations behind a new declared patch:
+- Decision: Give the capability four fixed operation names:
   `practice-review-remember-provisional`, `practice-review-resolve`, `practice-review-recall`, and
-  `practice-review-chain`.
+  `practice-review-chain`, but defer their production AgentRun patch/declaration and `FlowEffects`
+  integration to plan 46.
   Rationale: static names obey the checked workflow vocabulary and remain stable as review data
-  changes. [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) requires the
-  entire declared body addition inside a new patch with a real runtime branch.
+  changes. [ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md) forbids declaring them
+  while no registered Flow calls them; when plan 46 adds the specialist, [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md)
+  requires the entire declared body addition inside a new patch with a real runtime branch.
+  Date: 2026-08-24
+
+- Decision: After any Kioku retirement refusal, reread the losing row before classifying the
+  failure; if `supersededBy` names a winner, return `ResolutionConflict winner` and retire the local
+  candidate beneath it.
+  Rationale: Kioku can expose the same concurrent loss through different refusal constructors, but
+  its projected lineage is the durable arbitration result. Basing convergence on that state makes
+  the transition insensitive to command interleaving while retaining genuine refusals.
   Date: 2026-08-24
 
 
@@ -146,7 +174,25 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+The review-memory capability, version-1 envelopes, logical IDs, shared scope, deterministic tags,
+record-then-retire transitions, bounded active recall, and immutable chain view are implemented in
+`Shikigami.PracticeReview.Memory`. The focused suite has 17 passing tests, including replay through
+both patch branches, resolution replay across workflow identities, all four outcomes, prior-review
+retirement, malformed and wrong-scope diagnostics, and a real concurrent PostgreSQL race.
+
+Implementation confirmed the refreshed plan's central correction: Kioku lineage and Kioku
+retirement are separate facts. Deterministic candidates plus projected-winner rereads make the
+two-command transition recoverable without a Shikigami table or migration. Production AgentRun
+integration remains deliberately owned by plan 46 because no registered Flow can execute these
+operations yet.
+
+The final workspace run passed all nine suites and 753 tests, including 547 core tests, 29 checked
+Keiro conformance cases, and the package/migration suites. `git diff --check` passed, and a scoped
+diff from the plan's first commit confirmed no changes under the production Flow body,
+`Shikigami.Agent.Workflow`, `domain/`, or `shikigami-migrations/`. The repository has no ADR-check
+recipe; ADR 0031 was checked directly against `docs/adr/README.md` and is the sequential plain
+Markdown successor to ADR 0030. No acceptance gap remains in plan 45; plan 46's explicitly deferred
+production integration is follow-on work, not unfinished work in this plan.
 
 
 ## Context and Orientation
@@ -173,16 +219,19 @@ to call IO or Kioku directly, as required by
 
 `shikigami-core/src/Shikigami/Flow.hs` defines `FlowEffects`, the complete effect row available to a
 registered Flow. `shikigami-core/src/Shikigami/Agent/Workflow.hs:runFlowBehavior` installs every
-interpreter around a Flow body. Adding `PracticeReviewMemory` to that row and interpreter chain is
-a durable workflow-body change governed by `docs/workflow-versioning.md` and
-[ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md). Add the four fixed
-step labels inside a new `shikigami-practice-review-memory-v1` patch block in
-`domain/shikigami-agent-run.keiro`, regenerate the AgentRun artifacts, update the hand-owned Keiro
-conformance expectation, and run `just keiro-gate`. The interpreter reads the patch once. Fresh
-instances journal each operation; a pre-patch instance takes a real unjournaled compatibility
-branch. No current Flow calls the new capability, but the branch and declaration must still agree.
+interpreter around a Flow body. No current registered Flow has a validated verdict or resolution;
+the specialist that will call this capability belongs to plan 46. Therefore this plan does not edit
+`FlowEffects`, `Shikigami.Agent.Workflow`, `domain/shikigami-agent-run.keiro`, generated workflow
+artifacts, or `docs/workflow-versioning.md`. Doing so now would declare and install an operation the
+runtime cannot execute, violating
+[ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md). Plan 46 must add the capability,
+the four fixed labels, and a real `shikigami-practice-review-memory-v1` patch branch in the same
+change, following [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md).
+Plan 45 proves replay by running the capability in an isolated test workflow whose active patch set
+explicitly contains the future patch id; that journal is test data, not a production declaration.
 
-Mori identifies the dependency as `mori://shinzui/kioku`; `mori registry show shinzui/kioku --full`
+Mori identifies the dependency package as `mori://shinzui/kioku/packages/kioku-core`;
+`mori registry show shinzui/kioku --full`
 locates its source at `/Users/shinzui/Keikaku/bokuno/kioku`. The workspace selects released
 `kioku-api` and `kioku-core` 0.5.0.0. The authoritative Hackage preferred-version document and
 upstream `v0.5.0.0` tag agree. At that tag, `Kioku.Memory.recordWithContext` is idempotent by memory
@@ -255,16 +304,11 @@ Define the dynamic `PracticeReviewMemory` effect and a `PracticeReviewMemoryEnv`
 caller-supplied labels: `rememberProvisional`, `resolveReview`, `recallPracticeReviews`, and
 `recallPracticeReviewChain`. Its interpreter reads patch
 `shikigami-practice-review-memory-v1` once, journals the operations under the four fixed names for a
-fresh instance, and performs the same idempotent action directly in the legacy branch. Add the
-effect to `FlowEffects` and install the interpreter in both production
-`Shikigami.Agent.Workflow.runFlowBehavior` and the Flow test harness.
-
-Declare those fixed names in a new patch block in `domain/shikigami-agent-run.keiro`. Run
-`just keiro-scaffold`, update
-`shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`,
-and add a deploy-simulation case to `Shikigami.WorkflowVersioningSpec`: an old-shape instance takes
-the real direct branch, a fresh instance journals the new step, and the generated patch set contains
-the id. Update `docs/workflow-versioning.md`'s inventory.
+fresh instance, and performs the same idempotent action directly in the legacy branch. Exercise
+both branches in `PracticeReviewMemorySpec` with a dedicated test workflow and explicit run options.
+Do not install the effect in production `FlowEffects` or edit the checked AgentRun body in this
+plan. Record the exact integration obligation for plan 46 in the module documentation and this
+plan's Portfolio Reconciliation section.
 
 `rememberProvisional` records a deterministic provisional row with the current session, shared
 practice scope, verdict-derived confidence, `MemoryPattern`, envelope text, tags, and optional
@@ -285,7 +329,8 @@ cannot inhabit `ValidatedPracticeReviewResolution`, and a JSON boundary test pro
 the capability runs.
 
 At the end of this milestone, replay and concurrency converge without mutating old content or tags.
-Run the focused PostgreSQL transition tests and `just keiro-gate <merge-base>`.
+Run the focused PostgreSQL transition tests. `just keiro-gate` is not required because this plan
+does not change a production workflow body, declaration, generated artifact, or durable identity.
 
 ### Milestone 3 — expose the active view and immutable audit chain
 
@@ -328,25 +373,20 @@ sed -n '1,220p' docs/adr/0013-flow-bodies-reach-the-world-only-through-capabilit
 sed -n '1,180p' docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md
 ```
 
-Implement the pure module and focused tests first. Then add the capability, declaration, generated
-artifacts, and integration tests. Format only hand-owned Haskell; generated modules are not
-formatted.
+Implement the pure module and focused tests first. Then add the isolated capability interpreter,
+transitions, recall, and integration tests. Leave production Flow and generated workflow artifacts
+for plan 46. Format only hand-owned Haskell.
 
 ```bash
 nix develop -c fourmolu -i shikigami-core/src/Shikigami/PracticeReview/Memory.hs
 nix develop -c fourmolu -i shikigami-core/test/Shikigami/PracticeReviewMemorySpec.hs
-nix develop -c fourmolu -i shikigami-core/test/Shikigami/WorkflowVersioningSpec.hs
-just keiro-scaffold
 nix develop -c cabal test shikigami-core-test --test-options='-p "PracticeReviewMemory"' --test-show-details=direct
-just keiro-gate HEAD^
 nix develop -c cabal test all --test-show-details=direct
 ```
 
-If milestone commits mean `HEAD^` is not the revision before the workflow declaration changed, pass
-that actual merge-base to `just keiro-gate`. The focused transcript must show one provisional row
-after replay; one active resolution after resolution replay; the provisional row marked
-`superseded`; a chain containing both logical ids; and, in the race, exactly one active winner plus
-one retired loser and one typed conflict.
+The focused transcript must show one provisional row after replay; one active resolution after
+resolution replay; the provisional row marked `superseded`; a chain containing both logical ids;
+and, in the race, exactly one active winner plus one retired loser and one typed conflict.
 
 
 ## Validation and Acceptance
@@ -381,8 +421,9 @@ candidate retires the provisional and remains active. The losing call returns
 returns. Active recall never returns both as guidance, while the chain retains all three rows for
 audit.
 
-`just keiro-gate` reports no breaking workflow change, the focused test exits zero, `cabal test all`
-exits zero, `git diff --name-only -- shikigami-migrations` is empty, and no new dependency bound is
+The focused test exits zero, `cabal test all` exits zero,
+`git diff --name-only -- shikigami-core/src/Shikigami/Flow shikigami-core/src/Shikigami/Agent/Workflow.hs domain`
+is empty, `git diff --name-only -- shikigami-migrations` is empty, and no new dependency bound is
 introduced.
 
 
@@ -403,10 +444,11 @@ the provisional, replay reuses the candidate and finishes the retirement. If it 
 cleaning up a race loser, replay observes the same winner and repeats the same idempotent cleanup.
 The full chain exposes every intermediate row.
 
-The pre-patch capability branch performs the same deterministic IO without a new step, so an
-in-flight old-shape instance cannot acquire a result under a label it did not start with. The patch
-id, runtime branch, declaration, generated active set, conformance expectation, and workflow
-inventory must be added and later retired together according to `docs/workflow-versioning.md`.
+The pre-patch capability branch performs the same deterministic IO without a new step, so the
+isolated deploy-simulation test proves the future compatibility behavior before plan 46 installs
+it. The patch id, runtime branch, declaration, generated active set, conformance expectation, and
+workflow inventory must be added and later retired together by plan 46 according to
+`docs/workflow-versioning.md`.
 
 Tests provision isolated migrated PostgreSQL databases and are safe to repeat. A failed Keiro gate
 must be fixed by correcting the patch/declaration/runtime agreement; do not waive it or hide a label.
@@ -421,7 +463,11 @@ review-level ids, exact active/chain reads, and a record-plus-retire protocol. P
 owner of external evidence acquisition; this plan consumes only already validated verdicts and can
 be implemented before plan 44's live adapter. Plan 46 must be refreshed before implementation: its
 July advice to derive step labels from review/resolution data conflicts with the landed static-label
-workflow rules, and it should consume the four operations delivered here.
+workflow rules, and it should consume the four operations delivered here. It also owns adding
+`PracticeReviewMemory` to `FlowEffects`, installing the interpreter, declaring the four labels
+behind `shikigami-practice-review-memory-v1`, regenerating conformance artifacts, updating the
+workflow inventory, and running `just keiro-gate` in the same change that registers the specialist
+Flow.
 
 
 ## Interfaces and Dependencies
@@ -510,3 +556,11 @@ version bound, schema, direct SQL statement, or new memory store. Use Kioku 0.5.
   labels and logical ids, specifies record-plus-retire race cleanup, stores the verdict beside the
   resolution, removes the nonexistent expiry rule, and expands acceptance to the active view and
   full audit chain.
+- 2026-08-24: During implementation, applied ADR 0001's declare-only rule and moved production
+  `FlowEffects`/AgentRun integration plus the checked patch declaration to plan 46, where the
+  specialist Flow that actually executes these operations will land. Plan 45 retains an isolated
+  journaled workflow proof and does not broaden the production durable body speculatively.
+- 2026-08-24: Completed implementation and validation. Added projected-winner rereads for every
+  Kioku retirement refusal after PostgreSQL exposed more than one race-time refusal shape, added
+  malformed and wrong-scope diagnostics, and recorded the durable transition boundary in ADR 0031.
+  The focused 17-test suite and the full nine-suite, 753-test workspace run pass.
