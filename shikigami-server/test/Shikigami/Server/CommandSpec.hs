@@ -13,9 +13,13 @@ module Shikigami.Server.CommandSpec (tests) where
 import Data.List (isInfixOf)
 import Data.Maybe (isNothing)
 import Data.Text qualified as Text
+import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText)
 import Options.Applicative
+import Shikigami.Agent.Approval (ApprovalDecision (..))
 import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
+import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
+import System.Exit (ExitCode (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -28,6 +32,7 @@ tests =
           @?= [ "validate",
                 "render-lifecycle",
                 "enqueue-run",
+                "resolve-approval",
                 "publish-fixture",
                 "stub-kawa",
                 "stub-kanmon",
@@ -80,6 +85,33 @@ tests =
         mapM_
           (\flag -> assertBool ("danwa-spike help does not mention " <> flag) (flag `isInfixOf` rendered))
           ["--danwa-url", "--human", "--agent"],
+      testCase "resolve-approval accepts exactly one typed decision" do
+        let token = "123e4567-e89b-42d3-a456-426614174000"
+        case parseResolution [token, "--approve"] of
+          Success (awakeableId, Approved _) -> awakeableIdText awakeableId @?= Text.pack token
+          other -> assertBool ("approve form did not parse: " <> showParse other) False
+        case parseResolution [token, "--reject", "not approved"] of
+          Success (awakeableId, Rejected reason) -> do
+            awakeableIdText awakeableId @?= Text.pack token
+            reason @?= "not approved"
+          other -> assertBool ("reject form did not parse: " <> showParse other) False
+        mapM_
+          ( \args -> case parseResolution args of
+              Failure _ -> pure ()
+              _ -> assertBool ("invalid resolve-approval form parsed: " <> show args) False
+          )
+          [ [token],
+            [token, "--approve", "--reject", "no"],
+            ["not-a-uuid", "--approve"]
+          ],
+      testCase "resolve-approval selects success and unknown-token exits" do
+        let token = "123e4567-e89b-42d3-a456-426614174000"
+        case parseResolution [token, "--approve"] of
+          Success (awakeableId, _) -> do
+            resolutionResult awakeableId True @?= ("approval " <> Text.pack token <> " resolved: true", ExitSuccess)
+            resolutionResult awakeableId False
+              @?= ("approval " <> Text.pack token <> " resolved: false (unknown or already resolved)", ExitFailure 1)
+          _ -> assertBool "fixture token did not parse" False,
       -- The diagnostics live at the top level rather than inside a subcommand,
       -- because `shikigami --describe-config` must answer without being told
       -- which command it is about to not run.
@@ -198,3 +230,12 @@ helpTextOf args =
     Failure failure -> let (message, _) = renderFailure failure "shikigami" in message
     Success _ -> "unexpected success: the parser did not handle --help"
     CompletionInvoked _ -> "unexpected completion invocation"
+
+parseResolution :: [String] -> ParserResult (AwakeableId, ApprovalDecision)
+parseResolution = execParserPure defaultPrefs (info (resolveApprovalOptionsParser <**> helper) mempty)
+
+showParse :: ParserResult a -> String
+showParse = \case
+  Success _ -> "success with unexpected decision"
+  Failure failure -> fst (renderFailure failure "resolve-approval")
+  CompletionInvoked _ -> "completion invoked"

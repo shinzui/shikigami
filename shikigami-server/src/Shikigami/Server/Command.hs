@@ -56,6 +56,7 @@ import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrants
 import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
+import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
 import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
@@ -135,6 +136,7 @@ adminSubcommands =
   [ ("validate", command "validate" validateInfo),
     ("render-lifecycle", command "render-lifecycle" renderLifecycleInfo),
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
+    ("resolve-approval", command "resolve-approval" resolveApprovalInfo),
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
     ("stub-kanmon", command "stub-kanmon" stubKanmonInfo),
@@ -304,6 +306,16 @@ enqueueRunInfo =
         <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Addressed run payload as JSON"))
         <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
         <*> optional (strOption (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
+
+resolveApprovalInfo :: ParserInfo AdminAction
+resolveApprovalInfo =
+  info
+    (parser <**> helper)
+    (progDesc "Approve or reject one pending human approval token")
+  where
+    parser =
+      (\(awakeableId, decision) -> (runResolveApproval awakeableId decision, []))
+        <$> resolveApprovalOptionsParser
 
 publishFixtureInfo :: ParserInfo AdminAction
 publishFixtureInfo =
