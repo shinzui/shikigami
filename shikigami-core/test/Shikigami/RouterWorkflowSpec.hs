@@ -21,7 +21,8 @@ import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shikigami.Agent.Approval (defaultApprovalEnv)
+import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     AmbiguousPolicy (ReturnAmbiguous),
@@ -331,6 +332,8 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
       AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+      AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+      AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.approval = defaultApprovalEnv,
       AgentWorkflow.deadline = Nothing,
       AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,

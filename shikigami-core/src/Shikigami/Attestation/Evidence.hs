@@ -52,6 +52,7 @@ import Data.Map.Strict qualified as Map
 import Keiki.Core (RegFile)
 import Keiki.Core qualified as Keiki
 import Numeric.Natural (Natural)
+import Shikigami.Agent.Approval (ReviewRequestId (..))
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Reviewed (DiffDigest, ResultDigest, ReviewedArtifact)
@@ -88,15 +89,6 @@ instance FromJSON EvidencePhase where parseJSON = genericParseJSON eventAesonOpt
 data TransitionError = IllegalTransition !EvidencePhase !EvidencePhase
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
-
--- | Opaque identity of the human review request bound to this run.
---
--- The caller supplies this value until
--- @docs/plans/14-approval-and-human-in-the-loop-end-to-end.md@ defines the
--- owning approval vocabulary.
-newtype ReviewRequestId = ReviewRequestId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
 
 -- | How one correlatable call relates to another. Baikai owns the provider
 -- evidence; Shikigami owns these durable run-local relationships.

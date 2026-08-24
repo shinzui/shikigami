@@ -6,6 +6,7 @@ module Shikigami.Generated.Conformance
 
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
+import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
 
 runServiceConformanceChecks :: IO [(String, Bool)]
@@ -17,4 +18,5 @@ runServiceConformanceChecks =
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =
     [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
+    <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
     <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]

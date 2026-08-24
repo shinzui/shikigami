@@ -24,6 +24,7 @@ library
   exposed-modules:
     Shikigami.Activity
     Shikigami.Agent.Approval
+    Shikigami.Agent.Approval.Workflow
     Shikigami.Agent.Conversation
     Shikigami.Agent.Conversation.SessionIndex
     Shikigami.Agent.Decl
@@ -118,6 +119,8 @@ library
   other-modules:
     Shikigami.AgentRun.Generated.WorkflowFacts
     Shikigami.AgentRun.Generated.WorkflowRuntime
+    Shikigami.Approval.Generated.WorkflowFacts
+    Shikigami.Approval.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
     Shikigami.Generated.BehaviorSourceMap

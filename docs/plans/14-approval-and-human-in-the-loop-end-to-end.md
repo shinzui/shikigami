@@ -64,12 +64,19 @@ from the terminal completes without enqueuing its Kawa intent.
 - [x] (2026-08-23) Rebased this plan from the removed monolithic worker and pre-Settei design
       onto `shikigami-core`, `shikigami-workers`, and `shikigami-server`; removed work already
       delivered by plans 17, 22, 36, 37, 39, 47, and 51.
-- [ ] Milestone 1: declare and scaffold the approval child workflow and the permanent
-      `shikigami-approval-workflow-v1` parent patch, then add replay tests for both patch
-      branches.
-- [ ] Milestone 2: implement the approval policy snapshot, stable review identity, child
-      runtime, authenticated Danwa/Kizashi notification, and permanent/transient failure
-      behavior in `shikigami-core`.
+- [x] (2026-08-23) Declared and scaffolded the approval child workflow and the permanent
+      `shikigami-approval-workflow-v1` parent patch; updated the generated inventory,
+      Cabal module list, active-patch union, and conformance expectations.
+- [x] (2026-08-23) Added deploy-simulation replay tests for the legacy and child-workflow
+      branches on both Flow and sink request keys, plus a frozen stable-review-id vector and
+      generated-patch membership assertion. The Keiro gate follows the milestone commit because
+      its scaffold check compares generated files with `HEAD`.
+- [x] (2026-08-23) Verified the checkpoint with `nix fmt`, `git diff --check`, `cabal build all`,
+      all 30 `keiro-shikigami-conformance` facts, the three approval/versioning focused tests,
+      and all 44 `AgentWorkflow` tests.
+- [ ] Milestone 2 in progress: implemented the approval policy snapshot, stable review identity,
+      child runtime, Flow and sink parent integration, and permanent/transient failure model in
+      `shikigami-core`; authenticated Danwa/Kizashi notification remains.
 - [ ] Milestone 3: add the Settei settings and production worker wiring, register the approval
       child for resume, and emit a structured startup description of the effective policy.
 - [ ] Milestone 4: add `shikigami resolve-approval`, parser and exit-behavior tests, and the
@@ -137,6 +144,21 @@ from the terminal completes without enqueuing its Kawa intent.
   workflow.
   Evidence: the same mutable-policy problem and journaled-snapshot remedy are established for
   execution profiles by ADR 0007.
+  Date: 2026-08-23
+
+- Observation: Keiro DSL 0.14 scaffolds `declaredPatches :: Set PatchId`, but does not generate
+  one named Haskell constant per declared patch.
+  Evidence: the scaffolded `Shikigami.AgentRun.Generated.WorkflowRuntime` exports
+  `declaredPatches`, `declaredPatchStepNames`, and `withDeclaredPatches`; the generator in
+  `mori://shinzui/keiro/packages/keiro-dsl` emits no per-patch binding.
+  Date: 2026-08-23
+
+- Observation: `just keiro-scaffold` intentionally fails while newly scaffolded output differs
+  from `HEAD`, even when the generated files are correct. A new workflow declaration therefore
+  needs a milestone commit before `just keiro-gate <merge-base>` can prove both scaffold
+  cleanliness and compatibility against the pre-change tree.
+  Evidence: the scaffold recipe completed generation and reported only the expected generated
+  diff; `cabal test keiro-shikigami-conformance` passed all 30 facts afterward.
   Date: 2026-08-23
 
 
@@ -226,14 +248,21 @@ from the terminal completes without enqueuing its Kawa intent.
   runtime does not execute.
   Date: 2026-08-23
 
+- Decision: Keep the runtime `approvalWorkflowPatch` value hand-owned and assert that it is a
+  member of generated `AgentRun.declaredPatches` in the deploy-simulation tests.
+  Rationale: the pinned Keiro DSL generator exposes the authoritative set but no individual
+  constant. The membership assertion detects spelling drift while preserving the existing
+  runtime pattern for `patch` calls.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
 The 2026-08-23 refresh removed obsolete prerequisite implementation and made the remaining work
-consistent with the checked durable-workflow model. Implementation has not started. The expected
-outcome is one production approval vertical shared by sink policy and Flow acknowledgement, with
-static declared labels for fresh runs, compatible replay for old journals, a stable review id, an
-opaque resolution token, and no new database table or HTTP stack.
+consistent with the checked durable-workflow model. Milestone 1 now declares the child and parent
+patch, and the first part of milestone 2 routes fresh sink and Flow requests through that child
+while replay simulations preserve the old direct-awakeable branch. Authenticated notification,
+configuration, operator CLI, and the complete acceptance transcript remain.
 
 
 ## Context and Orientation
@@ -350,8 +379,9 @@ operation.
 
 Run `just keiro-scaffold`, review every generated path, wire the generated approval facts/runtime
 module into the Cabal component and `Shikigami.Workflow.Versioning.shikigamiActivePatches`, and
-update the create-once conformance expectations only as the scaffold instructs. Add the generated
-approval patch constant to the hand-owned runtime branch rather than spelling a second `PatchId`.
+update the create-once conformance expectations only as the scaffold instructs. Keiro DSL 0.14
+does not generate individual patch constants, so keep the hand-owned `approvalWorkflowPatch`
+value beside the approval runtime and assert that it belongs to the generated AgentRun patch set.
 
 Before proceeding, add focused deploy-simulation tests. A workflow begun with the patch absent
 must retain the direct legacy `await-ack` or auto-approved sink path when resumed by code whose
@@ -743,6 +773,9 @@ upstream tag before changing Cabal bounds.
 
 ## Revision Notes
 
+- 2026-08-23: Recorded that Keiro DSL 0.14 exposes the checked patch set but no individual patch
+  constants, and changed the runtime-binding instruction to require a generated-set membership
+  assertion instead.
 - 2026-08-23: Re-audited and comprehensively rewrote the plan after the package split, Settei
   adoption, authenticated `SinkHttp`, supervised resume loop, checked Keiro DSL, workflow
   versioning ADRs, and run-evidence vocabulary landed. Removed completed prerequisite work and

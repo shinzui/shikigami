@@ -15,6 +15,7 @@ import Kioku.Id (genSessionId, idText)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
@@ -130,6 +131,8 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+            AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy (Config.approvalDeadline config),
+            AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
             AgentWorkflow.approval = Approval.defaultApprovalEnv,
             AgentWorkflow.deadline = Just (Config.approvalDeadline config),
             AgentWorkflow.runTimeout = Config.runTimeout config,

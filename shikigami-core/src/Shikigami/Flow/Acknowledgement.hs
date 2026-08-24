@@ -7,23 +7,36 @@ module Shikigami.Flow.Acknowledgement
     awaitAck,
     awaitAcknowledgement,
     runAcknowledgement,
+    runAcknowledgementWithChild,
+    ApprovalAcknowledgementFailed (..),
   )
 where
 
+import Control.Exception (Exception, fromException)
 import Data.Aeson (Value)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
-import Keiro.Workflow (StepName, Workflow)
+import Effectful.Exception (catchSync, throwIO)
+import Keiro.Workflow (StepName (..), Workflow)
+import Keiro.Workflow.Child (WorkflowChildFailed (..))
+import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 
 data Ack
   = Acknowledged !Value
   | Declined !Text
   | TimedOut
   deriving stock (Eq, Show)
+
+newtype ApprovalAcknowledgementFailed = ApprovalAcknowledgementFailed Text
+  deriving stock (Eq, Show)
+
+instance Exception ApprovalAcknowledgementFailed
 
 -- | Park a flow until a human answers, or until the deadline does.
 --
@@ -64,6 +77,45 @@ runAcknowledgement ::
 runAcknowledgement env deadline =
   interpret \_ -> \case
     AwaitAcknowledgement name req -> awaitAcknowledgement env name req deadline
+
+-- | Interpret a fresh run's acknowledgement as a dedicated approval child.
+-- Permanent child outcomes are thrown as a typed synchronous exception so the
+-- owning agent workflow can convert them to its ordinary @Left Text@ behavior
+-- result and journal @fail-session@ instead of retrying the parent attempt.
+runAcknowledgementWithChild ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  SessionId ->
+  Approval.ApprovalChannel ->
+  NominalDiffTime ->
+  Eff (Acknowledgement : es) a ->
+  Eff es a
+runAcknowledgementWithChild session channel deadline =
+  interpret \_ -> \case
+    AwaitAcknowledgement (StepName name) req ->
+      ( ApprovalWorkflow.requestApproval
+          ("flow-" <> name)
+          session
+          (Approval.withApprovalChannel channel req)
+          deadline
+          >>= \case
+            ApprovalWorkflow.ApprovalResolved decision -> pure (ackFromDecision decision)
+            ApprovalWorkflow.ApprovalNotificationFailed detail ->
+              throwIO (ApprovalAcknowledgementFailed detail)
+      )
+        `catchSync` \err ->
+          case fromException err of
+            Just (WorkflowChildFailed childName childId detail) ->
+              throwIO
+                ( ApprovalAcknowledgementFailed
+                    ( "approval child "
+                        <> Text.pack (show childName)
+                        <> "/"
+                        <> Text.pack (show childId)
+                        <> " failed: "
+                        <> detail
+                    )
+                )
+            Nothing -> throwIO err
 
 -- | The direct call the capability wraps. Still exported because
 -- 'runAcknowledgement' is not the only possible caller and because the

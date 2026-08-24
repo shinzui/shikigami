@@ -1,0 +1,19 @@
+# One human review request. The parent derives a stable ReviewRequestId and
+# uses it as this child workflow's durable identity. The opaque AwakeableId
+# that authorizes resolution is allocated and journaled inside the child; it is
+# deliberately not an external operation or part of the workflow key.
+language keiro-dsl 5
+context shikigami
+layout collocated
+
+workflow Approval
+  name "shikigami.approval"
+  in ApprovalWorkflowInput {
+    reviewRequestId:Id
+  }
+  out ApprovalWorkflowResult
+  id from input.reviewRequestId via reviewRequestIdText
+  body
+    step ingest-approval -> ApprovalWorkflowInput
+    step notify -> ApprovalNotificationResult
+    await decision -> ApprovalDecision

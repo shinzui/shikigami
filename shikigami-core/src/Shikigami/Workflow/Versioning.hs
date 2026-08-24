@@ -39,6 +39,7 @@ import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptio
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
 import Kioku.App (AppEnv (..))
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
+import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
 
 -- | Every patch id this deployment has active, read from the checked
@@ -52,7 +53,7 @@ import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaC
 -- A hand-written list beside the generated one could drift from the gated one,
 -- which is the precise failure this module exists to prevent.
 --
--- The two sets are unioned because Keiro's resume worker carries a single
+-- The sets are unioned because Keiro's resume worker carries a single
 -- 'WorkflowRunOptions' for every workflow it drives (@runOptions@ in
 -- 'WorkflowResumeOptions'), so there is no boundary at which a per-workflow set
 -- could be applied. Activating a patch id for a workflow that never calls
@@ -60,7 +61,9 @@ import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaC
 -- instance's reserved @__workflow_patches__@ record.
 shikigamiActivePatches :: Set PatchId
 shikigamiActivePatches =
-  AgentRun.declaredPatches <> DanwaConversation.declaredPatches
+  AgentRun.declaredPatches
+    <> Approval.declaredPatches
+    <> DanwaConversation.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions

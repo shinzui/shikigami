@@ -28,7 +28,7 @@ module Shikigami.Agent.Workflow
   )
 where
 
-import Control.Exception (throwIO)
+import Control.Exception (fromException, throwIO)
 import Data.Aeson (Key, Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
@@ -44,6 +44,8 @@ import Data.Time (NominalDiffTime, secondsToNominalDiffTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError_)
+import Effectful.Exception (trySync)
+import Effectful.Exception qualified as EffException
 import Hasql.Pool (Pool)
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox (OutboxRow (..), PublishOutcome (..), mkPublishRejection)
@@ -58,6 +60,7 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
+import Keiro.Workflow.Child (WorkflowChildFailed (..))
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..))
@@ -72,7 +75,18 @@ import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, runTracing, withSpan')
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalRequirement (..), awaitApproval)
+import Shikigami.Agent.Approval
+  ( ApprovalDecision (..),
+    ApprovalEnv (..),
+    ApprovalPolicySnapshot,
+    ApprovalRequest (..),
+    ApprovalRequirement (..),
+    approvalPolicyChannel,
+    approvalPolicyDeadline,
+    awaitApproval,
+    requiresApprovalFor,
+  )
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -96,7 +110,11 @@ import Shikigami.Capability.Provider
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Flow qualified as Flow
-import Shikigami.Flow.Acknowledgement (runAcknowledgement)
+import Shikigami.Flow.Acknowledgement
+  ( ApprovalAcknowledgementFailed (..),
+    runAcknowledgement,
+    runAcknowledgementWithChild,
+  )
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing (RoutingRuntime)
@@ -140,6 +158,12 @@ data AgentRunDeps = AgentRunDeps
     -- or outbox serialization boundary.
     http :: !SinkHttp,
     hooks :: !AgentRunHooks,
+    -- | Mutable process policy. Fresh runs record it once before use; legacy
+    -- patch branches never consult it.
+    approvalPolicy :: !ApprovalPolicySnapshot,
+    -- | Process resources for the approval child registered alongside this
+    -- agent-run workflow. The value itself never crosses a journal boundary.
+    approvalWorkflow :: !ApprovalWorkflow.ApprovalWorkflowEnv,
     approval :: !(SessionId -> ApprovalEnv),
     deadline :: !(Maybe NominalDiffTime),
     runTimeout :: !NominalDiffTime,
@@ -216,6 +240,9 @@ depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
 depsDelegationBudget :: AgentRunDeps -> DelegationBudget
 depsDelegationBudget AgentRunDeps {delegationBudget = value} = value
 
+depsApprovalPolicy :: AgentRunDeps -> ApprovalPolicySnapshot
+depsApprovalPolicy AgentRunDeps {approvalPolicy = value} = value
+
 declDelegationBudget :: AgentDecl -> Maybe DelegationBudget
 declDelegationBudget AgentDecl {delegationBudget = value} = value
 
@@ -253,6 +280,7 @@ runAgentRunWorkflow deps job =
 agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 agentRunRegistry deps =
   Map.singleton agentRunWorkflowName (WorkflowDef \_wid -> agentRunWorkflow deps Nothing)
+    `Map.union` ApprovalWorkflow.approvalRegistry (approvalWorkflow deps)
 
 ingestJob :: (IOE :> es) => Maybe RunJob -> Eff es RunJob
 ingestJob = \case
@@ -363,23 +391,29 @@ runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl = do
     addAttribute traceSpan "agent.name" (agentName job)
     addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
     addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
+  useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
+  approvalPolicyForRun <-
+    if useApprovalChild
+      then Just <$> runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
+      else pure Nothing
   opened <- runStep deps (StepName "open-session") (requireStore (openSession deps job decl))
   case opened of
     -- kioku refused to open the session. The same command will be refused on
     -- every replay, so there is nothing to retry and the run is over.
     StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
-    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl sid
+    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun job decl sid
 
 -- | The rest of one agent run, once its kioku session is open.
 runSessionedAgent ::
   AgentRunDeps ->
   BehaviorEnv ->
   ResolvedCapabilitySet ->
+  Maybe ApprovalPolicySnapshot ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
+runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
   prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
@@ -387,10 +421,10 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl@AgentDecl {me
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
-        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
+        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior
         _
           | not (null (delegates decl)) ->
-              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv sid decl job prior
+              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior
           | useRetrySemantics ->
               first PermanentAgentRunFailure
                 <$> runStep
@@ -420,21 +454,26 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl@AgentDecl {me
                   )
           | otherwise ->
               first LegacyBehaviorFailure
-                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv sid decl job prior)
+                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior)
   case behaviorE of
-    Left err -> do
-      failed <- runStep deps (StepName "fail-session") (requireStore (failSession deps decl sid (agentRunFailureDetail err)))
-      pure case failed of
-        StepProduced () -> Left err
-        -- The run failed either way; if the failure could not be recorded, say
-        -- both things rather than only the half that reached a store.
-        StepRefused detail ->
-          Left
-            ( PermanentAgentRunFailure
-                (agentRunFailureDetail err <> " (and " <> detail <> ")")
-            )
-    Right output -> do
-      approvedSinks <- approveSinks deps sid job decl output
+    Left err -> finishRunFailure deps decl sid err
+    Right output -> finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid prior output
+
+finishSuccessfulRun ::
+  AgentRunDeps ->
+  BehaviorEnv ->
+  Maybe ApprovalPolicySnapshot ->
+  RunJob ->
+  AgentDecl ->
+  SessionId ->
+  [MemoryRecord] ->
+  Value ->
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
+finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid prior output = do
+  approvalResult <- approveSinks deps approvalPolicyForRun sid job decl output
+  case approvalResult of
+    Left err -> finishRunFailure deps decl sid err
+    Right approvedSinks -> do
       sinkResults <-
         withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
           addAttribute traceSpan "agent.name" (agentDeclName decl)
@@ -465,6 +504,24 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays job decl@AgentDecl {me
                     behaviorOutput = output,
                     recordedMemId = mem
                   }
+
+finishRunFailure ::
+  AgentRunDeps ->
+  AgentDecl ->
+  SessionId ->
+  AgentRunFailure ->
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
+finishRunFailure deps decl sid err = do
+  failed <- runStep deps (StepName "fail-session") (requireStore (failSession deps decl sid (agentRunFailureDetail err)))
+  pure case failed of
+    StepProduced () -> Left err
+    -- The run failed either way; if the failure could not be recorded, say
+    -- both things rather than only the half that reached a store.
+    StepRefused detail ->
+      Left
+        ( PermanentAgentRunFailure
+            (agentRunFailureDetail err <> " (and " <> detail <> ")")
+        )
 
 behaviorRetryPatch :: PatchId
 behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
@@ -583,27 +640,77 @@ runStep deps stepName action =
 approveSinks ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
+  Maybe ApprovalPolicySnapshot ->
   SessionId ->
   RunJob ->
   AgentDecl ->
   Value ->
-  Eff es [Sink]
-approveSinks deps sid job decl output =
-  catMaybes <$> traverse approve (zip [0 :: Int ..] (sinks decl))
+  Eff es (Either AgentRunFailure [Sink])
+approveSinks deps approvalPolicyForRun sid job decl output =
+  case approvalPolicyForRun of
+    Nothing -> Right . catMaybes <$> traverse approveLegacy indexedSinks
+    Just policy -> do
+      decisions <- traverse (approveWithPolicy policy) indexedSinks
+      pure (catMaybes <$> sequence decisions)
   where
-    env = approval deps sid
+    indexedSinks = zip [0 :: Int ..] (sinks decl)
+    legacyEnv = approval deps sid
 
-    approve (ordinal, sink) = do
+    approveLegacy (ordinal, sink) = do
       let kind = sinkKindOf sink
-      requirement <- liftIO (requiresApproval env (AgentIdentity (agentName job)) kind output)
+      requirement <- liftIO (requiresApproval legacyEnv (AgentIdentity (agentName job)) kind output)
       case requirement of
         ApprovalNotRequired -> pure (Just sink)
         ApprovalRequired request -> do
-          decision <- awaitApproval env (approvalStepName ordinal kind) request (deadline deps)
+          decision <- awaitApproval legacyEnv (approvalStepName ordinal kind) request (deadline deps)
           pure case decision of
             Approved _ -> Just sink
             Rejected _ -> Nothing
             TimedOut -> Nothing
+
+    approveWithPolicy policy (ordinal, sink)
+      | not (requiresApprovalFor policy kind) = pure (Right (Just sink))
+      | otherwise = do
+          requested <-
+            trySync
+              ( ApprovalWorkflow.requestApproval
+                  ("sink-" <> sinkKindText kind <> "-" <> Text.pack (show ordinal))
+                  sid
+                  ApprovalRequest
+                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> agentName job <> "?",
+                      context = output,
+                      channel = approvalPolicyChannel policy
+                    }
+                  (approvalPolicyDeadline policy)
+              )
+          case requested of
+            Left err ->
+              case fromException err of
+                Just (WorkflowChildFailed childName childId detail) ->
+                  pure
+                    ( Left
+                        ( PermanentAgentRunFailure
+                            ( "approval child "
+                                <> Text.pack (show childName)
+                                <> "/"
+                                <> Text.pack (show childId)
+                                <> " failed: "
+                                <> detail
+                            )
+                        )
+                    )
+                Nothing -> EffException.throwIO err
+            Right (ApprovalWorkflow.ApprovalNotificationFailed detail) ->
+              pure (Left (PermanentAgentRunFailure ("approval notification failed: " <> detail)))
+            Right (ApprovalWorkflow.ApprovalResolved decision) ->
+              pure
+                ( Right case decision of
+                    Approved _ -> Just sink
+                    Rejected _ -> Nothing
+                    TimedOut -> Nothing
+                )
+      where
+        kind = sinkKindOf sink
 
     approvalStepName ordinal kind =
       StepName ("approval:" <> sinkKindText kind <> ":" <> Text.pack (show ordinal))
@@ -660,14 +767,15 @@ runBehaviorStep ::
   (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
+  Maybe ApprovalPolicySnapshot ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   [MemoryRecord] ->
   Eff es (Either Text Value)
-runBehaviorStep deps activeBehaviorEnv sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
+runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
-    Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv sid decl job flowName
+    Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun sid decl job flowName
     _
       | not (null (delegates decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
@@ -680,25 +788,44 @@ runFlowBehavior ::
   (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
+  Maybe ApprovalPolicySnapshot ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   Text ->
   Eff es (Either Text Value)
-runFlowBehavior deps activeBehaviorEnv sid decl job flowName =
+runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun sid decl job flowName =
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
-      output <-
-        FlowCapability.runActivity (activityFromJob job)
-          . FlowCapability.runMemory memoryEnv
-          . FlowCapability.runSink sinkEnv
-          . FlowDelegate.runDelegate delegateEnv
-          . FlowRouting.runRouting routingEnv
-          . runAcknowledgement (approval deps sid) (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
-          $ run (triggerPayload job)
-      pure (Right output)
+      attempted <-
+        trySync
+          ( FlowCapability.runActivity (activityFromJob job)
+              . FlowCapability.runMemory memoryEnv
+              . FlowCapability.runSink sinkEnv
+              . FlowDelegate.runDelegate delegateEnv
+              . FlowRouting.runRouting routingEnv
+              . acknowledgementInterpreter
+              $ run (triggerPayload job)
+          )
+      case attempted of
+        Left err ->
+          case fromException err of
+            Just (ApprovalAcknowledgementFailed detail) -> pure (Left detail)
+            Nothing -> EffException.throwIO err
+        Right output -> pure (Right output)
   where
+    acknowledgementInterpreter =
+      case approvalPolicyForRun of
+        Nothing ->
+          runAcknowledgement
+            (approval deps sid)
+            (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
+        Just policy ->
+          runAcknowledgementWithChild
+            sid
+            (approvalPolicyChannel policy)
+            (approvalPolicyDeadline policy)
     memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
     delegateEnv = FlowDelegate.DelegateEnv {FlowDelegate.agent = decl, FlowDelegate.context = delegateContext deps decl sid job}
     routingEnv =

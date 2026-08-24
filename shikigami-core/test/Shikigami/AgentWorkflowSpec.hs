@@ -13,6 +13,7 @@ import Data.List (elemIndex)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -28,7 +29,6 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
-import Keiro.Timer (TimerRow (..))
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -47,9 +47,9 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Kiroku.Store.Types (EventId)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
@@ -161,28 +161,16 @@ tests =
                     [workspaceReadV1]
                     [trackingCapabilityProvider events active "v1" workspaceReadV1 (Right ())]
                     allowCapability
-                approvalFor sid =
-                  ApprovalEnv
-                    { currentSession = sid,
-                      requiresApproval = \_ _ _ -> do
-                        leaseIsActive <- readIORef active
-                        when leaseIsActive (ioError (userError "overlay lease survived into sink approval"))
-                        recordCapabilityEvent events "sink-boundary"
-                        pure ApprovalNotRequired,
-                      recordPark = \_ _ _ -> pure (),
-                      postAsk = \_ _ _ -> pure ()
-                    }
                 deps =
                   (testDepsWithAgents appEnv behaviorEnv hooks [declaration])
-                    { capabilities = runtime,
-                      approval = approvalFor
+                    { capabilities = runtime
                     }
                 runJob = capabilityJob "overlay-lifecycle" "overlay-lifecycle:run"
 
             result <- runAgentRunWorkflow deps runJob
             assertBool ("authorized overlay run completes: " <> show result) (isCompleted result)
             observed <- readIORef events
-            assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "sink-boundary", "before:record", "before:complete"]
+            assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "before:record", "before:complete"]
             assertEqual "the lease is gone when the workflow returns" False =<< readIORef active,
       testCase "a retry reacquires the journaled revision while a new run selects the new catalog revision" do
         withShikigamiMigratedDatabase \connStr ->
@@ -1461,6 +1449,7 @@ tests =
                   Right Suspended -> pure ()
                   other -> assertEqual "workflow parks for approval" "Suspended" (show other)
 
+                driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables
                 assertEqual "one awakeable is pending while parked" (Right 1) pending
                 beforeOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
@@ -1469,8 +1458,8 @@ tests =
                 aid <- readCapturedAwakeable aidRef
                 resolved <- resolveApproval appEnv aid (Approved (object ["approved" .= True]))
                 assertBool "approval signal resolves the awakeable" resolved
-                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
-                assertEqual "resume pass completes the approved workflow" (Right 1) (completed <$> resumed)
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "approved sink is dispatched once" (Right 1) (length <$> afterOutbox),
@@ -1488,11 +1477,12 @@ tests =
                   Right Suspended -> pure ()
                   other -> assertEqual "workflow parks for approval" "Suspended" (show other)
 
+                driveApprovalChildToPark appEnv deps
                 aid <- readCapturedAwakeable aidRef
                 resolved <- resolveApproval appEnv aid (Rejected "not approved")
                 assertBool "rejection signal resolves the awakeable" resolved
-                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
-                assertEqual "resume pass completes the rejected workflow" (Right 1) (completed <$> resumed)
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "rejected sink is suppressed" (Right 0) (length <$> afterOutbox)
@@ -1513,9 +1503,10 @@ tests =
                   Right Suspended -> pure ()
                   other -> assertEqual "workflow parks for approval deadline" "Suspended" (show other)
 
+                driveApprovalChildToPark appEnv deps
                 fireDueApprovalTimer appEnv
-                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
-                assertEqual "resume pass completes the timed-out workflow" (Right 1) (completed <$> resumed)
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "timed-out sink is suppressed" (Right 0) (length <$> afterOutbox),
@@ -1533,12 +1524,13 @@ tests =
                   Right Suspended -> pure ()
                   other -> assertEqual "workflow parks for approval deadline" "Suspended" (show other)
 
+                driveApprovalChildToPark appEnv deps
                 aid <- readCapturedAwakeable aidRef
                 resolved <- resolveApproval appEnv aid (Approved (object ["approved" .= True]))
                 assertBool "approval signal resolves before deadline" resolved
                 fireDueApprovalTimer appEnv
-                resumed <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
-                assertEqual "resume pass completes the approved workflow" (Right 1) (completed <$> resumed)
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "approved sink still dispatches once" (Right 1) (length <$> afterOutbox)
@@ -1582,7 +1574,7 @@ parentDelegateContext currentSession =
 
 testDeps :: AppEnv -> BehaviorEnv -> AgentRunHooks -> AgentRunDeps
 testDeps appEnv behaviorEnv hooks =
-  testDepsWithApproval appEnv behaviorEnv hooks defaultApprovalEnv
+  testDepsWithAgents appEnv behaviorEnv hooks [decl]
 
 testDepsWithAgents :: AppEnv -> BehaviorEnv -> AgentRunHooks -> [AgentDecl] -> AgentRunDeps
 testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
@@ -1598,6 +1590,8 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
+      approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+      approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       approval = defaultApprovalEnv,
       deadline = Nothing,
       runTimeout = secondsToNominalDiffTime 300,
@@ -1628,6 +1622,13 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
+      approvalPolicy =
+        ApprovalPolicySnapshot
+          { requireFor = Set.singleton SKawaDigest,
+            channel = ViaDanwa,
+            deadline = fromMaybe (secondsToNominalDiffTime 900) deadline
+          },
+      approvalWorkflow = approvalWorkflowFromLegacy approval,
       approval,
       deadline,
       runTimeout = secondsToNominalDiffTime 300,
@@ -1661,6 +1662,17 @@ approvalEnv aidRef currentSession =
             else ApprovalNotRequired,
       recordPark = \_ aid _ -> writeIORef aidRef (Just aid),
       postAsk = \_ _ _ -> pure ()
+    }
+
+approvalWorkflowFromLegacy :: (SessionId -> ApprovalEnv) -> ApprovalWorkflow.ApprovalWorkflowEnv
+approvalWorkflowFromLegacy approvalFor =
+  ApprovalWorkflow.ApprovalWorkflowEnv
+    { ApprovalWorkflow.notifier =
+        ApprovalWorkflow.ApprovalNotifier
+          { ApprovalWorkflow.recordPark = \session _ aid request ->
+              recordPark (approvalFor session) session aid request,
+            ApprovalWorkflow.postAsk = \_ _ _ -> pure (Right ())
+          }
     }
 
 approvalRequest :: ApprovalRequest
@@ -1886,6 +1898,21 @@ fireDueApprovalTimer appEnv = do
   fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) approvalTimeoutFireAction)
   assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
 
+driveApprovalChildToPark :: AppEnv -> AgentRunDeps -> IO ()
+driveApprovalChildToPark appEnv deps = do
+  outcome <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+  case outcome of
+    Left err -> assertFailure ("approval child resume failed: " <> show err)
+    Right report -> assertBool "approval child was discovered and driven" (resumed report > 0)
+
+resumeApprovalToCompletion :: AppEnv -> AgentRunDeps -> IO Int
+resumeApprovalToCompletion appEnv deps = do
+  firstPass <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+  secondPass <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+  case (firstPass, secondPass) of
+    (Right firstReport, Right secondReport) -> pure (completed firstReport + completed secondReport)
+    other -> assertFailure ("approval resume failed: " <> show other)
+
 -- | The lifecycle step names one agent run journaled, with Keiro's reserved
 -- bookkeeping removed so the assertion is about this workflow's own steps.
 --
@@ -2096,6 +2123,8 @@ expectedLifecycleSteps =
       "resolve-profile",
       "patch:shikigami-capability-overlays-v1",
       "resolve-capability-overlays",
+      "patch:shikigami-approval-workflow-v1",
+      "resolve-approval-policy",
       "open-session",
       "recall",
       "patch:shikigami-behavior-retry-v1",

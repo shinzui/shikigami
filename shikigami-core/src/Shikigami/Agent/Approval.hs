@@ -3,6 +3,16 @@ module Shikigami.Agent.Approval
     ApprovalChannel (..),
     ApprovalDecision (..),
     ApprovalRequirement (..),
+    ReviewRequestId (..),
+    ApprovalPolicySnapshot (..),
+    reviewRequestIdFor,
+    reviewRequestIdText,
+    approvalWorkflowId,
+    requiresApprovalFor,
+    withApprovalChannel,
+    approvalPolicyChannel,
+    approvalPolicyDeadline,
+    autoApprovePolicy,
     ApprovalEnv (..),
     defaultApprovalEnv,
     awaitApproval,
@@ -11,6 +21,7 @@ module Shikigami.Agent.Approval
     resolveApproval,
     approvalTimeoutFireAction,
     approvalTimeoutKind,
+    armApprovalDeadline,
   )
 where
 
@@ -18,8 +29,11 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (traverse_)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
+import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -77,6 +91,75 @@ data ApprovalRequirement
   | ApprovalRequired !ApprovalRequest
   deriving stock (Eq, Show, Generic)
 
+-- | Stable public identity for one human review. This value is safe to retain
+-- in logs and attestations; it is deliberately distinct from the random,
+-- one-shot 'AwakeableId' that authorizes a decision.
+newtype ReviewRequestId = ReviewRequestId {value :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+-- | The approval policy recorded once in an agent-run journal. Replaying a run
+-- consults this value instead of whichever process configuration happens to be
+-- active when the run resumes.
+data ApprovalPolicySnapshot = ApprovalPolicySnapshot
+  { requireFor :: !(Set SinkKind),
+    channel :: !ApprovalChannel,
+    deadline :: !NominalDiffTime
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | Derive the stable public review id from durable parent coordinates and a
+-- caller-owned request key.
+reviewRequestIdFor :: WorkflowName -> WorkflowId -> Int -> Text -> ReviewRequestId
+reviewRequestIdFor (WorkflowName workflowName) (WorkflowId workflowId) generation requestKey =
+  ReviewRequestId
+    ( "review_"
+        <> UUID.toText
+          ( UUID.V5.generateNamed
+              UUID.V5.namespaceURL
+              ( nameBytes
+                  ( Text.intercalate
+                      ":"
+                      [ "shikigami",
+                        "approval-review",
+                        workflowName,
+                        workflowId,
+                        Text.pack (show generation),
+                        requestKey
+                      ]
+                  )
+              )
+          )
+    )
+
+reviewRequestIdText :: ReviewRequestId -> Text
+reviewRequestIdText (ReviewRequestId reviewId) = reviewId
+
+approvalWorkflowId :: ReviewRequestId -> WorkflowId
+approvalWorkflowId = WorkflowId . reviewRequestIdText
+
+requiresApprovalFor :: ApprovalPolicySnapshot -> SinkKind -> Bool
+requiresApprovalFor ApprovalPolicySnapshot {requireFor} = (`Set.member` requireFor)
+
+withApprovalChannel :: ApprovalChannel -> ApprovalRequest -> ApprovalRequest
+withApprovalChannel selected ApprovalRequest {prompt, context} =
+  ApprovalRequest {prompt, context, channel = selected}
+
+approvalPolicyChannel :: ApprovalPolicySnapshot -> ApprovalChannel
+approvalPolicyChannel ApprovalPolicySnapshot {channel} = channel
+
+approvalPolicyDeadline :: ApprovalPolicySnapshot -> NominalDiffTime
+approvalPolicyDeadline ApprovalPolicySnapshot {deadline} = deadline
+
+autoApprovePolicy :: NominalDiffTime -> ApprovalPolicySnapshot
+autoApprovePolicy deadline =
+  ApprovalPolicySnapshot
+    { requireFor = Set.empty,
+      channel = ViaDanwa,
+      deadline
+    }
+
 data ApprovalTimeoutPayload = ApprovalTimeoutPayload
   { kind :: !Text,
     awakeableId :: !AwakeableId
@@ -113,9 +196,12 @@ awaitApproval env stepName req deadline = do
     step (notifyStepName stepName) $
       liftIO do
         recordPark env (currentSession env) aid req
-        postAsk env (channel req) req aid
+        postAsk env (requestChannel req) req aid
   traverse_ (armApprovalDeadline stepName aid) deadline
   awaitAnswer
+
+requestChannel :: ApprovalRequest -> ApprovalChannel
+requestChannel ApprovalRequest {channel} = channel
 
 resolveApproval :: AppEnv -> AwakeableId -> ApprovalDecision -> IO Bool
 resolveApproval appEnv aid decision = do

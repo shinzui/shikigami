@@ -11,13 +11,14 @@
 #     a payload that Shikigami.Trigger.Enqueue sends bare, which is a codec
 #     change disguised as a documentation change. See
 #     docs/architecture/shikigami-domain-inventory.md.
-#   * The per-approval awaits `approval:<SinkKind>:<ordinal>` and their
+#   * The legacy per-approval awaits `approval:<SinkKind>:<ordinal>` and their
 #     `:notify` steps, and the flow path's `emit-signal:<label>` steps. A
 #     workflow label is a compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*);
-#     it can carry neither a colon nor a runtime-computed suffix. The
-#     emit-signal labels are stable as of the patch declared below, but a
-#     colon still keeps them out of this specification; the family's owner is
-#     docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md.
+#     it can carry neither a colon nor a runtime-computed suffix. Fresh
+#     approvals use the declared shikigami.approval child workflow behind the
+#     patch below. The emit-signal labels are stable as of their own patch, but
+#     a colon still keeps them out of this specification; that family's owner
+#     is docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md.
 language keiro-dsl 5
 context shikigami
 layout collocated
@@ -67,6 +68,13 @@ workflow AgentRun
     }
     step classify -> RiskVerdict
     await await-ack -> ApprovalDecision
+    # Fresh runs snapshot approval policy once and execute each Flow or sink
+    # approval as a dedicated child with static labels. Instances already in
+    # flight keep the direct await-ack and computed approval label family.
+    patch shikigami-approval-workflow-v1 {
+      step resolve-approval-policy -> ApprovalPolicySnapshot
+      child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
+    }
     # The first registered router uses these two static call-site labels.
     # Shikigami.Flow.Routing journals the complete bounded catalog before the
     # raw evaluator value, then validates the latter against the former. They

@@ -35,7 +35,8 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Approval (defaultApprovalEnv)
+import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     Behavior (..),
@@ -460,6 +461,8 @@ withFixtureUsingTracer tracer label sinks kizashi danwa use =
                 AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
                 AgentWorkflow.http = sinkHttp,
                 AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+                AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+                AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
                 AgentWorkflow.approval = defaultApprovalEnv,
                 AgentWorkflow.deadline = Nothing,
                 AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,

@@ -19,7 +19,7 @@ import Control.Monad (when)
 import Data.Aeson (Value, toJSON)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -37,6 +37,7 @@ import Keiro.Workflow
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions (..),
+    awakeableAllocStepPrefix,
     defaultWorkflowRunOptions,
     loadStepIndex,
     patch,
@@ -45,6 +46,8 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
+import Keiro.Workflow.Awakeable (AwakeableId)
+import Keiro.Workflow.Child (childSpawnStepName, runChildWorkflow)
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..))
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -56,10 +59,12 @@ import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowRuntime (..), lookupFlow)
@@ -91,6 +96,8 @@ tests =
       testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
       testCase "behavior retry patch pins agent and conversation labels per deploy" behaviorRetryLabelsArePinned,
       testCase "capability resolution is absent in flight and journaled when fresh" capabilityResolutionIsPinned,
+      testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
+      testCase "approval patch preserves legacy flow and sink waits while fresh runs spawn children" approvalShapeIsPinned,
       testCase "emitSignal ordinals preserved in flight, labels when fresh" emitSignalSchemeIsPinnedPerInstance
     ]
 
@@ -358,6 +365,206 @@ newCapabilityShape = do
     pure ()
   (_ :: Maybe Text) <- awaitInput capabilityParkStep
   pure (if useCapabilityResolution then "new" else "old")
+
+approvalReviewIdentityIsStable :: IO ()
+approvalReviewIdentityIsStable = do
+  let parentName = WorkflowName "shikigami.agent-run"
+      parentId = WorkflowId "heartbeat:test"
+      reviewId = Approval.reviewRequestIdFor parentName parentId 0 "sink-KawaDigest-0"
+      expected = "review_65c07499-2dd9-52d2-ab2b-035bdd321b06"
+  assertEqual "the UUIDv5 review vector does not drift" expected (Approval.reviewRequestIdText reviewId)
+  assertEqual "the public JSON encoding remains a bare text value" (Aeson.String expected) (Aeson.toJSON reviewId)
+  assertBool
+    "a new parent generation receives a distinct review id"
+    (reviewId /= Approval.reviewRequestIdFor parentName parentId 1 "sink-KawaDigest-0")
+  assertBool
+    "a distinct stable request key receives a distinct review id"
+    (reviewId /= Approval.reviewRequestIdFor parentName parentId 0 "flow-await-ack")
+
+-- | The production approval patch protects two old label shapes: the Flow
+-- acknowledgement's direct @await-ack@ and the sink path's computed
+-- @approval:KawaDigest:0@ family. An instance parked under either old shape
+-- must finish there after deploy, while a fresh parent records the policy and
+-- a child relation without writing a computed approval or notify label.
+approvalShapeIsPinned :: IO ()
+approvalShapeIsPinned =
+  withShikigamiMigratedDatabase \connStr ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+      tracer <- noopTracer
+      session <- genSessionId
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      assertBool
+        "the hand-owned approval patch is declared by the generated AgentRun contract"
+        ApprovalWorkflow.approvalWorkflowPatchDeclared
+      traverse_
+        (exerciseApprovalShape appEnv session)
+        [ ("flow-await-ack", StepName "await-ack"),
+          ("sink-KawaDigest-0", StepName "approval:KawaDigest:0")
+        ]
+
+exerciseApprovalShape :: AppEnv -> SessionId -> (Text, StepName) -> IO ()
+exerciseApprovalShape appEnv session (requestKey, legacyStep) = do
+  legacyAidRef <- newIORef Nothing
+  freshAidRef <- newIORef Nothing
+  let suffix = Text.replace ":" "-" (unStepName legacyStep)
+      inFlightWorkflowId = WorkflowId ("approval-inflight-" <> suffix)
+      freshWorkflowId = WorkflowId ("approval-fresh-" <> suffix)
+      postDeploy =
+        defaultWorkflowRunOptions
+          { activePatches = Set.singleton ApprovalWorkflow.approvalWorkflowPatch
+          }
+      oldBody = legacyApprovalShape (capturingLegacyApprovalEnv session legacyAidRef) legacyStep
+      newBody aidRef =
+        patchedApprovalShape
+          (approvalChildEnv freshAidRef)
+          session
+          requestKey
+          legacyStep
+          (capturingLegacyApprovalEnv session aidRef)
+
+  parked <- runAppIO appEnv (runWorkflowWith defaultWorkflowRunOptions agentRunWorkflowName inFlightWorkflowId oldBody)
+  assertEqual (Text.unpack requestKey <> " pre-deploy shape parks") (Right Suspended) parked
+  legacyAid <- readRequiredApprovalAid legacyAidRef
+  legacyResolved <- Approval.resolveApproval appEnv legacyAid (Approval.Approved Aeson.Null)
+  assertBool (Text.unpack requestKey <> " legacy awakeable resolves") legacyResolved
+
+  resumed <- runAppIO appEnv (runWorkflowWith postDeploy agentRunWorkflowName inFlightWorkflowId (newBody legacyAidRef))
+  assertEqual
+    (Text.unpack requestKey <> " in-flight parent stays on the legacy branch")
+    (Right (Completed (ApprovalWorkflow.ApprovalResolved (Approval.Approved Aeson.Null))))
+    resumed
+  oldIndex <- loadStepIndexFor appEnv agentRunWorkflowName inFlightWorkflowId
+  assertEqual
+    (Text.unpack requestKey <> " old journal has no policy snapshot")
+    (Right False)
+    (Map.member "resolve-approval-policy" <$> oldIndex)
+  assertEqual
+    (Text.unpack requestKey <> " old journal retains its direct approval allocation label")
+    (Right True)
+    (Map.member (awakeableAllocStepPrefix <> unStepName legacyStep) <$> oldIndex)
+  assertEqual
+    (Text.unpack requestKey <> " old journal retains its derived notify label")
+    (Right True)
+    (Map.member (unStepName legacyStep <> ":notify") <$> oldIndex)
+
+  fresh <- runAppIO appEnv (runWorkflowWith postDeploy agentRunWorkflowName freshWorkflowId (newBody freshAidRef))
+  assertEqual (Text.unpack requestKey <> " fresh parent parks on its child") (Right Suspended) fresh
+  let reviewId = Approval.reviewRequestIdFor agentRunWorkflowName freshWorkflowId 0 requestKey
+      childId = Approval.approvalWorkflowId reviewId
+  freshIndex <- loadStepIndexFor appEnv agentRunWorkflowName freshWorkflowId
+  assertEqual
+    (Text.unpack requestKey <> " fresh parent journals its policy snapshot")
+    (Right True)
+    (Map.member "resolve-approval-policy" <$> freshIndex)
+  assertEqual
+    (Text.unpack requestKey <> " fresh parent journals the approval child relation")
+    (Right True)
+    (Map.member (childSpawnStepName childId) <$> freshIndex)
+  assertEqual
+    (Text.unpack requestKey <> " fresh parent writes no legacy approval allocation label")
+    (Right False)
+    (Map.member (awakeableAllocStepPrefix <> unStepName legacyStep) <$> freshIndex)
+  assertEqual
+    (Text.unpack requestKey <> " fresh parent writes no derived legacy notify label")
+    (Right False)
+    (Map.member (unStepName legacyStep <> ":notify") <$> freshIndex)
+
+  childParked <-
+    runAppIO
+      appEnv
+      ( runChildWorkflow
+          postDeploy
+          ApprovalWorkflow.approvalWorkflowName
+          childId
+          (ApprovalWorkflow.approvalWorkflow (approvalChildEnv freshAidRef) Nothing)
+      )
+  assertEqual (Text.unpack requestKey <> " approval child parks on decision") (Right Suspended) childParked
+  freshAid <- readRequiredApprovalAid freshAidRef
+  freshResolved <- Approval.resolveApproval appEnv freshAid (Approval.Approved Aeson.Null)
+  assertBool (Text.unpack requestKey <> " child awakeable resolves") freshResolved
+  childCompleted <-
+    runAppIO
+      appEnv
+      ( runChildWorkflow
+          postDeploy
+          ApprovalWorkflow.approvalWorkflowName
+          childId
+          (ApprovalWorkflow.approvalWorkflow (approvalChildEnv freshAidRef) Nothing)
+      )
+  assertEqual
+    (Text.unpack requestKey <> " approval child completes")
+    (Right (Completed (ApprovalWorkflow.ApprovalResolved (Approval.Approved Aeson.Null))))
+    childCompleted
+  parentCompleted <-
+    runAppIO
+      appEnv
+      (runWorkflowWith postDeploy agentRunWorkflowName freshWorkflowId (newBody freshAidRef))
+  assertEqual
+    (Text.unpack requestKey <> " fresh parent consumes the child result")
+    (Right (Completed (ApprovalWorkflow.ApprovalResolved (Approval.Approved Aeson.Null))))
+    parentCompleted
+
+legacyApprovalShape ::
+  Approval.ApprovalEnv ->
+  StepName ->
+  Eff (Workflow : AppEffects) ApprovalWorkflow.ApprovalWorkflowResult
+legacyApprovalShape env legacyStep =
+  ApprovalWorkflow.ApprovalResolved
+    <$> Approval.awaitApproval env legacyStep approvalVersioningRequest Nothing
+
+patchedApprovalShape ::
+  ApprovalWorkflow.ApprovalWorkflowEnv ->
+  SessionId ->
+  Text ->
+  StepName ->
+  Approval.ApprovalEnv ->
+  Eff (Workflow : AppEffects) ApprovalWorkflow.ApprovalWorkflowResult
+patchedApprovalShape _childEnv session requestKey legacyStep legacyEnv = do
+  useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
+  if useApprovalChild
+    then do
+      policy <-
+        step
+          (StepName "resolve-approval-policy")
+          ( pure
+              Approval.ApprovalPolicySnapshot
+                { Approval.requireFor = Set.empty,
+                  Approval.channel = Approval.ViaDanwa,
+                  Approval.deadline = secondsToNominalDiffTime 60
+                }
+          )
+      ApprovalWorkflow.requestApproval requestKey session approvalVersioningRequest (Approval.deadline policy)
+    else legacyApprovalShape legacyEnv legacyStep
+
+capturingLegacyApprovalEnv :: SessionId -> IORef (Maybe AwakeableId) -> Approval.ApprovalEnv
+capturingLegacyApprovalEnv session aidRef =
+  (Approval.defaultApprovalEnv session)
+    { Approval.recordPark = \_ aid _ -> writeIORef aidRef (Just aid)
+    }
+
+approvalChildEnv :: IORef (Maybe AwakeableId) -> ApprovalWorkflow.ApprovalWorkflowEnv
+approvalChildEnv aidRef =
+  ApprovalWorkflow.ApprovalWorkflowEnv
+    { ApprovalWorkflow.notifier =
+        ApprovalWorkflow.ApprovalNotifier
+          { ApprovalWorkflow.recordPark = \_ _ aid _ -> writeIORef aidRef (Just aid),
+            ApprovalWorkflow.postAsk = \_ _ _ -> pure (Right ())
+          }
+    }
+
+approvalVersioningRequest :: Approval.ApprovalRequest
+approvalVersioningRequest =
+  Approval.ApprovalRequest
+    { Approval.prompt = "Approve versioning test?",
+      Approval.context = Aeson.Null,
+      Approval.channel = Approval.ViaDanwa
+    }
+
+readRequiredApprovalAid :: IORef (Maybe AwakeableId) -> IO AwakeableId
+readRequiredApprovalAid aidRef =
+  readIORef aidRef >>= \case
+    Just aid -> pure aid
+    Nothing -> assertFailure "approval workflow did not publish an awakeable id"
 
 -- ── Test B: the emit-signal scheme is pinned per instance ───────────────────
 

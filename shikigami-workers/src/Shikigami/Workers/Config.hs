@@ -43,6 +43,7 @@ import Hasql.Pool (Pool)
 import Keiro.Telemetry (KeiroMetrics)
 import Kioku.App (AppEnv (..))
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
@@ -194,6 +195,8 @@ agentRunDeps env =
       AgentWorkflow.rei = rei env,
       AgentWorkflow.http = http env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+      AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy (envApprovalDeadline env),
+      AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.approval = Approval.defaultApprovalEnv,
       AgentWorkflow.deadline = Just (envApprovalDeadline env),
       AgentWorkflow.runTimeout = envRunTimeout env,
