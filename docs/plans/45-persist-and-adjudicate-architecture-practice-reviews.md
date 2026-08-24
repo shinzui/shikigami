@@ -44,11 +44,13 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-24T13:32:21Z) Refresh the July plan against the landed Flow capability, checked
       workflow rules, practice-review contracts, ADR corpus, and Kioku 0.5.0.0 source and release
       tag. The refreshed design is recorded in the 2026-08-24 Revision Note.
-- [ ] M1: define and round-trip version-1 provisional/resolved envelopes, logical Kioku IDs,
-      review scope, deterministic tags, recall context, applicability, diagnostics, and chain
-      entries.
-- [ ] M1: record one provisional memory idempotently from a validated verdict, including optional
-      retirement of the previous active conclusion.
+- [x] (2026-08-24T13:45:06Z) M1: define and round-trip version-1 provisional/resolved envelopes,
+      logical Kioku IDs, review scope, deterministic tags, recall context, applicability,
+      diagnostics, and chain entries. The 10 focused pure tests pass.
+- [x] (2026-08-24T13:45:06Z) M1 implementation: add deterministic provisional recording and
+      optional prior-conclusion retirement through Kioku's context-aware APIs.
+- [ ] M1 verification: prove provisional replay, metadata, semantic-conflict, and prior-retirement
+      behavior against migrated PostgreSQL.
 - [ ] M2: add the replay-safe `PracticeReviewMemory` Flow capability and declare its four static
       step labels behind `shikigami-practice-review-memory-v1`.
 - [ ] M2: apply accepted/rejected/narrowed/superseded resolutions with a separate Kioku retirement,

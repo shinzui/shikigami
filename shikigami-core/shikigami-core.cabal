@@ -80,6 +80,7 @@ library
     Shikigami.Memory.Access
     Shikigami.Memory.Scope
     Shikigami.PracticeReview
+    Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Program.Registry
     Shikigami.Repository
@@ -219,6 +220,7 @@ test-suite shikigami-core-test
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
+    Shikigami.PracticeReviewMemorySpec
     Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.RouterCatalogSpec
