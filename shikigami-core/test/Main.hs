@@ -18,6 +18,7 @@ import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), Si
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
+import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
 import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
@@ -84,6 +85,7 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AgentLoaderSpec.tests,
+          ApprovalNotificationSpec.tests,
           AppConfigSpec.tests,
           AttestationContractsSpec.tests,
           BehaviorInputSpec.tests,

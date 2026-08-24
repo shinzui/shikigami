@@ -4,12 +4,13 @@ import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
 import Control.Exception (SomeException, throwIO, try)
 import Control.Lens ((.~))
 import Control.Monad (forM_, void, when)
-import Data.Aeson (Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
+import Data.Aeson (Result (..), ToJSON, Value (..), eitherDecode, fromJSON, object, toJSON, (.=))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
-import Data.List (elemIndex)
+import Data.List (elemIndex, find)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -18,6 +19,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import GHC.Generics (Generic)
@@ -29,11 +31,12 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
-import Keiro.Workflow.Awakeable (AwakeableId)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
+import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChildrenOfParent)
+import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryType (MemoryPattern))
@@ -47,8 +50,11 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
+import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
+import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
@@ -85,7 +91,7 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
-import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
@@ -1435,7 +1441,61 @@ tests =
         ],
       testGroup
         "Approval"
-        [ testCase "approved answer resumes and dispatches sink once" do
+        [ testCase "Danwa ask, CLI-shaped resolution, child resume, and sink dispatch form one durable path" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                asks <- newIORef []
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                testWithApplication (pure (approvalDanwaApplication asks)) \port -> do
+                  let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                      danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = "part_agent_test"}
+                      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
+                  sinkHttp <- testSinkHttpFor danwaConfig
+                  let notifier = ApprovalNotification.approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
+                      deps =
+                        (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl])
+                          { approvalPolicy =
+                              ApprovalPolicySnapshot
+                                { requireFor = Set.singleton SKawaDigest,
+                                  channel = ViaDanwa,
+                                  deadline = secondsToNominalDiffTime 60
+                                },
+                            approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier},
+                            danwa = danwaConfig,
+                            http = sinkHttp
+                          }
+
+                  runAgentRunWorkflow deps approvalJob >>= assertEqual "parent parks on approval child" (Right Suspended)
+                  parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey approvalJob)) 0)
+                  assertEqual "fresh parent journals its policy" (Right True) (Map.member "resolve-approval-policy" <$> parentSteps)
+                  children <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey approvalJob) "shikigami.agent-run")
+                  child <- case children of
+                    Right [row] -> pure row
+                    other -> assertFailure ("expected one approval child relation, got " <> show other)
+
+                  driveApprovalChildToPark appEnv deps
+                  posted <- readIORef asks
+                  message <- case posted of
+                    [single] -> pure single
+                    other -> assertFailure ("expected one Danwa ask, got " <> show other)
+                  assertBool "ask carries stable review id" (childId child `Text.isInfixOf` message)
+                  awakeableId <- either (assertFailure . Text.unpack) pure (approvalTokenFromMessage message)
+
+                  childSteps <- runAppIO appEnv (loadStepIndex ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)) 0)
+                  assertEqual "child records the static notify step" (Right True) (Map.member "notify" <$> childSteps)
+                  assertEqual "child allocates the static decision awakeable" (Right True) (Map.member "awkid:decision" <$> childSteps)
+
+                  resolved <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
+                  assertBool "first CLI-shaped signal resolves" resolved
+                  resolvedAgain <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
+                  assertEqual "repeated signal is idempotently refused" False resolvedAgain
+                  completedCount <- resumeApprovalToCompletion appEnv deps
+                  assertEqual "resume passes complete child and parent" 2 completedCount
+
+                  afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                  assertEqual "approved sink is dispatched exactly once" (Right 1) (length <$> afterOutbox),
+          testCase "approved answer resumes and dispatches sink once" do
             withShikigamiMigratedDatabase \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
@@ -1485,7 +1545,131 @@ tests =
                 assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
-                assertEqual "rejected sink is suppressed" (Right 0) (length <$> afterOutbox)
+                assertEqual "rejected sink is suppressed" (Right 0) (length <$> afterOutbox),
+          testCase "permanent notification failure fails the parent without enqueuing" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    runJob = approvalJob {idempotencyKey = "heartbeat:test-approval-notify-permanent"}
+                    deps =
+                      (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
+                        { approvalWorkflow =
+                            ApprovalWorkflow.ApprovalWorkflowEnv
+                              { ApprovalWorkflow.notifier =
+                                  ApprovalWorkflow.ApprovalNotifier
+                                    { ApprovalWorkflow.recordPark = \_ _ _ _ -> pure (),
+                                      ApprovalWorkflow.postAsk = \_ _ _ _ -> pure (Left (ApprovalWorkflow.PermanentNotification "forbidden"))
+                                    }
+                              }
+                        }
+
+                runAgentRunWorkflow deps runJob >>= assertEqual "parent initially parks" (Right Suspended)
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "permanent failure completes child and parent" 2 completedCount
+                parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+                assertEqual "parent records fail-session" (Right True) (Map.member "fail-session" <$> parentSteps)
+                child <- onlyApprovalChild appEnv runJob
+                childSteps <- runAppIO appEnv (loadStepIndex ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)) 0)
+                assertEqual "permanent notify outcome is journaled" (Right True) (Map.member "notify" <$> childSteps)
+                outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                assertEqual "failed notification enqueues no sink" (Right 0) (length <$> outbox),
+          testCase "transient notification failure leaves notify unrecorded and increments child attempts" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                posts <- newIORef (0 :: Int)
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    runJob = approvalJob {idempotencyKey = "heartbeat:test-approval-notify-transient"}
+                    deps =
+                      (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
+                        { approvalWorkflow =
+                            ApprovalWorkflow.ApprovalWorkflowEnv
+                              { ApprovalWorkflow.notifier =
+                                  ApprovalWorkflow.ApprovalNotifier
+                                    { ApprovalWorkflow.recordPark = \_ _ _ _ -> pure (),
+                                      ApprovalWorkflow.postAsk = \_ _ _ _ -> do
+                                        modifyIORef' posts (+ 1)
+                                        pure (Left (ApprovalWorkflow.TransientNotification "temporarily unavailable"))
+                                    }
+                              }
+                        }
+
+                runAgentRunWorkflow deps runJob >>= assertEqual "parent initially parks" (Right Suspended)
+                resumeOutcome <- runAppIO appEnv (resumeWorkflowsOnce defaultWorkflowResumeOptions (agentRunRegistry deps))
+                case resumeOutcome of
+                  Right ResumeSummary {resumed} -> assertBool "resume attempted the transiently failing child" (resumed > 0)
+                  other -> assertFailure ("transient child resume failed unexpectedly: " <> show other)
+                readIORef posts >>= assertEqual "one notification attempt ran" 1
+                child <- onlyApprovalChild appEnv runJob
+                childSteps <- runAppIO appEnv (loadStepIndex ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)) 0)
+                assertEqual "transient notify has no journal result" (Right False) (Map.member "notify" <$> childSteps)
+                instanceResult <- runAppIO appEnv (lookupInstance ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)))
+                case instanceResult of
+                  Right (Just row) -> assertEqual "child attempt count increments" 1 (attempts row)
+                  other -> assertFailure ("approval child instance missing: " <> show other)
+                outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                assertEqual "transient notification enqueues no sink" (Right 0) (length <$> outbox),
+          testCase "notification retry reuses one review identity and one decision token" do
+            withShikigamiMigratedDatabase \connStr ->
+              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+                tracer <- noopTracer
+                behaviorEnv <- newBehaviorEnv
+                attemptsRef <- newIORef (0 :: Int)
+                posts <- newIORef []
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                    runJob = approvalJob {idempotencyKey = "heartbeat:test-approval-notify-crash-window"}
+                    notifier =
+                      ApprovalWorkflow.ApprovalNotifier
+                        { ApprovalWorkflow.recordPark = \_ _ _ _ -> pure (),
+                          ApprovalWorkflow.postAsk = \reviewId awakeableId _ _ -> do
+                            attempt <- atomicModifyIORef' attemptsRef \count -> let next = count + 1 in (next, next)
+                            modifyIORef' posts ((reviewId, awakeableId) :)
+                            pure
+                              if attempt == 1
+                                then Left (ApprovalWorkflow.TransientNotification "accepted remotely before local commit")
+                                else Right ()
+                        }
+                    childEnv = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier}
+                    deps =
+                      (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
+                        { approvalWorkflow = childEnv
+                        }
+
+                runAgentRunWorkflow deps runJob >>= assertEqual "parent initially parks" (Right Suspended)
+                child <- onlyApprovalChild appEnv runJob
+                let runChild =
+                      runAppIO appEnv $
+                        runChildWorkflow
+                          defaultWorkflowRunOptions
+                          ApprovalWorkflow.approvalWorkflowName
+                          (WorkflowId (childId child))
+                          (ApprovalWorkflow.approvalWorkflow childEnv Nothing)
+
+                firstAttempt <- try @ApprovalWorkflow.ApprovalNotificationTransientFailure runChild
+                case firstAttempt of
+                  Left (ApprovalWorkflow.ApprovalNotificationTransientFailure detail) ->
+                    assertEqual "first attempt models the post/commit crash window" "accepted remotely before local commit" detail
+                  Right other -> assertFailure ("first notification attempt should fail transiently, got " <> show other)
+                runChild >>= assertEqual "retry posts and then parks" (Right Suspended)
+
+                recordedPosts <- reverse <$> readIORef posts
+                awakeableId <- case recordedPosts of
+                  [firstPost, secondPost] -> do
+                    assertEqual "retry preserves review id and awakeable token" firstPost secondPost
+                    pure (snd firstPost)
+                  other -> assertFailure ("expected two notification posts, got " <> show other)
+
+                resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
+                  >>= assertEqual "one decision wins" True
+                resolveApproval appEnv awakeableId (Rejected "too late")
+                  >>= assertEqual "later conflicting decision loses" False
+                completedCount <- resumeApprovalToCompletion appEnv deps
+                assertEqual "child and parent complete after the winning decision" 2 completedCount
+                outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                assertEqual "the approved sink is still dispatched exactly once" (Right 1) (length <$> outbox)
         ],
       testGroup
         "Deadline"
@@ -1671,7 +1855,7 @@ approvalWorkflowFromLegacy approvalFor =
         ApprovalWorkflow.ApprovalNotifier
           { ApprovalWorkflow.recordPark = \session _ aid request ->
               recordPark (approvalFor session) session aid request,
-            ApprovalWorkflow.postAsk = \_ _ _ -> pure (Right ())
+            ApprovalWorkflow.postAsk = \_ _ _ _ -> pure (Right ())
           }
     }
 
@@ -1732,6 +1916,13 @@ childStatusText = \case
   ChildCompleted -> "completed"
   ChildCancelled -> "cancelled"
   ChildFailed -> "failed"
+
+onlyApprovalChild :: AppEnv -> RunJob -> IO ChildRow
+onlyApprovalChild appEnv runJob = do
+  children <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey runJob) "shikigami.agent-run")
+  case children of
+    Right [child] -> pure child
+    other -> assertFailure ("expected one approval child, got " <> show other)
 
 -- | The conversation environment every Conversation case runs against.
 --
@@ -1897,6 +2088,46 @@ fireDueApprovalTimer appEnv = do
   now <- getCurrentTime
   fired <- runAppIO appEnv (runWorkflowTimerWorker Nothing (addUTCTime 2 now) approvalTimeoutFireAction)
   assertBool "approval timeout timer should fire" (either (const False) (maybe False (const True)) fired)
+
+approvalTokenFromMessage :: Text -> Either Text AwakeableId
+approvalTokenFromMessage message = do
+  line <- maybe (Left "approval ask has no approve command") Right (find (Text.isPrefixOf prefix) (Text.lines message))
+  let token = Text.takeWhile (/= ' ') (Text.drop (Text.length prefix) line)
+  uuid <- maybe (Left "approval ask token is not a UUID") Right (UUID.fromText token)
+  pure (AwakeableId uuid)
+  where
+    prefix = "Approve: shikigami resolve-approval "
+
+approvalDanwaApplication :: IORef [Text] -> Application
+approvalDanwaApplication asks request respond =
+  case (requestMethod request, pathInfo request) of
+    ("POST", ["conversations"]) ->
+      respond
+        ( responseLBS
+            status200
+            [(hContentType, "application/json")]
+            "{\"conversationId\":\"conv_approval\",\"status\":\"active\",\"kind\":\"thread\",\"startedBy\":\"part_agent_test\",\"parentConversationId\":\"\"}"
+        )
+    ("POST", ["conversations", "conv_approval", "participants"]) -> respond (responseLBS status204 [] "")
+    ("POST", ["conversations", "conv_approval", "messages"]) -> do
+      body <- strictRequestBody request
+      case eitherDecode @Value body of
+        Right (Object fields) ->
+          case KeyMap.lookup "content" fields of
+            Just (String content) -> do
+              modifyIORef' asks (content :)
+              respond
+                ( responseLBS
+                    status200
+                    [(hContentType, "application/json")]
+                    "{\"messageId\":\"msg_approval\",\"conversationId\":\"conv_approval\",\"author\":\"part_agent_test\",\"content\":\"approval\",\"postedAt\":\"2026-08-23T00:00:00Z\"}"
+                )
+            _ -> respond (responseLBS status400 [] "missing content")
+        _ -> respond (responseLBS status400 [] "invalid JSON")
+    _ -> respond (responseLBS status404 [] "not found")
+
+localApprovalBaseUrl :: Int -> Text
+localApprovalBaseUrl port = "http://127.0.0.1:" <> Text.pack (show port)
 
 driveApprovalChildToPark :: AppEnv -> AgentRunDeps -> IO ()
 driveApprovalChildToPark appEnv deps = do

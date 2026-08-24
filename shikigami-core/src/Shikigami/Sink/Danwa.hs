@@ -5,6 +5,7 @@ module Shikigami.Sink.Danwa
   ( DanwaError (..),
     runDanwa,
     runDanwaWithHeaders,
+    postText,
     postReply,
     renderDanwaError,
   )
@@ -77,6 +78,21 @@ withTopicLine topic content
 postReply :: ClientEnv -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
 postReply clientEnv = postReplyWithHeaders clientEnv []
 
+-- | Open a fresh thread, join the configured agent participant, and post one
+-- text message. Unlike the sink path this helper owns no outbox receipt: its
+-- caller supplies its own durable idempotency identity in the message body.
+postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either DanwaError Text)
+postText clientEnv cfg content = do
+  startJoinedConversation clientEnv [] cfg >>= \case
+    Left err -> pure (Left err)
+    Right cid ->
+      postReplyWithHeaders
+        clientEnv
+        []
+        cfg
+        DanwaTarget {conversationId = cid, parentMessageId = Nothing}
+        content
+
 postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
 postReplyWithHeaders clientEnv headers cfg (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
   result <-
@@ -122,28 +138,9 @@ postToFreshConversation clientEnv headers cfg (AgentIdentity _agentName) receipt
           Right Nothing -> startJoinAndRemember (Just deliveryGuard)
 
     startJoinAndRemember deliveryGuard = do
-      started <-
-        runDanwaClientWithHeaders headers clientEnv $
-          Danwa.startConversation
-            Conv.StartConversationRequest
-              { Conv.startedBy = agentParticipant cfg,
-                Conv.kind = "thread",
-                Conv.parentConversationId = Nothing
-              }
-      case started of
-        Left failure -> pure (Left (DanwaHttpError failure))
-        Right Conv.ConversationResponse {Conv.conversationId = cid} -> do
-          joined <-
-            runDanwaClientWithHeaders headers clientEnv $
-              Danwa.joinConversation
-                cid
-                Conv.JoinConversationRequest
-                  { Conv.participantId = agentParticipant cfg,
-                    Conv.participantType = "agent"
-                  }
-          case joined of
-            Left failure -> pure (Left (DanwaHttpError failure))
-            Right _ -> rememberConversation deliveryGuard cid
+      startJoinedConversation clientEnv headers cfg >>= \case
+        Left err -> pure (Left err)
+        Right cid -> rememberConversation deliveryGuard cid
 
     rememberConversation Nothing cid = pure (Right cid)
     rememberConversation (Just deliveryGuard) cid =
@@ -153,6 +150,31 @@ postToFreshConversation clientEnv headers cfg (AgentIdentity _agentName) receipt
 
 tryIO :: IO a -> IO (Either IOException a)
 tryIO = try
+
+startJoinedConversation :: ClientEnv -> [Header] -> DanwaConfig -> IO (Either DanwaError Text)
+startJoinedConversation clientEnv headers cfg = do
+  started <-
+    runDanwaClientWithHeaders headers clientEnv $
+      Danwa.startConversation
+        Conv.StartConversationRequest
+          { Conv.startedBy = agentParticipant cfg,
+            Conv.kind = "thread",
+            Conv.parentConversationId = Nothing
+          }
+  case started of
+    Left failure -> pure (Left (DanwaHttpError failure))
+    Right Conv.ConversationResponse {Conv.conversationId = cid} -> do
+      joined <-
+        runDanwaClientWithHeaders headers clientEnv $
+          Danwa.joinConversation
+            cid
+            Conv.JoinConversationRequest
+              { Conv.participantId = agentParticipant cfg,
+                Conv.participantType = "agent"
+              }
+      pure case joined of
+        Left failure -> Left (DanwaHttpError failure)
+        Right _ -> Right cid
 
 renderDanwaContent :: Value -> Text
 renderDanwaContent v = case v of

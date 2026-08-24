@@ -24,6 +24,7 @@ library
   exposed-modules:
     Shikigami.Activity
     Shikigami.Agent.Approval
+    Shikigami.Agent.Approval.Notification
     Shikigami.Agent.Approval.Workflow
     Shikigami.Agent.Conversation
     Shikigami.Agent.Conversation.SessionIndex
@@ -196,6 +197,7 @@ test-suite shikigami-core-test
     Shikigami.AgentLoaderSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.AppConfigSpec
+    Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
@@ -279,6 +281,7 @@ test-suite shikigami-core-test
     , text
     , time
     , unordered-containers
+    , uuid
     , vector
     , wai
     , warp

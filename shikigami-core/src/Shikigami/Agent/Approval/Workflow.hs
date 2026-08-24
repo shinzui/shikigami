@@ -89,7 +89,7 @@ instance Exception ApprovalNotificationTransientFailure
 -- not cross the workflow journal; only 'ApprovalNotificationResult' does.
 data ApprovalNotifier = ApprovalNotifier
   { recordPark :: !(SessionId -> ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO ()),
-    postAsk :: !(ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
+    postAsk :: !(ReviewRequestId -> AwakeableId -> NominalDiffTime -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
   }
 
 newtype ApprovalWorkflowEnv = ApprovalWorkflowEnv
@@ -102,7 +102,7 @@ defaultApprovalWorkflowEnv =
     { notifier =
         ApprovalNotifier
           { recordPark = \_ _ _ _ -> pure (),
-            postAsk = \_ _ _ -> pure (Right ())
+            postAsk = \_ _ _ _ -> pure (Right ())
           }
     }
 
@@ -140,7 +140,7 @@ approvalWorkflow ApprovalWorkflowEnv {notifier} mInput = do
             awakeableId
             (request input)
         )
-      liftIO (postAsk notifier (reviewRequestId input) awakeableId (request input)) >>= \case
+      liftIO (postAsk notifier (reviewRequestId input) awakeableId (deadline input) (request input)) >>= \case
         Right () -> pure ApprovalNotificationSent
         Left (PermanentNotification detail) -> pure (ApprovalNotificationPermanentFailure detail)
         Left (TransientNotification detail) -> throwIO (ApprovalNotificationTransientFailure detail)

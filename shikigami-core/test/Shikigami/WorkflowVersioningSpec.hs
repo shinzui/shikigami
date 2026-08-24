@@ -548,7 +548,7 @@ approvalChildEnv aidRef =
     { ApprovalWorkflow.notifier =
         ApprovalWorkflow.ApprovalNotifier
           { ApprovalWorkflow.recordPark = \_ _ aid _ -> writeIORef aidRef (Just aid),
-            ApprovalWorkflow.postAsk = \_ _ _ -> pure (Right ())
+            ApprovalWorkflow.postAsk = \_ _ _ _ -> pure (Right ())
           }
     }
 
