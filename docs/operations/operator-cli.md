@@ -25,7 +25,7 @@ from a config file, `--set database.connection_string=…`, or the
 Two halves, and it matters which is which when something behaves unexpectedly.
 
 **Shikigami's own**: `agents`, `runs`, and the pre-existing `validate`,
-`render-lifecycle`, `enqueue-run`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
+`render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
 `danwa-spike`, and `grants`. These are defined in this repository.
 
 **Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
@@ -136,6 +136,19 @@ The session half reports one of four things, and they mean different things:
 
 For the workflow half alone, `wf show` reports more — children and awakeables —
 and `wf journal` and `wf steps` decode what the run actually recorded.
+
+**"How do I answer a human approval request?"** — `resolve-approval`.
+
+```bash
+cabal run shikigami -- resolve-approval <token> --approve
+cabal run shikigami -- resolve-approval <token> --reject "reason"
+```
+
+Copy the opaque UUID token from the Danwa or Kizashi ask, not its stable `review_…` identifier.
+Exactly one decision flag is accepted. The first signal exits zero and prints `resolved: true`;
+unknown, timed-out, and already-resolved tokens exit 1 and print the same explicit false result.
+This command does not run a resume pass. The supervised worker advances the approval child and
+parent after the signal, so inspect the run or outbox separately when you need its final outcome.
 
 **"This run is stuck."** — first find out how.
 

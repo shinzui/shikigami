@@ -355,7 +355,7 @@ invocation is about rather than how the deployment is set up: `shikigami stub-ka
 and `--republish-topic`, `shikigami danwa-spike --human` and `--agent`,
 `shikigami-run-behavior --agent` and `--payload`, `shikigami-agent-run --agent` and
 `--from-activity`, and the file or agent arguments of `validate`, `render-lifecycle`,
-`enqueue-run`, and `publish-fixture`.
+`enqueue-run`, `resolve-approval`, and `publish-fixture`.
 
 For `shikigami`, the configuration and diagnostic options are global and go *before* the
 subcommand:

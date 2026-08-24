@@ -18,6 +18,7 @@ $ cabal run <binary> -- [command] [options]
 shikigami validate <FILE>
 shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>]
+shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
 shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <URL>]
@@ -59,7 +60,7 @@ $ cabal run shikigami-server:exe:shikigami-server
 Every other binary is unambiguous, because no other executable shares its package's name.
 
 Binaries that record sessions, use the run queue, or use the Keiro inbox
-(`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami-consume-stream`,
+(`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami resolve-approval`, `shikigami-consume-stream`,
 `shikigami-consume-events`, `shikigami-worker`, `shikigami-scheduler`) need the
 `database.connection_string` setting and a migrated database (`just create-database`). The
 dev shell exports `PG_CONNECTION_STRING`, the environment variable bound to that setting.
@@ -151,6 +152,21 @@ queue — the Event trigger class. `--payload` is the addressed run payload as J
 `worker` drains and executes it.
 
 → See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
+
+## `shikigami resolve-approval`
+
+```bash
+$ shikigami resolve-approval <TOKEN> --approve
+$ shikigami resolve-approval <TOKEN> --reject "reason"
+```
+
+Resolve the opaque UUID token printed in a Danwa or Kizashi approval ask. Exactly one decision
+is required. The first successful resolution prints `resolved: true` and exits 0; an unknown,
+timed-out, or already-resolved token prints `resolved: false (unknown or already resolved)` and
+exits 1. The command only signals the durable awakeable. A running worker resumes the approval
+child and its parent, dispatching an approved sink or suppressing a rejected one.
+
+**Needs the DB** (`database.connection_string`).
 
 ## `shikigami stub-kawa`
 

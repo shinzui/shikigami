@@ -74,15 +74,25 @@ from the terminal completes without enqueuing its Kawa intent.
 - [x] (2026-08-23) Verified the checkpoint with `nix fmt`, `git diff --check`, `cabal build all`,
       all 30 `keiro-shikigami-conformance` facts, the three approval/versioning focused tests,
       and all 44 `AgentWorkflow` tests.
-- [ ] Milestone 2 in progress: implemented the approval policy snapshot, stable review identity,
-      child runtime, Flow and sink parent integration, and permanent/transient failure model in
-      `shikigami-core`; authenticated Danwa/Kizashi notification remains.
-- [ ] Milestone 3: add the Settei settings and production worker wiring, register the approval
-      child for resume, and emit a structured startup description of the effective policy.
-- [ ] Milestone 4: add `shikigami resolve-approval`, parser and exit-behavior tests, and the
-      automated park-notify-resolve-resume acceptance proof.
-- [ ] Milestone 5: pass the Keiro gate and full serialized test suite, then record a manual
-      approve/reject/timeout transcript in this plan.
+- [x] (2026-08-23) Completed milestone 2: added authenticated, bounded Danwa and Kizashi asks
+      over the process `SinkHttp`, safe transient/permanent classification, retry semantics,
+      stable public review identity, and permanent fail-closed parent behavior.
+- [x] (2026-08-23) Completed milestone 3: added typed Settei parsing and diagnostics for
+      `approval.require` and `approval.channel`, wired the resolved policy and real notifier into
+      `WorkerEnv`, registered the child for resume, and added the secret-safe structured startup
+      event. All 53 focused configuration cases pass.
+- [x] (2026-08-23) Completed milestone 4: added `shikigami resolve-approval`, parser and
+      exit-selection tests, real WAI Danwa/Kizashi notification tests, and durable
+      park-notify-resolve-resume proofs for approve, reject, timeout, double resolution,
+      notification failure, and the remote-accept/local-commit crash window.
+- [x] (2026-08-23) Completed milestone 5: `nix fmt`, `git diff --check`, `cabal build all`,
+      `just keiro-gate 20bd2a8e23dbac16246bfbf9559a5ca6c1f7d7ed`, and the complete
+      `cabal test all -j1` run passed. The serial run covered all nine test components and 737
+      cases, including 530 core, 81 worker, 43 server, and 30 generated conformance cases.
+- [x] (2026-08-23) Exercised the production composition against the real local Danwa server and
+      a fresh isolated Shikigami database: approve published one Kawa event, double resolution
+      was refused, and reject plus timeout both completed without creating another outbox row.
+      The redacted transcript is recorded below.
 
 
 ## Surprises & Discoveries
@@ -159,6 +169,36 @@ from the terminal completes without enqueuing its Kawa intent.
   cleanliness and compatibility against the pre-change tree.
   Evidence: the scaffold recipe completed generation and reported only the expected generated
   diff; `cabal test keiro-shikigami-conformance` passed all 30 facts afterward.
+  Date: 2026-08-23
+
+- Observation: the administrative executable already has its own telemetry composition helper,
+  `withServerTelemetry`, and the server package deliberately does not depend on
+  `shikigami-workers`. The one-shot resolution command can construct the same `AppEnv` shape
+  without importing the worker package or starting worker loops.
+  Evidence: `Shikigami.Server.Command.ResolveApproval`, `Shikigami.Server.Telemetry`, and the
+  component dependency graph in `shikigami-server.cabal`.
+  Date: 2026-08-23
+
+- Observation: Cabal commands that build the same test component concurrently race over the
+  component's inplace package-cache lock. Focused test invocations and final validation must be
+  serialized, independently of the repository's database-test serialization requirement.
+  Evidence: two concurrent focused `shikigami-core-test` invocations produced a missing
+  `package.cache.lock`; rerunning the affected target alone passed.
+  Date: 2026-08-23
+
+- Observation: the existing local `shikigami` development database was five migrations behind
+  and reported a historical Kioku checksum mismatch. Applying pending migrations to that
+  database would have mixed this feature proof with unrelated migration recovery work.
+  Evidence: `just migrate-status` reported `pending=5`, `issues=1`, with
+  `MigrationChecksumMismatch` for `kioku/0011-kioku-memory-space-partition`; the manual proof
+  therefore used a freshly created and fully migrated `shikigami_plan14` database.
+  Date: 2026-08-23
+
+- Observation: the dev shell's `PG_CONNECTION_STRING` binding outranks configuration files, as
+  the Settei contract says it should. A temporary file naming the isolated database was correctly
+  shadowed until the manual commands supplied an explicit process environment value.
+  Evidence: `--explain-config-json` named `PG_CONNECTION_STRING` as the winning origin and the
+  temporary YAML source as shadowed.
   Date: 2026-08-23
 
 
@@ -242,6 +282,13 @@ from the terminal completes without enqueuing its Kawa intent.
   handler can call the same function without changing the workflow contract.
   Date: 2026-08-23
 
+- Decision: The one-shot resolution command uses `withServerTelemetry`, then constructs the
+  Shikigami `AppEnv` with the resolved database settings, its tracer, and no process metrics.
+  Rationale: this is the established composition boundary for administrative commands in the
+  owning package; importing worker telemetry would invert the package graph and couple a local
+  operator action to long-running worker resources.
+  Date: 2026-08-23
+
 - Decision: Do not add a Keiro DSL `signal` operation for `resolve-approval` in this plan.
   Rationale: the CLI is keyed by `AwakeableId`, whereas the DSL signal form identifies a declared
   await through a workflow key and label. ADR 0001 forbids declaring a generated operation the
@@ -258,11 +305,55 @@ from the terminal completes without enqueuing its Kawa intent.
 
 ## Outcomes & Retrospective
 
-The 2026-08-23 refresh removed obsolete prerequisite implementation and made the remaining work
-consistent with the checked durable-workflow model. Milestone 1 now declares the child and parent
-patch, and the first part of milestone 2 routes fresh sink and Flow requests through that child
-while replay simulations preserve the old direct-awakeable branch. Authenticated notification,
-configuration, operator CLI, and the complete acceptance transcript remain.
+The implementation carries approval from resolved process policy through a journaled parent
+snapshot and dedicated child workflow to an authenticated, human-visible ask. The operator CLI
+signals the opaque decision token through the owning core API; the worker resume registry advances
+the child and parent, and only an approved sink reaches the existing outbox boundary. Replay tests
+preserve pre-change parent journals, while fresh runs use only the child's static labels. Both
+transports, approval/rejection/timeout, double resolution, fail-closed notification behavior, and
+the at-least-once post crash window are covered automatically. The complete serial suite, Keiro
+evolution gate, and a real Danwa/Kawa operator exercise all passed.
+
+The manual exercise used `mori://shinzui/danwa/packages/danwa-server` on `127.0.0.1:18080`, the
+repository's Kawa stub on `127.0.0.1:18088`, and a freshly migrated `shikigami_plan14` database.
+The Danwa checkout's current head descends from Shikigami's pinned client commit and has no later
+API/server changes. The worker announced this effective policy before starting its loops:
+
+```json
+{"event":"worker.approval.policy","mode":"required","required_sink_kinds":["KawaDigest"],"channel":"danwa","deadline_seconds":60}
+```
+
+Redacted approve transcript:
+
+```text
+run:    plan14-manual-approve-20260824
+review: review_b48c1ef9-220c-59e9-b9ac-558841a3d9ee
+token:  a4a55ade-…-401d
+ask:    POST /conversations/.../messages -> 200
+first:  resolved: true (exit 0)
+repeat: resolved: false (unknown or already resolved) (exit 1)
+kawa:   accepted source=shinzui/shikigami; outbox status=sent, attempts=1
+```
+
+Redacted reject and timeout transcript:
+
+```text
+reject run:    plan14-manual-reject-20260824
+reject review: review_8ad637ab-7f78-58fe-b6d7-ccf58c644f1d
+reject token:  497c9213-…-85b0
+reject result: resolved: true; no additional outbox row
+
+timeout run:    plan14-manual-timeout-20260824
+timeout review: review_4461b54d-82b8-5299-968c-5ea855f7710f
+timeout token:  bb939e61-…-c1d1
+deadline:       3 seconds
+timeout result: parent workflow and kioku session completed; no additional outbox row
+```
+
+The final operator `outbox list --source shinzui/shikigami` contained exactly the one sent row
+from the approved run. All temporary processes were stopped and temporary configuration files
+were removed. The isolated `danwa` and `shikigami_plan14` databases remain locally available for
+auditing this transcript.
 
 
 ## Context and Orientation
@@ -727,7 +818,7 @@ The notification seam carries process resources but never crosses JSON or the jo
 ```haskell
 data ApprovalNotifier = ApprovalNotifier
   { recordPark :: !(SessionId -> ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO ()),
-    postAsk :: !(ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
+    postAsk :: !(ReviewRequestId -> AwakeableId -> NominalDiffTime -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
   }
 
 postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either DanwaError Text)
@@ -741,7 +832,6 @@ approvalRegistry :: ApprovalWorkflowEnv -> WorkflowRegistry AppEffects
 
 requestApproval ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  ApprovalWorkflowEnv ->
   Text ->
   SessionId ->
   ApprovalRequest ->
@@ -773,6 +863,10 @@ upstream tag before changing Cabal bounds.
 
 ## Revision Notes
 
+- 2026-08-23: Implemented the durable approval child, replay-safe parent patch, stable review
+  identity, authenticated Danwa/Kizashi notifications, typed Settei policy, production worker
+  composition, operator resolution CLI, automated durability/failure proofs, and real-service
+  approve/reject/timeout transcript. Passed the evolution gate and all 737 serial tests.
 - 2026-08-23: Recorded that Keiro DSL 0.14 exposes the checked patch set but no individual patch
   constants, and changed the runtime-binding instruction to require a generated-set membership
   assertion instead.
