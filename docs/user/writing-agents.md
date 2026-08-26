@@ -185,6 +185,12 @@ non-selection outcomes explicit. None of these values authorizes a child by itse
 delegation still enforces the allow-list, lineage, depth, and root-run budget at the spawn
 boundary.
 
+The checked-in architecture-practice router and OpenTelemetry specialist are a complete example of
+this split. The router owns candidate selection and delegation; the specialist owns pinned
+evidence, review memory, Kawa history, and conditional attention. See
+[Architecture-practice reviews](./architecture-practice-reviews.md) for its trigger and operator
+contract.
+
 ## The three axes
 
 The schema deliberately keeps three concerns independent. Any combination is valid:

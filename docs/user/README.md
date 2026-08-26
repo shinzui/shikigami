@@ -55,6 +55,7 @@ agent declaration in order:
 | **[Triggers](./triggers.md)** | The three trigger classes — Schedule, Stream, Event — and the feedback guard |
 | **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill, Flow |
 | **[Flows](./flows.md)** | Durable lifecycle-backed behaviors that can park, resume, and render diagrams |
+| **[Architecture-practice reviews](./architecture-practice-reviews.md)** | Revision-pinned advisory review, resolution, attention, and recovery |
 | **[Skills](./skills.md)** | Authoring a `SKILL.md` skill behavior |
 | **[Sinks](./sinks.md)** | The producer sink set and the permission gate |
 | **[Memory & Sessions](./memory.md)** | How an agent recalls prior learnings and records new ones across runs |

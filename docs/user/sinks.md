@@ -42,6 +42,12 @@ re-delivery is a no-op.
 This is the sink that **closes the living loop**: a digest written here reappears on
 `activity.v1` and can trigger a second agent. See **[The Living Loop](./living-loop.md)**.
 
+A Flow payload may provide a top-level `context_refs` array. The Kawa adapter accepts only Kawa's
+closed schemes, bounds the array, deduplicates exact refs, and rejects malformed refs permanently
+before HTTP. Architecture-practice reviews use `mori://` project refs and one
+`activity://practice-review/<review-id>` logical ref; see
+[Architecture-practice reviews](./architecture-practice-reviews.md).
+
 ## KizashiSignal — raise awareness
 
 ```dhall
@@ -157,6 +163,10 @@ revocation after enqueue still prevents the external effect. A denial is journal
 This means you can **declare** sinks freely and control which ones an agent is actually
 permitted to fire through the grant layer — declaration and authorization are separate
 concerns.
+
+Flow-owned emissions are permission-gated even when the declaration's `sinks` list is empty. The
+OpenTelemetry practice reviewer deliberately uses this form so Kawa history and coalesced Kizashi
+attention occur at explicit lifecycle points rather than generic post-behavior dispatch.
 
 ## A sink-free agent
 

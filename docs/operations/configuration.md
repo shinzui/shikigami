@@ -120,6 +120,7 @@ nested under `kafka`.
 | `approval.require` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE` | Comma-separated unique sink kinds requiring human approval: `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, or `ChannelEgress`. Surrounding whitespace is ignored; empty preserves ordinary sink auto-approval. |
 | `approval.channel` | `danwa` | `SHIKIGAMI_APPROVAL_CHANNEL` | Human approval notification channel: exactly `danwa` or `kizashi`. Explicit Flow acknowledgements always use this channel even when `approval.require` is empty. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
+| `practice_review.attention_recipients` | *(empty; fail closed)* | `SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS` | Comma-separated semantic-owner to Kizashi `recipient_...` mappings. Joint-owner keys are sorted and joined with `+`; duplicate canonical keys and invalid recipients refuse startup. |
 | `kafka.broker` | `127.0.0.1:9092` | `SHIKIGAMI_KAFKA_BROKER` | Bootstrap broker, `HOST:PORT`. |
 | `kafka.activity.topic` | `activity.v1` | `SHIKIGAMI_KAFKA_ACTIVITY_TOPIC` | Topic carrying `activity.v1` envelopes. |
 | `kafka.events.topic` | `danwa.message-addressed.v1` | `SHIKIGAMI_KAFKA_EVENTS_TOPIC` | Topic carrying public integration events. |

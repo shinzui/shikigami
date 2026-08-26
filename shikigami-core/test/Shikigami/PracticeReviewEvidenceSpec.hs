@@ -1,4 +1,12 @@
-module Shikigami.PracticeReviewEvidenceSpec (tests) where
+module Shikigami.PracticeReviewEvidenceSpec
+  ( tests,
+    completeDependencyPinResolver,
+    completeEvidenceReader,
+    completeOpenTelemetryReferenceChangeTrigger,
+    completeOpenTelemetryTrigger,
+    completeReferenceRevision,
+  )
+where
 
 import Control.Lens ((^.))
 import Data.Aeson (eitherDecode, encode, object, (.=))
@@ -11,6 +19,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Shikigami.PracticeReview
   ( Applicability (..),
+    ChangedReference (..),
     ContentHash (..),
     EvidenceItem (..),
     EvidenceRole (..),
@@ -35,6 +44,7 @@ import Shikigami.PracticeReview
     practiceReviewSchemaVersion,
     validateResolution,
     validateTrigger,
+    validatedTriggerValue,
   )
 import Shikigami.PracticeReview.Evidence
   ( DependencyPinResolver (..),
@@ -253,6 +263,88 @@ tests =
         let expectedRevisions = [baseSha, headSha, practiceSha1, practiceSha2, upstreamSha1, upstreamSha2]
         assertBool "all expected revisions are pinned" (all (`ByteString8.isInfixOf` manifest) (ByteString8.pack . Text.unpack <$> expectedRevisions))
     ]
+
+-- | Shared complete content-plane fixture for orchestration tests. It uses the
+-- same immutable snapshots exercised by the evidence contract tests while
+-- presenting the production specialist's OpenTelemetry adoption vocabulary.
+completeOpenTelemetryTrigger :: Text -> PracticeReviewTrigger
+completeOpenTelemetryTrigger triggerKey =
+  validatedTriggerValue $ validateOpenTelemetryTrigger openTelemetryBinding
+  where
+    openTelemetryBinding =
+      PracticeAdoptionBinding
+        { practice = PracticeKey "opentelemetry",
+          references = [practiceReference1],
+          claimedApplicability = Applicability [targetProject] [] ["libfoo"] [PracticeKey "opentelemetry"],
+          mode = Advisory,
+          owners =
+            ReviewOwners
+              { targetOwner = OwnerPrincipal "team-example-service",
+                practiceOwner = OwnerPrincipal "team-haskell-platform",
+                triageOwner = OwnerPrincipal "architecture-council",
+                exceptionApprover = Just (OwnerPrincipal "architecture-council")
+              },
+          upstreamProjects = [RegisteredUpstreamProject {project = upstreamProject, dependency = "libfoo"}]
+        }
+
+    validateOpenTelemetryTrigger binding =
+      case validateTrigger
+        PracticeReviewTrigger
+          { schemaVersion = practiceReviewSchemaVersion,
+            triggerKind = TargetChange,
+            idempotencyKey = triggerKey,
+            target = targetProject,
+            targetRange = RevisionRange {changeKind = Modified, before = Just baseCommit, head = headCommit},
+            changedDecisionPaths = [decisionPath],
+            adoptions = [binding],
+            referenceChange = Nothing,
+            priorReviewId = Nothing
+          } of
+        Left problems -> error (show problems)
+        Right value -> value
+
+completeOpenTelemetryReferenceChangeTrigger :: Text -> ReviewId -> PracticeReviewTrigger
+completeOpenTelemetryReferenceChangeTrigger triggerKey prior =
+  case validateTrigger changed of
+    Left problems -> error (show problems)
+    Right value -> validatedTriggerValue value
+  where
+    original@PracticeReviewTrigger {adoptions} = completeOpenTelemetryTrigger triggerKey
+    changed =
+      original
+        { triggerKind = ReferenceChange,
+          adoptions =
+            [ changedReferenceBinding binding
+            | binding <- adoptions
+            ],
+          referenceChange =
+            Just
+              ChangedReference
+                { project = practiceProject,
+                  range = RevisionRange {changeKind = Modified, before = Just (parseRevision practiceSha1), head = parseRevision practiceSha2},
+                  changedPaths = [relativePath "docs/practices/PRACTICE-1.md"]
+                },
+          priorReviewId = Just prior
+        }
+
+    changedReferenceBinding PracticeAdoptionBinding {practice, claimedApplicability, mode, owners, upstreamProjects} =
+      PracticeAdoptionBinding
+        { practice,
+          references = [practiceReference2],
+          claimedApplicability,
+          mode,
+          owners,
+          upstreamProjects
+        }
+
+completeReferenceRevision :: Text
+completeReferenceRevision = practiceSha2
+
+completeEvidenceReader :: EvidenceReader
+completeEvidenceReader = fixtureReader
+
+completeDependencyPinResolver :: DependencyPinResolver
+completeDependencyPinResolver = compatiblePinResolver
 
 validatedTrigger :: ValidatedPracticeReviewTrigger
 validatedTrigger = validatedTriggerFor adoptionBinding
