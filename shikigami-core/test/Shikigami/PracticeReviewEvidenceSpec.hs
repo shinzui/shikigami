@@ -1,6 +1,7 @@
 module Shikigami.PracticeReviewEvidenceSpec (tests) where
 
 import Control.Lens ((^.))
+import Data.Aeson (eitherDecode, encode, object, (.=))
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString8
 import Data.Generics.Labels ()
@@ -225,6 +226,28 @@ tests =
             bundle = EvidenceBundle {target = [leaky], references = [], upstream = [], priorResolutions = [], problems = [], completeness = Complete}
             rendered = Text.pack (show (summarizeEvidenceBundle bundle))
         assertBool "summary excludes secret excerpt" (not ("fixture-secret" `Text.isInfixOf` rendered)),
+      testCase "versioned evidence bundles round-trip structured acquisition problems" do
+        let problem = ReadFailed targetRepository (Just headSha) (Just "docs/adr/0001.md") (ContentPlaneUnavailable "fixture unavailable") True
+            bundle = EvidenceBundle {target = [validEvidenceSource], references = [], upstream = [], priorResolutions = [], problems = [problem], completeness = Incomplete}
+        case eitherDecode (encode bundle) of
+          Left detail -> assertFailure detail
+          Right decoded -> assertEqual "round-trip" bundle decoded,
+      testCase "evidence bundle decoder rejects unknown schema versions" do
+        let encoded =
+              encode
+                ( object
+                    [ "schemaVersion" .= (2 :: Int),
+                      "target" .= ([validEvidenceSource] :: [EvidenceSource]),
+                      "references" .= ([] :: [EvidenceSource]),
+                      "upstream" .= ([] :: [EvidenceSource]),
+                      "priorResolutions" .= ([] :: [PracticeReviewResolution]),
+                      "problems" .= ([] :: [EvidenceProblem]),
+                      "completeness" .= Complete
+                    ]
+                )
+        case eitherDecode @EvidenceBundle encoded of
+          Left _ -> pure ()
+          Right _ -> assertFailure "unknown evidence schema version decoded",
       testCase "checked-in fixture manifest carries every pinned commit" do
         manifest <- readContentPlaneFixture "manifest.json"
         let expectedRevisions = [baseSha, headSha, practiceSha1, practiceSha2, upstreamSha1, upstreamSha2]

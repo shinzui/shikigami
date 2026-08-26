@@ -31,6 +31,7 @@ import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
+import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import System.Exit (exitFailure)
@@ -145,6 +146,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
               Routing.routingRuntime
                 (AgentLoadReport [AgentLoaded {path = "<agent-run>", declaration = decl}])
                 disabledDirectoryHandle,
+            AgentWorkflow.practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
             AgentWorkflow.deliveryPool = Just pool,
             AgentWorkflow.logger = logger,
             AgentWorkflow.resolveRunProfile = \profileId version -> do

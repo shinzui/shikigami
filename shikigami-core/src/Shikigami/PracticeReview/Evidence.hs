@@ -36,6 +36,7 @@ module Shikigami.PracticeReview.Evidence
   )
 where
 
+import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Either (partitionEithers)
@@ -98,6 +99,10 @@ data EvidenceReadError
   | ContentTooLarge !Int
   | ContentPlaneUnavailable !Text
   deriving stock (Eq, Show, Generic)
+
+instance ToJSON EvidenceReadError where toJSON = genericToJSON eventAesonOptions
+
+instance FromJSON EvidenceReadError where parseJSON = genericParseJSON eventAesonOptions
 
 -- | The raw provenance stamp returned by the content plane. Revision remains
 -- raw text here so the validator can reject a branch, uppercase SHA, or short
@@ -266,6 +271,10 @@ data EvidenceProblem
   | MissingRequiredEvidence !Text !Text
   deriving stock (Eq, Show, Generic)
 
+instance ToJSON EvidenceProblem where toJSON = genericToJSON eventAesonOptions
+
+instance FromJSON EvidenceProblem where parseJSON = genericParseJSON eventAesonOptions
+
 -- | A verdict-ready citation plus the bounded, redacted text shown to a
 -- specialist. Logs should render only the citation and problems, never
 -- 'excerpt'.
@@ -275,6 +284,10 @@ data EvidenceSource = EvidenceSource
     excerpt :: !Text
   }
   deriving stock (Eq, Show, Generic)
+
+instance ToJSON EvidenceSource where toJSON = genericToJSON defaultOptions
+
+instance FromJSON EvidenceSource where parseJSON = genericParseJSON defaultOptions
 
 data ValidatedPinnedDiff = ValidatedPinnedDiff
   { repository :: !RepositoryId,
@@ -307,6 +320,10 @@ newtype DependencyPinResolver = DependencyPinResolver
 data EvidenceCompleteness = Complete | Incomplete
   deriving stock (Eq, Show, Generic)
 
+instance ToJSON EvidenceCompleteness where toJSON = genericToJSON eventAesonOptions
+
+instance FromJSON EvidenceCompleteness where parseJSON = genericParseJSON eventAesonOptions
+
 -- | All evidence available for adjudication. Successful sources remain when a
 -- required sibling fails so the Flow can explain an unresolved result.
 data EvidenceBundle = EvidenceBundle
@@ -319,6 +336,38 @@ data EvidenceBundle = EvidenceBundle
   }
   deriving stock (Eq, Show, Generic)
 
+instance ToJSON EvidenceBundle where
+  toJSON EvidenceBundle {target, references, upstream, priorResolutions, problems, completeness} =
+    Aeson.object
+      [ "schemaVersion" Aeson..= evidenceBundleSchemaVersion,
+        "target" Aeson..= target,
+        "references" Aeson..= references,
+        "upstream" Aeson..= upstream,
+        "priorResolutions" Aeson..= priorResolutions,
+        "problems" Aeson..= problems,
+        "completeness" Aeson..= completeness
+      ]
+
+instance FromJSON EvidenceBundle where
+  parseJSON = Aeson.withObject "EvidenceBundle" \objectValue -> do
+    schemaVersion <- objectValue Aeson..: "schemaVersion"
+    if schemaVersion /= evidenceBundleSchemaVersion
+      then fail ("unsupported evidence-bundle schema version: " <> show (schemaVersion :: Int))
+      else do
+        target <- objectValue Aeson..: "target"
+        references <- objectValue Aeson..: "references"
+        upstream <- objectValue Aeson..: "upstream"
+        priorResolutions <- objectValue Aeson..: "priorResolutions"
+        problems <- objectValue Aeson..: "problems"
+        completeness <- objectValue Aeson..: "completeness"
+        let expectedCompleteness = if null problems then Complete else Incomplete
+        if completeness /= expectedCompleteness
+          then fail "evidence-bundle completeness does not match its problem set"
+          else pure EvidenceBundle {target, references, upstream, priorResolutions, problems, completeness}
+
+evidenceBundleSchemaVersion :: Int
+evidenceBundleSchemaVersion = 1
+
 -- | Log-safe bundle metadata. It deliberately has no excerpt or raw response
 -- field, so operational logging cannot accidentally serialize source bytes.
 data EvidenceBundleSummary = EvidenceBundleSummary
@@ -329,6 +378,10 @@ data EvidenceBundleSummary = EvidenceBundleSummary
     completeness :: !EvidenceCompleteness
   }
   deriving stock (Eq, Show, Generic)
+
+instance ToJSON EvidenceBundleSummary where toJSON = genericToJSON defaultOptions
+
+instance FromJSON EvidenceBundleSummary where parseJSON = genericParseJSON defaultOptions
 
 -- | Validate a blob against the exact repository, revision, and path that was
 -- requested, then produce a bounded and redacted citable source.

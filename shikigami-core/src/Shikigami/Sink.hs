@@ -91,9 +91,12 @@ dispatch ctx sink output = do
 runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome
 runSink ctx sink output = case sink of
   KawaDigest {} -> do
-    env <- buildEnvelope ctx sink output
-    r <- postEnvelopeWithHeaders (http ctx ^. #kawa) (traceHeaders ctx) (kawa ctx) env
-    pure (either kawaFailure Delivered r)
+    buildEnvelope ctx sink output >>= \case
+      Left err@KawaPayloadError {} -> pure (PermanentFailure (renderKawaError err))
+      Left err -> pure (kawaFailure err)
+      Right env -> do
+        r <- postEnvelopeWithHeaders (http ctx ^. #kawa) (traceHeaders ctx) (kawa ctx) env
+        pure (either kawaFailure Delivered r)
   KizashiSignal {} -> do
     -- A strategy that was declared and could not be honored is said out loud;
     -- the alternative is a signal quietly reaching whoever the fallback names.
@@ -132,6 +135,7 @@ sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (ide
 
 kawaFailure :: KawaError -> SinkOutcome
 kawaFailure failure = case failure of
+  KawaPayloadError detail -> PermanentFailure detail
   KawaHttpError httpFailure -> classifiedFailure httpFailure
   KawaDecodeError _ -> PermanentFailure (renderKawaError failure)
 

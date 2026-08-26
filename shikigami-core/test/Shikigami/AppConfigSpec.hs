@@ -51,6 +51,7 @@ import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -107,6 +108,7 @@ surfaceTests =
                 "kafka.groups.events",
                 "kafka.groups.stream",
                 "kafka.include_agent_actors",
+                "practice_review.attention_recipients",
                 "scheduler.catch_up",
                 "sinks.danwa.agent_participant",
                 "sinks.danwa.base_url",
@@ -152,6 +154,7 @@ surfaceTests =
               ("SHIKIGAMI_KAWA_TOKEN", "credentials.sinks.kawa.token"),
               ("SHIKIGAMI_KANMON_TOKEN", "credentials.sinks.kanmon.token"),
               ("SHIKIGAMI_KIZASHI_TOKEN", "credentials.sinks.kizashi.token"),
+              ("SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS", "practice_review.attention_recipients"),
               ("SHIKIGAMI_DANWA_TOKEN", "credentials.sinks.danwa.token"),
               ("SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT", "sinks.danwa.agent_participant"),
               ("SHIKIGAMI_SINKS_DANWA_BASE_URL", "sinks.danwa.base_url"),
@@ -184,6 +187,7 @@ surfaceTests =
         approvalRequiredSinks defaultAppConfig @?= Set.empty
         approvalChannel defaultAppConfig @?= ViaDanwa
         approvalDeadline defaultAppConfig @?= secondsToNominalDiffTime 900
+        renderAttentionRecipientMap (practiceReviewAttentionRecipients defaultAppConfig) @?= ""
         kafkaBroker defaultAppConfig @?= "127.0.0.1:9092"
         kafkaActivityTopic defaultAppConfig @?= "activity.v1"
         kafkaEventsTopic defaultAppConfig @?= "danwa.message-addressed.v1"
@@ -366,6 +370,13 @@ strictnessTests =
           (\bad -> exitCode (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
           ["KawaDigest,KawaDigest", "KawaDigest,Unknown", ","]
         exitCode (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
+      testCase "practice-review recipients reject noncanonical destinations and duplicate owner sets" do
+        mapM_
+          (\bad -> exitCode (runWith (optionsWith [] [cliOverride practiceReviewAttentionRecipientsKey bad]) [] []) @?= resolutionExitCode)
+          [ "target-owner=recipient:wrong",
+            "target-owner=recipient_one,target-owner=recipient_two",
+            "target-owner+triage=recipient_one,triage+target-owner=recipient_two"
+          ],
       testCase "a malformed winning approval policy does not fall back" do
         let run =
               runWith

@@ -74,6 +74,8 @@ import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, run
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.PracticeReview.Capability qualified as PracticeReview
+import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (defaultGrantTable)
 import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowResumeOptions)
@@ -711,10 +713,30 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
                       disabledDirectoryHandle
                 }
             . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            . PracticeReview.runExecutionContext practiceReviewExecutionContext
+            . PracticeReview.runPracticeReviewEvidence False PracticeReview.unavailablePracticeReviewRuntime
+            . PracticeReview.runPracticeReviewEvaluator False behaviorEnv PracticeReview.unavailablePracticeReviewRuntime
+            . PracticeReviewMemory.runPracticeReviewMemoryUnjournaled practiceReviewMemoryEnv
+            . PracticeReview.runPracticeReviewAttention False PracticeReview.unavailablePracticeReviewRuntime
             $ run highRiskPayload
         )
   where
     memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
+    practiceReviewExecutionContext =
+      PracticeReview.PracticeReviewExecutionContext
+        { PracticeReview.identity = compatibilityIdentity "at-risk-customer",
+          PracticeReview.parentWorkflowId = Nothing,
+          PracticeReview.parentSessionId = Nothing,
+          PracticeReview.childWorkflowId = "flow-versioning-workflow",
+          PracticeReview.childSessionId = "flow-versioning-session"
+        }
+    practiceReviewMemoryEnv =
+      PracticeReviewMemory.PracticeReviewMemoryEnv
+        { PracticeReviewMemory.appEnv = appEnv,
+          PracticeReviewMemory.agent = flowAgentDecl,
+          PracticeReviewMemory.identity = CompatibilityAgent "at-risk-customer",
+          PracticeReviewMemory.sessionId = Nothing
+        }
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowAgentDecl,

@@ -66,6 +66,8 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.PracticeReview.Capability qualified as PracticeReview
+import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
@@ -114,7 +116,7 @@ tests =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof, architecture-practice-router"]
+          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
         assertEqual
           "a registered flow is accepted"
@@ -560,11 +562,31 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
                       disabledDirectoryHandle
                 }
             . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            . PracticeReview.runExecutionContext practiceReviewExecutionContext
+            . PracticeReview.runPracticeReviewEvidence False PracticeReview.unavailablePracticeReviewRuntime
+            . PracticeReview.runPracticeReviewEvaluator False behaviorEnv PracticeReview.unavailablePracticeReviewRuntime
+            . PracticeReviewMemory.runPracticeReviewMemoryUnjournaled practiceReviewMemoryEnv
+            . PracticeReview.runPracticeReviewAttention False PracticeReview.unavailablePracticeReviewRuntime
             $ run input
         )
   where
     flowDecl = flowAgentDecl flowAgent
     memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent flowAgent, aliasPool = Nothing, sessionId = Nothing}
+    practiceReviewExecutionContext =
+      PracticeReview.PracticeReviewExecutionContext
+        { PracticeReview.identity = compatibilityIdentity flowAgent,
+          PracticeReview.parentWorkflowId = Nothing,
+          PracticeReview.parentSessionId = Nothing,
+          PracticeReview.childWorkflowId = "flow-test-workflow",
+          PracticeReview.childSessionId = "flow-test-session"
+        }
+    practiceReviewMemoryEnv =
+      PracticeReviewMemory.PracticeReviewMemoryEnv
+        { PracticeReviewMemory.appEnv = appEnv,
+          PracticeReviewMemory.agent = flowDecl,
+          PracticeReviewMemory.identity = CompatibilityAgent flowAgent,
+          PracticeReviewMemory.sessionId = Nothing
+        }
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowDecl,

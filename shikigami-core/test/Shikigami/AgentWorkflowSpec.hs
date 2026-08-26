@@ -2,7 +2,7 @@ module Shikigami.AgentWorkflowSpec (tests) where
 
 import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
 import Control.Exception (SomeException, throwIO, try)
-import Control.Lens ((.~))
+import Control.Lens ((&), (.~))
 import Control.Monad (forM_, void, when)
 import Data.Aeson (Result (..), ToJSON, Value (..), eitherDecode, fromJSON, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -100,6 +100,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
@@ -653,6 +654,32 @@ tests =
             sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "profiled-skill")))
             case sessions of
               Right (Right rows) -> assertEqual "the provider seam was refused before session creation" 0 (length rows)
+              other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
+      testCase "a profiled Flow is constrained before its capability interpreters run" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                content = workflowProfileWith defaultThinkingProhibitions (ProfileVersion "1")
+                digest = profileDigest content
+                resolved = resolvedWorkflowProfile content digest
+                deps =
+                  (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [profiledFlowDecl])
+                    { resolveRunProfile = \_profileId _version -> pure (Right resolved)
+                    }
+
+            result <- runAgentRunWorkflow deps profiledFlowViolationJob
+            case result of
+              Right (Completed (Left err)) -> do
+                let detail = agentRunFailureDetail err
+                assertBool ("Flow violation should name the attempted model: " <> Text.unpack detail) ("stub-v1" `Text.isInfixOf` detail)
+                assertBool ("Flow violation should name the pinned digest: " <> Text.unpack detail) (profileDigestText digest `Text.isInfixOf` detail)
+              other -> assertFailure ("expected a permanent Flow profile refusal, got " <> show other)
+
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "profiled-flow")))
+            case sessions of
+              Right (Right rows) -> assertEqual "the profiled Flow was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
       testCase "resumes after a crash between record and complete without duplicating memory" do
         withShikigamiMigratedDatabase \connStr ->
@@ -1831,6 +1858,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
       routing = testRoutingRuntime agentDecls,
+      practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -1868,6 +1896,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
       routing = testRoutingRuntime [decl],
+      practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -2544,6 +2573,17 @@ flowDecl =
       routing = Nothing
     }
 
+profiledFlowDecl :: AgentDecl
+profiledFlowDecl =
+  flowDecl
+    & #name .~ "profiled-flow"
+    & #sanctionedProfile
+      .~ Just
+        ProfileRequirement
+          { profileId = "sanctioned-review",
+            version = Just "1"
+          }
+
 flowDelegationDecl :: AgentDecl
 flowDelegationDecl =
   AgentDecl
@@ -2774,6 +2814,13 @@ profileViolationJob =
       lineage = [],
       delegationBudgetId = Nothing
     }
+
+profiledFlowViolationJob :: RunJob
+profiledFlowViolationJob =
+  profileViolationJob
+    & #agentName .~ "profiled-flow"
+    & #identity .~ compatibilityIdentity "profiled-flow"
+    & #idempotencyKey .~ "profiled-flow:test-profile-violation"
 
 sampleWorkflowProfileId :: ProfileId
 sampleWorkflowProfileId = ProfileId "sanctioned-review"

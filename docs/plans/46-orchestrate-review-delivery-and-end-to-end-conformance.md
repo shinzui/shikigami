@@ -54,15 +54,18 @@ This section must always reflect the actual current state of the work.
 - [ ] External live prerequisite: complete
       `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` before claiming live
       content-plane conformance. It does not block the deterministic implementation.
-- [ ] M1: turn the proof reviewer into the registered `opentelemetry-practice-review` Flow,
+- [x] (2026-08-26) M1: turned the proof reviewer into the registered
+      `opentelemetry-practice-review` Flow,
       add its execution context and capabilities, and declare every new static workflow step
       behind the required Keiro patches.
-- [ ] M2: implement strict trigger/authorized-resolution dispatch, one journaled evidence
+- [x] (2026-08-26) M2: implemented strict trigger/authorized-resolution dispatch, one journaled evidence
       snapshot, replay-safe model evaluation, deterministic incomplete-evidence handling, and
       production review-memory integration.
-- [ ] M3: publish typed review/resolution history with Kawa context refs and implement atomic,
+- [x] (2026-08-26) M3: published typed review/resolution history with Kawa context refs and implemented atomic,
       cross-run Kizashi attention reservation without duplicating delivery state.
-- [ ] M4: add migrated-Postgres end-to-end tests for five verdicts, four resolutions, re-review,
+- [ ] M4 (in progress): the migrated-Postgres suite now proves strict authorization, incomplete
+      evidence replay, deterministic resolution replay, semantic attention vectors, and concurrent
+      reservation/outbox coalescing. Extend it across five verdicts, four resolutions, re-review,
       replay, redelivery, attention coalescing, recorded identity, and read-only authority.
 - [ ] M5: after Kikan IR-5, install the live `EvidenceReader` adapter and prove pinned-content
       replay. Finish operator/user documentation, Keiro gates, build, and the serialized full
@@ -120,6 +123,19 @@ Finally, review owners are semantic `OwnerPrincipal` values such as team names, 
 expects one concrete `recipient_...` destination. `SubjectOwner` and `AreaOwner` are intentionally
 unresolvable today. A versioned, boot-validated owner-set-to-recipient map is required; relying on
 the deployment-wide Kizashi fallback would silently notify the wrong person.
+
+The landed verdict validator originally required target/reference citations and cited material
+claims for every classification. That made the plan's deterministic `Unresolved` result impossible
+when the content plane was unavailable: the result could truthfully describe acquisition problems,
+but it could not fabricate the missing citations. Validation now keeps the strict evidence rules
+for semantic classifications while allowing only `Unresolved` to carry problem claims without
+citations.
+
+The atomic reservation needs the journal result before it can append that result in the same
+transaction as the outbox and receipt. The existing sink intent derived its message id from the
+workflow step, which differs across runs and made the winning id unknowable until enqueue. A narrow
+intent helper now accepts the already-derived semantic message id; all existing callers retain the
+old wrapper.
 
 
 ## Decision Log
@@ -210,13 +226,28 @@ the deployment-wide Kizashi fallback would silently notify the wrong person.
   plane is ready, while the plan cannot honestly claim live revision-pinned evidence.
   Date: 2026-08-26. Carries forward the 2026-07-30 gate.
 
+- Decision: Permit uncited acquisition-problem claims only on `Unresolved`; retain citation and
+  target/reference evidence requirements for every semantic classification.
+  Rationale: Content-plane failure is itself the reason judgment is unavailable. Requiring missing
+  content as evidence would force either a fabricated citation or an operational failure instead of
+  the contract's explicit fail-closed classification.
+  Date: 2026-08-26.
+
+- Decision: Derive the attention outbox message id from the semantic attention key before entering
+  the reservation transaction, while preserving the step-derived wrapper for other sink callers.
+  Rationale: winner selection, outbox insertion, receipt creation, and the exact journal result must
+  commit atomically, and every equivalent run must address the same delivery identity.
+  Date: 2026-08-26.
+
 ## Outcomes & Retrospective
 
-The 2026-08-26 refresh is complete; implementation has not begun. The plan now starts from the
-landed router, contracts, evidence function, and review-memory interpreter instead of duplicating
-them. It also removes the proposed second delivery-state machine, corrects cross-run attention
-identity, accounts for recorded principals and unresolved Kizashi owners, and turns workflow
-versioning from a final check into part of the implementation design.
+Milestones 1 through 3 are implemented. The specialist is a registered, profile-constrained Flow;
+the AgentRun body declares and executes both review patches; evidence, evaluation, memory, history,
+authorized resolution, and attention cross fixed replay boundaries; and one database transaction
+owns semantic reservation, outbox, receipt, and journal append. The focused practice-review suite
+passes 42 tests, the migration contract passes 5 tests, and the fresh/apply-again smoke suite passes
+2 tests. The remaining deterministic work is the broad end-to-end matrix and the serialized full
+repository gates.
 
 The remaining external gap is narrow and explicit: live evidence requires Kikan IR-5. Deterministic
 orchestration, fail-closed production wiring, sink integration, migrations, and end-to-end tests can

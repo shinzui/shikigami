@@ -159,7 +159,8 @@ runWorkerCmd config = do
                 grants = DbGrants storePool,
                 heartbeats = registry,
                 directory,
-                directoryRefresher
+                directoryRefresher,
+                practiceReviewAttentionRecipients = Config.practiceReviewAttentionRecipients config
               }
       serveProbesWith
         logger

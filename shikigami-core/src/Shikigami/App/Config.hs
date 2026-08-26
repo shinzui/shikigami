@@ -103,6 +103,7 @@ module Shikigami.App.Config
     approvalChannelKey,
     approvalDeadlineSecondsKey,
     conversationIdleTimeoutSecondsKey,
+    practiceReviewAttentionRecipientsKey,
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
@@ -148,6 +149,12 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Directory (DirectorySettings (..))
+import Shikigami.PracticeReview.Capability
+  ( AttentionRecipientMap,
+    emptyAttentionRecipientMap,
+    parseAttentionRecipientMap,
+    renderAttentionRecipientMap,
+  )
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 
@@ -368,6 +375,10 @@ data AppConfig = AppConfig
     -- bounded by 'runTimeout'. A conversation that times out is not an error —
     -- the next message opens a fresh epoch chained to the one that closed.
     conversationIdleTimeout :: !NominalDiffTime,
+    -- | Explicit operational recipients for semantic practice-review owners.
+    -- Empty keeps the fail-closed default: actionable reviews cannot reserve
+    -- attention until an operator maps every owner they expect to encounter.
+    practiceReviewAttentionRecipients :: !AttentionRecipientMap,
     -- | Base URL of the kawa ingest doorway.
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
@@ -444,6 +455,7 @@ appConfig =
     <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
+    <*> withDefault practiceReviewAttentionRecipientsSetting (constant "practice-review-attention-unmapped" "Require operators to map every actionable review owner explicitly" emptyAttentionRecipientMap)
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
     <*> optional kawaTokenSetting
@@ -783,6 +795,23 @@ conversationIdleTimeoutSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
+practiceReviewAttentionRecipientsSetting :: Setting AttentionRecipientMap
+practiceReviewAttentionRecipientsSetting =
+  publicSettingWithRenderer
+    practiceReviewAttentionRecipientsKey
+    "Comma-separated practice-review owner mappings (owner=recipient_id or sorted owner+owner=recipient_id)"
+    (decoder decodeRecipientMap)
+    renderAttentionRecipientMap
+  where
+    decodeRecipientMap key raw =
+      case runDecoder textDecoder key raw of
+        Left _ -> Left (decodeFailure key attentionRecipientMapExpectation)
+        Right value -> first (const (decodeFailure key attentionRecipientMapExpectation)) (parseAttentionRecipientMap value)
+
+attentionRecipientMapExpectation :: Text
+attentionRecipientMapExpectation =
+  "a comma-separated unique map of owner or sorted owner+owner keys to recipient_... ids"
+
 -- | One day is well below @maxBound :: Int@ after conversion to microseconds on
 -- every 64-bit platform supported by this repository's deployment flake, while
 -- still allowing operational budgets far above the defaults.
@@ -971,6 +1000,9 @@ approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
 conversationIdleTimeoutSecondsKey :: Key
 conversationIdleTimeoutSecondsKey = stableKey "conversation.idle_timeout_seconds"
 
+practiceReviewAttentionRecipientsKey :: Key
+practiceReviewAttentionRecipientsKey = stableKey "practice_review.attention_recipients"
+
 sinksKawaBaseUrlKey :: Key
 sinksKawaBaseUrlKey = stableKey "sinks.kawa.base_url"
 
@@ -1082,6 +1114,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
           binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
+          binding (EnvName "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS") practiceReviewAttentionRecipientsKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
           binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
           binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,

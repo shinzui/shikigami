@@ -111,6 +111,22 @@ workflow AgentRun
       step remember-declined -> RecordedLearning
       step remember-escalated -> RecordedLearning
     }
+    # Architecture-practice review memory is a distinct typed state machine.
+    # Its four labels and interpreter patch landed together so a pre-change
+    # reviewer can retain the exact body its journal was written against.
+    patch shikigami-practice-review-memory-v1 {
+      step practice-review-remember-provisional -> PracticeReviewMemoryResult
+      step practice-review-resolve -> PracticeReviewMemoryResult
+      step practice-review-recall -> RecalledPracticeReviews
+      step practice-review-chain -> PracticeReviewChain
+    }
+    # The specialist's evidence snapshot, raw evaluator proposal, and atomic
+    # attention decision are the complete v1 review-flow step topology.
+    patch shikigami-practice-review-flow-v1 {
+      step practice-review-evidence -> EvidenceBundle
+      step practice-review-evaluate -> PracticeReviewEvaluation
+      step practice-review-attention -> AttentionReservationResult
+    }
     # Shikigami.Flow.Capability.runSink decides once per interpreted flow run
     # whether a sink emission's journal label is the caller's stable token
     # (`emit-signal:alert`) or the old per-run ordinal (`emit-signal:0`). The

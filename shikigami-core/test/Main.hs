@@ -13,7 +13,7 @@ import Network.HTTP.Types (hContentType, status200, status204, status400, status
 import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
@@ -46,6 +46,7 @@ import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
+import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
@@ -67,6 +68,7 @@ import Shikigami.Sink
     defaultGrantTable,
   )
 import Shikigami.Sink qualified as Sink
+import Shikigami.Sink.KawaClient (buildEnvelope)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
 import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
@@ -78,7 +80,7 @@ import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matche
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
 import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 main :: IO ()
 main =
@@ -110,6 +112,7 @@ main =
           PackageArchitectureSpec.tests,
           PracticeReviewEvidenceSpec.tests,
           PracticeReviewMemorySpec.tests,
+          PracticeReviewOrchestrationSpec.tests,
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,
           RouterCatalogSpec.tests,
@@ -339,7 +342,38 @@ kawaTests =
               assertEqual "same activity id on retry (deduplicated)" a1 a2
             other -> assertBool ("expected two Delivered, got " <> show other) False
           m <- readIORef store
-          assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m)
+          assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m),
+      testCase "context refs are bounded to closed schemes and deduplicated before ingest" do
+        let ctx = ctxFor (compatibilityIdentity "heartbeat") dummyKizashi dummyKawa
+            sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
+            output =
+              object
+                [ "context_refs"
+                    .= [ object ["scheme" .= ("mori://" :: Text), "ref" .= ("shinzui/example" :: Text)],
+                         object ["scheme" .= ("mori://" :: Text), "ref" .= ("shinzui/example" :: Text)],
+                         object ["scheme" .= ("activity://" :: Text), "ref" .= ("practice-review/review-1" :: Text)]
+                       ]
+                ]
+        buildEnvelope ctx sink output >>= \case
+          Left problem -> assertFailure (show problem)
+          Right ActivityEnvelope {contextRefs} ->
+            contextRefs
+              @?= [ ContextRef {scheme = "mori://", ref = "shinzui/example"},
+                    ContextRef {scheme = "activity://", ref = "practice-review/review-1"}
+                  ],
+      testCase "malformed context refs fail permanently before HTTP" do
+        store <- newIORef (Map.empty :: Map (Text, Text) Text)
+        testWithApplication (pure (kawaDoorwayApplication store)) $ \port -> do
+          let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
+              ctx = ctxFor (compatibilityIdentity "heartbeat") dummyKizashi kw
+              sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
+              output = object ["context_refs" .= [object ["scheme" .= ("https://" :: Text), "ref" .= ("example.invalid" :: Text)]]]
+          result <- Sink.dispatch ctx sink output
+          case outcome result of
+            PermanentFailure detail -> assertBool "failure does not name the bad scheme" ("unknown context_refs scheme" `Text.isInfixOf` detail)
+            other -> assertFailure ("malformed context refs were not permanent: " <> show other)
+          stored <- readIORef store
+          assertEqual "malformed refs made an HTTP request" 0 (Map.size stored)
     ]
 
 -- | A small danwa-compatible HTTP stub for the sink client. It records message request

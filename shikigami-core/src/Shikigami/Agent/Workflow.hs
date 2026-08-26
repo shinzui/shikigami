@@ -56,6 +56,7 @@ import Keiro.Workflow
     Workflow,
     WorkflowId (..),
     WorkflowOutcome,
+    currentWorkflow,
     patch,
     runWorkflowWith,
     step,
@@ -124,6 +125,9 @@ import Shikigami.Flow.Routing qualified as FlowRouting
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
+import Shikigami.PracticeReview.Capability qualified as PracticeReview
+import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -181,6 +185,10 @@ data AgentRunDeps = AgentRunDeps
     -- | Process-local catalog/evaluator seam. Catalog and raw decision values
     -- cross the workflow journal before they can influence delegation.
     routing :: !RoutingRuntime,
+    -- | Process-local content, evaluation, and attention adapters for the
+    -- specialist review Flow. Their outputs cross fixed journal steps before
+    -- they can influence the Flow body.
+    practiceReview :: !PracticeReview.PracticeReviewRuntime,
     -- | The Shikigami receipt store used only by the asynchronous publisher.
     -- Production always supplies it; focused workflow tests may opt out because
     -- they never cross the publisher boundary.
@@ -376,6 +384,8 @@ behaviorEnvForProfile ::
   BehaviorEnv ->
   Either ProfileViolation BehaviorEnv
 behaviorEnvForProfile AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
+  constrainBehaviorEnv resolvedProfile
+behaviorEnvForProfile AgentDecl {behavior = Flow {}} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
 behaviorEnvForProfile AgentDecl {routing = Just _} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
@@ -811,6 +821,11 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
+      (_, WorkflowId childWorkflowId) <- currentWorkflow
+      journalPracticeReview <- patch PracticeReview.practiceReviewFlowPatch
+      let attentionInterpreter
+            | journalPracticeReview = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
+            | otherwise = PracticeReview.runPracticeReviewAttention False (practiceReview deps)
       attempted <-
         trySync
           ( FlowCapability.runActivity (activityFromJob job)
@@ -819,6 +834,11 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
               . FlowDelegate.runDelegate delegateEnv
               . FlowRouting.runRouting routingEnv
               . acknowledgementInterpreter
+              . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
+              . PracticeReview.runPracticeReviewEvidence journalPracticeReview (practiceReview deps)
+              . PracticeReview.runPracticeReviewEvaluator journalPracticeReview activeBehaviorEnv (practiceReview deps)
+              . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
+              . attentionInterpreter
               $ run (triggerPayload job)
           )
       case attempted of
@@ -871,6 +891,32 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
           FlowCapability.grants = depsGrants deps,
           FlowCapability.directory = depsDirectory deps,
           FlowCapability.identity = RunJob.identity job
+        }
+    practiceReviewExecutionContext childWorkflowId =
+      PracticeReview.PracticeReviewExecutionContext
+        { PracticeReview.identity = RunJob.identity job,
+          PracticeReview.parentWorkflowId = RunJob.parentRunWorkflowId job,
+          PracticeReview.parentSessionId = RunJob.parentSessionId job,
+          PracticeReview.childWorkflowId = childWorkflowId,
+          PracticeReview.childSessionId = idText sid
+        }
+    practiceReviewMemoryEnv =
+      PracticeReviewMemory.PracticeReviewMemoryEnv
+        { PracticeReviewMemory.appEnv = appEnv deps,
+          PracticeReviewMemory.agent = decl,
+          PracticeReviewMemory.identity = recordedIdentity,
+          PracticeReviewMemory.sessionId = Just sid
+        }
+    practiceReviewAttentionEnv =
+      PracticeReviewAttention.PracticeReviewAttentionEnv
+        { PracticeReviewAttention.agent = agentName job,
+          PracticeReviewAttention.identity = RunJob.identity job,
+          PracticeReviewAttention.runId = idText sid,
+          PracticeReviewAttention.occurredAt = Just (runJobOccurredAt job),
+          PracticeReviewAttention.activity = Just (activityFromJob job),
+          PracticeReviewAttention.grants = depsGrants deps,
+          PracticeReviewAttention.directory = depsDirectory deps,
+          PracticeReviewAttention.recipients = PracticeReview.attentionRecipients (practiceReview deps)
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope

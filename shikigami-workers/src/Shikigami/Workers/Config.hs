@@ -56,6 +56,7 @@ import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
+import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Http (SinkHttp)
@@ -130,7 +131,8 @@ data WorkerEnv = WorkerEnv
     -- whichever copy it happens to hold.
     heartbeats :: !Heartbeats,
     directory :: !DirectoryHandle,
-    directoryRefresher :: !(Maybe (IO ()))
+    directoryRefresher :: !(Maybe (IO ())),
+    practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
   }
 
 -- | The process-wide logger. Named rather than used as a bare selector
@@ -213,6 +215,7 @@ agentRunDeps env =
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.directory = envDirectory env,
       AgentWorkflow.routing = Routing.routingRuntime (agentReport env) (envDirectory env),
+      AgentWorkflow.practiceReview = PracticeReviewCapability.failClosedPracticeReviewRuntime (practiceReviewAttentionRecipients env),
       AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime

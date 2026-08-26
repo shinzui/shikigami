@@ -4,13 +4,7 @@ in  A.Agent::{
     , name = "opentelemetry-practice-reviewer"
     , description =
         "Reviews OpenTelemetry instrumentation and telemetry architecture"
-    , behavior =
-        A.Behavior.ShikumiProgram
-          { task = "noop-summary"
-          , preferEnrichment = False
-          , grounding = None Text
-          , enabledBy = None Text
-          }
+    , behavior = A.Behavior.Flow { name = "opentelemetry-practice-review" }
     , trigger =
         A.Trigger.Event { eventType = "proof.opentelemetry-practice-review" }
     , expertise =
@@ -22,4 +16,8 @@ in  A.Agent::{
           [ "traceparent", "service.name", "instrumentation scope" ]
         }
       ]
+    , sanctionedProfile = Some
+      { profileId = "sanctioned-review", version = Some "1" }
+    , memory.recordPolicy = A.RecordPolicy.Never
+    , sinks = [] : List A.Sink
     }

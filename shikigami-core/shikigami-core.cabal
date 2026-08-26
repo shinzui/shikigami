@@ -71,6 +71,7 @@ library
     Shikigami.Flow.Capability
     Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
+    Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
@@ -82,6 +83,9 @@ library
     Shikigami.Memory.AliasStore
     Shikigami.Memory.Scope
     Shikigami.PracticeReview
+    Shikigami.PracticeReview.Attention
+    Shikigami.PracticeReview.Authorization
+    Shikigami.PracticeReview.Capability
     Shikigami.PracticeReview.Evidence
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
@@ -225,6 +229,7 @@ test-suite shikigami-core-test
     Shikigami.PackageArchitectureSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewMemorySpec
+    Shikigami.PracticeReviewOrchestrationSpec
     Shikigami.PracticeReviewSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.RouterCatalogSpec

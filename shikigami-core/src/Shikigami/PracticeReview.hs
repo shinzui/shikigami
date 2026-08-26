@@ -723,13 +723,13 @@ verdictErrors
         "verdict.reviewId"
         "does not match the deterministic trigger/practice/specialist identity"
       <> lineageErrors lineage
-      <> check (null targetEvidence) "verdict.targetEvidence" "must contain pinned target evidence"
+      <> check (classification /= Unresolved && null targetEvidence) "verdict.targetEvidence" "must contain pinned target evidence"
       <> check (classification /= Unresolved && null referenceEvidence) "verdict.referenceEvidence" "must contain pinned practice evidence"
       <> evidenceCollectionErrors TargetEvidence "verdict.targetEvidence" targetEvidence
       <> evidenceCollectionErrors ReferenceEvidence "verdict.referenceEvidence" referenceEvidence
       <> evidenceCollectionErrors UpstreamEvidence "verdict.upstreamEvidence" upstreamEvidence
       <> duplicateEvidenceErrors allEvidence
-      <> concatMap (uncurry (claimErrors knownEvidence)) (indexedFields "verdict.claims" claims)
+      <> concatMap (uncurry (claimErrors (classification == Unresolved) knownEvidence)) (indexedFields "verdict.claims" claims)
       <> duplicateClaimErrors claims
       <> check (confidence < 0 || confidence > 100) "verdict.confidence" "must be between 0 and 100"
       <> blankErrors "verdict.routingRationale" routingRationale
@@ -788,11 +788,11 @@ duplicateClaimErrors claims =
   | ClaimId claim <- duplicateValues [claimId | PracticeReviewClaim {claimId} <- claims]
   ]
 
-claimErrors :: Set.Set EvidenceId -> Text -> PracticeReviewClaim -> [ReviewContractError]
-claimErrors known prefix PracticeReviewClaim {claimId = ClaimId claim, statement, evidenceIds} =
+claimErrors :: Bool -> Set.Set EvidenceId -> Text -> PracticeReviewClaim -> [ReviewContractError]
+claimErrors allowProblemDerived known prefix PracticeReviewClaim {claimId = ClaimId claim, statement, evidenceIds} =
   blankErrors (prefix <> ".claimId") claim
     <> blankErrors (prefix <> ".statement") statement
-    <> check (null evidenceIds) (prefix <> ".evidenceIds") "must cite at least one evidence item"
+    <> check (not allowProblemDerived && null evidenceIds) (prefix <> ".evidenceIds") "must cite at least one evidence item"
     <> [ contractError (prefix <> ".evidenceIds") ("references unknown evidence id: " <> evidence)
        | evidenceId@(EvidenceId evidence) <- evidenceIds,
          Set.notMember evidenceId known

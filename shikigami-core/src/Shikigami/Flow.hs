@@ -32,8 +32,20 @@ import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
+import Shikigami.Flow.OpenTelemetryPracticeReview
+  ( opentelemetryPracticeReviewFlow,
+    opentelemetryPracticeReviewFlowName,
+    opentelemetryPracticeReviewMermaid,
+  )
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.PracticeReview.Capability
+  ( ExecutionContext,
+    PracticeReviewAttention,
+    PracticeReviewEvaluator,
+    PracticeReviewEvidence,
+  )
+import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 -- | Everything a flow body may do, and therefore everything it may not.
@@ -55,7 +67,19 @@ import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSe
 --
 -- Adding an effect here widens what every flow may do. Add a capability instead.
 type FlowEffects es =
-  (Workflow :> es, Memory :> es, Sink :> es, Activity :> es, Acknowledgement :> es, Delegate :> es, Routing :> es)
+  ( Workflow :> es,
+    Memory :> es,
+    Sink :> es,
+    Activity :> es,
+    Acknowledgement :> es,
+    Delegate :> es,
+    Routing :> es,
+    ExecutionContext :> es,
+    PracticeReviewEvidence :> es,
+    PracticeReviewEvaluator :> es,
+    PracticeReviewMemory :> es,
+    PracticeReviewAttention :> es
+  )
 
 -- | What 'Shikigami.Flow.Acknowledgement.runAcknowledgement' needs to interpret
 -- a flow's parks.
@@ -129,6 +153,15 @@ flowRegistry =
               validationWarnings = []
             },
         run = architecturePracticeRouterFlow
+      },
+    FlowDef
+      { name = opentelemetryPracticeReviewFlowName,
+        lifecycle =
+          LifecycleDiagram
+            { mermaid = opentelemetryPracticeReviewMermaid,
+              validationWarnings = []
+            },
+        run = opentelemetryPracticeReviewFlow
       }
   ]
 

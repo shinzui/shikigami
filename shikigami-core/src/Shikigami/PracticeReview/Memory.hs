@@ -35,6 +35,7 @@ module Shikigami.PracticeReview.Memory
     recallPracticeReviews,
     recallPracticeReviewChain,
     runPracticeReviewMemory,
+    runPracticeReviewMemoryUnjournaled,
   )
 where
 
@@ -445,6 +446,16 @@ practiceReviewMemoryPatch = PatchId "shikigami-practice-review-memory-v1"
 runPracticeReviewMemory :: (Workflow :> es, IOE :> es) => PracticeReviewMemoryEnv -> Eff (PracticeReviewMemory : es) a -> Eff es a
 runPracticeReviewMemory env action = do
   journalReviewMemory <- patch practiceReviewMemoryPatch
+  runPracticeReviewMemoryWithJournal journalReviewMemory env action
+
+-- | Test/legacy interpreter that installs the same narrow capability without
+-- adding the review-memory patch to an unrelated workflow's journal. AgentRun
+-- production always uses 'runPracticeReviewMemory'.
+runPracticeReviewMemoryUnjournaled :: (Workflow :> es, IOE :> es) => PracticeReviewMemoryEnv -> Eff (PracticeReviewMemory : es) a -> Eff es a
+runPracticeReviewMemoryUnjournaled = runPracticeReviewMemoryWithJournal False
+
+runPracticeReviewMemoryWithJournal :: (Workflow :> es, IOE :> es) => Bool -> PracticeReviewMemoryEnv -> Eff (PracticeReviewMemory : es) a -> Eff es a
+runPracticeReviewMemoryWithJournal journalReviewMemory env action =
   interpret
     ( \_ -> \case
         RememberProvisional prior verdict ->

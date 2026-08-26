@@ -95,6 +95,11 @@ behavior:
   # catalog; run --describe-config, or set a wrong one, to see the accepted list.
   model: claude-sonnet-4-6
 
+# Actionable practice reviews fail closed unless their exact semantic owner (or
+# sorted joint-owner set) maps to one Kizashi recipient id.
+practice_review:
+  attention_recipients: target-team=recipient_target_team,practice-team=recipient_practice_team,triage=recipient_triage,exception-approver=recipient_exception_approver
+
 # credentials:
 #   providers:
 #     anthropic:

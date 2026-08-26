@@ -8,6 +8,8 @@ module Shikigami.Sink.Intent
     enqueueSinkIntentStep,
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,
+    prepareSinkIntentForRecipient,
+    prepareSinkIntentForRecipientWithMessageId,
     preparedSinkResult,
     decodeSinkIntentEvent,
     sinkIntentEvent,
@@ -277,9 +279,92 @@ prepareSinkIntent ::
   UTCTime ->
   IO PreparedSinkIntent
 prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now = do
+  prepareSinkIntentWithRecipient
+    directoryHandle
+    grantSource
+    identity
+    workflowId
+    stepName
+    agentName
+    runIdText
+    ordinal
+    occurredAt
+    danwaTarget
+    activity
+    Nothing
+    (resolveSinkRecipient sink activity)
+    sink
+    output
+    now
+
+-- | Prepare one sink with a deployment-resolved recipient. This is narrower
+-- than a global fallback: callers must supply the concrete destination and the
+-- resulting intent records it before entering the outbox transaction.
+prepareSinkIntentForRecipient ::
+  DirectoryHandle ->
+  GrantSource ->
+  AgentIdentity ->
+  WorkflowId ->
+  StepName ->
+  Text ->
+  Text ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Maybe ActivityEnvelope ->
+  Text ->
+  Sink ->
+  Value ->
+  UTCTime ->
+  IO PreparedSinkIntent
+prepareSinkIntentForRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output now =
+  prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity Nothing (Just recipient) sink output now
+
+-- | Explicit-recipient preparation with a semantic message id shared by
+-- equivalent producers. Only the reservation winner may enqueue the result.
+prepareSinkIntentForRecipientWithMessageId ::
+  DirectoryHandle ->
+  GrantSource ->
+  AgentIdentity ->
+  WorkflowId ->
+  StepName ->
+  Text ->
+  Text ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Maybe ActivityEnvelope ->
+  Text ->
+  Text ->
+  Sink ->
+  Value ->
+  UTCTime ->
+  IO PreparedSinkIntent
+prepareSinkIntentForRecipientWithMessageId directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity messageId recipient sink output now =
+  prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity (Just messageId) (Just recipient) sink output now
+
+prepareSinkIntentWithRecipient ::
+  DirectoryHandle ->
+  GrantSource ->
+  AgentIdentity ->
+  WorkflowId ->
+  StepName ->
+  Text ->
+  Text ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Maybe ActivityEnvelope ->
+  Maybe Text ->
+  Maybe Text ->
+  Sink ->
+  Value ->
+  UTCTime ->
+  IO PreparedSinkIntent
+prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity explicitMessageId explicitRecipient sink output now = do
   capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
-      messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
+      messageId = fromMaybe (unWorkflowId workflowId <> ":" <> unStepName stepName) explicitMessageId
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
@@ -309,7 +394,7 @@ prepareSinkIntent directoryHandle grantSource identity workflowId stepName agent
                     ordinal,
                     occurredAt,
                     danwaTarget,
-                    resolvedRecipient = resolveSinkRecipient sink activity,
+                    resolvedRecipient = explicitRecipient,
                     conversationKey = resolvedConversationKey,
                     triggeringActivityId = resolvedTriggeringActivityId,
                     sink,

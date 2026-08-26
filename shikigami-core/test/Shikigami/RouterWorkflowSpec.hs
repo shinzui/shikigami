@@ -50,6 +50,7 @@ import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
@@ -343,6 +344,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.grants = StaticGrants defaultGrantTable,
       AgentWorkflow.directory = disabledDirectoryHandle,
       AgentWorkflow.routing,
+      AgentWorkflow.practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
       AgentWorkflow.deliveryPool = Nothing,
       AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }

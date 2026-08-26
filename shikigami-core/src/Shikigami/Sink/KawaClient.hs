@@ -16,12 +16,16 @@ module Shikigami.Sink.KawaClient
 where
 
 import Data.Aeson (Value (..), eitherDecode)
+import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Types (parseEither)
+import Data.Foldable (traverse_)
 import Data.KindID (genKindID, toText)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Network.HTTP.Types.Header (Header)
-import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Prelude
@@ -30,36 +34,82 @@ import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHtt
 import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
 import Shikigami.Sink.Wire (IngestRequest (..), IngestResponse (..))
 
-data KawaError = KawaHttpError !HttpFailure | KawaDecodeError !Text
+data KawaError = KawaHttpError !HttpFailure | KawaDecodeError !Text | KawaPayloadError !Text
   deriving stock (Eq, Show)
 
 renderKawaError :: KawaError -> Text
 renderKawaError (KawaHttpError failure) = renderHttpFailure failure
 renderKawaError (KawaDecodeError t) = "decode IngestResponse: " <> t
+renderKawaError (KawaPayloadError t) = "invalid Kawa payload: " <> t
 
 -- | Build the nine-field C1 envelope for a @KawaDigest@ sink: mint the @act_@ id,
 -- @actor.kind = "agent"@, @source = "shinzui/shikigami"@, @idempotency_key@ = the
 -- deterministic @source_event_id@.
-buildEnvelope :: SinkContext -> Sink -> Value -> IO ActivityEnvelope
+buildEnvelope :: SinkContext -> Sink -> Value -> IO (Either KawaError ActivityEnvelope)
 buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredAt} sink output =
   case sink of
     KawaDigest {subjectType = sty, verb = vb} -> do
-      actId <- genKindID @"act"
-      now <- maybe getCurrentTime pure ctxOccurredAt
-      let nm = either (const "unresolved-legacy") (\value -> value) (identityText ctxIdentity)
-      pure
-        ActivityEnvelope
-          { activityId = toText actId,
-            occurredAt = Text.pack (iso8601Show now),
-            source = "shinzui/shikigami",
-            actor = Actor {kind = "agent", id = nm, session = Nothing},
-            subject = Subject {subjectType = sty, subjectId = subjectIdFromOutput output nm},
-            verb = vb,
-            payload = output,
-            contextRefs = [],
-            idempotencyKey = mkSourceEventId ctx
-          }
+      case contextRefsFromOutput output of
+        Left problem -> pure (Left (KawaPayloadError problem))
+        Right contextRefs -> do
+          actId <- genKindID @"act"
+          now <- maybe getCurrentTime pure ctxOccurredAt
+          let nm = either (const "unresolved-legacy") (\value -> value) (identityText ctxIdentity)
+          pure
+            ( Right
+                ActivityEnvelope
+                  { activityId = toText actId,
+                    occurredAt = Text.pack (iso8601Show now),
+                    source = "shinzui/shikigami",
+                    actor = Actor {kind = "agent", id = nm, session = Nothing},
+                    subject = Subject {subjectType = sty, subjectId = subjectIdFromOutput output nm},
+                    verb = vb,
+                    payload = output,
+                    contextRefs,
+                    idempotencyKey = mkSourceEventId ctx
+                  }
+            )
     _ -> error "Shikigami.Sink.KawaClient.buildEnvelope: not a KawaDigest sink"
+
+contextRefsFromOutput :: Value -> Either Text [ContextRef]
+contextRefsFromOutput (Object objectValue) =
+  case KeyMap.lookup "context_refs" objectValue of
+    Nothing -> Right []
+    Just raw -> do
+      refs <- firstText (parseEither Aeson.parseJSON raw)
+      whenEither (length refs <= maximumContextRefs) ("context_refs exceeds " <> Text.pack (show maximumContextRefs) <> " entries")
+      traverse_ validateContextRef refs
+      pure (dedupeContextRefs refs)
+  where
+    firstText = either (Left . Text.pack) Right
+contextRefsFromOutput _ = Right []
+
+validateContextRef :: ContextRef -> Either Text ()
+validateContextRef ContextRef {scheme, ref}
+  | scheme `notElem` kawaContextRefSchemes = Left ("unknown context_refs scheme: " <> scheme)
+  | Text.null (Text.strip ref) = Left "context_refs ref must not be empty"
+  | Text.length ref > maximumContextRefLength = Left "context_refs ref is too long"
+  | otherwise = Right ()
+
+dedupeContextRefs :: [ContextRef] -> [ContextRef]
+dedupeContextRefs = reverse . snd . foldl add (Set.empty, [])
+  where
+    add (seen, retained) value@ContextRef {scheme, ref}
+      | Set.member (scheme, ref) seen = (seen, retained)
+      | otherwise = (Set.insert (scheme, ref) seen, value : retained)
+
+kawaContextRefSchemes :: [Text]
+kawaContextRefSchemes = ["mori://", "rei://", "plan://", "signal://", "conversation://", "activity://"]
+
+maximumContextRefs :: Int
+maximumContextRefs = 32
+
+maximumContextRefLength :: Int
+maximumContextRefLength = 512
+
+whenEither :: Bool -> Text -> Either Text ()
+whenEither True _ = Right ()
+whenEither False problem = Left problem
 
 -- | The subject id from the output's @subject_id@ field, falling back to the agent name.
 subjectIdFromOutput :: Value -> Text -> Text
