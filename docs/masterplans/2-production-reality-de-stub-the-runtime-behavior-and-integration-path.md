@@ -47,8 +47,10 @@ than conventions repeated differently in feature plans:
    (`Sink/KizashiClient.hs:22-45`, `Sink/Danwa.hs:24-31`).
 
 When this MasterPlan is complete, the production path is *honest*: Shikigami has the
-standard six-package boundary, every executable resolves typed configuration through
-Settei, and an operator can wire a real Anthropic model without exposing secrets while the worker says loudly which
+standard six-package boundary, every application/service executable resolves typed
+configuration through Settei, the dedicated migration wrapper keeps the accepted pg-migrate
+connection boundary, and an operator can wire a real Anthropic model without exposing
+secrets while the worker says loudly which
 provider is active (stub included); a human can be asked for approval through danwa or
 kizashi and answer from the CLI, with the tested durable park/resume/timeout semantics
 unchanged; agents actually use what they remember and what triggered them, in both
@@ -71,7 +73,7 @@ otherwise.
 
 The review's findings fall into six distinct concerns. Two are foundations:
 **deployed-service architecture** (where runtime responsibilities live) and
-**configuration** (how every executable obtains validated settings). Four are feature
+**configuration** (how every application-setting consumer obtains validated settings). Four are feature
 concerns, and the decomposition follows the concerns rather than the files: **model execution** (what
 runs a Skill), **human-in-the-loop** (who may stop a sink), **context assembly** (what
 the behavior gets to see), and **sink truth** (what happens to the output). Each
@@ -106,7 +108,7 @@ with a real model) but is not blocked by it.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
-| F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-07-31), except the migration executable — see Surprises |
+| F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-08-26; migration boundary accepted by ADR 0032) |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
 | F4 | Give one-off agent runs a light package that does not link the platform | docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md | F1 | plan 48 | Not Started |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
@@ -170,7 +172,8 @@ Foundation wave: land plan 36 (package architecture), plan 37 (Settei configurat
 plan 47 (the coherent released dependency cohort), in that order. Then land plan 38
 (pg-migrate transition) and plan 39 (checked Keiro DSL). These plans turn recurring fleet
 conventions into owned, testable prerequisites. No later plan may recreate a seventh
-top-level package, raw environment resolver, arbitrary pre-release dependency cohort, Codd
+top-level package, raw environment resolver outside the documented OTel/pg-migrate
+boundaries, arbitrary pre-release dependency cohort, Codd
 migration path, or unchecked workflow topology.
 
 Core semantics wave: land plan 13 (model provider), plan 16 (honest sink behavior),
@@ -374,13 +377,10 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       `shikigami-core/test/Shikigami/AppConfigSpec.hs` pin precedence, strictness, the
       accepted key and binding lists, and the absence of a planted secret from every
       rendering. 132 tests pass across seven suites.
-- [ ] F2 remaining: `shikigami-migrate` resolves `DATABASE_URL` with `lookupEnv` instead of
-      the shared `AppConfig`. The codd half of this item is closed — F3 (plan 47) moved the
-      whole migration stack to pg-migrate, so the `CODD_*` contract no longer exists
-      anywhere (`shikigami-migrations/app/Main.hs`, `Justfile:31,38`, `cabal.project:74-79`).
-      What remains is only the Settei unification, still blocked by the cabal package cycle
-      (see Surprises & Discoveries); reassigned to plan 38, which owns the migration CLI and
-      can restructure the package boundary.
+- [x] (2026-08-26) F2 migration reconciliation: `shikigami-migrate` reads only
+      `DATABASE_URL` and mounts pg-migrate's command surface. ADR 0032 accepts that
+      application-owned administrative boundary instead of splitting the configuration
+      package or duplicating Settei. The `CODD_*` contract is gone, and plan 38 is complete.
 - [x] (2026-07-31T03:46:15Z) F3 M0: Kioku `v0.2.0.0` published with
       released Keiki 0.4 / Keiro 0.4 bounds and codec-compatibility evidence.
 - [x] (2026-07-31) F3 M1–M5: `cabal.project` selects the whole cohort from Hackage by
@@ -408,6 +408,8 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       permitted run yields a `sanctioned` attestation, and a run that never reached a real provider
       cannot demonstrate that. See that MasterPlan's Surprises & Discoveries and
       `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` Milestone 5.
+      Rechecked 2026-08-26: the credential is still absent. One plan-52 positive-case run
+      may supply the transcript and close both records; this does not block plan 46.
 - [ ] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
 - [ ] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration
@@ -582,22 +584,23 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - Plan 36 implementation (2026-07-31): all builds and tests must run inside the Nix dev
   shell. A bare `cabal build all` compiles everything and then fails at link with
   `ld: library not found for -lrdkafka`. Use `nix develop --command cabal ...`.
-- Plan 37 implementation (2026-07-31): **`shikigami-migrate` cannot consume the shared
+- Plan 37 implementation (reconciled 2026-08-26): **`shikigami-migrate` cannot consume the shared
   configuration declaration, and every later plan that wants to configure a migration step
   inherits this.** `shikigami-core`'s test suite depends on
   `shikigami-migrations:test-support`, so the reverse edge makes the two packages mutually
   dependent and cabal's solver — which detects cycles at package rather than component
   granularity — refuses the whole project with
   `rejecting: shikigami-core:*test (cyclic dependencies)`. The migration executable therefore
-  reads its one variable itself, documented at its call site. Plan 38 owns the migration CLI
-  and is the right place to restructure the boundary.
+  reads its one variable itself, documented at its call site.
   Superseded in part (2026-07-31): when written, that one variable was codd's `CODD_*`
   contract. F3 (plan 47) moved the migration stack to pg-migrate, so the executable now reads
-  `DATABASE_URL`. **The cycle itself is unchanged and still binding** — it is a property of
-  the package graph, not of the migration library, so any later plan wanting configuration in
-  `shikigami-migrations` inherits it regardless of which migration tool is in use.
+  `DATABASE_URL`. **The cycle itself is unchanged and still binding**, but the assumed
+  restructure is no longer work: pg-migrate assigns connection configuration to the
+  embedding application, and the executable consumes no other Shikigami settings. ADR 0032
+  accepts the bounded exception and requires reconsideration before another raw setting is
+  added.
 - Plan 37 implementation (2026-07-31): the configuration surface is **one** `AppConfig`
-  shared by every binary, not one per binary, with per-binary requirements expressed as a
+  shared by every application-setting consumer, not one per binary, with per-binary requirements expressed as a
   `Role` and checked after resolution. Plans 13, 14, 16, 22, 28–32 and 34 extend that single
   declaration in `shikigami-core/src/Shikigami/App/Config.hs`; the six-step recipe is at the
   end of `docs/operations/configuration.md`. Two conventions bind them. Only declare a key
@@ -617,6 +620,21 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 
 ## Decision Log
+
+- Decision: Accept `shikigami-migrate`'s dedicated `DATABASE_URL` boundary and close plans
+  37 and 38 without a configuration-only package restructure.
+  Rationale: `mori://shinzui/pg-migrate/packages/pg-migrate-cli` deliberately leaves
+  connection ownership to the embedding application, the wrapper consumes no shared
+  Shikigami setting, and importing `AppConfig` creates a Cabal package cycle. ADR 0032 records
+  the durable boundary and its narrow reconsideration trigger.
+  Date: 2026-08-26
+
+- Decision: Treat plan 13's live Anthropic transcript as one shared acceptance proof with
+  plan 52, not as a prerequisite for plan 46.
+  Rationale: plan 13's provider implementation is complete, plan 52 is the consumer that
+  needs a real-provider positive case, and no credential is currently available. One live
+  run proves the fact once without broadening unrelated practice-review work.
+  Date: 2026-08-26
 
 - Decision: Treat Kioku IR-1 as completed evidence and remove it from plan 47's
   hard dependencies.
@@ -675,7 +693,7 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 - Decision: Plan 37 owns configuration through Settei; feature plans may define domain
   settings but may not read the environment or invent precedence rules directly.
   Rationale: one typed composition point provides consistent source ordering,
-  diagnostics, validation, and secret redaction across every binary.
+  diagnostics, validation, and secret redaction across every application-setting consumer.
   Date: 2026-07-22
 - Decision: Plan 36 owns the exact six-package architecture and the public HTTP/API
   boundary used by later plans.
@@ -699,10 +717,20 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The foundation and three implemented feature children are reconciled. Plan 37 is complete
+under ADR 0032's bounded migration exception; plan 13 is implementation-complete with one
+external live proof coordinated with plan 52; plan 15 is complete; and plan 16 is complete
+with its optional live observation explicitly descoped. The MasterPlan remains open for its
+other registered children, but none of plans 16, 37, or 38 is a blocker for plan 46.
 
 
 ## Revision Notes
+
+- 2026-08-26: Reconciled plans 13, 16, 37, and 38. Kept plan 13's live Anthropic proof open
+  and coordinated it with plan 52 because no credential is present. Confirmed plan 16
+  complete after plans 24 and 27 discharged its label and duplicated-intent follow-ups.
+  Accepted `shikigami-migrate`'s pg-migrate-owned `DATABASE_URL` boundary under ADR 0032,
+  closing plans 37 and 38 and releasing plans 31 and 46 from their former bookkeeping gate.
 
 - 2026-08-05: Reclassified EP-1 (plan 13) Milestone 3's unperformed live Anthropic smoke from an
   accepted gap to a cross-MasterPlan blocker. `docs/improvement-requests/attest-sanctioned-agent-execution.md`

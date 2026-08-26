@@ -16,13 +16,13 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Today every Skill-behavior agent that the production worker runs "succeeds" without ever
-calling a model. The worker unconditionally builds its behavior environment with a stub
-LLM provider, so every skill run returns the literal string
+Before this plan, every Skill-behavior agent that the production worker ran "succeeded"
+without ever calling a model. The worker unconditionally built its behavior environment
+with a stub LLM provider, so every skill run returned the literal string
 `"stub-skill: instructions acknowledged; no model was called"`
 (`shikigami-core/src/Shikigami/Behavior/StubProvider.hs:32`), and that fixed string is
-then durably recorded as the agent's "learning" in kioku memory. There is no code path,
-flag, or environment variable that can make the worker call a real model.
+then durably recorded as the agent's "learning" in kioku memory. There was no code path,
+flag, or environment variable that could make the worker call a real model.
 
 After this plan, an operator selects a provider through plan 37's Settei application
 configuration (with explicit compatibility bindings for `SHIKIGAMI_MODEL_PROVIDER` and
@@ -67,7 +67,10 @@ value and never gains `Show`, JSON, or log rendering.
 - [ ] Milestone 3 (live half): live anthropic smoke transcript. **Not performed** — no
       Anthropic credential is available in this environment (see Surprises & Discoveries).
       Everything it would prove that is checkable without a key has been checked; what
-      remains unproven is the round trip to `api.anthropic.com` itself.
+      remains unproven is the round trip to `api.anthropic.com` itself. Rechecked
+      2026-08-26: the credential is still absent. This is an external acceptance proof, not
+      unfinished provider wiring; it does not block plan 46. Plan 52's live-provider
+      positive conformance run may supply the same transcript and close this box.
 
 
 ## Surprises & Discoveries
@@ -145,8 +148,23 @@ value and never gains `Show`, JSON, or log rendering.
   - Unproven: the round trip itself — that a real key against a real endpoint returns a
     model-authored reply. Run the Milestone 3 command with a credential to close it.
 
+- Portfolio reconciliation (2026-08-26): the environment still has no
+  `ANTHROPIC_API_KEY`, so the live claim remains deliberately unproven. Nothing in plans
+  16, 37, or 38 supplies that credential or changes the provider path. The only downstream
+  requirement is plan 52's positive conformance case, which already needs a sanctioned run
+  reaching a real provider. One captured run can therefore satisfy both plans; plan 46's
+  practice-review flow has no provider-proof dependency on this box.
+
 
 ## Decision Log
+
+- Decision: Keep the live Anthropic round trip open as one shared external acceptance proof
+  with plan 52 rather than duplicate a paid call or treat it as unfinished implementation.
+  Rationale: all code-path, redaction, configuration, failure, and durable-model-identity
+  behavior is already covered without a credential. Plan 52 is the consumer that needs the
+  real-provider positive case; its transcript can prove the same fact once and close both
+  records. Plan 46 does not consume that fact.
+  Date: 2026-08-26
 
 - Decision: Express the credential requirement as a Settei condition in the declaration
   (`whenEq`), and drop `resolveProviderSelection` entirely. `ProviderSelection` lives in
@@ -232,7 +250,8 @@ value and never gains `Show`, JSON, or log rendering.
 
 ## Outcomes & Retrospective
 
-Complete as of 2026-07-31, except the live smoke (see Progress and Surprises).
+Implementation-complete as of 2026-07-31. The single external live-provider acceptance
+proof remains open (see Progress and Surprises) and is coordinated with plan 52.
 
 **What an operator can now do that they could not before.** Set `behavior.provider:
 anthropic` and a credential, and the same worker binary runs Skill behaviors against a
@@ -718,6 +737,11 @@ plan does not change (plan 15 does).
 
 
 ## Revision Notes
+
+- 2026-08-26: Rechecked the live acceptance gap and found no Anthropic credential. Kept the
+  round trip open rather than inventing evidence, classified it as shared proof with plan
+  52's positive conformance case, and made explicit that it does not block plan 46 or any
+  provider implementation work.
 
 - 2026-07-31: Implemented. Milestones 1–3 are complete except the live smoke, which was not
   performed for want of a credential and is recorded as unproven rather than assumed. Three

@@ -33,9 +33,9 @@ publisher loop is `shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs`
 enqueue remains `shikigami-core/src/Shikigami/Trigger/Enqueue.hs`. Nothing lives under
 `shikigami-cli` any more. Every process except `shikigami-migrate` resolves settings through
 Settei's `AppConfig`. The July 2026 cohort is in place, and it removed codd from the
-repository entirely; the 2026-08-05 decision to cancel the codd-ledger import shrank F1
-again, down to one configuration change (see the Decomposition Strategy and the F1 notes in
-Surprises & Discoveries). Any child plan text still naming
+repository entirely; the 2026-08-05 decision cancelled the codd-ledger import, and ADR 0032
+accepted the dedicated migration connection boundary on 2026-08-26. F1 is complete (see the
+Decomposition Strategy and the F1 notes in Surprises & Discoveries). Any child plan text still naming
 `shikigami-cli/...` or `shikigami-core/src/Shikigami/Worker.hs` is stale and must be read
 against this map.
 
@@ -50,10 +50,10 @@ plan model before any child adds tables. Plan 47 already delivered the component
 exact-byte manifest, the composed four-component application plan, the `pg-migrate-cli`
 executable, and the pg-migrate test support, and removed codd from the repository. The
 codd-ledger import was cancelled on 2026-08-05 — shikigami has no users and no database whose
-history needs preserving — so F1's remaining work is only the package restructure that lets
-`shikigami-migrate` resolve through the shared `AppConfig`. **The schema-authoring gate is
-released:** the manifest, the composed plan, and the public test support all exist and are
-proven, so a child may add a migration today.
+history needs preserving. ADR 0032 later accepted `shikigami-migrate`'s dedicated
+`DATABASE_URL` boundary, so no configuration-only package restructure remains. **F1 and the
+schema-authoring gate are complete:** the manifest, composed plan, public test support, and
+operator boundary all exist and are proven.
 The queue-to-workflow boundary (EP-1) is about
 what "retry" means once a job is in a handler, including the adapter's zero-based
 attempt and Shibuya's framework-owned acknowledgement. The stream-to-queue boundary
@@ -71,7 +71,7 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Mostly Complete (M1, M2, M3 cancelled, M4 part; remaining: `shikigami-migrate` Settei unification. No longer gates schema authoring) |
+| F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Complete (2026-08-26; M3 cancelled, migration boundary accepted by ADR 0032) |
 | 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
 | 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
 | 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plans 16 ✅, 47 ✅, 28 M1 ✅; `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` ✅ | None | Complete (2026-08-22; Keiro 0.14/Kioku 0.5 cleared the final terminal-rejection gate) |
@@ -84,7 +84,7 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 Child-plan staleness (2026-07-31). Every child ExecPlan's Context section was written before
 plans 36/37/47 landed and still names pre-split paths — `shikigami-cli/src/Shikigami/Cli/...`
 in plans 18 and 20, `shikigami-core/src/Shikigami/Worker.hs` in plans 17, 19, and 20 — and
-plan 38 described codd as present in the tree (corrected 2026-08-05). The *defects* those plans describe were
+plan 38 described codd as present in the tree (corrected 2026-08-05 and closed 2026-08-26). The *defects* those plans describe were
 re-verified against the current tree on 2026-07-31 and all still hold; only the file map and
 F1's starting point moved. Each child must have its Context and Concrete Steps re-pointed at
 the map in Vision & Scope before implementation begins.
@@ -92,9 +92,9 @@ the map in Vision & Scope before implementation begins.
 
 ## Dependency Graph
 
-F1 follows plans 36, 37, and 47 — all Complete. It no longer gates new Shikigami migrations:
-the manifest, composed plan, and test support exist, so a child may add one today. EP-1, EP-2,
-and F1's remainder are all startable now. EP-3 completed on 2026-08-22 after Keiro 0.14
+F1 followed plans 36, 37, and 47 — all Complete — and is itself Complete. The manifest,
+composed plan, test support, and dedicated migration connection boundary exist. EP-1 and EP-2
+are startable now. EP-3 completed on 2026-08-22 after Keiro 0.14
 shipped `PublishRejected` and Kioku 0.5 supplied the coherent consumer bound. EP-4
 hard-depends on EP-1 and EP-2 so it consumes the final ack taxonomy
 and `ensureRunQueue`/transactional enqueue seam instead of shipping conditional duplicate
@@ -117,7 +117,7 @@ follows plan 16, which makes each sink handler truthful. EP-3 then records deliv
 using the final sink outcomes and structured logger; plan 27 lands afterward and consolidates
 the settled semantics. The sink chain is plan 16 plus plan 28 M1 → EP-3 → plan 27.
 
-EP-1, EP-2, and F1's remainder can proceed in parallel; EP-3 is complete, and EP-4 starts
+EP-1 and EP-2 can proceed in parallel; F1 and EP-3 are complete, and EP-4 starts
 after EP-1 and EP-2. This is the MasterPlan-3 slice of the
 canonical MP-2 through MP-7 waves recorded in MasterPlan 2.
 
@@ -155,9 +155,9 @@ durable dead-letter/halt behavior and uses shibuya's serial/framework-owned comm
 boundary rather than a parallel acknowledgement loop. EP-4 consumes that seam.
 
 Database evolution — the `pg-migrate` component, exact-byte manifest, complete application
-plan, CLI, and test-support contract now exist in the tree (`shikigami-migrations`, delivered
-by plan 47). Plan 38 owns what remains: unifying the `shikigami-migrate` operator surface.
-The codd-ledger import it also owned was cancelled on 2026-08-05. EP-3 adds delivery receipts
+plan, CLI, and test-support contract exist in the tree (`shikigami-migrations`, delivered
+by plan 47). The codd-ledger import was cancelled on 2026-08-05, and ADR 0032 accepts the
+dedicated `DATABASE_URL` operator boundary. Plan 38 is complete. EP-3 adds delivery receipts
 only by appending a file to `shikigami-migrations/sql-migrations/manifest` (via
 `just new-migration`, which is already pg-migrate-shaped); plans 21 and 23 do the same for
 their tables. Note that a migration's durable identity is `<component>/<filename without
@@ -224,7 +224,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
 - [x] F1: Milestones 1, 2, and most of 4 — pg-migrate component, exact-byte manifest, complete four-component plan, `pg-migrate-cli` executable, pg-migrate test support, codd removed from the repository (delivered by plan 47, 2026-07-31)
 - [x] F1: Milestone 3 — **cancelled 2026-08-05.** No database needs its codd history preserved; codd support was removed outright instead
-- [ ] F1: Milestone 4 remainder — `shikigami-migrate` resolves `DATABASE_URL` through the shared `AppConfig` instead of reading it directly; the `shikigami-core` ↔ `shikigami-migrations` package cycle is broken
+- [x] F1: Milestone 4 reconciliation (2026-08-26) — ADR 0032 accepts
+      `shikigami-migrate`'s dedicated application-owned `DATABASE_URL` boundary; no shared
+      `AppConfig` dependency, duplicate declaration, or package restructure remains
 - [ ] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
 - [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
 - [ ] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
@@ -272,7 +274,7 @@ interactions between child plans. Provide concise evidence.
   component, not from a SQL comment. The filenames stay, but for a different reason: an
   applied migration's durable identity is its filename, so renaming one breaks any database
   that ran it.
-- Foundation landing (2026-07-31): **F1 also inherits a package-cycle problem that plan 37
+- Foundation landing (reconciled 2026-08-26): **F1 inherited a package-cycle problem that plan 37
   discovered and could not fix.** `shikigami-core`'s test suite depends on
   `shikigami-migrations`' public `test-support` sublibrary, so adding `shikigami-core` to
   `shikigami-migrate`'s `build-depends` makes the two packages mutually dependent, and Cabal
@@ -284,9 +286,9 @@ interactions between child plans. Provide concise evidence.
   ```
 
   `shikigami-migrate` therefore reads `DATABASE_URL` with `lookupEnv` directly, documented at
-  its call site. This is the one remaining exception to plan 37's "Settei is the sole
-  process-configuration mechanism" rule, and F1 is the plan positioned to restructure the
-  package boundary while it works there.
+  its call site. Mori's current pg-migrate documentation assigns connection configuration to
+  the embedding application, so ADR 0032 accepts this narrow exception rather than creating
+  a package or duplicate declaration solely for uniformity. F1 is complete.
 - Foundation landing (2026-07-31): **applying the migration plan is not sufficient on its
   own.** Kioku 0.2 stopped registering read models on first query and `registerReadModel`
   only inserts, so a host applying a composed plan directly must reconcile keiro's
@@ -314,6 +316,12 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision: Close F1 with `shikigami-migrate` on its dedicated `DATABASE_URL` boundary.
+  Rationale: pg-migrate leaves connection configuration to the embedding application, the
+  executable consumes no other Shikigami setting, and sharing plan 37's `AppConfig` creates
+  a Cabal package cycle. ADR 0032 records the boundary and the trigger for revisiting it.
+  Date: 2026-08-26
 
 - Decision: Cancel F1's codd-ledger import (plan 38 Milestone 3) and remove codd support
   outright, rather than carrying an import path for a migration nobody needs to make.
@@ -346,6 +354,8 @@ interactions between child plans. Provide concise evidence.
   table still needs a foundation plan that has been proved against real data.
   Partly superseded 2026-08-05: the ledger import is cancelled, so only the package
   restructure justifies keeping F1 open, and EP-3 no longer waits on it.
+  Fully superseded 2026-08-26: ADR 0032 accepts the dedicated connection boundary, so the
+  package restructure no longer justifies keeping F1 open.
   Date: 2026-07-31
 
 - Decision: Treat the child ExecPlans' file paths as stale documentation to be re-pointed at
@@ -428,11 +438,17 @@ ledger carries actual delivery state and downstream ids; proven delivery and Dan
 sub-receipts guard retries; independent sinks no longer share one ordering key; and Keiro 0.14's
 terminal rejection contract prevents known permanent failures from exhausting transient retries.
 The workflow gate classified the change replay-neutral, fresh migration apply/re-apply passed,
-and the full repository suite remained green. EP-1, EP-2, EP-4, and F1's configuration remainder
-remain open, so this MasterPlan is not complete.
+and the full repository suite remained green. F1 is complete as of 2026-08-26 under ADR 0032;
+EP-1, EP-2, and EP-4 remain open, so this MasterPlan is not complete.
 
 
 ## Revision Notes
+
+- 2026-08-26: Marked F1 (plan 38) complete. ADR 0032 accepts the dedicated pg-migrate
+  `DATABASE_URL` boundary and cancels the configuration-only package restructure. Updated
+  the registry, dependency graph, integration point, progress, discovery, decision, and
+  outcomes; schema authors and deployment consumers no longer wait on a nonexistent Settei
+  unification.
 
 - 2026-08-22: Marked EP-3 (plan 19) complete. Keiro 0.14 shipped the upstream terminal
   rejection contract and Kioku 0.5 shipped its coherent consumer bound, clearing the last

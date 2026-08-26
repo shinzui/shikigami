@@ -36,7 +36,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisites: `docs/plans/43-define-architecture-practice-review-contracts.md`, `docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md`, `docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md`, `docs/masterplans/8-declarative-router-agents.md`, `docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md`, `docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md`, `docs/plans/25-replay-safe-flow-memory-capabilities.md`, `docs/plans/35-delegation-as-a-first-class-declared-capability.md`, `docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`, `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`, `docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, and `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` have landed; Kikan IR-5 must also be completed for the live evidence path.
+- [x] (2026-08-26) Static prerequisites have landed: plans 43–45, MasterPlan 8,
+      and plans 16, 19, 25, 35–39. Plan 16's optional live observation is explicitly
+      descoped; plans 37 and 38 are complete under ADR 0032's accepted migration boundary.
+- [ ] External live prerequisite:
+      `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` must supply the production
+      evidence path. The deterministic orchestration and stubbed conformance work remain
+      startable, as the upstream request explicitly permits.
 - [ ] M1: finalize router/specialist declarations, register both Flows, and add checked step topology.
 - [ ] M2: implement replay-safe evidence, recall, verdict, provisional-memory, and resolution paths.
 - [ ] M3: publish Kawa review/resolution activities with `mori://` and `activity://` context refs.
@@ -281,6 +287,22 @@ routing/delegation, memory, and terminal sink semantics; it may not add parallel
 delivery machinery.
 
 
+## Portfolio Reconciliation (2026-08-26)
+
+Plans 16, 37, and 38 impose no remaining work on this plan. Plan 16 is Complete with its
+optional manual observation explicitly descoped; plan 24 stabilized its flow emission labels,
+and plan 27 consolidated the formerly duplicated sink intent. ADR 0032 accepts
+`shikigami-migrate`'s dedicated `DATABASE_URL` boundary, so plans 37 and 38 are Complete and the
+additive attention migration uses their existing manifest and test-support surface.
+
+Plan 44 completed its client-independent `EvidenceReader`, bounded acquisition, deterministic
+fixtures, and hermetic tests on 2026-08-26. Kikan IR-5 is therefore the only unmet live
+prerequisite identified by this reconciliation; it does not block the deterministic orchestration
+and stubbed conformance work. Before implementation, M1 must still be refreshed against plan 42's
+delivered router labels and plan 45's delivered memory operations; this status update does not
+preserve the duplicated topology proposed by the older plan body.
+
+
 ## Interfaces and Dependencies
 
 The orchestration ports and coalescing surface are:
@@ -337,6 +359,11 @@ authority.
 
 
 ## Revision Notes
+
+- 2026-08-26: Reconciled the prerequisite set. Marked the static predecessors, including
+  completed plan 44, as satisfied; recorded plans 16/37/38 as discharged; and narrowed the
+  remaining live gate to Kikan IR-5. The pre-implementation refresh against delivered plans
+  42 and 45 remains required.
 
 - 2026-07-30: Repointed the live evidence/conformance gate to Kikan IR-5 and
   its stable OKF concept URI.

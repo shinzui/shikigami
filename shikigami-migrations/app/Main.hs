@@ -12,17 +12,16 @@
 -- dependencies)@ and refuses to build the project — because it detects cycles at
 -- package rather than component granularity.
 --
--- So this binary reads @DATABASE_URL@ itself, in the same way
--- @shikigami-workers\/src\/Shikigami\/Telemetry.hs@ keeps the OpenTelemetry SDK's
--- @OTEL_*@ contract: nothing else in the process has a configuration surface to
--- share.
+-- So this binary reads @DATABASE_URL@ itself. That is the application-owned
+-- connection boundary documented by @pg-migrate-cli@, not a second Shikigami
+-- application configuration surface: nothing else in this process has a setting
+-- to share. The decision at
+-- @docs\/adr\/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md@
+-- accepts this deliberately rather than splitting the shared declaration into
+-- another package or duplicating it here.
 --
--- Unifying this surface belongs to
--- @docs\/plans\/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md@,
--- which owns the migration components, manifests, CLI, and test support and can
--- restructure the package boundary while it does so. This executable initializes
--- a fresh ledger and will refuse to re-apply migrations it has already
--- recorded.
+-- This executable initializes a fresh ledger and will refuse to re-apply
+-- migrations it has already recorded.
 module Main (main) where
 
 import Data.Aeson qualified as Aeson

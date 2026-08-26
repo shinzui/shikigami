@@ -16,17 +16,17 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Three of shikigami's declared-sink features lie to their operators today.
+Before this plan, three of Shikigami's declared-sink features lied to their operators.
 
 First, a `ReiAction` sink — "hand this finding to shinzui/rei as an action on an
-intention" — is a pure logging no-op that returns a `Stubbed` outcome
+intention" — was a pure logging no-op that returned a `Stubbed` outcome
 (`shikigami-core/src/Shikigami/Sink/ReiAction.hs:16-22`,
 `shikigami-core/src/Shikigami/Sink.hs:62`), and the outbox publisher counts anything
 non-`Failed` as `PublishSucceeded`
 (`shikigami-core/src/Shikigami/Agent/Workflow.hs:581-583`). Findings destined for rei
 therefore vanish while every ledger says "delivered."
 
-Second, two declaration fields are silently ignored:
+Second, two declaration fields were silently ignored:
 `KizashiSignal.recipientFrom` (a `SubjectOwner | AreaOwner | Actor` routing strategy,
 `shikigami-api/src/Shikigami/Api/Agent.hs:35-37,75`) is never read — `buildSignalReq`
 uses only `defaultRecipient` (`shikigami-core/src/Shikigami/Sink/KizashiClient.hs:22-45`)
@@ -65,9 +65,10 @@ any more — it is either honored or rejected up front.
       `Shikigami.Sink.Validate.sinkDeclarationErrors` refuses a directory strategy with no
       `defaultRecipient` and the `validate` command exits 1 with it; every shipped manifest
       re-validated.
-- [ ] Optional live observation (worker + database, watching the outbox retry a real
-      ReiAction failure): not performed. The equivalent is asserted in tests — see
-      Outcomes.
+- [x] (2026-08-26) Optional live observation explicitly descoped: it was not performed,
+      and it is not acceptance evidence or a downstream gate. The equivalent Shikigami-owned
+      behavior is asserted in tests — see Outcomes. Watching Keiro retry the same failed
+      row would add a visual transcript, not prove another requirement of this plan.
 
 
 ## Surprises & Discoveries
@@ -120,8 +121,24 @@ any more — it is either honored or rejected up front.
   live run would add is only the visual of the publisher retrying, which is keiro's
   behavior rather than this plan's.
 
+- Portfolio reconciliation (2026-08-26): the two cleanup findings this plan handed off
+  have landed. Plan 24 replaced ordinal-derived flow emission names with stable declared
+  labels behind `shikigami-emit-signal-labels-v1`; the labels still contain a colon and are
+  therefore represented by an intentionally empty checked patch block. Plan 27 moved both
+  `SinkIntent` producers and their helpers into one hand-owned `Shikigami.Sink.Intent`
+  module, so the duplicate-record and dead-helper hazards recorded above are historical
+  discovery, not open work in this plan.
+
 
 ## Decision Log
+
+- Decision: Close this plan without the optional live worker observation.
+  Rationale: the plan-owned acceptance facts are separately asserted: an unconfigured
+  `ReiAction` returns `Failed`, and `Failed` leaves the outbox row unpublished. A manual
+  screenful of Keiro retrying that row would exercise Keiro scheduling rather than add
+  evidence about Shikigami's sink mapping. Optional observation cannot keep a completed
+  plan on downstream prerequisite lists.
+  Date: 2026-08-26
 
 - Decision: Encode `SinkIntent` with `omitNothingFields` rather than updating the pinned
   pre-upgrade byte fixture.
@@ -239,7 +256,8 @@ now accepted and discarded.
 7. 190 tests across seven suites, `-j1`, including the untouched replay and
    outbox-stability cases.
 
-**Not done:** the optional live worker observation, for the reason in Surprises.
+**Explicitly descoped:** the optional live worker observation, for the reason in Surprises.
+It is not a completion criterion and no downstream plan waits for it.
 
 **What this leaves for the plans that follow.** Plan 19 now has truthful failures to manage
 rather than fabricated successes, which was this plan's whole contribution to it. Plan 22
@@ -621,6 +639,11 @@ policy for failed publishes — this plan only makes the failure real.
 
 ## Revision Notes
 
+- 2026-08-26: Closed the optional live-observation box as explicitly descoped and
+  non-gating. Reconciled the two follow-ups with delivered plans 24 and 27: stable
+  `emit-signal:<label>` names now sit behind the checked empty patch declaration, and one
+  `Shikigami.Sink.Intent` module now owns the formerly duplicated record and helpers.
+
 - 2026-07-31: Implemented; all three milestones complete. Two departures from the plan as
   written, both in the Decision Log: strategy resolution lives in a new
   `Shikigami.Sink.Recipient` rather than split between the workflow and the kizashi client,
@@ -639,20 +662,23 @@ policy for failed publishes — this plan only makes the failure real.
   Settei application config and made plans 36/37 explicit prerequisites.
 
 
-## Reconciliation with the delivered plan 39 (2026-08-19)
+## Reconciliation with delivered plans 24, 27, and 39 (2026-08-26)
 
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md` has landed. The
 service is now specified by `domain/shikigami.keiro-workspace`, and one finding lands on this
 plan.
 
-The flow path's sink steps are journaled as `emit-signal:<ordinal>`
-(`Shikigami/Flow/Capability.hs:136`), and that label **cannot be declared**: keiro-dsl parses a
-workflow label with the wire-word production `[A-Za-z0-9][A-Za-z0-9_-]*`, which admits neither the
-colon nor a runtime-computed suffix. So the flow's sink emissions are outside the checked
-specification and are not gated by `keiro-dsl diff`. If this plan makes those labels static, add
-them to `domain/shikigami-agent-run.keiro`'s `body` and run `just keiro-gate`; if it does not, say
-so, because the specification's silence is currently a limitation rather than a claim that the
-labels do not exist.
+The flow path's sink steps used to be journaled as `emit-signal:<ordinal>`. Plan 24 now derives
+fresh-run names from stable declaration labels (`emit-signal:<label>`) behind the permanent patch
+`shikigami-emit-signal-labels-v1`; in-flight legacy runs keep their ordinal branch. Keiro DSL's
+wire-word grammar still admits neither the colon nor a runtime-selected suffix, so
+`domain/shikigami-agent-run.keiro` declares the patch with an intentionally empty body and comments
+the opaque dynamic step family. `just keiro-gate` checks the patch presence without pretending the
+DSL can enumerate the runtime labels.
+
+Plan 27 also discharged the structural follow-up from this plan. There is now one
+`Shikigami.Sink.Intent` definition and one helper set consumed by both producer paths; the public
+re-exports remain for compatibility, but the two independently maintained codecs no longer exist.
 
 The sink outbox itself is also deliberately undeclared. A keiro-dsl `emit`/`publisher` pair models
 publishing contract events to a Kafka topic, and this outbox's publisher calls HTTP sinks — so

@@ -15,16 +15,19 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-Every Shikigami binary currently discovers operational values through a mixture of
-`getEnv`, `lookupEnv`, and unrelated command flags. After this change every process has
-one typed, inspectable Settei configuration, one explicit precedence order, structurally
-redacted secrets, and the same diagnostic interface. Operators can describe the complete
-schema, explain where each value came from, or validate configuration without opening a
-listener, acquiring a worker, or changing the database.
+Before this plan, Shikigami binaries discovered operational values through a mixture of
+`getEnv`, `lookupEnv`, and unrelated command flags. The delivered application and service
+processes now share one typed, inspectable Settei configuration, one explicit precedence
+order, structurally redacted secrets, and the same diagnostic interface. Operators can
+describe the complete schema, explain where each value came from, or validate configuration
+without opening a listener, acquiring a worker, or changing the database.
 
-The visible proof is that every configurable executable supports `--describe-config`,
+The visible proof is that every executable consuming Shikigami application settings supports
+`--describe-config`,
 `--describe-config-json`, `--explain-config`, `--explain-config-json`, and
 `--check-config`, and a planted secret never appears in output, errors, logs, or reports.
+The dedicated pg-migrate wrapper is deliberately outside this surface; ADR 0032 records its
+one-variable `DATABASE_URL` boundary.
 
 
 ## Progress
@@ -45,9 +48,11 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-31T05:10:00Z) M3: server, admin CLI (six subcommands), worker, scheduler,
       both consumers, run-behavior, and agent-run all resolve one `AppConfig` before opening
       anything. Named flags survive as Settei command-line sources aimed at declared keys.
-- [ ] M3 remaining: `shikigami-migrate` still uses codd's `CODD_*` contract. Blocked by a
-      cabal package cycle (see Surprises & Discoveries); handed to plan 38, which owns the
-      migration CLI.
+- [x] (2026-08-26) M3 reconciliation: `shikigami-migrate` uses pg-migrate and reads only
+      `DATABASE_URL`. [ADR 0032](../adr/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md)
+      accepts that application-owned administrative boundary instead of duplicating Settei
+      or creating a package solely to break the `shikigami-core` ↔
+      `shikigami-migrations:test-support` cycle. No Codd contract remains.
 - [x] (2026-07-31T05:40:00Z) M4: 31 conformance cases in
       `shikigami-core/test/Shikigami/AppConfigSpec.hs` (surface, precedence, strictness,
       role requirements, diagnostics, planted secret) plus parser-to-resolution cases in
@@ -77,8 +82,8 @@ implementation. Provide concise evidence.
   `optparse-applicative`: `settei-optparse-applicative` requires `>=0.19 && <0.20`, which is
   now pinned in every package that previously said `>=0.18`.
 
-- (Implementation, 2026-07-31) **The migration executable cannot use the shared declaration,
-  and the obstacle is structural rather than a matter of effort.** `shikigami-core`'s test
+- (Implementation, reconciled 2026-08-26) **The migration executable cannot use the shared
+  declaration, and the obstacle is structural rather than a matter of effort.** `shikigami-core`'s test
   suite depends on `shikigami-migrations`' public `test-support` sublibrary, so adding
   `shikigami-core` to `shikigami-migrate`'s `build-depends` makes the two packages mutually
   dependent. Cabal detects cycles at *package* rather than component granularity and refuses
@@ -94,11 +99,12 @@ implementation. Provide concise evidence.
         shikigami-core, shikigami-migrations)
   ```
 
-  `shikigami-migrate` therefore keeps codd's own `CODD_*` contract, documented at its call
-  site the same way the OpenTelemetry boundary is. It calls no `getEnv`/`lookupEnv` itself —
-  `Codd.Environment.getCoddSettings` does the reading — so the acceptance grep stays clean,
-  but the operator surface is genuinely not yet unified. Plan 38 owns the migration CLI and
-  can restructure the package boundary while replacing codd with pg-migrate.
+  Plan 47 later replaced Codd with pg-migrate, and the current executable reads
+  `DATABASE_URL` itself before constructing `pg-migrate-cli`'s environment. Mori's current
+  pg-migrate Quickstart assigns database configuration to the embedding application and uses
+  the same one-variable pattern. ADR 0032 therefore accepts the boundary as final: adding a
+  second Settei declaration or a new package would buy cosmetic uniformity without one
+  authoritative configuration surface.
 
 - (Implementation, 2026-07-31) Nesting the resolved configuration into `KafkaConfig`,
   `HttpConfig`, and `SinksConfig` records was tried and abandoned. Three sink records each
@@ -128,9 +134,17 @@ implementation. Provide concise evidence.
 
 Record every decision made while working on the plan.
 
-- Decision: Settei is the sole process-configuration mechanism; raw environment reads are forbidden outside the Settei adapter and the OpenTelemetry SDK.
-  Rationale: One declaration makes the accepted surface inspectable and prevents misspelled or shadowed values from silently changing behavior.
-  Date: 2026-07-22
+- Decision: Settei is the sole configuration mechanism for Shikigami-owned application and
+  service settings; raw environment reads are forbidden outside the Settei adapter, the
+  OpenTelemetry SDK, and the dedicated pg-migrate connection boundary accepted by ADR 0032.
+  Rationale: One declaration makes the accepted application surface inspectable and prevents
+  misspelled or shadowed values from silently changing behavior. `DATABASE_URL` belongs to a
+  single-purpose administrative wrapper whose owning library deliberately leaves connection
+  configuration to the embedding application.
+  Date: 2026-08-26
+- Superseded decision (2026-07-22): Settei is the sole process-configuration mechanism and
+  only the OpenTelemetry SDK may read environment variables outside its adapter. Superseded
+  narrowly by the accepted migration boundary above; the application-setting rule is unchanged.
 - Decision: Agent Dhall files remain domain declarations, not process configuration, but may contain only credential references—not secret values.
   Rationale: Agent structure benefits from Dhall typing, while secrets need Settei sensitivity and provenance. This also prevents MCP credentials from deriving revealing `Show` or JSON instances.
   Date: 2026-07-22
@@ -144,7 +158,7 @@ Record every decision made while working on the plan.
   YAML covers service files and CLI files while preserving Settei provenance and strict
   unknown-key handling.
   Date: 2026-07-22
-- Decision: One `AppConfig` declaration for every binary, with per-binary requirements
+- Decision: One `AppConfig` declaration for every application-setting consumer, with per-binary requirements
   expressed as a `Role` rather than as separate declarations.
   Rationale: the plan's own Milestone 3 wording is "one resolved record passed during
   composition", and one declaration is what lets a single configuration file serve a whole
@@ -198,18 +212,20 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-**2026-07-31 — complete but for the migration executable.**
+**2026-08-26 — complete.**
 
-The purpose was that every process has one typed, inspectable configuration, one explicit
-precedence order, structurally redacted secrets, and the same diagnostic interface. Nine of
-the ten executables now do. The stated visible proof holds: every configurable executable
+The purpose was that every process consuming Shikigami application settings has one typed,
+inspectable configuration, one explicit precedence order, structurally redacted secrets,
+and the same diagnostic interface. Those processes do. The stated visible proof holds:
+every executable on that surface
 supports all five diagnostic modes, and a planted secret appears in no output, error,
 report, or `Show`.
 
-The acceptance grep finds exactly one remaining raw environment read in the whole tree,
-`lookupEnv "OTEL_EXPORTER_OTLP_ENDPOINT"` in `shikigami-workers/src/Shikigami/Telemetry.hs`,
-which the plan already carves out as SDK-owned and which now carries a paragraph explaining
-why. Observed behavior, in the dev shell:
+The acceptance grep finds only the two documented production exceptions: the server/worker
+OpenTelemetry adapters read `OTEL_EXPORTER_OTLP_ENDPOINT`, and `shikigami-migrate` reads
+`DATABASE_URL`. Test-only environment reads are outside the production surface. The first
+exception is SDK-owned; ADR 0032 accepts the second as pg-migrate application composition.
+Observed Settei behavior, in the dev shell:
 
 ```text
 $ shikigami-worker --check-config --config config/shikigami.example.yaml
@@ -234,15 +250,10 @@ $ shikigami-worker --nonsense                                          # exit 2
 (`postgresql://nobody@203.0.113.1:5432/nope`) it still answers `configuration valid`
 immediately.
 
-What remains: `shikigami-migrate` still uses codd's `CODD_*` contract. That is not an
-oversight or a shortcut — cabal refuses to build the project if the migration executable
-depends on `shikigami-core`, because `shikigami-core`'s test suite already depends on
-`shikigami-migrations:test-support` and the solver rejects package-level cycles. The
-transcript is in Surprises & Discoveries. Plan 38 owns the migration CLI, is already a hard
-predecessor of every database-evolution plan, and can restructure that boundary while
-replacing codd with pg-migrate. An operator therefore configures the migration step
-separately today; `docs/operations/configuration.md` says so plainly rather than implying
-uniformity that does not exist.
+There is no remaining Codd or Settei migration work. An operator configures the migration
+step separately with `DATABASE_URL`; `docs/operations/configuration.md`, the executable
+module comment, and ADR 0032 say so plainly rather than implying uniformity that does not
+exist. Plans 31 and 46 may treat this foundation as complete.
 
 Two lessons worth carrying forward. First, a flag and a setting do not have to be
 alternatives: making every named flag a Settei source aimed at a declared key kept the
@@ -328,6 +339,8 @@ applicable instead of adding new resolvers. Agent manifests may refer to a
 credential by a stable name such as `credentials.mcp.<ref>`; runtime composition resolves
 that reference to a private secret type. The OpenTelemetry SDK continues reading its
 standard `OTEL_*` variables after Shikigami configuration succeeds.
+The completed implementation excludes only `shikigami-migrate`'s application-owned
+`DATABASE_URL` connection boundary, as accepted by ADR 0032.
 
 Milestone 4 proves security and precedence. Add tests for source ordering, repeated files
 and overrides, rejected unknown keys, malformed winners, complete error accumulation,
@@ -402,8 +415,9 @@ Expected: `configuration valid`, exit `0`.
 ## Validation and Acceptance
 
 Acceptance requires `rg 'System.Environment.*(getEnv|lookupEnv)|\b(getEnv|lookupEnv)\b'
-shikigami-* --glob '*.hs'` to find only the centralized adapter or documented OTel boundary.
-Every configurable executable exposes all five diagnostic modes. A `--check-config` run
+shikigami-* --glob '*.hs'` to find only the centralized adapter, documented OTel boundary,
+documented `shikigami-migrate` boundary, or test-only harness reads.
+Every `AppConfig` consumer exposes all five diagnostic modes. A `--check-config` run
 with valid sources exits zero without touching PostgreSQL; invalid source syntax exits 3;
 typed invalidity exits 4. Tests prove later sources win and that a planted secret is absent
 from all renderings.
@@ -438,6 +452,11 @@ strict unprefixed fields and generic-lens access. `CredentialRef` is a non-secre
 `ByteLimit` is a positive bounded domain type, not an unchecked `Int`. This plan hard-precedes all new raw-config
 work in plans 12–35 where applicable.
 
+`shikigami-migrate` is not a second `AppConfig` consumer. It mounts
+`mori://shinzui/pg-migrate/packages/pg-migrate-cli` and supplies the application-owned
+connection through `DATABASE_URL` under ADR 0032. A future shared Shikigami setting must not
+be added to that exception.
+
 Pin the coherent released direct-adapter family (`settei`, `settei-env`, `settei-yaml`,
 and `settei-optparse-applicative`) together. Do not add `settei-kubernetes`,
 `settei-formats`, or `settei-dhall` without a concrete source/deployment requirement, and do
@@ -460,3 +479,9 @@ Decision Log are one shared `AppConfig` with per-binary requirements expressed a
 declaring only keys that something reads today, and keeping the operator-facing flags as
 Settei sources. The one part of Milestone 3 not delivered — the migration executable — is
 recorded with its cabal transcript in Surprises & Discoveries and handed to plan 38.
+
+Revision note (2026-08-26): Reconciled the former migration remainder after plan 47's
+pg-migrate cutover. ADR 0032 accepts `shikigami-migrate`'s application-owned `DATABASE_URL`
+boundary, so no package split or duplicate Settei declaration remains to implement. Marked
+M3 and the plan complete, corrected the acceptance grep and outcomes, and released plans 31
+and 46 from this bookkeeping gate.

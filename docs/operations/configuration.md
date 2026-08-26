@@ -1,7 +1,8 @@
 # Configuring Shikigami
 
-Every Shikigami executable — the HTTP server, the six worker roles, the administrative
-commands — is configured the same way, from one declaration. This document is the
+Every Shikigami executable that consumes application settings — the HTTP server, the six
+worker roles, and the administrative commands — is configured the same way, from one
+declaration. This document is the
 operator-facing description of that surface. It is owned by
 `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`.
 
@@ -14,7 +15,7 @@ $ shikigami-worker --describe-config
 
 If this document and that output ever disagree, the output is right.
 
-The one exception is `shikigami-migrate`, which reads `DATABASE_URL` itself. See
+The executable exception is `shikigami-migrate`, which reads `DATABASE_URL` itself. See
 [The two exceptions](#the-two-exceptions) below.
 
 
@@ -400,7 +401,7 @@ $ shikigami-worker --config /etc/shikigami/base.yaml --config /etc/shikigami/wor
 ```
 
 Because unknown keys are rejected, a file may only contain keys from the table above. A
-file is not per-binary: every binary accepts the whole surface, so one file works for all
+file is not per-binary: every `AppConfig` consumer accepts the whole surface, so one file works for all
 of them.
 
 
@@ -436,19 +437,20 @@ an operator already knows, and would not stop the SDK reading them anyway. See
 `shikigami-workers/src/Shikigami/Telemetry.hs`. A Shikigami-specific tracing *policy* would
 be an ordinary setting; the standard variables stay SDK-owned.
 
-**`DATABASE_URL`, for `shikigami-migrate` only.** This one is not a design preference. The
+**`DATABASE_URL`, for `shikigami-migrate` only.** The
 `shikigami-core` test suite depends on `shikigami-migrations`' public `test-support`
 sublibrary, so adding `shikigami-core` to the migration executable makes the two packages
-mutually dependent, and cabal's solver rejects the project outright. Until that boundary is
-restructured, `shikigami-migrate` reads one variable itself; see the `migrate` recipe in
-`Justfile`. Unifying this surface belongs to
-`docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md`, which owns
-the migration CLI.
+mutually dependent, and cabal's solver rejects the project outright. The pg-migrate embedding
+contract also leaves database configuration with the application while the library owns command
+parsing and execution. `shikigami-migrate` therefore reads this one variable itself; see the
+`migrate` recipe in `Justfile`. [ADR 0032](../adr/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md)
+accepts this as the final boundary rather than pending Settei work.
 
 
 ## Adding a setting
 
-New settings are declared in `shikigami-core/src/Shikigami/App/Config.hs` and nowhere else.
+New Shikigami application settings are declared in
+`shikigami-core/src/Shikigami/App/Config.hs` and nowhere else.
 Reading the environment directly, or writing a one-off parser, is not permitted — that is
 the whole point of this plan. To add one:
 

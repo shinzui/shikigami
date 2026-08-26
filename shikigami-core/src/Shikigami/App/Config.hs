@@ -1,12 +1,12 @@
 -- | The single process-level configuration declaration.
 --
--- Every Shikigami executable — the HTTP server, each worker role, the
--- administrative commands, the migration runner — resolves its settings from the
--- one declaration in this module, rather than reading the environment where it
--- happens to need a value. Nothing else in this repository may call @getEnv@ or
--- @lookupEnv@; the only exception is the OpenTelemetry SDK, which owns the
--- standard @OTEL_*@ variables and is documented as such at its call site in
--- @shikigami-workers\/src\/Shikigami\/Telemetry.hs@.
+-- Every Shikigami executable that consumes application settings — the HTTP
+-- server, each worker role, and the administrative commands — resolves them from
+-- the one declaration in this module. Nothing else in this repository may call
+-- @getEnv@ or @lookupEnv@ except the OpenTelemetry SDK, which owns the standard
+-- @OTEL_*@ variables, and the dedicated pg-migrate wrapper, whose
+-- application-owned @DATABASE_URL@ boundary is recorded in
+-- @docs\/adr\/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md@.
 --
 -- \"Settei\" is the configuration library this module is built on. Three of its
 -- ideas are worth naming before you read further, because the rest of the module
@@ -287,9 +287,9 @@ lookupAnthropicModel wanted = lookup wanted [(modelId model, model) | model <- a
 
 -- ── The resolved configuration ──────────────────────────────────────────────
 
--- | Everything any Shikigami process is configured with.
+-- | Everything any AppConfig-consuming Shikigami process is configured with.
 --
--- One record for every binary, rather than one per binary, because a single
+-- One record for all such binaries, rather than one per binary, because a single
 -- declaration is what lets one configuration file serve every role, lets
 -- @--describe-config@ mean the same thing everywhere, and gives later plans one
 -- place to extend. Which fields a given binary actually requires is expressed by
@@ -1102,12 +1102,16 @@ environmentBindings =
 
 -- ── Which binary needs what ─────────────────────────────────────────────────
 
--- | One running Shikigami process.
+-- | One Shikigami process role in the shared application declaration.
 --
 -- A role exists so that a single declaration can still express per-binary
 -- requirements: @shikigami-worker@ cannot start without a database, while
 -- @shikigami-run-behavior@ never opens one, and @--check-config@ should say so
 -- for the binary it was invoked on rather than for Shikigami in general.
+-- 'MigrateRole' retains the database requirement in the shared schema vocabulary;
+-- the @shikigami-migrate@ executable itself uses the dedicated @DATABASE_URL@
+-- boundary recorded in
+-- @docs\/adr\/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md@.
 data Role
   = ServerRole
   | AdminRole
@@ -1159,7 +1163,7 @@ defaultHealthPort = \case
 -- A configured @health.port@ wins for every role that serves probes. Setting it
 -- on a role with no listener resolves fine and is then ignored, which is the
 -- same thing that happens to @kafka.broker@ on the scheduler: one declaration
--- serves every binary, and a key a given role does not read is not an error.
+-- serves every AppConfig consumer, and a key a given role does not read is not an error.
 healthPortFor :: Role -> AppConfig -> Maybe Port
 healthPortFor role config =
   case defaultHealthPort role of
