@@ -57,12 +57,15 @@ This plan implements
       on every fresh `RunJob`; decode old jobs compatibly; promote a legacy job once at admission.
 - [x] (2026-08-26T18:08:00Z) M2: keyed Kioku scopes and access contexts by recorded identity, used the supported contextful
       session/memory/recall APIs, and remove Shikigami's Kioku deprecation warnings.
-- [ ] M3: add legacy-scope aliases and extend `shikigami agents sync` with idempotent,
-      ambiguity-refusing reconciliation.
-- [ ] M4: key verified sink grants by principal while retaining an explicitly bounded
-      directory-disabled compatibility path.
-- [ ] M5: carry recorded identity through `SinkIntent`, exact lifecycle rechecks, and the Kawa,
-      Kizashi, and Danwa outbound attribution fields that actually exist.
+- [x] (2026-08-26T17:38:08Z) M3: added the legacy-scope alias schema/store, principal-plus-alias
+      recall with post-merge deduplication, and `agents sync` discovery plus repeatable explicit
+      `--alias LEGACY_NAME=agent_...` reconciliation that leaves ambiguous mappings untouched.
+- [x] (2026-08-26T17:38:08Z) M4: made verified grants unique and addressable by principal,
+      retained only null-principal name-keyed compatibility grants, and changed operator
+      grant/revoke to resolve identity under the configured directory before writing.
+- [x] (2026-08-26T17:38:08Z) M5: carried recorded identity through `SinkIntent`, promoted old
+      intents once before publish, rechecked exact-principal lifecycle and grants, and attributed
+      Kawa, Kizashi, and Danwa output to the durable identity.
 - [ ] M6: prove workflow-version safety with `just keiro-gate`, run all tests and migration
       checks, capture the rename demonstration, and distill the identity rule into an ADR.
 
@@ -116,6 +119,21 @@ This plan implements
 - `just keiro-gate` runs `git diff --exit-code -- shikigami-core/src` after deterministic
   scaffolding. Workflow-body changes therefore have to be staged before the gate can distinguish
   them from generated drift; the gate is run on the staged milestone immediately before commit.
+
+- Kioku's public contextful turn helper cannot share the SQL transaction that atomically appends
+  the assistant turn, workflow journal event, and sink outbox row. The conversation path therefore
+  uses Kioku's public session command/event stream with `runCommandWithSqlEvents`; the command
+  still records the admitted identity and Kioku's inline projection in the one existing
+  transaction.
+
+- Alias discovery can use the public Kioku namespace query without learning Kioku's tables.
+  Principal-bearing grant rows are also useful identity evidence after a presentation rename;
+  null-principal grant names require either an exact current handle join or explicit `--alias`.
+  Duplicate explicit claims are accumulated and reported before any alias row is written.
+
+- One schema boundary can safely introduce aliases and the grant partial indexes together. The
+  migration preserves every existing grant row, adds no Kioku mutation, applies on a fresh
+  database, and replays as a no-op through the repository migration harness.
 
 
 ## Decision Log
@@ -197,8 +215,16 @@ This plan implements
 The refresh removed three unsafe implementation directions before code changed: a new direct
 Meibo dependency, SQL mutation of Kioku projections, and an operator command in the migration
 executable. It also made disabled-mode compatibility and durable wire decoding explicit rather
-than relying on the repository's pre-release status. Implementation outcomes and the rename
-transcript remain to be recorded here.
+than relying on the repository's pre-release status.
+
+Milestones 3–5 now preserve legacy memory through metadata-only aliases, make verified grants
+principal-first with no compatibility fallback, and carry the same identity into the outbound
+publisher. Focused evidence is green: the migration apply/replay suites pass, all 573 core tests
+pass, and all 45 server tests pass. Those tests include alias insert/repeat/conflict behavior,
+explicit missing and multiply claimed sync mappings, legacy recall after rename, verified grant
+continuity across a presentation rename, frozen old `SinkIntent` bytes, and exact-principal pause
+between enqueue and publish. The workflow gate, complete repository suite, disposable rename
+transcript, and ADR remain for M6.
 
 
 ## Context and Orientation
@@ -471,20 +497,26 @@ data AgentIdentity
   | CompatibilityIdentity !Text
   | UnresolvedLegacyIdentity
 
+data ResolvedAgentIdentity
+  = VerifiedAgent !AgentPrincipal
+  | CompatibilityAgent !Text
+
 mkAgentPrincipal :: Text -> Either Text AgentPrincipal
 principalText :: AgentPrincipal -> Text
 identityText :: AgentIdentity -> Either Text Text
 meiboPrincipal :: AgentIdentity -> Maybe AgentPrincipal
-principalRefFor :: AgentIdentity -> Either Text PrincipalRef
-principalScopeText :: AgentIdentity -> Either Text Text
+resolveAgentIdentity :: AgentIdentity -> Either Text ResolvedAgentIdentity
+principalRefFor :: ResolvedAgentIdentity -> PrincipalRef
+principalScopeText :: ResolvedAgentIdentity -> Text
 ```
 
 The final implementation may choose more precise helper names, but it must preserve the three
 states and must not expose a partial conversion from unresolved identity.
 
-`Shikigami.Memory.Scope.agentScope` and access-context constructors accept `AgentIdentity`, not a
-declaration name. `RunJob` and `SinkIntent` each carry one strict identity. Directory admission
-returns a recorded identity, while exact-principal lifecycle recheck accepts one.
+`Shikigami.Memory.Scope.agentScope` and access-context constructors accept
+`ResolvedAgentIdentity`, not a declaration name or unresolved legacy value. `RunJob` and
+`SinkIntent` each carry one strict `AgentIdentity`. Directory admission returns a recorded
+identity, while exact-principal lifecycle recheck accepts one.
 
 The alias store owns principal-to-legacy-name mappings. It uses public Kioku APIs only:
 `Memory.getActiveRowsInNamespace` for discovery and explicit `RecallQuery`/`RecallTarget` for

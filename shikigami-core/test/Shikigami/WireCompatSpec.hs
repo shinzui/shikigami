@@ -234,9 +234,9 @@ outboxTests =
       testCase "a pre-upgrade row carries no resolved recipient" do
         SinkIntent {resolvedRecipient} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
         resolvedRecipient @?= Nothing,
-      testCase "a pre-upgrade row carries no principal id" do
-        SinkIntent {principalId} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
-        principalId @?= Nothing,
+      testCase "a pre-upgrade row carries unresolved legacy identity" do
+        SinkIntent {identity} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
+        identity @?= UnresolvedLegacyIdentity,
       testCase "a pre-upgrade row carries no egress metadata" do
         SinkIntent {conversationKey, triggeringActivityId} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
         conversationKey @?= Nothing
@@ -255,7 +255,7 @@ sampleSinkIntent :: SinkIntent
 sampleSinkIntent =
   SinkIntent
     { agent = "at-risk-watch",
-      principalId = Nothing,
+      identity = UnresolvedLegacyIdentity,
       runId = "run_1",
       ordinal = 0,
       occurredAt = Just sampleTime,

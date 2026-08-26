@@ -13,6 +13,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Sink.Intent
   ( SinkIntent (..),
     decodeSinkIntentEvent,
@@ -57,7 +58,7 @@ intentFor :: Sink -> SinkIntent
 intentFor sink =
   SinkIntent
     { agent = "at-risk-watch",
-      principalId = Nothing,
+      identity = UnresolvedLegacyIdentity,
       runId = "run_1",
       ordinal = 0,
       occurredAt = Just sampleTime,
@@ -73,7 +74,7 @@ egressIntent :: SinkIntent
 egressIntent =
   SinkIntent
     { agent = "channel-reply",
-      principalId = Just "agent_channel_reply",
+      identity = VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_channel_reply")),
       runId = "run_egress_1",
       ordinal = 0,
       occurredAt = Just sampleTime,

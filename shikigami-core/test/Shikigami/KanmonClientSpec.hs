@@ -14,6 +14,7 @@ import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App.Config (AppConfig, CredentialRef (..), appConfig, environmentBindings)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttp)
@@ -24,7 +25,7 @@ import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (.
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Http (HttpEnv (..), HttpFailure (..), HttpFailureReason (..), SinkCredentials (..), SinkHttp (..), credentialsFromConfig, newSinkManager)
 import Shikigami.Sink.KanmonClient
-import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind (SChannelEgress))
+import Shikigami.Sink.Permission (SinkKind (SChannelEgress))
 import Shikigami.Sink.Types (SinkContext (..))
 import Shikigami.Sink.Wire (EgressActionRequest (..), EgressActionResponse (..))
 import Test.Tasty (TestTree, testGroup)
@@ -36,7 +37,7 @@ tests =
     "Kanmon client"
     [ testCase "request and response JSON match the Kanmon snake-case contract" do
         encode request
-          @?= "{\"content\":\"reply text\",\"conversation_key\":\"conv_55012\",\"idempotency_key\":\"channel-reply:run-1:0\",\"triggering_activity_id\":\"act_1\"}"
+          @?= "{\"content\":\"reply text\",\"conversation_key\":\"conv_55012\",\"idempotency_key\":\"shikigami.agent.channel-reply:run-1:0\",\"triggering_activity_id\":\"act_1\"}"
         eitherDecode "{\"activity_id\":\"act_reply_1\",\"verb\":\"conversation.reply_sent\"}"
           @?= Right (EgressActionResponse "act_reply_1" "conversation.reply_sent"),
       testCase "conversation resolution follows declaration, output, then activity precedence" do
@@ -108,7 +109,7 @@ request =
   EgressActionRequest
     { conversationKey = "conv_55012",
       content = "reply text",
-      idempotencyKey = Just "channel-reply:run-1:0",
+      idempotencyKey = Just "shikigami.agent.channel-reply:run-1:0",
       triggeringActivityId = Just "act_1"
     }
 
@@ -138,8 +139,7 @@ sampleContextFor conversationKey = sampleContextWith conversationKey (KanmonConf
 sampleContextWith :: Maybe Text -> KanmonConfig -> SinkHttp -> SinkContext
 sampleContextWith conversationKey kanmon http =
   SinkContext
-    { identity = AgentIdentity "channel-reply",
-      principalId = Nothing,
+    { identity = compatibilityIdentity "channel-reply",
       directory = disabledDirectoryHandle,
       runId = "run-1",
       ordinal = 0,

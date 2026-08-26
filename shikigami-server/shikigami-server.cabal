@@ -138,6 +138,7 @@ test-suite shikigami-server-test
     , http-client
     , http-types
     , keiro
+    , kiroku-store
     , lens
     , openapi-hs
     , optparse-applicative
@@ -149,6 +150,7 @@ test-suite shikigami-server-test
     , settei-env
     , shikigami-api
     , shikigami-core
+    , shikigami-migrations:test-support
     , shikigami-server
     , tasty
     , tasty-hunit

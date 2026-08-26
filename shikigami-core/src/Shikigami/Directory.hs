@@ -27,6 +27,7 @@ module Shikigami.Directory
     lifecycleAdmission,
     identityAdmission,
     consultIdentityLifecycle,
+    identityLifecycleAdmission,
     principalAttribution,
     lookupPrincipal,
     directoryPrincipals,
@@ -328,6 +329,19 @@ consultIdentityLifecycle directoryHandle@(ConfiguredDirectory {}) recordedIdenti
     VerifiedIdentity principal -> consultLifecycle directoryHandle (Just (principalText principal)) (principalText principal)
     CompatibilityIdentity agentName -> pure (UnknownPrincipal ("compatibility identity " <> agentName))
     UnresolvedLegacyIdentity -> pure (UnknownPrincipal "unresolved legacy identity")
+
+-- | Require an already-recorded identity to remain active. This is the exact
+-- principal recheck used immediately before an effect.
+identityLifecycleAdmission :: DirectoryHandle -> AgentIdentity -> IO (Either Text ())
+identityLifecycleAdmission directoryHandle recordedIdentity =
+  fmap
+    ( \case
+        AllowRun _ -> Right ()
+        SkipRun _ reason -> Left reason
+        UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
+        DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
+    )
+    (consultIdentityLifecycle directoryHandle recordedIdentity)
 
 -- | Resolve the principal stored on a newly opened Kioku session.
 --

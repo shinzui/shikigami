@@ -35,6 +35,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
+import Hasql.Pool (Pool)
 import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentRunGeneration, currentWorkflow, patch, step)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEnv, runAppIO)
@@ -46,8 +47,8 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
-import Shikigami.Agent.Principal (ResolvedAgentIdentity)
-import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
+import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
+import Shikigami.Agent.Run (behaviorKindText, recallAgentLearnings, renderLearning)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
@@ -62,6 +63,7 @@ data MemoryEnv = MemoryEnv
   { appEnv :: !AppEnv,
     agent :: !AgentDecl,
     identity :: !ResolvedAgentIdentity,
+    aliasPool :: !(Maybe Pool),
     sessionId :: !(Maybe SessionId)
   }
 
@@ -79,7 +81,7 @@ data SinkEnv = SinkEnv
     -- from inside a flow.
     grants :: !GrantSource,
     directory :: !DirectoryHandle,
-    principalId :: !(Maybe Text)
+    identity :: !AgentIdentity
   }
 
 data Memory :: Effect where
@@ -241,12 +243,12 @@ flowMemoryStepsPatch = PatchId "shikigami-flow-memory-steps-v1"
 -- the patch id together, and only once no pre-change flow can still resume; see
 -- @docs\/workflow-versioning.md@.
 runMemory :: (Workflow :> es, IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
-runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}, identity} action = do
+runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}, identity, aliasPool} action = do
   journalMemory <- patch flowMemoryStepsPatch
   interpret
     ( \_ -> \case
         Recall label MemoryQuery {query} ->
-          let fetch = liftIO (recallPriorLearnings appEnv recallLimit (agentScope identity) query)
+          let fetch = liftIO (recallAgentLearnings appEnv aliasPool recallLimit identity query)
            in if journalMemory
                 then step (StepName ("recall-" <> label)) fetch
                 else fetch
@@ -371,7 +373,7 @@ recordFlowMemory
 -- position of the emission — in both branches. Only the journal step name, and
 -- with it the deterministic outbox id, differ.
 runSink :: (Workflow :> es, Store :> es, IOE :> es) => SinkEnv -> Eff (Sink : es) a -> Eff es a
-runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, directory, principalId} action = do
+runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, directory, identity} action = do
   useLabels <- patch (PatchId "shikigami-emit-signal-labels-v1")
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
@@ -381,7 +383,7 @@ runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, direct
           let stepName
                 | useLabels = StepName ("emit-signal:" <> label)
                 | otherwise = StepName ("emit-signal:" <> Text.pack (show ordinal))
-          enqueueSinkIntentStep directory grants principalId stepName agent runId ordinal occurredAt danwaTarget activity sink output
+          enqueueSinkIntentStep directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity sink output
     )
     action
 

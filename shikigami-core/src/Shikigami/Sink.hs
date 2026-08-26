@@ -28,9 +28,10 @@ import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (identityText)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude ((^.))
+import Shikigami.Prelude (Text, (^.))
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwaWithHeaders)
 import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
@@ -58,8 +59,8 @@ sinkKindOf = \case
 dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
 dispatch ctx sink output = do
   let kind = sinkKindOf sink
-      agent = agentName (identity ctx)
-  lifecycle <- Directory.lifecycleAdmission (directory ctx) (principalId ctx) agent
+      agent = sinkIdentityText ctx
+  lifecycle <- Directory.identityLifecycleAdmission (directory ctx) (identity ctx)
   case lifecycle of
     Left reason -> do
       Log.logWarn
@@ -78,7 +79,7 @@ dispatch ctx sink output = do
           Log.logWarn
             (logger ctx)
             "sink.denied"
-            [ "agent" Aeson..= agent,
+            [ "agent" Aeson..= sinkIdentityText ctx,
               Log.runIdKey Aeson..= runId ctx,
               "sink_kind" Aeson..= sinkKindText kind,
               "reason" Aeson..= reason
@@ -101,7 +102,7 @@ runSink ctx sink output = case sink of
           Log.logWarn
             (logger ctx)
             "sink.recipient.unresolved"
-            [ "agent" Aeson..= agentName (identity ctx),
+            [ "agent" Aeson..= sinkIdentityText ctx,
               Log.runIdKey Aeson..= runId ctx,
               "sink_kind" Aeson..= sinkKindText SKizashiSignal,
               "detail" Aeson..= warning
@@ -125,6 +126,9 @@ runSink ctx sink output = case sink of
       Right request -> do
         result <- postEgressWithHeaders (http ctx ^. #kanmon) (traceHeaders ctx) (kanmon ctx) channel action request
         pure (either kanmonFailure (Delivered . activityId) result)
+
+sinkIdentityText :: SinkContext -> Text
+sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (identityText (identity ctx))
 
 kawaFailure :: KawaError -> SinkOutcome
 kawaFailure failure = case failure of

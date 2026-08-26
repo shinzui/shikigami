@@ -35,6 +35,8 @@ module Shikigami.Sink.GrantStore
     -- * Reading
     lookupGrant,
     listGrants,
+    GrantIdentityEvidence (..),
+    listGrantIdentityEvidence,
 
     -- * Paging
     PageSize,
@@ -69,10 +71,10 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
+import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
-  ( AgentIdentity (..),
-    Denied (..),
+  ( Denied (..),
     SinkKind,
     checkGrantStatic,
     sinkKindText,
@@ -104,23 +106,29 @@ data GrantSource
 -- means somebody did that deliberately, a missing grant means nobody ever
 -- granted it, and a lookup failure means the gate could not tell and refused.
 checkGrant :: GrantSource -> AgentIdentity -> SinkKind -> IO (Either Denied ())
-checkGrant source identity@(AgentIdentity nm) kind = case source of
+checkGrant source identity kind = case source of
   StaticGrants table -> pure (checkGrantStatic table identity kind)
   DbGrants pool ->
-    lookupGrant pool nm kind <&> \case
+    lookupGrant pool identity kind <&> \case
       Right (Just True) -> Right ()
       Right (Just False) ->
-        Left (Denied ("agent '" <> nm <> "' grant for " <> sinkKindText kind <> " is revoked"))
+        Left (Denied ("agent '" <> label <> "' grant for " <> sinkKindText kind <> " is revoked"))
       Right Nothing ->
-        Left (Denied ("agent '" <> nm <> "' has no grant for " <> sinkKindText kind))
+        Left (Denied ("agent '" <> label <> "' has no grant for " <> sinkKindText kind))
       Left err ->
-        Left (Denied ("grant lookup failed (denying) for agent '" <> nm <> "': " <> err))
+        Left (Denied ("grant lookup failed (denying) for agent '" <> label <> "': " <> err))
+  where
+    label = case identity of
+      VerifiedIdentity principal -> principalText principal
+      CompatibilityIdentity agentName -> agentName
+      UnresolvedLegacyIdentity -> "unresolved-legacy"
 
 -- | One row of @shikigami.sink_grants@.
 --
 -- @principalId@ is filled by @shikigami agents sync@ after it verifies a
--- declaration/directory join. The grant key deliberately remains the declared
--- agent name until plan 54 performs the broader durable re-keying.
+-- declaration/directory join. Verified rows are keyed by principal and retain
+-- @agentName@ as presentation and reconciliation evidence; null-principal rows
+-- are explicitly bounded compatibility grants.
 data GrantRow = GrantRow
   { agentName :: !Text,
     principalId :: !(Maybe Text),
@@ -132,6 +140,14 @@ data GrantRow = GrantRow
     revokedAt :: !(Maybe UTCTime)
   }
   deriving stock (Eq, Show, Generic)
+
+-- | Distinct presentation-name/principal pairs retained by the grant table.
+-- Sync uses these rows as migration evidence without depending on sink kinds.
+data GrantIdentityEvidence = GrantIdentityEvidence
+  { agentName :: !Text,
+    principalId :: !(Maybe Text)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
 
 -- | Result of reconciling one declaration/principal join across all of the
 -- declaration's sink-grant rows.
@@ -200,23 +216,65 @@ data GrantPage = GrantPage
 -- different fact from @Right (Just False)@ (a row saying revoked), and the
 -- caller renders them differently. A pool failure is @Left@ and the caller must
 -- fail closed.
-lookupGrant :: Pool -> Text -> SinkKind -> IO (Either Text (Maybe Bool))
-lookupGrant pool agent kind =
-  renderUsage <$> Pool.use pool (Session.statement (agent, sinkKindText kind) lookupStatement)
+lookupGrant :: Pool -> AgentIdentity -> SinkKind -> IO (Either Text (Maybe Bool))
+lookupGrant pool identity kind = case identity of
+  VerifiedIdentity principal ->
+    renderUsage <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind) lookupVerifiedStatement)
+  CompatibilityIdentity agentName ->
+    renderUsage <$> Pool.use pool (Session.statement (agentName, sinkKindText kind) lookupCompatibilityStatement)
+  UnresolvedLegacyIdentity -> pure (Left "cannot check a grant for unresolved legacy identity")
 
-lookupStatement :: Statement (Text, Text) (Maybe Bool)
-lookupStatement =
+lookupVerifiedStatement :: Statement (Text, Text) (Maybe Bool)
+lookupVerifiedStatement =
   preparable
     """
     SELECT granted
       FROM shikigami.sink_grants
-     WHERE agent_name = $1
+     WHERE principal_id = $1
        AND sink_kind = $2
     """
     ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+lookupCompatibilityStatement :: Statement (Text, Text) (Maybe Bool)
+lookupCompatibilityStatement =
+  preparable
+    """
+    SELECT granted
+      FROM shikigami.sink_grants
+     WHERE agent_name = $1
+       AND principal_id IS NULL
+       AND sink_kind = $2
+    """
+    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    )
+    (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+-- | All distinct identity evidence carried by grants, in deterministic order.
+-- This is intentionally unpaged: the result cardinality is bounded by agent
+-- identities rather than by the (agents x sink kinds) grant relation.
+listGrantIdentityEvidence :: Pool -> IO (Either Text [GrantIdentityEvidence])
+listGrantIdentityEvidence pool =
+  renderUsage <$> Pool.use pool (Session.statement () grantIdentityEvidenceStatement)
+
+grantIdentityEvidenceStatement :: Statement () [GrantIdentityEvidence]
+grantIdentityEvidenceStatement =
+  preparable
+    """
+    SELECT DISTINCT agent_name, principal_id
+      FROM shikigami.sink_grants
+     ORDER BY agent_name, principal_id NULLS FIRST
+    """
+    Encoders.noParams
+    ( Decoders.rowList
+        ( GrantIdentityEvidence
+            <$> Decoders.column (Decoders.nonNullable Decoders.text)
+            <*> Decoders.column (Decoders.nullable Decoders.text)
+        )
+    )
 
 -- | One page of grants, ordered by @(agent_name, sink_kind)@.
 --
@@ -279,18 +337,47 @@ grantRow =
 --
 -- Re-granting clears @revoked_by@ and @revoked_at@ rather than leaving them set,
 -- so a row never claims to be both granted and revoked.
-upsertGrant :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
-upsertGrant pool agent kind by =
-  renderUsage <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) upsertStatement)
+upsertGrant :: Pool -> Text -> AgentIdentity -> SinkKind -> Maybe Text -> IO (Either Text ())
+upsertGrant pool agent identity kind by = case identity of
+  VerifiedIdentity principal ->
+    renderUsage <$> Pool.use pool (Session.statement (agent, principalText principal, sinkKindText kind, by) upsertVerifiedStatement)
+  CompatibilityIdentity compatibilityName
+    | compatibilityName == agent ->
+        renderUsage <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) upsertCompatibilityStatement)
+    | otherwise -> pure (Left "compatibility identity does not match the selected agent")
+  UnresolvedLegacyIdentity -> pure (Left "cannot grant an unresolved legacy identity")
 
-upsertStatement :: Statement (Text, Text, Maybe Text) ()
-upsertStatement =
+upsertVerifiedStatement :: Statement (Text, Text, Text, Maybe Text) ()
+upsertVerifiedStatement =
   preparable
     """
     INSERT INTO shikigami.sink_grants
-        (agent_name, sink_kind, granted, granted_by, granted_at, updated_at)
-    VALUES ($1, $2, TRUE, $3, now(), now())
-    ON CONFLICT (agent_name, sink_kind) DO UPDATE
+        (agent_name, principal_id, sink_kind, granted, granted_by, granted_at, updated_at)
+    VALUES ($1, $2, $3, TRUE, $4, now(), now())
+    ON CONFLICT (principal_id, sink_kind) WHERE principal_id IS NOT NULL DO UPDATE
+       SET agent_name = EXCLUDED.agent_name,
+           granted = TRUE,
+           granted_by = EXCLUDED.granted_by,
+           granted_at = now(),
+           revoked_by = NULL,
+           revoked_at = NULL,
+           updated_at = now()
+    """
+    ( ((\(a, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, p, _, _) -> p) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    )
+    Decoders.noResult
+
+upsertCompatibilityStatement :: Statement (Text, Text, Maybe Text) ()
+upsertCompatibilityStatement =
+  preparable
+    """
+    INSERT INTO shikigami.sink_grants
+        (agent_name, principal_id, sink_kind, granted, granted_by, granted_at, updated_at)
+    VALUES ($1, NULL, $2, TRUE, $3, now(), now())
+    ON CONFLICT (agent_name, sink_kind) WHERE principal_id IS NULL DO UPDATE
        SET granted = TRUE,
            granted_by = EXCLUDED.granted_by,
            granted_at = now(),
@@ -307,13 +394,36 @@ upsertStatement =
 -- | Revoke a grant. Returns whether a row was actually affected, so the caller
 -- can tell an operator that they revoked something that was never granted
 -- instead of silently reporting success.
-revokeGrant :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text Bool)
-revokeGrant pool agent kind by =
-  fmap (> 0) . renderUsage
-    <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) revokeStatement)
+revokeGrant :: Pool -> AgentIdentity -> SinkKind -> Maybe Text -> IO (Either Text Bool)
+revokeGrant pool identity kind by = case identity of
+  VerifiedIdentity principal ->
+    affected <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind, by) revokeVerifiedStatement)
+  CompatibilityIdentity agent ->
+    affected <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) revokeCompatibilityStatement)
+  UnresolvedLegacyIdentity -> pure (Left "cannot revoke an unresolved legacy identity")
+  where
+    affected = fmap (> 0) . renderUsage
 
-revokeStatement :: Statement (Text, Text, Maybe Text) Int64
-revokeStatement =
+revokeVerifiedStatement :: Statement (Text, Text, Maybe Text) Int64
+revokeVerifiedStatement =
+  preparable
+    """
+    UPDATE shikigami.sink_grants
+       SET granted = FALSE,
+           revoked_by = $3,
+           revoked_at = now(),
+           updated_at = now()
+     WHERE principal_id = $1
+       AND sink_kind = $2
+    """
+    ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    )
+    Decoders.rowsAffected
+
+revokeCompatibilityStatement :: Statement (Text, Text, Maybe Text) Int64
+revokeCompatibilityStatement =
   preparable
     """
     UPDATE shikigami.sink_grants
@@ -322,6 +432,7 @@ revokeStatement =
            revoked_at = now(),
            updated_at = now()
      WHERE agent_name = $1
+       AND principal_id IS NULL
        AND sink_kind = $2
     """
     ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))

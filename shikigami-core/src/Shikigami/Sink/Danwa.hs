@@ -23,10 +23,10 @@ import Data.Text.Lazy qualified as TL
 import Network.HTTP.Types.Header (Header)
 import Servant.Client (ClientEnv)
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Http (HttpFailure, renderHttpFailure, runDanwaClientWithHeaders)
-import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Types (DanwaTarget (..), DeliveryGuard (..))
 
 data DanwaError
@@ -61,9 +61,11 @@ runDanwaWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> 
 runDanwaWithHeaders clientEnv headers cfg identity receipts target sink output =
   case sink of
     DanwaConversation {topic} ->
-      case target of
-        Just t -> postReplyWithHeaders clientEnv headers cfg t (renderDanwaContent output)
-        Nothing -> postToFreshConversation clientEnv headers cfg identity receipts sink (withTopicLine topic (renderDanwaContent output))
+      case identityText identity of
+        Left problem -> pure (Left (DanwaUsageError problem))
+        Right author -> case target of
+          Just t -> postReplyWithHeaders clientEnv headers cfg author t (renderDanwaContent output)
+          Nothing -> postToFreshConversation clientEnv headers cfg author receipts sink (withTopicLine topic (renderDanwaContent output))
     _ -> pure (Left (DanwaUsageError "runDanwa: not a DanwaConversation sink"))
 
 -- | Prefix the opening message with the declared topic, if there is one.
@@ -76,7 +78,7 @@ withTopicLine topic content
   | otherwise = "[" <> Text.strip topic <> "]\n" <> content
 
 postReply :: ClientEnv -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
-postReply clientEnv = postReplyWithHeaders clientEnv []
+postReply clientEnv cfg = postReplyWithHeaders clientEnv [] cfg (agentParticipant cfg)
 
 -- | Open a fresh thread, join the configured agent participant, and post one
 -- text message. Unlike the sink path this helper owns no outbox receipt: its
@@ -90,11 +92,12 @@ postText clientEnv cfg content = do
         clientEnv
         []
         cfg
+        (agentParticipant cfg)
         DanwaTarget {conversationId = cid, parentMessageId = Nothing}
         content
 
-postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
-postReplyWithHeaders clientEnv headers cfg (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
+postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> Text -> DanwaTarget -> Text -> IO (Either DanwaError Text)
+postReplyWithHeaders clientEnv headers _cfg author (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
   result <-
     runDanwaClientWithHeaders headers clientEnv $
       case parent of
@@ -102,7 +105,7 @@ postReplyWithHeaders clientEnv headers cfg (DanwaTarget {conversationId = cid, p
           Danwa.postMessage
             cid
             Msg.PostMessageRequest
-              { Msg.author = agentParticipant cfg,
+              { Msg.author = author,
                 Msg.content = content
               }
         Just parentMessageId ->
@@ -110,7 +113,7 @@ postReplyWithHeaders clientEnv headers cfg (DanwaTarget {conversationId = cid, p
             cid
             parentMessageId
             Msg.PostMessageRequest
-              { Msg.author = agentParticipant cfg,
+              { Msg.author = author,
                 Msg.content = content
               }
   pure $ case result of
@@ -119,13 +122,13 @@ postReplyWithHeaders clientEnv headers cfg (DanwaTarget {conversationId = cid, p
       let Msg.MessageResponse {Msg.messageId = mid} = response
        in Right mid
 
-postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either DanwaError Text)
-postToFreshConversation clientEnv headers cfg (AgentIdentity _agentName) receipts sink content =
+postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> Text -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either DanwaError Text)
+postToFreshConversation clientEnv headers cfg author receipts sink content =
   case sink of
     DanwaConversation {} -> do
       guardedConversation >>= \case
         Left err -> pure (Left err)
-        Right cid -> postReplyWithHeaders clientEnv headers cfg DanwaTarget {conversationId = cid, parentMessageId = Nothing} content
+        Right cid -> postReplyWithHeaders clientEnv headers cfg author DanwaTarget {conversationId = cid, parentMessageId = Nothing} content
     _ -> pure (Left (DanwaUsageError "postToFreshConversation: not a DanwaConversation sink"))
   where
     guardedConversation = case receipts of

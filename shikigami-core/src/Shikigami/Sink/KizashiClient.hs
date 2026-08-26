@@ -15,10 +15,10 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
-import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Recipient (recipientFor)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 
@@ -38,7 +38,8 @@ renderKizashiError = \case
 -- "Shikigami.Sink.Recipient" for why resolution does not happen here and for the
 -- precedence 'recipientFor' applies.
 buildSignalReq :: KizashiConfig -> Maybe Text -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
-buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient sink (AgentIdentity nm) output =
+buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient sink identity output = do
+  nm <- identityText identity
   case sink of
     KizashiSignal
       { source = src,

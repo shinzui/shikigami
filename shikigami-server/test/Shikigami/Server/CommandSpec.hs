@@ -141,13 +141,14 @@ tests =
       testCase "agents list offers --json and takes no target argument" do
         let rendered = helpTextOf ["agents", "list", "--help"]
         assertBool ("agents list help does not mention --json:\n" <> rendered) ("--json" `isInfixOf` rendered),
-      testCase "agents exposes list and sync, and sync offers --json" do
+      testCase "agents exposes list and sync, and sync offers JSON and explicit aliases" do
         let groupHelp = helpTextOf ["agents", "--help"]
             syncHelp = helpTextOf ["agents", "sync", "--help"]
         mapM_
           (\verb -> assertBool ("agents help does not mention " <> verb <> ":\n" <> groupHelp) (verb `isInfixOf` groupHelp))
           ["list", "sync"]
-        assertBool ("agents sync help does not mention --json:\n" <> syncHelp) ("--json" `isInfixOf` syncHelp),
+        assertBool ("agents sync help does not mention --json:\n" <> syncHelp) ("--json" `isInfixOf` syncHelp)
+        assertBool ("agents sync help does not mention --alias:\n" <> syncHelp) ("--alias" `isInfixOf` syncHelp),
       testCase "a subcommand's downstream flags name the configuration keys they set" do
         assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
         assertMentions ["stub-kawa", "--help"] ["kafka.broker"]

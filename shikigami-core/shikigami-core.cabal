@@ -79,6 +79,7 @@ library
     Shikigami.Log
     Shikigami.Log.Correlation
     Shikigami.Memory.Access
+    Shikigami.Memory.AliasStore
     Shikigami.Memory.Scope
     Shikigami.PracticeReview
     Shikigami.PracticeReview.Evidence

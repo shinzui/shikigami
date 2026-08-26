@@ -18,14 +18,19 @@ module Shikigami.Server.Command.Grants
   )
 where
 
+import Control.Exception (finally)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.App.Config (AppConfig, revealSecretText)
+import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.App.Config (AppConfig, directorySettings, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Directory qualified as Directory
+import Shikigami.Log qualified as Log
 import Shikigami.Sink.GrantStore
   ( GrantCursor (..),
     GrantPage (..),
@@ -66,11 +71,12 @@ runGrantsList mlimit mafter config = do
 runGrantsGrant :: String -> String -> Maybe String -> AppConfig -> IO ()
 runGrantsGrant agent kindArg by config = do
   kind <- requireKind "grants grant" kindArg
-  withPool config "grants grant" \pool ->
-    upsertGrant pool (Text.pack agent) kind (Text.pack <$> by) >>= \case
-      Left err -> die "grants grant" err
-      Right () ->
-        putStrLn ("granted " <> agent <> " " <> Text.unpack (sinkKindText kind))
+  withResolvedIdentity config "grants grant" (Text.pack agent) \identity ->
+    withPool config "grants grant" \pool ->
+      upsertGrant pool (Text.pack agent) identity kind (Text.pack <$> by) >>= \case
+        Left err -> die "grants grant" err
+        Right () ->
+          putStrLn ("granted " <> agent <> " " <> Text.unpack (sinkKindText kind))
 
 -- | @grants revoke <agent> <kind> [--by WHO]@.
 --
@@ -80,19 +86,20 @@ runGrantsGrant agent kindArg by config = do
 runGrantsRevoke :: String -> String -> Maybe String -> AppConfig -> IO ()
 runGrantsRevoke agent kindArg by config = do
   kind <- requireKind "grants revoke" kindArg
-  withPool config "grants revoke" \pool ->
-    revokeGrant pool (Text.pack agent) kind (Text.pack <$> by) >>= \case
-      Left err -> die "grants revoke" err
-      Right True ->
-        putStrLn ("revoked " <> agent <> " " <> Text.unpack (sinkKindText kind))
-      Right False ->
-        putStrLn
-          ( "no grant row for "
-              <> agent
-              <> " "
-              <> Text.unpack (sinkKindText kind)
-              <> " (nothing to revoke)"
-          )
+  withResolvedIdentity config "grants revoke" (Text.pack agent) \identity ->
+    withPool config "grants revoke" \pool ->
+      revokeGrant pool identity kind (Text.pack <$> by) >>= \case
+        Left err -> die "grants revoke" err
+        Right True ->
+          putStrLn ("revoked " <> agent <> " " <> Text.unpack (sinkKindText kind))
+        Right False ->
+          putStrLn
+            ( "no grant row for "
+                <> agent
+                <> " "
+                <> Text.unpack (sinkKindText kind)
+                <> " (nothing to revoke)"
+            )
 
 -- | One row, tab-free and greppable: state, agent, kind, then the audit trail.
 renderRow :: GrantRow -> Text
@@ -141,6 +148,12 @@ withPool :: AppConfig -> String -> (Pool -> IO a) -> IO a
 withPool config ctx use = do
   connStr <- revealSecretText <$> requireDatabaseUrl (Text.pack ctx) config
   withStore (defaultConnectionSettings connStr) (use . pool)
+
+withResolvedIdentity :: AppConfig -> String -> Text -> (AgentIdentity -> IO a) -> IO a
+withResolvedIdentity config context selector use = do
+  runtime <- Directory.startDirectory Log.silentLogger (directorySettings config) >>= either (die context) pure
+  let cleanup = maybe (pure ()) id (refresher runtime)
+  (Directory.identityAdmission (handle runtime) Nothing selector >>= either (die context) use) `finally` cleanup
 
 die :: String -> Text -> IO a
 die ctx msg = do

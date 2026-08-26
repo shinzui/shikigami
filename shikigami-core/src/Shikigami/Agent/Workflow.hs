@@ -90,10 +90,11 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Principal (ResolvedAgentIdentity, resolveAgentIdentity, resolvedIdentityText)
-import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
+import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, resolveAgentIdentity, resolvedIdentityText)
+import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
@@ -139,7 +140,7 @@ import Shikigami.Sink.Intent
     prepareSinkIntent,
     preparedSinkResult,
   )
-import Shikigami.Sink.Permission (AgentIdentity (AgentIdentity), SinkKind, sinkKindText)
+import Shikigami.Sink.Permission (SinkKind, sinkKindText)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
@@ -421,7 +422,7 @@ runSessionedAgent ::
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
-  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope recordedIdentity) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
+  prior <- runStep deps (StepName "recall") (liftIO (recallAgentLearnings (appEnv deps) (deliveryPool deps) declaredRecallLimit recordedIdentity (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
@@ -490,7 +491,7 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity
             (depsDirectory deps)
             (depsGrants deps)
             (agentName job)
-            (declaredPrincipalId decl)
+            (RunJob.identity job)
             (runJobOccurredAt job)
             (activityFromJob job)
             approvedSinks
@@ -667,7 +668,7 @@ approveSinks deps approvalPolicyForRun sid job decl output =
 
     approveLegacy (ordinal, sink) = do
       let kind = sinkKindOf sink
-      requirement <- liftIO (requiresApproval legacyEnv (AgentIdentity (agentName job)) kind output)
+      requirement <- liftIO (requiresApproval legacyEnv (RunJob.identity job) kind output)
       case requirement of
         ApprovalNotRequired -> pure (Just sink)
         ApprovalRequired request -> do
@@ -843,6 +844,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
         { FlowCapability.appEnv = appEnv deps,
           FlowCapability.agent = decl,
           FlowCapability.identity = recordedIdentity,
+          FlowCapability.aliasPool = deliveryPool deps,
           FlowCapability.sessionId = Just sid
         }
     delegateEnv =
@@ -868,7 +870,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
           FlowCapability.activity = Just (activityFromJob job),
           FlowCapability.grants = depsGrants deps,
           FlowCapability.directory = depsDirectory deps,
-          FlowCapability.principalId = declaredPrincipalId decl
+          FlowCapability.identity = RunJob.identity job
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope
@@ -997,17 +999,19 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right intent@SinkIntent {agent, principalId, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} -> liftIO do
+        Right intent@SinkIntent {agent, identity = recordedIdentity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} -> liftIO do
           let messageId = Integration.messageId integrationEvent
               kind = sinkKindOf sink
               publish =
                 Otel.inSpan' (tracer depsAppEnv) "sink.publish" (spanArgs Consumer) \traceSpan -> do
                   Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (sinkKindText kind))
                   currentTraceContext <- traceContextFromCurrentSpan
+                  admittedIdentity <- case recordedIdentity of
+                    UnresolvedLegacyIdentity -> Directory.identityAdmission intentDirectory Nothing agent
+                    _ -> pure (Right recordedIdentity)
                   let sinkContext =
                         SinkContext
-                          { identity = AgentIdentity agent,
-                            principalId,
+                          { identity = either (const recordedIdentity) id admittedIdentity,
                             directory = intentDirectory,
                             runId = runId,
                             ordinal = ordinal,
@@ -1027,7 +1031,9 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                             grants = intentGrants,
                             logger = intentLogger
                           }
-                      send = dispatch sinkContext sink output
+                      send = case admittedIdentity of
+                        Left reason -> pure (SinkResult kind (SkippedLifecycle reason))
+                        Right _ -> dispatch sinkContext sink output
                   case deliveryPool of
                     Nothing -> publishUntracked <$> send
                     Just pool -> publishTracked intentLogger pool messageId kind intent send

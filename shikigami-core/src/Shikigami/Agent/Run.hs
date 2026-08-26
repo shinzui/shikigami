@@ -5,6 +5,7 @@ module Shikigami.Agent.Run
   ( AgentRunResult (..),
     behaviorKindText,
     recallPriorLearnings,
+    recallAgentLearnings,
     recallQuery,
     renderLearning,
     recordActivityAsMemory,
@@ -20,6 +21,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Time.Format.ISO8601 (iso8601ParseM)
+import Hasql.Pool (Pool)
 import Kioku.Api.Recall qualified as KiokuRecall
 import Kioku.Api.Scope (MemoryScope)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
@@ -32,9 +34,10 @@ import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecallLimit, recallLimitInt)
-import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (..))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext, shikigamiWriteContext)
-import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Memory.AliasStore qualified as AliasStore
+import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Prelude
 
 -- | The result of an agent run with memory.
@@ -139,6 +142,24 @@ recallPriorLearnings appEnv limit scope' query = do
     Right (Right hits)
       | not (null hits) -> pure (Recall.memory <$> hits)
     _ -> recallActiveByScope appEnv (recallLimitInt limit) scope'
+
+-- | Recall from the stable principal scope and every explicitly accepted
+-- legacy scope. Compatibility identities remain confined to their one visible
+-- self-asserted scope.
+recallAgentLearnings :: AppEnv -> Maybe Pool -> RecallLimit -> ResolvedAgentIdentity -> Text -> IO [MemoryRecord]
+recallAgentLearnings appEnv aliasPool limit identity query = do
+  aliases <- case (identity, aliasPool) of
+    (VerifiedAgent principal, Just pool) -> either (const []) id <$> AliasStore.aliasesForPrincipal pool principal
+    _ -> pure []
+  recalled <- traverse (\scope' -> recallPriorLearnings appEnv limit scope' query) (agentScope identity : (legacyAgentScope <$> aliases))
+  pure (take (recallLimitInt limit) (deduplicate (concat recalled)))
+  where
+    deduplicate = go Set.empty
+
+    go _ [] = []
+    go seen (memory@MemoryRecord {memoryId} : rest)
+      | memoryId `Set.member` seen = go seen rest
+      | otherwise = memory : go (Set.insert memoryId seen) rest
 
 recallBound :: Int -> KiokuRecall.RecallLimit
 recallBound limit =

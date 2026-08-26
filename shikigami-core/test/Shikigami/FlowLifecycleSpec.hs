@@ -247,7 +247,7 @@ tests =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
                 mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
                 note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
 
@@ -278,7 +278,7 @@ tests =
             tracer <- noopTracer
             session <- genSessionId
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
                 replayedId = WorkflowId "flow-recall-replay"
                 freshId = WorkflowId "flow-recall-fresh"
                 runCount workflowId = runFlowBody appEnv (spikeRuntime session) "at-risk-customer" recallCountFlow workflowId (object [])
@@ -564,7 +564,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         )
   where
     flowDecl = flowAgentDecl flowAgent
-    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent flowAgent, sessionId = Nothing}
+    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent flowAgent, aliasPool = Nothing, sessionId = Nothing}
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowDecl,
@@ -593,7 +593,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
           activity = Just sampleActivity,
           grants = StaticGrants defaultGrantTable,
           directory = disabledDirectoryHandle,
-          principalId = Nothing
+          identity = compatibilityIdentity flowAgent
         }
 
 -- | The runtime is handed to the test rather than consumed by 'lookupFlow',

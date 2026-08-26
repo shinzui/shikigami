@@ -23,10 +23,10 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KawaConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
-import Shikigami.Sink.Permission (AgentIdentity (..))
 import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
 import Shikigami.Sink.Wire (IngestRequest (..), IngestResponse (..))
 
@@ -46,7 +46,7 @@ buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredA
     KawaDigest {subjectType = sty, verb = vb} -> do
       actId <- genKindID @"act"
       now <- maybe getCurrentTime pure ctxOccurredAt
-      let nm = agentName ctxIdentity
+      let nm = either (const "unresolved-legacy") (\value -> value) (identityText ctxIdentity)
       pure
         ActivityEnvelope
           { activityId = toText actId,

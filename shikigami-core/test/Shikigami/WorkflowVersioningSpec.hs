@@ -714,7 +714,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
             $ run highRiskPayload
         )
   where
-    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
+    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowAgentDecl,
@@ -741,7 +741,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
           activity = Just sampleActivity,
           grants = StaticGrants defaultGrantTable,
           directory = disabledDirectoryHandle,
-          principalId = Nothing
+          identity = compatibilityIdentity "at-risk-customer"
         }
 
 fireDueApprovalTimer :: AppEnv -> IO ()

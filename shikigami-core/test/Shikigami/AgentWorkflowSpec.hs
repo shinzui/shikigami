@@ -39,7 +39,7 @@ import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChild
 import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
-import Kioku.Api.Types (Confidence (MediumConfidence), MemoryType (MemoryPattern))
+import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
@@ -63,7 +63,7 @@ import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblin
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
-import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
+import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Attestation.Envelope (profileDigest)
@@ -97,7 +97,8 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
-import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Memory.AliasStore qualified as AliasStore
+import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -412,6 +413,21 @@ tests =
             limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
             recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent "recall-limit-agent")) "recall fixture"
             assertEqual "declared bound caps fallback rows" 3 (length recalled),
+      testCase "verified recall composes the principal scope with an accepted legacy alias" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                principal = either (error . Text.unpack) id (mkAgentPrincipal "agent_renamed")
+                aliasPool = pool kirokuStore
+            recordLegacyRecallFixture appEnv "old-handle"
+            _ <- AliasStore.reconcileAlias aliasPool principal "old-handle" >>= either (assertFailure . Text.unpack) pure
+            limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
+            recalled <- recallAgentLearnings appEnv (Just aliasPool) limit (VerifiedAgent principal) "legacy alias fixture"
+            assertEqual
+              "legacy content remains reachable after rename"
+              ["legacy alias fixture"]
+              (map (\MemoryRecord {content = memoryContent} -> memoryContent) recalled),
       testCase "replays completed lifecycle steps for the same run id" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -455,7 +471,7 @@ tests =
               assertEqual "the granted run enqueued one outbox row" (Right 1) (length <$> outboxBefore)
 
               -- Now revoke, and drive the publisher exactly as the worker does.
-              _ <- revokeGrant pool' "heartbeat" SKawaDigest (Just "test") >>= either (assertFailure . show) pure
+              _ <- revokeGrant pool' (compatibilityIdentity "heartbeat") SKawaDigest (Just "test") >>= either (assertFailure . show) pure
               let publishBatch rows =
                     traverse (\row -> (outboxId row,) <$> publishSinkIntent deps row) rows
               published <- runAppIO appEnv (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
@@ -2971,6 +2987,33 @@ recordRecallFixture appEnv ordinal = do
   case result of
     Right (Right _) -> pure ()
     other -> assertFailure ("seeding recall fixture should succeed, got " <> show other)
+
+recordLegacyRecallFixture :: AppEnv -> Text -> IO ()
+recordLegacyRecallFixture appEnv legacyName = do
+  mid <- genMemoryId
+  recordedAt <- getCurrentTime
+  result <-
+    runAppIO appEnv $
+      Memory.record
+        RecordMemoryData
+          { memoryId = mid,
+            memorySpaceId = shikigamiMemorySpace,
+            actorPrincipal = agentActor (CompatibilityAgent legacyName),
+            ownerPrincipal = Nothing,
+            agentId = legacyName,
+            sessionId = Nothing,
+            scope = legacyAgentScope legacyName,
+            memoryType = MemoryPattern,
+            content = "legacy alias fixture",
+            priority = 100,
+            confidence = MediumConfidence,
+            tags = Set.fromList ["agent-run", "legacy-alias"],
+            supersedes = Nothing,
+            recordedAt
+          }
+  case result of
+    Right (Right _) -> pure ()
+    other -> assertFailure ("seeding legacy recall fixture should succeed, got " <> show other)
 
 expectedFlowOutput :: Value
 expectedFlowOutput =

@@ -1,4 +1,4 @@
--- | The vocabulary of the C11 permission gate: sink kinds, agent identity,
+-- | The vocabulary of the C11 permission gate: sink kinds,
 -- denials, and the pure decision over a compiled-in allow-list.
 --
 -- This module deliberately knows nothing about a database. The gate that
@@ -23,6 +23,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude (FromJSON, ToJSON)
 
 -- | The five sink kinds the gate distinguishes. @SChannelEgress@ is reserved for the
@@ -35,10 +36,6 @@ data SinkKind
   | SChannelEgress
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
   deriving anyclass (ToJSON, FromJSON)
-
--- | Who is asking. The name is the de-risking key; later the shomei-verified @sub@.
-newtype AgentIdentity = AgentIdentity {agentName :: Text}
-  deriving stock (Eq, Show)
 
 -- | A permission denial carrying its reason.
 newtype Denied = Denied {deniedReason :: Text}
@@ -85,9 +82,14 @@ defaultGrantTable =
 -- so the static arm stays testable without any IO, exactly as the original stub
 -- was.
 checkGrantStatic :: Map Text (Set SinkKind) -> AgentIdentity -> SinkKind -> Either Denied ()
-checkGrantStatic table (AgentIdentity nm) kind =
+checkGrantStatic table identity kind =
   case Map.lookup nm table of
     Just kinds
       | Set.member kind kinds -> Right ()
       | otherwise -> Left (Denied ("agent '" <> nm <> "' is not granted " <> sinkKindText kind))
     Nothing -> Left (Denied ("agent '" <> nm <> "' has no sink grants"))
+  where
+    nm = case identity of
+      VerifiedIdentity principal -> principalText principal
+      CompatibilityIdentity agentName -> agentName
+      UnresolvedLegacyIdentity -> "unresolved-legacy"

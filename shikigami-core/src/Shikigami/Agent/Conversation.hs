@@ -75,7 +75,6 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
     ResolvedAgentIdentity,
-    compatibilityIdentity,
     resolveAgentIdentity,
     resolvedIdentity,
     resolvedIdentityText,
@@ -1236,11 +1235,11 @@ recordAssistantTurnAndEnqueueReply directoryHandle grantSource recordedIdentity 
   case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
     Just TurnRow {turnIndex = existingTurnIndex} -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg replyText now)
       pure (Right (RecordedTurn {turnId, turnIndex = existingTurnIndex}, AgentWorkflow.preparedSinkResult prepared))
     Nothing -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg replyText now)
       existing <- Session.getById shikigamiMemorySpace sid
       case existing of
         Left err -> pure (Left (Text.pack (show err)))
@@ -1291,17 +1290,18 @@ recordAssistantTurnAndEnqueueReply directoryHandle grantSource recordedIdentity 
 prepareConversationReplySinkIntent ::
   DirectoryHandle ->
   GrantSource ->
+  ResolvedAgentIdentity ->
   AgentDecl ->
   SessionId ->
   AddressedMessage ->
   Text ->
   UTCTime ->
   IO AgentWorkflow.PreparedSinkIntent
-prepareConversationReplySinkIntent directoryHandle grantSource decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
+prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
   AgentWorkflow.prepareSinkIntent
     directoryHandle
     grantSource
-    (declaredPrincipalId decl)
+    (resolvedIdentity recordedIdentity)
     (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
     (name decl)

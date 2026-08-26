@@ -10,8 +10,11 @@ module Shikigami.Server.Command.Agents
   ( AgentInventoryEntry (..),
     AgentSyncEntry (..),
     AgentSyncOutcome (..),
+    AliasSyncEntry (..),
+    AliasSyncOutcome (..),
     buildAgentInventory,
     reconcileAgentInventory,
+    reconcileAgentAliases,
     runAgentsList,
     runAgentsSync,
   )
@@ -21,6 +24,7 @@ import Control.Monad (foldM, when)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
+import Data.Functor ((<&>))
 import Data.List (transpose)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
@@ -29,7 +33,10 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Hasql.Pool (Pool)
+import Kioku.Memory qualified as Memory
+import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Effect (runStoreIO)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     IdentityDecl (..),
@@ -42,6 +49,7 @@ import Shikigami.Agent.Loader
     LoadError (..),
     loadAgentsReport,
   )
+import Shikigami.Agent.Principal (AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Agent.Run (behaviorKindText)
 import Shikigami.App.Config (AppConfig, agentsDirectory, directorySettings, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -49,9 +57,15 @@ import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySet
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Log qualified as Log
+import Shikigami.Memory.Access (shikigamiMemorySpace)
+import Shikigami.Memory.AliasStore (AliasReconciliation (..))
+import Shikigami.Memory.AliasStore qualified as AliasStore
+import Shikigami.Memory.Scope (shikigamiNamespace)
 import Shikigami.Sink.GrantStore
-  ( GrantPrincipalSync (..),
+  ( GrantIdentityEvidence (..),
+    GrantPrincipalSync (..),
     GrantPrincipalSyncStatus (..),
+    listGrantIdentityEvidence,
     reconcileGrantPrincipal,
   )
 import System.Exit (exitFailure)
@@ -86,6 +100,22 @@ data AgentSyncOutcome
   | ManifestLoadFailed !Text
   | AmbiguousJoin !Text
   | DirectoryDisabledForSync
+  deriving stock (Eq, Show)
+
+-- | One legacy name considered by alias reconciliation.
+data AliasSyncEntry = AliasSyncEntry
+  { legacyName :: !Text,
+    aliasPrincipalId :: !(Maybe Text),
+    outcome :: !AliasSyncOutcome
+  }
+  deriving stock (Eq, Show)
+
+data AliasSyncOutcome
+  = AliasReconciled !AliasReconciliation
+  | AliasMissingMapping
+  | AliasPrincipalMissing ![Text]
+  | AliasMultiplyClaimed ![Text]
+  | AliasInvalidMapping !Text
   deriving stock (Eq, Show)
 
 -- | Join one load report to one already-refreshed directory snapshot.
@@ -219,6 +249,154 @@ reconcileAgentInventory pool inventory =
         )
     reconcileEntry _ = pure (Left "invalid agent inventory entry")
 
+-- | Reconcile every discovered legacy name to exactly one principal. Claims
+-- come from an exact current declaration join, principal-bearing grant
+-- evidence, or an explicit @LEGACY_NAME=agent_...@ option. Any malformed,
+-- missing, or multiply-owned candidate is reported without writing that name.
+reconcileAgentAliases ::
+  Pool ->
+  Set.Set Text ->
+  [GrantIdentityEvidence] ->
+  [AgentInventoryEntry] ->
+  [Text] ->
+  IO (Either Text [AliasSyncEntry])
+reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappings = do
+  reconciled <- traverse reconcileCandidate (Set.toAscList candidates)
+  pure ((invalidExplicitEntries <>) <$> sequence reconciled)
+  where
+    joined =
+      [ (declName decl, rawPrincipal)
+      | AgentInventoryEntry {declaration = Just decl, principal = Just directoryPrincipal} <- inventory,
+        let rawPrincipal = Directory.principalId directoryPrincipal
+      ]
+    nameCounts = Map.fromListWith (+) [(agentName, 1 :: Int) | (agentName, _) <- joined]
+    principalCounts = Map.fromListWith (+) [(rawPrincipal, 1 :: Int) | (_, rawPrincipal) <- joined]
+    unambiguousJoins =
+      [ (agentName, principal)
+      | (agentName, rawPrincipal) <- joined,
+        Map.findWithDefault 0 agentName nameCounts == 1,
+        Map.findWithDefault 0 rawPrincipal principalCounts == 1,
+        Right principal <- [mkAgentPrincipal rawPrincipal]
+      ]
+    currentByName = Map.fromList unambiguousJoins
+    currentPrincipals = Set.fromList (map snd unambiguousJoins)
+
+    parsedExplicit = map parseExplicitAlias rawExplicitMappings
+    explicitMappings = [mapping | Right mapping <- parsedExplicit]
+    invalidExplicitEntries =
+      [ AliasSyncEntry
+          { legacyName = raw,
+            aliasPrincipalId = Nothing,
+            outcome = AliasInvalidMapping detail
+          }
+      | (raw, Left detail) <- zip rawExplicitMappings parsedExplicit
+      ]
+
+    grantNames = Set.fromList [agentName | GrantIdentityEvidence {agentName} <- grantEvidence]
+    explicitNames = Set.fromList (map fst explicitMappings)
+    candidates = legacyScopes <> grantNames <> explicitNames
+
+    baseClaims =
+      Map.fromListWith
+        Set.union
+        [ (candidate, Set.singleton principal)
+        | candidate <- Set.toList candidates,
+          Just principal <- [Map.lookup candidate currentByName]
+        ]
+    explicitClaims =
+      Map.fromListWith
+        Set.union
+        [ (legacy, Set.singleton principal)
+        | (legacy, principal) <- explicitMappings,
+          principal `Set.member` currentPrincipals
+        ]
+    grantClaims =
+      Map.fromListWith
+        Set.union
+        [ (agentName, Set.singleton principal)
+        | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
+          Right principal <- [mkAgentPrincipal rawPrincipal],
+          principal `Set.member` currentPrincipals
+        ]
+    allClaims = Map.unionsWith Set.union [baseClaims, explicitClaims, grantClaims]
+
+    missingPrincipalClaims =
+      Map.fromListWith
+        Set.union
+        ( [ (legacy, Set.singleton (principalText principal))
+          | (legacy, principal) <- explicitMappings,
+            principal `Set.notMember` currentPrincipals
+          ]
+            <> [ (agentName, Set.singleton rawPrincipal)
+               | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
+                 case mkAgentPrincipal rawPrincipal of
+                   Left _ -> False
+                   Right principal -> principal `Set.notMember` currentPrincipals
+               ]
+        )
+    invalidGrantClaims =
+      Map.fromListWith
+        (<>)
+        [ (agentName, ["grant carries invalid principal '" <> rawPrincipal <> "': " <> detail])
+        | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
+          Left detail <- [mkAgentPrincipal rawPrincipal]
+        ]
+
+    reconcileCandidate legacy =
+      case Map.lookup legacy invalidGrantClaims of
+        Just details -> pure (Right (issue (AliasInvalidMapping (Text.intercalate "; " details))))
+        Nothing ->
+          case Set.toAscList (Map.findWithDefault Set.empty legacy missingPrincipalClaims) of
+            missing@(_ : _) -> pure (Right (issue (AliasPrincipalMissing missing)))
+            [] ->
+              case Set.toAscList (Map.findWithDefault Set.empty legacy allClaims) of
+                [] -> pure (Right (issue AliasMissingMapping))
+                principals@(_ : _ : _) ->
+                  pure (Right (issue (AliasMultiplyClaimed (map principalText principals))))
+                [principal] ->
+                  AliasStore.reconcileAlias pool principal legacy <&> fmap (reconciled principal)
+      where
+        issue aliasOutcome =
+          AliasSyncEntry
+            { legacyName = legacy,
+              aliasPrincipalId = Nothing,
+              outcome = aliasOutcome
+            }
+        reconciled principal aliasResult =
+          AliasSyncEntry
+            { legacyName = legacy,
+              aliasPrincipalId = Just (principalText principal),
+              outcome = AliasReconciled aliasResult
+            }
+
+parseExplicitAlias :: Text -> Either Text (Text, AgentPrincipal)
+parseExplicitAlias raw = do
+  let (legacy, suffix) = Text.breakOn "=" raw
+      principal = Text.drop 1 suffix
+  when
+    (Text.null suffix || Text.null legacy || Text.null principal || Text.any (== '=') principal)
+    (Left "expected LEGACY_NAME=agent_...")
+  validated <- mkAgentPrincipal principal
+  pure (legacy, validated)
+
+discoverLegacyAgentScopes :: KirokuStore -> IO (Either Text (Set.Set Text))
+discoverLegacyAgentScopes store =
+  runStoreIO store (Memory.getActiveRowsInNamespace shikigamiMemorySpace shikigamiNamespace) <&> \case
+    Left err -> Left (Text.pack (show err))
+    Right (Left err) -> Left (Text.pack (show err))
+    Right (Right rows) ->
+      Right
+        ( Set.fromList
+            [ legacy
+            | MemoryRow {scopeKind = Just "agent", scopeRef = Just legacy} <- rows,
+              isLegacyScope legacy
+            ]
+        )
+  where
+    isLegacyScope scope =
+      not ("agent_" `Text.isPrefixOf` scope)
+        && not ("shikigami.agent." `Text.isPrefixOf` scope)
+
 -- | @shikigami agents list [--json]@.
 --
 -- This command opens no database. It exits zero when a manifest failed to
@@ -234,35 +412,44 @@ runAgentsList asJson config = do
     then LazyChar8.putStrLn (Aeson.encode (map inventoryJson inventory))
     else renderInventoryTable inventory
 
--- | @shikigami agents sync [--json]@.
+-- | @shikigami agents sync [--json] [--alias LEGACY_NAME=agent_...]@.
 --
 -- The completed manifest report is persisted before directory reconciliation,
 -- so a broken directory source cannot make a broken manifest invisible. Join
 -- issues are reported and skipped. A conflicting existing grant principal is
 -- the one per-row issue that makes the command exit non-zero: identity was
 -- already asserted and this command deliberately refused to overwrite it.
-runAgentsSync :: Bool -> AppConfig -> IO ()
-runAgentsSync asJson config = do
+runAgentsSync :: Bool -> [Text] -> AppConfig -> IO ()
+runAgentsSync asJson explicitAliases config = do
   report <- loadAgentsReport (agentsDirectory config)
-  withPool config "agents sync" \pool -> do
-    recordLoadStates pool (agentsDirectory config) report >>= \case
+  withKirokuStore config "agents sync" \store -> do
+    let storePool = pool store
+    recordLoadStates storePool (agentsDirectory config) report >>= \case
       Left err -> die "agents sync" err
       Right () -> pure ()
     (configured, directoryHandle) <- loadDirectory "agents sync" (directorySettings config)
     inventory <- buildAgentInventory configured directoryHandle report
-    results <- reconcileAgentInventory pool inventory >>= either (die "agents sync") pure
+    legacyScopes <- discoverLegacyAgentScopes store >>= either (die "agents sync") pure
+    grantEvidence <- listGrantIdentityEvidence storePool >>= either (die "agents sync") pure
+    aliases <-
+      reconcileAgentAliases storePool legacyScopes grantEvidence inventory explicitAliases
+        >>= either (die "agents sync") pure
+    results <- reconcileAgentInventory storePool inventory >>= either (die "agents sync") pure
     if asJson
       then
         LazyChar8.putStrLn
           ( Aeson.encode
               ( object
                   [ "load_state_recorded" .= True,
-                    "results" .= map syncJson results
+                    "results" .= map syncJson results,
+                    "aliases" .= map aliasSyncJson aliases
                   ]
               )
           )
-      else renderSyncResults results
-    when (any hasPrincipalConflict results) exitFailure
+      else do
+        renderSyncResults results
+        renderAliasSyncResults aliases
+    when (any hasPrincipalConflict results || any hasAliasIssue aliases) exitFailure
 
 loadDirectory :: String -> DirectorySettings -> IO (Bool, DirectoryHandle)
 loadDirectory context settings =
@@ -421,6 +608,64 @@ hasPrincipalConflict :: AgentSyncEntry -> Bool
 hasPrincipalConflict AgentSyncEntry {outcome = GrantsReconciled GrantPrincipalSync {status = PrincipalConflict _}} = True
 hasPrincipalConflict _ = False
 
+renderAliasSyncResults :: [AliasSyncEntry] -> IO ()
+renderAliasSyncResults [] = pure ()
+renderAliasSyncResults entries = do
+  putStrLn ""
+  mapM_ (TextIO.putStrLn . aliasSyncLine) entries
+
+aliasSyncLine :: AliasSyncEntry -> Text
+aliasSyncLine AliasSyncEntry {legacyName, aliasPrincipalId, outcome} =
+  case outcome of
+    AliasReconciled AliasInserted {} -> prefix "ALIASED"
+    AliasReconciled AliasAlreadyPresent {} -> prefix "ALIAS PRESENT"
+    AliasReconciled AliasConflict {existingPrincipalId} ->
+      "ALIAS CONFLICT " <> legacyName <> " expected=" <> expected <> " existing=" <> existingPrincipalId
+    AliasMissingMapping -> "ALIAS ISSUE " <> legacyName <> " MISSING MAPPING"
+    AliasPrincipalMissing missing ->
+      "ALIAS ISSUE " <> legacyName <> " PRINCIPAL MISSING " <> Text.intercalate "," missing
+    AliasMultiplyClaimed principals ->
+      "ALIAS ISSUE " <> legacyName <> " MULTIPLY CLAIMED " <> Text.intercalate "," principals
+    AliasInvalidMapping detail -> "ALIAS ISSUE " <> legacyName <> " INVALID " <> detail
+  where
+    expected = maybe "NO PRINCIPAL" id aliasPrincipalId
+    prefix status = Text.unwords [status, legacyName, expected]
+
+aliasSyncJson :: AliasSyncEntry -> Value
+aliasSyncJson AliasSyncEntry {legacyName, aliasPrincipalId, outcome} =
+  object
+    ( [ "legacy_name" .= legacyName,
+        "principal_id" .= aliasPrincipalId
+      ]
+        <> outcomeFields outcome
+    )
+  where
+    outcomeFields = \case
+      AliasReconciled AliasInserted {} -> ["outcome" .= ("inserted" :: Text)]
+      AliasReconciled AliasAlreadyPresent {} -> ["outcome" .= ("already-present" :: Text)]
+      AliasReconciled AliasConflict {existingPrincipalId} ->
+        [ "outcome" .= ("conflict" :: Text),
+          "existing_principal_id" .= existingPrincipalId
+        ]
+      AliasMissingMapping -> ["outcome" .= ("missing-mapping" :: Text)]
+      AliasPrincipalMissing missing ->
+        [ "outcome" .= ("principal-missing" :: Text),
+          "missing_principal_ids" .= missing
+        ]
+      AliasMultiplyClaimed principals ->
+        [ "outcome" .= ("multiply-claimed" :: Text),
+          "claimed_principal_ids" .= principals
+        ]
+      AliasInvalidMapping detail ->
+        [ "outcome" .= ("invalid-mapping" :: Text),
+          "detail" .= detail
+        ]
+
+hasAliasIssue :: AliasSyncEntry -> Bool
+hasAliasIssue AliasSyncEntry {outcome = AliasReconciled AliasInserted {}} = False
+hasAliasIssue AliasSyncEntry {outcome = AliasReconciled AliasAlreadyPresent {}} = False
+hasAliasIssue _ = True
+
 declaredPrincipalId :: AgentDecl -> Maybe Text
 declaredPrincipalId AgentDecl {identity} = declared <$> identity
   where
@@ -472,10 +717,10 @@ padRow widths cells =
   where
     pad width cell = cell <> Text.replicate (width - Text.length cell) " "
 
-withPool :: AppConfig -> String -> (Pool -> IO a) -> IO a
-withPool config context use = do
+withKirokuStore :: AppConfig -> String -> (KirokuStore -> IO a) -> IO a
+withKirokuStore config context use = do
   connectionString <- revealSecretText <$> requireDatabaseUrl (Text.pack context) config
-  withStore (defaultConnectionSettings connectionString) (use . pool)
+  withStore (defaultConnectionSettings connectionString) use
 
 die :: String -> Text -> IO a
 die context message = do

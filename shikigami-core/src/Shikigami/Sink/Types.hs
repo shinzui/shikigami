@@ -12,13 +12,14 @@ where
 
 import Data.Text qualified as Text
 import Network.HTTP.Types.Header (Header)
+import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Http (SinkHttp)
-import Shikigami.Sink.Permission (AgentIdentity (..), SinkKind)
+import Shikigami.Sink.Permission (SinkKind)
 
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
 -- absent parent means "post a top-level message in the conversation".
@@ -42,7 +43,6 @@ data DeliveryGuard = DeliveryGuard
 -- run timestamp.
 data SinkContext = SinkContext
   { identity :: !AgentIdentity,
-    principalId :: !(Maybe Text),
     directory :: !DirectoryHandle,
     runId :: !Text,
     ordinal :: !Int,
@@ -123,4 +123,6 @@ data SinkResult = SinkResult
 -- of the same run re-POSTs the same key, so the doorway dedups it.
 mkSourceEventId :: SinkContext -> Text
 mkSourceEventId ctx =
-  agentName (identity ctx) <> ":" <> runId ctx <> ":" <> Text.pack (show (ordinal ctx))
+  identityLabel (identity ctx) <> ":" <> runId ctx <> ":" <> Text.pack (show (ordinal ctx))
+  where
+    identityLabel = either (const "unresolved-legacy") id . identityText

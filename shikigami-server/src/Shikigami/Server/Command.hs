@@ -39,6 +39,7 @@ module Shikigami.Server.Command
 where
 
 import Data.Maybe (catMaybes)
+import Data.Text qualified as Text
 import Options.Applicative
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
@@ -214,18 +215,26 @@ agentsListInfo =
       (\asJson -> (runAgentsList asJson, []))
         <$> switch (long "json" <> help "Emit machine-readable JSON")
 
--- | @agents sync [--json]@ persists the load report and reconciles joined
--- principal ids onto existing sink grants. Database configuration is required
--- at execution time so @agents list@ remains available offline.
+-- | @agents sync [--json] [--alias LEGACY_NAME=agent_...]@ persists the load
+-- report and reconciles joined principal ids onto existing sink grants and
+-- legacy memory-scope aliases. Database configuration is required at execution
+-- time so @agents list@ remains available offline.
 agentsSyncInfo :: ParserInfo AdminAction
 agentsSyncInfo =
   info
     (parser <**> helper)
-    (progDesc "Persist agent load state and reconcile grant principal ids")
+    (progDesc "Persist agent load state and reconcile principal-keyed durable state")
   where
     parser =
-      (\asJson -> (runAgentsSync asJson, []))
+      (\asJson aliases -> (runAgentsSync asJson (map Text.pack aliases), []))
         <$> switch (long "json" <> help "Emit machine-readable JSON")
+        <*> many
+          ( strOption
+              ( long "alias"
+                  <> metavar "LEGACY_NAME=agent_..."
+                  <> help "Map a renamed legacy memory/grant name to a current principal (repeatable)"
+              )
+          )
 
 -- | @grants@ is a group rather than a flat command: list, grant, and revoke
 -- share the table but take different arguments, and a flat @grant-sink@ /

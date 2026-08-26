@@ -1,6 +1,6 @@
 -- | How Shikigami names itself to Kioku's memory-space boundary.
 --
--- Kioku 0.4 partitions everything it stores by 'MemorySpaceId' and records who acted as a
+-- Kioku 0.5 partitions everything it stores by 'MemorySpaceId' and records who acted as a
 -- 'RecordedPrincipal'. Shikigami is a single-space deployment that predates both, so this module
 -- exists to answer those two questions in exactly one place rather than at every call site.
 --
@@ -10,7 +10,9 @@
 -- placeholder for a missing decision: a single-space deployment has one space, and naming it the
 -- one the backfill used is what keeps history reachable.
 --
--- The actor is a @KnownPrincipal@ over a ref this service mints from the agent's declared name.
+-- The actor is a @KnownPrincipal@ over the identity admitted for the durable
+-- run. Verified work uses its Meibo principal verbatim. Directory-disabled
+-- work uses the visibly self-asserted @shikigami.agent.<name>@ form.
 --
 -- That is the second answer this module has given, and the first one was wrong. It originally
 -- recorded 'Kioku.Api.Access.LegacyPrincipal', reasoning that @KnownPrincipal@ claims a directory
@@ -28,16 +30,9 @@
 -- /how much history knows/. Hence @shikigami.agent.\<name\>@: legible, stable, and obviously not
 -- directory-issued to anyone reading the stream.
 --
--- The corrected writes are not backfilled. Rows written before this change carry
--- @kioku:legacy:\<name\>@ and are wrong in the way described above; Shikigami has no users and no
--- data worth preserving, so the fix is to recreate rather than migrate. This is exactly the
--- asymmetry that made changing it now rather than at IR-9 the cheap option: an append-only event
--- store makes a false attribution permanent the moment real traffic exists.
---
--- When IR-9 (@docs\/improvement-requests\/key-agent-continuity-by-meibo-principal.md@) lands and
--- Meibo can resolve agents, 'agentActor' takes its ref from Meibo instead of minting one, and the
--- call sites still do not move. The write path can move to Kioku's @*WithContext@ surface at the
--- same time, which is what retires the deprecation warnings this module's callers carry.
+-- Existing name-scoped rows are not rewritten. Shikigami owns explicit
+-- principal-to-name aliases and composes their supported Kioku reads at recall;
+-- all fresh writes use the recorded identity through Kioku's contextful API.
 module Shikigami.Memory.Access
   ( shikigamiMemorySpace,
     agentActor,
@@ -56,13 +51,12 @@ import Kioku.Api.Access
   )
 import Kioku.Api.Access qualified as Access
 import Shikigami.Agent.Principal (ResolvedAgentIdentity, principalRefFor)
-import Shikigami.Prelude
 
 -- | The one memory space Shikigami reads and writes.
 shikigamiMemorySpace :: MemorySpaceId
 shikigamiMemorySpace = legacyMemorySpaceId
 
--- | The acting principal for a run, from the agent's declared name.
+-- | The acting principal for a run, from its admitted durable identity.
 agentActor :: ResolvedAgentIdentity -> RecordedPrincipal
 agentActor = KnownPrincipal . principalRefFor
 
@@ -76,10 +70,9 @@ agentActor = KnownPrincipal . principalRefFor
 -- invents nothing; it is the honest actor for a read the process itself is making, and it is why
 -- the write path still goes through 'agentActor' rather than reusing this.
 --
--- 'assumeAuthorizedMemoryContext' is the trusted in-process entry point: Shikigami resolves and
--- authorizes an agent long before memory is touched, which is exactly the case Kioku documents it
--- for. When IR-9 lands and there is a directory to ask, this becomes an 'authorizeMemoryAccess'
--- call and the call sites again do not move.
+-- 'assumeAuthorizedMemoryContext' is the trusted in-process entry point:
+-- Shikigami admits the identity through its directory before memory is touched,
+-- which is exactly the host-vouched case Kioku documents it for.
 shikigamiReadContext :: MemoryAccessContext
 shikigamiReadContext =
   assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor shikigamiServicePrincipal)
@@ -92,11 +85,8 @@ shikigamiReadContext =
 -- @agentActor name@ must be authorized by a context built from the same ref. Building both from
 -- 'agentPrincipal' makes that agreement structural rather than a thing two call sites remember.
 --
--- Use this with kioku's @*WithContext@ surface. The unsuffixed wrappers ('Kioku.Session.start'
--- and friends) are deprecated and confined to the legacy space; they still appear in this
--- repository, and retiring them is
--- @docs\/plans\/54-key-durable-agent-state-by-meibo-principal.md@'s work — but no new call site
--- should join them.
+-- Use this with Kioku's @*WithContext@ surface. Unsuffixed compatibility
+-- wrappers are confined to test fixtures that intentionally seed legacy rows.
 shikigamiWriteContext :: ResolvedAgentIdentity -> MemoryAccessContext
 shikigamiWriteContext identity =
   assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor (principalRefFor identity))

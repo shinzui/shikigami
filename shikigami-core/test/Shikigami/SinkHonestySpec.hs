@@ -39,12 +39,12 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink
-  ( AgentIdentity (..),
-    DanwaConfig (..),
+  ( DanwaConfig (..),
     GrantSource (StaticGrants),
     KanmonConfig (..),
     KawaConfig (..),
@@ -191,7 +191,7 @@ recipientOf resolved declared =
       KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
       resolved
       (signalWith Actor declared)
-      (AgentIdentity "triage-note")
+      (compatibilityIdentity "triage-note")
       sampleOutput
 
 -- | A declaration carrying the given sinks; every other field is irrelevant to
@@ -293,7 +293,7 @@ reiActionTests =
               -- The deterministic dedup key: an outbox retry or a workflow
               -- replay re-POSTs this exact value, so a future rei can dedup the
               -- way kawa's doorway already does.
-              sourceEventId @?= "heartbeat:run-1:0"
+              sourceEventId @?= "shikigami.agent.heartbeat:run-1:0"
             other -> assertFailure ("expected exactly one recorded action, got " <> show (length other)),
       -- A reachable endpoint that refuses is a different failure from no
       -- endpoint at all, and both must be failures.
@@ -307,7 +307,7 @@ reiActionTests =
       testCase "a denied agent never reaches the handler at all" do
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
-          let ctx = ctxWithIdentity (AgentIdentity "intruder") (ReiConfig {baseUrl = Just (localBaseUrl port)})
+          let ctx = ctxWithIdentity (compatibilityIdentity "intruder") (ReiConfig {baseUrl = Just (localBaseUrl port)})
           result <- dispatch ctx sampleReiSink sampleOutput
           case outcome result of
             DeniedOutcome _ -> pure ()
@@ -361,13 +361,12 @@ publicationDisposition = \case
 -- | @heartbeat@ is granted @SReiAction@ in the static grant table, so the
 -- permission gate is not what these cases are measuring.
 ctxWith :: ReiConfig -> SinkContext
-ctxWith = ctxWithIdentity (AgentIdentity "heartbeat")
+ctxWith = ctxWithIdentity (compatibilityIdentity "heartbeat")
 
 ctxWithIdentity :: AgentIdentity -> ReiConfig -> SinkContext
 ctxWithIdentity agentIdentity rei =
   SinkContext
     { identity = agentIdentity,
-      principalId = Nothing,
       directory = disabledDirectoryHandle,
       runId = "run-1",
       ordinal = 0,

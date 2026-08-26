@@ -49,7 +49,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
-import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
@@ -214,11 +214,12 @@ pauseBeforePublish = do
   testWithApplication (pure (kizashiApp requests)) \port ->
     withFixture "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       directory <- mutableDirectory lifecycleRef
+      _ <- expectRight "reconcile verified heartbeat grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
       let gatedDeps = deps {AgentWorkflow.directory = directory}
       [row] <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
       case Integration.decodeJsonIntegrationEvent (rowEvent row) of
-        Right AgentWorkflow.SinkIntent {AgentWorkflow.principalId} ->
-          assertEqual "outbox intent carries canonical principal" (Just "agent_heartbeat") principalId
+        Right AgentWorkflow.SinkIntent {AgentWorkflow.identity = intentIdentity} ->
+          assertEqual "outbox intent carries canonical principal" verifiedHeartbeatAgentIdentity intentIdentity
         other -> assertFailure ("sink intent should decode, got " <> show other)
 
       sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope verifiedHeartbeatIdentity))
@@ -257,7 +258,7 @@ journalTruth =
 egressIntentMetadata :: IO ()
 egressIntentMetadata =
   withFixture "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-    _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+    _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
     [row] <- runWorkflowAndRows deps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
       Right AgentWorkflow.SinkIntent {AgentWorkflow.conversationKey, AgentWorkflow.triggeringActivityId} -> do
@@ -284,7 +285,7 @@ egressReceiptRecording = do
   requests <- newIORef []
   testWithApplication (pure (kanmonApp requests)) \port ->
     withFixture "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
       authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
       let configuredDeps =
             deps
@@ -318,7 +319,7 @@ egressPermanentRejection = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
     withFixture "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" SChannelEgress (Just "test")
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
       let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
       [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       published <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)

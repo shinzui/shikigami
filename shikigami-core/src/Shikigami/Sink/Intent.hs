@@ -19,7 +19,7 @@ module Shikigami.Sink.Intent
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Foldable (traverse_)
@@ -53,6 +53,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
@@ -68,8 +69,7 @@ import Shikigami.Sink
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.KanmonClient (resolveConversationKey)
 import Shikigami.Sink.Permission
-  ( AgentIdentity (AgentIdentity),
-    Denied (..),
+  ( Denied (..),
     SinkKind,
     sinkKindText,
   )
@@ -80,7 +80,7 @@ import Shikigami.Sink.Recipient (resolveSinkRecipient)
 -- an additive field existed keep their original bytes.
 data SinkIntent = SinkIntent
   { agent :: !Text,
-    principalId :: !(Maybe Text),
+    identity :: !AgentIdentity,
     runId :: !Text,
     ordinal :: !Int,
     occurredAt :: !(Maybe UTCTime),
@@ -93,12 +93,47 @@ data SinkIntent = SinkIntent
   }
   deriving stock (Eq, Show, Generic)
 
-instance ToJSON SinkIntent where toJSON = genericToJSON sinkIntentOptions
+instance ToJSON SinkIntent where
+  toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} =
+    Aeson.object
+      ( [ "agent" Aeson..= agent,
+          "runId" Aeson..= runId,
+          "ordinal" Aeson..= ordinal,
+          "sink" Aeson..= sink,
+          "output" Aeson..= output
+        ]
+          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
+          <> maybeField "occurredAt" occurredAt
+          <> maybeField "danwaTarget" danwaTarget
+          <> maybeField "resolvedRecipient" resolvedRecipient
+          <> maybeField "conversationKey" conversationKey
+          <> maybeField "triggeringActivityId" triggeringActivityId
+      )
+    where
+      maybeField _ Nothing = []
+      maybeField key (Just value) = [key Aeson..= value]
 
-instance FromJSON SinkIntent where parseJSON = genericParseJSON sinkIntentOptions
-
-sinkIntentOptions :: Options
-sinkIntentOptions = defaultOptions {omitNothingFields = True}
+instance FromJSON SinkIntent where
+  parseJSON = withObject "SinkIntent" \object -> do
+    explicitIdentity <- object .:? "identity"
+    legacyPrincipal <- object .:? "principalId"
+    identity <- case explicitIdentity of
+      Just recorded -> pure recorded
+      Nothing -> case legacyPrincipal of
+        Just raw -> either (fail . Text.unpack) (pure . VerifiedIdentity) (mkAgentPrincipal raw)
+        Nothing -> pure UnresolvedLegacyIdentity
+    SinkIntent
+      <$> object .: "agent"
+      <*> pure identity
+      <*> object .: "runId"
+      <*> object .: "ordinal"
+      <*> object .:? "occurredAt"
+      <*> object .:? "danwaTarget"
+      <*> object .:? "resolvedRecipient"
+      <*> object .:? "conversationKey"
+      <*> object .:? "triggeringActivityId"
+      <*> object .: "sink"
+      <*> object .: "output"
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
@@ -114,14 +149,14 @@ enqueueSinkIntents ::
   DirectoryHandle ->
   GrantSource ->
   Text ->
-  Maybe Text ->
+  AgentIdentity ->
   UTCTime ->
   ActivityEnvelope ->
   [Sink] ->
   SessionId ->
   Value ->
   Eff es [SinkResult]
-enqueueSinkIntents directoryHandle grantSource agentName declaredPrincipalId jobOccurredAt activity sinks sessionId output = do
+enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt activity sinks sessionId output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   capturedTraceContext <- traceContextFromCurrentSpan
@@ -154,10 +189,10 @@ enqueueSinkIntents directoryHandle grantSource agentName declaredPrincipalId job
 
     buildSinkIntent capturedTraceContext workflowId now (ordinal, sink) = do
       let kind = sinkKindOf sink
-      Directory.lifecycleAdmission directoryHandle declaredPrincipalId agentName >>= \case
+      Directory.identityLifecycleAdmission directoryHandle identity >>= \case
         Left reason -> pure (SinkResult kind (SkippedLifecycle reason), Nothing)
-        Right resolvedPrincipalId ->
-          checkGrant grantSource (AgentIdentity agentName) kind <&> \case
+        Right () ->
+          checkGrant grantSource identity kind <&> \case
             Left (Denied reason) ->
               (SinkResult kind (DeniedOutcome reason), Nothing)
             Right () ->
@@ -165,7 +200,7 @@ enqueueSinkIntents directoryHandle grantSource agentName declaredPrincipalId job
                   intent =
                     SinkIntent
                       { agent = agentName,
-                        principalId = resolvedPrincipalId,
+                        identity,
                         runId = runIdText,
                         ordinal,
                         occurredAt = Just jobOccurredAt,
@@ -190,7 +225,7 @@ enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   DirectoryHandle ->
   GrantSource ->
-  Maybe Text ->
+  AgentIdentity ->
   StepName ->
   Text ->
   Text ->
@@ -201,11 +236,11 @@ enqueueSinkIntentStep ::
   Sink ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output = do
+enqueueSinkIntentStep directoryHandle grantSource identity stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now)
+  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now)
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do
@@ -228,7 +263,7 @@ enqueueSinkIntentStep directoryHandle grantSource declaredPrincipalId stepName a
 prepareSinkIntent ::
   DirectoryHandle ->
   GrantSource ->
-  Maybe Text ->
+  AgentIdentity ->
   WorkflowId ->
   StepName ->
   Text ->
@@ -241,14 +276,14 @@ prepareSinkIntent ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now = do
+prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now = do
   capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
       messageId = unWorkflowId workflowId <> ":" <> unStepName stepName
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
       enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
-  Directory.lifecycleAdmission directoryHandle declaredPrincipalId agentName >>= \case
+  Directory.identityLifecycleAdmission directoryHandle identity >>= \case
     Left reason ->
       pure
         PreparedSinkIntent
@@ -256,8 +291,8 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
             outboxMessage = Nothing,
             deliveryReceipt = Nothing
           }
-    Right resolvedPrincipalId ->
-      checkGrant grantSource (AgentIdentity agentName) kind <&> \case
+    Right () ->
+      checkGrant grantSource identity kind <&> \case
         Left (Denied reason) ->
           PreparedSinkIntent
             { sinkResult = deniedResult reason,
@@ -269,7 +304,7 @@ prepareSinkIntent directoryHandle grantSource declaredPrincipalId workflowId ste
               intent =
                 SinkIntent
                   { agent = agentName,
-                    principalId = resolvedPrincipalId,
+                    identity,
                     runId = runIdText,
                     ordinal,
                     occurredAt,
