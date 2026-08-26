@@ -39,8 +39,8 @@ This section must always reflect the actual current state of the work.
   has landed; re-check Kikan C16 plans 25/28/29, Kikan IR-5, and the final
   Shikumi ToolEnv seam.
 - [x] (2026-08-26T14:40:56Z) M1: define a fail-closed `EvidenceReader`, pinned response types, and provenance/content validation.
-- [ ] M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
-- [ ] M2: accept prior validated resolutions as evidence without reading Kioku directly.
+- [x] (2026-08-26T14:50:55Z) M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
+- [x] (2026-08-26T14:50:55Z) M2: accept prior validated resolutions as evidence without reading Kioku directly.
 - [ ] M3: add deterministic fixture repositories, a stub reader, redaction/limit tests, and incomplete-evidence cases.
 - [ ] Final: focused evidence tests and `cabal test all` pass without live network access.
 
@@ -112,6 +112,19 @@ Record every decision made while working on the plan.
   acquisition needs specialist-readable bytes without widening or duplicating that wire contract.
   Date: 2026-08-26
 
+- Decision: Make `DependencyPinResolver` a pure interpreter from validated target path/byte pairs
+  and one `RegisteredUpstreamProject` to a mutable upstream ref plus required paths.
+  Rationale: manifest syntax belongs to each package ecosystem, while this module owns the invariant
+  that the returned ref is resolved once and only its resulting full SHA reaches content reads.
+  Date: 2026-08-26
+
+- Decision: A prior accepted or narrowed resolution applies only when every non-empty applicability
+  dimension covers the current target; rejected resolutions supplied by the caller remain audit
+  evidence, and superseded or out-of-scope guidance is excluded.
+  Rationale: an applicability dimension narrows rather than broadens another dimension, and rejected
+  evidence remains useful to prevent a specialist from repeating a disproven argument.
+  Date: 2026-08-26
+
 
 ## Outcomes & Retrospective
 
@@ -122,6 +135,10 @@ Compare the result against the original purpose.
   bounded limits, redaction rules, and fail-closed blob/diff validation. The focused command from
   this plan passes 10 tests covering success, provenance, revision, path, hash, size, and count
   limits; no test or implementation path performs network or host-repository IO.
+- Milestone 2 added judgment-free acquisition across target diffs/blobs, one-revision registered
+  practice references, compatible upstream selections, and caller-validated prior resolutions.
+  The focused suite passes 13 tests, including a complete T2/P1/U2 bundle, mixed-reference rejection,
+  incompatible-version handling, and exclusion of out-of-scope or superseded guidance.
 
 
 ## Context and Orientation

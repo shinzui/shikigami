@@ -24,24 +24,44 @@ module Shikigami.PracticeReview.Evidence
     EvidenceProblem (..),
     EvidenceSource (..),
     ValidatedPinnedDiff (..),
+    UpstreamSelection (..),
+    DependencyPinResolver (..),
+    EvidenceCompleteness (..),
+    EvidenceBundle (..),
     validatePinnedContent,
     validatePinnedDiff,
+    acquireEvidence,
   )
 where
 
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
+import Data.Either (partitionEithers)
 import Data.Generics.Labels ()
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.Encoding.Error qualified as TextEncodingError
 import Shikigami.PracticeReview
-  ( ContentHash (..),
+  ( Applicability (..),
+    ContentHash (..),
     ContentReference (..),
     EvidenceId (..),
     EvidenceItem (..),
     EvidenceRole (..),
+    PracticeAdoptionBinding (..),
+    PracticeReviewResolution (..),
+    PracticeReviewTrigger (..),
     ProjectRef (..),
+    RegisteredPracticeReference (..),
+    RegisteredUpstreamProject (..),
+    ResolutionOutcome (..),
+    RevisionRange (..),
+    ValidatedPracticeReviewResolution,
+    ValidatedPracticeReviewTrigger,
+    validatedResolutionValue,
+    validatedTriggerValue,
   )
 import Shikigami.Prelude
 import Shikigami.Repository
@@ -237,7 +257,9 @@ data EvidenceProblem
   | InvalidDeclaredSize !Text !Int !Bool
   | ContentSizeMismatch !Text !Int !Int !Bool
   | EvidenceLimitExceeded !Text !Int !Int !Bool
+  | InvalidGrepMatch !Text !Int
   | MixedReferenceRevisions !RepositoryId ![Text]
+  | ResolvedRepositoryMismatch !RepositoryId !RepositoryId
   | IncompatibleUpstreamVersion !Text !Text
   | MissingRequiredEvidence !Text !Text
   deriving stock (Eq, Show, Generic)
@@ -261,6 +283,37 @@ data ValidatedPinnedDiff = ValidatedPinnedDiff
     contentHash :: !ContentHash,
     mirrorObservedAt :: !UTCTime,
     excerpt :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | The mutable upstream ref selected from a target dependency pin and the
+-- pinned paths that become required after that ref is resolved once.
+data UpstreamSelection = UpstreamSelection
+  { mutableRef :: !Text,
+    paths :: ![RelativePath]
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Pure dependency-pin interpretation supplied by the caller. The inputs are
+-- validated target paths and their exact bytes; the resolver may parse the
+-- repository's own manifest format without coupling this module to Cabal,
+-- NPM, or another package ecosystem.
+newtype DependencyPinResolver = DependencyPinResolver
+  { resolvePin :: RegisteredUpstreamProject -> [(RelativePath, ByteString)] -> Either Text UpstreamSelection
+  }
+
+data EvidenceCompleteness = Complete | Incomplete
+  deriving stock (Eq, Show, Generic)
+
+-- | All evidence available for adjudication. Successful sources remain when a
+-- required sibling fails so the Flow can explain an unresolved result.
+data EvidenceBundle = EvidenceBundle
+  { target :: ![EvidenceSource],
+    references :: ![EvidenceSource],
+    upstream :: ![EvidenceSource],
+    priorResolutions :: ![PracticeReviewResolution],
+    problems :: ![EvidenceProblem],
+    completeness :: !EvidenceCompleteness
   }
   deriving stock (Eq, Show, Generic)
 
@@ -332,6 +385,371 @@ validatePinnedDiff limits requestedRepository requestedBase requestedHead reques
         mirrorObservedAt = response ^. #provenance . #mirrorObservedAt,
         excerpt = renderExcerpt limits (response ^. #bytes)
       }
+
+data ReadResult = ReadResult
+  { source :: !EvidenceSource,
+    response :: !PinnedContent
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Acquire all target, registered-reference, compatible-upstream, and
+-- caller-supplied prior-resolution evidence. This function performs no
+-- persistence and emits no verdict; every required failure is returned as
+-- data in an incomplete bundle.
+acquireEvidence :: EvidenceLimits -> EvidenceReader -> DependencyPinResolver -> ValidatedPracticeReviewTrigger -> PracticeAdoptionBinding -> [ValidatedPracticeReviewResolution] -> IO EvidenceBundle
+acquireEvidence limits reader pinResolver validatedTrigger binding validatedPriorResolutions = do
+  let trigger = validatedTriggerValue validatedTrigger
+      targetProject = trigger ^. #target
+      targetRange = trigger ^. #targetRange
+      targetRef =
+        RepoRef
+          { repository = targetProject ^. #repository,
+            revision = targetRange ^. #head
+          }
+  (diffPaths, diffProblems) <- acquireTargetDiff limits reader targetProject targetRange
+  let (targetPaths, targetLimitProblems) =
+        boundPaths limits "target-paths" ((trigger ^. #changedDecisionPaths) <> diffPaths)
+  targetReads <- traverse (readRequiredSource limits reader TargetEvidence targetProject targetRef) targetPaths
+  let (targetProblems, successfulTargetReads) = partitionEithers targetReads
+  (referenceReads, referenceProblems) <- acquireReferenceEvidence limits reader binding
+  (upstreamReads, upstreamProblems) <- acquireUpstreamEvidence limits reader pinResolver binding successfulTargetReads
+  let allProblems =
+        diffProblems
+          <> targetLimitProblems
+          <> targetProblems
+          <> referenceProblems
+          <> upstreamProblems
+      retainedPriorResolutions = selectPriorResolutions trigger binding targetPaths validatedPriorResolutions
+  pure
+    EvidenceBundle
+      { target = source <$> successfulTargetReads,
+        references = source <$> dedupeReads referenceReads,
+        upstream = source <$> dedupeReads upstreamReads,
+        priorResolutions = retainedPriorResolutions,
+        problems = allProblems,
+        completeness = if null allProblems then Complete else Incomplete
+      }
+
+acquireTargetDiff :: EvidenceLimits -> EvidenceReader -> ProjectRef -> RevisionRange -> IO ([RelativePath], [EvidenceProblem])
+acquireTargetDiff limits reader project range =
+  case range ^. #before of
+    Nothing -> pure ([], [])
+    Just base -> do
+      let repository = project ^. #repository
+          targetHead = range ^. #head
+      result <- readDiff reader repository base targetHead Nothing
+      case result of
+        Left failure ->
+          pure
+            ( [],
+              [ReadFailed repository (Just (revisionText targetHead)) Nothing failure True]
+            )
+        Right response ->
+          case validatePinnedDiff limits repository base targetHead Nothing response of
+            Left problem -> pure ([], [problem])
+            Right validated -> pure (validated ^. #changedPaths, [])
+
+readRequiredSource :: EvidenceLimits -> EvidenceReader -> EvidenceRole -> ProjectRef -> RepoRef -> RelativePath -> IO (Either EvidenceProblem ReadResult)
+readRequiredSource limits reader role project requested path = do
+  result <- readBlob reader requested path
+  pure case result of
+    Left failure ->
+      Left
+        ( ReadFailed
+            (requested ^. #repository)
+            (Just (revisionText (requested ^. #revision)))
+            (Just (relativePathText path))
+            failure
+            True
+        )
+    Right response ->
+      ReadResult <$> validatePinnedContent limits role project requested path response <*> pure response
+
+acquireReferenceEvidence :: EvidenceLimits -> EvidenceReader -> PracticeAdoptionBinding -> IO ([ReadResult], [EvidenceProblem])
+acquireReferenceEvidence limits reader binding = do
+  let registeredReferences = binding ^. #references
+      revisionsByRepository =
+        Map.fromListWith
+          Set.union
+          [ ( registered ^. #provenance . #repository,
+              Set.singleton (revisionText (registered ^. #provenance . #revision))
+            )
+          | registered <- registeredReferences
+          ]
+      mixed = Map.filter ((> 1) . Set.size) revisionsByRepository
+      mixedProblems =
+        [ MixedReferenceRevisions repository (Set.toList revisions)
+        | (repository, revisions) <- Map.toList mixed
+        ]
+      eligible =
+        filter
+          (\registered -> Map.notMember (registered ^. #provenance . #repository) mixed)
+          registeredReferences
+  acquired <- traverse (acquireRegisteredReference limits reader) eligible
+  pure
+    ( concatMap fst acquired,
+      mixedProblems <> concatMap snd acquired
+    )
+
+acquireRegisteredReference :: EvidenceLimits -> EvidenceReader -> RegisteredPracticeReference -> IO ([ReadResult], [EvidenceProblem])
+acquireRegisteredReference limits reader registered = do
+  let project = registered ^. #project
+      reference = registered ^. #provenance
+  acquired <-
+    traverse
+      (acquireReferenceDocument limits reader project reference)
+      (registered ^. #documentIds)
+  pure (concatMap fst acquired, concatMap snd acquired)
+
+acquireReferenceDocument :: EvidenceLimits -> EvidenceReader -> ProjectRef -> RepoRef -> Text -> IO ([ReadResult], [EvidenceProblem])
+acquireReferenceDocument limits reader project reference documentId =
+  case mkRelativePath documentId of
+    Right directPath -> do
+      direct <- readBlob reader reference directPath
+      case direct of
+        Right response ->
+          case validatePinnedContent limits ReferenceEvidence project reference directPath response of
+            Left problem -> pure ([], [problem])
+            Right source -> pure ([ReadResult {source, response}], [])
+        Left ContentNotFound {} -> discoverAndRead
+        Left failure ->
+          pure
+            ( [],
+              [ ReadFailed
+                  (reference ^. #repository)
+                  (Just (revisionText (reference ^. #revision)))
+                  (Just (relativePathText directPath))
+                  failure
+                  True
+              ]
+            )
+    Left _ -> discoverAndRead
+  where
+    discoverAndRead = do
+      (discoveredPaths, discoveryProblems) <- discoverReferencePaths limits reader reference documentId
+      let (boundedDiscoveredPaths, pathProblems) = boundPaths limits "reference-paths" discoveredPaths
+      readResults <- traverse (readRequiredSource limits reader ReferenceEvidence project reference) boundedDiscoveredPaths
+      let (readProblems, successes) = partitionEithers readResults
+          missingProblems =
+            [MissingRequiredEvidence "reference-document" documentId | null boundedDiscoveredPaths]
+      pure
+        ( successes,
+          discoveryProblems <> pathProblems <> readProblems <> missingProblems
+        )
+
+discoverReferencePaths :: EvidenceLimits -> EvidenceReader -> RepoRef -> Text -> IO ([RelativePath], [EvidenceProblem])
+discoverReferencePaths limits reader reference documentId =
+  go 0 0 Nothing Set.empty [] []
+  where
+    maximumPages = countLimit (grepPages limits)
+    maximumMatches = countLimit (grepMatches limits)
+    evidenceQuery = EvidenceQuery {query = documentId, path = Nothing}
+
+    go pagesRead matchesRead cursor seenCursors collected collectedProblems
+      | pagesRead >= maximumPages =
+          pure
+            ( collected,
+              collectedProblems <> [EvidenceLimitExceeded "grep-pages" maximumPages (pagesRead + 1) True]
+            )
+      | matchesRead >= maximumMatches =
+          pure
+            ( collected,
+              collectedProblems <> [EvidenceLimitExceeded "grep-matches" maximumMatches (matchesRead + 1) True]
+            )
+      | otherwise = do
+          let remaining = maximumMatches - matchesRead
+              request = PageRequest {first = min 100 remaining, cursor}
+          result <- grep reader reference evidenceQuery request
+          case result of
+            Left failure ->
+              pure
+                ( collected,
+                  collectedProblems
+                    <> [ ReadFailed
+                           (reference ^. #repository)
+                           (Just (revisionText (reference ^. #revision)))
+                           Nothing
+                           failure
+                           True
+                       ]
+                )
+            Right page ->
+              case validateProvenance True reference (page ^. #provenance) of
+                Left problem -> pure (collected, collectedProblems <> [problem])
+                Right () -> do
+                  let pageMatches = page ^. #matches
+                      (acceptedMatches, matchLimitProblems) =
+                        if length pageMatches <= remaining
+                          then (pageMatches, [])
+                          else
+                            ( take remaining pageMatches,
+                              [EvidenceLimitExceeded "grep-matches" maximumMatches (matchesRead + length pageMatches) True]
+                            )
+                      validatedPaths = validateMatch <$> acceptedMatches
+                      (matchProblems, paths) = partitionEithers validatedPaths
+                      next = page ^. #nextCursor
+                      nextProblems = collectedProblems <> matchLimitProblems <> matchProblems
+                      nextCollected = collected <> paths
+                      nextMatchesRead = matchesRead + length acceptedMatches
+                      nextPagesRead = pagesRead + 1
+                  case next of
+                    Nothing -> pure (uniquePaths nextCollected, nextProblems)
+                    Just nextCursor
+                      | Set.member nextCursor seenCursors ->
+                          pure
+                            ( uniquePaths nextCollected,
+                              nextProblems
+                                <> [ ReadFailed
+                                       (reference ^. #repository)
+                                       (Just (revisionText (reference ^. #revision)))
+                                       Nothing
+                                       (InvalidContentRequest "content plane repeated a grep cursor")
+                                       True
+                                   ]
+                            )
+                      | nextPagesRead >= maximumPages ->
+                          pure
+                            ( uniquePaths nextCollected,
+                              nextProblems <> [EvidenceLimitExceeded "grep-pages" maximumPages (nextPagesRead + 1) True]
+                            )
+                      | nextMatchesRead >= maximumMatches ->
+                          pure
+                            ( uniquePaths nextCollected,
+                              nextProblems <> [EvidenceLimitExceeded "grep-matches" maximumMatches (nextMatchesRead + 1) True]
+                            )
+                      | otherwise ->
+                          go nextPagesRead nextMatchesRead (Just nextCursor) (Set.insert nextCursor seenCursors) nextCollected nextProblems
+
+    validateMatch match
+      | match ^. #lineNumber < 1 = Left (InvalidGrepMatch (match ^. #path) (match ^. #lineNumber))
+      | otherwise = validatePath True (match ^. #path)
+
+acquireUpstreamEvidence :: EvidenceLimits -> EvidenceReader -> DependencyPinResolver -> PracticeAdoptionBinding -> [ReadResult] -> IO ([ReadResult], [EvidenceProblem])
+acquireUpstreamEvidence limits reader pinResolver binding targetReads = do
+  let pinInputs =
+        [ ( result ^. #source . #citation . #content . #path,
+            result ^. #response . #bytes
+          )
+        | result <- targetReads
+        ]
+  acquired <-
+    traverse
+      (acquireRegisteredUpstream limits reader pinResolver pinInputs)
+      (binding ^. #upstreamProjects)
+  pure (concatMap fst acquired, concatMap snd acquired)
+
+acquireRegisteredUpstream :: EvidenceLimits -> EvidenceReader -> DependencyPinResolver -> [(RelativePath, ByteString)] -> RegisteredUpstreamProject -> IO ([ReadResult], [EvidenceProblem])
+acquireRegisteredUpstream limits reader pinResolver pinInputs registered =
+  case resolvePin pinResolver registered pinInputs of
+    Left reason -> pure ([], [IncompatibleUpstreamVersion dependency reason])
+    Right selection
+      | Text.null (Text.strip (selection ^. #mutableRef)) ->
+          pure ([], [IncompatibleUpstreamVersion dependency "dependency pin resolved to an empty upstream ref"])
+      | null (selection ^. #paths) ->
+          pure ([], [IncompatibleUpstreamVersion dependency "dependency pin selected no required upstream paths"])
+      | otherwise -> do
+          resolved <- resolveRef reader upstreamRepository (selection ^. #mutableRef)
+          case resolved of
+            Left failure ->
+              pure
+                ( [],
+                  [ IncompatibleUpstreamVersion
+                      dependency
+                      ("resolve-ref failed: " <> Text.pack (show failure))
+                  ]
+                )
+            Right reference
+              | reference ^. #repository /= upstreamRepository ->
+                  pure
+                    ( [],
+                      [ResolvedRepositoryMismatch upstreamRepository (reference ^. #repository)]
+                    )
+              | otherwise -> do
+                  let (upstreamPaths, pathProblems) = boundPaths limits "upstream-paths" (selection ^. #paths)
+                  readResults <- traverse (readRequiredSource limits reader UpstreamEvidence project reference) upstreamPaths
+                  let (readProblems, successes) = partitionEithers readResults
+                  pure (successes, pathProblems <> readProblems)
+  where
+    dependency = registered ^. #dependency
+    project = registered ^. #project
+    upstreamRepository = project ^. #repository
+
+selectPriorResolutions :: PracticeReviewTrigger -> PracticeAdoptionBinding -> [RelativePath] -> [ValidatedPracticeReviewResolution] -> [PracticeReviewResolution]
+selectPriorResolutions trigger binding targetPaths =
+  mapMaybe select
+  where
+    select validated =
+      let resolution = validatedResolutionValue validated
+       in case resolution ^. #outcome of
+            Rejected -> Just resolution
+            Accepted -> guiding resolution
+            Narrowed -> guiding resolution
+            Superseded -> Nothing
+
+    guiding resolution =
+      case resolution ^. #resultingApplicability of
+        Just applicability
+          | applicabilityCovers trigger binding targetPaths applicability -> Just resolution
+        _ -> Nothing
+
+applicabilityCovers :: PracticeReviewTrigger -> PracticeAdoptionBinding -> [RelativePath] -> Applicability -> Bool
+applicabilityCovers trigger binding targetPaths applicability =
+  projectCovered && pathsCovered && dependenciesCovered && practiceCovered
+  where
+    scopedProjects = applicability ^. #projects
+    scopedPaths = applicability ^. #paths
+    scopedDependencies = normalizeName <$> (applicability ^. #dependencies)
+    scopedPractices = applicability ^. #practices
+    targetRepository = trigger ^. #target . #repository
+    targetDependencies = normalizeName . (^. #dependency) <$> (binding ^. #upstreamProjects)
+    targetPractice = binding ^. #practice
+
+    projectCovered =
+      null scopedProjects
+        || any ((== targetRepository) . (^. #repository)) scopedProjects
+    pathsCovered =
+      null scopedPaths
+        || any (\scope -> any (pathsOverlap scope) targetPaths) scopedPaths
+    dependenciesCovered =
+      null scopedDependencies
+        || any (`elem` targetDependencies) scopedDependencies
+    practiceCovered = null scopedPractices || targetPractice `elem` scopedPractices
+
+pathsOverlap :: RelativePath -> RelativePath -> Bool
+pathsOverlap left right = pathContains left right || pathContains right left
+
+pathContains :: RelativePath -> RelativePath -> Bool
+pathContains parent child =
+  let parentText = relativePathText parent
+      childText = relativePathText child
+   in parentText == childText || (parentText <> "/") `Text.isPrefixOf` childText
+
+normalizeName :: Text -> Text
+normalizeName = Text.toCaseFold . Text.strip
+
+boundPaths :: EvidenceLimits -> Text -> [RelativePath] -> ([RelativePath], [EvidenceProblem])
+boundPaths limits label rawPaths =
+  let paths = uniquePaths rawPaths
+      maximumPaths = countLimit (pathCount limits)
+   in if length paths <= maximumPaths
+        then (paths, [])
+        else
+          ( take maximumPaths paths,
+            [EvidenceLimitExceeded label maximumPaths (length paths) True]
+          )
+
+uniquePaths :: [RelativePath] -> [RelativePath]
+uniquePaths = uniqueOn relativePathText
+
+dedupeReads :: [ReadResult] -> [ReadResult]
+dedupeReads = uniqueOn (^. #source . #citation . #evidenceId)
+
+uniqueOn :: (Ord key) => (value -> key) -> [value] -> [value]
+uniqueOn key = reverse . snd . foldl step (Set.empty, [])
+  where
+    step (seen, values) value
+      | Set.member (key value) seen = (seen, values)
+      | otherwise = (Set.insert (key value) seen, value : values)
 
 validateProvenance :: Bool -> RepoRef -> PinnedProvenance -> Either EvidenceProblem ()
 validateProvenance required RepoRef {repository = expectedRepository, revision = expectedRevision} PinnedProvenance {repository = actualRepository, revision = actualRevision} = do
