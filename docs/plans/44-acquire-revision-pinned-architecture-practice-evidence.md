@@ -42,7 +42,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-26T14:50:55Z) M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
 - [x] (2026-08-26T14:50:55Z) M2: accept prior validated resolutions as evidence without reading Kioku directly.
 - [x] (2026-08-26T15:01:09Z) M3: add deterministic fixture repositories, a stub reader, redaction/limit tests, and incomplete-evidence cases.
-- [ ] Final: focused evidence tests and `cabal test all` pass without live network access.
+- [x] (2026-08-26T15:04:26Z) Final: focused evidence tests and `cabal test all` pass without live network access.
 
 
 ## Surprises & Discoveries
@@ -72,6 +72,10 @@ implementation. Provide concise evidence.
   checking nested `.git` directories into this repository. Fixed authors, timestamps, messages,
   paths, and bytes produced stable full commit and blob ids, while parallel snapshot files let the
   ordinary stub tests consume the exact bytes without invoking Git.
+- The generic ADR workflow mentions `just check-adr`, but this repository has no such recipe and
+  intentionally keeps `docs/adr/` as an unprofiled plain-Markdown corpus. `mori show --full`
+  confirms that only `docs/improvement-requests/` is an OKF bundle, so no OKF ADR validation or log
+  update applies; pre-commit formatting and the full workspace suite are the available checks.
 
 
 ## Decision Log
@@ -140,6 +144,12 @@ Record every decision made while working on the plan.
   response or excerpt field, making accidental source/secret serialization structurally harder.
   Date: 2026-08-26
 
+- Decision: Distill the landed reader and fail-closed provenance boundary into existing ADR 0008
+  rather than create a second decision record.
+  Rationale: ADR 0008 already owns shared repository provenance vocabulary and explicitly named
+  this plan's reader as its next consumer; implementation completes that same decision.
+  Date: 2026-08-26
+
 
 ## Outcomes & Retrospective
 
@@ -158,6 +168,13 @@ Compare the result against the original purpose.
   blob ids, snapshot-backed in-memory reads, and acquisition-level failure tests. The focused suite
   passes 21 tests and now proves P1-to-P2 isolation, added-target behavior, stale tags, P2/P1 stamp
   mismatch, missing required content, pagination ceilings, redaction, and log-safe summaries.
+- Final outcome: Plan 44 is complete. `Shikigami.PracticeReview.Evidence` exposes a reusable pinned
+  reader seam, bounded acquisition, typed incomplete bundles, pure dependency-pin selection,
+  scope-aware prior-resolution reuse, and a log-safe summary. The focused 21-case suite and
+  `nix develop -c cabal test all --test-show-details=direct` both exit zero without live network
+  access. The deliberate remaining gap is the production C16/Shikumi adapter, still owned by
+  `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`; no ambient Git or filesystem fallback
+  was introduced.
 
 
 ## Context and Orientation
@@ -167,13 +184,16 @@ The trigger/verdict vocabulary comes from
 content plane: `resolve-ref` accepts a branch/tag and returns `RepoRef`; all tree/blob/log/grep
 routes require a full 40-character SHA; diff requires full base/head SHAs; and every successful
 response carries `X-Content-Provenance: <repoId>@<revision>`. Blob responses also carry their
-Git object id and size. The relevant source documents are Kikan plans 25, 28, and 29 at the
-Mori-located project path `/Users/shinzui/Keikaku/bokuno/kikan/docs/plans/`.
+Git object id and size. The relevant source documents are
+`mori://shinzui/kikan/plans/25-author-contract-c16-the-repo-content-plane-and-its-provenance-stamp`,
+`mori://shinzui/kikan/plans/28-author-mori-s-content-plane-revision-pinning-bare-mirrors-and-the-repository-content-api`,
+and
+`mori://shinzui/kikan/plans/29-author-the-content-plane-toolenv-and-ephemeral-worktrees-for-shikumi-and-shikigami`.
 
 Kikan plan 29 authors a Shikumi `ToolEnv` backed by the content plane and threads it into
 Shikigami's `BehaviorEnv`. That work is not present in the current tree. This plan defines
-`EvidenceReader` as a record of the minimum read operations and later adapts the landed
-ToolEnv/client. Tests use an in-memory reader; production code must not shell out to local
+`EvidenceReader` as a record of the minimum read operations; a later plan can adapt the landed
+ToolEnv/client. Tests use an in-memory reader; a future production adapter must not shell out to local
 Git or read arbitrary host paths.
 
 An "evidence bundle" is a bounded set of validated excerpts and metadata, not a prompt. It
@@ -184,7 +204,7 @@ contradiction.
 
 ## Plan of Work
 
-Milestone 1 creates `Shikigami.PracticeReview.Evidence` in the plan-36 core package. Define a
+Milestone 1 created `Shikigami.PracticeReview.Evidence` in the plan-36 core package. It defines a
 record-of-functions `EvidenceReader` for pinned blob, diff, tree/grep discovery, and ref
 resolution. The production adapter delegates to the final C16/Shikumi client; the stub returns
 fixture values. `validatePinnedContent` checks requested/returned `repoId` and revision,
@@ -299,23 +319,38 @@ review needs the same revision-pinned read that an architecture-practice review 
 
 ## Interfaces and Dependencies
 
-The implementation exposes this shape, adjusted only to match the final C16 client types:
+The completed client-independent implementation exposes this shape. The eventual C16 adapter must
+implement it without changing the domain invariants:
 
 ```haskell
 data EvidenceReader = EvidenceReader
   { resolveRef :: !(RepositoryId -> Text -> IO (Either EvidenceReadError RepoRef))
   , readBlob :: !(RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent))
   , readDiff :: !(RepositoryId -> Revision -> Revision -> Maybe RelativePath -> IO (Either EvidenceReadError PinnedDiff))
-  , grep :: !(RepoRef -> EvidenceQuery -> IO (Either EvidenceReadError [PinnedMatch]))
+  , readTree :: !(RepoRef -> Maybe RelativePath -> PageRequest -> IO (Either EvidenceReadError PinnedTreePage))
+  , grep :: !(RepoRef -> EvidenceQuery -> PageRequest -> IO (Either EvidenceReadError PinnedMatchPage))
+  }
+
+data EvidenceSource = EvidenceSource
+  { citation :: !EvidenceItem
+  , mirrorObservedAt :: !UTCTime
+  , excerpt :: !Text
   }
 
 data EvidenceBundle = EvidenceBundle
-  { target :: ![EvidenceItem]
-  , references :: ![EvidenceItem]
-  , upstream :: ![EvidenceItem]
+  { target :: ![EvidenceSource]
+  , references :: ![EvidenceSource]
+  , upstream :: ![EvidenceSource]
   , priorResolutions :: ![PracticeReviewResolution]
   , problems :: ![EvidenceProblem]
   , completeness :: !EvidenceCompleteness
+  }
+
+newtype DependencyPinResolver = DependencyPinResolver
+  { resolvePin
+      :: RegisteredUpstreamProject
+      -> [(RelativePath, ByteString)]
+      -> Either Text UpstreamSelection
   }
 
 acquireEvidence
@@ -328,14 +363,19 @@ acquireEvidence
   -> IO EvidenceBundle
 ```
 
-All records use direct strict fields. External dependencies are Kikan C16 plans
-25/28/29, Kikan IR-5, and the final Shikumi ToolEnv/content client discovered
-with Mori. Do not select dependency bounds
+All records use direct strict fields. External dependencies are the three canonical Kikan C16 plan
+URIs named in Context and Orientation, `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`,
+and the final Shikumi ToolEnv/content client discovered with Mori. Do not select dependency bounds
 from the local corpus: when implementation adds a package dependency, verify its released
 version against the authoritative registry and upstream tags as required by `AGENTS.md`.
 
 
 ## Revision Notes
+
+- 2026-08-26: Implemented all milestones. Added the bounded reader/acquisition module, deterministic
+  Git-history and snapshot fixtures, 21 focused cases, full workspace validation, and ADR 0008
+  distillation. Updated the interface sketch and outcomes to describe the landed client-independent
+  seam while retaining Kikan IR-5 as the explicit live-adapter gap.
 
 - 2026-08-05: Added a Portfolio Reconciliation note declaring the `EvidenceReader` seam and its
   `RepositoryId`/`Revision`/`RepoRef`/`PinnedDiff` vocabulary portfolio-shared rather than private to

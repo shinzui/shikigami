@@ -42,9 +42,16 @@ Concretely:
 * `Revision` has a private constructor. `mkRevision` and its `FromJSON` instance accept exactly
   40 lowercase hexadecimal characters, matching the current Mori content-plane wire contract.
 * `RepoRef` pairs `RepositoryId` with `Revision`; it is the provenance identity carried by
-  triggers, evidence, and future content-plane readers.
+  triggers, evidence, and content-plane readers.
 * `RelativePath` has a private constructor. It normalizes redundant POSIX separators and `.`
   segments, and rejects absolute paths, backslashes, NUL bytes, empty paths, and `..` traversal.
+* `Shikigami.PracticeReview.Evidence.EvidenceReader` is the shared read boundary. Blob, tree,
+  grep, and diff operations accept only typed pinned revisions; `resolveRef` is the sole operation
+  that accepts a mutable branch, tag, or other ref, and callers use only its returned `RepoRef`.
+* Raw content-plane responses remain untrusted until their repository, full revision, normalized
+  path, content hash, declared byte count, and configured bounds match the request. A successful
+  `EvidenceSource` wraps the existing verdict-ready `EvidenceItem` citation with only a bounded,
+  redacted excerpt and the mirror-observation timestamp.
 * `Shikigami.Attestation.Reviewed` imports and re-exports the moved `RepositoryId` and `Revision`
   names so existing imports keep compiling. New code imports `Shikigami.Repository` directly.
 * Attestation `FullCommit` remains separate. Broadening Mori's revision format requires a
@@ -78,17 +85,21 @@ Practice-review triggers and evidence now share one provenance representation, a
 attestation JSON is unchanged because `RepositoryId` keeps the same transparent text encoding;
 its focused compatibility tests continue to pass.
 
-`docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` must define
-`PinnedDiff` and `EvidenceReader` over `RepositoryId`, `Revision`, `RepoRef`, and `RelativePath`
-from `Shikigami.Repository`. Later consumers must not declare parallel versions.
+`Shikigami.PracticeReview.Evidence` now defines `PinnedDiff` and `EvidenceReader` over
+`RepositoryId`, `Revision`, `RepoRef`, and `RelativePath` from `Shikigami.Repository`. Later
+consumers must import this seam rather than declare parallel versions. A read failure or validation
+refusal remains structured incomplete evidence; the acquisition layer does not manufacture a
+practice verdict from absent bytes.
 
 Content-plane payloads fail during decoding when a revision is a branch, tag, abbreviation,
 uppercase SHA, or future 64-character hash. If Mori adopts Git SHA-256, producers and consumers
 need an explicit schema/version rollout with new fixtures. Attestation does not wait for that
 rollout because its separate `FullCommit` already supports both full hash widths.
 
-The repository module is deliberately pure and carries no Mori client, database, Keiro workflow,
-or model-provider dependency. Live resolution and reads remain adapter responsibilities.
+The repository and evidence modules are deliberately client-independent and carry no Mori client,
+database, Keiro workflow, or model-provider dependency. The deterministic stub and fixture histories
+can therefore prove the boundary before a live adapter exists. Live resolution and reads remain
+adapter responsibilities tracked by `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
 
 ## References
