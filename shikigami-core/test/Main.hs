@@ -43,6 +43,7 @@ import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
+import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
@@ -106,6 +107,7 @@ main =
           KanmonClientSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
+          PracticeReviewEvidenceSpec.tests,
           PracticeReviewMemorySpec.tests,
           PracticeReviewSpec.tests,
           ProfileResolutionSpec.tests,

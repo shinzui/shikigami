@@ -35,10 +35,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Prerequisite: `docs/plans/43-define-architecture-practice-review-contracts.md`
+- [x] (2026-08-26T14:30:41Z) Prerequisite: `docs/plans/43-define-architecture-practice-review-contracts.md`
   has landed; re-check Kikan C16 plans 25/28/29, Kikan IR-5, and the final
   Shikumi ToolEnv seam.
-- [ ] M1: define a fail-closed `EvidenceReader`, pinned response types, and provenance/content validation.
+- [x] (2026-08-26T14:40:56Z) M1: define a fail-closed `EvidenceReader`, pinned response types, and provenance/content validation.
 - [ ] M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
 - [ ] M2: accept prior validated resolutions as evidence without reading Kioku directly.
 - [ ] M3: add deterministic fixture repositories, a stub reader, redaction/limit tests, and incomplete-evidence cases.
@@ -59,6 +59,15 @@ implementation. Provide concise evidence.
 - Kikan IR-5 now provides the canonical OKF request for the revision-pinned
   content plane and bounded tool environment. The deterministic reader seam
   remains startable while that request is proposed.
+- The prerequisite vocabulary is present in `Shikigami.Repository` and
+  `Shikigami.PracticeReview`, but the portfolio reconciliation's bare "plan 47"
+  no longer names a practice-adoption plan in the current tree; current plan 47 is the completed
+  dependency-cohort upgrade. The needed `PracticeAdoptionBinding` nevertheless landed in plan 43,
+  so there is no missing domain prerequisite.
+- Re-checking the registered upstream sources found no content-plane Haskell implementation in
+  Mori and no revision-pinned operations in Shikumi's `ToolEnv`; the latter still exposes only
+  host filesystem and process operations. Kikan plans 28/29 and IR-5 remain proposed/unimplemented,
+  so a live adapter cannot be added without guessing APIs.
 
 
 ## Decision Log
@@ -90,13 +99,29 @@ Record every decision made while working on the plan.
   request path.
   Date: 2026-07-30
 
+- Decision: Land only the pure `EvidenceReader` contract, acquisition logic, and deterministic
+  stub in this plan; leave the production adapter absent until Kikan IR-5 ships a real C16 client
+  and bounded Shikumi tool seam.
+  Rationale: both registered upstream trees confirm that the required live APIs do not exist, and
+  the plan explicitly forbids ambient Git, host filesystem reads, and guessed ToolEnv APIs.
+  Date: 2026-08-26
+
+- Decision: Keep the plan-43 `EvidenceItem` as the verdict-ready citation and wrap it in
+  `EvidenceSource` for the C16 freshness timestamp plus bounded redacted excerpt.
+  Rationale: the existing public review contract already owns citation identity and JSON shape;
+  acquisition needs specialist-readable bytes without widening or duplicating that wire contract.
+  Date: 2026-08-26
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Milestone 1 established the client-independent reader seam, raw pinned response types, positive
+  bounded limits, redaction rules, and fail-closed blob/diff validation. The focused command from
+  this plan passes 10 tests covering success, provenance, revision, path, hash, size, and count
+  limits; no test or implementation path performs network or host-repository IO.
 
 
 ## Context and Orientation
