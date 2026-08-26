@@ -63,13 +63,17 @@ This section must always reflect the actual current state of the work.
       production review-memory integration.
 - [x] (2026-08-26) M3: published typed review/resolution history with Kawa context refs and implemented atomic,
       cross-run Kizashi attention reservation without duplicating delivery state.
-- [ ] M4 (in progress): the migrated-Postgres suite now proves strict authorization, incomplete
-      evidence replay, deterministic resolution replay, semantic attention vectors, and concurrent
-      reservation/outbox coalescing. Extend it across five verdicts, four resolutions, re-review,
-      replay, redelivery, attention coalescing, recorded identity, and read-only authority.
-- [ ] M5: after Kikan IR-5, install the live `EvidenceReader` adapter and prove pinned-content
-      replay. Finish operator/user documentation, Keiro gates, build, and the serialized full
-      test suite.
+- [x] (2026-08-26) M4: completed deterministic end-to-end conformance across five verdicts,
+      both legitimate-exception attention branches, four resolution outcomes, reference-change
+      re-review, replay, semantic attention coalescing, recorded identity, read-only authority,
+      and a real AgentRun specialist execution. The full suite retains delivery retry, unknown
+      outcome, and recorded-principal coverage.
+- [x] (2026-08-26) Completed the deterministic M5 closeout: published operator/user documentation
+      and ADRs, regenerated and checked Keiro facts, passed the additive workflow-evolution gate,
+      built every package, and passed the serialized 801-test repository suite.
+- [ ] External live portion of M5: after Kikan IR-5, install the live `EvidenceReader` adapter,
+      exercise operator provisioning against a deployment, and prove pinned-content replay through
+      the released content plane. No released IR-5 adapter revision exists to record yet.
 
 
 ## Surprises & Discoveries
@@ -136,6 +140,12 @@ transaction as the outbox and receipt. The existing sink intent derived its mess
 workflow step, which differs across runs and made the winning id unknowable until enqueue. A narrow
 intent helper now accepts the already-derived semantic message id; all existing callers retain the
 old wrapper.
+
+Dhall record completion does not permit overriding only the nested `memory.recordPolicy` field in
+an agent manifest. The first serialized full-suite run exposed the partial record as invalid in
+three loader paths. Supplying the complete memory record (`scope`, `recallLimit`, and
+`recordPolicy`) fixed the declaration; the focused 18-test agent-loader suite and the subsequent
+full-suite rerun both pass.
 
 
 ## Decision Log
@@ -241,18 +251,30 @@ old wrapper.
 
 ## Outcomes & Retrospective
 
-Milestones 1 through 3 are implemented. The specialist is a registered, profile-constrained Flow;
-the AgentRun body declares and executes both review patches; evidence, evaluation, memory, history,
-authorized resolution, and attention cross fixed replay boundaries; and one database transaction
-owns semantic reservation, outbox, receipt, and journal append. The focused practice-review suite
-passes 42 tests, the migration contract passes 5 tests, and the fresh/apply-again smoke suite passes
-2 tests. The remaining deterministic work is the broad end-to-end matrix and the serialized full
-repository gates.
+Milestones 1 through 4 and the deterministic closeout are implemented. The specialist is a
+registered, profile-constrained Flow; the AgentRun body declares and executes both review patches;
+evidence, evaluation, memory, history, authorized resolution, and attention cross fixed replay
+boundaries; and one database transaction owns semantic reservation, outbox, receipt, and journal
+append. The user and operator contract is documented in
+`docs/user/architecture-practice-reviews.md`, with supporting updates to the agent, sink, and
+configuration guides and ADRs 0034 and 0035.
 
-The remaining external gap is narrow and explicit: live evidence requires Kikan IR-5. Deterministic
-orchestration, fail-closed production wiring, sink integration, migrations, and end-to-end tests can
-all proceed before it. Update this section after each milestone with commands run, test counts,
-Keiro diff classification, and any scope that remains deferred.
+The focused practice-review suite passes 44 tests, the Kawa adapter group passes 3 tests, the
+agent-loader group passes 18 tests, the migration contract passes 5 tests, and the fresh/apply-again
+migration smoke suite passes 2 tests. `nix develop -c cabal build all` passes. The exact serialized
+`nix develop -c cabal test all -j1 --test-show-details=direct` run passes all 801 tests: 30
+conformance, 29 agent, 15 API, 3 client, 590 core, 2 migration smoke, 5 migration contract, 46
+server, and 81 worker tests. `just keiro-scaffold` leaves generated facts unchanged, and
+`just keiro-gate 8e0df55` classifies `shikigami-practice-review-memory-v1` and
+`shikigami-practice-review-flow-v1` as additive and stored-data replay as neutral.
+
+The only unfinished acceptance is external and remains explicit: live evidence and deployment
+provisioning require the still-proposed
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`. Production therefore installs the
+documented fail-closed unavailable reader; no host-workspace fallback or live-content claim was
+added. The deterministic profile and grants are covered by integration tests and documented
+operator commands, but those commands were not run against a real deployment database. There is
+no exact released Kikan IR-5 revision/version to record until that prerequisite lands.
 
 
 ## Context and Orientation
@@ -770,6 +792,12 @@ local corpus and registered release metadata can change.
 
 
 ## Revision Notes
+
+- 2026-08-26: Implemented milestones 1 through 4 and the deterministic milestone-5 closeout.
+  Recorded the 44-test review matrix, real AgentRun proof, atomic cross-run attention conformance,
+  authorization and resolution coverage, 801-test serialized repository pass, additive Keiro gate,
+  operator/user documentation, and ADRs 0034 and 0035. Left only the live Kikan IR-5 adapter and
+  deployment exercise open, without claiming a released adapter revision.
 
 - 2026-08-26: Rewrote the plan against the current implementation. Preserved the landed router,
   replaced the stub specialist with the only new Flow, collapsed evidence acquisition to one

@@ -18,6 +18,10 @@ in  A.Agent::{
       ]
     , sanctionedProfile = Some
       { profileId = "sanctioned-review", version = Some "1" }
-    , memory.recordPolicy = A.RecordPolicy.Never
+    , memory =
+      { scope = A.MemoryScope.AgentScope
+      , recallLimit = 10
+      , recordPolicy = A.RecordPolicy.Never
+      }
     , sinks = [] : List A.Sink
     }
