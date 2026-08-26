@@ -23,6 +23,7 @@ import Shikigami.Agent.Delegate
     preflightDelegationBatch,
   )
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -93,7 +94,8 @@ parentWorkflowId = WorkflowId "router-parent"
 delegateCtx :: DelegateCtx
 delegateCtx =
   DelegateCtx
-    { delegateDepth = 0,
+    { identity = compatibilityIdentity "router",
+      delegateDepth = 0,
       sessionId = Just "router-session",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,

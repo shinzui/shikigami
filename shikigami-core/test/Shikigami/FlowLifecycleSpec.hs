@@ -33,6 +33,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
@@ -246,7 +247,7 @@ tests =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
                 mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
                 note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
 
@@ -277,7 +278,7 @@ tests =
             tracer <- noopTracer
             session <- genSessionId
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
                 replayedId = WorkflowId "flow-recall-replay"
                 freshId = WorkflowId "flow-recall-fresh"
                 runCount workflowId = runFlowBody appEnv (spikeRuntime session) "at-risk-customer" recallCountFlow workflowId (object [])
@@ -563,20 +564,23 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         )
   where
     flowDecl = flowAgentDecl flowAgent
-    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, sessionId = Nothing}
+    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent flowAgent, sessionId = Nothing}
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowDecl,
           FlowDelegate.context =
             DelegateCtx
-              { delegateDepth = 0,
+              { identity = compatibilityIdentity flowAgent,
+                delegateDepth = 0,
                 sessionId = Just (idText (Approval.currentSession (approval runtime))),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = [flowAgent],
                 delegationBudgetId = Nothing,
                 budgetLimit = defaultDelegationBudget
-              }
+              },
+          FlowDelegate.agents = [flowDecl, flowAgentDecl "web-researcher"],
+          FlowDelegate.directory = disabledDirectoryHandle
         }
     sinkEnv =
       SinkEnv
@@ -642,7 +646,7 @@ fireDueApprovalTimer appEnv = do
 -- field, which @Shikigami.Agent.Run.renderLearning@ stores verbatim.
 acknowledgedMemoryCount :: AppEnv -> IO Int
 acknowledgedMemoryCount appEnv =
-  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "at-risk-customer")) >>= \case
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "at-risk-customer"))) >>= \case
     Right (Right rows) -> pure (length (filter isAcknowledgedNote rows))
     Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
     Left _ -> assertFailure "memory rows should be readable, got a store error"
@@ -666,7 +670,7 @@ assertRecordedId label expected = \case
 -- | Every active memory in the test agent's scope.
 scopeRows :: AppEnv -> IO [MemoryRow]
 scopeRows appEnv =
-  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "at-risk-customer")) >>= \case
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "at-risk-customer"))) >>= \case
     Right (Right rows) -> pure rows
     Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
     Left _ -> assertFailure "memory rows should be readable, got a store error"

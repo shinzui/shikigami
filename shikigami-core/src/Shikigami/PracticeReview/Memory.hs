@@ -74,6 +74,7 @@ import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..), SupersedeMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Principal (ResolvedAgentIdentity)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (shikigamiNamespace)
 import Shikigami.PracticeReview
@@ -412,6 +413,7 @@ matchesPractices allowed (PracticeKey wanted) =
 data PracticeReviewMemoryEnv = PracticeReviewMemoryEnv
   { appEnv :: !AppEnv,
     agent :: !AgentDecl,
+    identity :: !ResolvedAgentIdentity,
     sessionId :: !(Maybe SessionId)
   }
 
@@ -503,13 +505,13 @@ finishTransition env (Just prior) candidate =
     Left err -> pure (Left err)
 
 recordCandidate :: PracticeReviewMemoryEnv -> MemoryId -> PracticeKey -> Kioku.Confidence -> Kioku.MemoryType -> Maybe MemoryId -> PracticeReviewMemoryEnvelope -> IO (Either ReviewMemoryError MemoryId)
-recordCandidate PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agentName}, sessionId} candidate practice confidence memoryType supersedes envelope = do
+recordCandidate PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agentName}, identity, sessionId} candidate practice confidence memoryType supersedes envelope = do
   recordedAt <- getCurrentTime
   let command =
         RecordMemoryData
           { memoryId = candidate,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor agentName,
+            actorPrincipal = agentActor identity,
             ownerPrincipal = Nothing,
             agentId = agentName,
             sessionId,
@@ -522,24 +524,24 @@ recordCandidate PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agent
             supersedes,
             recordedAt
           }
-  runAppIO appEnv (Memory.recordWithContext (shikigamiWriteContext agentName) command) >>= \case
+  runAppIO appEnv (Memory.recordWithContext (shikigamiWriteContext identity) command) >>= \case
     Left storeError -> ioError (userError ("failed to record practice-review memory: " <> show storeError))
     Right (Right stored) -> pure (Right stored)
     Right (Left (MemoryConflict detail)) -> pure (Left (ReviewContentConflict candidate detail))
     Right (Left err) -> pure (Left (ReviewMemoryRefused (Text.pack (show err))))
 
 retireMemory :: PracticeReviewMemoryEnv -> MemoryId -> MemoryId -> IO (Either ReviewMemoryError MemoryId)
-retireMemory PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agentName}} loser winner = do
+retireMemory PracticeReviewMemoryEnv {appEnv, identity} loser winner = do
   supersededAt <- getCurrentTime
   let command =
         SupersedeMemoryData
           { memoryId = loser,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor agentName,
+            actorPrincipal = agentActor identity,
             supersededBy = winner,
             supersededAt
           }
-  runAppIO appEnv (Memory.supersedeWithContext (shikigamiWriteContext agentName) command) >>= \case
+  runAppIO appEnv (Memory.supersedeWithContext (shikigamiWriteContext identity) command) >>= \case
     Left storeError -> ioError (userError ("failed to supersede practice-review memory: " <> show storeError))
     Right (Right stored) -> pure (Right stored)
     Right (Left err) ->

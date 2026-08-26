@@ -31,6 +31,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip)
 import Shikigami.Id.Name (nameBytes)
@@ -130,9 +131,9 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
             for_ (Map.lookup agent (schedules env)) \cron ->
               armNextRun cron agent armFrom
             pure (Just (scheduleFiredEventId agent dueAt))
-      case lifecycleRefusal declaredPrincipalId decision of
-        Nothing -> do
-          enqueued <- liftIO (enqueueScheduledRun (pool env) agent dueAt)
+      case admittedIdentity agent declaredPrincipalId decision of
+        Right identity -> do
+          enqueued <- liftIO (enqueueScheduledRun (pool env) identity agent dueAt)
           case enqueued of
             -- Returning Nothing leaves the row in Firing for keiro to requeue. The
             -- log line is what makes that retry visible: before it, a failed enqueue
@@ -148,7 +149,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                   ]
               pure Nothing
             Right _ -> advance
-        Just (resolvedPrincipalId, reason) -> do
+        Left (resolvedPrincipalId, reason) -> do
           let runSkip =
                 RunSkip
                   { agentName = agent,
@@ -182,12 +183,16 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                   ]
               advance
 
-lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
-lifecycleRefusal declaredPrincipalId = \case
-  Directory.AllowRun _ -> Nothing
-  Directory.SkipRun principal reason -> Just (Just (Directory.principalId principal), reason)
-  Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
-  Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
+admittedIdentity :: Text -> Maybe Text -> Directory.LifecycleDecision -> Either (Maybe Text, Text) AgentIdentity
+admittedIdentity agent declaredPrincipalId = \case
+  Directory.AllowRun Nothing -> Right (compatibilityIdentity agent)
+  Directory.AllowRun (Just principal) ->
+    case mkAgentPrincipal (Directory.principalId principal) of
+      Left reason -> Left (Just (Directory.principalId principal), reason)
+      Right admittedPrincipal -> Right (VerifiedIdentity admittedPrincipal)
+  Directory.SkipRun principal reason -> Left (Just (Directory.principalId principal), reason)
+  Directory.UnknownPrincipal identifier -> Left (declaredPrincipalId, "unknown principal: " <> identifier)
+  Directory.DirectoryUnavailable problem -> Left (declaredPrincipalId, "directory unavailable: " <> problem)
 
 -- | Route one due timer row to the action that owns its kind.
 --

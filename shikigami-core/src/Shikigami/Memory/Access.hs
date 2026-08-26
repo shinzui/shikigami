@@ -46,17 +46,16 @@ module Shikigami.Memory.Access
   )
 where
 
-import Data.Text qualified as Text
 import Kioku.Api.Access
   ( MemoryAccessContext,
     MemoryActor (MemoryActor),
     MemorySpaceId,
-    PrincipalRef,
     RecordedPrincipal (KnownPrincipal),
     assumeAuthorizedMemoryContext,
     legacyMemorySpaceId,
-    mkPrincipalRef,
   )
+import Kioku.Api.Access qualified as Access
+import Shikigami.Agent.Principal (ResolvedAgentIdentity, principalRefFor)
 import Shikigami.Prelude
 
 -- | The one memory space Shikigami reads and writes.
@@ -64,30 +63,8 @@ shikigamiMemorySpace :: MemorySpaceId
 shikigamiMemorySpace = legacyMemorySpaceId
 
 -- | The acting principal for a run, from the agent's declared name.
-agentActor :: Text -> RecordedPrincipal
-agentActor = KnownPrincipal . agentPrincipal
-
--- | Mint this service's ref for an agent.
---
--- The @shikigami.agent.@ prefix is the self-assertion marker ADR-5 asks for, and it is safe to
--- build by concatenation: 'mkPrincipalRef' reserves only @:@ and @#@, neither of which appears
--- here or in an agent name that survived declaration validation.
---
--- A name that somehow does contain one is a bug in declaration validation rather than a runtime
--- condition to route around, but it must not become a silently mis-attributed write — so the
--- reserved characters are replaced with @.@ and the result still names the agent legibly. That is
--- lossy in principle and unreachable in practice; the alternative, failing the write, would take
--- an agent offline over a character.
-agentPrincipal :: Text -> PrincipalRef
-agentPrincipal agentName =
-  case mkPrincipalRef ("shikigami.agent." <> sanitize agentName) of
-    Right principal -> principal
-    Left err -> error ("Shikigami.Memory.Access: invalid agent principal: " <> show err)
-  where
-    sanitize = Text.map \case
-      ':' -> '.'
-      '#' -> '.'
-      c -> c
+agentActor :: ResolvedAgentIdentity -> RecordedPrincipal
+agentActor = KnownPrincipal . principalRefFor
 
 -- | The authorization context Shikigami reads memory under.
 --
@@ -120,14 +97,14 @@ shikigamiReadContext =
 -- repository, and retiring them is
 -- @docs\/plans\/54-key-durable-agent-state-by-meibo-principal.md@'s work — but no new call site
 -- should join them.
-shikigamiWriteContext :: Text -> MemoryAccessContext
-shikigamiWriteContext agentName =
-  assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor (agentPrincipal agentName))
+shikigamiWriteContext :: ResolvedAgentIdentity -> MemoryAccessContext
+shikigamiWriteContext identity =
+  assumeAuthorizedMemoryContext shikigamiMemorySpace (MemoryActor (principalRefFor identity))
 
 -- | The service's own principal. The name contains no @:@, so 'mkPrincipalRef' accepts it; the
 -- @error@ is unreachable and would fire at module load rather than mid-run if that ever changed.
-shikigamiServicePrincipal :: PrincipalRef
+shikigamiServicePrincipal :: Access.PrincipalRef
 shikigamiServicePrincipal =
-  case mkPrincipalRef "shikigami" of
+  case Access.mkPrincipalRef "shikigami" of
     Right principal -> principal
     Left err -> error ("Shikigami.Memory.Access: invalid service principal: " <> show err)

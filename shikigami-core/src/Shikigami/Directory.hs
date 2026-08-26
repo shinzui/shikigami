@@ -25,6 +25,8 @@ module Shikigami.Directory
     startDirectoryWithHeartbeat,
     consultLifecycle,
     lifecycleAdmission,
+    identityAdmission,
+    consultIdentityLifecycle,
     principalAttribution,
     lookupPrincipal,
     directoryPrincipals,
@@ -48,6 +50,12 @@ import Data.Time (NominalDiffTime, UTCTime, getCurrentTime, nominalDiffTimeToSec
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import GHC.Generics (Generic)
+import Shikigami.Agent.Principal
+  ( AgentIdentity (..),
+    compatibilityIdentity,
+    mkAgentPrincipal,
+    principalText,
+  )
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import System.IO.Error (tryIOError)
@@ -289,6 +297,37 @@ lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
     )
     (consultLifecycle directoryHandle declaredPrincipalId agentHandle)
+
+-- | Admit fresh work and return the identity it must persist.
+--
+-- Disabled mode never upgrades a declaration's unverified text into a Meibo
+-- assertion. Configured mode records the exact active principal returned by the
+-- validated snapshot.
+identityAdmission :: DirectoryHandle -> Maybe Text -> Text -> IO (Either Text AgentIdentity)
+identityAdmission directoryHandle declaredPrincipalId agentHandle =
+  fmap
+    ( \case
+        AllowRun Nothing -> Right (compatibilityIdentity agentHandle)
+        AllowRun (Just principal) -> VerifiedIdentity <$> mkAgentPrincipal (principalId principal)
+        SkipRun _ reason -> Left reason
+        UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
+        DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
+    )
+    (consultLifecycle directoryHandle declaredPrincipalId agentHandle)
+
+-- | Recheck the lifecycle of a previously recorded identity without resolving
+-- through a mutable name or handle.
+consultIdentityLifecycle :: DirectoryHandle -> AgentIdentity -> IO LifecycleDecision
+consultIdentityLifecycle DisabledDirectory (CompatibilityIdentity _) = pure (AllowRun Nothing)
+consultIdentityLifecycle DisabledDirectory (VerifiedIdentity principal) =
+  pure (DirectoryUnavailable ("directory is disabled; cannot verify principal " <> principalText principal))
+consultIdentityLifecycle DisabledDirectory UnresolvedLegacyIdentity =
+  pure (UnknownPrincipal "unresolved legacy identity")
+consultIdentityLifecycle directoryHandle@(ConfiguredDirectory {}) recordedIdentity =
+  case recordedIdentity of
+    VerifiedIdentity principal -> consultLifecycle directoryHandle (Just (principalText principal)) (principalText principal)
+    CompatibilityIdentity agentName -> pure (UnknownPrincipal ("compatibility identity " <> agentName))
+    UnresolvedLegacyIdentity -> pure (UnknownPrincipal "unresolved legacy identity")
 
 -- | Resolve the principal stored on a newly opened Kioku session.
 --

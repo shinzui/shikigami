@@ -42,6 +42,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Principal (AgentIdentity (..), meiboPrincipal, principalText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
@@ -95,18 +96,18 @@ handleRunJob env context job =
               "reason" Aeson..= ("skip_audit_failed" :: Text)
             ]
         pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
-      DrainAllowed -> do
-        liftIO (runMetric Metrics.recordRunStarted env job)
-        attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env job))
+      DrainAllowed admittedJob -> do
+        liftIO (runMetric Metrics.recordRunStarted env admittedJob)
+        attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env admittedJob))
         case attemptResult of
           Left failure@(TransientBehaviorFailure {detail}) -> do
             liftIO do
-              runMetric Metrics.recordRunFailed env job
-              runMetric Metrics.recordRunRetried env job
+              runMetric Metrics.recordRunFailed env admittedJob
+              runMetric Metrics.recordRunRetried env admittedJob
             liftIO $
               jobLog
                 env
-                job
+                admittedJob
                 Log.Error
                 "worker.job.retried"
                 [ "error" Aeson..= detail,
@@ -116,7 +117,7 @@ handleRunJob env context job =
           Right outcome -> pure outcome
 
 data DrainAdmission
-  = DrainAllowed
+  = DrainAllowed !RunJob
   | DrainSkipped !DirectoryStore.RunSkip
   | DrainAuditFailed !Text
   deriving stock (Eq, Show)
@@ -125,7 +126,7 @@ data DrainAdmission
 -- routing, durable refusals acknowledge, and audit failures retry.
 drainAdmissionOutcome :: DrainAdmission -> Maybe JobOutcome
 drainAdmissionOutcome = \case
-  DrainAllowed -> Nothing
+  DrainAllowed _ -> Nothing
   DrainSkipped _ -> Just Done
   DrainAuditFailed _ -> Just RetryDefault
 
@@ -139,27 +140,35 @@ admitRunJob env = admitRunJobWith (pool env) (envDirectory env) (agents env)
 admitRunJobWith :: Hasql.Pool.Pool -> Directory.DirectoryHandle -> [AgentDecl] -> RunJob -> IO DrainAdmission
 admitRunJobWith storePool directory declarations job =
   case find ((== agentName job) . name) declarations of
-    Nothing -> pure DrainAllowed
+    Nothing -> recordRefusal Nothing "unknown agent declaration"
     Just AgentDecl {name, identity} -> do
       let declaredPrincipalId = principalOf <$> identity
-      decision <- Directory.consultLifecycle directory declaredPrincipalId name
-      case lifecycleRefusal declaredPrincipalId decision of
-        Nothing -> pure DrainAllowed
-        Just (resolvedPrincipalId, skipReason) -> do
-          let runSkip =
-                DirectoryStore.RunSkip
-                  { DirectoryStore.agentName = name,
-                    DirectoryStore.principalId = resolvedPrincipalId,
-                    DirectoryStore.stage = DirectoryStore.DrainStage,
-                    DirectoryStore.detail = routeKindText (routeKind job),
-                    DirectoryStore.reason = skipReason,
-                    DirectoryStore.idempotencyKey = idempotencyKey job
-                  }
-          DirectoryStore.recordRunSkip storePool runSkip >>= \case
-            Left problem -> pure (DrainAuditFailed problem)
-            Right () -> pure (DrainSkipped runSkip)
+      admitted <- case Shikigami.Agent.RunJob.identity job of
+        UnresolvedLegacyIdentity -> Directory.identityAdmission directory declaredPrincipalId name
+        recorded -> pure (Right recorded)
+      case admitted of
+        Left reason -> recordRefusal declaredPrincipalId reason
+        Right recorded -> do
+          decision <- Directory.consultIdentityLifecycle directory recorded
+          case lifecycleRefusal (principalText <$> meiboPrincipal recorded) decision of
+            Nothing -> pure (DrainAllowed (job {Shikigami.Agent.RunJob.identity = recorded}))
+            Just (resolvedPrincipalId, skipReason) -> recordRefusal resolvedPrincipalId skipReason
   where
     principalOf identityDecl = identityDecl ^. #principal
+
+    recordRefusal resolvedPrincipalId skipReason = do
+      let runSkip =
+            DirectoryStore.RunSkip
+              { DirectoryStore.agentName = agentName job,
+                DirectoryStore.principalId = resolvedPrincipalId,
+                DirectoryStore.stage = DirectoryStore.DrainStage,
+                DirectoryStore.detail = routeKindText (routeKind job),
+                DirectoryStore.reason = skipReason,
+                DirectoryStore.idempotencyKey = idempotencyKey job
+              }
+      DirectoryStore.recordRunSkip storePool runSkip >>= \case
+        Left problem -> pure (DrainAuditFailed problem)
+        Right () -> pure (DrainSkipped runSkip)
 
 lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
 lifecycleRefusal declaredPrincipalId = \case
@@ -281,7 +290,7 @@ runConversationAgent env job addressed =
         ]
       pure (deadOutcome "unknown_agent" detail)
     Just decl -> do
-      result <- Conversation.runConversationTurn (conversationEnv env) decl addressed
+      result <- Conversation.runConversationTurnWithIdentity (conversationEnv env) decl (job ^. #identity) addressed
       case result of
         Left (Conversation.ConversationTransientFailure err) -> do
           runMetric Metrics.recordRunFailed env job

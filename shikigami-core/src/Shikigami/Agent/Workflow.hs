@@ -90,6 +90,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Principal (ResolvedAgentIdentity, resolveAgentIdentity, resolvedIdentityText)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallPriorLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..))
@@ -120,7 +121,7 @@ import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
 import Shikigami.Log qualified as Log
-import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
@@ -386,22 +387,27 @@ runProfiledAgentWith ::
   RunJob ->
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl = do
-  withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
-    addAttribute traceSpan "agent.name" (agentName job)
-    addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
-    addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
-  useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
-  approvalPolicyForRun <-
-    if useApprovalChild
-      then Just <$> runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
-      else pure Nothing
-  opened <- runStep deps (StepName "open-session") (requireStore (openSession deps job decl))
-  case opened of
-    -- kioku refused to open the session. The same command will be refused on
-    -- every replay, so there is nothing to retry and the run is over.
-    StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
-    StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun job decl sid
+runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl =
+  case resolveAgentIdentity (job ^. #identity) of
+    Left problem -> pure (Left (PermanentAgentRunFailure problem))
+    Right recordedIdentity -> runResolved recordedIdentity
+  where
+    runResolved recordedIdentity = do
+      withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
+        addAttribute traceSpan "agent.name" (agentName job)
+        addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
+        addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
+      useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
+      approvalPolicyForRun <-
+        if useApprovalChild
+          then Just <$> runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
+          else pure Nothing
+      opened <- runStep deps (StepName "open-session") (requireStore (openSession deps recordedIdentity job decl))
+      case opened of
+        -- kioku refused to open the session. The same command will be refused on
+        -- every replay, so there is nothing to retry and the run is over.
+        StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
+        StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun recordedIdentity job decl sid
 
 -- | The rest of one agent run, once its kioku session is open.
 runSessionedAgent ::
@@ -409,22 +415,23 @@ runSessionedAgent ::
   BehaviorEnv ->
   ResolvedCapabilitySet ->
   Maybe ApprovalPolicySnapshot ->
+  ResolvedAgentIdentity ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
-  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope (agentDeclName decl)) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
+runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
+  prior <- runStep deps (StepName "recall") (liftIO (recallPriorLearnings (appEnv deps) declaredRecallLimit (agentScope recordedIdentity) (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
       case behavior decl of
-        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior
+        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior
         _
           | not (null (delegates decl)) ->
-              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior
+              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior
           | useRetrySemantics ->
               first PermanentAgentRunFailure
                 <$> runStep
@@ -454,25 +461,26 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun j
                   )
           | otherwise ->
               first LegacyBehaviorFailure
-                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl job prior)
+                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior)
   case behaviorE of
-    Left err -> finishRunFailure deps decl sid err
-    Right output -> finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid prior output
+    Left err -> finishRunFailure deps recordedIdentity decl sid err
+    Right output -> finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity job decl sid prior output
 
 finishSuccessfulRun ::
   AgentRunDeps ->
   BehaviorEnv ->
   Maybe ApprovalPolicySnapshot ->
+  ResolvedAgentIdentity ->
   RunJob ->
   AgentDecl ->
   SessionId ->
   [MemoryRecord] ->
   Value ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid prior output = do
+finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity job decl sid prior output = do
   approvalResult <- approveSinks deps approvalPolicyForRun sid job decl output
   case approvalResult of
-    Left err -> finishRunFailure deps decl sid err
+    Left err -> finishRunFailure deps recordedIdentity decl sid err
     Right approvedSinks -> do
       sinkResults <-
         withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
@@ -489,11 +497,11 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid pri
             sid
             output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
-      recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps decl sid output))
+      recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps recordedIdentity decl sid output))
       case recorded of
         StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
         StepProduced mem -> do
-          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps activeBehaviorEnv decl sid))
+          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps activeBehaviorEnv recordedIdentity sid))
           pure case completed of
             StepRefused detail -> Left (PermanentAgentRunFailure detail)
             StepProduced () ->
@@ -507,12 +515,13 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun job decl sid pri
 
 finishRunFailure ::
   AgentRunDeps ->
+  ResolvedAgentIdentity ->
   AgentDecl ->
   SessionId ->
   AgentRunFailure ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-finishRunFailure deps decl sid err = do
-  failed <- runStep deps (StepName "fail-session") (requireStore (failSession deps decl sid (agentRunFailureDetail err)))
+finishRunFailure deps recordedIdentity decl sid err = do
+  failed <- runStep deps (StepName "fail-session") (requireStore (failSession deps recordedIdentity decl sid (agentRunFailureDetail err)))
   pure case failed of
     StepProduced () -> Left err
     -- The run failed either way; if the failure could not be recorded, say
@@ -722,12 +731,12 @@ approveSinks deps approvalPolicyForRun sid job decl output =
 -- reporting success for it is a lie about what happened: an unreachable store
 -- becomes the workflow driver's retryable store-error arm, and a refused command
 -- becomes a journaled 'StepRefused' the caller turns into a permanent failure.
-openSession :: (IOE :> es) => AgentRunDeps -> RunJob -> AgentDecl -> Eff es (Either StoreError (StepResult SessionId))
-openSession deps job decl = liftIO do
+openSession :: (IOE :> es) => AgentRunDeps -> ResolvedAgentIdentity -> RunJob -> AgentDecl -> Eff es (Either StoreError (StepResult SessionId))
+openSession deps recordedIdentity job decl = liftIO do
   startedAt' <- getCurrentTime
   sid <- genSessionId
-  sessionAgentId <- Directory.principalAttribution (depsDirectory deps) (declaredPrincipalId decl) (agentDeclName decl)
-  let focusTxt = behaviorKindText (behavior decl)
+  let sessionAgentId = resolvedIdentityText recordedIdentity
+      focusTxt = behaviorKindText (behavior decl)
       RunJob {parentSessionId = jobParentSessionId, delegationDepth = jobDelegationDepth} = job
   parsedParent <-
     case jobParentSessionId of
@@ -739,15 +748,16 @@ openSession deps job decl = liftIO do
   -- kioku answers with the session id it started, which is the one generated
   -- above; taking it from the answer keeps the step value the store's word.
   kiokuWrite "opening the run's kioku session" $
-    Session.start
+    Session.startWithContext
+      (shikigamiWriteContext recordedIdentity)
       StartSessionData
         { sessionId = sid,
           memorySpaceId = shikigamiMemorySpace,
-          actorPrincipal = agentActor (agentDeclName decl),
+          actorPrincipal = agentActor recordedIdentity,
           ownerPrincipal = Nothing,
           agentId = sessionAgentId,
           focus = focusTxt,
-          scope = agentScope (agentDeclName decl),
+          scope = agentScope recordedIdentity,
           subjectRef = Just (idText sid),
           previousSessionId = Nothing,
           parentSessionId = parsedParent,
@@ -768,14 +778,15 @@ runBehaviorStep ::
   AgentRunDeps ->
   BehaviorEnv ->
   Maybe ApprovalPolicySnapshot ->
+  ResolvedAgentIdentity ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   [MemoryRecord] ->
   Eff es (Either Text Value)
-runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
+runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
-    Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun sid decl job flowName
+    Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job flowName
     _
       | not (null (delegates decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
@@ -789,12 +800,13 @@ runFlowBehavior ::
   AgentRunDeps ->
   BehaviorEnv ->
   Maybe ApprovalPolicySnapshot ->
+  ResolvedAgentIdentity ->
   SessionId ->
   AgentDecl ->
   RunJob ->
   Text ->
   Eff es (Either Text Value)
-runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun sid decl job flowName =
+runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job flowName =
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
@@ -826,8 +838,20 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun sid decl job flowNam
             sid
             (approvalPolicyChannel policy)
             (approvalPolicyDeadline policy)
-    memoryEnv = FlowCapability.MemoryEnv {FlowCapability.appEnv = appEnv deps, FlowCapability.agent = decl, FlowCapability.sessionId = Just sid}
-    delegateEnv = FlowDelegate.DelegateEnv {FlowDelegate.agent = decl, FlowDelegate.context = delegateContext deps decl sid job}
+    memoryEnv =
+      FlowCapability.MemoryEnv
+        { FlowCapability.appEnv = appEnv deps,
+          FlowCapability.agent = decl,
+          FlowCapability.identity = recordedIdentity,
+          FlowCapability.sessionId = Just sid
+        }
+    delegateEnv =
+      FlowDelegate.DelegateEnv
+        { FlowDelegate.agent = decl,
+          FlowDelegate.context = delegateContext deps decl sid job,
+          FlowDelegate.agents = agents deps,
+          FlowDelegate.directory = depsDirectory deps
+        }
     routingEnv =
       FlowRouting.RoutingEnv
         { FlowRouting.agent = decl,
@@ -885,7 +909,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
           ]
   childHandles <-
     traverse
-      (\(ordinal, target) -> delegate decl ctx (delegationKey ordinal) target (childPayload target))
+      (\(ordinal, target) -> delegate (agents deps) (depsDirectory deps) decl ctx (delegationKey ordinal) target (childPayload target))
       (zip [(0 :: Int) ..] delegateTargets)
   findings <- awaitAllDelegated childHandles
   pure
@@ -899,9 +923,10 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
     )
 
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
-delegateContext deps decl currentSession RunJob {agentName, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} =
+delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} =
   DelegateCtx
     { delegateDepth = fromMaybe 0 delegationDepth,
+      identity,
       sessionId = Just (idText currentSession),
       parentSessionId,
       parentRunWorkflowId,
@@ -918,18 +943,19 @@ delegateContext deps decl currentSession RunJob {agentName, parentSessionId, par
 -- genuinely optional write on this path — the run has already failed, and losing
 -- a note about /why/ does not make the recorded outcome wrong — so it is named
 -- for what it is and says so when it fails rather than vanishing.
-failSession :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Text -> Eff es (Either StoreError (StepResult ()))
-failSession deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid err = liftIO do
+failSession :: (IOE :> es) => AgentRunDeps -> ResolvedAgentIdentity -> AgentDecl -> SessionId -> Text -> Eff es (Either StoreError (StepResult ()))
+failSession deps recordedIdentity decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid err = liftIO do
   when (recordPolicy == Always) $
-    recordFailureLearningBestEffort deps decl sid err
+    recordFailureLearningBestEffort deps recordedIdentity decl sid err
   failedAt' <- getCurrentTime
   kiokuWrite "marking the run's kioku session failed" $
     (fmap . fmap) void $
-      Session.failSession
+      Session.failSessionWithContext
+        (shikigamiWriteContext recordedIdentity)
         FailSessionData
           { sessionId = sid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor (agentDeclName decl),
+            actorPrincipal = agentActor recordedIdentity,
             failedAt = failedAt',
             errorMessage = err
           }
@@ -942,11 +968,12 @@ failSession deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid err =
 -- on the failure path and must still mark the session failed, so this write may
 -- not decide the run's outcome. What it may not do is disappear, which is what
 -- the discarded result before it did.
-recordFailureLearningBestEffort :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> IO ()
-recordFailureLearningBestEffort deps decl sid err = do
+recordFailureLearningBestEffort :: AgentRunDeps -> ResolvedAgentIdentity -> AgentDecl -> SessionId -> Text -> IO ()
+recordFailureLearningBestEffort deps recordedIdentity decl sid err = do
   recorded <-
     recordMemory
       deps
+      recordedIdentity
       decl
       sid
       ("run failed: " <> err)
@@ -1193,8 +1220,8 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
 -- having persisted nothing disagree about what the agent did. The store result
 -- is therefore returned, not discarded; 'requireStore' at the call site fails the
 -- run instead.
-recordLearning :: (IOE :> es) => AgentRunDeps -> AgentDecl -> SessionId -> Value -> Eff es (Either StoreError (StepResult (Maybe MemoryId)))
-recordLearning deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid output = liftIO do
+recordLearning :: (IOE :> es) => AgentRunDeps -> ResolvedAgentIdentity -> AgentDecl -> SessionId -> Value -> Eff es (Either StoreError (StepResult (Maybe MemoryId)))
+recordLearning deps recordedIdentity decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid output = liftIO do
   case recordPolicy of
     Never -> pure (Right (StepProduced Nothing))
     OnSuccess -> recordedJust
@@ -1205,25 +1232,27 @@ recordLearning deps decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid ou
     recordSuccess =
       recordMemory
         deps
+        recordedIdentity
         decl
         sid
         (renderLearning output)
         (Set.fromList ["agent-run", behaviorKindText (behavior decl)])
 
-recordMemory :: AgentRunDeps -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO (Either StoreError (StepResult MemoryId))
-recordMemory deps decl sid content' tags' = do
+recordMemory :: AgentRunDeps -> ResolvedAgentIdentity -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO (Either StoreError (StepResult MemoryId))
+recordMemory deps recordedIdentity decl sid content' tags' = do
   mid <- genMemoryId
   recordedAt' <- getCurrentTime
   kiokuWrite "recording the run's learning" $
-    Memory.record
+    Memory.recordWithContext
+      (shikigamiWriteContext recordedIdentity)
       RecordMemoryData
         { memoryId = mid,
           memorySpaceId = shikigamiMemorySpace,
-          actorPrincipal = agentActor (agentDeclName decl),
+          actorPrincipal = agentActor recordedIdentity,
           ownerPrincipal = Nothing,
           agentId = agentDeclName decl,
           sessionId = Just sid,
-          scope = agentScope (agentDeclName decl),
+          scope = agentScope recordedIdentity,
           memoryType = MemoryPattern,
           content = content',
           priority = 100,
@@ -1244,16 +1273,17 @@ recordMemory deps decl sid content' tags' = do
 -- This changes what the @complete@ step body writes, not the journal: the step
 -- name and its recorded result shape are untouched, so a workflow parked before
 -- this change still replays.
-completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> AgentDecl -> SessionId -> Eff es (Either StoreError (StepResult ()))
-completeSession deps activeBehaviorEnv decl sid = liftIO do
+completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> ResolvedAgentIdentity -> SessionId -> Eff es (Either StoreError (StepResult ()))
+completeSession deps activeBehaviorEnv recordedIdentity sid = liftIO do
   completedAt' <- getCurrentTime
   kiokuWrite "completing the run's kioku session" $
     (fmap . fmap) void $
-      Session.complete
+      Session.completeWithContext
+        (shikigamiWriteContext recordedIdentity)
         CompleteSessionData
           { sessionId = sid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor (agentDeclName decl),
+            actorPrincipal = agentActor recordedIdentity,
             completedAt = completedAt',
             modelUsed = Just (behaviorModelId activeBehaviorEnv),
             summary = Just "agent-run completed"

@@ -19,6 +19,7 @@ where
 import Control.Exception (Exception, fromException)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.List (find)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -31,12 +32,14 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournal
 import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, cancelChild, spawnChild)
 import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
-import Shikigami.Agent.Decl (AgentDecl (..), RouterPolicy (..))
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), RouterPolicy (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
@@ -90,16 +93,26 @@ instance Exception DelegationBatchFailure
 -- | Start @childAgent@ as a child agent-run workflow without blocking.
 delegate ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  [AgentDecl] ->
+  DirectoryHandle ->
   AgentDecl ->
   DelegateCtx ->
   Text ->
   Text ->
   Aeson.Value ->
   Eff es (Delegated Aeson.Value)
-delegate decl ctx delegationKey childAgent payload = do
+delegate declarations directory decl ctx delegationKey childAgent payload = do
   either throwIO pure (assertMayDelegate decl childAgent)
   either throwIO pure (checkCycle ctx childAgent)
   childCtx <- either throwIO pure (checkDepth ctx)
+  childDecl <-
+    maybe
+      (throwIO (DelegationIdentityRefused ("unknown agent declaration: " <> childAgent)))
+      pure
+      (find (\AgentDecl {name = declaredName} -> declaredName == childAgent) declarations)
+  childIdentity <-
+    liftIO (Directory.identityAdmission directory (declaredPrincipalId childDecl) childAgent)
+      >>= either (throwIO . DelegationIdentityRefused) pure
   let DelegateCtx
         { sessionId = currentCtxSessionId,
           lineage = currentLineage,
@@ -132,6 +145,7 @@ delegate decl ctx delegationKey childAgent payload = do
   let childJob =
         RunJob
           { agentName = childAgent,
+            identity = childIdentity,
             triggerKind = TriggeredByDelegation,
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
@@ -225,12 +239,14 @@ preflightDelegationBatch decl@AgentDecl {name = delegatingAgent, routing} ctx@De
 -- single-child spawn boundary for any member.
 delegateBatch ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  [AgentDecl] ->
+  DirectoryHandle ->
   AgentDecl ->
   DelegateCtx ->
   CandidateCatalog ->
   NonEmpty DelegationRequest ->
   Eff es (NonEmpty (Delegated Aeson.Value))
-delegateBatch decl ctx catalog requests = do
+delegateBatch declarations directory decl ctx catalog requests = do
   (_, parentWorkflowId) <- currentWorkflow
   prepared <-
     either
@@ -257,7 +273,10 @@ delegateBatch decl ctx catalog requests = do
   traverse spawnPrepared prepared
   where
     spawnPrepared PreparedDelegation {request = DelegationRequest {key, target, payload}} =
-      delegate decl ctx key target payload
+      delegate declarations directory decl ctx key target payload
+
+declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId AgentDecl {identity} = principal <$> identity
 
 -- | Suspend until the delegated child completes and decode its behavior output.
 awaitDelegated ::

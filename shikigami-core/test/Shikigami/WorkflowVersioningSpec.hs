@@ -63,6 +63,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.Behavior.Run (newBehaviorEnv)
@@ -713,20 +714,23 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
             $ run highRiskPayload
         )
   where
-    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, sessionId = Nothing}
+    memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl, identity = CompatibilityAgent "at-risk-customer", sessionId = Nothing}
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowAgentDecl,
           FlowDelegate.context =
             DelegateCtx
-              { delegateDepth = 0,
+              { identity = compatibilityIdentity "at-risk-customer",
+                delegateDepth = 0,
                 sessionId = Just (idText (Approval.currentSession (approval runtime))),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = ["at-risk-customer"],
                 delegationBudgetId = Nothing,
                 budgetLimit = defaultDelegationBudget
-              }
+              },
+          FlowDelegate.agents = [flowAgentDecl],
+          FlowDelegate.directory = disabledDirectoryHandle
         }
     sinkEnv =
       SinkEnv

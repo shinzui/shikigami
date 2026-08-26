@@ -38,6 +38,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.PracticeReview
@@ -475,6 +476,7 @@ runReviewOperationWith runOptions appEnv session workflowId operation =
       PracticeReviewMemoryEnv
         { appEnv,
           agent = reviewAgentDecl,
+          identity = CompatibilityAgent "opentelemetry-practice-reviewer",
           sessionId = Just session
         }
 
@@ -606,11 +608,12 @@ seedReviewContent appEnv session practice content = do
   memoryId <- genMemoryId
   recordedAt <- getCurrentTime
   let agentName = "opentelemetry-practice-reviewer"
+      recordedIdentity = CompatibilityAgent agentName
       command =
         RecordMemoryData
           { memoryId,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor agentName,
+            actorPrincipal = agentActor recordedIdentity,
             ownerPrincipal = Nothing,
             agentId = agentName,
             sessionId = Just session,
@@ -623,7 +626,7 @@ seedReviewContent appEnv session practice content = do
             supersedes = Nothing,
             recordedAt
           }
-  runAppIO appEnv (Memory.recordWithContext (shikigamiWriteContext agentName) command) >>= \case
+  runAppIO appEnv (Memory.recordWithContext (shikigamiWriteContext recordedIdentity) command) >>= \case
     Left err -> assertFailure ("failed to seed malformed review memory: " <> show err)
     Right (Left err) -> assertFailure ("malformed review seed was refused: " <> show err)
     Right (Right stored) -> pure stored

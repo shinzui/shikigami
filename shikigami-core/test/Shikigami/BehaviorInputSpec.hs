@@ -37,6 +37,7 @@ import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, programArgs, runBehavior, runProgramTask)
@@ -292,7 +293,7 @@ memoryWith prose =
     { memoryId = priorMemoryId,
       agentId = "triage-note",
       sessionId = Nothing,
-      scope = agentScope "triage-note",
+      scope = agentScope (CompatibilityAgent "triage-note"),
       memoryType = "pattern",
       content = prose,
       priority = 100,

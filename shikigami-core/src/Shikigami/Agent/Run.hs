@@ -20,6 +20,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Time.Format.ISO8601 (iso8601ParseM)
+import Kioku.Api.Recall qualified as KiokuRecall
 import Kioku.Api.Scope (MemoryScope)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
 import Kioku.App (AppEnv, runAppIO)
@@ -31,7 +32,8 @@ import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecallLimit, recallLimitInt)
-import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext)
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 
@@ -53,18 +55,20 @@ recordActivityAsMemory :: AppEnv -> AgentDecl -> ActivityEnvelope -> IO (Either 
 recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
   let ActivityEnvelope {occurredAt = oat, verb = vb, payload = pl, subject = subj} = env
       Subject {subjectType = sty} = subj
-      scope' = agentScope agentName'
+      recordedIdentity = CompatibilityAgent agentName'
+      scope' = agentScope recordedIdentity
       tags' = Set.fromList ["verb:" <> vb, "subject:" <> sty]
       content' = TL.toStrict (encodeToLazyText pl)
   mid <- genMemoryId
   recordedAt' <- maybe getCurrentTime pure (iso8601ParseM (Text.unpack oat))
   res <-
     runAppIO appEnv $
-      Memory.record
+      Memory.recordWithContext
+        (shikigamiWriteContext recordedIdentity)
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor agentName',
+            actorPrincipal = agentActor recordedIdentity,
             ownerPrincipal = Nothing,
             agentId = agentName',
             sessionId = Nothing,
@@ -117,16 +121,15 @@ recallPriorLearnings appEnv limit scope' query = do
       Left _ -> RecallCapability.VectorExtensionUnavailable
   recalled <-
     runAppIO appEnv $
-      Recall.legacyRecall
+      Recall.recall
         (Embedding.toEmbeddingModel cfg)
         capability
         shikigamiReadContext
-        Recall.RecallRequest
-          { memorySpaceId = shikigamiMemorySpace,
-            scope = scope',
+        KiokuRecall.RecallQuery
+          { target = KiokuRecall.ExactScope scope',
             query,
-            strategy = Recall.Hybrid,
-            maxResults = recallLimitInt limit
+            strategy = KiokuRecall.Hybrid,
+            maxResults = recallBound (recallLimitInt limit)
           }
   -- Two Eithers now: the outer one is runAppIO's, the inner one is recall's own
   -- "could not be asked" channel, which Kioku 0.4 added so an unrunnable query
@@ -136,6 +139,12 @@ recallPriorLearnings appEnv limit scope' query = do
     Right (Right hits)
       | not (null hits) -> pure (Recall.memory <$> hits)
     _ -> recallActiveByScope appEnv (recallLimitInt limit) scope'
+
+recallBound :: Int -> KiokuRecall.RecallLimit
+recallBound limit =
+  case KiokuRecall.mkRecallLimit limit of
+    Right bounded -> bounded
+    Left problem -> error ("validated declaration recall limit became invalid: " <> Text.unpack problem)
 
 recallActiveByScope :: AppEnv -> Int -> MemoryScope -> IO [MemoryRecord]
 recallActiveByScope appEnv limit scope' = do

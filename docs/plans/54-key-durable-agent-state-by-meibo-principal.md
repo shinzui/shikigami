@@ -53,9 +53,9 @@ This plan implements
       projection and Kioku 0.5.0.0 public APIs; it needs no Meibo or Shomei package pin.
 - [x] (2026-08-26T16:22:34Z) Established a green baseline with
       `nix develop -c cabal build all --dry-run` and `nix develop -c cabal test all -j1`.
-- [ ] M1: define verified, compatibility, and legacy-unresolved agent identities; record identity
+- [x] (2026-08-26T18:08:00Z) M1: defined verified, compatibility, and legacy-unresolved agent identities; recorded identity
       on every fresh `RunJob`; decode old jobs compatibly; promote a legacy job once at admission.
-- [ ] M2: key Kioku scopes and access contexts by recorded identity, use the supported contextful
+- [x] (2026-08-26T18:08:00Z) M2: keyed Kioku scopes and access contexts by recorded identity, used the supported contextful
       session/memory/recall APIs, and remove Shikigami's Kioku deprecation warnings.
 - [ ] M3: add legacy-scope aliases and extend `shikigami agents sync` with idempotent,
       ambiguity-refusing reconciliation.
@@ -108,6 +108,15 @@ This plan implements
   `shikigami-core-test` passed 568 tests, `shikigami-server-test` passed 43, and
   `shikigami-client-test` passed 3.
 
+- Delegated work cannot inherit the parent's recorded identity. That made both specialist child
+  sessions appear to be the supervisor. The delegation boundary now admits the target declaration
+  and persists that exact child identity on the child `RunJob`; lineage still records the parent
+  relationship independently.
+
+- `just keiro-gate` runs `git diff --exit-code -- shikigami-core/src` after deterministic
+  scaffolding. Workflow-body changes therefore have to be staged before the gate can distinguish
+  them from generated drift; the gate is run on the staged milestone immediately before commit.
+
 
 ## Decision Log
 
@@ -129,6 +138,13 @@ This plan implements
   Rationale: replay, delayed queues, and delegated children must retain the admitted subject even
   if directory presentation changes later. Falling back from a recorded principal to a handle
   would silently switch identities.
+  Date: 2026-08-26
+
+- Decision: admit a delegation target as its own subject and persist the child's identity on the
+  child job; never copy the parent's identity into the child.
+  Rationale: delegation establishes ancestry, not identity equivalence. Copying the parent
+  principal causes the child's memory, session, and authorship to be attributed to the wrong
+  subject.
   Date: 2026-08-26
 
 - Decision: preserve old queue and journal bytes with a hand-written additive codec.
@@ -266,10 +282,10 @@ directory admission or a compatibility identity only when the directory is disab
 worker boundary, promote a pre-upgrade unresolved job once, then dispatch and journal the promoted
 job. A configured legacy promotion that cannot resolve fails closed.
 
-Delegated children inherit the parent's recorded identity; they never re-resolve the target by a
-mutable handle after the target has been admitted. Agent and conversation workflows read identity
-from `ingest-job`. Tests cover JSON vectors, configured/disabled admission, replay after directory
-changes, and delegation.
+Delegated children record the target identity admitted at the delegation boundary; they never
+inherit the parent identity or re-resolve the target after the child job has been journaled. Agent
+and conversation workflows read identity from `ingest-job`. Tests cover JSON vectors,
+configured/disabled admission, replay after directory changes, and delegation.
 
 ### Milestone 2 — Key supported Kioku access by recorded identity
 

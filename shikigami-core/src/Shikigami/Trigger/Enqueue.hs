@@ -5,6 +5,7 @@ module Shikigami.Trigger.Enqueue
   ( runQueueName,
     envelopeOccurredAt,
     runJobFromEnvelope,
+    runJobFromEnvelopeWithIdentity,
     enqueueRunJobTx,
     ensureRunQueue,
     enqueueRunJob,
@@ -30,6 +31,7 @@ import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQue
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
@@ -59,9 +61,14 @@ envelopeOccurredAt ActivityEnvelope {occurredAt = envOccurredAt} =
 -- caller resolves it with 'envelopeOccurredAt' before the transaction opens —
 -- the same shape @eventInboxHandler@ already uses with its @receivedAt@.
 runJobFromEnvelope :: UTCTime -> AgentDecl -> ActivityEnvelope -> RunJob
-runJobFromEnvelope resolvedOccurredAt decl env =
+runJobFromEnvelope resolvedOccurredAt decl =
+  runJobFromEnvelopeWithIdentity resolvedOccurredAt (compatibilityIdentity (name decl)) decl
+
+runJobFromEnvelopeWithIdentity :: UTCTime -> AgentIdentity -> AgentDecl -> ActivityEnvelope -> RunJob
+runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
   RunJob
     { agentName = name decl,
+      identity,
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
@@ -132,13 +139,14 @@ addressedRunKey agent payload =
 --
 -- The route is a parameter rather than an inference: an event-triggered job can
 -- mean either workflow, and only the caller knows which one it meant.
-enqueueAddressedRunWithKey :: Pool -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
-enqueueAddressedRunWithKey pool agent route payload key = do
+enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunWithKey pool identity agent route payload key = do
   now <- getCurrentTime
   enqueueRunJob
     pool
     RunJob
       { agentName = agent,
+        identity,
         triggerKind = TriggeredByEvent,
         routeKind = route,
         occurredAt = now,
@@ -152,12 +160,13 @@ enqueueAddressedRunWithKey pool agent route payload key = do
       }
 
 -- | Enqueue a schedule-triggered run for a deterministic due minute.
-enqueueScheduledRun :: Pool -> Text -> UTCTime -> IO (Either UsageError MessageId)
-enqueueScheduledRun pool agent dueAt =
+enqueueScheduledRun :: Pool -> AgentIdentity -> Text -> UTCTime -> IO (Either UsageError MessageId)
+enqueueScheduledRun pool identity agent dueAt =
   enqueueRunJob
     pool
     RunJob
       { agentName = agent,
+        identity,
         triggerKind = TriggeredBySchedule,
         routeKind = AgentWorkflowRoute,
         occurredAt = dueAt,

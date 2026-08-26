@@ -28,11 +28,14 @@ import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate (Delegated, DelegationRequest)
 import Shikigami.Agent.Delegate qualified as AgentDelegate
 import Shikigami.Agent.Delegate.Context (DelegateCtx)
+import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Router.Catalog (CandidateCatalog)
 
 data DelegateEnv = DelegateEnv
   { agent :: !AgentDecl,
-    context :: !DelegateCtx
+    context :: !DelegateCtx,
+    agents :: ![AgentDecl],
+    directory :: !DirectoryHandle
   }
 
 data Delegate :: Effect where
@@ -65,10 +68,10 @@ runDelegate ::
   DelegateEnv ->
   Eff (Delegate : es) a ->
   Eff es a
-runDelegate DelegateEnv {agent, context} =
+runDelegate DelegateEnv {agent, context, agents, directory} =
   interpret \_ -> \case
-    DelegateChild key target payload -> AgentDelegate.delegate agent context key target payload
-    DelegateBatch catalog requests -> AgentDelegate.delegateBatch agent context catalog requests
+    DelegateChild key target payload -> AgentDelegate.delegate agents directory agent context key target payload
+    DelegateBatch catalog requests -> AgentDelegate.delegateBatch agents directory agent context catalog requests
     AwaitOne delegated -> AgentDelegate.awaitDelegated delegated
     AwaitAll delegated -> AgentDelegate.awaitAllDelegated delegated
     CancelOnFailure delegated -> AgentDelegate.cancelSiblingsOnFailure delegated

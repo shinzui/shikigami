@@ -38,6 +38,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Delegate (delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -357,6 +358,7 @@ routerJob :: Text -> RunJob
 routerJob key =
   RunJob
     { agentName = "router",
+      identity = compatibilityIdentity "router",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = fixedTime,

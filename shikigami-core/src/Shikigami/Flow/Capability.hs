@@ -46,9 +46,10 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Principal (ResolvedAgentIdentity)
 import Shikigami.Agent.Run (behaviorKindText, recallPriorLearnings, renderLearning)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
 import Shikigami.Sink.Intent (enqueueSinkIntentStep)
@@ -60,6 +61,7 @@ newtype MemoryQuery = MemoryQuery {query :: Text}
 data MemoryEnv = MemoryEnv
   { appEnv :: !AppEnv,
     agent :: !AgentDecl,
+    identity :: !ResolvedAgentIdentity,
     sessionId :: !(Maybe SessionId)
   }
 
@@ -239,12 +241,12 @@ flowMemoryStepsPatch = PatchId "shikigami-flow-memory-steps-v1"
 -- the patch id together, and only once no pre-change flow can still resume; see
 -- @docs\/workflow-versioning.md@.
 runMemory :: (Workflow :> es, IOE :> es) => MemoryEnv -> Eff (Memory : es) a -> Eff es a
-runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}} action = do
+runMemory env@MemoryEnv {appEnv, agent = decl@AgentDecl {memory = MemoryPolicy {recallLimit}}, identity} action = do
   journalMemory <- patch flowMemoryStepsPatch
   interpret
     ( \_ -> \case
         Recall label MemoryQuery {query} ->
-          let fetch = liftIO (recallPriorLearnings appEnv recallLimit (agentScope (name decl)) query)
+          let fetch = liftIO (recallPriorLearnings appEnv recallLimit (agentScope identity) query)
            in if journalMemory
                 then step (StepName ("recall-" <> label)) fetch
                 else fetch
@@ -316,7 +318,7 @@ deterministicFlowMemoryId (WorkflowName wfName) (WorkflowId wfId) generation lab
 -- an 'IOError' the way this interpreter has always raised it.
 recordFlowMemory :: MemoryEnv -> MemoryId -> RememberOptions -> Value -> IO (Either MemoryWriteError MemoryId)
 recordFlowMemory
-  MemoryEnv {appEnv, agent = decl, sessionId}
+  MemoryEnv {appEnv, agent = decl, identity, sessionId}
   mid
   RememberOptions {priority, confidence, memoryType, supersedes, extraTags}
   value = do
@@ -326,11 +328,11 @@ recordFlowMemory
           RecordMemoryData
             { memoryId = mid,
               memorySpaceId = shikigamiMemorySpace,
-              actorPrincipal = agentActor (name decl),
+              actorPrincipal = agentActor identity,
               ownerPrincipal = Nothing,
               agentId = name decl,
               sessionId,
-              scope = agentScope (name decl),
+              scope = agentScope identity,
               memoryType,
               content = renderLearning value,
               priority,
@@ -339,7 +341,7 @@ recordFlowMemory
               supersedes,
               recordedAt
             }
-    runAppIO appEnv (MemoryStore.record record) >>= \case
+    runAppIO appEnv (MemoryStore.recordWithContext (shikigamiWriteContext identity) record) >>= \case
       Right outcome -> pure outcome
       Left err -> ioError (userError ("failed to record flow memory: " <> show err))
 

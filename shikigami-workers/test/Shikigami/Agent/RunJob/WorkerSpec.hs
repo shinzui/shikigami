@@ -40,6 +40,7 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, meiboPrincipal, principalText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.RunJob.Worker (DrainAdmission (..), RunRoute (..), admitRunJobWith, agentJobOutcome, conversationJobOutcome, drainAdmissionOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -131,10 +132,10 @@ tests =
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             let pool = StoreConnection.pool store
-                jobWith suffix = sampleJob {idempotencyKey = "codec-agent:event:" <> suffix}
+                jobWith suffix = sampleJob {identity = UnresolvedLegacyIdentity, idempotencyKey = "codec-agent:event:" <> suffix}
             activeDirectory <- directoryWith [principalRecord Active]
             active <- admitRunJobWith pool activeDirectory [drainAgent] (jobWith "active")
-            assertEqual "active principal continues" DrainAllowed active
+            assertAllowedAs "active principal continues" "agent_codec" active
 
             pausedDirectory <- directoryWith [principalRecord Paused]
             paused <- admitRunJobWith pool pausedDirectory [drainAgent] (jobWith "paused")
@@ -338,6 +339,7 @@ sampleJob :: RunJob
 sampleJob =
   RunJob
     { agentName = "codec-agent",
+      identity = compatibilityIdentity "codec-agent",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
@@ -383,6 +385,11 @@ assertSkipped :: String -> DrainAdmission -> IO ()
 assertSkipped _ (DrainSkipped runSkip) =
   assertEqual "drain stage" DirectoryStore.DrainStage (DirectoryStore.stage runSkip)
 assertSkipped label other = assertFailure (label <> ": expected DrainSkipped, got " <> show other)
+
+assertAllowedAs :: String -> Text -> DrainAdmission -> IO ()
+assertAllowedAs _ expectedPrincipal (DrainAllowed RunJob {identity}) =
+  assertEqual "admitted principal" (Just expectedPrincipal) (principalText <$> meiboPrincipal identity)
+assertAllowedAs label _ other = assertFailure (label <> ": expected DrainAllowed, got " <> show other)
 
 requireTuning :: Either e JobTuning -> JobTuning
 requireTuning = either (const (error "invalid test job tuning")) id

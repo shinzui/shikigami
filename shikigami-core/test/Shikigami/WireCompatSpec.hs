@@ -30,6 +30,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
@@ -180,6 +181,7 @@ sampleRunJob :: RunJob
 sampleRunJob =
   RunJob
     { agentName = "at-risk-watch",
+      identity = UnresolvedLegacyIdentity,
       triggerKind = TriggeredByStream,
       routeKind = InferredLegacyRoute,
       occurredAt = sampleTime,

@@ -62,6 +62,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), P
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
+import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..), recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
@@ -396,7 +397,7 @@ tests =
               Right (Completed (Left _)) -> pure ()
               other -> assertFailure ("Always run should fail permanently, got " <> show other)
 
-            memories <- runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope "missing-task-agent"))
+            memories <- runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "missing-task-agent")))
             case memories of
               Right (Right [MemoryRow {content, tags}]) -> do
                 assertBool "failure content is explicit" ("run failed: " `Text.isPrefixOf` content)
@@ -409,7 +410,7 @@ tests =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
             forM_ [1 .. 5 :: Int] (recordRecallFixture appEnv)
             limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
-            recalled <- recallPriorLearnings appEnv limit (agentScope "recall-limit-agent") "recall fixture"
+            recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent "recall-limit-agent")) "recall fixture"
             assertEqual "declared bound caps fallback rows" 3 (length recalled),
       testCase "replays completed lifecycle steps for the same run id" do
         withShikigamiMigratedDatabase \connStr ->
@@ -527,7 +528,7 @@ tests =
                 assertBool ("failure should name the profile: " <> show err) ("sanctioned-review" `Text.isInfixOf` agentRunFailureDetail err)
               other -> assertFailure ("expected a permanent profile refusal, got " <> show other)
 
-            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "heartbeat")))
             case sessions of
               Right (Right rows) -> assertEqual "no session was opened" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other))
@@ -610,7 +611,7 @@ tests =
                 assertBool ("violation should name the pinned digest: " <> Text.unpack detail) (profileDigestText digest `Text.isInfixOf` detail)
               other -> assertFailure ("expected a permanent provider-profile refusal, got " <> show other)
 
-            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "profiled-skill"))
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "profiled-skill")))
             case sessions of
               Right (Right rows) -> assertEqual "the provider seam was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
@@ -744,7 +745,7 @@ tests =
                 sid <- case turn of
                   Right result -> pure (Conversation.sessionId result)
                   Left err -> assertFailure ("conversation turn failed: " <> show err)
-                sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+                sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (verifiedAgentIdentity "agent_heartbeat")))
                 case sessions of
                   Right (Right [SessionRow {agentId}]) -> assertEqual "session agent id" "agent_heartbeat" agentId
                   other -> assertFailure ("name-keyed scope should contain one attributed session, got " <> show other)
@@ -1246,7 +1247,8 @@ tests =
                     supervisor = decl {delegates = ["heartbeat"]}
                     ctx =
                       DelegateCtx
-                        { delegateDepth = 0,
+                        { identity = compatibilityIdentity "heartbeat",
+                          delegateDepth = 0,
                           sessionId = Just (idText parentSession),
                           parentSessionId = Nothing,
                           parentRunWorkflowId = Nothing,
@@ -1254,7 +1256,7 @@ tests =
                           delegationBudgetId = Nothing,
                           budgetLimit = defaultDelegationBudget
                         }
-                    parentBody = void (delegate supervisor ctx "cycle" "heartbeat" (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "cycle" "heartbeat" (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
                   Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected "heartbeat") err
@@ -1270,7 +1272,7 @@ tests =
                     supervisor = decl {delegates = ["heartbeat"]}
                     zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
                     ctx = (parentDelegateContext parentSession) {budgetLimit = zeroBudget}
-                    parentBody = void (delegate supervisor ctx "over-budget" "heartbeat" (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "over-budget" "heartbeat" (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
                   Left err -> assertEqual "the zero budget is exhausted" DelegationBudgetExhausted err
@@ -1342,8 +1344,8 @@ tests =
                     assertEqual
                       "kioku records both delegated child sessions"
                       ( Set.fromList
-                          [ ("web-researcher", Just (idText parentSession), 1),
-                            ("code-researcher", Just (idText parentSession), 1)
+                          [ ("shikigami.agent.web-researcher", Just (idText parentSession), 1),
+                            ("shikigami.agent.code-researcher", Just (idText parentSession), 1)
                           ]
                       )
                       (lineageSummary rows)
@@ -1725,6 +1727,8 @@ parentDelegateWorkflow :: SessionId -> Eff (Workflow : AppEffects) Value
 parentDelegateWorkflow currentSession = do
   delegated <-
     delegate
+      [decl]
+      disabledDirectoryHandle
       (decl {delegates = ["heartbeat"]})
       (parentDelegateContext currentSession)
       "heartbeat"
@@ -1734,20 +1738,21 @@ parentDelegateWorkflow currentSession = do
 
 parentCollectWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCollectWorkflow currentSession supervisor = do
-  success <- delegate supervisor (parentDelegateContext currentSession) "success" "heartbeat" (object [])
-  failure <- delegate supervisor (parentDelegateContext currentSession) "failure" "missing-task-agent" (object [])
+  success <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "success" "heartbeat" (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure" "missing-task-agent" (object [])
   awaitAllDelegated [success, failure]
 
 parentCancellationWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCancellationWorkflow currentSession supervisor = do
-  failure <- delegate supervisor (parentDelegateContext currentSession) "failure-first" "missing-task-agent" (object [])
-  sibling <- delegate supervisor (parentDelegateContext currentSession) "cancelled-sibling" "heartbeat" (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure-first" "missing-task-agent" (object [])
+  sibling <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "cancelled-sibling" "heartbeat" (object [])
   cancelSiblingsOnFailure [failure, sibling]
 
 parentDelegateContext :: SessionId -> DelegateCtx
 parentDelegateContext currentSession =
   DelegateCtx
-    { delegateDepth = 0,
+    { identity = compatibilityIdentity "test-parent",
+      delegateDepth = 0,
       sessionId = Just (idText currentSession),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
@@ -1755,6 +1760,9 @@ parentDelegateContext currentSession =
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }
+
+verifiedAgentIdentity :: Text -> ResolvedAgentIdentity
+verifiedAgentIdentity raw = VerifiedAgent (either (error . Text.unpack) id (mkAgentPrincipal raw))
 
 testDeps :: AppEnv -> BehaviorEnv -> AgentRunHooks -> AgentRunDeps
 testDeps appEnv behaviorEnv hooks =
@@ -1971,17 +1979,18 @@ startDecoyConversationSession :: AppEnv -> Text -> Text -> IO SessionId
 startDecoyConversationSession appEnv agentName decoyConversationId = do
   now <- getCurrentTime
   sid <- genSessionId
+  let recordedIdentity = CompatibilityAgent agentName
   result <-
     runAppIO appEnv $
       Session.start
         StartSessionData
           { sessionId = sid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor agentName,
+            actorPrincipal = agentActor recordedIdentity,
             ownerPrincipal = Nothing,
             agentId = agentName,
             focus = "conversation",
-            scope = agentScope agentName,
+            scope = agentScope recordedIdentity,
             subjectRef = Just decoyConversationId,
             previousSessionId = Nothing,
             parentSessionId = Nothing,
@@ -1996,7 +2005,7 @@ startDecoyConversationSession appEnv agentName decoyConversationId = do
 -- conversation.
 runningSessionsFor :: AppEnv -> Text -> Text -> IO [Text]
 runningSessionsFor appEnv agentName wantedConversationId = do
-  rows <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope agentName))
+  rows <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent agentName)))
   case rows of
     Right (Right allRows) ->
       pure
@@ -2328,6 +2337,7 @@ capabilityJob :: Text -> Text -> RunJob
 capabilityJob agentName key =
   RunJob
     { agentName,
+      identity = compatibilityIdentity agentName,
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2608,6 +2618,7 @@ job :: RunJob
 job =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2624,6 +2635,7 @@ retryVersioningJob :: Text -> RunJob
 retryVersioningJob key =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2643,6 +2655,7 @@ permanentFailureJob :: RunJob
 permanentFailureJob =
   RunJob
     { agentName = "missing-task-agent",
+      identity = compatibilityIdentity "missing-task-agent",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2659,6 +2672,7 @@ crashJob :: RunJob
 crashJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2675,6 +2689,7 @@ profileRefusalJob :: RunJob
 profileRefusalJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2691,6 +2706,7 @@ profilePinningJob :: RunJob
 profilePinningJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2707,6 +2723,7 @@ profileViolationJob :: RunJob
 profileViolationJob =
   RunJob
     { agentName = "profiled-skill",
+      identity = compatibilityIdentity "profiled-skill",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2849,6 +2866,7 @@ recordBeforeCompleteCrashJob :: RunJob
 recordBeforeCompleteCrashJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2865,6 +2883,7 @@ flowJob :: RunJob
 flowJob =
   RunJob
     { agentName = "at-risk-customer",
+      identity = compatibilityIdentity "at-risk-customer",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2883,6 +2902,7 @@ flowMemoryJob :: RunJob
 flowMemoryJob =
   RunJob
     { agentName = "at-risk-customer",
+      identity = compatibilityIdentity "at-risk-customer",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2908,11 +2928,11 @@ recordPriorEscalation appEnv ticket = do
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor "at-risk-customer",
+            actorPrincipal = agentActor (CompatibilityAgent "at-risk-customer"),
             ownerPrincipal = Nothing,
             agentId = "at-risk-customer",
             sessionId = Nothing,
-            scope = agentScope "at-risk-customer",
+            scope = agentScope (CompatibilityAgent "at-risk-customer"),
             memoryType = MemoryPattern,
             content = ticket <> " escalated after acknowledgement timeout",
             priority = 100,
@@ -2935,11 +2955,11 @@ recordRecallFixture appEnv ordinal = do
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor "recall-limit-agent",
+            actorPrincipal = agentActor (CompatibilityAgent "recall-limit-agent"),
             ownerPrincipal = Nothing,
             agentId = "recall-limit-agent",
             sessionId = Nothing,
-            scope = agentScope "recall-limit-agent",
+            scope = agentScope (CompatibilityAgent "recall-limit-agent"),
             memoryType = MemoryPattern,
             content = "recall fixture " <> Text.pack (show ordinal),
             priority = 100,
@@ -2964,6 +2984,7 @@ approvalJob :: RunJob
 approvalJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2980,6 +3001,7 @@ rejectedJob :: RunJob
 rejectedJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2996,6 +3018,7 @@ timeoutJob :: RunJob
 timeoutJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3012,6 +3035,7 @@ answeredBeforeDeadlineJob :: RunJob
 answeredBeforeDeadlineJob =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3028,6 +3052,7 @@ researchSupervisorJob :: RunJob
 researchSupervisorJob =
   RunJob
     { agentName = "research-supervisor",
+      identity = compatibilityIdentity "research-supervisor",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3044,6 +3069,7 @@ flowDelegationJob :: RunJob
 flowDelegationJob =
   RunJob
     { agentName = "flow-delegation-supervisor",
+      identity = compatibilityIdentity "flow-delegation-supervisor",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,

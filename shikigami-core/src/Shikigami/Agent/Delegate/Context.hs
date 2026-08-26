@@ -12,6 +12,7 @@ where
 
 import Control.Exception (Exception)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Prelude
 
 -- | Identity of the one durable descendant budget shared by a complete
@@ -24,6 +25,7 @@ newtype DelegationBudgetId = DelegationBudgetId Text
 -- | Context a run needs to decide whether it may delegate further.
 data DelegateCtx = DelegateCtx
   { delegateDepth :: !Int,
+    identity :: !AgentIdentity,
     sessionId :: !(Maybe Text),
     parentSessionId :: !(Maybe Text),
     parentRunWorkflowId :: !(Maybe Text),
@@ -46,6 +48,7 @@ data DelegationError
   | DelegationBudgetExhausted
   | DelegationBudgetUnavailable !Text
   | DelegationNotAllowed !Text
+  | DelegationIdentityRefused !Text
   | DelegatedChildCancelled
   | DelegatedChildFailed !Text
   | DelegatedResultDecodeFailed !Text
@@ -67,13 +70,14 @@ checkCycle DelegateCtx {lineage} target
 
 -- | Validate that a child can be created and return the child's depth context.
 checkDepth :: DelegateCtx -> Either DelegationError DelegateCtx
-checkDepth DelegateCtx {delegateDepth, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, budgetLimit} =
+checkDepth DelegateCtx {delegateDepth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, budgetLimit} =
   let attemptedDepth = delegateDepth + 1
    in if attemptedDepth < maxDelegationDepth
         then
           Right
             DelegateCtx
               { delegateDepth = attemptedDepth,
+                identity,
                 sessionId,
                 parentSessionId,
                 parentRunWorkflowId,

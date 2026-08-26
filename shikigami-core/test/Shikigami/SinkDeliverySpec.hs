@@ -49,6 +49,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
@@ -195,7 +196,7 @@ pausedEnqueue :: IO ()
 pausedEnqueue =
   withFixture "paused-enqueue" [signalSink "paused"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     directory <- directoryWith Paused
-    rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv runJob
+    rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "lifecycle refusal creates no outbox row" [] rows
     receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey (idempotencyKey runJob <> ":sink:0"))
     assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
@@ -214,13 +215,13 @@ pauseBeforePublish = do
     withFixture "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       directory <- mutableDirectory lifecycleRef
       let gatedDeps = deps {AgentWorkflow.directory = directory}
-      [row] <- runWorkflowAndRows gatedDeps appEnv runJob
+      [row] <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
       case Integration.decodeJsonIntegrationEvent (rowEvent row) of
         Right AgentWorkflow.SinkIntent {AgentWorkflow.principalId} ->
           assertEqual "outbox intent carries canonical principal" (Just "agent_heartbeat") principalId
         other -> assertFailure ("sink intent should decode, got " <> show other)
 
-      sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope "heartbeat"))
+      sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope verifiedHeartbeatIdentity))
       case sessions of
         Right (Right [SessionRow {agentId}]) -> assertEqual "agent-run session uses principal id" "agent_heartbeat" agentId
         other -> assertFailure ("expected one attributed session, got " <> show other)
@@ -549,6 +550,7 @@ testJob :: Text -> RunJob
 testJob label =
   RunJob
     { agentName = "heartbeat",
+      identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 21) 0,
@@ -560,6 +562,12 @@ testJob label =
       lineage = [],
       delegationBudgetId = Nothing
     }
+
+verifiedHeartbeatAgentIdentity :: AgentIdentity
+verifiedHeartbeatAgentIdentity = VerifiedIdentity (either (error . Text.unpack) id (mkAgentPrincipal "agent_heartbeat"))
+
+verifiedHeartbeatIdentity :: ResolvedAgentIdentity
+verifiedHeartbeatIdentity = VerifiedAgent (either (error . Text.unpack) id (mkAgentPrincipal "agent_heartbeat"))
 
 signalSink :: Text -> Sink
 signalSink requestedIntent =

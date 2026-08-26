@@ -3,6 +3,7 @@ module Shikigami.DelegateContextSpec (tests) where
 import Data.Foldable (traverse_)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
 
@@ -38,7 +39,8 @@ tests =
 ctxAt :: Int -> DelegateCtx
 ctxAt depth =
   DelegateCtx
-    { delegateDepth = depth,
+    { identity = compatibilityIdentity "lead",
+      delegateDepth = depth,
       sessionId = Nothing,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,

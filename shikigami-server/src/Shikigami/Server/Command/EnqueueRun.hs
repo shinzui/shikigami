@@ -4,12 +4,18 @@ module Shikigami.Server.Command.EnqueueRun
 where
 
 import Data.Aeson qualified as Aeson
+import Data.List (find)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
-import Shikigami.App.Config (AppConfig, revealSecretText)
+import Shikigami.App.Config (AppConfig, agentsDirectory, directorySettings, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Directory qualified as Directory
+import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Enqueue (addressedRunKey, enqueueAddressedRunWithKey, ensureRunQueue)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -41,6 +47,21 @@ runEnqueueRun agent mpayload conversation mkey config = do
       Nothing -> do
         hPutStrLn stderr ("enqueue-run: --payload is not valid JSON: " <> raw)
         exitFailure
+  report <- loadAgentsReport (agentsDirectory config)
+  decl <-
+    case find ((== Text.pack agent) . name) (loadedAgents report) of
+      Nothing -> die ("unknown or unloadable agent " <> agent)
+      Just found -> pure found
+  directoryRuntime <-
+    Directory.startDirectory Log.silentLogger (directorySettings config) >>= \case
+      Left problem -> die ("directory admission failed: " <> Text.unpack problem)
+      Right runtime -> pure runtime
+  admittedIdentity <-
+    Directory.identityAdmission
+      (handle directoryRuntime)
+      (declaredPrincipalId decl)
+      (name decl)
+      >>= either (die . Text.unpack) pure
   connStr <- revealSecretText <$> requireDatabaseUrl "enqueue-run" config
   withStore (defaultConnectionSettings connStr) $ \st -> do
     -- This is one of the two startup paths that used to rely on the per-send
@@ -53,7 +74,7 @@ runEnqueueRun agent mpayload conversation mkey config = do
       Right () -> pure ()
     let route = if conversation then ConversationWorkflowRoute else AgentWorkflowRoute
         key = maybe (addressedRunKey (Text.pack agent) payload) Text.pack mkey
-    res <- enqueueAddressedRunWithKey (pool st) (Text.pack agent) route payload key
+    res <- enqueueAddressedRunWithKey (pool st) admittedIdentity (Text.pack agent) route payload key
     case res of
       Left e -> do
         hPutStrLn stderr ("enqueue-run: " <> show e)
@@ -67,3 +88,10 @@ runEnqueueRun agent mpayload conversation mkey config = do
               <> " with idempotency key "
               <> Text.unpack key
           )
+  where
+    declaredPrincipalId AgentDecl {identity = Nothing} = Nothing
+    declaredPrincipalId AgentDecl {identity = Just IdentityDecl {principal}} = Just principal
+
+    die message = do
+      hPutStrLn stderr ("enqueue-run: " <> message)
+      exitFailure

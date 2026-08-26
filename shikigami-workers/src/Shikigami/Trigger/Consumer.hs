@@ -77,14 +77,16 @@ import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
+import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
-import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelope)
+import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
@@ -577,7 +579,7 @@ prepareActivityHits directory resolvedOccurredAt include agents activity =
     ]
   where
     prepare agent = do
-      let job = runJobFromEnvelope resolvedOccurredAt agent activity
+      let job = runJobFromEnvelopeWithIdentity resolvedOccurredAt UnresolvedLegacyIdentity agent activity
           hit = StreamHit {agentName = agent ^. #name, envelope = activity}
       prepareTrigger directory "stream" agent job hit
 
@@ -605,6 +607,7 @@ prepareEventHits directory receivedAt agents payloadValue event =
       let job =
             RunJob
               { agentName = agent ^. #name,
+                identity = UnresolvedLegacyIdentity,
                 triggerKind = TriggeredByEvent,
                 routeKind = eventRouteOf agent,
                 occurredAt = receivedAt,
@@ -632,9 +635,17 @@ prepareTrigger :: Directory.DirectoryHandle -> Text -> AgentDecl -> RunJob -> hi
 prepareTrigger directory detail agent job hit = do
   let declaredPrincipalId = principalIdOf agent
   decision <- Directory.consultLifecycle directory declaredPrincipalId (agent ^. #name)
-  pure case lifecycleRefusal declaredPrincipalId decision of
-    Nothing -> EnqueueTrigger job hit
-    Just (resolvedPrincipalId, reason) ->
+  pure case decision of
+    Directory.AllowRun Nothing -> EnqueueTrigger (job {RunJob.identity = compatibilityIdentity (agent ^. #name)}) hit
+    Directory.AllowRun (Just principal) ->
+      case mkAgentPrincipal (Directory.principalId principal) of
+        Right admittedPrincipal -> EnqueueTrigger (job {RunJob.identity = VerifiedIdentity admittedPrincipal}) hit
+        Left reason -> refused (Just (Directory.principalId principal)) reason
+    Directory.SkipRun principal reason -> refused (Just (Directory.principalId principal)) reason
+    Directory.UnknownPrincipal identifier -> refused declaredPrincipalId ("unknown principal: " <> identifier)
+    Directory.DirectoryUnavailable problem -> refused declaredPrincipalId ("directory unavailable: " <> problem)
+  where
+    refused resolvedPrincipalId reason =
       SkipTrigger
         RunSkip
           { agentName = agent ^. #name,
@@ -672,13 +683,6 @@ principalIdOf :: AgentDecl -> Maybe Text
 principalIdOf AgentDecl {identity} = declared <$> identity
   where
     declared IdentityDecl {principal} = principal
-
-lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
-lifecycleRefusal declaredPrincipalId = \case
-  Directory.AllowRun _ -> Nothing
-  Directory.SkipRun principal reason -> Just (Just (Directory.principalId principal), reason)
-  Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
-  Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
 
 eventTriggerTypeOf :: AgentDecl -> Maybe Text
 eventTriggerTypeOf agent = case agent ^. #trigger of

@@ -19,6 +19,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -107,6 +108,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
   let job =
         RunJob
           { agentName = name decl,
+            identity = compatibilityIdentity (name decl),
             triggerKind = TriggeredByEvent,
             occurredAt,
             triggerPayload = Aeson.Null,

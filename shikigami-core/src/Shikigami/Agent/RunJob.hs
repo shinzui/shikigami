@@ -11,6 +11,7 @@ where
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
+import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Prelude
 
 -- | Which trigger class produced the job.
@@ -40,6 +41,7 @@ data RunRouteKind
 -- | A request to run one declared agent, with the trigger occurrence and payload.
 data RunJob = RunJob
   { agentName :: !Text,
+    identity :: !AgentIdentity,
     triggerKind :: !TriggerKind,
     occurredAt :: !UTCTime,
     triggerPayload :: !Value,
@@ -60,7 +62,7 @@ data RunJob = RunJob
 -- and a queued or journaled job written before the discriminator existed encodes
 -- and decodes exactly as it did.
 instance ToJSON RunJob where
-  toJSON RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind} =
+  toJSON RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind} =
     Aeson.object
       ( [ "agentName" Aeson..= agentName,
           "triggerKind" Aeson..= triggerKind,
@@ -71,6 +73,7 @@ instance ToJSON RunJob where
           "parentRunWorkflowId" Aeson..= parentRunWorkflowId,
           "delegationDepth" Aeson..= delegationDepth
         ]
+          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
           <> ["lineage" Aeson..= lineage | not (null lineage)]
           <> maybe [] (\budgetId -> ["delegationBudgetId" Aeson..= budgetId]) delegationBudgetId
           <> ["routeKind" Aeson..= routeKind | routeKind /= InferredLegacyRoute]
@@ -82,6 +85,7 @@ instance ToJSON RunJob where
 instance FromJSON RunJob where
   parseJSON = Aeson.withObject "RunJob" \value -> do
     agentName <- value Aeson..: "agentName"
+    identity <- value Aeson..:? "identity" Aeson..!= UnresolvedLegacyIdentity
     triggerKind <- value Aeson..: "triggerKind"
     occurredAt <- value Aeson..: "occurredAt"
     triggerPayload <- value Aeson..: "triggerPayload"
@@ -92,4 +96,4 @@ instance FromJSON RunJob where
     lineage <- value Aeson..:? "lineage" Aeson..!= []
     delegationBudgetId <- value Aeson..:? "delegationBudgetId"
     routeKind <- value Aeson..:? "routeKind" Aeson..!= InferredLegacyRoute
-    pure RunJob {agentName, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}
+    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}
