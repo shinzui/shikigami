@@ -1,0 +1,38 @@
+blob
+mark :1
+data <<PRACTICE_DOC_P1
+# PRACTICE-1 P1
+PRACTICE_DOC_P1
+
+commit refs/heads/main
+mark :2
+author Fixture <fixture@example.com> 1700000120 +0000
+committer Fixture <fixture@example.com> 1700000120 +0000
+data <<PRACTICE_COMMIT_P1
+practice P1
+PRACTICE_COMMIT_P1
+M 100644 :1 docs/practices/PRACTICE-1.md
+
+reset refs/tags/P1
+from :2
+
+blob
+mark :3
+data <<PRACTICE_DOC_P2
+# PRACTICE-1 P2
+PRACTICE_DOC_P2
+
+commit refs/heads/main
+mark :4
+author Fixture <fixture@example.com> 1700000180 +0000
+committer Fixture <fixture@example.com> 1700000180 +0000
+data <<PRACTICE_COMMIT_P2
+practice P2
+PRACTICE_COMMIT_P2
+from :2
+M 100644 :3 docs/practices/PRACTICE-1.md
+
+reset refs/tags/P2
+from :4
+
+done

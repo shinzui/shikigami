@@ -1,0 +1,45 @@
+blob
+mark :1
+data <<TARGET_ADR_T1
+# Target T1
+TARGET_ADR_T1
+
+commit refs/heads/main
+mark :2
+author Fixture <fixture@example.com> 1700000000 +0000
+committer Fixture <fixture@example.com> 1700000000 +0000
+data <<TARGET_COMMIT_T1
+target T1
+TARGET_COMMIT_T1
+M 100644 :1 docs/adr/0001.md
+
+reset refs/tags/T1
+from :2
+
+blob
+mark :3
+data <<TARGET_ADR_T2
+# Target T2
+TARGET_ADR_T2
+
+blob
+mark :4
+data <<TARGET_MANIFEST_T2
+libfoo ==2.0
+TARGET_MANIFEST_T2
+
+commit refs/heads/main
+mark :5
+author Fixture <fixture@example.com> 1700000060 +0000
+committer Fixture <fixture@example.com> 1700000060 +0000
+data <<TARGET_COMMIT_T2
+target T2
+TARGET_COMMIT_T2
+from :2
+M 100644 :3 docs/adr/0001.md
+M 100644 :4 cabal.project
+
+reset refs/tags/T2
+from :5
+
+done

@@ -4,7 +4,9 @@ import Control.Lens ((^.))
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString8
 import Data.Generics.Labels ()
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Shikigami.PracticeReview
   ( Applicability (..),
@@ -37,13 +39,14 @@ import Shikigami.PracticeReview.Evidence
   ( DependencyPinResolver (..),
     EvidenceBundle (..),
     EvidenceCompleteness (..),
+    EvidenceCursor (..),
     EvidenceLimits,
     EvidenceProblem (..),
     EvidenceQuery,
     EvidenceReadError (..),
     EvidenceReader (..),
     EvidenceSource (..),
-    PageRequest,
+    PageRequest (..),
     PinnedContent (..),
     PinnedDiff (..),
     PinnedMatch (..),
@@ -55,6 +58,7 @@ import Shikigami.PracticeReview.Evidence
     acquireEvidence,
     mkEvidenceLimits,
     mkRedactionRule,
+    summarizeEvidenceBundle,
     validatePinnedContent,
     validatePinnedDiff,
   )
@@ -68,6 +72,8 @@ import Shikigami.Repository
     relativePathText,
     revisionText,
   )
+import System.Directory (doesFileExist)
+import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -168,7 +174,24 @@ tests =
             assertEqual "target sources" [headSha, headSha] (sourceRevision <$> target)
             assertEqual "practice source" [practiceSha1] (sourceRevision <$> references)
             assertEqual "upstream source" [upstreamSha2] (sourceRevision <$> upstream)
+            assertEqual "target blob ids" [targetDecisionBlob2, targetManifestBlob2] (sourceHash <$> target)
+            assertEqual "practice blob id" [practiceBlob1] (sourceHash <$> references)
+            assertEqual "upstream blob id" [upstreamBlob2] (sourceHash <$> upstream)
             assertEqual "accepted and rejected prior evidence retained" [Accepted, Rejected] (resolutionOutcome <$> priorResolutions),
+      testCase "switching P1 to P2 changes only practice provenance" do
+        let binding = bindingWithReferences [practiceReference2]
+        bundle <- acquireEvidence testLimits fixtureReader compatiblePinResolver (validatedTriggerFor binding) binding []
+        assertEqual "complete" Complete (bundle ^. #completeness)
+        assertEqual "target remains T2" [headSha, headSha] (sourceRevision <$> (bundle ^. #target))
+        assertEqual "practice advances to P2" [practiceSha2] (sourceRevision <$> (bundle ^. #references))
+        assertEqual "upstream remains U2" [upstreamSha2] (sourceRevision <$> (bundle ^. #upstream)),
+      testCase "an added target does not ask the reader for a diff" do
+        diffCalls <- newIORef 0
+        let binding = bindingWithoutUpstream
+        bundle <- acquireEvidence testLimits (countingDiffReader diffCalls) compatiblePinResolver (validatedAddedTriggerFor binding) binding []
+        calls <- readIORef diffCalls
+        assertEqual "no base/head diff for an added object" 0 calls
+        assertEqual "added ADR is still acquired" ["docs/adr/0001.md"] (sourcePath <$> (bundle ^. #target)),
       testCase "rejects mixed revisions for one practice repository" do
         bundle <- acquireEvidence testLimits fixtureReader compatiblePinResolver (validatedTriggerFor mixedRevisionBinding) mixedRevisionBinding []
         assertEqual "incomplete" Incomplete (bundle ^. #completeness)
@@ -177,7 +200,35 @@ tests =
         bundle <- acquireEvidence testLimits fixtureReader incompatiblePinResolver validatedTrigger adoptionBinding []
         assertEqual "incomplete" Incomplete (bundle ^. #completeness)
         assertEqual "no upstream evidence" [] (bundle ^. #upstream)
-        assertBool "incompatible version reported" (any isIncompatibleVersion (bundle ^. #problems))
+        assertBool "incompatible version reported" (any isIncompatibleVersion (bundle ^. #problems)),
+      testCase "reports a missing upstream tag as incompatible" do
+        bundle <- acquireEvidence testLimits staleRefReader compatiblePinResolver validatedTrigger adoptionBinding []
+        assertEqual "incomplete" Incomplete (bundle ^. #completeness)
+        assertEqual "no fabricated upstream evidence" [] (bundle ^. #upstream)
+        assertBool "stale tag reported" (any isIncompatibleVersion (bundle ^. #problems)),
+      testCase "rejects P2 bytes stamped as P1" do
+        bundle <- acquireEvidence testLimits mismatchedPracticeReader compatiblePinResolver validatedTrigger adoptionBinding []
+        assertEqual "incomplete" Incomplete (bundle ^. #completeness)
+        assertEqual "mismatched practice omitted" [] (bundle ^. #references)
+        assertBool "provenance mismatch reported" (any isProvenanceMismatch (bundle ^. #problems)),
+      testCase "retains successful sources when a required target blob is missing" do
+        bundle <- acquireEvidence testLimits missingTargetReader compatiblePinResolver validatedTrigger adoptionBinding []
+        assertEqual "incomplete" Incomplete (bundle ^. #completeness)
+        assertEqual "manifest remains available" ["cabal.project"] (sourcePath <$> (bundle ^. #target))
+        assertBool "missing target reported" (any isReadFailure (bundle ^. #problems)),
+      testCase "stops reference discovery at the grep page ceiling" do
+        bundle <- acquireEvidence testLimits endlessGrepReader compatiblePinResolver validatedTrigger adoptionBinding []
+        assertEqual "incomplete" Incomplete (bundle ^. #completeness)
+        assertBool "page limit reported" (any isGrepPageLimit (bundle ^. #problems)),
+      testCase "log-safe summaries never contain excerpts" do
+        let leaky = EvidenceSource {citation = validEvidenceSource ^. #citation, mirrorObservedAt = observedAt, excerpt = "fixture-secret"}
+            bundle = EvidenceBundle {target = [leaky], references = [], upstream = [], priorResolutions = [], problems = [], completeness = Complete}
+            rendered = Text.pack (show (summarizeEvidenceBundle bundle))
+        assertBool "summary excludes secret excerpt" (not ("fixture-secret" `Text.isInfixOf` rendered)),
+      testCase "checked-in fixture manifest carries every pinned commit" do
+        manifest <- readContentPlaneFixture "manifest.json"
+        let expectedRevisions = [baseSha, headSha, practiceSha1, practiceSha2, upstreamSha1, upstreamSha2]
+        assertBool "all expected revisions are pinned" (all (`ByteString8.isInfixOf` manifest) (ByteString8.pack . Text.unpack <$> expectedRevisions))
     ]
 
 validatedTrigger :: ValidatedPracticeReviewTrigger
@@ -200,14 +251,37 @@ validatedTriggerFor binding =
     Left problems -> error (show problems)
     Right value -> value
 
+validatedAddedTriggerFor :: PracticeAdoptionBinding -> ValidatedPracticeReviewTrigger
+validatedAddedTriggerFor binding =
+  case validateTrigger
+    PracticeReviewTrigger
+      { schemaVersion = practiceReviewSchemaVersion,
+        triggerKind = TargetChange,
+        idempotencyKey = "trigger-added-practice-evidence",
+        target = targetProject,
+        targetRange = RevisionRange {changeKind = Added, before = Nothing, head = headCommit},
+        changedDecisionPaths = [decisionPath],
+        adoptions = [binding],
+        referenceChange = Nothing,
+        priorReviewId = Nothing
+      } of
+    Left problems -> error (show problems)
+    Right value -> value
+
 adoptionBinding :: PracticeAdoptionBinding
 adoptionBinding = bindingWithReferences [practiceReference1]
 
 mixedRevisionBinding :: PracticeAdoptionBinding
 mixedRevisionBinding = bindingWithReferences [practiceReference1, practiceReference2]
 
+bindingWithoutUpstream :: PracticeAdoptionBinding
+bindingWithoutUpstream = bindingWith [practiceReference1] []
+
 bindingWithReferences :: [RegisteredPracticeReference] -> PracticeAdoptionBinding
-bindingWithReferences references =
+bindingWithReferences references = bindingWith references [RegisteredUpstreamProject {project = upstreamProject, dependency = "libfoo"}]
+
+bindingWith :: [RegisteredPracticeReference] -> [RegisteredUpstreamProject] -> PracticeAdoptionBinding
+bindingWith references upstreamProjects =
   PracticeAdoptionBinding
     { practice = PracticeKey "practice-1",
       references,
@@ -220,12 +294,7 @@ bindingWithReferences references =
             triageOwner = OwnerPrincipal "principal-triage",
             exceptionApprover = Nothing
           },
-      upstreamProjects =
-        [ RegisteredUpstreamProject
-            { project = upstreamProject,
-              dependency = "libfoo"
-            }
-        ]
+      upstreamProjects
     }
 
 practiceReference1 :: RegisteredPracticeReference
@@ -260,13 +329,28 @@ upstreamRef2 :: RepoRef
 upstreamRef2 = RepoRef {repository = upstreamProject ^. #repository, revision = parseRevision upstreamSha2}
 
 practiceSha1 :: Text
-practiceSha1 = "3333333333333333333333333333333333333333"
+practiceSha1 = "25c08703947fd96d78b3f6908f4454ce0f84c7e6"
 
 practiceSha2 :: Text
-practiceSha2 = "4444444444444444444444444444444444444444"
+practiceSha2 = "bc8a68c96db6cd2d5fc981024e332be566ff30ae"
 
 upstreamSha2 :: Text
-upstreamSha2 = "5555555555555555555555555555555555555555"
+upstreamSha2 = "62f545e3018eaa4f854c57d4161e62fce73e2753"
+
+upstreamSha1 :: Text
+upstreamSha1 = "47234c4ad7d950dfc8a1e695e0a7acaa070494f2"
+
+targetDecisionBlob2 :: Text
+targetDecisionBlob2 = "012ea4ca3a544e103bd378495b290def714e1620"
+
+targetManifestBlob2 :: Text
+targetManifestBlob2 = "47c77c0c0d5bbd3821c4e571476e284b1ef01180"
+
+practiceBlob1 :: Text
+practiceBlob1 = "8126edfc1acfdf3f3e2e84dad04fdd6129d2905e"
+
+upstreamBlob2 :: Text
+upstreamBlob2 = "7eb1470c633b87a99a8acea5250b66c1ce716705"
 
 compatiblePinResolver :: DependencyPinResolver
 compatiblePinResolver =
@@ -289,11 +373,14 @@ incompatiblePinResolver =
     }
 
 fixtureReader :: EvidenceReader
-fixtureReader =
+fixtureReader = makeReader fixtureResolveRef fixtureReadBlob fixtureReadDiff fixtureGrep
+
+makeReader :: (RepositoryId -> Text -> IO (Either EvidenceReadError RepoRef)) -> (RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent)) -> (RepositoryId -> Revision -> Revision -> Maybe RelativePath -> IO (Either EvidenceReadError PinnedDiff)) -> (RepoRef -> EvidenceQuery -> PageRequest -> IO (Either EvidenceReadError PinnedMatchPage)) -> EvidenceReader
+makeReader resolve blobReader diffReader grepPage =
   EvidenceReader
-    { resolveRef = fixtureResolveRef,
-      readBlob = fixtureReadBlob,
-      readDiff = fixtureReadDiff,
+    { resolveRef = resolve,
+      readBlob = blobReader,
+      readDiff = diffReader,
       readTree = \reference _ _ ->
         pure
           ( Right
@@ -303,8 +390,63 @@ fixtureReader =
                   nextCursor = Nothing
                 }
           ),
-      grep = fixtureGrep
+      grep = grepPage
     }
+
+countingDiffReader :: IORef Int -> EvidenceReader
+countingDiffReader calls =
+  makeReader
+    fixtureResolveRef
+    fixtureReadBlob
+    (\repository base requestedHead path -> modifyIORef' calls (+ 1) >> fixtureReadDiff repository base requestedHead path)
+    fixtureGrep
+
+staleRefReader :: EvidenceReader
+staleRefReader =
+  makeReader
+    (\repository mutableRef -> pure (Left (RevisionNotFound repository mutableRef)))
+    fixtureReadBlob
+    fixtureReadDiff
+    fixtureGrep
+
+mismatchedPracticeReader :: EvidenceReader
+mismatchedPracticeReader =
+  makeReader fixtureResolveRef mismatchedBlob fixtureReadDiff fixtureGrep
+  where
+    mismatchedBlob reference path
+      | reference == practiceRef1 && relativePathText path == "docs/practices/PRACTICE-1.md" =
+          fixtureReadBlob practiceRef2 path
+      | otherwise = fixtureReadBlob reference path
+
+missingTargetReader :: EvidenceReader
+missingTargetReader =
+  makeReader fixtureResolveRef missingBlob fixtureReadDiff fixtureGrep
+  where
+    missingBlob reference path
+      | reference == targetRef && path == decisionPath =
+          pure (Left (ContentNotFound targetRepository headSha (relativePathText path)))
+      | otherwise = fixtureReadBlob reference path
+
+endlessGrepReader :: EvidenceReader
+endlessGrepReader =
+  makeReader fixtureResolveRef fixtureReadBlob fixtureReadDiff endlessGrep
+  where
+    endlessGrep reference _ request =
+      let pageNumber =
+            case request ^. #cursor of
+              Nothing -> 1
+              Just (EvidenceCursor "1") -> 2
+              Just (EvidenceCursor "2") -> 3
+              Just (EvidenceCursor "3") -> 4
+              Just _ -> 5
+       in pure
+            ( Right
+                PinnedMatchPage
+                  { provenance = provenanceFor reference,
+                    matches = [PinnedMatch {path = "docs/practices/PRACTICE-1.md", lineNumber = pageNumber, line = "# PRACTICE-1"}],
+                    nextCursor = Just (EvidenceCursor (Text.pack (show pageNumber)))
+                  }
+            )
 
 fixtureResolveRef :: RepositoryId -> Text -> IO (Either EvidenceReadError RepoRef)
 fixtureResolveRef repository mutableRef
@@ -313,17 +455,21 @@ fixtureResolveRef repository mutableRef
 
 fixtureReadBlob :: RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent)
 fixtureReadBlob reference path =
-  pure case (reference ^. #repository, revisionText (reference ^. #revision), relativePathText path) of
+  case (reference ^. #repository, revisionText (reference ^. #revision), relativePathText path) of
     (RepositoryId "repo_target", revision, "docs/adr/0001.md")
-      | revision == headSha -> Right (fixtureBlob reference path "oid-target-t2" "# Target T2\n")
+      | revision == headSha -> fromSnapshot "target/T2/docs/adr/0001.md" targetDecisionBlob2
     (RepositoryId "repo_target", revision, "cabal.project")
-      | revision == headSha -> Right (fixtureBlob reference path "oid-target-manifest-t2" "libfoo ==2.0\n")
+      | revision == headSha -> fromSnapshot "target/T2/cabal.project" targetManifestBlob2
     (RepositoryId "repo_practice", revision, "docs/practices/PRACTICE-1.md")
-      | revision == practiceSha1 -> Right (fixtureBlob reference path "oid-practice-p1" "# PRACTICE-1 P1\n")
-      | revision == practiceSha2 -> Right (fixtureBlob reference path "oid-practice-p2" "# PRACTICE-1 P2\n")
+      | revision == practiceSha1 -> fromSnapshot "practice/P1/docs/practices/PRACTICE-1.md" practiceBlob1
+      | revision == practiceSha2 -> fromSnapshot "practice/P2/docs/practices/PRACTICE-1.md" "246dfb7fa84bb8eeeee051efccd7b240b83f5dc0"
     (RepositoryId "repo_upstream", revision, "src/Foo.hs")
-      | revision == upstreamSha2 -> Right (fixtureBlob reference path "oid-upstream-u2" "module Foo where\n")
-    (repository, revision, rawPath) -> Left (ContentNotFound repository revision rawPath)
+      | revision == upstreamSha2 -> fromSnapshot "upstream/U2/src/Foo.hs" upstreamBlob2
+    (repository, revision, rawPath) -> pure (Left (ContentNotFound repository revision rawPath))
+  where
+    fromSnapshot relativeFixturePath hash = do
+      bytes <- readContentPlaneSnapshot relativeFixturePath
+      pure (Right (fixtureBlob reference path hash bytes))
 
 fixtureReadDiff :: RepositoryId -> Revision -> Revision -> Maybe RelativePath -> IO (Either EvidenceReadError PinnedDiff)
 fixtureReadDiff repository base requestedHead path
@@ -364,6 +510,31 @@ provenanceFor reference =
 
 sourceRevision :: EvidenceSource -> Text
 sourceRevision source = revisionText (source ^. #citation . #content . #provenance . #revision)
+
+sourcePath :: EvidenceSource -> Text
+sourcePath source = relativePathText (source ^. #citation . #content . #path)
+
+sourceHash :: EvidenceSource -> Text
+sourceHash source =
+  case source ^. #citation . #content . #contentHash of
+    ContentHash value -> value
+
+readContentPlaneSnapshot :: FilePath -> IO ByteString
+readContentPlaneSnapshot relativeFixturePath = do
+  readContentPlaneFixture ("snapshots" </> relativeFixturePath)
+
+readContentPlaneFixture :: FilePath -> IO ByteString
+readContentPlaneFixture relativeFixturePath = do
+  root <- repositoryRoot
+  ByteString8.readFile (root </> "fixtures" </> "practice-review" </> "content-plane" </> relativeFixturePath)
+
+repositoryRoot :: IO FilePath
+repositoryRoot = go [".", ".."]
+  where
+    go [] = assertFailure "cannot find cabal.project from the working directory"
+    go (candidate : rest) = do
+      exists <- doesFileExist (candidate </> "cabal.project")
+      if exists then pure candidate else go rest
 
 priorResolutionFixtures :: [ValidatedPracticeReviewResolution]
 priorResolutionFixtures =
@@ -437,16 +608,22 @@ headCommit :: Revision
 headCommit = parseRevision headSha
 
 baseSha :: Text
-baseSha = "1111111111111111111111111111111111111111"
+baseSha = "47fceceac91be21ad137c827ff277ac35da37ee6"
 
 headSha :: Text
-headSha = "2222222222222222222222222222222222222222"
+headSha = "4860c38138deb34933840bb9587138fe1df30e8e"
 
 observedAt :: UTCTime
 observedAt = UTCTime (fromGregorian 2026 8 26) (secondsToDiffTime 0)
 
 validBlob :: PinnedContent
 validBlob = blob "repo_target" headSha "docs/adr/0001.md" "oid_target" 21 "token=fixture-secret\n"
+
+validEvidenceSource :: EvidenceSource
+validEvidenceSource =
+  case validatePinnedContent testLimits TargetEvidence targetProject targetRef decisionPath validBlob of
+    Left problem -> error (show problem)
+    Right source -> source
 
 blob :: Text -> Text -> Text -> Text -> Int -> ByteString -> PinnedContent
 blob repository revision path contentHash declaredSize bytes =
@@ -533,3 +710,11 @@ isMixedRevisions _ = False
 isIncompatibleVersion :: EvidenceProblem -> Bool
 isIncompatibleVersion (IncompatibleUpstreamVersion _ _) = True
 isIncompatibleVersion _ = False
+
+isReadFailure :: EvidenceProblem -> Bool
+isReadFailure (ReadFailed _ _ _ _ _) = True
+isReadFailure _ = False
+
+isGrepPageLimit :: EvidenceProblem -> Bool
+isGrepPageLimit (EvidenceLimitExceeded "grep-pages" _ _ _) = True
+isGrepPageLimit _ = False

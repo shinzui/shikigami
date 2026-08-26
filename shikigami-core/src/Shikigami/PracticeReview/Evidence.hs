@@ -28,9 +28,11 @@ module Shikigami.PracticeReview.Evidence
     DependencyPinResolver (..),
     EvidenceCompleteness (..),
     EvidenceBundle (..),
+    EvidenceBundleSummary (..),
     validatePinnedContent,
     validatePinnedDiff,
     acquireEvidence,
+    summarizeEvidenceBundle,
   )
 where
 
@@ -317,6 +319,17 @@ data EvidenceBundle = EvidenceBundle
   }
   deriving stock (Eq, Show, Generic)
 
+-- | Log-safe bundle metadata. It deliberately has no excerpt or raw response
+-- field, so operational logging cannot accidentally serialize source bytes.
+data EvidenceBundleSummary = EvidenceBundleSummary
+  { targetIds :: ![EvidenceId],
+    referenceIds :: ![EvidenceId],
+    upstreamIds :: ![EvidenceId],
+    problems :: ![EvidenceProblem],
+    completeness :: !EvidenceCompleteness
+  }
+  deriving stock (Eq, Show, Generic)
+
 -- | Validate a blob against the exact repository, revision, and path that was
 -- requested, then produce a bounded and redacted citable source.
 validatePinnedContent :: EvidenceLimits -> EvidenceRole -> ProjectRef -> RepoRef -> RelativePath -> PinnedContent -> Either EvidenceProblem EvidenceSource
@@ -429,6 +442,18 @@ acquireEvidence limits reader pinResolver validatedTrigger binding validatedPrio
         problems = allProblems,
         completeness = if null allProblems then Complete else Incomplete
       }
+
+summarizeEvidenceBundle :: EvidenceBundle -> EvidenceBundleSummary
+summarizeEvidenceBundle bundle =
+  EvidenceBundleSummary
+    { targetIds = evidenceIds (bundle ^. #target),
+      referenceIds = evidenceIds (bundle ^. #references),
+      upstreamIds = evidenceIds (bundle ^. #upstream),
+      problems = bundle ^. #problems,
+      completeness = bundle ^. #completeness
+    }
+  where
+    evidenceIds = fmap (^. #citation . #evidenceId)
 
 acquireTargetDiff :: EvidenceLimits -> EvidenceReader -> ProjectRef -> RevisionRange -> IO ([RelativePath], [EvidenceProblem])
 acquireTargetDiff limits reader project range =

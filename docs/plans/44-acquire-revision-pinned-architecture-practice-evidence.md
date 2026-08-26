@@ -41,7 +41,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-26T14:40:56Z) M1: define a fail-closed `EvidenceReader`, pinned response types, and provenance/content validation.
 - [x] (2026-08-26T14:50:55Z) M2: acquire target ADR/diff/code, one-revision practice references, and compatible upstream evidence.
 - [x] (2026-08-26T14:50:55Z) M2: accept prior validated resolutions as evidence without reading Kioku directly.
-- [ ] M3: add deterministic fixture repositories, a stub reader, redaction/limit tests, and incomplete-evidence cases.
+- [x] (2026-08-26T15:01:09Z) M3: add deterministic fixture repositories, a stub reader, redaction/limit tests, and incomplete-evidence cases.
 - [ ] Final: focused evidence tests and `cabal test all` pass without live network access.
 
 
@@ -68,6 +68,10 @@ implementation. Provide concise evidence.
   Mori and no revision-pinned operations in Shikumi's `ToolEnv`; the latter still exposes only
   host filesystem and process operations. Kikan plans 28/29 and IR-5 remain proposed/unimplemented,
   so a live adapter cannot be added without guessing APIs.
+- Deterministic `git fast-import` streams can preserve real two-commit fixture histories without
+  checking nested `.git` directories into this repository. Fixed authors, timestamps, messages,
+  paths, and bytes produced stable full commit and blob ids, while parallel snapshot files let the
+  ordinary stub tests consume the exact bytes without invoking Git.
 
 
 ## Decision Log
@@ -125,6 +129,17 @@ Record every decision made while working on the plan.
   evidence remains useful to prevent a specialist from repeating a disproven argument.
   Date: 2026-08-26
 
+- Decision: Check in deterministic fast-import histories, a commit/blob manifest, and matching
+  snapshot bytes under `fixtures/practice-review/content-plane/`.
+  Rationale: the histories prove real Git identities and can be rebuilt when inspected, while the
+  default unit suite remains fast, hermetic, and independent of a Git subprocess or network clone.
+  Date: 2026-08-26
+
+- Decision: Expose `summarizeEvidenceBundle` as the only log-oriented projection.
+  Rationale: its type carries citation identities, completeness, and typed problems but has no raw
+  response or excerpt field, making accidental source/secret serialization structurally harder.
+  Date: 2026-08-26
+
 
 ## Outcomes & Retrospective
 
@@ -139,6 +154,10 @@ Compare the result against the original purpose.
   practice references, compatible upstream selections, and caller-validated prior resolutions.
   The focused suite passes 13 tests, including a complete T2/P1/U2 bundle, mixed-reference rejection,
   incompatible-version handling, and exclusion of out-of-scope or superseded guidance.
+- Milestone 3 added deterministic two-commit target/practice/upstream histories with real commit and
+  blob ids, snapshot-backed in-memory reads, and acquisition-level failure tests. The focused suite
+  passes 21 tests and now proves P1-to-P2 isolation, added-target behavior, stale tags, P2/P1 stamp
+  mismatch, missing required content, pagination ceilings, redaction, and log-safe summaries.
 
 
 ## Context and Orientation

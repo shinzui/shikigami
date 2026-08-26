@@ -1,0 +1,40 @@
+{
+  "target": {
+    "repositoryId": "repo_target",
+    "revisions": {
+      "T1": "47fceceac91be21ad137c827ff277ac35da37ee6",
+      "T2": "4860c38138deb34933840bb9587138fe1df30e8e"
+    },
+    "blobs": {
+      "T1:docs/adr/0001.md": "4c5223bac2ae0ec2fa26d2ece65961341e121a9d",
+      "T2:docs/adr/0001.md": "012ea4ca3a544e103bd378495b290def714e1620",
+      "T2:cabal.project": "47c77c0c0d5bbd3821c4e571476e284b1ef01180"
+    }
+  },
+  "practice": {
+    "repositoryId": "repo_practice",
+    "revisions": {
+      "P1": "25c08703947fd96d78b3f6908f4454ce0f84c7e6",
+      "P2": "bc8a68c96db6cd2d5fc981024e332be566ff30ae"
+    },
+    "blobs": {
+      "P1:docs/practices/PRACTICE-1.md": "8126edfc1acfdf3f3e2e84dad04fdd6129d2905e",
+      "P2:docs/practices/PRACTICE-1.md": "246dfb7fa84bb8eeeee051efccd7b240b83f5dc0"
+    }
+  },
+  "upstream": {
+    "repositoryId": "repo_upstream",
+    "revisions": {
+      "U1": "47234c4ad7d950dfc8a1e695e0a7acaa070494f2",
+      "U2": "62f545e3018eaa4f854c57d4161e62fce73e2753"
+    },
+    "tags": {
+      "v1.0.0": "47234c4ad7d950dfc8a1e695e0a7acaa070494f2",
+      "v2.0.0": "62f545e3018eaa4f854c57d4161e62fce73e2753"
+    },
+    "blobs": {
+      "U1:src/Foo.hs": "9bde8dd4d631520656ba58ce52b7c1f22992cc0e",
+      "U2:src/Foo.hs": "7eb1470c633b87a99a8acea5250b66c1ce716705"
+    }
+  }
+}
