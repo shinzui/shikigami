@@ -39,7 +39,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
-import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Log qualified as Log
@@ -155,6 +155,18 @@ recipientTests =
         recipientOf Nothing (Just "ops") @?= Right "ops",
       testCase "the deployment fallback is the last resort" $
         recipientOf Nothing Nothing @?= Right "recipient_default",
+      testCase "verified principal agent_heartbeat is the Kizashi actor" do
+        principal <- either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_heartbeat")
+        request <-
+          either (assertFailure . Text.unpack) pure $
+            buildSignalReq
+              KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
+              Nothing
+              (signalWith Actor (Just "ops"))
+              (VerifiedIdentity principal)
+              sampleOutput
+        case request of
+          CreateSignalReq {actor} -> actor @?= "agent_heartbeat",
       -- Silence here would mean a signal quietly reaching whoever the fallback
       -- names, which is the failure mode the whole plan is about.
       testCase "an unresolvable strategy produces a warning naming itself" $

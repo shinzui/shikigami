@@ -62,7 +62,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), P
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
-import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
@@ -102,7 +102,7 @@ import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
-import Shikigami.Sink.GrantStore (revokeGrant)
+import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
@@ -428,6 +428,29 @@ tests =
               "legacy content remains reachable after rename"
               ["legacy alias fixture"]
               (map (\MemoryRecord {content = memoryContent} -> memoryContent) recalled),
+      testCase "reopening storage after a presentation rename retains agent_heartbeat recall and grant" do
+        withShikigamiMigratedDatabase \connStr -> do
+          tracer <- noopTracer
+          let settings = defaultConnectionSettings connStr
+              appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
+              principal = either (error . Text.unpack) id (mkAgentPrincipal "agent_heartbeat")
+              verified = VerifiedIdentity principal
+          withStore settings \firstStore -> do
+            recordLegacyRecallFixture appEnv "old-heartbeat"
+            _ <- AliasStore.reconcileAlias (pool firstStore) principal "old-heartbeat" >>= either (assertFailure . Text.unpack) pure
+            _ <- reconcileGrantPrincipal (pool firstStore) "heartbeat" "agent_heartbeat" >>= either (assertFailure . Text.unpack) pure
+            upsertGrant (pool firstStore) "heartbeat-renamed" verified SKawaDigest (Just "rename-demo")
+              >>= either (assertFailure . Text.unpack) pure
+          withStore settings \reopenedStore -> do
+            limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
+            recalled <- recallAgentLearnings appEnv (Just (pool reopenedStore)) limit (VerifiedAgent principal) "legacy alias fixture"
+            assertEqual
+              "post-restart recall follows the alias to agent_heartbeat"
+              ["legacy alias fixture"]
+              (map (\MemoryRecord {content = memoryContent} -> memoryContent) recalled)
+            checkGrant (DbGrants (pool reopenedStore)) verified SKawaDigest >>= \case
+              Right () -> pure ()
+              Left denial -> assertFailure ("post-restart principal grant was denied: " <> show denial),
       testCase "replays completed lifecycle steps for the same run id" do
         withShikigamiMigratedDatabase \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do

@@ -66,8 +66,9 @@ This plan implements
 - [x] (2026-08-26T17:38:08Z) M5: carried recorded identity through `SinkIntent`, promoted old
       intents once before publish, rechecked exact-principal lifecycle and grants, and attributed
       Kawa, Kizashi, and Danwa output to the durable identity.
-- [ ] M6: prove workflow-version safety with `just keiro-gate`, run all tests and migration
-      checks, capture the rename demonstration, and distill the identity rule into an ADR.
+- [x] (2026-08-26T18:00:39Z) M6: proved the workflow edits replay-neutral with
+      `just keiro-gate 08c27cb`, passed the warning-focused build, full suite, and migration
+      apply/replay checks, captured the disposable rename proof, and recorded ADR 0033.
 
 
 ## Surprises & Discoveries
@@ -134,6 +135,12 @@ This plan implements
 - One schema boundary can safely introduce aliases and the grant partial indexes together. The
   migration preserves every existing grant row, adds no Kioku mutation, applies on a fresh
   database, and replays as a no-op through the repository migration harness.
+
+- Malformed explicit alias input initially remained outside the discovered candidate set. A
+  malformed mapping for a name that also had an exact current-directory join could therefore be
+  reported invalid while automatic reconciliation inserted the alias. Explicit invalid input now
+  blocks every other claim for that legacy name, and a disposable-database regression proves that
+  it writes no row.
 
 
 ## Decision Log
@@ -209,22 +216,76 @@ This plan implements
   compatibility pattern documented by ADR 0011, but `just keiro-gate` remains mandatory evidence.
   Date: 2026-08-26
 
+- Decision: an invalid explicit alias mapping is authoritative negative evidence for its legacy
+  name during that sync invocation.
+  Rationale: operator input must never be reported invalid while a lower-priority automatic join
+  mutates the same name. The command leaves the alias untouched and exits non-zero so the operator
+  can correct the mapping deliberately.
+  Date: 2026-08-26
+
 
 ## Outcomes & Retrospective
 
+The implementation makes admitted identity one durable value from queue to output. Fresh work
+records a verified principal or explicit compatibility identity; old jobs and sink intents retain
+their frozen bytes and take one bounded promotion path. Kioku sessions, memory, recall, grants,
+delegated children, delayed publish, and Kawa/Kizashi/Danwa attribution now consume that recorded
+value. Presentation names remain selectors and audit evidence, not durable keys.
+
 The refresh removed three unsafe implementation directions before code changed: a new direct
 Meibo dependency, SQL mutation of Kioku projections, and an operator command in the migration
-executable. It also made disabled-mode compatibility and durable wire decoding explicit rather
-than relying on the repository's pre-release status.
+executable. The landed design instead uses the local directory projection, public Kioku 0.5.0.0
+APIs, Shikigami-owned metadata aliases, disjoint verified/compatibility grant indexes, and the
+existing `agents sync` boundary. The late invalid-mapping audit also closed the only case where
+bad explicit input could have coincided with an automatic alias write.
 
-Milestones 3–5 now preserve legacy memory through metadata-only aliases, make verified grants
-principal-first with no compatibility fallback, and carry the same identity into the outbound
-publisher. Focused evidence is green: the migration apply/replay suites pass, all 573 core tests
-pass, and all 45 server tests pass. Those tests include alias insert/repeat/conflict behavior,
-explicit missing and multiply claimed sync mappings, legacy recall after rename, verified grant
-continuity across a presentation rename, frozen old `SinkIntent` bytes, and exact-principal pause
-between enqueue and publish. The workflow gate, complete repository suite, disposable rename
-transcript, and ADR remain for M6.
+The workflow proof was replay-neutral. `just keiro-gate 08c27cb` accepted the staged workflow
+changes without a patch id: step names, types, order, generated modules, and prior-run behavior
+remain compatible. `nix develop -c cabal build all --enable-tests -j1` passed. The repository-wide
+test command passed all suites, including 575 core tests, 46 server tests, 81 worker tests, 29
+one-off agent tests, 15 API tests, 3 client tests, the Keiro conformance suite, and both migration
+suites. Fresh migration apply plus replay passed, and the repository-scoped deprecation search
+found no production use of Kioku's legacy memory/session/recall wrappers.
+
+The rename proof uses a fresh migrated PostgreSQL database for every database-backed case. The
+core restart case writes the legacy memory and alias, converts the grant to principal ownership,
+updates its presentation from `heartbeat` to `heartbeat-renamed`, closes the first store, opens a
+new store on the same database, and asserts recall plus the grant still resolve as
+`agent_heartbeat`. The sink-delivery case separately asserts that the admitted outbox identity and
+Kioku session actor are `agent_heartbeat` before a lifecycle refresh, and the Kizashi case inspects
+the actual request actor.
+
+```text
+$ nix develop -c cabal test shikigami-server-test -j1 --test-show-details=direct \
+    --test-option=-p \
+    --test-option='/explicit rename aliases/ || /invalid explicit mapping/'
+explicit rename aliases are idempotent and missing mappings remain untouched: OK
+an invalid explicit mapping blocks automatic reconciliation for that name:    OK
+All 2 tests passed
+
+$ nix develop -c cabal test shikigami-core-test -j1 --test-show-details=direct \
+    --test-option=-p \
+    --test-option='/presentation rename/ || /pause before publish/ || /verified principal agent_heartbeat/'
+a presentation rename retains the principal-keyed grant:                              OK
+pause before publish records a terminal non-send without HTTP:                          OK
+verified principal agent_heartbeat is the Kizashi actor:                              OK
+reopening storage after a presentation rename retains agent_heartbeat recall and grant: OK
+All 4 tests passed
+```
+
+The asserted sequence is:
+
+1. `heartbeat` is admitted as `VerifiedIdentity agent_heartbeat`.
+2. Its Kioku scope, session actor, run lineage, and verified grant key are
+   `agent_heartbeat`.
+3. `old-heartbeat=agent_heartbeat` inserts one alias and a repeat reports it present.
+4. The grant presentation changes to `heartbeat-renamed` without changing its principal.
+5. After reopening storage, legacy recall and the `KawaDigest` grant still succeed for
+   `agent_heartbeat`.
+6. A built Kizashi request carries `actor = agent_heartbeat`; delayed publish also retains the
+   same recorded identity for exact-principal lifecycle enforcement.
+
+[ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) records the resulting rule.
 
 
 ## Context and Orientation
@@ -242,18 +303,17 @@ find dependency code; use Mori's registry and the registered source checkout.
 - `shikigami-core/src/Shikigami/Directory.hs` owns the cached directory projection. It exposes
   `PrincipalRecord`, `consultLifecycle`, `lifecycleAdmission`, `lookupPrincipal`, and disabled
   mode. Its snapshot loader rejects duplicate normalized handles and principal ids atomically.
-- `shikigami-core/src/Shikigami/Agent/RunJob.hs` is the queued and journaled run request. Producers
-  live in trigger enqueue paths, workers, the scheduler/operator path, delegated children, and the
-  one-off agent executable.
-- `shikigami-core/src/Shikigami/Memory/Scope.hs` currently derives a Kioku scope from declaration
-  name. `Shikigami.Memory.Access` currently records `shikigami.agent.<name>` and several workflow
-  call sites still use deprecated Kioku wrappers.
-- `shikigami.sink_grants` is keyed by `(agent_name, sink_kind)` and carries nullable
-  `principal_id`. `Shikigami.Sink.GrantStore` and `Shikigami.Sink.Permission` still gate by name.
-- `shikigami-core/src/Shikigami/Sink/Types.hs` (or the current consolidated sink-intent module)
-  persists an optional principal, but enqueue and publish re-resolve the mutable declaration.
-- Agent and conversation workflow bodies currently resolve principal again at session open. Those
-  bodies and `Shikigami.Agent.Delegate` must instead consume the identity journaled on `RunJob`.
+- `shikigami-core/src/Shikigami/Agent/RunJob.hs` is the queued and journaled run request. Every
+  fresh producer records an `AgentIdentity`; the worker promotes missing legacy identity once.
+- `Shikigami.Memory.Scope` and `Shikigami.Memory.Access` derive Kioku scope, principal reference,
+  and context from the resolved recorded identity. Production call sites use contextful Kioku
+  APIs; deprecated wrappers remain only in fixtures that intentionally seed old rows.
+- `shikigami.sink_grants` has disjoint partial unique keys for verified principal rows and
+  null-principal compatibility rows. Verified permission checks never fall through to names.
+- `Shikigami.Sink.Intent` persists `AgentIdentity` with a hand-written legacy codec. Enqueue and
+  publish consume the recorded value, and publish rechecks lifecycle by exact principal.
+- Agent, conversation, flow, and delegation paths consume the journaled identity. Delegated
+  children are admitted independently and retain parentage only in lineage.
 
 ### Governing local ADRs
 

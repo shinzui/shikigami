@@ -6,6 +6,7 @@ import Data.Text (Text)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport)
+import Shikigami.Agent.Principal (mkAgentPrincipal)
 import Shikigami.Directory
   ( Lifecycle (..),
     PrincipalRecord (..),
@@ -16,6 +17,7 @@ import Shikigami.Directory
   )
 import Shikigami.Directory qualified as Directory
 import Shikigami.Memory.AliasStore (AliasReconciliation (..))
+import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.Server.Command.Agents
   ( AgentInventoryEntry (..),
@@ -107,7 +109,27 @@ tests =
             case results of
               [AliasSyncEntry {legacyName = "former-name", outcome = AliasMultiplyClaimed principals}] ->
                 assertEqual "both claims are named" ["agent_heartbeat", "agent_triage_note"] principals
-              other -> assertFailure ("expected one multiply-claimed mapping, got " <> show other)
+              other -> assertFailure ("expected one multiply-claimed mapping, got " <> show other),
+      testCase "an invalid explicit mapping blocks automatic reconciliation for that name" do
+        withShikigamiMigratedDatabase \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            report <- loadAgentsReport "../agents"
+            directoryHandle <- directoryWithPrincipals [heartbeatPrincipal]
+            inventory <- buildAgentInventory True directoryHandle report
+            results <-
+              reconcileAgentAliases
+                (pool store)
+                (Set.singleton "heartbeat")
+                []
+                inventory
+                ["heartbeat=not-a-principal"]
+                >>= either (assertFailure . show) pure
+            case results of
+              [AliasSyncEntry {legacyName = "heartbeat", outcome = AliasInvalidMapping _}] -> pure ()
+              other -> assertFailure ("expected one invalid mapping, got " <> show other)
+            principal <- either (assertFailure . show) pure (mkAgentPrincipal "agent_heartbeat")
+            aliases <- AliasStore.aliasesForPrincipal (pool store) principal >>= either (assertFailure . show) pure
+            assertEqual "invalid operator input wrote no alias" [] aliases
     ]
 
 directoryWithPrincipals :: [PrincipalRecord] -> IO Directory.DirectoryHandle

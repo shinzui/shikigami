@@ -23,6 +23,7 @@ where
 import Control.Monad (foldM, when)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.Functor ((<&>))
 import Data.List (transpose)
@@ -289,12 +290,18 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
             aliasPrincipalId = Nothing,
             outcome = AliasInvalidMapping detail
           }
-      | (raw, Left detail) <- zip rawExplicitMappings parsedExplicit
+      | (raw, Left (Nothing, detail)) <- zip rawExplicitMappings parsedExplicit
       ]
+    invalidExplicitClaims =
+      Map.fromListWith
+        (<>)
+        [ (legacy, [detail])
+        | Left (Just legacy, detail) <- parsedExplicit
+        ]
 
     grantNames = Set.fromList [agentName | GrantIdentityEvidence {agentName} <- grantEvidence]
     explicitNames = Set.fromList (map fst explicitMappings)
-    candidates = legacyScopes <> grantNames <> explicitNames
+    candidates = legacyScopes <> grantNames <> explicitNames <> Map.keysSet invalidExplicitClaims
 
     baseClaims =
       Map.fromListWith
@@ -343,18 +350,21 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
         ]
 
     reconcileCandidate legacy =
-      case Map.lookup legacy invalidGrantClaims of
+      case Map.lookup legacy invalidExplicitClaims of
         Just details -> pure (Right (issue (AliasInvalidMapping (Text.intercalate "; " details))))
         Nothing ->
-          case Set.toAscList (Map.findWithDefault Set.empty legacy missingPrincipalClaims) of
-            missing@(_ : _) -> pure (Right (issue (AliasPrincipalMissing missing)))
-            [] ->
-              case Set.toAscList (Map.findWithDefault Set.empty legacy allClaims) of
-                [] -> pure (Right (issue AliasMissingMapping))
-                principals@(_ : _ : _) ->
-                  pure (Right (issue (AliasMultiplyClaimed (map principalText principals))))
-                [principal] ->
-                  AliasStore.reconcileAlias pool principal legacy <&> fmap (reconciled principal)
+          case Map.lookup legacy invalidGrantClaims of
+            Just details -> pure (Right (issue (AliasInvalidMapping (Text.intercalate "; " details))))
+            Nothing ->
+              case Set.toAscList (Map.findWithDefault Set.empty legacy missingPrincipalClaims) of
+                missing@(_ : _) -> pure (Right (issue (AliasPrincipalMissing missing)))
+                [] ->
+                  case Set.toAscList (Map.findWithDefault Set.empty legacy allClaims) of
+                    [] -> pure (Right (issue AliasMissingMapping))
+                    principals@(_ : _ : _) ->
+                      pure (Right (issue (AliasMultiplyClaimed (map principalText principals))))
+                    [principal] ->
+                      AliasStore.reconcileAlias pool principal legacy <&> fmap (reconciled principal)
       where
         issue aliasOutcome =
           AliasSyncEntry
@@ -369,14 +379,17 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
               outcome = AliasReconciled aliasResult
             }
 
-parseExplicitAlias :: Text -> Either Text (Text, AgentPrincipal)
+parseExplicitAlias :: Text -> Either (Maybe Text, Text) (Text, AgentPrincipal)
 parseExplicitAlias raw = do
   let (legacy, suffix) = Text.breakOn "=" raw
       principal = Text.drop 1 suffix
+      identifiedLegacy
+        | Text.null legacy = Nothing
+        | otherwise = Just legacy
   when
     (Text.null suffix || Text.null legacy || Text.null principal || Text.any (== '=') principal)
-    (Left "expected LEGACY_NAME=agent_...")
-  validated <- mkAgentPrincipal principal
+    (Left (identifiedLegacy, "expected LEGACY_NAME=agent_..."))
+  validated <- first (identifiedLegacy,) (mkAgentPrincipal principal)
   pure (legacy, validated)
 
 discoverLegacyAgentScopes :: KirokuStore -> IO (Either Text (Set.Set Text))
