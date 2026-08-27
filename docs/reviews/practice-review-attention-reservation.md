@@ -4,7 +4,7 @@ title: Practice-review attention reservation
 description: The atomic reservation is correct under the concurrent race it was built for, but a replay after a journaled skip can commit a reservation whose outbox message never existed, and the semantic key includes a model-chosen claim id.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-2
 subject: mori://shinzui/shikigami
 subjectKind: component
@@ -23,6 +23,9 @@ dimensions:
   - design
   - test-coverage
   - operability
+produced:
+  - mori://shinzui/shikigami/plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries
+  - mori://shinzui/shikigami/plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix
 context: >-
   Read the complete module, ADR 0035, the sink-intent helpers it calls, and
   the concurrent and real-AgentRun tests that exercise it; traced the

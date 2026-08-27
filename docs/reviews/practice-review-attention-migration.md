@@ -4,7 +4,7 @@ title: Practice-review attention migration
 description: The additive migration creates exactly the two logical tables ADR 0035 specifies, carries no delivery state, and applies twice cleanly; it lacks only an index for the audit query that walks from a review id to its reservation.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-3
 subject: mori://shinzui/shikigami
 subjectKind: migration
@@ -22,6 +22,8 @@ dimensions:
   - correctness
   - operability
   - design
+produced:
+  - mori://shinzui/shikigami/plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries
 context: >-
   Read the migration, its manifest entry, the contract test that inspects the
   embedded DDL, the sink_deliveries migration it joins against, and every

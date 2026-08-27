@@ -4,7 +4,7 @@ title: Improvement-requests OKF corpus before the reviews bundle joins it
 description: The nine requests validate strictly and their log and index are current, but the bundle pins a profile three catalog releases behind the one the new reviews bundle pins, the request the landed review flow fulfils is still proposed, and the Mori registry entry that should resolve their URIs is stale.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-8
 subject: mori://shinzui/shikigami/okf/improvement-requests
 subjectKind: component
@@ -20,6 +20,8 @@ outcome: changes-requested
 dimensions:
   - documentation
   - operability
+produced:
+  - mori://shinzui/shikigami/plans/64-realign-the-improvement-requests-corpus-pin-status-and-mori-registry
 context: >-
   Ran okf 0.8.0.0 validation, log staleness, and trust reports over the
   bundle; read its profile pin, log, and index; compared the pin with the

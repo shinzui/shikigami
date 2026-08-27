@@ -4,7 +4,7 @@ title: Practice-review resolution authorization boundary
 description: The envelope binds a verified subject to a resolution and survives replay without a second authorizer call, but nothing in the runtime asks whether that subject is entitled to resolve this review, and the opaque credential type derives Show.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-4
 subject: mori://shinzui/shikigami
 subjectKind: component
@@ -23,6 +23,8 @@ dimensions:
   - security
   - design
   - test-coverage
+produced:
+  - mori://shinzui/shikigami/plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope
 context: >-
   Read the complete module, ADR 0034, the resolution contract validator and
   memory interpreter it hands off to, the Flow's resolution branch, and the

@@ -4,7 +4,7 @@ title: Practice-review capability ports and runtime adapters
 description: The five narrow effects keep IO in interpreters and behind fixed journal steps, the recipient map is canonicalized and boot-validated, and the model evaluator reuses the profile-constrained environment; the leftover non-atomic attention interpreter and an unjournaled evaluator failure are the only rough edges.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-6
 subject: mori://shinzui/shikigami
 subjectKind: component
@@ -22,6 +22,9 @@ dimensions:
   - correctness
   - design
   - test-coverage
+produced:
+  - mori://shinzui/shikigami/plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries
+  - mori://shinzui/shikigami/plans/62-make-the-practice-review-closeout-and-operator-documentation-true
 context: >-
   Read the complete module, its installation in Shikigami.Agent.Workflow and
   the worker composition root, the config surface and its strictness tests,

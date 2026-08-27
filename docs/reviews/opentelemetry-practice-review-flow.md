@@ -4,7 +4,7 @@ title: OpenTelemetry practice-review specialist Flow
 description: The Flow dispatches strictly, replaces every trusted field before validation, and orders memory before history before attention as designed; its failure path is crash-shaped rather than terminal, its problem claims are rendered with derived Show, and a producer-named prior review is retired without a relationship check.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-5
 subject: mori://shinzui/shikigami
 subjectKind: component
@@ -22,6 +22,9 @@ dimensions:
   - correctness
   - design
   - test-coverage
+produced:
+  - mori://shinzui/shikigami/plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries
+  - mori://shinzui/shikigami/plans/62-make-the-practice-review-closeout-and-operator-documentation-true
 context: >-
   Read the complete Flow, its registration in Shikigami.Flow, the AgentRun
   interpreter wiring in Shikigami.Agent.Workflow, the run-job worker's outcome

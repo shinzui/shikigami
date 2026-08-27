@@ -22,6 +22,10 @@
   resolution path has no production ingress and profile provisioning has no procedure.
 * **Addition**: REV-8 requests changes to the improvement-requests corpus: repin from okf-profiles
   v0.10.0 to v0.13.1, move IR-4 out of `proposed`, and refresh the stale Mori registry entry.
+* **Update**: REV-1 through REV-8 now name the ExecPlans that answer them in `produced`:
+  plans 60 (attention and specialist boundaries), 61 (resolver entitlement), 62 (closeout
+  and operator documentation), 63 (conformance matrix), and 64 (improvement-requests corpus
+  and registry).
 
 ## 2026-08-26
 

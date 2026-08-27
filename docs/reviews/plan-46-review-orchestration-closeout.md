@@ -4,7 +4,7 @@ title: ExecPlan 46 closeout against the landed tree
 description: The plan's reproducible gates hold at the reviewed commit, but its closeout claims end-to-end coverage the conformance suite does not contain, and three documents it owns were left stale.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-1
 subject: mori://shinzui/shikigami/plans/46-orchestrate-review-delivery-and-end-to-end-conformance
 subjectKind: plan
@@ -21,6 +21,9 @@ dimensions:
   - documentation
   - test-coverage
   - design
+produced:
+  - mori://shinzui/shikigami/plans/62-make-the-practice-review-closeout-and-operator-documentation-true
+  - mori://shinzui/shikigami/plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix
 context: >-
   Read the complete plan, ADRs 0034 and 0035, master plan 9, the workflow
   versioning guide, every file the three plan commits (8e0df55..HEAD) touch,

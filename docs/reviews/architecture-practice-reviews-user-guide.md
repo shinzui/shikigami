@@ -4,7 +4,7 @@ title: Architecture-practice reviews user guide
 description: Every command, key, table, and refusal the guide names exists and behaves as written, but the guide presents a resolution path with no production ingress and a profile-provisioning step with no procedure as if an operator could perform them today.
 generated:
   by: process:claude-code
-  at: "2026-08-27T00:12:00Z"
+  at: "2026-08-27T01:04:13Z"
 reviewId: REV-7
 subject: mori://shinzui/shikigami
 subjectKind: component
@@ -21,6 +21,9 @@ outcome: changes-requested
 dimensions:
   - documentation
   - operability
+produced:
+  - mori://shinzui/shikigami/plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope
+  - mori://shinzui/shikigami/plans/62-make-the-practice-review-closeout-and-operator-documentation-true
 context: >-
   Read the complete guide and the sink, agent, README, and configuration
   pages the plan changed alongside it; checked each command against the
