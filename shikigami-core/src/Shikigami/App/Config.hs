@@ -58,6 +58,7 @@ module Shikigami.App.Config
 
     -- * Which model runs a Skill behavior
     ProviderSelection (..),
+    ActionAuthorizationConfig (..),
     anthropicModels,
     lookupAnthropicModel,
 
@@ -107,6 +108,14 @@ module Shikigami.App.Config
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
+    actionAuthorizationModeKey,
+    actionKikanBaseUrlKey,
+    actionShomeiBaseUrlKey,
+    actionShomeiClientIdKey,
+    actionShomeiClientSecretKey,
+    actionIssuerPublicKeysKey,
+    actionSchemaHashesKey,
+    actionCallerIdKey,
     kawaTokenKey,
     kizashiTokenKey,
     kanmonTokenKey,
@@ -128,10 +137,13 @@ import Baikai.Model (Model, api, modelId, provider)
 import Baikai.Models.Generated (allModels, anthropic_claude_sonnet_4_6)
 import Data.Bifunctor (first)
 import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
+import En.Biscuit.Keys (IssuerKeySet, parseIssuerKeySetText)
 import GHC.Generics (Generic)
+import Kikan.En.Action (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHash)
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
@@ -269,6 +281,26 @@ renderProviderChoice :: ProviderChoice -> Text
 renderProviderChoice = \case
   ChooseStub -> "stub"
   ChooseAnthropic -> "anthropic"
+
+data ActionAuthorizationConfig
+  = ActionAuthorizationDisabled
+  | KikanActionAuthorization
+      { kikanBaseUrl :: !Text,
+        shomeiBaseUrl :: !Text,
+        shomeiClientId :: !Text,
+        shomeiClientSecret :: !SecretText,
+        issuerPublicKeys :: !IssuerKeySet,
+        acceptedSchemaHashes :: !(Set ActionSchemaHash),
+        callerId :: !Text
+      }
+  deriving stock (Generic, Eq)
+
+data ActionAuthorizationChoice = DisableActionAuthorization | UseKikanActionAuthorization
+  deriving stock (Generic, Eq, Show)
+
+renderActionAuthorizationChoice :: ActionAuthorizationChoice -> Text
+renderActionAuthorizationChoice DisableActionAuthorization = "disabled"
+renderActionAuthorizationChoice UseKikanActionAuthorization = "kikan"
 
 -- | Every Anthropic Messages model in baikai's generated catalog.
 --
@@ -416,7 +448,8 @@ data AppConfig = AppConfig
     -- @credentials.providers.anthropic.api_key@. Keeping them one field is what
     -- makes \"a real provider without a credential\" unrepresentable rather
     -- than something every consumer has to re-check.
-    behaviorProvider :: !ProviderSelection
+    behaviorProvider :: !ProviderSelection,
+    actionAuthorization :: !ActionAuthorizationConfig
   }
   deriving stock (Generic, Eq)
 
@@ -460,7 +493,7 @@ appConfig =
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
     <*> optional kawaTokenSetting
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
-    <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient:default")
+    <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient_default")
     <*> optional kizashiTokenSetting
     <*> withDefault sinksKanmonBaseUrlSetting (constant "local-kanmon" "The local Kanmon channel-action service" "http://localhost:8090")
     <*> optional kanmonTokenSetting
@@ -469,6 +502,7 @@ appConfig =
     <*> optional danwaTokenSetting
     <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
+    <*> actionAuthorizationConfig
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -494,6 +528,25 @@ behaviorProviderConfig =
           <$> withDefault behaviorModelSetting (constant "default-model" "The current general-purpose Claude model" anthropic_claude_sonnet_4_6)
           <*> required anthropicApiKeySetting
       )
+
+actionAuthorizationConfig :: Config ActionAuthorizationConfig
+actionAuthorizationConfig =
+  maybe ActionAuthorizationDisabled build
+    <$> whenEq
+      (withDefault actionAuthorizationModeSetting (constant "action-authorization-disabled" "Protected external IO fails closed until Kikan trust material is configured" DisableActionAuthorization))
+      UseKikanActionAuthorization
+      ( (,,,,,,)
+          <$> required actionKikanBaseUrlSetting
+          <*> required actionShomeiBaseUrlSetting
+          <*> required actionShomeiClientIdSetting
+          <*> required actionShomeiClientSecretSetting
+          <*> required actionIssuerPublicKeysSetting
+          <*> required actionSchemaHashesSetting
+          <*> required actionCallerIdSetting
+      )
+  where
+    build (kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId) =
+      KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId}
 
 -- | Directory mode is conditional so file mode cannot resolve without a path,
 -- while disabled deployments are not asked for a meaningless one.
@@ -919,6 +972,48 @@ anthropicApiKeySetting =
     "Anthropic API key, required when behavior.provider is anthropic"
     (SecretText <$> textDecoder)
 
+actionAuthorizationModeSetting :: Setting ActionAuthorizationChoice
+actionAuthorizationModeSetting =
+  publicSettingWithRenderer
+    actionAuthorizationModeKey
+    "Per-action authorization mode: disabled fails protected IO closed; kikan enables verified Kikan-En decisions"
+    (enumDecoder [("disabled", DisableActionAuthorization), ("kikan", UseKikanActionAuthorization)])
+    renderActionAuthorizationChoice
+
+actionKikanBaseUrlSetting, actionShomeiBaseUrlSetting, actionShomeiClientIdSetting, actionCallerIdSetting :: Setting Text
+actionKikanBaseUrlSetting = publicSettingWithRenderer actionKikanBaseUrlKey "Base URL of Kikan-En's action authorization service" textDecoder id
+actionShomeiBaseUrlSetting = publicSettingWithRenderer actionShomeiBaseUrlKey "Base URL of the Shomei OAuth2 service" textDecoder id
+actionShomeiClientIdSetting = publicSettingWithRenderer actionShomeiClientIdKey "Shomei service-account client id used for Kikan authorization" textDecoder id
+actionCallerIdSetting = publicSettingWithRenderer actionCallerIdKey "Bounded public caller identity written to action authorization audit logs" textDecoder id
+
+actionShomeiClientSecretSetting :: Setting SecretText
+actionShomeiClientSecretSetting =
+  secretSetting actionShomeiClientSecretKey "Shomei client secret used only at the OAuth2 client_credentials boundary" (SecretText <$> textDecoder)
+
+actionIssuerPublicKeysSetting :: Setting IssuerKeySet
+actionIssuerPublicKeysSetting =
+  publicSettingWithRenderer
+    actionIssuerPublicKeysKey
+    "Comma-separated En Biscuit issuer public keys as key-id:hex"
+    (decoder (\key raw -> runDecoder textDecoder key raw >>= first (const (decodeFailure key "a non-empty key-id:64-hex En Biscuit public-key set")) . parseIssuerKeySetText))
+    (const "<configured public key set>")
+
+actionSchemaHashesSetting :: Setting (Set ActionSchemaHash)
+actionSchemaHashesSetting =
+  publicSettingWithRenderer
+    actionSchemaHashesKey
+    "Comma-separated accepted Kikan-En action schema hashes"
+    (decoder decodeHashes)
+    (Text.intercalate "," . fmap actionSchemaHashText . Set.toAscList)
+  where
+    decodeHashes key raw = do
+      value <- runDecoder textDecoder key raw
+      let pieces = filter (not . Text.null) (Text.strip <$> Text.splitOn "," value)
+      hashes <- traverse (first (const (decodeFailure key "one or more comma-separated canonical schema hashes")) . mkActionSchemaHash) pieces
+      if null hashes
+        then Left (decodeFailure key "one or more comma-separated canonical schema hashes")
+        else Right (Set.fromList hashes)
+
 -- ── Stable keys ─────────────────────────────────────────────────────────────
 
 -- Keys are the deployment contract: renaming one silently ignores an operator's
@@ -1048,6 +1143,16 @@ kanmonTokenKey = stableKey "credentials.sinks.kanmon.token"
 danwaTokenKey :: Key
 danwaTokenKey = stableKey "credentials.sinks.danwa.token"
 
+actionAuthorizationModeKey, actionKikanBaseUrlKey, actionShomeiBaseUrlKey, actionShomeiClientIdKey, actionShomeiClientSecretKey, actionIssuerPublicKeysKey, actionSchemaHashesKey, actionCallerIdKey :: Key
+actionAuthorizationModeKey = stableKey "authorization.actions.mode"
+actionKikanBaseUrlKey = stableKey "authorization.actions.kikan_en.base_url"
+actionShomeiBaseUrlKey = stableKey "authorization.actions.shomei.base_url"
+actionShomeiClientIdKey = stableKey "authorization.actions.shomei.client_id"
+actionShomeiClientSecretKey = stableKey "credentials.authorization.actions.shomei.client_secret"
+actionIssuerPublicKeysKey = stableKey "authorization.actions.en.issuer_public_keys"
+actionSchemaHashesKey = stableKey "authorization.actions.en.schema_hashes"
+actionCallerIdKey = stableKey "authorization.actions.caller_id"
+
 -- | Every key this declaration accepts, in schema order.
 --
 -- Exists so a test can assert the accepted surface has not drifted, and so
@@ -1129,7 +1234,15 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
-          binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey
+          binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
+          binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
+          binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
+          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,
+          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID") actionShomeiClientIdKey,
+          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET") actionShomeiClientSecretKey,
+          binding (EnvName "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") actionIssuerPublicKeysKey,
+          binding (EnvName "SHIKIGAMI_ACTION_EN_SCHEMA_HASHES") actionSchemaHashesKey,
+          binding (EnvName "SHIKIGAMI_ACTION_CALLER_ID") actionCallerIdKey
         ]
     )
 

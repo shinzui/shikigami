@@ -34,7 +34,15 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Effectful.Dispatch.Static (unsafeEff_)
+import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
+import Kikan.En.Action (AgentAction (..), actionValueErrorText, mkCapabilityTarget, mkCapabilityToolTarget)
+import Shikigami.Action.Authorization
+  ( ActionAuthorizationFailure (..),
+    ActionAuthorizer (..),
+    authorizationFailureDetail,
+  )
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Capability.Catalog
   ( CapabilityCatalog,
@@ -55,7 +63,8 @@ import Shikigami.Capability.Overlay
   )
 import Shikigami.Capability.Tools (CapabilityToolError, composeCapabilityToolsWithNames)
 import Shikigami.Log qualified as Log
-import Shikumi.Tool (SomeTool, ToolRegistry, someToolName)
+import Shikumi.Error (ShikumiError (..))
+import Shikumi.Tool (SomeTool (..), Tool (..), ToolRegistry, someToolName)
 
 -- | Process-local capability policy and provider state for durable agent runs.
 -- Only the result of resolving through this bundle is journaled; the bundle
@@ -152,6 +161,10 @@ data CapabilityRuntimeError
       { descriptor :: !CapabilityDescriptor,
         detail :: !Text
       }
+  | CapabilityAuthorizationFailed
+      { descriptor :: !CapabilityDescriptor,
+        authorizationError :: !ActionAuthorizationFailure
+      }
   | CapabilityLeaseDescriptorMismatch
       { expected :: !CapabilityDescriptor,
         actual :: !CapabilityDescriptor
@@ -200,13 +213,14 @@ resolveProvider (CapabilityProviderRegistry registry) expected@CapabilityDescrip
 -- propagate after cleanup; asynchronous acquisition exceptions do likewise.
 withCapabilityOverlays ::
   Log.Logger ->
+  ActionAuthorizer ->
   CapabilityProviderRegistry ->
   CapabilityScope ->
   ResolvedCapabilitySet ->
   ToolRegistry ->
   (ToolRegistry -> Set CapabilityId -> IO value) ->
   IO (Either CapabilityRuntimeError value)
-withCapabilityOverlays logger registry scope resolved base callback =
+withCapabilityOverlays logger actionAuthorizer registry scope resolved base callback =
   mask \restore ->
     acquireAll
       (\provider -> restore (acquire provider scope))
@@ -239,38 +253,49 @@ withCapabilityOverlays logger registry scope resolved base callback =
             rethrowCleanupAsync cleanup
             pure (Left runtimeError)
           Right provider -> do
-            logAcquiring logger scope expected
-            acquired <- Exception.try @SomeException (restoreAcquire provider)
-            case acquired of
-              Left exception -> do
-                logAcquireFailed logger scope expected (exceptionDetail exception)
-                cleanup <- releaseAll logger scope leases
-                if isAsyncException exception
-                  then throwIO exception
-                  else do
-                    rethrowCleanupAsync cleanup
-                    pure (Left CapabilityAcquireThrew {descriptor = expected, detail = exceptionDetail exception})
-              Right (Left acquireError) -> do
-                logAcquireFailed logger scope expected (acquireErrorDetail acquireError)
+            authorized <- authorizeProvider actionAuthorizer scope expected
+            case authorized of
+              Left authorizationError -> do
                 cleanup <- releaseAll logger scope leases
                 rethrowCleanupAsync cleanup
-                pure (Left CapabilityAcquireFailed {descriptor = expected, error = acquireError})
-              Right (Right lease) -> do
-                let leases' = lease : leases
-                case validateLease expected lease of
-                  Left runtimeError -> do
-                    logAcquireFailed logger scope expected (runtimeErrorDetail runtimeError)
-                    cleanup <- releaseAll logger scope leases'
-                    rethrowCleanupAsync cleanup
-                    pure (Left runtimeError)
-                  Right logicalNames -> do
-                    logAcquired logger scope expected logicalNames
-                    acquireAll
-                      restoreAcquire
-                      restoreCallback
-                      leases'
-                      ((capabilityOf expected, toolsOf lease) : groups)
-                      rest
+                pure (Left CapabilityAuthorizationFailed {descriptor = expected, authorizationError})
+              Right () -> do
+                logAcquiring logger scope expected
+                acquired <- Exception.try @SomeException (restoreAcquire provider)
+                handleAcquired restoreAcquire restoreCallback leases groups expected rest acquired
+
+    handleAcquired restoreAcquire restoreCallback leases groups expected rest acquired =
+      case acquired of
+        Left exception -> do
+          logAcquireFailed logger scope expected (exceptionDetail exception)
+          cleanup <- releaseAll logger scope leases
+          if isAsyncException exception
+            then throwIO exception
+            else do
+              rethrowCleanupAsync cleanup
+              pure (Left CapabilityAcquireThrew {descriptor = expected, detail = exceptionDetail exception})
+        Right (Left acquireError) -> do
+          logAcquireFailed logger scope expected (acquireErrorDetail acquireError)
+          cleanup <- releaseAll logger scope leases
+          rethrowCleanupAsync cleanup
+          pure (Left CapabilityAcquireFailed {descriptor = expected, error = acquireError})
+        Right (Right lease) -> do
+          let leases' = lease : leases
+          case validateLease expected lease of
+            Left runtimeError -> do
+              logAcquireFailed logger scope expected (runtimeErrorDetail runtimeError)
+              cleanup <- releaseAll logger scope leases'
+              rethrowCleanupAsync cleanup
+              pure (Left runtimeError)
+            Right logicalNames -> do
+              logAcquired logger scope expected logicalNames
+              let guardedTools = guardCapabilityTool actionAuthorizer scope expected <$> toolsOf lease
+              acquireAll
+                restoreAcquire
+                restoreCallback
+                leases'
+                ((capabilityOf expected, guardedTools) : groups)
+                rest
 
     activeIds = Set.fromList (capabilityOf <$> resolvedCapabilities resolved)
 
@@ -327,6 +352,30 @@ descriptorToolNames :: CapabilityDescriptor -> [Text]
 descriptorToolNames CapabilityDescriptor {tools} = logicalName <$> tools
   where
     logicalName CapabilityToolDescriptor {name} = name
+
+authorizeProvider :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> IO (Either ActionAuthorizationFailure ())
+authorizeProvider ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} =
+  case mkCapabilityTarget (capabilityIdText capability) (capabilityRevisionText revision) of
+    Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
+    Right target -> fmap (const ()) <$> authorize principal (ConnectCapability target)
+
+guardCapabilityTool :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> SomeTool -> SomeTool
+guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (SomeTool Tool {name, description, run}) =
+  SomeTool
+    Tool
+      { name,
+        description,
+        run = \input -> do
+          authorization <-
+            unsafeEff_
+              case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
+                Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
+                Right target -> authorize principal (InvokeCapabilityTool target)
+          case authorization of
+            Right _ -> run input
+            Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
+            Left failure -> throwError (ProviderFailure (authorizationFailureDetail failure))
+      }
 
 acquireErrorDetail :: CapabilityAcquireError -> Text
 acquireErrorDetail (CapabilityAcquireError detail) = boundedBehaviorDetail detail

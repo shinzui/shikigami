@@ -13,6 +13,7 @@ import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..), noopTracer)
 import Kioku.Id (genSessionId, idText)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -125,6 +126,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
         AgentWorkflow.AgentRunDeps
           { AgentWorkflow.appEnv = appEnv,
             AgentWorkflow.behaviorEnv = behEnv,
+            AgentWorkflow.actionAuthorizer = denyAllActionAuthorizer,
             AgentWorkflow.capabilities = capabilities,
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,

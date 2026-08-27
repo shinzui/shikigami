@@ -31,6 +31,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Vector qualified as Vector
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Capability.OneOff
 import Shikigami.Agent.Capability.Workspace (workspaceReadId)
 import Shikigami.Agent.Decl
@@ -75,6 +76,7 @@ tests =
         result <-
           withOneOffCapabilityOverlays
             Log.silentLogger
+            allowAllActionAuthorizerForTests
             (Just "/definitely/missing/shikigami-workspace")
             (declFor [])
             base
@@ -103,6 +105,7 @@ tests =
         result <-
           withOneOffCapabilityOverlays
             Log.silentLogger
+            allowAllActionAuthorizerForTests
             (Just "/definitely/missing/shikigami-workspace")
             (declForIdentity Nothing [workspaceReadId])
             base
@@ -149,11 +152,12 @@ tests =
               optedDecl = (declFor [workspaceReadId]) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
               emptyDecl = (declFor []) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
           opted <-
-            withOneOffCapabilityOverlays logger (Just repository) optedDecl optedBase \derived ->
+            withOneOffCapabilityOverlays logger allowAllActionAuthorizerForTests (Just repository) optedDecl optedBase \derived ->
               runBehavior derived optedDecl (triggerOnly (object ["task" .= ("read the fixture" :: Text)]))
           empty <-
             withOneOffCapabilityOverlays
               logger
+              allowAllActionAuthorizerForTests
               (Just "/definitely/missing/shikigami-workspace")
               emptyDecl
               emptyBase

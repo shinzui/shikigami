@@ -6,6 +6,11 @@ packages:
   shikigami-migrations
   shikigami-server
   shikigami-workers
+  -- Co-developed public action boundary from mori://shinzui/kikan-en. Replace
+  -- these sibling paths with the exact upstream commit once the M2-M4 commits
+  -- are published; the packages themselves remain the only Kikan dependency.
+  ../kikan-project/kikan-en/kikan-en-contract
+  ../kikan-project/kikan-en/kikan-en-client
 
 -- keiro-dsl is the build-time specification toolchain, not a library this
 -- service links against. Listing it here makes `cabal run keiro-dsl -- ...`
@@ -87,6 +92,32 @@ source-repository-package
   location: https://github.com/shinzui/danwa.git
   tag: 301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9
   subdir: danwa-core danwa-api danwa-client
+
+-- en has no released package or source tag. kikan-en-client verifies decision
+-- proofs against this exact generic engine revision.
+-- mori://shinzui/en/repos/en
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/en.git
+  tag: 51edaab17473f7b9310f8802ccffd23bac5e4a9e
+  subdir: en-core en-biscuit
+
+-- Shomei's 0.1.0.0 tags resolve to this commit and are not on Hackage. The
+-- client package supplies the production OAuth2 client_credentials call.
+-- mori://shinzui/shomei/repos/shomei
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/shomei.git
+  tag: 65551cb120336b53695c0dd30ebe0e473d6efcb2
+  subdir: shomei-core shomei-jwt shomei-servant shomei-client
+
+-- en-biscuit's current proof parser dependency.
+-- mori://shinzui/biscuit-haskell
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/biscuit-haskell.git
+  tag: 8c0b3c5a13ce4a310737c0336f2ae167a1597588
+  subdir: biscuit
 
 -- Schema evolution is pg-migrate throughout: every library in the stack
 -- publishes a MigrationComponent, and this repository composes them. See

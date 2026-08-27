@@ -75,6 +75,7 @@ import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, runTracing, withSpan')
+import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval
   ( ApprovalDecision (..),
@@ -91,7 +92,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, resolveAgentIdentity, resolvedIdentityText)
+import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, identityText, resolveAgentIdentity, resolvedIdentityText)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..))
@@ -131,6 +132,7 @@ import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.GrantStore (withActionAuthorizer)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Intent
   ( PreparedSinkIntent,
@@ -151,6 +153,9 @@ import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
+    -- | Process-local C13 authorizer. The value never crosses a workflow or
+    -- outbox boundary; every protected IO boundary asks it afresh.
+    actionAuthorizer :: !ActionAuthorizer,
     -- | Operator-owned overlay catalog, policy, and exact-revision provider
     -- factories. Only its pure resolution result crosses the journal boundary.
     capabilities :: !CapabilityRuntime,
@@ -231,18 +236,13 @@ depsLogger AgentRunDeps {logger = l} = l
 -- | Named for the same reason as 'depsLogger': 'SinkContext' and
 -- 'FlowCapability.SinkEnv' also carry a @grants@ field.
 depsGrants :: AgentRunDeps -> GrantSource
-depsGrants AgentRunDeps {grants = g} = g
+depsGrants AgentRunDeps {grants = g, actionAuthorizer} = withActionAuthorizer actionAuthorizer g
 
 depsDirectory :: AgentRunDeps -> DirectoryHandle
 depsDirectory AgentRunDeps {directory = value} = value
 
 depsRouting :: AgentRunDeps -> RoutingRuntime
 depsRouting AgentRunDeps {routing = value} = value
-
-declaredPrincipalId :: AgentDecl -> Maybe Text
-declaredPrincipalId AgentDecl {identity} = declared <$> identity
-  where
-    declared IdentityDecl {principal} = principal
 
 depsRunTimeout :: AgentRunDeps -> NominalDiffTime
 depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
@@ -455,8 +455,9 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun r
                             acquired <-
                               runBehaviorWithCapabilities
                                 (depsLogger deps)
+                                (actionAuthorizer deps)
                                 (capabilities deps)
-                                (capabilityScopeForRun job decl)
+                                (capabilityScopeForRun job)
                                 resolvedOverlays
                                 activeBehaviorEnv
                                 decl
@@ -546,11 +547,14 @@ finishRunFailure deps recordedIdentity decl sid err = do
 behaviorRetryPatch :: PatchId
 behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
 
-capabilityScopeForRun :: RunJob -> AgentDecl -> CapabilityScope
-capabilityScopeForRun job decl =
+capabilityScopeForRun :: RunJob -> CapabilityScope
+capabilityScopeForRun job =
   CapabilityScope
     { runId = jobIdempotencyKey job,
-      principal = fromMaybe (agentDeclName decl) (declaredPrincipalId decl),
+      -- C13 always binds to the identity admitted for this concrete run. The
+      -- manifest principal remains part of pure catalog admission, but it must
+      -- never replace a verified Meibo run principal at an IO boundary.
+      principal = either (const "") id (identityText (RunJob.identity job)),
       mode = Capability.Durable
     }
 
@@ -559,6 +563,7 @@ capabilityScopeForRun job decl =
 -- lease before returning.
 runBehaviorWithCapabilities ::
   Log.Logger ->
+  ActionAuthorizer ->
   CapabilityRuntime ->
   CapabilityScope ->
   ResolvedCapabilitySet ->
@@ -566,9 +571,10 @@ runBehaviorWithCapabilities ::
   AgentDecl ->
   BehaviorInput ->
   IO (Either CapabilityRuntimeError (Either RunError Value))
-runBehaviorWithCapabilities logger CapabilityRuntime {providers} scope resolvedOverlays baseEnv@BehaviorEnv {tools = baseTools} decl input =
+runBehaviorWithCapabilities logger actionAuthorizer CapabilityRuntime {providers} scope resolvedOverlays baseEnv@BehaviorEnv {tools = baseTools} decl input =
   withCapabilityOverlays
     logger
+    actionAuthorizer
     providers
     scope
     resolvedOverlays
@@ -1041,7 +1047,7 @@ recordFailureLearningBestEffort deps recordedIdentity decl sid err = do
         ]
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = intentGrants, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = rawIntentGrants, actionAuthorizer, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -1074,7 +1080,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                             triggeringActivityId,
                             occurredAt = occurredAt,
                             receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
-                            grants = intentGrants,
+                            grants = withActionAuthorizer actionAuthorizer rawIntentGrants,
                             logger = intentLogger
                           }
                       send = case admittedIdentity of
@@ -1097,6 +1103,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
 publishUntracked :: SinkResult -> PublishOutcome
 publishUntracked result = case outcome result of
   Failed err -> PublishFailed err
+  AuthorizationFailed err -> PublishFailed err
   PermanentFailure err -> either PublishFailed id (permanentPublishOutcome err)
   Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
   _ -> PublishSucceeded
@@ -1160,6 +1167,7 @@ publishTracked logger pool messageId kind intent send = do
             -- event is the operator-visible repair target.
             pure PublishSucceeded
       Failed err -> recordRetryableFailure err
+      AuthorizationFailed err -> recordRetryableFailure err
       PermanentFailure err ->
         case permanentPublishOutcome err of
           Left rejectionError -> recordRetryableFailure (rejectionError <> "; sink failure: " <> err)
@@ -1378,6 +1386,7 @@ logSinkResult logger job result =
     levelFor = \case
       Failed _ -> Log.Error
       PermanentFailure _ -> Log.Error
+      AuthorizationFailed _ -> Log.Error
       DeniedOutcome _ -> Log.Warn
       SkippedLifecycle _ -> Log.Warn
       _ -> Log.Info
@@ -1387,6 +1396,7 @@ logSinkResult logger job result =
       Enqueued _ -> "enqueued"
       Stubbed -> "stubbed"
       DeniedOutcome _ -> "denied"
+      AuthorizationFailed _ -> "authorization_failed"
       SkippedLifecycle _ -> "skipped_lifecycle"
       Failed _ -> "failed"
       PermanentFailure _ -> "permanent_failure"
@@ -1398,6 +1408,7 @@ logSinkResult logger job result =
       Enqueued detail -> ["detail" Aeson..= detail]
       Stubbed -> []
       DeniedOutcome reason -> ["reason" Aeson..= reason]
+      AuthorizationFailed reason -> ["error" Aeson..= reason]
       SkippedLifecycle reason -> ["reason" Aeson..= reason]
       Failed err -> ["error" Aeson..= err]
       PermanentFailure err -> ["error" Aeson..= err]

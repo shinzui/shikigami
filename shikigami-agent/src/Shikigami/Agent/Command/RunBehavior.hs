@@ -10,6 +10,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
+import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -56,7 +57,7 @@ runRunBehavior path mpayload workspace config = do
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
           resultE <-
-            withOneOffCapabilityOverlays logger workspace decl env \derivedEnv ->
+            withOneOffCapabilityOverlays logger denyAllActionAuthorizer workspace decl env \derivedEnv ->
               runBehavior derivedEnv decl (triggerOnly payload)
           case resultE of
             Left overlayErr -> do

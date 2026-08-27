@@ -21,6 +21,7 @@ import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
@@ -325,6 +326,7 @@ routerDeps appEnv behaviorEnv routing agents =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
+      AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.agents,
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},

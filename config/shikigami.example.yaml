@@ -95,12 +95,32 @@ behavior:
   # catalog; run --describe-config, or set a wrong one, to see the accepted list.
   model: claude-sonnet-4-6
 
+# Protected provider, tool, and sink IO is deny-all until this complete group is
+# enabled. The Shomei secret belongs under credentials below or in the bound
+# SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET environment variable.
+# authorization:
+#   actions:
+#     mode: kikan
+#     kikan_en:
+#       base_url: https://kikan-en.example.internal
+#     shomei:
+#       base_url: https://shomei.example.internal
+#       client_id: shikigami-worker
+#     en:
+#       issuer_public_keys: "1:<64-hex-public-key>"
+#       schema_hashes: "sha256:<kikan-schema-hash>"
+#     caller_id: shikigami-worker
+
 # Actionable practice reviews fail closed unless their exact semantic owner (or
 # sorted joint-owner set) maps to one Kizashi recipient id.
 practice_review:
   attention_recipients: target-team=recipient_target_team,practice-team=recipient_practice_team,triage=recipient_triage,exception-approver=recipient_exception_approver
 
 # credentials:
+#   authorization:
+#     actions:
+#       shomei:
+#         client_secret: ...
 #   providers:
 #     anthropic:
 #       # Secret, and required only when behavior.provider is anthropic. Prefer a
@@ -114,7 +134,7 @@ sinks:
     source_segment: shinzui/shikigami
   kizashi:
     base_url: http://localhost:8089
-    default_recipient: recipient:default
+    default_recipient: recipient_default
   kanmon:
     # Shikigami authenticates to this service; Kanmon owns provider credentials.
     base_url: http://localhost:8090

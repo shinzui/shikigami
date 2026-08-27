@@ -26,6 +26,9 @@ in  Schema.Project::{
       , "shinzui/shibuya"
       , "shinzui/pgmq-hs"
       , "shinzui/keiki"
+      , "shinzui/en"
+      , "shinzui/kikan-en"
+      , "shinzui/shomei"
       ]
     , okfBundles =
       [ Schema.OkfBundle::{

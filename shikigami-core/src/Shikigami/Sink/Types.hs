@@ -103,6 +103,7 @@ data SinkOutcome
     -- @Shikigami.WireCompatSpec@, which pins that it still /decodes/.
     Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
+  | AuthorizationFailed !Text -- C13 unavailable, invalid, or proof-rejected (no send)
   | SkippedLifecycle !Text -- principal paused, deactivated, unknown, or unavailable (no send)
   | Failed !Text -- the send errored (the worker decides retry)
   | -- | The transport classified a failure as permanent. The publisher maps

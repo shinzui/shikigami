@@ -27,14 +27,17 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
+import Data.Time (getCurrentTime)
+import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authorizationFailureDetail)
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude (Text, (^.))
+import Shikigami.Sink.Authorization (authorizeSinkAction)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwaWithHeaders)
-import Shikigami.Sink.GrantStore (GrantSource (..), checkGrant)
+import Shikigami.Sink.GrantStore (GrantSource (..), actionAuthorizerFor, checkGrant)
 import Shikigami.Sink.Http (HttpFailure)
 import Shikigami.Sink.Http qualified as Http
 import Shikigami.Sink.KanmonClient (KanmonError (..), buildEgressRequest, postEgressWithHeaders, renderKanmonError)
@@ -60,6 +63,7 @@ dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
 dispatch ctx sink output = do
   let kind = sinkKindOf sink
       agent = sinkIdentityText ctx
+      resolvedConversation = case ctx of SinkContext {conversationKey = value} -> value
   lifecycle <- Directory.identityLifecycleAdmission (directory ctx) (identity ctx)
   case lifecycle of
     Left reason -> do
@@ -85,7 +89,18 @@ dispatch ctx sink output = do
               "reason" Aeson..= reason
             ]
           pure (SinkResult kind (DeniedOutcome reason))
-        Right () -> SinkResult kind <$> runSink ctx sink output
+        Right () -> do
+          now <- getCurrentTime
+          authorizeSinkAction (actionAuthorizerFor (grants ctx)) (identity ctx) sink (danwaTarget ctx) (recipientOverride ctx) resolvedConversation now >>= \case
+            Left failure@ActionPolicyDenied {} -> do
+              let reason = authorizationFailureDetail failure
+              Log.logWarn (logger ctx) "sink.action_denied" ["agent" Aeson..= agent, Log.runIdKey Aeson..= runId ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              pure (SinkResult kind (DeniedOutcome reason))
+            Left failure -> do
+              let reason = authorizationFailureDetail failure
+              Log.logError (logger ctx) "sink.authorization_failed" ["agent" Aeson..= agent, Log.runIdKey Aeson..= runId ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              pure (SinkResult kind (AuthorizationFailed reason))
+            Right _ -> SinkResult kind <$> runSink ctx sink output
 
 -- | Route a granted sink to its handler, wrapping the outcome.
 runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome

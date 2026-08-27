@@ -52,6 +52,7 @@ import Keiro.Workflow
 import Kioku.Id (SessionId, idText)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authorizationFailureDetail)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
@@ -68,7 +69,9 @@ import Shikigami.Sink
     checkGrant,
     sinkKindOf,
   )
+import Shikigami.Sink.Authorization (authorizeSinkAction)
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.GrantStore (actionAuthorizerFor)
 import Shikigami.Sink.KanmonClient (resolveConversationKey)
 import Shikigami.Sink.Permission
   ( Denied (..),
@@ -194,10 +197,10 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
       Directory.identityLifecycleAdmission directoryHandle identity >>= \case
         Left reason -> pure (SinkResult kind (SkippedLifecycle reason), Nothing)
         Right () ->
-          checkGrant grantSource identity kind <&> \case
+          checkGrant grantSource identity kind >>= \case
             Left (Denied reason) ->
-              (SinkResult kind (DeniedOutcome reason), Nothing)
-            Right () ->
+              pure (SinkResult kind (DeniedOutcome reason), Nothing)
+            Right () -> do
               let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink (Just activity) output
                   intent =
                     SinkIntent
@@ -218,7 +221,9 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
                   event = sinkIntentEvent messageId orderingKey jobOccurredAt capturedTraceContext intent
                   outboxId = deterministicOutboxId workflowId ordinal
                   receipt = pendingDeliveryReceipt messageId kind now intent
-               in (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
+              authorizeSinkAction (actionAuthorizerFor grantSource) identity sink Nothing (resolvedRecipient intent) resolvedConversationKey now >>= \case
+                Left failure -> pure (SinkResult kind (authorizationOutcome failure), Nothing)
+                Right _ -> pure (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
 
 -- | Journal and enqueue one step-shaped sink intent. Flows and conversation
 -- replies retain their shared per-run ordering key because their outputs are
@@ -377,14 +382,15 @@ prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId s
             deliveryReceipt = Nothing
           }
     Right () ->
-      checkGrant grantSource identity kind <&> \case
+      checkGrant grantSource identity kind >>= \case
         Left (Denied reason) ->
-          PreparedSinkIntent
-            { sinkResult = deniedResult reason,
-              outboxMessage = Nothing,
-              deliveryReceipt = Nothing
-            }
-        Right () ->
+          pure
+            PreparedSinkIntent
+              { sinkResult = deniedResult reason,
+                outboxMessage = Nothing,
+                deliveryReceipt = Nothing
+              }
+        Right () -> do
           let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink activity output
               intent =
                 SinkIntent
@@ -402,11 +408,25 @@ prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId s
                   }
               event = sinkIntentEvent messageId runIdText now capturedTraceContext intent
               receipt = pendingDeliveryReceipt messageId kind now intent
-           in PreparedSinkIntent
-                { sinkResult = enqueuedResult,
-                  outboxMessage = Just (OutboxMessage outboxId event),
-                  deliveryReceipt = Just receipt
-                }
+          authorizeSinkAction (actionAuthorizerFor grantSource) identity sink danwaTarget explicitRecipient resolvedConversationKey now >>= \case
+            Left failure ->
+              pure
+                PreparedSinkIntent
+                  { sinkResult = SinkResult kind (authorizationOutcome failure),
+                    outboxMessage = Nothing,
+                    deliveryReceipt = Nothing
+                  }
+            Right _ ->
+              pure
+                PreparedSinkIntent
+                  { sinkResult = enqueuedResult,
+                    outboxMessage = Just (OutboxMessage outboxId event),
+                    deliveryReceipt = Just receipt
+                  }
+
+authorizationOutcome :: ActionAuthorizationFailure -> SinkOutcome
+authorizationOutcome failure@ActionPolicyDenied {} = DeniedOutcome (authorizationFailureDetail failure)
+authorizationOutcome failure = AuthorizationFailed (authorizationFailureDetail failure)
 
 egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe Text, Maybe Text)
 egressMetadata sink activity output = case sink of

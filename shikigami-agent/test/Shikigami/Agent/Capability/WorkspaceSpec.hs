@@ -8,6 +8,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Capability.OneOff (withOneOffCapabilityOverlays)
 import Shikigami.Agent.Capability.Workspace
 import Shikigami.Agent.Decl
@@ -208,6 +209,7 @@ withWorkspaceEnv Fixture {repository} callback = do
   result <-
     withOneOffCapabilityOverlays
       Log.silentLogger
+      allowAllActionAuthorizerForTests
       (Just repository)
       (testDecl [workspaceReadId])
       base

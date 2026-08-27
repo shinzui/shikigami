@@ -83,9 +83,17 @@ surfaceTests =
                 "approval.channel",
                 "approval.deadline_seconds",
                 "approval.require",
+                "authorization.actions.caller_id",
+                "authorization.actions.en.issuer_public_keys",
+                "authorization.actions.en.schema_hashes",
+                "authorization.actions.kikan_en.base_url",
+                "authorization.actions.mode",
+                "authorization.actions.shomei.base_url",
+                "authorization.actions.shomei.client_id",
                 "behavior.model",
                 "behavior.provider",
                 "conversation.idle_timeout_seconds",
+                "credentials.authorization.actions.shomei.client_secret",
                 "credentials.providers.anthropic.api_key",
                 "credentials.sinks.danwa.token",
                 "credentials.sinks.kanmon.token",
@@ -127,6 +135,14 @@ surfaceTests =
           @?= sort
             [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
               ("PG_CONNECTION_STRING", "database.connection_string"),
+              ("SHIKIGAMI_ACTION_AUTHORIZATION_MODE", "authorization.actions.mode"),
+              ("SHIKIGAMI_ACTION_CALLER_ID", "authorization.actions.caller_id"),
+              ("SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS", "authorization.actions.en.issuer_public_keys"),
+              ("SHIKIGAMI_ACTION_EN_SCHEMA_HASHES", "authorization.actions.en.schema_hashes"),
+              ("SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL", "authorization.actions.kikan_en.base_url"),
+              ("SHIKIGAMI_ACTION_SHOMEI_BASE_URL", "authorization.actions.shomei.base_url"),
+              ("SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID", "authorization.actions.shomei.client_id"),
+              ("SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET", "credentials.authorization.actions.shomei.client_secret"),
               ("SHIKIGAMI_AGENTS_DIRECTORY", "agents.directory"),
               ("SHIKIGAMI_AGENTS_STRICT", "agents.strict"),
               ("SHIKIGAMI_APPROVAL_CHANNEL", "approval.channel"),
@@ -199,13 +215,16 @@ surfaceTests =
         kawaSourceSegment defaultAppConfig @?= "shinzui/shikigami"
         assertBool "kawa has no default credential" (isNothing (kawaToken defaultAppConfig))
         kizashiBaseUrl defaultAppConfig @?= "http://localhost:8089"
-        kizashiDefaultRecipient defaultAppConfig @?= "recipient:default"
+        kizashiDefaultRecipient defaultAppConfig @?= "recipient_default"
         assertBool "kizashi has no default credential" (isNothing (kizashiToken defaultAppConfig))
         kanmonBaseUrl defaultAppConfig @?= "http://localhost:8090"
         assertBool "Kanmon has no default credential" (isNothing (kanmonToken defaultAppConfig))
         danwaBaseUrl defaultAppConfig @?= "http://localhost:8080"
         danwaAgentParticipant defaultAppConfig @?= "part_shikigami"
         assertBool "danwa has no default credential" (isNothing (danwaToken defaultAppConfig))
+        case actionAuthorization defaultAppConfig of
+          ActionAuthorizationDisabled -> pure ()
+          KikanActionAuthorization {} -> assertFailure "action authorization must default to fail-closed disabled mode"
         -- Deliberately absent rather than pointing somewhere: rei has no HTTP
         -- surface, and a defaulted URL would turn "nowhere to send" into
         -- "connection refused to a host nobody chose".
@@ -435,6 +454,30 @@ strictnessTests =
       testCase "a textual boolean from the environment decodes" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "true")]
         kafkaIncludeAgentActors config @?= True,
+      testCase "Kikan action authorization resolves only as one complete trust configuration" do
+        config <- resolveOrFail (optionsWith [] []) [] completeActionAuthorizationEnvironment
+        case actionAuthorization config of
+          ActionAuthorizationDisabled -> assertFailure "complete Kikan action configuration resolved as disabled"
+          KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, acceptedSchemaHashes, callerId} -> do
+            kikanBaseUrl @?= "https://kikan.example.test"
+            shomeiBaseUrl @?= "https://shomei.example.test"
+            shomeiClientId @?= "shikigami-worker"
+            Set.size acceptedSchemaHashes @?= 1
+            callerId @?= "shikigami-worker",
+      testCase "partial Kikan action authorization is rejected at resolution" do
+        let run = runWith (optionsWith [] []) [] [("SHIKIGAMI_ACTION_AUTHORIZATION_MODE", "kikan")]
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the grouped failure should name missing trust coordinates:\n" <> Text.unpack (standardError run))
+          ( "authorization.actions.kikan_en.base_url" `Text.isInfixOf` standardError run
+              && "credentials.authorization.actions.shomei.client_secret" `Text.isInfixOf` standardError run
+          ),
+      testCase "malformed proof trust material is rejected before the worker starts" do
+        let run = runWith (optionsWith [] []) [] (("SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS", "1:not-hex") : filter ((/= "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") . fst) completeActionAuthorizationEnvironment)
+        exitCode run @?= resolutionExitCode
+        assertBool
+          ("the failure should identify the issuer key setting:\n" <> Text.unpack (standardError run))
+          ("authorization.actions.en.issuer_public_keys" `Text.isInfixOf` standardError run),
       testCase "an invalid dead-letter queue name is rejected at resolution time" do
         let run = runWith (optionsWith [] [cliOverride kafkaDeadLetterQueueKey "Not-A-PGMQ-Queue"]) [] []
         exitCode run @?= resolutionExitCode
@@ -596,6 +639,13 @@ secrecyTests =
             ("the Kanmon token in the environment", [], [("SHIKIGAMI_KANMON_TOKEN", plantedToken)], []),
             ("the Kanmon token in a --set override", [], [], [cliOverride kanmonTokenKey plantedToken])
           ],
+      testCase "a planted Shomei client secret appears in no rendering, whatever supplied it" $
+        mapM_
+          assertNoLeak
+          [ ("the Shomei secret in a configuration file", [yaml "file" ("credentials:\n  authorization:\n    actions:\n      shomei:\n        client_secret: " <> plantedTokenBytes <> "\n")], [], []),
+            ("the Shomei secret in the environment", [], [("SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET", plantedToken)], []),
+            ("the Shomei secret in a --set override", [], [], [cliOverride actionShomeiClientSecretKey plantedToken])
+          ],
       testCase "an opaque token source renders and compares no plaintext at its public boundary" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAWA_TOKEN", plantedToken)]
         case kawaToken config of
@@ -636,6 +686,18 @@ plantedToken = "sink-s3cr3t-planted-token-42"
 
 plantedTokenBytes :: ByteString
 plantedTokenBytes = "sink-s3cr3t-planted-token-42"
+
+completeActionAuthorizationEnvironment :: [(Text, Text)]
+completeActionAuthorizationEnvironment =
+  [ ("SHIKIGAMI_ACTION_AUTHORIZATION_MODE", "kikan"),
+    ("SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL", "https://kikan.example.test"),
+    ("SHIKIGAMI_ACTION_SHOMEI_BASE_URL", "https://shomei.example.test"),
+    ("SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID", "shikigami-worker"),
+    ("SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET", "fixture-machine-secret"),
+    ("SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS", "1:0000000000000000000000000000000000000000000000000000000000000000"),
+    ("SHIKIGAMI_ACTION_EN_SCHEMA_HASHES", "sha256:test"),
+    ("SHIKIGAMI_ACTION_CALLER_ID", "shikigami-worker")
+  ]
 
 -- | Resolve one source combination in every mode and prove the token is absent
 -- from output, errors, and both resolution reports.

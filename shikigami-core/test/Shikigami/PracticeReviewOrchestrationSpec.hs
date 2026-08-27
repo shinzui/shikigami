@@ -34,6 +34,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -612,6 +613,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
+      AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.agents = [reviewerDecl],
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_unused"},

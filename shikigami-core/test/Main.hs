@@ -460,15 +460,18 @@ danwaTests =
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
           postedContent reqs @?= Just "[support]\nfresh thread text",
-      testCase "a declaration with no topic opens exactly as it did before" do
+      testCase "a declaration with no topic is denied before opening an unaddressable thread" do
         ref <- newIORef []
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               sink = DanwaConversation {topic = ""}
           ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg Nothing
-          _ <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          result <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          case outcome result of
+            AuthorizationFailed reason -> assertBool "the missing exact target is explicit" ("invalid coordinates" `Text.isInfixOf` reason)
+            other -> assertFailure ("expected fail-closed authorization, got " <> show other)
           reqs <- readIORef ref
-          postedContent reqs @?= Just "fresh thread text"
+          reqs @?= []
     ]
 
 traceHeaderTests :: TestTree

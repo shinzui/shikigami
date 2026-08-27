@@ -21,6 +21,7 @@ import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
+import Kikan.En.Action (AgentAction, actionResource, canonicalResourceText)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
@@ -34,6 +35,7 @@ import OpenTelemetry.Propagator.W3CTraceContext (decodeSpanContext)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
+import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -64,7 +66,7 @@ import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
-import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
+import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (AuthorizationFailed, DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore qualified as GrantStore
@@ -89,6 +91,9 @@ tests =
       testCase "ChannelEgress publication records the Kanmon activity id and suppresses re-send" egressReceiptRecording,
       testCase "ChannelEgress 403 records a dead receipt and terminal publication" egressPermanentRejection,
       testCase "ungranted ChannelEgress creates no outbox, receipt, or HTTP effect" egressDenied,
+      testCase "C13 denial at enqueue creates no outbox or downstream effect" actionDeniedAtEnqueue,
+      testCase "C13 outage at enqueue is distinct and creates no outbox" actionUnavailableAtEnqueue,
+      testCase "C13 is checked again at publish and revocation prevents HTTP" actionRevokedBeforePublish,
       testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
       testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
       testCase "danwa post-failure retry reuses the started conversation" danwaReuse,
@@ -347,6 +352,82 @@ egressDenied = do
         other -> assertFailure ("egress workflow did not journal DeniedOutcome: " <> show other)
       readIORef requests >>= assertEqual "denied egress sends no HTTP request" 0
 
+actionDeniedAtEnqueue :: IO ()
+actionDeniedAtEnqueue = do
+  requests <- newIORef ([] :: [(Text, AgentAction)])
+  withFixture "action-denied-enqueue" [signalSink "denied"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
+    directory <- directoryWith Active
+    let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied"), AgentWorkflow.directory = directory}
+    rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+    assertEqual "C13 denial creates no outbox" [] rows
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
+      Success [SinkResult {outcome = DeniedOutcome reason}] ->
+        assertBool "journal distinguishes exact policy denial" ("exact recipient denied" `Text.isInfixOf` reason)
+      other -> assertFailure ("expected one C13 DeniedOutcome, got " <> show other)
+    observed <- readIORef requests
+    case observed of
+      [(principal, action)] -> do
+        assertEqual "authorization uses admitted Meibo principal" "agent_heartbeat" principal
+        assertEqual "authorization uses exact recipient" "kizashi_recipient:recipient" (canonicalResourceText (actionResource action))
+      other -> assertFailure ("expected one exact sink authorization, got " <> show other)
+
+actionUnavailableAtEnqueue :: IO ()
+actionUnavailableAtEnqueue = do
+  requests <- newIORef ([] :: [(Text, AgentAction)])
+  withFixture "action-unavailable-enqueue" [signalSink "unavailable"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
+    directory <- directoryWith Active
+    let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage"), AgentWorkflow.directory = directory}
+    rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+    assertEqual "authorization outage creates no outbox" [] rows
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
+      Success [SinkResult {outcome = AuthorizationFailed reason}] ->
+        assertBool "journal distinguishes authorization outage" ("Kikan fixture outage" `Text.isInfixOf` reason)
+      other -> assertFailure ("expected one AuthorizationFailed outcome, got " <> show other)
+    readIORef requests >>= assertEqual "one fail-closed authorization attempt" 1 . length
+
+actionRevokedBeforePublish :: IO ()
+actionRevokedBeforePublish = do
+  downstream <- newIORef []
+  deny <- newIORef False
+  decisions <- newIORef ([] :: [(Text, AgentAction)])
+  testWithApplication (pure (kizashiApp downstream)) \port ->
+    withFixture "action-revoked-publish" [signalSink "revoked"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+      _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
+      directory <- directoryWith Active
+      let ActionAuthorizer {authorize = allowFixture} = allowAllActionAuthorizerForTests
+          authorizer =
+            ActionAuthorizer
+              { authorize = \principal action -> do
+                  modifyIORef' decisions (<> [(principal, action)])
+                  denied <- readIORef deny
+                  if denied
+                    then pure (Left (ActionPolicyDenied "relationship revoked"))
+                    else allowFixture principal action,
+                kawaSource = "fixture"
+              }
+          gatedDeps = deps {AgentWorkflow.actionAuthorizer = authorizer, AgentWorkflow.directory = directory}
+      [row] <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+      writeIORef deny True
+      result <- runEff (AgentWorkflow.publishSinkIntent gatedDeps row)
+      assertEqual "publish-time policy denial is a terminal non-send" Outbox.PublishSucceeded result
+      readIORef downstream >>= assertEqual "revocation prevents downstream HTTP" []
+      readIORef decisions >>= assertEqual "C13 runs once at enqueue and once at publish" 2 . length
+      receipt <- lookupReceipt pool row
+      assertEqual "publish-time denial closes the pending receipt" Delivery.Dead (Delivery.status receipt)
+
+rejectingAuthorizer :: IORef [(Text, AgentAction)] -> ActionAuthorizationFailure -> ActionAuthorizer
+rejectingAuthorizer requests failure =
+  ActionAuthorizer
+    { authorize = \principal action -> do
+        modifyIORef' requests (<> [(principal, action)])
+        pure (Left failure),
+      kawaSource = "fixture"
+    }
+
 receiptRecording :: IO ()
 receiptRecording = do
   requests <- newIORef []
@@ -455,6 +536,7 @@ withFixtureUsingTracer tracer label sinks kizashi danwa use =
             AgentWorkflow.AgentRunDeps
               { AgentWorkflow.appEnv = appEnv,
                 AgentWorkflow.behaviorEnv = behaviorEnv,
+                AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,

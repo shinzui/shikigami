@@ -134,7 +134,7 @@ nested under `kafka`.
 | `sinks.kawa.base_url` | `http://localhost:8088` | `SHIKIGAMI_SINKS_KAWA_BASE_URL` | Base URL of the kawa ingest doorway. |
 | `sinks.kawa.source_segment` | `shinzui/shikigami` | `SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT` | Source segment kawa attributes ingested activity to. |
 | `sinks.kizashi.base_url` | `http://localhost:8089` | `SHIKIGAMI_SINKS_KIZASHI_BASE_URL` | Base URL of the kizashi signal service. |
-| `sinks.kizashi.default_recipient` | `recipient:default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. |
+| `sinks.kizashi.default_recipient` | `recipient_default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. Exact C13 target ids cannot contain `:` or `#`. |
 | `sinks.kanmon.base_url` | `http://localhost:8090` | `SHIKIGAMI_SINKS_KANMON_BASE_URL` | Base URL of Kanmon's guarded channel-action service. |
 | `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
 | `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
@@ -146,6 +146,14 @@ nested under `kafka`.
 | `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
 | `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
 | `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
+| `authorization.actions.mode` | `disabled` | `SHIKIGAMI_ACTION_AUTHORIZATION_MODE` | `disabled` authorizes no protected external action; `kikan` requires the complete trust group below. |
+| `authorization.actions.kikan_en.base_url` | *(none)* | `SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL` | Kikan-En base URL, required in `kikan` mode. |
+| `authorization.actions.shomei.base_url` | *(none)* | `SHIKIGAMI_ACTION_SHOMEI_BASE_URL` | Shomei base URL, required in `kikan` mode. |
+| `authorization.actions.shomei.client_id` | *(none)* | `SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID` | Shomei machine client id, required in `kikan` mode. |
+| `credentials.authorization.actions.shomei.client_secret` | *(none — secret)* | `SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET` | Shomei machine secret, required and redacted in `kikan` mode. |
+| `authorization.actions.en.issuer_public_keys` | *(none)* | `SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS` | En Biscuit verifier keyset, required in `kikan` mode. |
+| `authorization.actions.en.schema_hashes` | *(none)* | `SHIKIGAMI_ACTION_EN_SCHEMA_HASHES` | Accepted Kikan schema hashes, required in `kikan` mode. |
+| `authorization.actions.caller_id` | *(none)* | `SHIKIGAMI_ACTION_CALLER_ID` | Public audit caller id, required in `kikan` mode. |
 
 The three duration settings are whole seconds in the range 1–86400. The upper bound keeps
 conversion to the microsecond timeout representation safe on the 64-bit platforms
@@ -199,7 +207,9 @@ precedence and redaction instead of being read behind Settei's back by the clien
 
 ## Choosing a model provider
 
-`behavior.provider` is the only conditional part of the surface, and the only one whose
+`behavior.provider` and `authorization.actions.mode` are the two conditional parts of the
+surface. The authorization trust group is documented in
+[Per-action authorization operations](action-authorization.md). The behavior provider's
 default is a deliberate fiction. Left alone it selects the **stub**: a provider that loads
 the skill, builds the same request a real model would get, and answers with a fixed
 sentence. That is what makes the test suite deterministic and key-free — and it is also

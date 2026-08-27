@@ -185,12 +185,12 @@ recipientTests =
           let ctx =
                 (ctxWith (ReiConfig {baseUrl = Nothing}))
                   { kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = "recipient_default"},
-                    recipientOverride = Just "person:mai"
+                    recipientOverride = Just "person_mai"
                   }
           _ <- dispatch ctx (signalWith Actor (Just "ops")) sampleOutput
           posted <- readIORef recorded
           case posted of
-            [CreateSignalReq {recipient}] -> recipient @?= "person:mai"
+            [CreateSignalReq {recipient}] -> recipient @?= "person_mai"
             other -> assertFailure ("expected exactly one signal, got " <> show (length other))
     ]
 

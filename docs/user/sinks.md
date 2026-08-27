@@ -57,7 +57,7 @@ A.Sink.KizashiSignal
   , priority = A.Priority.Normal
   , importance = 45
   , recipientFrom = A.RecipientFrom.SubjectOwner
-  , defaultRecipient = Some "person:nadeem"
+  , defaultRecipient = Some "person_nadeem"
   , intentTemplate = "triage this ticket"
   , extraContextTags = [ "verb:ticket.received", "subject:ticket" ]
   }
@@ -104,7 +104,8 @@ A.Sink.DanwaConversation { topic = "incident-42" }
 Opens or attaches a `shinzui/danwa` conversation on the given topic. An addressed
 conversation reply posts into its existing thread; an ordinary run starts a thread, joins the
 configured agent participant, and posts the behavior output. Delivery receipts retain a
-started conversation across retries.
+started conversation across retries. A fresh conversation requires a non-empty topic because
+that stable value is the authorization target available before any Danwa IO.
 
 ## ChannelEgress — act through Kanmon
 
@@ -150,7 +151,7 @@ request content, conversation key, or raw response body.
 
 ## The permission gate
 
-**Every sink dispatch is gated by a permission check** tied to the agent's identity. If a
+**Every sink dispatch is gated by two permission checks** tied to the agent's identity. If a
 sink is **denied**, it is **logged and skipped** — the run still completes, and the session
 records the denial. A denied sink never crashes the agent.
 
@@ -159,6 +160,14 @@ use `shikigami grants grant`, `grants revoke`, and `grants list`; production doe
 compiled static fixture. The runtime checks at enqueue and again at publication, so a
 revocation after enqueue still prevents the external effect. A denial is journaled as
 `DeniedOutcome` and creates no outbox row or delivery receipt.
+
+After that C11 sink-kind check, Kikan-En C13 authorizes the exact fully resolved target: Kawa
+source, Kizashi recipient, Rei intention, Danwa thread/topic, or channel plus conversation key.
+It is checked before enqueue and checked again before publication; no proof is stored in the
+journal or outbox. Exact target identifiers reject reserved tuple separators such as `:` and `#`.
+An authorization-service outage or rejected proof is reported as `AuthorizationFailed`, creates
+no enqueue row, and performs no delivery IO. See
+[Per-action authorization operations](../operations/action-authorization.md).
 
 This means you can **declare** sinks freely and control which ones an agent is actually
 permitted to fire through the grant layer — declaration and authorization are separate

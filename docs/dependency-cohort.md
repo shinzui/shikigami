@@ -13,7 +13,9 @@ Two rules govern changes:
 1. **Released versions only.** A co-developed dependency is selected by Hackage
    version. A `source-repository-package` stanza is admissible only for a package
    with no Hackage release, or for a fork we deliberately carry; each such stanza
-   carries a comment saying which case it is and when it retires.
+   carries a comment saying which case it is and when it retires. A sibling package path is
+   permitted only while an unpublished public contract is being co-developed, and records the
+   exact producing commit it must become.
 2. **No `allow-newer` between co-developed packages.** If two cohort members
    cannot agree, the fix is an upstream release, not a solver override. The one
    `allow-newer` in `cabal.project` (`haxl:time`) is a third-party bound and
@@ -53,6 +55,10 @@ referring to them from anywhere durable.
 | `handan-core` | `mori://shinzui/handan` |
 | `kafka-effectful` | `mori://shinzui/kafka-effectful` |
 | `danwa*` | `mori://shinzui/danwa` |
+| `kikan-en-contract`, `kikan-en-client` | `mori://shinzui/kikan-en` |
+| `en-core`, `en-biscuit` | `mori://shinzui/en` |
+| `shomei*` | `mori://shinzui/shomei` |
+| `biscuit` | `mori://shinzui/biscuit-haskell` |
 
 
 ## Release matrix
@@ -137,7 +143,8 @@ cohort already satisfies. Adopted by
 
 ### Current release status
 
-No compatible release line is pending adoption. Hackage and upstream both
+No compatible release line in the released cohort matrix is pending adoption. The unpublished
+action-authorization dependencies are recorded separately below. Hackage and upstream both
 identify `keiki-0.9.1.0` and `keiki-codec-json-0.9.1.0` as current (tag
 `v0.9.1.0`, commit `15bc83b1eb38d78488862f24bb1d873aa32a919a`, released
 2026-08-20), and Shikigami selects both. The release changes the default
@@ -148,8 +155,8 @@ format. Keiro 0.14 admits `keiki >=0.9 && <0.10`, and Kioku 0.5 admits
 the Keiro specification, deterministic scaffold, replay diff, conformance,
 build, and full serial test gates all passed on 2026-08-22.
 
-Every explicitly managed cohort selection is at its newest Hackage release.
-No `allow-newer` is used between co-developed packages.
+Every explicitly managed released-cohort selection is at its newest Hackage release. No
+`allow-newer` is used between co-developed packages.
 
 That was not true when the upgrade started. `kioku-core 0.4.0.0`'s library declared
 `baikai ^>=0.4.1.0`, capping baikai below 0.5, which in turn pinned `shikumi` to `0.3.0.1`
@@ -186,9 +193,16 @@ were excluded by keiro 0.11's own bounds and are admissible under keiro 0.13.
 |---|---|---|
 | `handan-core` | No Hackage release. Typed-program runtime behind `Shikigami.Behavior.Run` and `Shikigami.Program.Registry`. | Handan publishes. |
 | `danwa-core`, `danwa-api`, `danwa-client` | No Hackage release. Conversation substrate behind the `DanwaConversation` sink. | Danwa publishes. |
+| `en-core`, `en-biscuit` | En has no upstream tag or Hackage release. The exact commit `51edaab17473f7b9310f8802ccffd23bac5e4a9e` supplies the generic proof verifier used by the Kikan client. | En publishes a compatible release. |
+| `shomei-core`, `shomei-jwt`, `shomei-servant`, `shomei-client` | Shomei's 0.1.0.0 source tags resolve to exact commit `65551cb120336b53695c0dd30ebe0e473d6efcb2`, but the packages are not on Hackage. | Shomei publishes those packages. |
+| `biscuit` | Exact commit `8c0b3c5a13ce4a310737c0336f2ae167a1597588` is En's current proof-parser dependency. | En adopts a released compatible Biscuit package. |
 
-Only Handan and Danwa remain Git-sourced, and both exceptions retire when their
-packages publish to Hackage.
+`kikan-en-contract` and `kikan-en-client` are temporarily listed as sibling packages from the
+`mori://shinzui/kikan-en` checkout at commit
+`b061e55cda12ff87fbfeb61c99466e03cd2d6852`. They are the only Kikan packages Shikigami links;
+the PostgreSQL host and policy internals remain outside this build. Replace the sibling paths with
+that exact upstream commit when the packages are published to the remote repository, then with a
+released version when one exists.
 
 Schema evolution is pg-migrate throughout. The `codd`, `hasql-migration`, and
 `hasql-notifications` forks this project once carried are gone, and so is the

@@ -22,6 +22,7 @@ library
   import:          common
   hs-source-dirs:  src
   exposed-modules:
+    Shikigami.Action.Authorization
     Shikigami.Activity
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.Notification
@@ -97,6 +98,7 @@ library
     Shikigami.RunEvidence.Conformance
     Shikigami.Sink
     Shikigami.Sink.Auth
+    Shikigami.Sink.Authorization
     Shikigami.Sink.Config
     Shikigami.Sink.Danwa
     Shikigami.Sink.Delivery
@@ -160,6 +162,7 @@ library
     , directory                        >=1.3
     , effectful
     , effectful-core
+    , en-biscuit
     , filepath                         >=1.4
     , generic-lens                     >=2.2
     , handan-core
@@ -174,6 +177,8 @@ library
     , keiki
     , keiro
     , keiro-core
+    , kikan-en-client
+    , kikan-en-contract
     , kioku-api
     , kioku-core
     , kiroku-store
@@ -190,6 +195,8 @@ library
     , shibuya-core
     , shikumi
     , shikumi-tools
+    , shomei-client
+    , shomei-servant
     , streamly-core
     , text                             >=2.1
     , time                             >=1.12
@@ -271,6 +278,7 @@ test-suite shikigami-core-test
     , http-types
     , keiki
     , keiro
+    , kikan-en-contract
     , kioku-api
     , kioku-core
     , kiroku-store

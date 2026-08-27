@@ -99,7 +99,7 @@ tests =
           dispatch (dispatchContext port env (Just "conv_55012")) (egress Nothing) (object [])
             >>= (@?= SinkResult SChannelEgress (PermanentFailure "decode EgressActionResponse"))
         dispatch (dispatchContext 1 env Nothing) (egress Nothing) (object [])
-          >>= (@?= SinkResult SChannelEgress (PermanentFailure "ChannelEgress requires a resolved conversation key"))
+          >>= (@?= SinkResult SChannelEgress (AuthorizationFailed "invalid coordinates: channel conversation was not resolved before authorization"))
         dispatch (dispatchContext 1 env (Just "conv_55012")) (egress Nothing) (object [])
           >>= (@?= SinkResult SChannelEgress (Failed "transient HTTP failure: transport error"))
     ]

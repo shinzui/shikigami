@@ -26,8 +26,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Vector qualified as V
+import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
+import Kikan.En.Action (AgentAction (InvokeCapabilityTool))
+import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (Event), defaultMemoryPolicy)
 import Shikigami.Behavior.Error (FailureClass (Permanent), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
@@ -64,7 +67,8 @@ tests =
     [ emptyRegistryTests,
       toolLoopTests,
       overlayEnvironmentTests,
-      bracketedTraceTest
+      bracketedTraceTest,
+      toolInvocationAuthorizationTest
     ]
 
 emptyRegistryTests :: TestTree
@@ -233,6 +237,7 @@ bracketedTraceTest =
     result <-
       withCapabilityOverlays
         Log.silentLogger
+        allowAllActionAuthorizerForTests
         providers
         CapabilityScope {runId = "run-e2e", principal = "principal-e2e", mode = Durable}
         resolvedRead
@@ -250,6 +255,77 @@ bracketedTraceTest =
     observedTrace <- readIORef traceEvents
     length [() | CallStarted {} <- observedTrace] @?= 2
     length [() | CallFinished {} <- observedTrace] @?= 2
+
+toolInvocationAuthorizationTest :: TestTree
+toolInvocationAuthorizationTest =
+  testCase "a denied exact tool action never runs the leased tool callback" do
+    root <- repositoryRoot
+    invocations <- newIORef (0 :: Int)
+    authorizations <- newIORef ([] :: [AgentAction])
+    turns <- newIORef (0 :: Int)
+    let ActionAuthorizer {authorize = allowFixture} = allowAllActionAuthorizerForTests
+        authorizer =
+          ActionAuthorizer
+            { authorize = \principal action -> do
+                modifyIORef' authorizations (<> [action])
+                case action of
+                  InvokeCapabilityTool {} -> pure (Left (ActionPolicyDenied "tool fixture denial"))
+                  _ -> allowFixture principal action,
+              kawaSource = "fixture"
+            }
+        guardedTool =
+          SomeTool
+            ( mkTool "read" "Record and return the supplied value." \ToolInput {value} -> do
+                unsafeEff_ (modifyIORef' invocations (+ 1))
+                pure ToolOutput {answer = "saw " <> value}
+            )
+        provider =
+          CapabilityProvider
+            { descriptor = readDescriptor,
+              acquire = \_scope ->
+                pure
+                  ( Right
+                      CapabilityLease
+                        { descriptor = readDescriptor,
+                          tools = [guardedTool],
+                          release = pure (Right ())
+                        }
+                  )
+            }
+        providers = expectRight (mkCapabilityProviderRegistry [provider])
+        api = Custom "shikigami-behavior-tool-authorization"
+        model = toolModel api
+        handler _model _ctx _options = do
+          turn <- next turns
+          pure
+            if turn == 0
+              then toolResponse (call "call-denied" namespacedRead (object ["value" .= ("secret" :: Text)]))
+              else textResponse "handled denial"
+    registerApiProvider
+      ApiProvider
+        { apiTag = api,
+          stream = liftCompleteToStream handler,
+          complete = handler,
+          describeThinking = \_ _ -> noThinkingRequested
+        }
+    base <- newBehaviorEnv
+    let env = base & #model .~ model
+        decl = declFor [workspaceReadId] (Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")})
+    result <-
+      withCapabilityOverlays
+        Log.silentLogger
+        authorizer
+        providers
+        CapabilityScope {runId = "run-denied", principal = "principal-denied", mode = Durable}
+        resolvedRead
+        (mkRegistry [])
+        (\registry _active -> runBehavior (withCapabilityTools resolvedRead registry env) decl (triggerOnly Aeson.Null))
+    result @?= Right (Right (object ["reply" .= ("handled denial" :: Text)]))
+    readIORef invocations >>= (@?= 0)
+    observed <- readIORef authorizations
+    case observed of
+      [_connect, InvokeCapabilityTool {}] -> pure ()
+      _ -> assertFailure ("expected connect then invoke authorization, got " <> show observed)
 
 runSkillFixture ::
   ToolRegistry ->

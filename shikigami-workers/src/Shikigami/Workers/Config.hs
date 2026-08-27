@@ -42,6 +42,7 @@ import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
 import Keiro.Telemetry (KeiroMetrics)
 import Kioku.App (AppEnv (..))
+import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
@@ -59,6 +60,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink.GrantStore (withActionAuthorizer)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
@@ -92,6 +94,7 @@ data WorkerEnv = WorkerEnv
     -- than reconstructing a less truthful view from enabled agents.
     agentReport :: !AgentLoadReport,
     behaviorEnv :: !BehaviorEnv,
+    actionAuthorizer :: !ActionAuthorizer,
     runTimeout :: !NominalDiffTime,
     delegationBudget :: !DelegationBudget,
     approvalDeadline :: !NominalDiffTime,
@@ -152,7 +155,7 @@ envKeiroMetrics WorkerEnv {appEnv = AppEnv {metrics = value}} = value
 -- | Named for the same reason as 'envLogger': several of the records below also
 -- carry a @grants@ field.
 envGrants :: WorkerEnv -> GrantSource
-envGrants WorkerEnv {grants = g} = g
+envGrants WorkerEnv {grants = g, actionAuthorizer} = withActionAuthorizer actionAuthorizer g
 
 -- | Named for the same reason as 'envLogger': field access through a bare
 -- selector is ambiguous under @DuplicateRecordFields@.
@@ -196,6 +199,7 @@ agentRunDeps env =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv = appEnv env,
       AgentWorkflow.behaviorEnv = behaviorEnv env,
+      AgentWorkflow.actionAuthorizer = actionAuthorizer env,
       AgentWorkflow.capabilities = emptyCapabilityRuntime,
       AgentWorkflow.agents = agents env,
       AgentWorkflow.kizashi = kizashi env,

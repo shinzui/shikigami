@@ -28,6 +28,8 @@ module Shikigami.Sink.GrantStore
   ( -- * The gate
     GrantSource (..),
     checkGrant,
+    withActionAuthorizer,
+    actionAuthorizerFor,
 
     -- * Rows
     GrantRow (..),
@@ -71,6 +73,7 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
+import Shikigami.Action.Authorization (ActionAuthorizer, allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
@@ -92,6 +95,21 @@ data GrantSource
     StaticGrants !(Map Text (Set SinkKind))
   | -- | The @shikigami.sink_grants@ table, over the event-store pool.
     DbGrants !Pool
+  | -- | C11 plus the process-local C13 interpreter. This wrapper is live
+    -- dependency wiring and is never serialized.
+    ActionGatedGrants !ActionAuthorizer !GrantSource
+
+withActionAuthorizer :: ActionAuthorizer -> GrantSource -> GrantSource
+withActionAuthorizer authorizer source = ActionGatedGrants authorizer source
+
+-- | Focused static fixtures predate C13 and remain isolated from network IO.
+-- A bare production database source is fail-closed; production composition
+-- must wrap it explicitly.
+actionAuthorizerFor :: GrantSource -> ActionAuthorizer
+actionAuthorizerFor = \case
+  ActionGatedGrants authorizer _ -> authorizer
+  StaticGrants {} -> allowAllActionAuthorizerForTests
+  DbGrants {} -> denyAllActionAuthorizer
 
 -- | Is this agent permitted this sink kind? @Right ()@ if granted, else
 -- @Left (Denied reason)@.
@@ -108,6 +126,7 @@ data GrantSource
 checkGrant :: GrantSource -> AgentIdentity -> SinkKind -> IO (Either Denied ())
 checkGrant source identity kind = case source of
   StaticGrants table -> pure (checkGrantStatic table identity kind)
+  ActionGatedGrants _ underlying -> checkGrant underlying identity kind
   DbGrants pool ->
     lookupGrant pool identity kind <&> \case
       Right (Just True) -> Right ()

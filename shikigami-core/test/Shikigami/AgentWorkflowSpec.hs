@@ -53,6 +53,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -1839,6 +1840,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
@@ -1872,6 +1874,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},

@@ -11,6 +11,8 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Kikan.En.Action (AgentAction (ConnectCapability), actionResource, canonicalResourceText)
+import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
@@ -39,6 +41,7 @@ tests =
     "capability providers"
     [ toolCompositionTests,
       providerRegistryTests,
+      authorizationTests,
       lifecycleTests,
       isolationTests
     ]
@@ -92,6 +95,45 @@ providerRegistryTests =
         case resolveProvider registry alphaDescriptor of
           Left err -> err @?= CapabilityProviderDescriptorMismatch {expected = alphaDescriptor, actual}
           Right _ -> assertFailure "expected the public descriptor mismatch to be refused"
+    ]
+
+authorizationTests :: TestTree
+authorizationTests =
+  testGroup
+    "per-action authorization"
+    [ testCase "a denied exact provider action performs no acquisition IO" do
+        events <- newIORef []
+        requests <- newIORef []
+        let authorizer =
+              ActionAuthorizer
+                { authorize = \principal action -> do
+                    modifyIORef' requests (<> [(principal, action)])
+                    pure (Left (ActionPolicyDenied "fixture denial")),
+                  kawaSource = "fixture"
+                }
+            registry = expectRegistry [successfulProvider events "A" alphaDescriptor (Right ())]
+        result <-
+          withCapabilityOverlays
+            Log.silentLogger
+            authorizer
+            registry
+            testScope
+            (mkResolvedCapabilitySet [alphaDescriptor])
+            emptyRegistry
+            (\_ _ -> pure ())
+        result
+          @?= Left
+            CapabilityAuthorizationFailed
+              { descriptor = alphaDescriptor,
+                authorizationError = ActionPolicyDenied "fixture denial"
+              }
+        readIORef events >>= (@?= [])
+        observed <- readIORef requests
+        case observed of
+          [(principal, action@ConnectCapability {})] -> do
+            principal @?= "principal-test"
+            canonicalResourceText (actionResource action) @?= "capability_provider:alpha@v1"
+          _ -> assertFailure ("expected one exact connect authorization, got " <> show observed)
     ]
 
 lifecycleTests :: TestTree
@@ -209,7 +251,7 @@ runOverlays ::
   (ToolRegistry -> Set.Set CapabilityId -> IO value) ->
   IO (Either CapabilityRuntimeError value)
 runOverlays registry resolved base =
-  withCapabilityOverlays Log.silentLogger registry testScope resolved base
+  withCapabilityOverlays Log.silentLogger allowAllActionAuthorizerForTests registry testScope resolved base
 
 testScope :: CapabilityScope
 testScope = CapabilityScope {runId = "run-test", principal = "principal-test", mode = Durable}

@@ -7,9 +7,14 @@ import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
+import Kikan.En.Client (newActionProofVerifier, newKikanEnClient)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
+import Network.HTTP.Client.TLS (newTlsManager)
+import Servant.Client (mkClientEnv, parseBaseUrl)
+import Shikigami.Action.Authorization (ActionAuthorizer, denyAllActionAuthorizer, newKikanActionAuthorizer, shomeiClientCredentialsToken)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -88,6 +93,7 @@ runWorkerCmd config = do
         newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
           Left failure -> refuseInvalidSinkHttp logger failure
           Right clients -> pure clients
+      actionAuthorizer <- buildActionAuthorizer logger config
       let policy =
             ApprovalPolicySnapshot
               { requireFor = Config.approvalRequiredSinks config,
@@ -137,6 +143,7 @@ runWorkerCmd config = do
                 agents,
                 agentReport = report,
                 behaviorEnv = behEnv,
+                actionAuthorizer,
                 runTimeout = Config.runTimeout config,
                 delegationBudget = Config.delegationBudget config,
                 approvalDeadline = Config.approvalDeadline config,
@@ -177,6 +184,22 @@ refuseInvalidSinkHttp :: Log.Logger -> SinkHttpError -> IO SinkHttp
 refuseInvalidSinkHttp logger failure = do
   Log.logError logger "worker.sink_http.invalid" ["error" Aeson..= show failure]
   Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
+
+buildActionAuthorizer :: Log.Logger -> AppConfig -> IO ActionAuthorizer
+buildActionAuthorizer logger config =
+  case Config.actionAuthorization config of
+    Config.ActionAuthorizationDisabled -> pure denyAllActionAuthorizer
+    Config.KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId} -> do
+      kikanBase <- either (refuse "Kikan-En" kikanBaseUrl) pure (parseBaseUrl (Text.unpack kikanBaseUrl))
+      shomeiBase <- either (refuse "Shomei" shomeiBaseUrl) pure (parseBaseUrl (Text.unpack shomeiBaseUrl))
+      manager <- newTlsManager
+      let verifier = newActionProofVerifier issuerPublicKeys acceptedSchemaHashes (const (pure False))
+          client = newKikanEnClient (mkClientEnv manager kikanBase) verifier
+          tokenSource = shomeiClientCredentialsToken (mkClientEnv manager shomeiBase) shomeiClientId (Config.revealSecretText shomeiClientSecret)
+      pure (newKikanActionAuthorizer logger callerId (Config.kawaSourceSegment config) client tokenSource)
+  where
+    refuse serviceName baseUrl _ =
+      Exit.die ("shikigami-worker: invalid " <> Text.unpack serviceName <> " authorization base URL: " <> Text.unpack baseUrl)
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.
