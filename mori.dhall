@@ -35,5 +35,13 @@ in  Schema.Project::{
         , okfVersion = "0.2"
         , description = Some "Shikigami-owned improvement requests"
         }
+      , Schema.OkfBundle::{
+        , name = "reviews"
+        , path = "docs/reviews"
+        , profile = Some "docs/reviews/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some
+            "Commit-pinned records of Shikigami artifacts having been reviewed"
+        }
       ]
     }

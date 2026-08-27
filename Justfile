@@ -1,3 +1,14 @@
+# Strictly validate commit-pinned review records against the shared
+# assurance.reviews profile. Findings stay in the review body or become records
+# in the owning bug-report or improvement-request bundle.
+[group("docs")]
+reviews-validate:
+    okf validate docs/reviews \
+      --strict \
+      --profile docs/reviews/profile.dhall \
+      --profile-enforce \
+      --log-enforce
+
 # Create the dev database (idempotent) and apply the full schema.
 # Relies on the PG* environment variables set by the nix devShell (flake.nix):
 # PGHOST is a Unix-socket dir inside the repo, PGDATABASE=shikigami.
