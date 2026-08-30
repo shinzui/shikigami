@@ -15,7 +15,6 @@ module Shikigami.Attestation.EvidenceStore
   )
 where
 
-import Baikai.Evidence qualified as Baikai
 import Data.Aeson (Result (..), Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
@@ -270,13 +269,11 @@ recordedCallId RecordedCallEvidence {callId} = callId
 callProjection :: Text -> RecordedCallEvidence -> CallProjection
 callProjection ownerRunId RecordedCallEvidence {callId, relationship, resolvedModelId, requestedAlias, evidence = terminal} =
   let (relationshipText, relatedCallId) = relationshipParts relationship
-      Baikai.ModelCallEvidence
-        { Baikai.runId = sourceRunId,
-          Baikai.callId = baikaiCallId,
-          Baikai.attempt,
-          Baikai.status,
-          Baikai.strength
-        } = terminal
+      sourceRunId = terminal ^. #runId
+      baikaiCallId = terminal ^. #callId
+      attempt = terminal ^. #attempt
+      status = terminal ^. #status
+      strength = terminal ^. #strength
    in CallProjection
         { runId = ownerRunId,
           callId = renderCallCorrelationId callId,

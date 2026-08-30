@@ -25,12 +25,13 @@ is therefore *not* v1 work. This now has a second, sharper consequence: the rece
 installed **seven patch ids whose legacy branches are unreachable code** — see
 [Compatibility work that v1 does not owe](#compatibility-work-that-v1-does-not-owe).
 
-**The cohort is current and has no exclusions.** Re-verified 2026-08-26 against Hackage for every
-row and the upstream tags for the changed Keiki, Keiro, Kioku, Shikumi, and Baikai families:
-nothing released past what `cabal.project` pins. The table in this document had fallen behind the
-repository contract: the selected family is Keiki 0.9.1, Keiro 0.14, and
-Kioku 0.5, and `shikumi-tools` 0.3.0.2 joined the cohort for the capability-overlay runtime. See
-[The cohort, as pinned](#the-cohort-as-pinned).
+**The cohort is current, with narrow TLS metadata exceptions.** Re-verified 2026-08-29 against
+Hackage for every row and the upstream tags for the changed Keiki, Keiro, Kioku, Shikumi, and
+Baikai families: nothing released past what `cabal.project` pins. The table in this document had
+fallen behind the repository contract: the selected family is Keiki 0.9.1, Keiro 0.14, Kioku
+0.5.1, Shikumi 0.3.0.3, and Baikai 0.6. `http-client-tls` 0.4 is selected through temporary
+per-package exceptions while compatible Baikai, Shikumi-tools, and Claude metadata is published.
+See [The cohort, as pinned](#the-cohort-as-pinned).
 
 **The MasterPlan registries are no longer the authority on status.** Twenty-four registry rows
 call a complete plan `Not Started`; plans 14, 32, 44, and 45 are the newest stale rows, while
@@ -347,7 +348,7 @@ the corpus first, which was the cheaper of the two places to find it.
 
 ## The cohort, as pinned
 
-Re-verified 2026-08-26 against `cabal.project` and Hackage for every row, plus the upstream tags for
+Re-verified 2026-08-29 against `cabal.project` and Hackage for every row, plus the upstream tags for
 the changed Keiki, Keiro, Kioku, Shikumi, and Baikai families; no cohort member has released past
 its pin. `docs/dependency-cohort.md` is the contract; this is the summary.
 
@@ -357,9 +358,9 @@ its pin. `docs/dependency-cohort.md` is the contract; this is the summary.
 | `keiro`, `-core`, `-migrations`, `-dsl` | 0.14.0.0 | 0.14.0.0 | ✅ |
 | `keiro-pgmq` | 0.14.0.0 | 0.14.0.0 | ✅ **plan 17** |
 | `keiro-ops` | 0.14.0.0 | 0.14.0.0 | ✅ **plan 30** |
-| `kioku-*` | 0.5.0.0 | 0.5.0.0 | ✅ |
-| `shikumi`, `shikumi-tools` | 0.3.0.2 | 0.3.0.2 | ✅ **`shikumi-tools` added by plan 57** |
-| `baikai`, `baikai-claude` | 0.5.0.0 | 0.5.0.0 | ✅ |
+| `kioku-*` | 0.5.1.0 | 0.5.1.0 | ✅ |
+| `shikumi`, `shikumi-tools` | 0.3.0.3 | 0.3.0.3 | ✅ **`shikumi-tools` added by plan 57** |
+| `baikai`, `baikai-claude` | 0.6.0.0 | 0.6.0.0 | ✅ |
 | `pgmq-*` | 0.5.0.0 | 0.5.0.0 | ✅ |
 | `shibuya-core` | 0.9.0.0 | 0.9.0.0 | ✅ |
 | `shibuya-kafka-adapter` | 0.9.0.0 | 0.9.0.0 | ✅ **new — plan 18** |
@@ -367,6 +368,11 @@ its pin. `docs/dependency-cohort.md` is the contract; this is the summary.
 | `kiroku-store` / `-migrations` | 0.8.0.0 / 0.4.0.0 | same | ✅ |
 | `shibuya-kiroku-adapter` | 0.5.1.1 | 0.5.1.1 | ✅ |
 | `pg-migrate`, `settei`, `servant-health` | 1.1.0.0 / 0.2.0.0 / 0.1.0.0 | unchanged | ✅ |
+
+The selected TLS line is `http-client-tls 0.4.0`. Baikai, Shikumi-tools, and Claude release
+metadata still caps it below 0.4, so the project carries narrow per-package `allow-newer`
+exceptions until corrected Hackage revisions or replacement releases land; compatibility and
+retirement conditions are recorded in `docs/dependency-cohort.md`.
 
 Four of these arrived *because a plan went looking*, which is the pattern worth keeping: plan 17
 found `keiro-pgmq` rather than hand-rolling a typed consumer, plan 18 found `shibuya-kafka-adapter`
@@ -443,8 +449,8 @@ and audit four things, not one:
   scheduled.
 - **Keiro 0.14 shipped `PublishRejected`.** Plan 19 consumed the released terminal rejection and
   landed on 2026-08-22; plan 22 is no longer waiting on its delivery boundary.
-- **Plan 12's upstream contracts are still absent.** Re-verified 2026-08-26: no `Baikai.Mcp.*`
-  source in Baikai 0.5.0.0, no MCP adapter in Shikumi 0.3.0.2, and Kikan-En's per-action request is
+- **Plan 12's upstream contracts are still absent.** Re-verified 2026-08-29: no `Baikai.Mcp.*`
+  source in Baikai 0.6.0.0, no MCP adapter in Shikumi 0.3.0.3, and Kikan-En's per-action request is
   still proposed. Plans 56 and 57 superseded plan 12's old M1–M2 shape: the declaration is now a
   provider-neutral overlay request and the registry/bracket/loop already exist. **Do not implement
   the old partial milestones; rewrite plan 12 as an MCP overlay provider after its three upstream
@@ -685,18 +691,18 @@ they no longer sit in front of the core service cut.
 
 ## Upstream gates, current status
 
-| Gate | Blocks | Status 2026-08-26 |
+| Gate | Blocks | Status 2026-08-29 |
 |---|---|---|
 | `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-1` | plan 47 | ✅ Closed. |
-| kioku 0.3.0.0 | plan 53 M0 | ✅ Closed; superseded by the selected Kioku 0.5.0.0. |
+| kioku 0.3.0.0 | plan 53 M0 | ✅ Closed; superseded by the selected Kioku 0.5.1.0. |
 | `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` | plans 51, 52 | ✅ **Closed and consumed.** Plan 51 landed on `Baikai.Evidence`. |
 | keiro 0.12 | plan 17 | ✅ **Moot and consumed.** The selected Keiro 0.14 lifted the cap; plan 17 landed. |
-| Kioku admitting `baikai ^>=0.5` | plans 48, 51, 52 | ✅ Closed by Kioku 0.4.1.0; the selected release is now 0.5.0.0. |
+| Kioku admitting `baikai ^>=0.5` | plans 48, 51, 52 | ✅ Closed by Kioku 0.4.1.0; Kioku 0.5.1.0 now admits Baikai 0.6. |
 | `mori://shinzui/shibuya/okf/improvement-requests/concepts/IR-1` | plan 29's worker probe | ✅ **Discharged in substance.** `shibuya-core 0.9.0.0` exports `getAppMetrics` / `ProcessorMetrics` / `ProcessorState` — a non-blocking read distinguishing idle, processing, failed-with-reason-and-time, and stopped, attributed by processor id. Plan 29 shipped on it and reports *last activity* rather than *last time we remembered to beat*. The IR is still `proposed` upstream and its second ask is unmet; it gates nothing here. |
 | `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-3` | plan 19 M1's blocked half | ✅ Closed by Keiro 0.14.0.0 and consumed when plan 19 landed. |
 | `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2` | plan 34 | ❌ Still `proposed`. Plans 26 and 30 stopped waiting on it. |
-| `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-2` | plan 12 | ❌ Still `proposed`; Baikai 0.5.0.0 has no `Baikai.Mcp.*` source. |
-| `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-1` | plan 12 | ❌ Still `proposed`; Shikumi 0.3.0.2 has no MCP adapter. |
+| `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-2` | plan 12 | ❌ Still `proposed`; Baikai 0.6.0.0 has no `Baikai.Mcp.*` source. |
+| `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-1` | plan 12 | ❌ Still `proposed`; Shikumi 0.3.0.3 has no MCP adapter. |
 | `mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3` | plan 12 | ❌ Still `proposed`. |
 | Meibo + Shomei source-package closure | plan 54 | ⚠️ Meibo has no Hackage release or tag; remote `HEAD` remains `a641e2d`. `mori://shinzui/shomei/packages/shomei-servant` now has upstream tag `shomei-servant-0.1.0.0` resolving to `65551cb`, but still no Hackage release. Plan 54 must select remote-reachable commits and compile-prove the closure before M1. |
 | `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` | plans 44, 46, 52 | ❌ Still `proposed`. |

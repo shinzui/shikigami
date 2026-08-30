@@ -315,8 +315,10 @@ correlateEvidence ::
 correlateEvidence runId stepName firstOrdinal = go firstOrdinal Map.empty
   where
     go _ _ [] = []
-    go ordinal previousByBaikaiId (terminal@Baikai.ModelCallEvidence {Baikai.supersedes, Baikai.callId = baikaiCallId} : rest) =
-      let correlationId = callCorrelationId runId stepName ordinal
+    go ordinal previousByBaikaiId (terminal : rest) =
+      let supersedes = terminal ^. #supersedes
+          baikaiCallId = terminal ^. #callId
+          correlationId = callCorrelationId runId stepName ordinal
           relationship =
             case supersedes >>= (`Map.lookup` previousByBaikaiId) of
               Just previous -> RetryOf previous

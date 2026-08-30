@@ -81,11 +81,11 @@ tests =
                     emptyOptions
             case Options.evidence configured of
               Nothing -> assertFailure "evidence request was not installed"
-              Just Baikai.EvidenceRequest {Baikai.runId = requestRunId, Baikai.strictness, Baikai.attempt, Baikai.supersedes} -> do
-                assertEqual "run id" "run-evidence-options" requestRunId
-                assertEqual "strictness" (Baikai.EvidenceRequired Baikai.EvidenceModelObserved) strictness
-                assertEqual "attempt" 2 attempt
-                assertEqual "retry provenance" (Just "baikai-call-1") supersedes,
+              Just request -> do
+                assertEqual "run id" "run-evidence-options" (request ^. #runId)
+                assertEqual "strictness" (Baikai.EvidenceRequired Baikai.EvidenceModelObserved) (request ^. #strictness)
+                assertEqual "attempt" 2 (request ^. #attempt)
+                assertEqual "retry provenance" (Just "baikai-call-1") (request ^. #supersedes),
           testCase "an unconfigured call remains opted out" do
             assertEqual "no evidence request" Nothing (Options.evidence emptyOptions),
           testCase "the live trace source collects Baikai evidence with Shikigami correlation" do
@@ -112,9 +112,8 @@ tests =
             case collected of
               [RecordedCallEvidence {callId = collectedId, relationship = RootCall, evidence = terminal}] -> do
                 assertEqual "correlation id" (renderCallCorrelationId callId) (renderCallCorrelationId collectedId)
-                let Baikai.ModelCallEvidence {Baikai.runId = evidenceRunId, Baikai.schemaVersion} = terminal
-                assertEqual "Baikai run id" "run-evidence-live" evidenceRunId
-                assertEqual "Baikai schema" Baikai.evidenceSchemaVersion schemaVersion
+                assertEqual "Baikai run id" "run-evidence-live" (terminal ^. #runId)
+                assertEqual "Baikai schema" Baikai.evidenceSchemaVersion (terminal ^. #schemaVersion)
               other -> assertFailure ("expected one root call, got " <> show other),
           testCase "two-call, retry, and child fixtures pin literal Baikai JSON" do
             assertLiteralEvidence "two-call" twoCallEvidenceJson twoCallFirst
@@ -623,14 +622,13 @@ childRecorded =
 
 fixtureRecorded :: CallCorrelationId -> CallRelationship -> Maybe Text -> Baikai.ModelCallEvidence -> RecordedCallEvidence
 fixtureRecorded callId relationship requestedAlias evidence =
-  let Baikai.ModelCallEvidence {Baikai.requestedModel} = evidence
-   in RecordedCallEvidence
-        { callId,
-          relationship,
-          resolvedModelId = requestedModel,
-          requestedAlias,
-          evidence
-        }
+  RecordedCallEvidence
+    { callId,
+      relationship,
+      resolvedModelId = evidence ^. #requestedModel,
+      requestedAlias,
+      evidence
+    }
 
 pendingChild :: RelevantChild
 pendingChild =
@@ -655,12 +653,12 @@ terminalChild =
 fixtureEvidence :: Text -> Text -> Natural -> Maybe Text -> Text -> Baikai.ModelCallEvidence
 fixtureEvidence runId callId attempt supersedes requestedModel =
   Baikai.baseEvidence
-    Baikai.EvidenceRequest
-      { runId,
-        strictness = Baikai.EvidenceBestEffort,
-        attempt,
-        supersedes
-      }
+    ( Baikai.evidenceRequest runId
+        & #attempt
+        .~ attempt
+        & #supersedes
+        .~ supersedes
+    )
     callId
     fixtureEndpoint
     requestedModel
@@ -678,7 +676,7 @@ fixtureEndpoint =
       api = "messages",
       transport = Baikai.TransportHttpApi,
       endpoint = Just "https://fixture.invalid/v1/messages",
-      baikaiVersion = "0.5.0.0",
+      baikaiVersion = "0.6.0.0",
       implementationVersion = Just "fixture-v1"
     }
 
@@ -783,7 +781,7 @@ endpointFor provider transport endpoint =
       api = "messages",
       transport,
       endpoint,
-      baikaiVersion = "0.5.0.0",
+      baikaiVersion = "0.6.0.0",
       implementationVersion = Just "fixture-v1"
     }
 
@@ -862,12 +860,12 @@ twoCallEvidenceJson :: ByteString
 twoCallEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/1.0",
+    "schema_version":"baikai.model-call-evidence/2.0",
     "run_id":"run-evidence-m1",
     "call_id":"baikai-two-1",
     "attempt":1,
     "supersedes":null,
-    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.5.0.0","implementation_version":"fixture-v1"},
+    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.6.0.0","implementation_version":"fixture-v1"},
     "requested_model":"model-a",
     "thinking":{"requested":null,"mode":"absent","effort_text":null,"budget_tokens":null,"wire_field":null,"adjustments":[]},
     "observed_model":"unobserved",
@@ -892,12 +890,12 @@ retryEvidenceJson :: ByteString
 retryEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/1.0",
+    "schema_version":"baikai.model-call-evidence/2.0",
     "run_id":"run-evidence-m1",
     "call_id":"baikai-retry-2",
     "attempt":2,
     "supersedes":"baikai-retry-1",
-    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.5.0.0","implementation_version":"fixture-v1"},
+    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.6.0.0","implementation_version":"fixture-v1"},
     "requested_model":"model-a",
     "thinking":{"requested":null,"mode":"absent","effort_text":null,"budget_tokens":null,"wire_field":null,"adjustments":[]},
     "observed_model":"unobserved",
@@ -922,12 +920,12 @@ childEvidenceJson :: ByteString
 childEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/1.0",
+    "schema_version":"baikai.model-call-evidence/2.0",
     "run_id":"run-evidence-child",
     "call_id":"baikai-child-1",
     "attempt":1,
     "supersedes":null,
-    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.5.0.0","implementation_version":"fixture-v1"},
+    "endpoint":{"provider":"fixture","api":"messages","transport":"http_api","endpoint":"https://fixture.invalid/v1/messages","baikai_version":"0.6.0.0","implementation_version":"fixture-v1"},
     "requested_model":"model-a",
     "thinking":{"requested":null,"mode":"absent","effort_text":null,"budget_tokens":null,"wire_field":null,"adjustments":[]},
     "observed_model":"unobserved",

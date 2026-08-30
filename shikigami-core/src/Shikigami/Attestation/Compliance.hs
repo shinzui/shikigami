@@ -99,11 +99,9 @@ callReasons
       evidence = terminal
     } =
     let renderedCallId = renderCallCorrelationId callId
-        Baikai.ModelCallEvidence
-          { Baikai.endpoint,
-            Baikai.thinking,
-            Baikai.strength
-          } = terminal
+        endpoint = terminal ^. #endpoint
+        thinking = terminal ^. #thinking
+        strength = terminal ^. #strength
         Baikai.EndpointIdentity {Baikai.provider, Baikai.api, Baikai.transport} = endpoint
         endpointClass = endpointClassOf endpoint
         permitted = toList allowedCalls
@@ -185,17 +183,19 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
       [ ProhibitedEffortClamping callId requestedText effective
       | adjustment <- adjustments,
         not (Profile.effortClampingAllowed prohibitions),
-        let (requestedText, effective) = renderAdjustment adjustment
+        Just (requestedText, effective) <- [renderAdjustment adjustment]
       ]
 
-renderAdjustment :: Baikai.ThinkingAdjustment -> (Text, Text)
+renderAdjustment :: Baikai.ThinkingAdjustment -> Maybe (Text, Text)
 renderAdjustment = \case
-  Baikai.EffortClamped requested wire -> (renderThinkingLevel requested, wire)
-  Baikai.EffortCollapsedToToggle requested -> (renderThinkingLevel requested, "toggle")
-  Baikai.EffortOmitted requested -> (renderThinkingLevel requested, "omitted")
-  Baikai.ThinkingDroppedUnsupportedModel requested -> (renderThinkingLevel requested, "unsupported-model")
-  Baikai.ThinkingDroppedUnsupportedHost requested -> (renderThinkingLevel requested, "unsupported-host")
-  Baikai.ThinkingDroppedBudgetExceeded requested _ _ -> (renderThinkingLevel requested, "budget-exceeded")
+  Baikai.EffortClamped requested wire -> Just (renderThinkingLevel requested, wire)
+  Baikai.EffortCollapsedToToggle requested -> Just (renderThinkingLevel requested, "toggle")
+  Baikai.EffortOmitted requested -> Just (renderThinkingLevel requested, "omitted")
+  Baikai.ThinkingDroppedUnsupportedModel requested -> Just (renderThinkingLevel requested, "unsupported-model")
+  Baikai.ThinkingDroppedUnsupportedHost requested -> Just (renderThinkingLevel requested, "unsupported-host")
+  Baikai.ThinkingDroppedBudgetExceeded requested _ _ -> Just (renderThinkingLevel requested, "budget-exceeded")
+  Baikai.SamplingDroppedUnsupportedModel _ -> Nothing
+  Baikai.SamplingDroppedUnsupportedApi _ -> Nothing
 
 effectiveThinkingText :: Baikai.ThinkingTranslation -> Text
 effectiveThinkingText Baikai.ThinkingTranslation {Baikai.effortText, Baikai.mode} =
@@ -208,6 +208,7 @@ renderThinkingMode = \case
   Baikai.ThinkingModeFlag -> "flag"
   Baikai.ThinkingModeToggle -> "toggle"
   Baikai.ThinkingModeUnsupported -> "unsupported"
+  Baikai.ThinkingModeNotTranslated -> "not-translated"
   Baikai.ThinkingModeAbsent -> "absent"
 
 relationshipReasons ::
@@ -238,7 +239,7 @@ recordedCallId :: RecordedCallEvidence -> CallCorrelationId
 recordedCallId RecordedCallEvidence {callId} = callId
 
 evidenceProvider :: Baikai.ModelCallEvidence -> Text
-evidenceProvider Baikai.ModelCallEvidence {Baikai.endpoint = Baikai.EndpointIdentity {Baikai.provider}} = provider
+evidenceProvider terminal = terminal ^. #endpoint . #provider
 
 endpointClassOf :: Baikai.EndpointIdentity -> Text
 endpointClassOf Baikai.EndpointIdentity {Baikai.transport, Baikai.endpoint} =
@@ -254,11 +255,11 @@ renderTransport = \case
   Baikai.TransportAgentRun -> "agent_run"
 
 hasCorrelationField :: Text -> Baikai.ModelCallEvidence -> Bool
-hasCorrelationField requested terminal@Baikai.ModelCallEvidence {Baikai.responseId, Baikai.providerRequestId, Baikai.clientRequestId} =
+hasCorrelationField requested terminal =
   case normalize requested of
-    "responseid" -> isJust (Baikai.observedValue responseId)
-    "providerrequestid" -> isJust (Baikai.observedValue providerRequestId)
-    "clientrequestid" -> isJust clientRequestId
+    "responseid" -> isJust (Baikai.observedValue (terminal ^. #responseId))
+    "providerrequestid" -> isJust (Baikai.observedValue (terminal ^. #providerRequestId))
+    "clientrequestid" -> isJust (terminal ^. #clientRequestId)
     "callid" -> not (Text.null (baikaiCallId terminal))
     "runid" -> not (Text.null (baikaiRunId terminal))
     _ -> False
@@ -266,10 +267,10 @@ hasCorrelationField requested terminal@Baikai.ModelCallEvidence {Baikai.response
     normalize = Text.toLower . Text.filter (`notElem` ['-', '_', '.'])
 
 baikaiCallId :: Baikai.ModelCallEvidence -> Text
-baikaiCallId Baikai.ModelCallEvidence {Baikai.callId} = callId
+baikaiCallId terminal = terminal ^. #callId
 
 baikaiRunId :: Baikai.ModelCallEvidence -> Text
-baikaiRunId Baikai.ModelCallEvidence {Baikai.runId} = runId
+baikaiRunId terminal = terminal ^. #runId
 
 accountingReasons :: RunEvidence -> [NonConformingReason]
 accountingReasons RunEvidence {expectedCalls, calls, expectedChildRunIds, delegatedChildren} =
@@ -332,8 +333,8 @@ totalTokens :: [RecordedCallEvidence] -> Natural
 totalTokens = sum . fmap terminalTokens
 
 terminalTokens :: RecordedCallEvidence -> Natural
-terminalTokens RecordedCallEvidence {evidence = Baikai.ModelCallEvidence {Baikai.usage}} =
-  case usage of
+terminalTokens RecordedCallEvidence {evidence} =
+  case evidence ^. #usage of
     Baikai.Observed observed -> Usage.totalTokens observed
     Baikai.Unobserved -> 0
 
@@ -341,8 +342,8 @@ costMicroUsd :: [RecordedCallEvidence] -> Rational
 costMicroUsd = sum . fmap terminalCostMicroUsd
 
 terminalCostMicroUsd :: RecordedCallEvidence -> Rational
-terminalCostMicroUsd RecordedCallEvidence {evidence = Baikai.ModelCallEvidence {Baikai.usage}} =
-  case usage of
+terminalCostMicroUsd RecordedCallEvidence {evidence} =
+  case evidence ^. #usage of
     Baikai.Observed observed -> Cost.usd (Usage.cost observed) * 1000000
     Baikai.Unobserved -> 0
 

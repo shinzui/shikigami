@@ -6,11 +6,10 @@ import Baikai.Api (Api (Custom))
 import Baikai.Content (AssistantContent (AssistantText, AssistantToolCall), TextContent (..), ToolCall (..), ToolResultContent (ToolResultText), emptyToolCall)
 import Baikai.Context (Context)
 import Baikai.Context qualified as Context
-import Baikai.Evidence (noThinkingRequested)
 import Baikai.Message (Message (ToolResultMessage), ToolResultPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Options (Options, emptyOptions)
-import Baikai.Provider (ApiProvider (..), registerApiProvider)
+import Baikai.Provider (apiProviderWith, registerApiProvider)
 import Baikai.Response (Response (..), emptyResponse)
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
@@ -224,13 +223,7 @@ bracketedTraceTest =
                   )
             }
         providers = expectRight (mkCapabilityProviderRegistry [provider])
-    registerApiProvider
-      ApiProvider
-        { apiTag = api,
-          stream = liftCompleteToStream handler,
-          complete = handler,
-          describeThinking = \_ _ -> noThinkingRequested
-        }
+    registerApiProvider (apiProviderWith api (liftCompleteToStream handler) handler)
     base <- newBehaviorEnv
     let tracedBase = base & #model .~ model & #traceSink .~ Just sink
         decl = declFor [workspaceReadId] (Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")})
@@ -301,13 +294,7 @@ toolInvocationAuthorizationTest =
             if turn == 0
               then toolResponse (call "call-denied" namespacedRead (object ["value" .= ("secret" :: Text)]))
               else textResponse "handled denial"
-    registerApiProvider
-      ApiProvider
-        { apiTag = api,
-          stream = liftCompleteToStream handler,
-          complete = handler,
-          describeThinking = \_ _ -> noThinkingRequested
-        }
+    registerApiProvider (apiProviderWith api (liftCompleteToStream handler) handler)
     base <- newBehaviorEnv
     let env = base & #model .~ model
         decl = declFor [workspaceReadId] (Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")})
@@ -345,7 +332,7 @@ runSkillFixture registry turnLimit complete = do
 
 advertisedToolNames :: Context -> [Text]
 advertisedToolNames ctx =
-  [name | WireTool.Tool {WireTool.name = name} <- V.toList (Context.tools ctx)]
+  WireTool.name <$> V.toList (Context.tools ctx)
 
 toolObservations :: Context -> [(Text, Text, Text, Bool)]
 toolObservations ctx =

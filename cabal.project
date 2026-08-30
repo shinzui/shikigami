@@ -45,15 +45,15 @@ constraints:
   , keiro-migrations        ==0.14.0.0
   , keiro-ops               ==0.14.0.0
   , keiro-pgmq              ==0.14.0.0
-  , kioku-api               ==0.5.0.0
-  , kioku-core              ==0.5.0.0
-  , kioku-migrations        ==0.5.0.0
+  , kioku-api               ==0.5.1.0
+  , kioku-core              ==0.5.1.0
+  , kioku-migrations        ==0.5.1.0
 
   -- typed model programs and providers
-  , shikumi                 ==0.3.0.2
-  , shikumi-tools           ==0.3.0.2
-  , baikai                  ==0.5.0.0
-  , baikai-claude           ==0.5.0.0
+  , shikumi                 ==0.3.0.3
+  , shikumi-tools           ==0.3.0.3
+  , baikai                  ==0.6.0.0
+  , baikai-claude           ==0.6.0.0
 
   -- worker runtime, queues, and the event store
   , kafka-effectful         ==0.3.0.0
@@ -130,5 +130,15 @@ package blake3
 package postgresql-libpq
   flags: +use-pkg-config
 
+-- The selected Crypton 1.1 / TLS 2.x cohort requires http-client-tls 0.4.
+-- These five released package descriptions still cap it below 0.4 even though
+-- the used API is compatible. Local upstream fixes widen the co-developed
+-- bounds through <0.5; remove each exception after its Hackage revision or
+-- replacement release lands. haxl:time is the older unrelated exception.
 allow-newer:
+  baikai:http-client-tls,
+  baikai-claude:http-client-tls,
+  baikai-openai:http-client-tls,
+  claude:http-client-tls,
+  shikumi-tools:http-client-tls,
   haxl:time

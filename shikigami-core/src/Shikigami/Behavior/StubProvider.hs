@@ -28,13 +28,12 @@ import Baikai.Evidence
     newCallId,
     noThinkingRequested,
   )
-import Baikai.Message (AssistantPayload (..))
-import Baikai.Model (Model (..), _Model)
+import Baikai.Model (Model, emptyModel)
 import Baikai.Model qualified as Model
-import Baikai.Options (Options (..))
+import Baikai.Options (Options)
 import Baikai.Options qualified as Options
-import Baikai.Provider.Registry (ApiProvider (..), registerApiProvider)
-import Baikai.Response (Response (..), _Response)
+import Baikai.Provider.Registry (ApiProvider, apiProviderWith, registerApiProvider)
+import Baikai.Response (Response, emptyResponse)
 import Baikai.Stream (liftCompleteToStream)
 import Control.Lens ((&), (.~))
 import Data.Aeson (object, toJSON, (.=))
@@ -53,33 +52,29 @@ stubReplyText :: Text
 stubReplyText = "stub-skill: instructions acknowledged; no model was called"
 
 -- | A model whose API tag is 'stubApi', so @completeRequest stubModel@ dispatches to
--- 'stubApiProvider'. Built from baikai's @_Model@ base.
+-- 'stubApiProvider'. Built from baikai's 'emptyModel' base.
 stubModel :: Model
 stubModel =
-  _Model
-    { modelId = "stub-v1",
-      name = "Stub LLM",
-      api = stubApi,
-      provider = "stub"
-    }
+  emptyModel
+    & #modelId .~ "stub-v1"
+    & #name .~ "Stub LLM"
+    & #api .~ stubApi
+    & #provider .~ "stub"
 
--- | The fixed response: baikai's @_Response@ base with its assistant content replaced
+-- | The fixed response: baikai's 'emptyResponse' base with its assistant content replaced
 -- by a single text block carrying 'stubReplyText'.
 stubResponse :: Response
 stubResponse =
-  let base = _Response
-      msg = (message base) {content = V.singleton (AssistantText (TextContent {text = stubReplyText}))}
-   in base {message = msg, api = stubApi, provider = "stub"}
+  emptyResponse
+    & #message . #content .~ V.singleton (AssistantText (TextContent {text = stubReplyText}))
+    & #api .~ stubApi
+    & #provider .~ "stub"
 
 -- | The provider whose @complete@ ignores the request and returns 'stubResponse'.
 stubApiProvider :: ApiProvider
 stubApiProvider =
-  ApiProvider
-    { apiTag = stubApi,
-      stream = liftCompleteToStream completeStub,
-      complete = completeStub,
-      describeThinking = stubThinking
-    }
+  apiProviderWith stubApi (liftCompleteToStream completeStub) completeStub
+    & #describeThinking .~ stubThinking
 
 completeStub :: Model -> context -> Options -> IO Response
 completeStub model _context options =
@@ -117,7 +112,7 @@ stubEndpoint =
       api = "stub",
       transport = TransportAgentRun,
       endpoint = Nothing,
-      baikaiVersion = "0.5.0.0",
+      baikaiVersion = "0.6.0.0",
       implementationVersion = Just "shikigami-stub-v1"
     }
 
@@ -135,7 +130,7 @@ stubEndpoint =
 -- from "asked and could not be served".
 stubThinking :: Model -> Options -> ThinkingTranslation
 stubThinking _model opts =
-  case thinking opts of
+  case Options.thinking opts of
     Nothing -> noThinkingRequested
     Just level ->
       ThinkingTranslation

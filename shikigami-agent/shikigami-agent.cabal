@@ -50,8 +50,8 @@ library
     , process
     , regex-tdfa
     , shikigami-core
-    , shikumi               ==0.3.0.2
-    , shikumi-tools         ==0.3.0.2
+    , shikumi               ==0.3.0.3
+    , shikumi-tools         ==0.3.0.3
     , text                  >=2.1
     , time
 

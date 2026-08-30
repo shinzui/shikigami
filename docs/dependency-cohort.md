@@ -4,8 +4,8 @@ Shikigami builds against **one** coherent set of co-developed releases. This
 document is the contract: it names each explicitly managed cohort selection,
 the upstream tag and tag commit that produced it, and the evidence that the
 cohort holds together. `cabal.project` encodes the direct selections as a
-`constraints:` block; the one bound-driven transitive selection in the matrix
-is labelled as such. A drift between a direct-selection row and the solver is a
+`constraints:` block; bound-driven transitive selections in the matrix are
+labelled as such. A drift between a direct-selection row and the solver is a
 bug in one of them.
 
 Two rules govern changes:
@@ -16,10 +16,11 @@ Two rules govern changes:
    carries a comment saying which case it is and when it retires. A sibling package path is
    permitted only while an unpublished public contract is being co-developed, and records the
    exact producing commit it must become.
-2. **No `allow-newer` between co-developed packages.** If two cohort members
-   cannot agree, the fix is an upstream release, not a solver override. The one
-   `allow-newer` in `cabal.project` (`haxl:time`) is a third-party bound and
-   predates this cohort.
+2. **No permanent `allow-newer` between co-developed packages.** If two cohort
+   members cannot agree, the fix is an upstream release or Hackage revision,
+   not an unbounded solver override. A temporary exception must name only the
+   stale package/bound pair, carry compatibility evidence here, and retire as
+   soon as corrected release metadata is published.
 
 Regenerate the resolved-version evidence with:
 
@@ -78,14 +79,18 @@ published; the current release status is called out immediately below it.
 | `keiro-migrations` | 0.4.0.1 | **0.14.0.0** | `keiro-migrations-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
 | `keiro-ops` | — | **0.14.0.0** | `keiro-ops-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
 | `keiro-pgmq` | — | **0.14.0.0** | `keiro-pgmq-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `kioku-api` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
-| `kioku-core` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
-| `kioku-migrations` | 0.2.0.0 | **0.5.0.0** | `v0.5.0.0` | `cb5f35e2e97477ad4da16e2f64b9d09a6c1634ad` |
-| `shikumi` | 0.3.0.1 | **0.3.0.2** | `shikumi-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
-| `shikumi-tools` | — | **0.3.0.2** | `shikumi-tools-0.3.0.2` | `5e3680e52608d7e88698fa9485f78619853ced98` |
-| `baikai` | 0.4.1.0 | **0.5.0.0** | `baikai-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
-| `baikai-claude` | 0.4.0.1 | **0.5.0.0** | `baikai-claude-0.5.0.0` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
-| `baikai-effectful` (transitive) | 0.3.0.2 | **0.3.0.3** | `baikai-effectful-0.3.0.3` | `d6c57d3c70096711231420cfb1f801d6ee600fdc` |
+| `kioku-api` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
+| `kioku-core` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
+| `kioku-migrations` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
+| `shikumi` | 0.3.0.1 | **0.3.0.3** | `shikumi-0.3.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
+| `shikumi-tools` | — | **0.3.0.3** | `shikumi-tools-0.3.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
+| `shikumi-trace` (transitive) | — | **0.2.0.3** | `shikumi-trace-0.2.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
+| `shikumi-trace-otel` (transitive) | — | **0.1.1.1** | `shikumi-trace-otel-0.1.1.1` | `205219f75dde9350cad9fd47b97a5e1576674123` |
+| `baikai` | 0.4.1.0 | **0.6.0.0** | `baikai-0.6.0.0` | `1b97e14c62f03ca35adc2feecae1a505a9edf02b` |
+| `baikai-claude` | 0.4.0.1 | **0.6.0.0** | `baikai-claude-0.6.0.0` | `1b97e14c62f03ca35adc2feecae1a505a9edf02b` |
+| `baikai-openai` (transitive) | — | **0.6.0.0** | `baikai-openai-0.6.0.0` | `1b97e14c62f03ca35adc2feecae1a505a9edf02b` |
+| `baikai-effectful` (transitive) | 0.3.0.2 | **0.4.0.0** | `baikai-effectful-0.4.0.0` | `1b97e14c62f03ca35adc2feecae1a505a9edf02b` |
+| `baikai-trace-otel` (transitive) | — | **0.4.0.0** | `baikai-trace-otel-0.4.0.0` | `1b97e14c62f03ca35adc2feecae1a505a9edf02b` |
 | `kafka-effectful` | 0.3.0.0 (Git) | **0.3.0.0** | `v0.3.0.0` | `2f3ee7e4f2da41befd338f3eda35aa337b2f022f` |
 | `shibuya-core` | 0.8.0.1 | **0.9.0.0** | `v0.9.0.0` | `d958a5748475a4b84075feda7a2a4f5cc7471c60` |
 | `shibuya-kafka-adapter` | — | **0.9.0.0** | `v0.9.0.0` | `89e8026b3aeb7ebca9ff93482fa7f0195be06f63` |
@@ -98,14 +103,14 @@ published; the current release status is called out immediately below it.
 | `settei` | 0.2.0.0 | 0.2.0.0 | `v0.2.0.0` | `1bf62b0af110b4f42fe2528e9d459e0ccf12d626` |
 | `hs-opentelemetry-api` / `-sdk` | 1.0.0.0 | 1.0.0.0 | Hackage (third party) | — |
 
-`baikai-effectful` is not an exact row in `cabal.project`: `kioku-core`
-selects it through `^>=0.3.0.3`, and the resolved plan contains 0.3.0.3. Every
+Rows labelled transitive are not exact entries in `cabal.project`; they are the
+versions selected through the pinned Kioku, Shikumi, and Baikai packages. Every
 other package named in the first column is an exact `constraints:` selection.
 
-`shikumi-tools 0.3.0.2` is the released model-tool registry consumed by
-`shikigami-core`. Hackage and the upstream `shikumi-tools-0.3.0.2` tag were
-reverified on 2026-08-22; it shares tag commit
-`5e3680e52608d7e88698fa9485f78619853ced98` with the selected `shikumi 0.3.0.2`
+`shikumi-tools 0.3.0.3` is the released model-tool registry consumed by
+`shikigami-core`. Hackage and the upstream `shikumi-tools-0.3.0.3` tag were
+reverified on 2026-08-29; it shares tag commit
+`205219f75dde9350cad9fd47b97a5e1576674123` with the selected `shikumi 0.3.0.3`
 cohort.
 
 `kafka-effectful` moved from the post-release Git commit
@@ -155,8 +160,21 @@ format. Keiro 0.14 admits `keiki >=0.9 && <0.10`, and Kioku 0.5 admits
 the Keiro specification, deterministic scaffold, replay diff, conformance,
 build, and full serial test gates all passed on 2026-08-22.
 
-Every explicitly managed released-cohort selection is at its newest Hackage release. No
-`allow-newer` is used between co-developed packages.
+Every explicitly managed released-cohort selection is at its newest Hackage release as of
+2026-08-29. The latest Kioku 0.5.1.0 release is the cohort bridge: it admits Baikai 0.6,
+Shikumi 0.3.0.3, and `http-client-tls` 0.4 while retaining the selected Keiro and Keiki lines.
+
+Five narrow `http-client-tls` exceptions remain while released Hackage metadata catches up:
+`baikai`, `baikai-claude`, `baikai-openai`, `shikumi-tools`, and the third-party `claude`
+package all cap the dependency below 0.4 even though their used API compiles against 0.4.
+Local upstream fixes widen the four co-developed package bounds to `<0.5`; the consuming
+overrides retire after those Hackage revisions or replacement releases are published. The
+pre-existing third-party `haxl:time` exception is unrelated.
+
+The Baikai source fix is required, but not sufficient by itself: without it the solver rejects
+the direct Baikai packages, while `shikumi-tools` and `claude` independently retain the same
+stale cap. Removing upper bounds entirely is not the fix; the upstream Cabal files retain a
+PVP upper bound and widen only through the compatibility-proved 0.4 line.
 
 That was not true when the upgrade started. `kioku-core 0.4.0.0`'s library declared
 `baikai ^>=0.4.1.0`, capping baikai below 0.5, which in turn pinned `shikumi` to `0.3.0.1`
@@ -216,7 +234,7 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 
 | Concern | Evidence |
 |---|---|
-| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.0.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.14.0.0`, and `keiro-core ^>=0.14.0.0`; `kioku-migrations-0.5.0.0` declares `keiro-migrations ^>=0.14.0.0`. The solver selects the exact released cohort with no `allow-newer`. |
+| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.1.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.14.0.0`, and `keiro-core ^>=0.14.0.0`; `kioku-migrations-0.5.1.0` declares `keiro-migrations ^>=0.14.0.0`. The solver selects that exact released cohort. |
 | Kioku's own codec regression guard | Kioku 0.2.0.0 adds `Kioku.CodecCompatSpec`, which decodes literal pre-upgrade event payloads under the new cohort. |
 | Keiro terminal outbox rejection | Keiro 0.14 adds bounded `PublishRejection` values, `PublishRejected`, terminal `rejected` rows, rejection audit fields, and a `rejected` publisher-summary count. Shikigami constructs code `sink.permanent-failure` through `mkPublishRejection`; it never mutates Keiro-owned tables. |
 | Keiro snapshot state-shape hash | `StateCodec` gains `stateShapeHash`; migration `0019-keiro-snapshots-state-shape-hash.sql` adds the column and existing rows take the empty sentinel, invalidating each snapshot exactly once on next hydration. Journals and events are untouched. |
@@ -226,7 +244,8 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 | PGMQ delivery attempt numbering | `shibuya-pgmq-adapter-0.14.0.0` retains the conversion, present since 0.12, from PGMQ's one-based `read_count` to a zero-based `Message.attempt`. Shikigami must not subtract one again. |
 | Shibuya 0.9 public surface | The 0.9 line retains the public surface adopted at 0.8: `runApp` takes `AppConfig`; handlers receive `Message es msg`; `Ordering` is named `OrderingPolicy`; runner internals live under `Shibuya.Internal.*`. Shikigami uses only the public surface. |
 | Shibuya Kafka adapter 0.9 | `shibuya-kafka-adapter-0.9.0.0` declares `shibuya-core ^>=0.9.0.0` and `kafka-effectful ^>=0.3.0.0`; the stream worker links that exact adapter and the exact Hackage `kafka-effectful-0.3.0.0` release for `activity.v1`. |
-| Baikai 0.5 | The widened `ThinkingLevel` sum and defaulted request `effort` remain, and `ApiProvider` adds `describeThinking` so strictness is decided before request construction. Shikigami's stub implements the new method explicitly. |
+| Baikai 0.6 | Evolvable constructors are hidden behind `emptyModel`, `emptyResponse`, `apiProviderWith`, and evidence builders/selectors. Shikigami uses those public paths, handles the new sampling adjustments separately from thinking weakening, and pins literal evidence JSON to schema `baikai.model-call-evidence/2.0`. |
+| TLS 0.4 compatibility | The Baikai core, Claude, and OpenAI suites pass against `http-client-tls ==0.4.0` with only the independently stale `claude:http-client-tls` metadata relaxed; all 70 Shikumi-tools tests pass against the same line with the released Baikai and Claude metadata exceptions. Their source uses the retained `tlsManagerSettings` surface. Baikai, Shikumi-tools, and Claude need Hackage revisions before Shikigami can remove the narrow exceptions. |
 | Settei 0.2 | Unchanged by this cohort; `docs/operations/configuration.md` remains the configuration contract. |
 
 ## Compatibility fixtures
@@ -263,31 +282,33 @@ Build profile: -w ghc-9.12.4 -O1
 ```
 
 The plan selects exactly the pinned and transitive versions in the matrix
-above, including both Keiki packages at 0.9.1.0 and `kafka-effectful` 0.3.0.0
-from Hackage. The only `allow-newer` in `cabal.project` is `haxl:time`, a
-third-party bound that predates this cohort; no co-developed package needs one.
+above, including Kioku 0.5.1.0, Shikumi 0.3.0.3, Baikai 0.6.0.0,
+`http-client-tls` 0.4.0, both Keiki packages at 0.9.1.0, and
+`kafka-effectful` 0.3.0.0 from Hackage. The temporary TLS metadata exceptions
+are listed under Current release status; `haxl:time` remains the only unrelated
+exception.
 
 ```bash
 $ nix develop --command cabal test all -j1
-keiro-shikigami-conformance PASS   24 checks
-shikigami-agent-test        PASS    8 tests
+keiro-shikigami-conformance PASS   30 checks
+shikigami-agent-test        PASS   29 tests
 shikigami-api-test          PASS   15 tests
 shikigami-client-test       PASS    3 tests
-shikigami-core-test         PASS  390 tests
+shikigami-core-test         PASS  599 tests
 shikigami-migrations-smoke  PASS    2 tests
-shikigami-migrations-test   PASS    4 tests
-shikigami-server-test       PASS   29 tests
-shikigami-workers-test      PASS   78 tests
+shikigami-migrations-test   PASS    5 tests
+shikigami-server-test       PASS   46 tests
+shikigami-workers-test      PASS   81 tests
 ```
 
-553 checks across nine suites passed on 2026-08-22 with Keiki 0.9.1.0 selected
-and `kafka-effectful` 0.3.0.0 resolved from Hackage.
+810 checks across nine Shikigami suites passed on 2026-08-29 with Kioku 0.5.1.0,
+Shikumi 0.3.0.3, Baikai 0.6.0.0, and `http-client-tls` 0.4.0 selected. The two
+sibling Kikan-En package suites also passed.
 
 Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
 an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
-intermittently. The 553-check run above is the latest complete default-RTS
-serial pass and supersedes both the pre-lifecycle 518-check run and the earlier
-partial audit that aborted in the GHC runtime rather than at a test assertion.
+intermittently. The 810-check run above is the latest complete default-RTS
+serial pass.
 
 
 ## What this cohort cost in source, and what it left behind
@@ -342,11 +363,12 @@ The retirement condition for all three is
 `docs/improvement-requests/key-agent-continuity-by-meibo-principal.md` (IR-9). When agents
 resolve to real principals, that module changes and the call sites do not.
 
-**baikai 0.5 added a field to `ApiProvider`.** `describeThinking :: Model -> Options ->
-ThinkingTranslation` lets the pre-dispatch strictness gate refuse a call *before* a request is
-built, so it cannot wait for the translation a provider returns alongside its mapped request.
-`shikigami-core/src/Shikigami/Behavior/StubProvider.hs` is the repository's only `ApiProvider`
-and stopped compiling.
+**baikai 0.6 hid evolvable record constructors.** Shikigami moved its stub provider and tests
+to `emptyModel`, `emptyResponse`, and `apiProviderWith`; evidence consumers now use selectors
+and generic lenses rather than matching the hidden `EvidenceRequest` and `ModelCallEvidence`
+constructors. The schema-major evidence fixtures moved from 1.0 to 2.0. The new sampling-drop
+adjustments deliberately do not produce `ProhibitedEffortClamping`, because Baikai marks them
+as unrelated to thinking strength.
 
 The stub calls no model and puts nothing on any wire, so it now reports that honestly: a caller
 who set no level gets `noThinkingRequested`, and a caller who asked for one gets
@@ -364,10 +386,8 @@ rather than breakage, but it is debt with an announced expiry: the `*WithContext
 are the replacement, and taking them properly means having real principals, which is IR-9
 again.
 
-Three smaller deprecations survive from baikai: `_Model`, `_Response`, and `_Context`, the
-record bases `StubProvider.hs` builds its fixtures from. They are unrelated to this upgrade and
-were already deprecated before it; they are noted here so the next reader does not mistake them
-for fallout from baikai 0.5.
+The former Baikai fixture deprecations no longer survive: 0.6 removed `_Model`, `_Response`,
+and `_Context`, and Shikigami now uses the supported empty values and builders.
 
 
 ## Migration consequence
@@ -399,6 +419,9 @@ full-text index when `btree_gin` is available and retains the old correctness-pr
 otherwise. The dependency-composed plan is therefore 55 entries (Kiroku 11, Keiro 31, Kioku
 13). Shikigami's ninth entry, `2026-08-22-22-35-00-delegation-budgets.sql`, adds the
 shared delegation ledger; the complete application plan is now 64 entries.
+
+Kioku 0.5.1.0 is a bounds/API-adaptation release and adds no migration, so those counts and the
+0.5.0.0 ledger re-baseline procedure remain unchanged.
 
 Kioku 0.5 also corrects the already-released payload bytes for
 `kioku/0011-kioku-memory-space-partition`. A fresh or ephemeral database applies the corrected

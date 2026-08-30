@@ -10,11 +10,10 @@ import Baikai.Content
   )
 import Baikai.Context (Context)
 import Baikai.Context qualified as Context
-import Baikai.Evidence (noThinkingRequested)
 import Baikai.Message (Message (ToolResultMessage), ToolResultPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Options (Options)
-import Baikai.Provider (ApiProvider (..), registerApiProvider)
+import Baikai.Provider (ApiProvider, apiProviderWith, registerApiProvider)
 import Baikai.Response (Response, emptyResponse)
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
@@ -211,13 +210,7 @@ declForIdentity identity capabilityOverlays =
     }
 
 apiProvider :: Api -> (Model -> Context -> Options -> IO Response) -> ApiProvider
-apiProvider api handler =
-  ApiProvider
-    { apiTag = api,
-      stream = liftCompleteToStream handler,
-      complete = handler,
-      describeThinking = \_ _ -> noThinkingRequested
-    }
+apiProvider tag handler = apiProviderWith tag (liftCompleteToStream handler) handler
 
 toolModel :: Api -> Model
 toolModel api =
@@ -248,7 +241,7 @@ call callId toolName arguments =
 
 advertisedToolNames :: Context -> [Text]
 advertisedToolNames context =
-  [name | WireTool.Tool {WireTool.name = name} <- Vector.toList (Context.tools context)]
+  WireTool.name <$> Vector.toList (Context.tools context)
 
 toolObservations :: Context -> [(Text, Text, Text, Bool)]
 toolObservations context =

@@ -101,9 +101,11 @@ for Danwa. Tests and other composition roots must construct `SinkHttp` explicitl
 all sources are absent. Rei currently reuses the shared manager through an explicitly
 unauthenticated `HttpEnv`, so the Kawa token cannot bleed into its request.
 
-The current direct `http-client-tls ==0.3.6.1` pin is a compatibility constraint imposed by
-the repository's Baikai/crypton dependency cohort. It should be revisited with that cohort,
-without weakening the manager policy described here.
+The direct pin is now `http-client-tls ==0.4.0`, aligned with the Baikai 0.6 / Crypton 1.1
+dependency cohort. Released Baikai, Shikumi-tools, and Claude package descriptions still carry
+stale `<0.4` bounds, so `cabal.project` names temporary per-package exceptions until corrected
+Hackage revisions or replacement releases land. This metadata workaround does not weaken the
+manager policy described here.
 
 The token-source seam is deliberately narrower than a general secret provider. A future
 Shomei adapter must keep plaintext confined to the internal header boundary, cache expiry
