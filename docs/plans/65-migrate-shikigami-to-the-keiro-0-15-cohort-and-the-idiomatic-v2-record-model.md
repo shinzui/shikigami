@@ -1,426 +1,326 @@
 ---
 id: 65
 slug: migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model
-title: "Migrate Shikigami to the keiro 0.15 cohort and the idiomatic-v2 record model"
+title: "Fully adopt released Keiro and runtime patterns before Shikigami v1"
 kind: exec-plan
 created_at: 2026-08-31T10:30:57Z
 intention: "intention_01m1bntpmbeqet1597zr91ej43"
 ---
 
-# Migrate Shikigami to the keiro 0.15 cohort and the idiomatic-v2 record model
+# Fully adopt released Keiro and runtime patterns before Shikigami v1
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
 
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log,
+and Outcomes & Retrospective current. Follow `agents/skills/exec-plan/PLANS.md` and
+`agents/skills/exec-plan/ADR.md`. The filename and plan identity remain stable despite the
+expanded title and scope.
 
 ## Purpose / Big Picture
 
-Shikigami's durable workflow and aggregate identities are declared in a checked
-specification under `domain/`, and a build-time tool called `keiro-dsl` turns that
-specification into Haskell source under `shikigami-core/src`. Today Shikigami is pinned to
-the `keiro` 0.14.0.0 release line. Keiro published 0.15.0.0 on 2026-08-30. After this plan,
-Shikigami builds, tests, and scaffolds against that 0.15.0.0 line, and its generated Haskell
-layer is written in the new presentation style that release introduces.
 
-What a person can do afterwards that they cannot do today: run `just keiro-gate` and have it
-pass against the current Keiro toolchain instead of a superseded one. Right now, running the
-0.15.0.0 toolchain against this repository is impossible — the dependency solver refuses to
-build it at all — and once that is unblocked, the toolchain refuses to scaffold until the
-repository explicitly opts in to the new generated-code style. This plan clears both refusals
-and leaves the gate green.
+Bring Shikigami onto the latest released Keiro runtime and build-time DSL, and make its
+actual execution paths follow the current runtime-patterns standards before the first
+release. This includes idiomatic-v2 generated Haskell, the applicable Language 5 contracts,
+reliable workflow progress, honest projection ownership, and isolated database tests.
+Completion is more than a successful dependency solve or regeneration: a generated run job
+must execute, suspend for approval, resume after restart, persist evidence atomically, and
+finish without duplicate delivery effects.
 
-There is no user-visible behavior change in the running service. Keiro 0.15.0.0 does not
-change any wire format, JSON key, SQL name, workflow identity, journal byte, or runtime
-semantic. Its own release notes say so, and the runtime libraries themselves are republished
-without functional change: `keiro-core` 0.15.0.0's changelog entry reads, in full, "No changes
-this release." The entire substance of the release is a change to the *Haskell surface* that
-`keiro-dsl` emits and consumes. That is why the proof of success in this plan is not a new
-feature but an unchanged one: every existing test still passes, every persisted byte fixture
-still matches, and the specification gate still reports the same identities — while the source
-that produces them is written differently.
+As verified on 2026-09-07, all seven published Keiro packages are at 0.15.0.0 and all three
+Kioku packages consumed here are available at 0.5.2.0. Kioku's former bound blocker has
+cleared. The latest runtime-patterns checkout and remote HEAD are both
+`e844191cc5f90de4b48b7c0906698d4df39372cb` (2026-09-06). Recheck releases immediately before
+implementation; use released package metadata and tags as API authority if guidance or
+Mori's registry is stale.
 
-The cost is concentrated in one place and it is large. The new style removes record *selector
-functions* — the ordinary Haskell functions like `failureKey someFailure` that read a field out
-of a record — and replaces reading with dot syntax, `someFailure.key`. Turning that on is a
-per-component switch, not a per-module one, so switching it on for the component that compiles
-the generated modules switches it on for every record `shikigami-core` defines. That is 587
-distinct field names, and an upper bound of roughly ten thousand places across all seven
-packages where one of those names is applied as a function. This plan takes that cost
-deliberately rather than working around it; the reasoning, and the alternatives that were
-rejected, are in the Decision Log.
+The owner reconfirmed on 2026-09-07 that Shikigami is not used yet. Use the one pre-v1
+baseline exception in `docs/workflow-versioning.md` and ADR 0027 to replace unreleased
+shapes and remove obsolete compatibility paths. Do not manufacture a legacy population,
+a dual queue decoder, or new patch branches merely to preserve pre-release code. Verify
+and record the exception's four facts immediately before the reset. Keep genuine runtime
+idempotence, upstream wire contracts, authorization boundaries, and future evolution gates.
 
+The release/record migration itself preserves bytes and workflow meaning. Later milestones
+intentionally change the application's pre-release baseline, including the run-job envelope
+and removal of unused historical workflow branches. Keep those changes in separate,
+reviewable commits with explicit before/after fixtures and diff evidence.
 
 ## Progress
 
-Every stopping point is recorded here. Split a partially finished item into a "done" half and
-a "remaining" half rather than leaving it ambiguous.
 
-### Milestone 1 — Prove and record the cohort gate
-
-- [ ] Reproduce the solver refusal for keiro 0.15.0.0 and capture the transcript.
-- [ ] Add a "Pending adoption: the keiro 0.15 cohort" subsection to `docs/dependency-cohort.md`
-      stating exactly what Kioku must publish.
-- [ ] Commit with the `ExecPlan:` and `Intention:` trailers.
-
-### Milestone 2 — Prepare hand-owned code for the record model (edition-neutral)
-
-- [ ] Add `OverloadedRecordDot` to the `common common` stanza of all seven `.cabal` files.
-- [ ] Rewrite `shikigami-core/src/Shikigami/RunEvidence/BehaviorHoles.hs` to read and build the
-      generated behavior records positionally, so it compiles under both editions.
-- [ ] `nix develop -c cabal build all` and `nix develop -c cabal test all -j1` are green.
-- [ ] Commit.
-
-### Milestone 3 — Take the lockstep 0.15 bump
-
-- [ ] Confirm the Kioku release that admits keiro 0.15 is on Hackage.
-- [ ] Move the six Keiro `constraints:` rows in `cabal.project` to `==0.15.0.0`.
-- [ ] Move `keiro-migrations ^>=0.15.0.0` in `shikigami-migrations/shikigami-migrations.cabal`.
-- [ ] Move `keiro ==0.15.0.0` and `keiro-ops ==0.15.0.0` in `shikigami-server/shikigami-server.cabal`.
-- [ ] Decide the Danwa pin: move it if `mori://shinzui/danwa` ExecPlan 13 has landed, otherwise
-      record the retirement condition and leave the commit alone.
-- [ ] `nix develop -c cabal build all --dry-run` selects the 0.15.0.0 set; build and tests green.
-- [ ] Capture the `just keiro-scaffold` edition refusal transcript; it is expected to fail here.
-- [ ] Commit.
-
-### Milestone 4 — Adopt idiomatic-v2 and the record model
-
-- [ ] Ignore the edition backup directory in `.gitignore`.
-- [ ] Run the explicit `--apply-generated-haskell-edition` scaffold.
-- [ ] Paste the regenerated Cabal fragment's extensions into `shikigami-core.cabal`.
-- [ ] Migrate `shikigami-core/src` off selector application (113 modules).
-- [ ] Migrate `shikigami-core/test` (43 modules).
-- [ ] Migrate `shikigami-workers` (28 modules).
-- [ ] Migrate `shikigami-server` (32 modules).
-- [ ] Migrate `shikigami-agent` (10 modules).
-- [ ] Migrate `shikigami-api` (7 modules).
-- [ ] Migrate `shikigami-migrations` (5 modules).
-- [ ] Migrate `shikigami-client` (2 modules).
-- [ ] Fix the 34 individually-exported selector names in 14 modules.
-- [ ] Repoint `Shikigami.KeiroSpecificationSpec` and `Shikigami.PackageArchitectureSpec` if the
-      parse assumptions moved.
-- [ ] `just keiro-gate` passes end to end.
-- [ ] Full serial test run green.
-- [ ] Commit.
-
-### Milestone 5 — Reconcile the surrounding contracts
-
-- [ ] Update `docs/dependency-cohort.md`: matrix rows, upstream tags, evidence, cost section.
-- [ ] Update `docs/architecture/packages.md` module-placement and record-model rules.
-- [ ] Write `docs/adr/0037-*.md` recording the record-model decision.
-- [ ] Remove the Milestone 1 pending-adoption subsection now that it has retired.
-- [ ] Fill in Outcomes & Retrospective and commit.
-
+- [x] (2026-09-07) Re-read the original plan, local ADR contract and workflow-versioning rules;
+  inspected current runtime code and Mori-resolved runtime-patterns guidance.
+- [x] (2026-09-07) Verified Hackage preferred versions for all seven Keiro packages and the
+  three Kioku packages, checked release tags, and confirmed Kioku 0.5.2.0 admits Keiro 0.15.
+- [x] (2026-09-07) Revised the plan and recorded the expanded pre-v1 adoption decision in ADR 0037.
+- [ ] Milestone 1: refresh the dependency solve, source inventory, standards applicability,
+  and pre-release evidence; record a pre-adoption Git revision.
+- [ ] Milestone 2: adopt Keiro 0.15.0.0, Kioku 0.5.2.0, idiomatic-v2, and the common record
+  compilation model across all seven Shikigami packages; preserve baseline wire fixtures.
+- [ ] Milestone 3: use keiro-test-support behind the migration fixture boundary and separate
+  pure domain/diagram checks from PostgreSQL tests.
+- [ ] Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
+  and close runtime identity and nominal-type gaps.
+- [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
+  prove every generated artifact is used and every remaining exclusion is justified.
+- [ ] Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
+  wiring against the released public APIs.
+- [ ] Milestone 7: run scenario acceptance, deterministic regeneration, full serial suites,
+  evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
 
-Two findings from the research that preceded this plan are recorded up front because they
-changed its shape.
+The original 2026-08-31 probe rejected `kioku-core-0.5.1.0` because its Keiro bound was
+`^>=0.14.0.0`. That is historical evidence, not an active external blocker. Hackage now
+publishes `kioku-core-0.5.2.0` with `keiro ^>=0.15.0.0` and
+`keiro-core ^>=0.15.0.0`, and `kioku-migrations-0.5.2.0` with
+`keiro-migrations ^>=0.15.0.0`. The peeled Kioku `v0.5.2.0` tag is
+`14a7543f508a7d8110296383aa0500ab9e3b6a5d`. All seven Keiro 0.15.0.0 tags peel to
+`de574cdcb0add3fefbb0fdd96d820258d15f8997`. A fresh whole-project solve has not been run
+as part of this documentation update; do not infer that every unrelated constraint clears.
 
-**The 0.15 runtime bump is a no-op, and yet it is blocked.** Four of the six Keiro packages
-Shikigami selects change nothing at all in 0.15.0.0. `keiro-core` and `keiro-migrations` say
-"No changes this release"; `keiro`, `keiro-ops`, and `keiro-pgmq` changed only the bound on
-`keiro-test-support` inside their own test-suite stanzas, which no library consumer sees. And
-yet the solver refuses the upgrade outright, because Kioku's released metadata caps Keiro below
-0.15. Reproduced on 2026-08-31 against a Hackage index at `2026-08-31T08:25:22Z`:
+`docs/architecture/shikigami-domain-inventory.md` still describes a service with no
+aggregate or read model. Current `domain/shikigami-run-evidence.keiro` and
+`shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs` disprove that census:
+RunEvidence has generated lifecycle events and transactional run/call SQL rows.
+`shikigami-server/src/Shikigami/Server/Command/Ops.hs` repeats the obsolete census to
+justify empty hooks. Re-inventory executable ownership rather than copying those exclusions.
 
-```text
-$ nix develop -c cabal build all --dry-run --project-file=cabal.project.probe015
-Resolving dependencies...
-Error: [Cabal-7107]
-Could not resolve dependencies:
-[__0] trying: danwa-core-0.1.0.0 (user goal)
-[__1] trying: keiro-0.15.0.0 (dependency of danwa-core)
-[__2] trying: shikigami-agent-0.1.0.0 (user goal)
-[__3] next goal: kioku-core (dependency of shikigami-agent)
-[__3] rejecting: kioku-core-0.5.1.0 (conflict: keiro==0.15.0.0, kioku-core => keiro^>=0.14.0.0)
-[__3] skipping: kioku-core; 0.5.0.0, 0.4.1.0, 0.4.0.0, 0.3.0.0, 0.2.0.0, 0.1.0.0 (has the same
-      characteristics that caused the previous version to fail: excludes 'keiro' version 0.15.0.0)
-[__3] fail (backjumping, conflict set: keiro, kioku-core, shikigami-agent)
-```
+The original plan preserved the bare RunJob queue solely as a historical wire contract.
+Language 5 can generate queue codecs and mapped payload fields, and the owner says the
+service is unused. The generated `{v,t,data}` queue envelope is therefore an applicable
+adoption now, with producer and consumer changed together. Conversely, the external Danwa
+payload and Shikigami's HTTP sink publisher do not acquire matching DSL semantics merely
+because the service is unused.
 
-`danwa-core` appears in that trace as the package that *accepted* keiro 0.15.0.0 — it declares
-`keiro` with no version bound at all — not as a blocker. Danwa is separately being moved onto
-this same cohort under `mori://shinzui/danwa` ExecPlan 13, "Upgrade Danwa to the released Keiro
-0.15 cohort"; that work had not begun as of 2026-08-31 and, because the commit Shikigami pins
-declares no Keiro bound, it neither blocks nor is blocked by this plan. It does mean the pin
-should follow. The same probe with the Kioku bound
-relaxed and Shikigami's own two bounds relaxed produces a complete, conflict-free plan selecting
-`keiro-core-0.15.0.0`, `keiro-migrations-0.15.0.0`, `keiro-pgmq-0.15.0.0`, `keiro-0.15.0.0`, and
-`keiro-ops-0.15.0.0` alongside the unchanged `kioku-core-0.5.1.0`. So exactly two released
-Kioku libraries stand between this repository and the current Keiro.
+RunEvidence's rich payload includes upstream encode-only model evidence. Lifecycle events
+alone cannot rebuild those payloads. Catalog adoption must describe that limitation with
+`PreserveAndReconcile` and `LiveOnly`, not invent a decoder or promise a destructive replay.
 
-**The v1 generated layer itself uses selector functions.** This is what forces the two halves of
-Milestone 4 into a single commit. `shikigami-core/src/Shikigami/RunEvidence/Generated/BehaviorContract.hs`
-at the current edition contains:
+The source path for the Haskell record guidance in the supplied AGENTS instructions has
+moved. Mori resolves it as `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`.
+It requires concise fields and lens-based updates, with the generic-lens orphan imported
+only in the modules that need it. Keiro-dsl's generated records use record dot and must not
+be rewritten to follow hand-owned formatting conventions.
 
-```haskell
-    [ "key" .= unBehaviorKey (failureKey behaviorFailure)
-    , "subject" .= failureSubject behaviorFailure
-    , "code" .= failureCode behaviorFailure
-    , "detail" .= failureDetail behaviorFailure
-```
-
-Those are selector applications inside a `-- @generated` file. Turning on `NoFieldSelectors`
-for the stanza that compiles it therefore breaks it, and it must not be hand-edited — that is
-the generated-code firewall recorded in [docs/adr/0002-generated-code-is-not-formatted.md](../adr/0002-generated-code-is-not-formatted.md).
-The extension can only be switched on in the same change that replaces those bytes with
-idiomatic-v2 output.
-
+Danwa's cohort plan has made partial progress but does not record a completed migration
+build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade HEAD.
 
 ## Decision Log
 
-- Decision: Treat the released Kioku bound as a hard prerequisite rather than routing around it
-  with `allow-newer`.
-  Rationale: Two independent sources forbid the workaround. `docs/dependency-cohort.md` rule 2
-  says "No permanent `allow-newer` between co-developed packages. If two cohort members cannot
-  agree, the fix is an upstream release or Hackage revision, not an unbounded solver override."
-  Keiro's own published upgrade guidance for this exact edge is more specific still: "If another
-  released package excludes the 0.15.0.0 bound, stop and report that solver conflict; do not use
-  `allow-newer`, a git override, or a wider unsupported bound." The temptation here is unusually
-  strong, because `keiro-core` 0.15.0.0 is functionally identical to 0.14.0.0 and an override
-  would demonstrably work. It is still the wrong move: the bound is a true statement about which
-  Keiro Kioku was compiled against, and overriding a true statement to save an upstream release
-  is how a cohort stops meaning anything. Milestone 1 therefore records the gate and Milestone 3
-  waits for it.
-  Date: 2026-08-31
 
-- Decision: Enable the idiomatic-v2 record model on `shikigami-core`'s existing shared library
-  stanza and migrate every affected hand-written module, rather than isolating the generated
-  layer in its own Cabal component.
-  Rationale: This was put to the plan's owner with the measured cost of each option, and this
-  is the option chosen. The rejected alternative was an internal sublibrary
-  (`library keiro-generated` inside `shikigami-core.cabal`) carrying only the 18 generated
-  modules and the one hand-owned hole module, with the four required extensions scoped to it;
-  the main library would have depended on it and re-exported `Shikigami.Generated.Conformance`
-  for the generated conformance runner. That would have confined the extension change to 19
-  files. It was rejected in favour of one uniform record model across the package: a package in
-  which some records have selectors and some do not is a package where every reader has to know
-  which stanza a type came from. The second rejected alternative — enabling only
-  `OverloadedRecordDot` and skipping `NoFieldSelectors`, deviating from the fragment keiro-dsl
-  emits — was rejected because it is a silent trap: it compiles today and breaks the first time
-  a generated module declares a field and a binding of the same name, with no warning that the
-  repository had opted out of the contract.
-  Date: 2026-08-31
-
-- Decision: Scope `NoFieldSelectors` to `shikigami-core` and add only `OverloadedRecordDot` to
-  the other six packages.
-  Rationale: `NoFieldSelectors` acts at the point a record is *defined*, so it only needs to be
-  on where the generated modules live. `OverloadedRecordDot` acts at the point a field is
-  *read*, so every package that reads a `shikigami-core` record needs it. Turning
-  `NoFieldSelectors` on in the other six as well would multiply the migration by their own
-  record definitions for no gain in this plan. Whether the fleet eventually wants one model
-  everywhere is a separate question and is left open.
-  Date: 2026-08-31
-
-- Decision: Do not commit the edition backup directory
-  `shikigami-core/src/.keiro-dsl-generated-haskell-migrations/`.
-  Rationale: keiro-dsl writes the pre-migration bytes there so a rollback has evidence, and its
-  own guide states that "Version-control restoration is equally valid when it restores the same
-  complete set." Git already holds that complete set at the commit before Milestone 4, so
-  committing a second copy adds no recoverability and adds a directory of dead generated bytes
-  that every future reviewer has to scroll past. It is gitignored instead, alongside the
-  existing ignore for the paste-ready Cabal fragment.
-  Date: 2026-08-31
-
-- Decision: Do not make Shikigami's 0.15 move wait for Danwa's, and do not move the Danwa pin to
-  a mid-upgrade commit.
-  Rationale: Danwa is being taken onto the same cohort under `mori://shinzui/danwa` ExecPlan 13,
-  which had not started as of 2026-08-31. The commit Shikigami pins declares `keiro` and
-  `keiro-core` with no version bound, so it builds identically against 0.14.0.0 and 0.15.0.0 —
-  the runtime libraries are functionally unchanged between them. Coupling the two plans would
-  therefore buy nothing and would make each one's schedule the other's problem. Moving the pin
-  to an intermediate Danwa commit is worse than leaving it: an unreleased dependency pinned to a
-  commit that has not passed its own repository's gate is a pin with no evidence behind it,
-  which is exactly what the "Packages still resolved from Git" table in
-  `docs/dependency-cohort.md` exists to keep honest. The pin moves when Danwa's plan completes.
-  Date: 2026-08-31
-
-- Decision: Bridge `BehaviorHoles.hs` through positional constructor patterns in Milestone 2,
-  then convert it to concise-label record dot in Milestone 4.
-  Rationale: Keiro's guide names exactly three dual-edition bridges, and positional patterns are
-  the one that survives a *renamed* label, which is what every field this module reads is about
-  to get. Writing it positionally first means the module compiles unchanged across the edition
-  boundary, so Milestone 4's build failures are all in hand-written application code and none of
-  them are in the file that talks to the generated contract. Converting it afterwards costs one
-  small diff and leaves the module in the idiom the edition exists for, rather than leaving a
-  nine-field positional pattern behind as permanent scar tissue.
-  Date: 2026-08-31
-
+- Decision: Target the complete released 0.15.0.0 Keiro set, including the now-applicable
+  keiro-test-support package, and Kioku 0.5.2.0. Refresh this evidence at implementation time.
+  Rationale: Hackage and upstream tags agree; the old Kioku wait is obsolete. No new
+  allow-newer, unsupported bounds, or local Keiro override is needed by this decision.
+  Date: 2026-09-07.
+- Decision: Expand the work from generated-record adoption to applicable runtime and DSL
+  adoption before v1, using ADR 0027's verified empty-population exception.
+  Rationale: The owner explicitly requested full adoption while the service is unused.
+  Compatibility-only exclusions in the previous plan no longer justify retaining old code.
+  Date: 2026-09-07.
+- Decision: Use the generated compilation contract throughout all seven Shikigami packages,
+  rather than isolating generated code or leaving sibling packages on selector functions.
+  Rationale: This is the inexpensive time to establish one definition model. Use concise
+  fields, record dot for generated consumers, constructor matching, and ordinary supported
+  lenses for hand-owned records and nested/default-option updates. Do not introduce selector
+  aliases, FieldSelectors exceptions, or generic-lens shims for removed upstream APIs.
+  This supersedes the 2026-08-31 decision to limit NoFieldSelectors to core.
+  Date: 2026-09-07.
+- Decision: Make the generated run-job queue the sole queue codec authority; retain external
+  Danwa decoding and the HTTP sink dispatch boundary as explicitly hand-owned integrations.
+  Rationale: The queue format is service-owned and can change before use. Danwa's format
+  and HTTP publication meaning belong to different boundaries that the DSL must not misstate.
+  Date: 2026-09-07.
+- Decision: Catalog application-owned evidence query targets truthfully, preserving the
+  lifecycle/payload transaction and declaring non-replayability of rich evidence.
+  Rationale: A generated catalog is applicable even when a target cannot be rebuilt from
+  lifecycle history. A passing facade without actual guarded reads/writes is not adoption.
+  Date: 2026-09-07.
+- Decision: Keep the edition adoption and every intentional baseline reset separately
+  reviewable; accept only enumerated pre-v1 breaking diagnostics, never weaken the gate.
+  Rationale: Record migration should first prove it preserves bytes. Subsequent wire/body
+  changes must show exactly what was deliberately replaced. ADR 0037 records this scope.
+  Date: 2026-09-07.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
 
+Planning revision completed on 2026-09-07. The obsolete Kioku blocker is removed and the
+remaining work now covers seven implementation milestones. No dependency constraints,
+generated sources, runtime code, databases, or upstream repositories were changed by this
+update. Implementation, the fresh solver check, and all runtime acceptance remain pending.
+
+At completion record the selected package plan, source/gate revisions, retired compatibility
+paths, adopted DSL surfaces, justified exclusions, scenario results, and remaining upstream
+limitations. Do not mark this plan complete while an applicable execution path remains only
+documented or while a required upstream API gap is unresolved.
 
 ## Context and Orientation
 
-### What this repository is, and where the pieces live
 
-Shikigami is a Haskell service that runs declared agents as durable workflows. It is split
-into seven Cabal packages at the repository root: `shikigami-core` (the domain library every
-other package builds on), `shikigami-api`, `shikigami-agent`, `shikigami-workers`,
-`shikigami-server`, `shikigami-client`, and `shikigami-migrations`. `cabal.project` lists all
-seven, pins the compiler to `ghc-9.12.4`, and carries a `constraints:` block naming the exact
-Hackage version of every co-developed dependency.
+Shikigami has seven packages: `shikigami-core` owns domain and workflow code;
+`shikigami-api` and `shikigami-client` own public contracts and clients;
+`shikigami-agent` provides one-off runs; `shikigami-workers` owns worker loops;
+`shikigami-server` owns the service/CLI boundary; `shikigami-migrations` owns the composed
+migration plan and its public test-support sublibrary. Preserve those import boundaries.
+Build inside the Nix development shell because native linking needs its libraries.
+`cabal.project` selects GHC 9.12.4 and also includes co-developed Kikan-En packages.
+Their presence is part of the complete solve, not permission to edit sibling sources.
 
-Everything is built and tested inside a Nix development shell. A bare `cabal build` compiles
-and then fails at link time with `ld: library not found for -lrdkafka`. Every command in this
-plan is therefore written as `nix develop -c <command>`, run from the repository root
-`/Users/shinzui/Keikaku/bokuno/shikigami`.
+`domain/shikigami.keiro-workspace` declares `runtime-package shikigami-core` and collocated
+layout. Its four members are `domain/shikigami-agent-run.keiro`,
+`domain/shikigami-approval.keiro`, `domain/shikigami-conversation.keiro`, and
+`domain/shikigami-run-evidence.keiro`. Each declares stable Language 5. A workspace is the
+single checked ownership boundary for these files; a generated edition is the Haskell
+presentation convention and is independent of the source language version.
 
-### Keiro, keiki, and keiro-dsl, in plain language
+The current generated layer contains 18 Haskell modules under
+`shikigami-core/src/Shikigami/Generated/` and the `AgentRun`, `Approval`,
+`DanwaConversation`, and `RunEvidence` verticals' `Generated/` directories.
+`shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt` records idiomatic-v1.
+The neighboring migration report and `keiro-dsl-conformance.workspace.shikigami/`
+package are committed. The Cabal fragment is ignored but must be reconciled after scaffold.
+The service facade `Shikigami.Generated.Conformance` remains exposed by core.
+`Shikigami.RunEvidence.BehaviorHoles` and the conformance package's
+`src/KeiroConformance/Expectations.hs` are create-once, hand-owned files, not overwrite targets.
 
-**Keiro** is the event-sourcing and durable-workflow framework this service runs on. A
-*durable workflow* here means a long-running process whose every step is written to a
-database journal, so that if the process dies it can be replayed from the journal and resume
-where it left off. Keiro ships as six libraries Shikigami selects: `keiro`, `keiro-core`,
-`keiro-migrations`, `keiro-ops`, `keiro-pgmq`, and `keiro-dsl`. Its canonical project handle
-is `mori://shinzui/keiro`.
+`Justfile` already provides `keiro-check`, `keiro-inspect`, `keiro-scaffold`,
+`keiro-diff <ref>`, and `keiro-gate <ref>`. The check denies warnings, requires Language 5,
+emits binding/coverage reports, and fails opaque persisted boundaries. Scaffold checks the
+working tree against Git, so its clean-diff assertion is meaningful after reviewed changes
+are committed. Do not run it mid-edit and label an expected source diff generator drift.
 
-**keiki** is the state-machine and event-shape library Keiro builds on. It is not moving in
-this plan.
+The standards read for this revision are the exact canonical documents
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-overview`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-generated-haskell-editions`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-adoption`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-mapped-consumer-surfaces`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-behavior-conformance`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-runtime-assembly`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-durable-workflows`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-workflow-reliability`,
+`mori://shinzui/keiro-runtime-patterns/docs/keiro-projection-catalogs`,
+`mori://shinzui/keiro-runtime-patterns/docs/messaging-outbox`,
+`mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids`, and
+`mori://shinzui/keiro-runtime-patterns/docs/architecture-test-layout`.
+Their applicable requirements are embedded in the milestones below.
 
-**keiro-dsl** is the odd one out. It is not a library Shikigami links against; it is a
-command-line *toolchain*. It reads a checked specification of the service's durable identities
-and generates Haskell source from it. `cabal.project` declares it with
+Resolve dependency code with Mori before reading APIs. In `mori://shinzui/keiro`, the
+project-relative sources `keiro/src/Keiro/Workflow/Resume.hs`,
+`keiro/src/Keiro/Projection.hs`, `keiro/src/Keiro/Projection/Catalog.hs`,
+`keiro-ops/src/Keiro/Ops/Embed.hs`, and `keiro-test-support/src/Keiro/Test/Postgres.hs`
+were checked at the release commit. The project-relative adoption guide is
+`docs/guides/adopting-keiro-dsl-idiomatic-v2.md`; these source-file artifact URIs are pending.
+Use the canonical project URI with those paths, never an unqualified cross-repo path.
 
-```cabal
-extra-packages: keiro-dsl
-```
+Relevant local ADRs are [0001](../adr/0001-declare-only-what-the-runtime-executes.md),
+which forbids declarations the runtime does not execute;
+[0002](../adr/0002-generated-code-is-not-formatted.md), which protects generated output;
+[0004](../adr/0004-one-options-value-and-a-checked-patch-set.md), which centralizes run and
+resume options and generated patch sets;
+[0010](../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md), which
+requires atomic lifecycle/evidence persistence and forbids inventing an evidence decoder;
+[0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md), which governs
+post-release workflow-body changes;
+[0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md), which
+permits the verified pre-v1 reset; and
+[0030](../adr/0030-an-approval-request-is-a-durable-child-workflow.md), which establishes
+static-label approval children and opaque resolution tokens.
+[0037](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) records this plan's
+expanded adoption decision and scoped supersession of older pre-release exclusions.
+ADRs are plain Markdown; `mori show --full` confirms there is no profiled ADR bundle.
 
-which tells the solver to treat that Hackage package as if it were a local one. That is what
-makes `cabal run keiro-dsl -- ...` resolve to the version this project pins, so that every
-developer and CI run the same toolchain without depending on `PATH` or on a separate Keiro
-checkout. Because it lives in the same solver plan as the service, `keiro-dsl` cannot be at a
-different Keiro version from the runtime libraries — that fact is the whole of Milestone 1.
+## Plan of Work
 
-### The specification and the generated layer
 
-The specification is `domain/shikigami.keiro-workspace`, a manifest listing four member files:
-`domain/shikigami-agent-run.keiro`, `domain/shikigami-approval.keiro`,
-`domain/shikigami-conversation.keiro`, and `domain/shikigami-run-evidence.keiro`. Each declares
-`language keiro-dsl 5` and `context shikigami` on its first two significant lines.
+### Milestone 1 — Establish current evidence and applicability
 
-From that specification, `keiro-dsl scaffold` writes 18 Haskell modules into
-`shikigami-core/src`, each carrying a first-line banner of the form
-`-- @generated by keiro-dsl 0.14.0.0 (language keiro-dsl 5) from ...; do not edit.` They are:
 
-```text
-shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs
-shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowRuntime.hs
-shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs
-shikigami-core/src/Shikigami/Approval/Generated/WorkflowRuntime.hs
-shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs
-shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowRuntime.hs
-shikigami-core/src/Shikigami/Generated/BehaviorSourceMap.hs
-shikigami-core/src/Shikigami/Generated/Conformance.hs
-shikigami-core/src/Shikigami/Generated/Nominals.hs
-shikigami-core/src/Shikigami/Generated/Nominals/Internal.hs
-shikigami-core/src/Shikigami/Generated/ReplayAudit.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/BehaviorContract.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/Codec.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/Domain.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/EventStream.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/Harness.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/Projection.hs
-shikigami-core/src/Shikigami/RunEvidence/Generated/Transducer.hs
-```
+Record `git rev-parse HEAD` as the pre-adoption reference in this plan and
+`docs/dependency-cohort.md`. Refresh Hackage, verify every selected Keiro package and Kioku
+release description against tags, then solve the actual project with the intended pins.
+If newer releases exist, inspect their released sources and upgrade instructions and revise
+all pins and acceptance in this plan before proceeding. Do not silently mix cohort versions.
+Retain unrelated pins unless the actual dependency closure requires a documented change.
 
-Alongside them the tool writes four bookkeeping files. Three are committed:
+Replace the stale domain inventory in `docs/architecture/shikigami-domain-inventory.md`
+with a current census of producers, codecs, consumers, runtime calls, SQL targets, workflows,
+operations, and tests. Each applicable standard must have an owning module and an observable
+proof; each exclusion must name a concrete semantic mismatch or absent capability. Include
+all three workflows, RunEvidence, the run queue, Kafka intake, HTTP sink outbox, timers,
+read-side targets, and shared Kioku sessions. A feature name alone is not evidence that the
+service uses the corresponding Keiro node kind: the model-driven router remains a Flow
+capability, not automatically a Keiro router/process.
 
-- `shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt` — the *scaffold ledger*, the
-  tool's own record of what it generated last time and under which conventions. Its line
-  `naming-edition idiomatic-v1` is the single fact that makes this plan necessary.
-- `shikigami-core/src/keiro-dsl-migration-report.workspace.shikigami.txt`
-- `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/` — a small generated Cabal
-  package holding a conformance test runner, plus one create-once hand-owned module
-  `src/KeiroConformance/Expectations.hs`. `cabal.project` picks it up through
-  `optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal`, and it is
-  run as `cabal test keiro-shikigami-conformance`.
+Record the owner's unused-service statement and inspect repository release/deployment
+configuration. Immediately before Milestone 4, establish that there is no released/deployed
+shape, no resumable journal population, no stored/queued payload population to preserve, and
+no external consumer of a Shikigami-owned format. Use fresh isolated test databases for the
+new baseline. If evidence contradicts those facts, retain the affected compatibility path
+and revise its rollout explicitly; uncertainty is not proof of an empty population.
 
-The fourth, `shikigami-core/src/keiro-dsl-cabal-fragment.workspace.shikigami.txt`, is
-deliberately **not** committed — `.gitignore` excludes it. It is a paste-ready Cabal snippet
-that a human copies into `shikigami-core/shikigami-core.cabal`. That file is where the required
-language extensions arrive, so Milestone 4 has to read it after regenerating.
+Acceptance is a current successful solve or exact newly discovered conflict, plus a complete
+applicability census with the intended changes below assigned to owners. The historical
+Kioku 0.5.1 refusal must not remain a stopping condition.
 
-Two modules are *hand-owned but generated-adjacent*, meaning keiro-dsl created them once and
-will never overwrite them:
+### Milestone 2 — Adopt releases and the complete generated record contract
 
-- `shikigami-core/src/Shikigami/RunEvidence/BehaviorHoles.hs` — a "hole" module. It supplies,
-  by hand, one canonical history and expected outcome for every state/command cell the
-  specification declares. It is the only hand-written file in the repository that reads the
-  generated behavior-contract records field by field.
-- `shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`
-  — a table of expected workflow facts as plain string pairs. It touches no record fields and
-  needs no change in this plan.
 
-### The gate
+Move `keiro`, `keiro-core`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, and `keiro-pgmq`
+to `==0.15.0.0` in `cabal.project`; add `keiro-test-support ==0.15.0.0` for Milestone 3.
+Move `kioku-api`, `kioku-core`, and `kioku-migrations` to `==0.5.2.0`. Update direct bounds
+in `shikigami-server/shikigami-server.cabal` and
+`shikigami-migrations/shikigami-migrations.cabal`, and search all component descriptions
+for additional incompatible bounds. Keep `extra-packages: keiro-dsl` so the executable comes
+from the same project solve. Current Keiki 0.9.1.0, Kiroku Store 0.8.0.0, store migrations
+0.4.0.0, and Shibuya Core 0.9.0.0 remain unless refreshed released metadata requires otherwise.
 
-`Justfile` defines the specification gate. `just keiro-gate` runs, in order:
+Check `mori://shinzui/danwa/plans/13-upgrade-danwa-to-the-released-keiro-0-15-cohort`.
+If the registry cannot resolve that intended handle, locate it through the Danwa project.
+Advance Shikigami's Danwa pin only to a published commit with completed relevant build/test
+and API compatibility evidence. The observed partial plan is not such evidence; keeping
+`301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9` is valid if the complete consumer build passes.
+Record the exact retirement condition in the cohort document.
 
-1. `just keiro-check` — `keiro-dsl check` with `--min-language 5 --deny-warnings
-   --explain-bindings --fail-on-opaque`, writing reports under `build/`.
-2. `just keiro-inspect` — asserts every member *declares* its language rather than inheriting a
-   silent default.
-3. `just keiro-scaffold` — regenerates the layer and then runs `git diff --exit-code --
-   shikigami-core/src`. The regeneration being a no-op is the whole test: it proves the
-   committed bytes are what the current specification produces.
-4. `just keiro-diff HEAD^` — classifies a proposed change across the compatibility surfaces.
-5. `cabal test keiro-shikigami-conformance`.
+First add OverloadedRecordDot to all seven package common stanzas. Optionally prepare
+BehaviorHoles with temporary positional constructor matching to bridge renamed fields;
+constructor order is stable across the edition. This is a temporary migration aid only.
+Run ordinary scaffold once and capture its pre-v2 refusal before applying the edition.
+Keep the existing workspace/layout/runtime-package arguments. The current idiomatic-v1
+ledger and modern sidecar names require only `--apply-generated-haskell-edition`.
+If fresh evidence instead finds legacy names, use both required flags in one run; do not
+remove the ledger or force an overwrite to evade the refusal.
 
-Step 3 is where keiro-dsl 0.15.0.0 will refuse until the edition is explicitly adopted.
+Ignore `shikigami-core/src/.keiro-dsl-generated-haskell-migrations/`, retain the backup,
+and apply the edition. Read the remediation report and reconcile the complete Cabal fragment:
+module inventory, exposed conformance facade, dependencies, GHC2024 baseline, and
+DuplicateRecordFields, NoFieldSelectors, OverloadedRecordDot, OverloadedStrings. Set those
+four extensions in all seven Shikigami common stanzas; generated Haskell stays in core's
+existing library. Do not introduce a generated-only sublibrary or compatibility aliases.
 
-### What Keiro 0.15.0.0 actually changes
+Compile core first, then its tests, workers, server, agent, API, migrations, and client.
+Convert reads of removed selectors to concise record dot or constructor-directed patterns;
+use supported lenses for hand-owned records and option updates, importing
+`Data.Generics.Labels ()` only where needed. Preserve Keiki DSL modules from transitive
+orphan-instance pollution. A same-spelled field is not necessarily the same owner: use GHC's
+types and upstream owner-specific rename inventories, not global prefix stripping.
+Preserve intentional public newtype unwrappers. Review explicit exports with the compiler;
+keep the field/type visibility needed by HasField rather than blindly deleting every field
+export. Never expose an abstract checked constructor as a way to make a call site compile.
 
-The release is dated 2026-08-30 and all six packages are on Hackage. Verified on 2026-08-31
-against `https://hackage.haskell.org/package/<name>/preferred` and against the upstream tags
-`keiro-0.15.0.0`, `keiro-core-0.15.0.0`, `keiro-dsl-0.15.0.0`, `keiro-migrations-0.15.0.0`,
-`keiro-ops-0.15.0.0`, and `keiro-pgmq-0.15.0.0`, all at commit
-`de574cdcb0add3fefbb0fdd96d820258d15f8997` on `mori://shinzui/keiro` (the
-`chore(release): 0.15.0.0` commit).
+The original core-only scan estimated 587 field names and about ten thousand candidate
+uses. It is historical sizing, not an exact inventory; all-package NoFieldSelectors now
+also affects sibling-owned record definitions. Existing named construction and puns remain
+valid. For hand-owned updates follow the record standard's lenses instead of claiming all
+record-update expressions are unambiguous under DuplicateRecordFields.
 
-For the five runtime libraries there is nothing to migrate. `keiro-core` and
-`keiro-migrations` are pure republishes. `keiro`, `keiro-ops`, and `keiro-pgmq` changed only
-the `keiro-test-support` bound inside their own test-suite stanzas; their changelogs each say
-"Library consumers are unaffected."
-
-`keiro-dsl` 0.15.0.0 is the release. It does two things:
-
-1. It changes the record style of the Haskell it *emits*. Generated product records lose their
-   owner-prefixed field labels and their selector functions, and take concise repeated labels
-   instead. The generated Cabal fragment now defaults four extensions:
-   `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedRecordDot`, and `OverloadedStrings`.
-   This new style is named **`idiomatic-v2`**; the current style is `idiomatic-v1`.
-2. It refuses to scaffold at all over a ledger that still records a pre-v2 edition, until the
-   operator passes `--apply-generated-haskell-edition` explicitly. Before overwriting, that
-   flag copies every ledger-recorded generated file plus the ledger and the Cabal fragment into
-   `<out>/.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/`.
-
-The release notes are explicit that "`.keiro` syntax, serialized identities, and runtime
-behavior are unchanged," and that "JSON and wire keys, canonical/rendered output, diagnostics,
-fingerprints, `.keiro` language behavior, and runtime semantics are unchanged by the record
-migration." The specification's declared `language keiro-dsl 5` stays valid.
-
-Two Keiro documents are worth reading alongside this plan, though this plan repeats everything
-from them that matters. Both live in the `mori://shinzui/keiro` checkout:
-`docs/guides/adopting-keiro-dsl-idiomatic-v2.md` (the adoption procedure and the rollback path)
-and `blueprints/keiro-upgrade/migrations/0-14-to-0-15.md` (the upgrade edge, including the
-instruction not to reach for `allow-newer`).
-
-### What idiomatic-v2 renames, concretely, in this repository
-
-Only three generated modules declare product records with prefixed labels, so the rename map
-for Shikigami is short and fully enumerable. In
-`shikigami-core/src/Shikigami/Generated/BehaviorSourceMap.hs`, `BehaviorSourceLocation` renames
-`sourceFile` to `file`, `sourceLine` to `line`, and `sourceColumn` to `column`. In the three
-`*/Generated/WorkflowFacts.hs` modules, `WorkflowFacts` renames `workflowFactName` to `name`,
-`workflowFactIdVia` to `idVia`, `workflowFactIdField` to `idField`, `workflowFactBody` to
-`body`, `workflowFactAwaitLabels` to `awaitLabels`, and `workflowFactPatchIds` to `patchIds`.
-In `shikigami-core/src/Shikigami/RunEvidence/Generated/BehaviorContract.hs`:
+The generated rename map below remains useful for BehaviorHoles. In WorkflowFacts,
+`workflowFactName`, `workflowFactIdVia`, `workflowFactIdField`, `workflowFactBody`,
+`workflowFactAwaitLabels`, and `workflowFactPatchIds` become `name`, `idVia`, `idField`,
+`body`, `awaitLabels`, and `patchIds`. BehaviorSourceLocation becomes `file`, `line`,
+`column`. Finish the temporary BehaviorHoles bridge with concise-label construction/reads.
 
 ```text
 BehaviorRequirement       requirementKey           -> key
@@ -454,842 +354,399 @@ BehaviorConformanceReport reportRequired           -> required
 BehaviorKey               unBehaviorKey            -> unchanged (an explicit newtype unwrapper)
 ```
 
-The 28 `*Data` records in
-`shikigami-core/src/Shikigami/RunEvidence/Generated/Domain.hs` already use the concise labels
-`runEvidenceId` and `runId` and do not rename.
-
-Exactly one hand-written module in the repository reads any of those renamed labels:
-`shikigami-core/src/Shikigami/RunEvidence/BehaviorHoles.hs`. Every other consumer of the
-generated layer imports it `qualified` and touches only constructors and top-level values
-(`Shikigami.Agent.Approval.Workflow`, `Shikigami.Agent.Conversation`,
-`Shikigami.Agent.Workflow.Name`, `Shikigami.Workflow.Versioning`,
-`Shikigami.Attestation.Evidence`, `Shikigami.Attestation.EvidenceStore`,
-`Shikigami.RunEvidence.Conformance`). The rename itself is therefore a very small change. It is
-the *extension* the rename requires that is large.
-
-### Why the extension is the expensive part
-
-`NoFieldSelectors` is a definition-site extension: it applies to every record declared in a
-module compiled with it, and Cabal applies `default-extensions` to a whole component, not to
-selected modules. `shikigami-core`'s library stanza compiles the 18 generated modules together
-with 100 hand-written ones, so switching it on removes the selector functions for every record
-`shikigami-core` defines — 587 distinct field names — and every read of one of them anywhere
-in the repository must become dot syntax instead.
-
-The measured upper bound, taken on 2026-08-31 by matching those 587 names in application
-position across all Haskell sources, is:
-
-```text
-shikigami-core/src        ~4709 sites across 113 modules
-shikigami-core/test       ~3539 sites across  43 modules
-shikigami-workers          ~919 sites across  28 modules
-shikigami-server           ~724 sites across  32 modules
-shikigami-agent            ~255 sites across  10 modules
-shikigami-api               ~97 sites across   7 modules
-shikigami-migrations        ~44 sites across   5 modules
-shikigami-client            ~14 sites across   2 modules
-```
-
-This is an over-estimate, deliberately: the scan cannot distinguish a selector application from
-a local binding that happens to share a field's name, nor from an existing record-dot use. GHC's
-type errors are the authority. It is quoted here so nobody starts Milestone 4 expecting a
-morning's work.
-
-Three specific shapes are *not* broken by `NoFieldSelectors` and must not be rewritten:
-record construction (`Foo { bar = x }`), record update (`r { bar = x }`), and field puns in
-patterns (`Foo {bar}`). GHC2024 already implies `NamedFieldPuns`, so puns keep working. Only
-*application* of a field name as a function breaks. Separately, 34 field names are listed
-individually in the export lists of 14 `shikigami-core` modules; those exports name values that
-will no longer exist and must be deleted from the export list (the field is still exported by
-the type's `(..)`).
-
-### Existing local ADRs relevant to this plan
-
-Scanned the filenames and headings of all 36 records under `docs/adr/`. Three are relevant.
-
-[docs/adr/0002-generated-code-is-not-formatted.md](../adr/0002-generated-code-is-not-formatted.md)
-excludes `keiro-dsl` output from `treefmt` and states the generated-code firewall: a
-`-- @generated` file is never hand-modified, because determinism — that scaffolding an unchanged
-specification twice reports every module `unchanged` — is what makes a committed generated file
-trustworthy. This plan obeys that firewall absolutely: no generated file is edited by hand at
-any point, and every change to one arrives through `keiro-dsl scaffold`. The record also warns
-that "a new generated artifact in a location the globs do not match will be formatted silently,"
-which is why Milestone 4 re-checks the `treefmt.settings.global.excludes` list in
-`flake.module.nix` after regenerating.
-
-[docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md)
-governs changes to a declared workflow body. It is relevant as a *boundary*: this plan changes
-no workflow body, adds no step, and declares no patch id. If any step of this plan appears to
-require one, that is a signal the plan has gone wrong, because Keiro 0.15.0.0 changes no
-workflow semantics.
-
-[docs/adr/0027-the-first-release-establishes-one-clean-durable-baseline.md](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md)
-is the record that lets this plan skip a data-migration story entirely: nothing in 0.15.0.0
-touches a persisted byte, and no journal, snapshot, or event payload changes shape.
-
-No existing ADR covers the Haskell record model of this repository. Milestone 5 creates one.
-
-### The two upstream coordination points
-
-The first is a hard blocker. `kioku-core` 0.5.1.0 — the newest release, tagged `v0.5.1.0` on 2026-08-29 at commit
-`d071aea110bb3ca90bfcd1af70441dd0e2f2d086` of `mori://shinzui/kioku` — declares
-`keiro ^>=0.14.0.0` and `keiro-core ^>=0.14.0.0`, and `kioku-migrations` 0.5.1.0 declares
-`keiro-migrations ^>=0.14.0.0`. In Cabal, `^>=0.14.0.0` means `>=0.14.0.0 && <0.15`. Those two
-libraries are the only released packages in Shikigami's closure that exclude 0.15.0.0;
-`kioku-api` declares no Keiro dependency and `danwa-core` declares `keiro` unbounded.
-
-Shikigami links `kioku-core` from four packages, so there is no way to satisfy both. Kioku must
-publish a release whose `kioku-core` declares `keiro ^>=0.15.0.0` and `keiro-core ^>=0.15.0.0`
-and whose `kioku-migrations` declares `keiro-migrations ^>=0.15.0.0`. Because the Keiro runtime
-libraries are functionally unchanged at 0.15.0.0, that is a bounds-only release for Kioku, and
-there is direct precedent: `kioku 0.3.0.0` (2026-08-05) was exactly such a release, admitting
-keiki 0.9 and keiro 0.11 without a source change. That work belongs to
-`mori://shinzui/kioku` and is outside this repository. Milestone 1 states the requirement;
-Milestone 3 consumes it.
-
-The second is not a blocker but must not be forgotten. Danwa — the conversation substrate behind
-the `DanwaConversation` sink — has no Hackage release, so `cabal.project` resolves
-`danwa-core`, `danwa-api`, and `danwa-client` from the Git commit
-`301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9`. Danwa is being moved onto this same Keiro cohort
-under `mori://shinzui/danwa` ExecPlan 13, "Upgrade Danwa to the released Keiro 0.15 cohort",
-itself a child of that repository's MasterPlan 2. As of 2026-08-31 that plan records that no
-implementation work has begun.
-
-Nothing about it gates this plan. The pinned Danwa commit declares `keiro` and `keiro-core`
-with no version bound at all, so it resolves against 0.15.0.0 exactly as it resolves against
-0.14.0.0, and since the Keiro runtime libraries are functionally unchanged between the two, the
-resulting build is the same build. What it means is that after this plan lands, Shikigami will
-be linking a Danwa that was pinned before Danwa itself was validated against the cohort. That
-is a provenance gap rather than a correctness one, and the right closure is to move the pin to
-the commit that completes Danwa's ExecPlan 13 — opportunistically in Milestone 3 if it has
-landed by then, and otherwise as a recorded retirement condition in
-`docs/dependency-cohort.md`. Do not delay this plan waiting for it, and do not move the pin to
-a mid-upgrade Danwa commit that has not passed its own gate.
-
-
-## Plan of Work
-
-The work is five milestones. Milestones 1 and 2 can be done today, in either order, and do not
-depend on anything upstream. Milestone 3 cannot start until Kioku publishes. Milestone 4 is the
-large one and must land as a single working commit. Milestone 5 tidies the durable record.
-
-### Milestone 1 — Prove and record the cohort gate
-
-**Scope.** Turn "we cannot upgrade yet" from a thing someone discovered once into a checked-in,
-reproducible statement with a named exit condition. Nothing changes version.
-
-**What exists at the end.** `docs/dependency-cohort.md` has a new subsection under its
-"Current release status" heading, titled "Pending adoption: the keiro 0.15 cohort," which
-names the release, states that its runtime half is a functional no-op, quotes the solver
-refusal, and names exactly what Kioku must publish. Anyone who asks "why is Shikigami not on
-the current Keiro?" gets a complete answer from that file alone.
-
-**Edits.** One file: `docs/dependency-cohort.md`. Insert the new subsection immediately after
-the existing `### Current release status` prose and before `### The keiro 0.11 / keiki 0.9
-gate, and how it cleared`. That neighbouring subsection is the template to follow — it is the
-last time this repository recorded a blocked cohort move, and it reads as a small narrative of
-what blocked it and what cleared it. Write this one the same way, in the present tense.
-
-The subsection must state, in prose: that Keiro 0.15.0.0 was published 2026-08-30 and is on
-Hackage for all six selected packages; that `keiro-core` and `keiro-migrations` declare no
-changes and that `keiro`, `keiro-ops`, and `keiro-pgmq` changed only their own test-suite
-bounds, so the runtime half of the move is a republish; that the substance is `keiro-dsl`'s
-idiomatic-v2 generated-Haskell edition; that `kioku-core` 0.5.1.0 and `kioku-migrations`
-0.5.1.0 cap Keiro below 0.15 and are the sole blockers; and that the exit condition is a
-bounds-only Kioku release declaring `keiro ^>=0.15.0.0`, `keiro-core ^>=0.15.0.0`, and
-`keiro-migrations ^>=0.15.0.0`. Include the solver transcript from the Surprises section, and
-state explicitly that `allow-newer` is not the answer here, quoting the cohort's own rule 2 and
-Keiro's upgrade-edge instruction.
-
-**Acceptance.** `docs/dependency-cohort.md` contains the subsection; the transcript in it can
-be reproduced by following the Concrete Steps below and getting the same conflict set.
-
-### Milestone 2 — Prepare hand-owned code for the record model
-
-**Scope.** Two edition-neutral preparations, both of which are safe on the current cohort and
-both of which shrink Milestone 4.
-
-**What exists at the end.** Every package can read a field with dot syntax, and the one
-hand-written module that reads generated behavior records does so in a way that survives the
-rename. The build and the full test suite are green, still on keiro 0.14.0.0 and still on the
-`idiomatic-v1` generated layer.
-
-**Edits.**
-
-First, add `OverloadedRecordDot` to the `default-extensions` list of the `common common` stanza
-in all seven `.cabal` files: `shikigami-core/shikigami-core.cabal`,
-`shikigami-agent/shikigami-agent.cabal`, `shikigami-api/shikigami-api.cabal`,
-`shikigami-client/shikigami-client.cabal`,
-`shikigami-migrations/shikigami-migrations.cabal`, `shikigami-server/shikigami-server.cabal`,
-and `shikigami-workers/shikigami-workers.cabal`. Each currently reads
-
-```cabal
-  default-extensions:
-    BlockArguments
-    DeriveAnyClass
-    DuplicateRecordFields
-    MultilineStrings
-    OverloadedLabels
-    OverloadedStrings
-```
-
-and becomes
-
-```cabal
-  default-extensions:
-    BlockArguments
-    DeriveAnyClass
-    DuplicateRecordFields
-    MultilineStrings
-    OverloadedLabels
-    OverloadedRecordDot
-    OverloadedStrings
-```
-
-This is additive and cannot break existing code that composes functions with spaces around the
-dot, which is how every composition in this repository is written. `OverloadedRecordDot` only
-changes the meaning of `a.b` written with no surrounding whitespace where `a` begins with a
-lowercase letter; a scan of all Haskell sources on 2026-08-31, with string literals and
-comments removed, found 117 such occurrences and every one of them is already an intentional
-record-dot use inside a generated module. Nonetheless, re-run that scan after the edit if the
-build produces a surprising type error, and treat any hit outside a `Generated` directory as
-the cause.
-
-Second, rewrite `shikigami-core/src/Shikigami/RunEvidence/BehaviorHoles.hs`. Today it reads
-generated fields by applying selectors and constructs a witness with prefixed labels:
-
-```haskell
-witness :: BehaviorRequirement -> BehaviorWitness
-witness requirement =
-  LiveWitness
-    { witnessKey = requirementKey requirement,
-      witnessHistory = historyFor (requirementSource requirement),
-      witnessCommand = commandFor (requirementCommandName requirement),
-      witnessExpected = expectationFor requirement
-    }
-
-expectationFor :: BehaviorRequirement -> LiveExpectation
-expectationFor BehaviorRequirement {requirementKind, requirementCommandName, requirementSource} =
-  case requirementKind of
-    LiveTransition -> Emits (eventFor requirementCommandName :| [])
-    RequiredRejection -> Rejects (rejectionFor requirementSource)
-    ReplayTransition -> error "RunEvidence has no replay-only behavior requirement"
-```
-
-Every one of `witnessKey`, `witnessHistory`, `witnessCommand`, `witnessExpected`,
-`requirementKey`, `requirementSource`, `requirementCommandName`, and `requirementKind` is
-renamed by idiomatic-v2. Keiro's adoption guide names positional constructor syntax as the
-bridge that survives a rename, because "Constructor order is stable across the edition."
-Rewrite both functions to use it. `BehaviorRequirement` has nine fields in the declaration order
-`key, kind, evidence, guardCoverage, source, commandName, expectedEdge, target, eventKinds`, and
-`LiveWitness` has four in the order `key, history, command, expected`:
-
-```haskell
-witness :: BehaviorRequirement -> BehaviorWitness
-witness requirement@(BehaviorRequirement key _ _ _ source commandName _ _ _) =
-  LiveWitness key (historyFor source) (commandFor commandName) (expectationFor requirement)
-
-expectationFor :: BehaviorRequirement -> LiveExpectation
-expectationFor (BehaviorRequirement _ kind _ _ source commandName _ _ _) =
-  case kind of
-    LiveTransition -> Emits (eventFor commandName :| [])
-    RequiredRejection -> Rejects (rejectionFor source)
-    ReplayTransition -> error "RunEvidence has no replay-only behavior requirement"
-```
-
-Add a short comment above `witness` recording *why* the module is written positionally: it is a
-deliberate dual-edition bridge across the keiro-dsl generated-Haskell edition boundary, and it
-becomes record dot in Milestone 4. Leave the rest of the module — `historyFor`, `commandFor`,
-`eventFor`, the fixture values — untouched; none of it reads a renamed field.
-
-Note that this file also currently imports `Shikigami.Prelude`, which it uses only for `Text`.
-That import is fine and stays.
-
-**Acceptance.** `nix develop -c cabal build all` succeeds. `nix develop -c cabal test all -j1`
-reports the same suites and the same counts as the last recorded run in
-`docs/dependency-cohort.md` (810 checks across nine suites, plus the two sibling Kikan-En
-suites). `just keiro-gate` still passes: the generated layer has not changed and neither has
-the toolchain.
-
-### Milestone 3 — Take the lockstep 0.15 bump
-
-**Scope.** Move all six Keiro selections to 0.15.0.0 and nothing else. Do not touch the Kiroku,
-Keiki, Shibuya, Kioku, Shikumi, or Baikai selections — Keiro's own upgrade edge states that this
-release "entails no upstream edge" and that its `kiroku-store`, `kiroku-store-migrations`,
-`keiki`, and `shibuya-core` bounds are unchanged.
-
-**Precondition.** A Kioku release admitting `keiro ^>=0.15.0.0` is on Hackage. Verify with
-
-```bash
-curl -s -H 'Accept: application/json' https://hackage.haskell.org/package/kioku-core/preferred
-```
-
-and by reading the new release's `kioku-core.cabal` and `kioku-migrations.cabal` bounds. If it
-is not there, stop; the plan resumes when it is. Do not proceed with `allow-newer`, a
-`source-repository-package` override, or a wider bound.
-
-**What exists at the end.** The solver selects the 0.15.0.0 Keiro set, the whole repository
-builds, and the whole test suite passes — with the generated layer still at `idiomatic-v1`, and
-`just keiro-scaffold` failing with the edition refusal. That failure is the milestone's
-deliverable evidence, not a defect: it demonstrates that keiro-dsl refuses before writing
-anything.
-
-**Edits.** Three files.
-
-In `cabal.project`, the `constraints:` block's Keiro rows move from `==0.14.0.0` to
-`==0.15.0.0`:
-
-```diff
--  , keiro                   ==0.14.0.0
--  , keiro-core              ==0.14.0.0
--  , keiro-dsl               ==0.14.0.0
--  , keiro-migrations        ==0.14.0.0
--  , keiro-ops               ==0.14.0.0
--  , keiro-pgmq              ==0.14.0.0
-+  , keiro                   ==0.15.0.0
-+  , keiro-core              ==0.15.0.0
-+  , keiro-dsl               ==0.15.0.0
-+  , keiro-migrations        ==0.15.0.0
-+  , keiro-ops               ==0.15.0.0
-+  , keiro-pgmq              ==0.15.0.0
-```
-
-Also bump the Kioku rows to whatever version the new Kioku release carries, keeping
-`kioku-api`, `kioku-core`, and `kioku-migrations` at one version as they are today.
-
-In `shikigami-migrations/shikigami-migrations.cabal`, line 30, change
-`keiro-migrations ^>=0.14.0.0` to `keiro-migrations ^>=0.15.0.0`, and bump the two `kioku-*`
-rows below it to the new Kioku line.
-
-In `shikigami-server/shikigami-server.cabal`, lines 69–70, change `keiro ==0.14.0.0` and
-`keiro-ops ==0.14.0.0` to `==0.15.0.0`.
-
-Then settle the Danwa pin. Check whether `mori://shinzui/danwa` ExecPlan 13 has completed. If it
-has, move the `tag:` of the Danwa `source-repository-package` stanza in `cabal.project` from
-`301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9` to that plan's final commit, and re-run the dry-run
-solve and the full suite with it. If it has not, leave the tag alone — the pinned commit
-declares no Keiro bound and resolves against 0.15.0.0 unchanged — and instead add a sentence to
-the `danwa-core`, `danwa-api`, `danwa-client` row of the "Packages still resolved from Git"
-table in `docs/dependency-cohort.md` recording that the pin predates Danwa's own Keiro 0.15
-adoption and should move to the commit that completes it. Do not pin a mid-upgrade Danwa commit.
-
-No other file in the repository names a Keiro version. The banner inside
-`shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/keiro-shikigami-conformance.cabal`
-also says `0.14.0.0`, but that is generated output and updates itself in Milestone 4.
-
-**Acceptance.** `nix develop -c cabal build all --dry-run` prints a plan containing
-`keiro-core-0.15.0.0`, `keiro-0.15.0.0`, `keiro-migrations-0.15.0.0`, `keiro-ops-0.15.0.0`, and
-`keiro-pgmq-0.15.0.0`. `nix develop -c cabal build keiro-dsl --dry-run` selects
-`keiro-dsl-0.15.0.0`. `nix develop -c cabal build all` and `nix develop -c cabal test all -j1`
-are green. `just keiro-scaffold` fails with a refusal naming the recorded Generated paths, the
-ledger, the Cabal fragment, and any attributable old selector uses in create-once files; capture
-that transcript into Surprises & Discoveries.
-
-### Milestone 4 — Adopt idiomatic-v2 and the record model
-
-**Scope.** The edition apply, the extension switch, and the whole selector migration, as one
-commit that leaves the tree building. They cannot be separated: the current generated
-`BehaviorContract.hs` applies its own selectors, so `NoFieldSelectors` breaks it, and it may not
-be hand-fixed.
-
-**What exists at the end.** The ledger records `naming-edition idiomatic-v2`; the 18 generated
-modules carry a `0.15.0.0` banner and concise labels; `shikigami-core`'s stanza carries the four
-extensions from the regenerated fragment; every hand-written read of a `shikigami-core` field is
-dot syntax; `just keiro-gate` passes; the whole suite passes.
-
-**Order of work.** Do it in this order; each step's failure mode is easier to read than the
-next one's.
-
-*Step A — ignore the backup directory.* Add to `.gitignore`, next to the existing keiro-dsl
-entries, with a comment explaining that git itself is the rollback:
-
-```gitignore
-# keiro-dsl copies the pre-migration generated layer here when a generated-Haskell
-# edition is applied. The same complete set is already in git history at the commit
-# before the adoption, which the adoption guide accepts as an equally valid restore,
-# so this is local migration evidence rather than something to commit.
-shikigami-core/src/.keiro-dsl-generated-haskell-migrations/
-```
-
-*Step B — apply the edition.* From the repository root, run the ordinary scaffold command with
-the explicit adoption flag. The working tree must be clean first, because the tool records
-durable backups but cannot roll back unrelated edits.
-
-```bash
-nix develop -c cabal run -v0 keiro-dsl -- scaffold domain/shikigami.keiro-workspace \
-  --out shikigami-core/src \
-  --apply-generated-haskell-edition
-```
-
-This is *not* a legacy-v1 tree: the ledger already records `naming-edition idiomatic-v1` and the
-sidecar files already use their current names, so `--apply-name-migrations` is not needed and
-must not be passed. If the tool asks for both flags, stop and re-read its message — that would
-mean the ledger is older than this plan assumes.
-
-Afterwards, inspect the three things the run produces: the changed generated modules, the new
-`naming-edition idiomatic-v2` line in
-`shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt`, and
-`shikigami-core/src/.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/remediation-report.txt`.
-Read that report in full. It lists every attributable use of a renamed label it can see in
-recorded hole files, and it is the tool's own account of what it thinks still needs migrating.
-It is explicitly *not* a claim to understand the whole application — compile errors remain the
-authority outside the scaffold inventory.
-
-*Step C — reconcile the Cabal fragment.* Read the regenerated
-`shikigami-core/src/keiro-dsl-cabal-fragment.workspace.shikigami.txt` (gitignored, so it will
-not appear in `git status`). Reconcile it into `shikigami-core/shikigami-core.cabal`: the
-`other-modules` block under the "Generated by `keiro-dsl scaffold`" comment, the
-`Shikigami.Generated.Conformance` line in `exposed-modules`, the `build-depends` list, and the
-extensions. The extensions go into the shared `common common` stanza, which after Milestone 2
-already has `DuplicateRecordFields`, `OverloadedRecordDot`, and `OverloadedStrings`; add
-`NoFieldSelectors`:
-
-```cabal
-  default-extensions:
-    BlockArguments
-    DeriveAnyClass
-    DuplicateRecordFields
-    MultilineStrings
-    NoFieldSelectors
-    OverloadedLabels
-    OverloadedRecordDot
-    OverloadedStrings
-```
-
-Check the fragment's `build-depends` against the stanza's. The current fragment lists `aeson`,
-`base`, `containers`, `effectful-core`, `keiki`, `keiro`, and `text`, but
-`*/Generated/WorkflowRuntime.hs` imports `Kiroku.Store.Effect`, which comes from
-`kiroku-store`. The stanza already depends on `kiroku-store` for hand-written reasons, so this
-has never mattered; verify it is still listed and note any other omission in Surprises &
-Discoveries, because it would matter to anyone who later isolates the generated layer.
-
-*Step D — migrate the selector reads, package by package.* Build one component at a time and
-let GHC drive. Start with the core library, because nothing else compiles until it does:
-
-```bash
-nix develop -c cabal build shikigami-core:lib:shikigami-core
-```
-
-Each error is of the form "Variable not in scope: someField :: Foo -> Bar". Replace the
-application `someField x` with `x.someField`, and `someField (g y)` with `(g y).someField`.
-Where the value is a lambda argument or a section, the mechanical rewrite `someField` to
-`(.someField)` is valid and reads acceptably in point-free chains such as `map (.name) xs`.
-Where the code is already pattern-matching on the constructor, prefer adding a field pun to
-rewriting the read.
-
-Three rewrites are wrong and must not be used. Do not add `FieldSelectors` to any module or
-stanza to opt back out — Keiro's upgrade edge names that specifically as a compatibility escape
-hatch to avoid, and it would silently exempt whichever module carried it from the model the rest
-of the package now follows. Do not introduce a hand-written function with the field's old name
-that does the same thing; that is the same escape hatch with a longer diff. Do not mechanically
-rename same-spelled fields across types to make an error go away — under
-`DuplicateRecordFields` two different records may legitimately share a label, and a blind rename
-can silently retarget a read at the wrong type.
-
-Then, in order, and rebuilding after each: `shikigami-core:test:shikigami-core-test`,
-`shikigami-workers`, `shikigami-server`, `shikigami-agent`, `shikigami-api`,
-`shikigami-migrations`, `shikigami-client`, and each package's test suite. Tick the matching
-Progress entry as each component compiles, and if the work stops part-way, split that entry so
-the next contributor knows which component was mid-flight.
-
-*Step E — fix the export lists.* Fourteen `shikigami-core` modules name 34 field selectors
-individually in their `module M (...) where` export lists. Those names no longer exist and the
-compiler will say so. Delete each from the export list; the field is still exported to
-record-dot users by the type's `(..)` entry. Do not replace it with anything.
-
-*Step F — return `BehaviorHoles.hs` to the idiom.* With the edition applied, rewrite the
-positional bridge from Milestone 2 into concise-label record dot, and delete the comment that
-explained the bridge:
-
-```haskell
-witness :: BehaviorRequirement -> BehaviorWitness
-witness requirement =
-  LiveWitness
-    { key = requirement.key,
-      history = historyFor requirement.source,
-      command = commandFor requirement.commandName,
-      expected = expectationFor requirement
-    }
-
-expectationFor :: BehaviorRequirement -> LiveExpectation
-expectationFor requirement =
-  case requirement.kind of
-    LiveTransition -> Emits (eventFor requirement.commandName :| [])
-    RequiredRejection -> Rejects (rejectionFor requirement.source)
-    ReplayTransition -> error "RunEvidence has no replay-only behavior requirement"
-```
-
-*Step G — repair the architecture tests if their assumptions moved.* Two test modules read
-`.cabal` files as text and will notice this change.
-`shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs` compares the generated modules on disk
-against the module names declared in `shikigami-core.cabal`; that comparison should still hold
-exactly, and if it does not, the fragment was reconciled incompletely — fix the `.cabal`, not
-the test. `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` should be unaffected by this
-plan's chosen approach, since no new stanza appears; confirm it passes rather than assuming.
-
-*Step H — check the formatter firewall.* Confirm that every path the scaffold wrote is still
-matched by the `treefmt.settings.global.excludes` globs in `flake.module.nix`. The current globs
-are `shikigami-core/src/Shikigami/Generated/*.hs`,
-`shikigami-core/src/Shikigami/*/Generated/*.hs`,
-`shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal`, and
-`shikigami-core/src/keiro-dsl-conformance.workspace.*/src/Main.hs`. Note that the first glob does
-*not* match `shikigami-core/src/Shikigami/Generated/Nominals/Internal.hs`, one directory deeper;
-that is a pre-existing gap rather than something this plan introduces, but if the formatter now
-rewrites that file, the next scaffold will report it `overwritten` and `just keiro-scaffold` will
-fail. If that happens, extend the globs in `flake.module.nix` in this same commit and record it
-in Surprises & Discoveries as an ADR-0002 consequence realised.
-
-**Acceptance.** `just keiro-gate` passes all five stages, including the `git diff --exit-code`
-determinism check after re-scaffolding. `nix develop -c cabal test all -j1` reports the same
-nine Shikigami suites with the same check counts as before the migration. In particular
-`shikigami-core-test` must still report its `Shikigami.WireCompatSpec` cases green — those are
-literal pre-upgrade byte fixtures, and their passing is the direct evidence that a large source
-rewrite changed no persisted byte.
-
-### Milestone 5 — Reconcile the surrounding contracts
-
-**Scope.** Make the durable documents true again and promote the durable decision out of this
-plan.
-
-**What exists at the end.** `docs/dependency-cohort.md` describes the cohort Shikigami actually
-selects; `docs/architecture/packages.md` states the repository's record model as a rule rather
-than as an accident of one migration; a new ADR records the decision and the alternatives; and
-the Milestone 1 pending-adoption subsection is gone, because it retired.
-
-**Edits.**
-
-In `docs/dependency-cohort.md`: move the six Keiro rows of the release matrix to 0.15.0.0 with
-tags `keiro-0.15.0.0`, `keiro-core-0.15.0.0`, `keiro-dsl-0.15.0.0`,
-`keiro-migrations-0.15.0.0`, `keiro-ops-0.15.0.0`, `keiro-pgmq-0.15.0.0` and the release commit
-they share; update the Kioku rows to the release that cleared the gate; delete the pending
-subsection; add a compatibility-evidence row stating that 0.15.0.0 changes no wire, JSON, SQL,
-fingerprint, or runtime observation and that `WireCompatSpec` is the check; and add a paragraph
-to "What this cohort cost in source" describing the record-model switch honestly, including the
-scale, since the version numbers do not predict it.
-
-In `docs/architecture/packages.md`, under "Module placement rules": state that
-`shikigami-core` compiles with `NoFieldSelectors` and `OverloadedRecordDot`, that reads of its
-records are dot syntax, that construction, update, and puns are unchanged, and that the reason
-is the keiro-dsl generated layer sharing the stanza. State that the other six packages carry
-`OverloadedRecordDot` so they can read those records, and that they do not carry
-`NoFieldSelectors`.
-
-Create `docs/adr/0037-<slug>.md` — the next free number; 0036 is the highest today. Follow the
-house shape: an `# 0037. <Title>` heading, then `Date:`, `Status: accepted`, and the sections
-Context, Decision, Alternatives rejected, Consequences, References. The corpus is plain
-Markdown; `docs/adr/README.md` states it is not an OKF bundle and that no `docId` or frontmatter
-belongs there. The record should say that Shikigami's Haskell record model is set by the
-generated layer it shares a component with, name the two rejected alternatives with the numbers
-that made the choice, and state the consequence a future contributor will actually feel: a new
-record in `shikigami-core` has no selectors and never will, and a new `shikigami-core` field
-read from a sibling package needs dot syntax.
-
-Finally, fill in this plan's Outcomes & Retrospective and perform the ADR distillation pass over
-the Decision Log and Surprises & Discoveries.
 
+Verify the formatter exclusions cover every generated file, including
+`Shikigami/Generated/Nominals/Internal.hs`, and generated conformance sources/Cabal files.
+No generated module is hand-edited or formatted. Build every component and preserve existing
+literal wire fixtures and conformance expectations in this milestone. After committing the
+reviewed regeneration, a second ordinary scaffold and `just keiro-gate <pre-adoption-ref>`
+must pass without changed bytes. This proves the edition migration independently of later
+intentional changes.
+
+### Milestone 3 — Adopt the published isolated test fixture
+
+
+Keep `shikigami-migrations:test-support` as the only database-test acquisition boundary.
+Update `shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs` to wrap
+`Keiro.Test.Postgres.withMigratedSuiteWith`, then use `withFreshDatabase` or the supported
+store helpers per example. Expose a service suite wrapper so suites migrate one template
+and clone isolated databases rather than rebuilding a template for every case. Preserve
+`withShikigamiMigratedDatabase` as a convenience if callers need it.
+
+The upstream fixture already composes Kiroku and Keiro. Supply Kioku and Shikigami's
+MigrationComponents once, with the complete transport/application dependencies; do not pass
+those two base components twice and do not apply a partial plan to a complete ledger.
+Preserve the service migration plan, search paths, and Kioku read-model reconciliation at
+the correct setup boundary. Add the keiro-test-support dependency only to test-support
+components; ordinary runtime libraries must not depend on test fixtures.
+
+Reorganize the existing core checks into a pure domain driver, diagram checks, and isolated
+PostgreSQL checks while keeping ordinary unit tests and the generated conformance package.
+Use `test-domain/Main.hs`, `test-diagrams/Main.hs`, and `test-postgres/Main.hs` under
+`shikigami-core`, with corresponding Cabal suites. The domain driver imports core's
+hand-owned facade and evaluates generated harness/behavior results with only base and core
+dependencies; it must not start PostgreSQL. Add a hand-owned exposed facade if needed rather
+than bypassing core's generated-module visibility. Move tests rather than duplicating them.
+Server/workers continue to own their handler and delivery tests.
+
+Acceptance proves template migration once, distinct databases for two examples, cleanup on
+exceptions, unchanged complete migration composition, and a no-op second migration run.
+The pure domain/diagram suites run without a database. Run the full suite serially.
+
+### Milestone 4 — Establish one pre-v1 workflow and identity baseline
+
+
+Recheck ADR 0027's four facts and record the pre-reset Git revision. Inventory every `patch`
+call and branch in `shikigami-core/src/Shikigami/Agent/Workflow.hs`,
+`shikigami-core/src/Shikigami/Agent/Conversation.hs`,
+`shikigami-core/src/Shikigami/Flow/Capability.hs`, and the rest of Agent/Flow.
+Retain the current semantics directly: resolved profiles/capability overlays, behavior
+attempt/retry results, journaled memory, stable sink labels, approval-policy snapshots and
+approval child workflows, and one conversation turn per continueAsNew generation.
+Remove the corresponding historical false branches, compatibility-only decoders, obsolete
+label helpers, patch calls, and declared patch IDs together. Keep any patch with a real
+population or a separate current semantic purpose, recording its reason.
+
+Preserve `Shikigami.Workflow.Versioning` as the single options construction site and derive
+its active set from generated declaredPatches even when that set is empty. Preserve the
+framework patch tests using explicit synthetic old/new test workflows; retire application
+fixtures whose sole claim is that an unused legacy branch must remain forever.
+Use `restoreSeed` before generation-dependent work, static journal labels, generated
+`allocateDeclaredAwait` for declared waits, and the returned opaque AwakeableId for
+publication and signaling. Every externally visible allocation must be published before
+awaiting, with deduplication on that id; rotation must publish the newly allocated id.
+Do not use generation-0 awakeable compatibility helpers in ordinary execution.
+
+Review domain values at these boundaries and RunJob/evidence mappings. Keep WorkflowId,
+AwakeableId and other runtime-owned types nominal through the domain. Use generated
+RunEvidenceId directly. Give service-owned entity IDs TypeID-v7-backed domain types with
+full domain prefixes; wrap meaningful names, quantities, versions and locators in their
+own types and validate at decoding boundaries. External IDs keep their authority's wire
+representation; deterministic review/delegation/deduplication keys retain the runtime's
+specified UUID version and derivation. A UUIDv5 technical identity must not be relabeled
+as a TypeID-v7. Do not make random IDs during replay; allocate once at ingress or in a
+journaled operation. Update JSON/SQL adapters explicitly and test cross-domain rejection.
+
+Update all affected `domain/` bodies and hand-owned conformance expectations, regenerate,
+and record every old-to-new diff diagnostic. Body/patch retirement findings are expected
+only for this documented pre-v1 reset. Do not hide them with fake patches or relaxed flags.
+Acceptance includes approval, behavior retry, memory replay, conversation rotation, and
+identity tests on the new baseline, plus synthetic proof that future patching still works.
+
+### Milestone 5 — Make applicable DSL contracts executable
+
+
+Create `domain/shikigami-run-jobs.keiro` and add it to the workspace. Give each shared type
+one member owner. Declare the full currently encoded RunJob shape, not just the three fields
+referenced by the workflow, along with queue identity, dispatch, retry/disposition policy,
+and the actual worker binding. Use Language 5 structural/nominal bindings for retained
+domain values when conversion is total; otherwise use a generated payload with an explicit
+validated boundary adapter. Resolve opaque persisted roots rather than dropping
+`--fail-on-opaque`. Do not change workflow input merely to mimic the queue envelope:
+unwrap the queue at its boundary and keep the domain value explicit.
+
+Change `shikigami-core/src/Shikigami/Trigger/Enqueue.hs` and
+`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` together to use the generated Queue,
+QueueCodec and QueuePolicy artifacts. Cover all enqueue paths, including scheduler, inbox,
+CLI, delegation and conversation routing. Remove bare-payload fallback decoding and
+`InferredLegacyRoute` compatibility behavior after establishing explicit routing for every
+producer. Preserve intentional business defaults; remove only historical compatibility.
+Replace the old bare-queue golden in `shikigami-core/test/Shikigami/WireCompatSpec.hs` with a
+literal complete generated-envelope golden, and test the production encoder/decoder against
+it. This is an intentional first-release format choice, not a byte-neutral record refactor.
+
+Declare RunEvidence query targets and their catalog in the workspace, with one generated
+catalog facade and hand-owned handler/query modules under
+`shikigami-core/src/Shikigami/RunEvidence/`. Inventory `shikigami.run_evidence` and
+`shikigami.run_evidence_calls` as one dependency group. Use `PreserveAndReconcile` reset
+policy and `LiveOnly` with the explicit reason that lifecycle history lacks rich evidence
+payloads. Preserve ADR 0010's transaction: append lifecycle events and persist captured rich
+payloads in the same resource-backed transaction. Keep the generated transducer and codec
+as the sole lifecycle authority.
+
+First prove this integration in a focused PostgreSQL test: build/validate the generated
+catalog with hand-owned live handler closures capturing the command's evidence, derive its
+inline set, and execute through `Keiro.Projection.runCommandWithCatalogProjections` or the
+released supported catalog transaction boundary that preserves the same atomic callback.
+Inspect the public catalog/delivery API before choosing the closure shape. Force SQL failure
+and a fenced group to prove neither lifecycle nor payload can partially commit. A facade
+registered beside unguarded SQL is not acceptable. If the released API cannot express this
+atomic live-only boundary, record the exact missing API and upstream issue; do not invent a
+replay adapter or mark this milestone complete on a documentation-only substitute.
+
+Derive query access and operator catalog operations from the same validated catalog.
+Do not manufacture external SQL contracts when there is no external SQL reader. If the
+current census finds one, adopt the generated guarded read surface rather than granting
+raw projection-table access. Do not enable destructive rebuild or stream repair for the
+live-only evidence payload; those require a real replay source and verification. Preserve
+Kioku's ownership of session streams and projections; do not redeclare its contracts as
+Shikigami aggregates. Reconcile those through Kioku's supported API.
+
+The remaining hand-owned boundaries must be specific: external Danwa AddressedMessage has
+no generated discriminator; open Kafka agent matching is not a finite typed intake; HTTP
+sink dispatch is not a Kafka publisher; custom timers without a real process/saga should
+not acquire a fictitious process declaration. Keep their actual codecs, typed failures,
+idempotence and tests, with an owner and reason in the census. Revisit each against current
+released grammar rather than retaining every old exclusion by default.
+
+Run check, inspect, binding/coverage reports, behavior-obligations, scaffold and conformance.
+Every aggregate obligation must execute a witness; pending, missing, duplicate, stale and
+failed sets must be empty. Require strict verified evidence where guards are generated and
+total, and explain genuine unverified obligations instead of relabeling them. Acceptance
+includes a real generated-envelope enqueue/dequeue/run test and atomic guarded evidence
+write/query tests, with every new generated module used by production code.
+
+### Milestone 6 — Complete runtime progress and operational wiring
+
+
+Audit construction in `shikigami-workers/src/Shikigami/Workers/Config.hs`, worker command
+entry points, server commands, and the one-off agent path. Compose one explicit startup
+sequence: read-only migration handshake, telemetry construction, resource acquisition,
+validated event streams, validated/registered catalog, then listeners and workers. Pending
+migrations or ledger problems must refuse startup. Do not apply migrations opportunistically
+in each replica. Construct tracing/metrics before the store because its callbacks close over
+them. Begin with upstream default options and use supported lenses for named changes.
+
+Retain one registry covering agent runs, conversations and approval children; verify the
+actual composed registry rather than comments that still say two families. Centralize shared
+registrations and bounded actions in core if server and workers both need them; server must
+not import workers. Preserve resource-aware effects for transactional steps. In
+`shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs`, expose bounded passes using
+`resumeWorkflowsOnceUpTo` for tests/operations and run the supported continuous worker in
+production. A bounded drain repeats on `advanced > 0`, not `discovered > 0`. Default
+maxConcurrentAdvances to 1 until pool headroom is measured. Export all ResumeSummary fields,
+including unregistered names, transient errors, failure, lease skips, pacing and sleep-due
+counts, with thread-safe logging. Keep separate PGMQ delivery extension and resume lease TTL;
+direct run options must not pretend to own the resume worker's lease heartbeat.
+
+In `shikigami-workers/src/Shikigami/Trigger/Timer.hs`, preserve a single dispatcher for
+shared timer rows and integrate bounded Keiro sleep-timer draining with custom schedule,
+approval and conversation timeout handling. Do not start competing unfiltered consumers.
+Prove parked workflows are quiescent, due timers make progress, cancellation wins without
+extra delivery, and custom wake rows settle/update lifecycle atomically across rotation.
+Configure a documented terminal workflow retention policy and supported GC worker if this
+service retains terminal instances; prove its interval/policy cannot collect live approvals
+or evidence needed by application retention.
+
+Review `shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs` against the released
+outbox failure algebra: transient publication failure retries, permanent publication
+rejection terminates durably, claim-batch finalization remains atomic, and a terminal race
+does not delete another worker's claim. Keep delivery receipts and deduplication as the
+external-effect authority. Classify domain command rejection, ambiguity, and typed transient
+store failures distinctly; never acknowledge ambiguity as a benign no-op.
+
+Reassess `shikigami-server/src/Shikigami/Server/Command/Ops.hs` using the current census.
+Wire RunEvidence replay-audit and catalog hooks where their public types match the validated
+runtime. Replay audit covers lifecycle events, not recovery of encode-only payloads.
+The released ResumeHook is a registry over `[Store, Error StoreError, IOE]`, whereas the
+application requires a resource-aware Kioku effect row. Do not cast or erase that resource
+requirement. If no honest shared interpreter can satisfy the hook, expose the bounded action
+at the worker-owned operational boundary and document the unsupported embedded hook with
+its exact type; similarly keep timer operations with the owning dispatcher. Mount only
+operations that execute, and use public Keiro APIs for repair/resurrection, not private SQL.
+Operator mutating actions retain preview/force behavior and audit evidence.
+
+Acceptance is focused server/worker testing of startup refusal, all registered workflow
+families, bounded no-progress termination, failure/resurrection, timer wake-up and terminal
+outbox rejection. Already-correct wiring needs evidence, not replacement merely to create a
+diff. A required public API gap becomes a concrete upstream dependency with a test and exit
+condition; it must not be hidden under a general claim of full adoption.
+
+### Milestone 7 — Qualify and establish the first-release baseline
+
+
+Run the complete command sequence below. Use deterministic fake model/sink clients and real
+isolated PostgreSQL for the service scenario: enqueue a generated RunJob, run to approval,
+restart the worker, signal the published opaque token, complete the workflow and evidence,
+then redeliver the job and signal. Observe one logical run, one approved sink intent, one
+converged delivery receipt, and no partial lifecycle/payload state. Add a conversation
+scenario crossing continueAsNew: the old token must not resolve a new generation and the
+new token must be published and work. Force an external acceptance/journal-commit gap and
+prove the remote deduplication key is reused, not that effects magically execute once.
+
+Capture pre-reset diffs with exact intentional diagnostics; after committing the reviewed
+reset, record that commit as the new baseline and run the ordinary unmodified gate against
+it. Do not use `HEAD^` blindly when that points across the intentional reset. Verify a
+subsequent incompatible workflow edit in a disposable test fixture still fails the differ.
+
+Update `docs/dependency-cohort.md`, `docs/architecture/packages.md`,
+`docs/architecture/shikigami-domain-inventory.md`, and `docs/workflow-versioning.md` to
+match the final source, versions, records, startup, tests and baseline. Correct stale claims
+about no aggregates, zero behavior obligations, bare queues, and permanent legacy branches.
+Review ADRs 0001, 0004, 0010, 0012, 0027, 0030 and 0037; add evidence or superseding records
+according to `docs/adr/README.md`, never silently rewrite their historical decisions.
+Record all acceptance output in this plan, then complete Outcomes & Retrospective.
 
 ## Concrete Steps
 
-All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami`.
 
-### Reproducing the Milestone 1 solver refusal
-
-The refusal cannot be reproduced by passing `--constraint` on the command line, because
-`cabal.project`'s own `constraints:` block wins and the two conflict with each other, producing
-a misleading "constraint from cabal.project requires ==0.14.0.0" message. Use a throwaway
-project file instead. Refresh the package index first, or the solver will report that
-`keiro-core-0.15.0.0` does not exist rather than that it is excluded:
+Run from the Shikigami repository root. These commands perform implementation validation;
+this plan update did not run builds or change dependencies.
 
 ```bash
+git status --short
+git rev-parse HEAD
+mori registry list
+mori registry search keiro
+mori registry show shinzui/keiro --full
+mori registry docs shinzui/keiro-runtime-patterns
+mori path mori://shinzui/keiro
+mori path mori://shinzui/kioku
+curl -fsSL -H 'Accept: application/json' https://hackage.haskell.org/package/keiro/preferred
+curl -fsSL -H 'Accept: application/json' https://hackage.haskell.org/package/keiro-dsl/preferred
+curl -fsSL -H 'Accept: application/json' https://hackage.haskell.org/package/kioku-core/preferred
+curl -fsSL https://hackage.haskell.org/package/kioku-core-0.5.2.0/kioku-core.cabal
+curl -fsSL https://hackage.haskell.org/package/kioku-migrations-0.5.2.0/kioku-migrations.cabal
+git ls-remote --tags https://github.com/shinzui/keiro.git
+git ls-remote --tags https://github.com/shinzui/kioku.git
 nix develop -c cabal update
-
-sed -E 's/^([[:space:]]*,?[[:space:]]*)(keiro|keiro-core|keiro-dsl|keiro-migrations|keiro-ops|keiro-pgmq)([[:space:]]+)==0\.14\.0\.0/\1\2\3==0.15.0.0/' \
-  cabal.project > cabal.project.probe015
-
-nix develop -c cabal build all --dry-run --project-file=cabal.project.probe015
 ```
 
-Expect the conflict quoted in Surprises & Discoveries, ending with:
-
-```text
-[__3] rejecting: kioku-core-0.5.1.0 (conflict: keiro==0.15.0.0, kioku-core => keiro^>=0.14.0.0)
-```
-
-Delete the probe file when finished; it must not be committed:
-
-```bash
-rm -f cabal.project.probe015
-```
-
-### Verifying the Milestone 3 precondition
-
-```bash
-curl -s -H 'Accept: application/json' https://hackage.haskell.org/package/kioku-core/preferred
-curl -s -H 'Accept: application/json' https://hackage.haskell.org/package/keiro/preferred
-```
-
-The second already prints `0.15.0.0` first. The first must print a version newer than
-`0.5.1.0`; then read that release's `.cabal` bounds before trusting it.
-
-To settle the Danwa pin, read the state of that repository's own plan and compare its head
-commit with the one `cabal.project` pins:
-
-```bash
-grep -n -A3 'danwa' cabal.project | grep -n 'tag:'
-sed -n '/^## Progress/,/^## Surprises/p' \
-  /Users/shinzui/Keikaku/bokuno/danwa/docs/plans/13-upgrade-danwa-to-the-released-keiro-0-15-cohort.md
-```
-
-If that plan's Progress section still says no implementation work has begun, leave the pin.
-
-### The Milestone 3 build and the expected refusal
+Repeat preferred-version checks for every consumed cohort package, including test support.
+After editing the constraints/bounds, resolve and build the tool:
 
 ```bash
 nix develop -c cabal build all --dry-run
-nix develop -c cabal build all
-nix develop -c cabal test all -j1
-just keiro-scaffold   # expected to FAIL with the edition refusal; capture the output
+nix develop -c cabal build keiro-dsl --dry-run
+nix develop -c cabal build keiro-dsl
+nix develop -c cabal run -v0 keiro-dsl -- scaffold domain/shikigami.keiro-workspace --out shikigami-core/src
 ```
 
-### The Milestone 4 apply
+The final command initially refuses the idiomatic-v1 ledger. Capture it, then apply:
 
 ```bash
-git status --porcelain    # must be empty before applying
-
 nix develop -c cabal run -v0 keiro-dsl -- scaffold domain/shikigami.keiro-workspace \
-  --out shikigami-core/src \
-  --apply-generated-haskell-edition
-
-grep naming-edition shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt
+  --out shikigami-core/src --apply-generated-haskell-edition
+rg naming-edition shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt
 cat shikigami-core/src/.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/remediation-report.txt
 cat shikigami-core/src/keiro-dsl-cabal-fragment.workspace.shikigami.txt
-```
-
-The `grep` must print `naming-edition idiomatic-v2`.
-
-### The Milestone 4 migration loop
-
-```bash
 nix develop -c cabal build shikigami-core:lib:shikigami-core
-nix develop -c cabal build shikigami-core:test:shikigami-core-test
-nix develop -c cabal build shikigami-workers
-nix develop -c cabal build shikigami-server
-nix develop -c cabal build shikigami-agent
-nix develop -c cabal build shikigami-api
-nix develop -c cabal build shikigami-migrations
-nix develop -c cabal build shikigami-client
 nix develop -c cabal build all
-```
-
-To relocate the individually-exported selector names of Step E:
-
-```bash
-python3 - <<'PY'
-import re, os
-names = set()
-for dp, _, fs in os.walk('shikigami-core/src'):
-    for f in fs:
-        if not f.endswith('.hs'):
-            continue
-        src = open(os.path.join(dp, f), encoding='utf-8', errors='replace').read()
-        for m in re.finditer(r"^\s*[{,]?\s*([a-z][A-Za-z0-9_']*)\s*::", src, re.M):
-            names.add(m.group(1))
-for dp, _, fs in os.walk('shikigami-core/src'):
-    for f in fs:
-        if not f.endswith('.hs'):
-            continue
-        p = os.path.join(dp, f)
-        src = open(p, encoding='utf-8', errors='replace').read()
-        m = re.search(r"\nmodule\s+[\w.]+\s*\((.*?)\)\s*where", src, re.S)
-        if not m:
-            continue
-        body = re.sub(r"\([^()]*\)", "", m.group(1))
-        hits = [t for t in re.split(r"[,\s]+", body) if t in names]
-        if hits:
-            print(p, hits)
-PY
-```
-
-### The gate and the full suite
-
-```bash
-just keiro-gate
 nix develop -c cabal test all -j1
 ```
 
-Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up an ephemeral
-PostgreSQL and contend, which makes `shikigami-core-test` fail intermittently for reasons that
-have nothing to do with this plan.
+Expected edition is `idiomatic-v2`. During Milestones 4–5 regenerate with the same ordinary
+scaffold command without the apply flag, reconcile new fragments and hand-owned holes, and
+run these checks:
 
-### Committing
+```bash
+nix develop -c just keiro-check
+nix develop -c just keiro-inspect
+nix develop -c cabal run -v0 keiro-dsl -- behavior-obligations domain/shikigami.keiro-workspace --format=json
+nix develop -c cabal test keiro-shikigami-conformance
+nix develop -c cabal test shikigami-core-domain shikigami-core-diagrams shikigami-core-postgres -j1
+nix develop -c cabal test all -j1
+```
 
-Every commit made under this plan carries both trailers:
+For an intentional baseline reset, replace PRE_RESET_REF below with the recorded Git hash;
+it is an input to review, not a command expected to exit zero. Read
+`build/keiro-diff.json` and `build/keiro-replay-impact.json` and record each finding.
+After committing all reviewed generated and hand-owned changes, replace NEW_BASELINE_REF
+with that commit and require the ordinary gate to pass:
+
+```bash
+nix develop -c just keiro-diff PRE_RESET_REF
+nix develop -c just keiro-gate NEW_BASELINE_REF
+nix develop -c just keiro-scaffold
+git diff --exit-code -- shikigami-core/src
+git diff --check
+```
+
+Every implementation commit uses Conventional Commits, stays on the current branch, and
+includes both trailers:
 
 ```text
-chore(deps): take the keiro 0.15.0.0 lockstep release
-
-Move the six Keiro constraints to 0.15.0.0 and widen the two local bounds
-that named 0.14. The runtime half of the release is a republish; the
-generated-Haskell edition is adopted separately.
+feat(keiro): establish the generated run-job queue baseline
 
 ExecPlan: docs/plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md
 Intention: intention_01m1bntpmbeqet1597zr91ej43
 ```
 
-Commit directly to the current branch; do not create a feature branch.
-
-
 ## Validation and Acceptance
 
-Acceptance is phrased as things a person can run and observe.
 
-**The toolchain is current.** `nix develop -c cabal build keiro-dsl --dry-run` names
-`keiro-dsl-0.15.0.0`, and every generated module's first-line banner reads
-`-- @generated by keiro-dsl 0.15.0.0 (language keiro-dsl 5) from ...; do not edit.` Confirm with:
+The solver selects the verified latest released coherent Keiro set and compatible Kioku,
+including test support only in test components. The complete build and all serial tests pass;
+record actual suites and counts rather than requiring the old count after adding tests.
 
-```bash
-head -1 shikigami-core/src/Shikigami/RunEvidence/Generated/Codec.hs
-```
+The edition-only commit preserves all literal wire observations, workflow expectations and
+semantic fingerprints. The final reset commits have reviewed before/after fixtures, exact
+diff evidence and an explicit new baseline. A second scaffold changes nothing; check and
+inspect remain strict Language 5 gates; generated behavior obligations execute and pass.
 
-**The edition is adopted, and adopting it was idempotent.** The ledger line reads
-`naming-edition idiomatic-v2`, and re-running the ordinary scaffold command — with no apply flag
-— succeeds and changes nothing:
+Run jobs use one generated queue codec from producer through consumer. Nominal bindings
+round-trip and wrong identifier domains fail. The three workflow families resume after
+restart; approval/rotation tokens obey allocation and generation boundaries; a bounded drain
+stops on zero durable progress and reports why. Old pre-release branches are gone without
+losing journal idempotence or the tests for future versioning.
 
-```bash
-nix develop -c cabal run -v0 keiro-dsl -- scaffold domain/shikigami.keiro-workspace \
-  --out shikigami-core/src
-git diff --exit-code -- shikigami-core/src
-```
+RunEvidence lifecycle and payload writes commit or roll back together, catalog fencing
+blocks writes/reads as applicable, startup rejects missing migrations and invalid catalog
+facts, and operators cannot request a fictional rich-evidence rebuild. All supported
+operational actions use the same owners as production. Permanent outbox rejection is
+terminal and transient failure remains retryable.
 
-An empty diff and a zero exit are the whole test. This is the same check `just keiro-scaffold`
-performs, and it is what makes a committed generated file trustworthy: it is what the current
-specification produces, not what someone's editor left behind.
-
-**The declared identities did not move.** `cabal test keiro-shikigami-conformance` passes with
-its 30 checks against the unmodified expectation table in
-`shikigami-core/src/keiro-dsl-conformance.workspace.shikigami/src/KeiroConformance/Expectations.hs`.
-That table is hand-owned and lists every workflow's name, id field, id constructor, await
-labels, patch ids, and full step body as literal strings. If any durable identity had shifted,
-this suite would fail and the table would have needed editing. It must not be edited.
-
-**No persisted byte changed.** `shikigami-core-test` passes, including
-`Shikigami.WireCompatSpec`, which decodes literal pre-upgrade payloads captured before earlier
-upgrades — queue `RunJob` payloads, journal step values, `SinkIntent` and `SinkResult` outbox
-JSON. Those fixtures are literals on purpose: a fixture built by calling the current encoder
-would pass no matter what the encoder did.
-
-**The specification still checks clean.** `just keiro-check` exits zero with
-`--deny-warnings` and `--fail-on-opaque`. A new keiro-dsl warning appearing on a toolchain
-upgrade is a finding about this specification and must be read, not suppressed.
-
-**Nothing regressed.** `nix develop -c cabal test all -j1` reports nine Shikigami suites plus
-the two sibling Kikan-En suites, with check counts matching the last recorded run. Record the
-new transcript in `docs/dependency-cohort.md` under "Resolved evidence."
-
-**The service still runs.** Bring up the dev database and apply migrations, which exercises the
-composed `keiro-migrations` component at its new version:
-
-```bash
-just create-database
-just migrate-status
-```
-
-`just migrate-status` on an already-migrated database must report nothing to apply. Keiro
-0.15.0.0 adds no migration, so a fresh `just migrate` and a repeat run are both expected to be
-no-ops beyond what 0.14.0.0 applied.
-
+Database tests clone isolated fully migrated databases through the service's test-support
+boundary; no test uses a developer database. Domain/diagram checks are independent of
+PostgreSQL. The scenario in Milestone 7 proves the assembled service behavior and replay,
+not just disconnected codecs. The final applicability census has no unexplained exclusions,
+unused generated claims or unresolved applicable blockers.
 
 ## Idempotence and Recovery
 
-**Milestones 1, 2, 3 and 5** are ordinary edits to text files and are safe to repeat, revise, or
-revert with git.
 
-**Milestone 4's apply is the one step with a special recovery path**, and it is well specified
-upstream. The apply copies every ledger-recorded generated file, the ledger, and the Cabal
-fragment into
-`shikigami-core/src/.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/`
-*before* overwriting anything. Repeating a successful apply is an ordinary idempotent v2
-scaffold. A pre-existing backup whose bytes differ from the current source is a hard refusal,
-not a silent overwrite.
+Keep release/edition migration separate from baseline resets so source recovery restores a
+coherent state. Before edition apply retain a complete Git baseline, including the generated
+conformance package and hand-owned holes. The edition backup covers ledger-recorded generated
+files, ledger and Cabal fragment; it does not cover create-once files or the generated
+conformance package. Restore those separately from the same Git baseline, together with
+component extensions and consumers. Never pair a v1 ledger with v2 modules.
 
-To roll back, restore the complete backed-up set to `shikigami-core/src`, including the Cabal
-fragment and the ledger — or, equivalently and more simply here, `git checkout` the commit
-before the adoption. Restoring is all-or-nothing: a v1 ledger must never be paired with v2
-generated modules, or the next scaffold will reason from a false history. The restored ledger
-records `naming-edition idiomatic-v1` again and the 0.15.0.0 tool will refuse ordinary
-regeneration until a later explicit adoption, which is the correct behavior. The
-`remediation-report.txt` does not need to be restored or removed; it is regenerated on every
-apply and never blocks a rollback-edit-retry cycle.
+An interrupted edition apply may refuse differing immutable backup bytes. Inspect its
+report, restore the whole matching set and retry; do not delete or edit the ledger/backup to
+silence the conflict. The remediation report is mutable reporting, not immutable backup
+evidence. Once v2 is recorded, ordinary scaffolding is idempotent and does not validate later
+hand edits against the original backup.
 
-If an apply is interrupted, do not rerun blind. Inspect the backup directory first. The tool
-either continues from byte-identical backup evidence or refuses with a source/backup conflict;
-on a refusal, restore the complete set and retry. That conflict check runs only while the ledger
-still records the older edition — once it says `idiomatic-v2`, an ordinary rerun does not
-mistake later application edits for migration conflicts.
-
-Because Milestone 4 cannot leave the tree compiling part-way through, expect to work with an
-uncommittable tree for its duration. If the work must be paused, `git stash` is not a good fit
-for a change of this size; instead commit to a scratch branch, note in Progress exactly which
-component was mid-migration, and return to it. Note that this repository's pre-commit hook
-stashes unstaged work while it runs, so partially staged states can look briefly alarming; that
-is the hook, not lost work.
-
-**One risk has no undo and must simply not be taken:** hand-editing a `-- @generated` file. If
-one is edited, the next scaffold refuses to overwrite it (the banner check) or silently reverts
-the edit, and either way the repository has lost the property that its generated layer is
-derived from its specification. If a generated file looks wrong, the specification under
-`domain/` is where to look.
-
+If work stops during a compiler migration, leave a precise Progress entry naming completed
+components and the first failing target. Preserve the working tree; do not create a scratch
+branch or reset unrelated changes. No database destruction is necessary to implement this
+plan: acceptance uses newly provisioned disposable fixtures. If a real deployment or durable
+population appears, the pre-v1 exception ends and the affected reset needs a real migration
+and replay strategy. Source rollback after a deployed baseline change is not data rollback.
 
 ## Interfaces and Dependencies
 
-**Dependency selections that change.** `cabal.project`'s `constraints:` block moves `keiro`,
-`keiro-core`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, and `keiro-pgmq` from `==0.14.0.0`
-to `==0.15.0.0`, and moves the three `kioku-*` rows to the Kioku release that admits it.
-`shikigami-migrations/shikigami-migrations.cabal` moves `keiro-migrations` to `^>=0.15.0.0` and
-its `kioku-*` bounds to match. `shikigami-server/shikigami-server.cabal` moves `keiro` and
-`keiro-ops` to `==0.15.0.0`. Nothing else in the cohort moves: `keiki` and `keiki-codec-json`
-stay at 0.9.1.0, `kiroku-store` at 0.8.0.0, `kiroku-store-migrations` at 0.4.0.0,
-`shibuya-core` at 0.9.0.0, and the `pgmq-*`, `pg-migrate`, `settei`, `shikumi*`, and `baikai*`
-selections are untouched. The five temporary `http-client-tls` `allow-newer` exceptions and the
-unrelated `haxl:time` exception stay exactly as they are; this plan adds none and removes none.
 
-**Dependency selections that may change, and the condition.** The Danwa
-`source-repository-package` stanza in `cabal.project` pins `danwa-core`, `danwa-api`, and
-`danwa-client` at commit `301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9`. Those packages declare
-`keiro` and `keiro-core` unbounded, so the pin resolves against 0.15.0.0 without change and is
-not a blocker. It moves only when `mori://shinzui/danwa` ExecPlan 13 completes that
-repository's own move onto this cohort; until then the stale pin is recorded as a retirement
-condition rather than fixed.
+Keep `Shikigami.Generated.Conformance.runServiceConformanceChecks :: IO [(String, Bool)]`
+and `serviceConformanceFacts :: [(String, String)]` exposed through core, and keep
+`Shikigami.RunEvidence.BehaviorHoles.behaviorWitnesses :: [BehaviorWitness]` as hand-owned
+executed evidence. New generated queue/catalog/query modules enter core through the emitted
+Cabal fragment and are regenerated from the workspace. New typed domain wrappers belong in
+their owning vertical or API boundary, not a catch-all utilities module.
 
-**Language extensions that change.** All seven packages gain `OverloadedRecordDot` in their
-`common common` stanza. `shikigami-core` additionally gains `NoFieldSelectors`.
-`DuplicateRecordFields` and `OverloadedStrings` are already present everywhere. No module gains
-a `{-# LANGUAGE FieldSelectors #-}` pragma; adding one anywhere is a defect against this plan.
+Use the released public Workflow, Resume, Projection, Catalog, Ops and Test.Postgres APIs from
+`mori://shinzui/keiro/packages/keiro`, `mori://shinzui/keiro/packages/keiro-core`,
+`mori://shinzui/keiro/packages/keiro-dsl`, `mori://shinzui/keiro/packages/keiro-ops`,
+`mori://shinzui/keiro/packages/keiro-pgmq`,
+`mori://shinzui/keiro/packages/keiro-migrations`, and
+`mori://shinzui/keiro/packages/keiro-test-support`. Obtain checked streams/catalogs and
+prepared migrations through public validation/preflight functions, not hidden constructors.
+Runtime defaults are extended rather than exhaustively reconstructed. Keep framework store,
+workflow schema and application schema ownership distinct.
 
-**Interfaces that must exist unchanged at the end.** These are the load-bearing surfaces this
-plan must not disturb, stated so that a reader can check them directly:
+Release verification used Hackage's preferred-version endpoints and the released Cabal
+metadata, including [Kioku Core 0.5.2.0](https://hackage.haskell.org/package/kioku-core-0.5.2.0)
+and [Kioku Migrations 0.5.2.0](https://hackage.haskell.org/package/kioku-migrations-0.5.2.0).
+The coherent Keiro target includes [Keiro 0.15.0.0](https://hackage.haskell.org/package/keiro-0.15.0.0)
+and [keiro-dsl 0.15.0.0](https://hackage.haskell.org/package/keiro-dsl-0.15.0.0).
+No unreleased upstream capability is an implicit prerequisite; identify a missing capability
+explicitly with its canonical upstream issue and release exit condition if the implementation
+proof finds one.
 
-- `Shikigami.Generated.Conformance` continues to export `runServiceConformanceChecks :: IO [(String, Bool)]`
-  and `serviceConformanceFacts :: [(String, String)]`, and remains in `exposed-modules` of
-  `shikigami-core`'s library so the generated `keiro-shikigami-conformance` test package, which
-  depends on `shikigami-core`, can import it.
-- `Shikigami.RunEvidence.Conformance` continues to export
-  `runEvidenceBehaviorConformanceReport :: BehaviorConformanceReport` and
-  `runEvidenceBehaviorConformancePassed :: Bool`.
-- `Shikigami.RunEvidence.BehaviorHoles` continues to export
-  `behaviorWitnesses :: [BehaviorWitness]`.
-- The three `*/Generated/WorkflowRuntime.hs` modules continue to export `workflowName`,
-  `declaredPatches`, `allocateDeclaredAwait`, and their named await values, which
-  `Shikigami.Agent.Approval.Workflow`, `Shikigami.Agent.Conversation`,
-  `Shikigami.Agent.Workflow.Name`, and `Shikigami.Workflow.Versioning` consume qualified.
-- `Shikigami.RunEvidence.Generated.Domain`'s command and event constructors, and the `*Data`
-  field labels `runEvidenceId` and `runId`, which `Shikigami.Attestation.Evidence` builds
-  positionally today and which do not rename.
-
-**Upstream artifacts this plan depends on.** The Keiro release `keiro-dsl-0.15.0.0` and its five
-sibling tags on `mori://shinzui/keiro`; the adoption guide
-`docs/guides/adopting-keiro-dsl-idiomatic-v2.md` and the upgrade edge
-`blueprints/keiro-upgrade/migrations/0-14-to-0-15.md` in that same checkout; and a Kioku release
-on `mori://shinzui/kioku` admitting `keiro ^>=0.15.0.0`, which does not exist at the time this
-plan was written and is the plan's only external blocker.
+Revision note (2026-09-07): Replaced the obsolete Kioku wait and record-only scope with
+full applicable released Keiro adoption before v1, grounded in the latest runtime-patterns
+and current application sources. Added test-support, current workflow/identity baseline,
+generated queue/catalog integration, runtime qualification, and explicit honest exclusions.
+Corrected edition-backup coverage, clean-scaffold timing, scratch-branch advice, and the
+assumption that all final wire expectations must remain unchanged.
