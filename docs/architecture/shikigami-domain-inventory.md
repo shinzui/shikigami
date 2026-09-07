@@ -1,435 +1,135 @@
 # Shikigami domain inventory
 
-The evidence behind `domain/shikigami.keiro-workspace`. Every durable identity
-Shikigami writes is listed here with the file and line that defines it, together
-with an explicit statement of whether the checked specification describes it and
-why. Produced by Milestone 1 of
-`docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`
-on 2026-08-19 against `keiro-dsl 0.13.0.0`, language 5.
+This census was refreshed on 2026-09-07 for [plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md), starting at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
+It describes executed ownership and explicitly identifies pending adoption. A declaration
+counts only when its generated contract is used by production code (ADR 0001).
+The workspace currently contains four Language 5 members: agent-run, approval,
+conversation, and RunEvidence. Later plan milestones add queue and catalog contracts.
 
-The rule this document exists to enforce is one sentence: **do not certify a
-schema that differs from the codec actually executed.** A specification that
-describes a contract the runtime does not run is worse than no specification,
-because the evolution gate then attests to something false. So a row below is
-either declared *and* true, or undeclared *and* explained.
+## Workflows and identities
 
+Paths in this section are relative to `shikigami-core/src/`.
 
-## What the node census actually found
-
-Keiro-dsl's node taxonomy is aggregates and their events, snapshots, read models
-and projections, process managers and timers, routers, integration contracts
-with inbox/outbox nodes and publishers, PGMQ work queues and dispatch, and
-durable workflows with operations. Shikigami occupies a much smaller part of it
-than the plan that commissioned this inventory assumed.
-
-**Shikigami has no event-sourced aggregate.** There is no Keiro command runner
-over a Shikigami-owned event stream anywhere in the repository. The one
-`runCommandWithSqlEvents` call (`shikigami-core/src/Shikigami/Agent/Conversation.hs:373`)
-runs against *kioku's* `sessionEventStream` with kioku's `sessionStream`, and the
-inline projections it applies (`Conversation.hs:393`) are kioku's
-`sessionInlineProjection` and `l1TimerScheduleProjection`. Those are another
-service's aggregate and another service's read models.
-
-`Shikigami.Flow.Lifecycle.AtRiskCustomer` looks like an aggregate and is not one.
-It is a Keiki `SymTransducer` whose output type is `()`, whose every edge is
-output-free, and whose own module comment says so: "this transducer is not an
-event source. It is a rendered specification of the at-risk-customer lifecycle:
-it produces the Mermaid diagram and nothing else. The durable state for that
-lifecycle is Keiro's workflow journal." Its sibling
-`Shikigami.Flow.AtRiskCustomer` is a behavior body that runs *inside* the
-agent-run workflow and journals the steps `classify` and `await-ack`
-(`Flow/AtRiskCustomer.hs:45,50`).
-
-It follows that Shikigami also has **no read model, no projection, no router,
-and no process manager** of its own. It has two durable workflows, one PGMQ
-queue, a Kafka inbox, and a Keiro outbox.
-
-
-## Durable workflows — declared
-
-Both are real Keiro durable workflows with journaled steps, awakeables, and (for
-agent-run) child workflows. Both are declared in the workspace.
-
-| Identity | Value | Defined at | Declared |
-|---|---|---|---|
-| Workflow name | `shikigami.agent-run` | `Shikigami/Agent/Workflow/Name.hs:9` | yes |
-| Workflow id derivation | the job's `idempotencyKey`, verbatim | `Agent/Workflow.hs:206` | yes, `id from input.idempotencyKey via idText` |
-| Workflow name | `shikigami.danwa-conversation` | `Agent/Conversation.hs:96` | yes |
-| Workflow id derivation | `"danwa-conversation:" <> conversationId` | `Agent/Conversation.hs:98-100` | yes, `id from input via conversationWorkflowId` |
-
-### Agent-run journal labels
-
-The static labels below are valid DSL wire words and declared in
-`domain/shikigami-agent-run.keiro`.
-
-| Label | Kind | Defined at | Path |
-|---|---|---|---|
-| `ingest-job` | step | `Agent/Workflow.hs:187` | always |
-| `lookup-agent` | step | `Agent/Workflow.hs:188` | always |
-| `resolve-profile` | step | `runResolvedAgent` | fresh runs under `shikigami-resolve-profile-v1` |
-| `resolve-capability-overlays` | step | `runResolvedAgent` | fresh runs under `shikigami-capability-overlays-v1` |
-| `open-session` | step | `Agent/Workflow.hs:228` | agent resolved |
-| `recall` | step | `Agent/Workflow.hs:229` | agent resolved |
-| `run-behavior` | step | `Agent/Workflow.hs:236` | non-`Flow` behaviors only |
-| `run-behavior-v2` | step | `runSessionedAgent` | fresh runs under `shikigami-behavior-retry-v1` |
-| `classify` | step | `Flow/AtRiskCustomer.hs:45` | `Flow` behavior only |
-| `await-ack` | await | `Flow/AtRiskCustomer.hs:50` | `Flow` behavior, high risk only |
-| `dispatch-sinks` | step | `Agent/Workflow.hs:491` | behavior succeeded |
-| `fail-session` | step | `Agent/Workflow.hs:239` | behavior failed |
-| `record` | step | `Agent/Workflow.hs:249` | behavior succeeded |
-| `complete` | step | `Agent/Workflow.hs:250` | behavior succeeded |
-
-The declared body lists them in reading order. That is honest because the
-DSL body is a label inventory, not a control-flow program: keiro's own reference
-says "the body is ordered, but replay matches journal records by label"
-(`mori://shinzui/keiro`, `docs/user/typed-spec-toolchain.md`). `run-behavior`
-and the `classify`/`await-ack` pair are alternatives, and `fail-session` is
-mutually exclusive with `record`/`complete`.
-
-`await-ack` is declared as returning `ApprovalDecision`, not `Ack`. The awakeable
-really carries `ApprovalDecision` (`Agent/Approval.hs:109`); `Ack` is the value
-`Shikigami.Flow.Acknowledgement.ackFromDecision` produces *after* the await
-returns, and is never journaled.
-
-### Agent-run labels that cannot be declared
-
-A workflow label is parsed by keiro-dsl's `wireWord` production —
-`[A-Za-z0-9][A-Za-z0-9_-]*` (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs:282-286`).
-It admits neither a colon nor a value computed at run time. These labels are
-therefore outside the grammar, and renaming them would not help, because their
-suffixes are runtime values:
-
-| Label family | Kind | Defined at | Owner |
-|---|---|---|---|
-| `approval:<SinkKind>:<ordinal>` | await | `Agent/Workflow.hs:299-300` | `docs/plans/14-approval-and-human-in-the-loop-end-to-end.md` |
-| `<any await>:notify` | step | `Agent/Approval.hs:156-157` | same |
-| `emit-signal:<ordinal>` | step | `Flow/Capability.hs:136` | `docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md` |
-
-### Conversation journal labels
-
-This workflow has two label sets, chosen by `patch
-shikigami-conversation-rotation-v1` once per interpreted run. Which one an
-instance is on is a durable property of that instance, so both are inventoried.
-
-The **rotating** shape is what every fresh conversation runs. One journal
-generation holds exactly one turn, so no label is ever written twice in a
-generation and none of them needs a computed suffix. All of it is declared in
-`domain/shikigami-conversation.keiro` and gated by `just keiro-gate`.
-
-| Label | Kind | Defined in | Declared |
-|---|---|---|---|
-| `ingest-start` | step | `rotatingConversation` | yes |
-| `lookup-agent` | step | `resolveDeclStep` | yes |
-| `resolve-session` | step | `processRotatingTurn` | yes |
-| `record-user` | step | `processRotatingTurn` | yes |
-| `run-behavior-v2` | step | `processRotatingTurn` | yes |
-| `record-assistant-and-reply` | step | `processRotatingTurn` | yes |
-| `turn-result` | step | `processRotatingTurn` | yes |
-| `next-message` | await | `awaitConversationWake` | yes |
-| `danwa-reply:<messageId>` | sink-intent id | `replySinkStepName` | no — not a journal step |
-
-The **legacy** shape is the `False` branch, kept so that an instance parked
-before rotation shipped replays the shape its journal was written under. It ran
-every turn of a conversation in one immortal generation, which is exactly why
-each per-turn label needed a `:<messageId>` or `:<ordinal>` suffix — and why
-none of them could be declared.
-
-| Label | Kind | Defined in | Declared |
-|---|---|---|---|
-| `record-user:<messageId>` | step | `processTurn` | no — colon |
-| `run-behavior:<messageId>` | step | `processTurn` (pre behavior-retry-v1) | no — colon |
-| `run-behavior-v2:<messageId>` | step | `processTurn` (post behavior-retry-v1) | no — colon |
-| `record-assistant-and-reply:<messageId>` | step | `assistantReplyStepName` | no — colon |
-| `turn-result:<messageId>` | step | `turnResultStepName` | no — colon |
-| `next-message:<ordinal>` | await | `nextMessageStepName` | no — colon |
-
-Making this journal declarable was
-`docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md`,
-which did it by removing the reason for the suffixes rather than by finding a
-declarable spelling of them. Retiring the legacy set — deleting the guard, the
-`False` branch, and the patch block together — follows
-`docs/adr/0004-one-options-value-and-a-checked-patch-set.md`.
-
-### Child workflows
-
-`Shikigami.Agent.Delegate.delegate` spawns a child of `shikigami.agent-run`
-itself. The child id is a UUIDv5 over
-`["shikigami", "delegate", parentWorkflowId, childAgent, stableKey]`.
-The generic supervisor derives stable keys from the `delegates` list captured in
-the journaled agent declaration; Flow callers supply a stable call-site key.
-Declared as `child delegate id input via
-delegatedWorkflowId -> AgentRunResult`; the `via` name records the hand-owned
-derivation, which takes the parent workflow id rather than the workflow input.
-`docs/plans/35-delegation-as-a-first-class-declared-capability.md` made that a
-governed first-class capability.
-
-### Operations
-
-Two `run` operations are declared, one per workflow, naming the hand-owned
-entry points `runAgentRunWorkflow` (`Agent/Workflow.hs:197`) and
-`runConversationWorkflow` (`Agent/Conversation.hs:196-210`).
-
-No `signal` operation is declared. `Shikigami.Agent.Approval.resolveApproval`
-and `Shikigami.Agent.Workflow.Input.deliverInput` exist and are exported but
-have **no caller anywhere in this repository**, and `resolveApproval` is keyed by
-`AwakeableId` rather than by workflow key, which is not what a DSL `signal`
-operation declares. The awaits an external signal would target
-(`approval:<kind>:<ordinal>`, `next-message:<n>`) are not declarable labels
-anyway. `docs/plans/14-approval-and-human-in-the-loop-end-to-end.md` adds the
-entry point; the signal operation lands with it.
-
-
-## The run-job queue — not declared
-
-| Identity | Value | Defined at |
+| Surface | Declaration and execution owner | Observable proof / remaining work |
 |---|---|---|
-| Queue name | `shikigami_run_jobs` | `Trigger/Enqueue.hs` (`runQueueName`) |
-| Message body | `MessageBody (toJSON job)` — a bare `RunJob` | `Trigger/Enqueue.hs` (`enqueueRunJobTx`, `enqueueRunJob`) |
-| Consumer | `Aeson.fromJSON` straight to `RunJob` | `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` (`runJob`) |
+| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Plan 65 retires unused historical patch branches after verifying the pre-v1 exception. |
+| `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
+| `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. Historical nonrotating/per-message-label branches remain pending retirement. |
+| Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegation/` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
+| Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
+| Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
-`RunJob` (`Agent/RunJob.hs`) has eleven fields: `agentName :: Text`,
-`triggerKind :: TriggerKind` (a four-constructor sum saying where the job came
-from, for audit and tracing), `routeKind :: RunRouteKind` (a three-constructor
-sum saying which workflow the producer meant), `occurredAt :: UTCTime`,
-`triggerPayload :: Data.Aeson.Value`, `idempotencyKey :: Text`, and three
-optionals — `parentSessionId :: Maybe Text`, `parentRunWorkflowId :: Maybe Text`,
-`delegationDepth :: Maybe Int`, plus `lineage :: [Text]` and
-`delegationBudgetId :: Maybe DelegationBudgetId`.
+The worker registry in `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs`
+composes the agent-run registry (including approval children) with conversations.
+Its old comment saying two families is stale. Plan 65 must prove all three registrations,
+bounded termination on zero durable advances, restart/resume, and rotation token invalidation.
+Generated workflow facts inventory static declared steps; `docs/workflow-versioning.md`
+still inventories historical computed labels until their reviewed removal.
 
-`routeKind` is additive and hand-encoded per
-[ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md):
-its compatibility default `InferredLegacyRoute` emits no key at all, so a job
-enqueued or journaled before the field existed is byte-identical and still
-decodes. See
-[ADR 0014](../adr/0014-a-run-job-declares-its-route-rather-than-being-guessed.md).
-The delegation fields follow the same additive rule: absent keys decode as
-`lineage = []` and `delegationBudgetId = Nothing`, and default values remain
-omitted when encoding.
-The keiro specification still inventories only the three fields it refers to
-(`agentName`, `idempotencyKey`, `occurredAt`) in
-`domain/shikigami-agent-run.keiro`, so adding the field needed no specification
-edit.
+`Shikigami/Flow/Lifecycle/AtRiskCustomer.hs` is a diagram-only Keiki transducer
+with no emitted events. Its durable execution state belongs to the workflow journal.
+It does not become an aggregate merely because RunEvidence is now an aggregate.
 
-Describing this as a Language 5 `workqueue` is *expressible*: the colon form
-`field -> "wire_key" : TypeExpr` accepts `Json`, `Optional Text`, `Optional Int`,
-and `Time`, and `TriggerKind` would become a `mapped structural` enum. It is not
-*honest*, for three reasons that compound:
+## Evidence lifecycle and queries
 
-1. **The envelope.** A scaffolded queue always carries Keiro's schema-version-1
-   `{v,t,data}` envelope: the generated codec is `keiroJobCodec runJobsPayloadCodec`,
-   and its own generated comment says "do not adopt this codec on a non-empty
-   bare-payload queue without draining it". Shikigami sends a bare payload.
-2. **The type.** The generated `Queue` module defines its *own* `RunJob` record
-   with generated `encodeRunJob`/`parseRunJob`. Adopting it replaces
-   `Shikigami.Agent.RunJob.RunJob` on both the producer and the consumer.
-3. **The existing test.** `shikigami-core/test/Shikigami/WireCompatSpec.hs:76-81`
-   asserts, as a live case, that "the payload is a bare run job, not a versioned
-   envelope". That test was written deliberately, its fixture is a captured
-   literal, and `docs/dependency-cohort.md` records it as permanent.
+`domain/shikigami-run-evidence.keiro` owns the RunEvidence aggregate, generated
+RunEvidenceId, commands, events, transducer, codecs and behavior obligations.
+`Shikigami.RunEvidence.BehaviorHoles` supplies executable state/command witnesses.
+`shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs` executes
+`runCommandWithSqlEvents` and persists `shikigami.run_evidence` and
+`shikigami.run_evidence_calls` in the same transaction callback. These are real
+application-owned query targets, disproving the former no-aggregate/no-read-model census.
+`RunEvidenceSpec` covers the lifecycle and persistence boundary.
 
-So the queue keeps its own payload codec and stays out of the scaffolded
-surface. Moving it is a wire change with its own commit, its own decision, and
-its own fixture — `docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md`
-and `docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md` are
-the plans that would do it.
+Plan 65 assigns the generated catalog and guarded query/write integration to the
+RunEvidence vertical. Both SQL tables belong to one dependency group. Its reset policy
+must preserve and reconcile data and its delivery capability must be live-only:
+lifecycle events do not contain Baikai's rich encode-only evidence. No destructive
+replay, stream repair, or fabricated evidence decoder can recover those payloads.
+Acceptance must force SQL failure and catalog fencing and observe atomic rollback.
+`shikigami-server/src/Shikigami/Server/Command/Runs.hs` owns operator evidence queries;
+`Server/Command/Ops.hs` must expose honest lifecycle audit/catalog hooks using the same
+validated catalog. Current raw SQL queries and empty hooks remain pending adoption.
+No external SQL reader has been identified in the repository.
 
+Kioku owns shared session streams, memory projections and session timer projections.
+Conversation session commands use Kioku's stream and inline projections. The service
+migration boundary reconciles Kioku read models through its public API. Shikigami must
+not redeclare that upstream aggregate or those targets as its own.
 
-## The Kafka inbox — not declared
+## Run-job queue
 
-Two consumers decode Kafka records through Keiro's idempotent inbox
-(`shikigami-workers/src/Shikigami/Trigger/Consumer.hs:158,198`), both with
-`runInboxTransaction Nothing PreferIntegrationMessageId event (Just kref)
-handler`. The `activity.v1` consumer matches declared stream agents against an
-`ActivityEnvelope`; the integration-event consumer matches an agent's declared
-`eventType` against the envelope's.
+`shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the current RunJob domain value
+and bare JSON codec. `Trigger/Enqueue.hs` is the producer boundary for
+`shikigami_run_jobs`; `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` decodes
+and dispatches it. Producers include CLI, schedule, Kafka inbox, delegation and conversation
+routing. The complete payload includes routing, trigger data, occurrence time, idempotency,
+parentage, depth, lineage and delegation budget, not just the three workflow input facts.
+`WireCompatSpec` currently proves the bare payload and compatibility defaults.
 
-A keiro-dsl `intake` requires a declared `contract` with named events and an
-`accept <Event>` clause, and generates inbox wiring with an `inboxPersistence`
-value and a seven-outcome disposition table. Shikigami's handlers are agent
-*matchers* over an open payload, not typed event acceptors, and they decode with
-`decodeJsonIntegrationEvent` to `ActivityEnvelope` / `Data.Aeson.Value`. Adopting
-a generated intake would rewrite the consumers, which is a behavior change.
-`docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md`
-and `docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md`
-own that boundary.
+Language 5 supports this service-owned queue. Plan 65 will add
+`domain/shikigami-run-jobs.keiro`, use generated Queue/QueueCodec/QueuePolicy artifacts
+at both ends, and replace the bare fixture with a complete literal `{v,t,data}` envelope.
+The existing wire shape is preserved during edition migration, then intentionally reset
+in a separate reviewed change. `InferredLegacyRoute` and bare fallback decoding have no
+permanent exemption; every producer must choose its route explicitly before removal.
+Acceptance is an actual generated-envelope enqueue/dequeue/run, not a codec-only test.
 
-The Danwa contract Shikigami consumes is `danwa.message-addressed-to-agent`
-(`Integration/Danwa.hs:60`), whose body is a bare `AddressedMessage` object with
-**no discriminator field**. A keiro-dsl `contract` requires a `discriminator` and
-writes it into the encoded body, so a generated codec for it would not reproduce
-the bytes Danwa publishes.
+## External intake and sink delivery
 
-
-## The sink outbox — not declared
-
-| Identity | Value | Defined at |
+| Boundary | Owner | Why it remains hand-owned; proof |
 |---|---|---|
-| Integration event type | `shikigami.sink.dispatch-requested` | `Agent/Workflow.hs:613` |
-| Destination | `shikigami.sink.v1` | `Agent/Workflow.hs:611` |
-| Source | `shinzui/shikigami` | `Agent/Workflow.hs:610` |
-| Schema version | `1` | `Agent/Workflow.hs:614` |
-| Outbox id | UUIDv5 over `"shikigami:sink:" <> messageId` | `Agent/Workflow.hs:636-641` |
-| Agent-run message id | `<workflowId>:sink:<ordinal>` | `Agent/Workflow.hs:628-630` |
-| Flow message id | `<workflowId>:<stepName>` | `Flow/SinkOutbox.hs:125` |
+| Open Kafka agent matching | `shikigami-workers/src/Shikigami/Trigger/Consumer.hs` | Matching configured agents over ActivityEnvelope/open integration payloads is not a finite declared typed-event intake. Preserve inbox transaction dispositions and Kafka offset advancement only after durable disposition; consumer tests exercise failure/redelivery. |
+| Danwa addressed message | `shikigami-core/src/Shikigami/Integration/Danwa.hs` | Upstream AddressedMessage is a bare object without the generated contract discriminator. Preserve upstream bytes and explicit decoding tests. |
+| HTTP sink outbox | `shikigami-core/src/Shikigami/Sink/Intent.hs`, `Shikigami/Flow/SinkOutbox.hs`, `Shikigami/Agent/Workflow.hs`; worker `Shikigami/Flow/SinkOutbox/Publisher.hs` | HTTP dispatch is not a DSL Kafka publisher. One hand-owned SinkIntent replaced the former duplicate. Preserve deterministic intent IDs, delivery receipts and remote deduplication keys. SinkIntentSpec, SinkDeliverySpec and worker tests prove transient retry, permanent rejection and redelivery. |
+| Sink grants | `shikigami-core/src/Shikigami/Sink/Permission.hs`, `Sink/GrantStore.hs` | Authorization policy tables are not an event-sourced aggregate or an unused generated enum. Permission/grant tests own the boundary. |
 
-The rows are `Keiro.Outbox` rows carrying `IntegrationEvent`s, delivered by
-`shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs`, which calls
-`publishSinkIntent` — an **HTTP sink dispatcher**, not a Kafka publish. A
-keiro-dsl `emit` maps aggregate events onto contract events on a Kafka topic and
-requires both an aggregate and a contract, and a `publisher` models publishing
-those to Kafka. Neither is what this outbox does, so declaring them would certify
-a publication that does not happen.
+The outbox publisher already uses Keiro's claim-batch callback and exports rejected counts.
+Plan 65 audits actual permanent/transient outcomes and terminal claim races before replacing
+any already-correct behavior. A remote acceptance followed by journal failure must reuse the
+same remote key; the journal alone cannot promise exactly-once HTTP delivery.
 
-### `SinkIntent` and its duplicate
+## Timers, startup, operations and tests
 
-`SinkIntent` is declared twice — `Agent/Workflow.hs:125-138` and
-`Flow/SinkOutbox.hs:49-58` — with identical fields and identical
-`omitNothingFields` options, because `Flow/SinkOutbox` cannot import
-`Agent/Workflow` without a module cycle. The only guard today is a comment
-reading "Must match ... exactly" (`Flow/SinkOutbox.hs:40,65`) plus
-`WireCompatSpec.hs:147-148`, which asserts the two encoders agree.
+`shikigami-workers/src/Shikigami/Trigger/Timer.hs` owns the shared timer dispatcher,
+with schedule, approval and conversation-timeout payload handlers. Schedule allocation lives
+in `Trigger/Scheduler.hs`; approval allocation in core's approval vertical; conversation idle
+allocation in the conversation vertical. These are custom timer rows, not a saga process.
+RunEvidence's existence does not supply a process that dispatches their commands. Plan 65
+adds bounded Keiro sleep draining within the owning dispatcher and proves wake/cancel/rotation
+behavior without competing unfiltered consumers.
 
-Milestone 1 of plan 39 intended to retire that duplication by giving `SinkIntent`
-one owning workspace member, so `WorkspaceDuplicateDeclaration` would enforce
-what the comment asks for. **That is not achievable at keiro-dsl 0.13**, and the
-tool says so itself. A `mapped structural record SinkIntent` checks clean, but
-`check --explain-bindings` reports the obligation as "structural type SinkIntent
-(not currently used by an aggregate root)" and the coverage report lists zero
-roots on every surface. An unconsumed mapped declaration generates a shape, a
-binding skeleton, projections, and conformance assertions — but **no wire
-codec**. Declaring `SinkIntent`'s wire shape there would state a JSON policy that
-nothing executes, which is exactly the failure this document opens by forbidding,
-and it would cost three mapped declarations (`SinkIntent`, `DanwaTarget`, and the
-four-constructor `Sink` union) and three hand-owned binding modules to do it.
+Workers.Config, worker command entry points, server startup and the one-off agent path own
+resource acquisition and telemetry. Required proof covers migration handshake before listeners,
+telemetry before store callbacks, validated streams/catalog, registry completeness, resume
+summaries, quiescent waits and safe terminal retention. Existing wiring is retained when tests
+prove it meets the released contract.
 
-The duplication therefore stays guarded by `WireCompatSpec` until
-`docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md`
-consolidates the two records into one hand-owned `Shikigami.Sink.Intent` module.
-Plan 27's Decision Log entry — "Plan 39's generated module owns the `SinkIntent`
-structural wire type and codec" — is superseded by this finding; plan 39's
-Milestone 4 records the correction.
+`shikigami-server/src/Shikigami/Server/Command/Ops.hs` currently leaves application hooks
+empty. Its no-aggregate rationale is obsolete. Lifecycle audit and catalog hooks are applicable.
+The released ResumeHook effect row lacks the resource-aware Kioku effects required here;
+plan 65 must either supply an honest interpreter or expose bounded resume at the worker-owned
+operational boundary and document the exact unsupported embedded type. Timer mutation stays
+with its dispatcher. No cast or direct private SQL is an acceptable integration.
 
+`shikigami-migrations:test-support` is the only database-test acquisition boundary.
+It currently wraps pg-migrate's per-database fixture. Plan 65 replaces that implementation
+with keiro-test-support's migrated suite/template and isolated per-example clones, preserving
+the complete migration ledger and Kioku reconciliation. Core's domain/diagram checks will move
+to database-independent drivers, with PostgreSQL tests in a separate suite. Server and worker
+integration tests retain their package ownership. Cleanup on exceptions, distinct example
+databases and a no-op second migration are mandatory acceptance.
 
-## Timers — not declared
+## Evolution and conformance
 
-Two timer families exist, both as raw `Keiro.Timer` rows fired by one
-hand-written loop (`shikigami-workers/src/Shikigami/Trigger/Timer.hs`) because a
-timer table with two independent readers would race.
+Run `nix develop -c just keiro-check`, `just keiro-inspect`, and generated conformance
+with the project-pinned tool. Check retains `--min-language 5`, `--deny-warnings`, binding
+and coverage reports, and `--fail-on-opaque`. Behavior obligations are nonzero and must
+execute; the former zero-obligation claim is obsolete. After committing reviewed generation,
+ordinary scaffold must change no bytes. `just keiro-gate <baseline>` remains strict.
 
-| Timer | Id derivation | Defined at |
-|---|---|---|
-| Approval timeout | UUIDv5 over `["shikigami","approval-timeout",workflowName,workflowId,generation,stepName]` | `Agent/Approval.hs:182-187` |
-| Schedule | UUIDv5 over `["shikigami","schedule",agent,dueAt]` | `shikigami-workers/src/Shikigami/Trigger/Scheduler.hs:63-69` |
-| Schedule fired-event id | UUIDv5 over `["shikigami","schedule-fired",agent,dueAt]` | `Trigger/Scheduler.hs:71-77` |
-| Schedule payload kind | `shikigami.schedule` | `Trigger/Scheduler.hs:49-50` |
-| Approval payload kind | `shikigami.approval-timeout` | `Agent/Approval.hs:204-205` |
-
-A keiro-dsl `timer` is a clause *inside* a `process` node, and a `process`
-requires a saga aggregate, a target aggregate, and command dispatches. Shikigami
-has no aggregate, so it has no process manager to hang a timer on. These timers
-become declarable when an aggregate exists —
-`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` is the first
-plan that introduces one.
-
-
-## Sink kinds and grants — not declared
-
-`SinkKind` (`Sink/Permission.hs:30-37`) has five constructors, whose persisted
-spellings are `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`,
-and `ChannelEgress` (`Sink/Permission.hs:50-67`). They key the database-backed
-grant table (`Sink/GrantStore.hs`). A DSL `enum` is usable only inside a node
-payload, and no declared node carries one, so declaring it would add an unused
-declaration. `docs/plans/21-database-backed-sink-permission-grants.md` owns the
-grant table.
-
-
-## The keep-or-rename call
-
-Milestone 1 is the last window in which any of these names is free: Shikigami has
-no users, so no workflow is parked and no queue holds a message. Every identity
-above was reviewed and **kept**. There is no rename in this change, so every
-existing golden stays byte-identical, which is the evidence that adoption changed
-no behavior.
-
-Two names were argued about and kept anyway:
-
-* `classify` and `await-ack` are at-risk-customer flow labels journaled into the
-  general `shikigami.agent-run` workflow, so the agent-run journal carries two
-  labels that belong to one behavior. Renaming them would not fix that; moving
-  them out of the shared workflow would, and that is a modelling change belonging
-  to whichever plan gives the flow its own aggregate.
-* `record` and `complete` are generic enough to collide with a future label.
-  They are kept because they are the deployed names, they are unambiguous inside
-  this workflow, and the workspace now makes a collision a `check` failure rather
-  than a silent overwrite.
-
-
-## The gate
-
-Run this before merging anything that touches `domain/`, the generated layer
-under `shikigami-core/src/Shikigami/*/Generated/`, or a durable identity named
-above:
-
-```bash
-nix develop
-just keiro-gate                 # or `just keiro-gate <merge-base>` on a branch
-```
-
-It runs, in the order a failure is cheapest to read:
-
-| Recipe | What it fails on |
-|---|---|
-| `just keiro-check` | any error, any warning (`--deny-warnings`), an effective language below 5 (`--min-language 5`), a new opaque boundary on a persisted root (`--fail-on-opaque`) |
-| `just keiro-inspect` | a member that does not declare its language, or whose effective version is not 5, or a contract that is not `stable` |
-| `just keiro-scaffold` | a committed generated layer that the current specification would not produce |
-| `just keiro-diff <ref>` | a `BREAKING` finding on any gated compatibility surface |
-| `cabal test keiro-shikigami-conformance` | a workflow fact that no longer matches the reviewed `KeiroConformance.Expectations` |
-
-`cabal test all` additionally runs `Shikigami.KeiroSpecificationSpec`, which
-covers what the toolchain structurally cannot: a `.keiro` file in `domain/` that
-the manifest does not list is not part of the service, so `check`, `inspect`, and
-`scaffold` never see it.
-
-Each gate was verified against the failure it claims to catch. Deleting a
-member's preamble:
-
-```text
-domain/shikigami-agent-run.keiro:18: error[WorkspaceLanguageVersionMismatch]:
-  workspace members select different effective language versions (5, 1)
-  domain/shikigami-conversation.keiro:14: note: member selects effective language version 1
-```
-
-Removing a generated module's banner:
-
-```text
-error: refusing to overwrite 1 file(s) at Generated paths that lack the '-- @generated' banner
-  Shikigami/AgentRun/Generated/WorkflowFacts.hs
-nothing was written
-```
-
-Renaming a durable workflow name:
-
-```text
-BREAKING: AgentRun workflow-name AgentRun: stable name changed
-  'shikigami.agent-run' -> 'shikigami.agent-run-v2';
-  in-flight journals remain under the old stream name [WorkflowStableNameChanged]
-    vector: persisted-identity=breaking
-    remedy: revert the re-keying change or perform an explicit operational identity migration
-```
-
-
-## How to reproduce this inventory
-
-```bash
-nix develop
-cabal run -v0 keiro-dsl -- check domain/shikigami.keiro-workspace \
-  --min-language 5 --deny-warnings --explain-bindings \
-  --coverage-report build/keiro-coverage.json --fail-on-opaque
-cabal run -v0 keiro-dsl -- inspect domain/shikigami.keiro-workspace --format=json
-cabal run -v0 keiro-dsl -- behavior-obligations domain/shikigami.keiro-workspace --format=text
-```
-
-As of 2026-08-19 the first exits `0` with every boundary reporting zero mapped
-roots, the second reports both members `"sourceForm": "declared"` at effective
-language 5 with `"languageSupport": "stable"`, and the third reports
-`required: 0` because there is no aggregate to carry a behavior obligation.
+There are no local release tags or checked-in deployment pipeline; process-compose and
+example config describe the development stack. Plan 65 records the owner's 2026-09-07
+unused-service statement. Repository configuration alone cannot prove an empty remote
+population: immediately before any workflow/wire reset, record all four pre-v1 facts in
+that plan and preserve compatibility if contrary evidence appears.

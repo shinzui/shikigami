@@ -53,8 +53,11 @@ reviewable commits with explicit before/after fixtures and diff evidence.
 - [x] (2026-09-07) Verified Hackage preferred versions for all seven Keiro packages and the
   three Kioku packages, checked release tags, and confirmed Kioku 0.5.2.0 admits Keiro 0.15.
 - [x] (2026-09-07) Revised the plan and recorded the expanded pre-v1 adoption decision in ADR 0037.
-- [ ] Milestone 1: refresh the dependency solve, source inventory, standards applicability,
-  and pre-release evidence; record a pre-adoption Git revision.
+- [x] (2026-09-07) Milestone 1: verified all ten released package descriptions against tags,
+  passed the full dependency solve, refreshed the executable ownership/applicability census,
+  and recorded pre-adoption revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
+- [x] (2026-09-07) Selected Keiro 0.15.0.0 and Kioku 0.5.2.0 in project constraints
+  and direct bounds. Building the DSL tool; no generated edition or workflow reset yet.
 - [ ] Milestone 2: adopt Keiro 0.15.0.0, Kioku 0.5.2.0, idiomatic-v2, and the common record
   compilation model across all seven Shikigami packages; preserve baseline wire fixtures.
 - [ ] Milestone 3: use keiro-test-support behind the migration fixture boundary and separate
@@ -69,6 +72,19 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+Implementation refresh (2026-09-07): `cabal update` selected secure index
+`2026-09-07T12:40:03Z`; the complete project dry-run succeeded with the intended
+cohort and existing Danwa pin. All ten Hackage Cabal files exactly match their
+release tags. There are no local Git release tags or checked-in deployment pipeline;
+`process-compose.yaml` owns the development stack. The plan's owner statement remains
+the unused-service evidence; recheck all four population facts immediately before reset.
+The domain inventory now distinguishes three workflows, RunEvidence's actual SQL targets,
+and concrete pending queue/catalog/runtime/test adoption from semantic exclusions.
+
+Danwa's plan now records successful non-migration library builds and pure suites;
+the earlier partial-progress observation below is stale. The existing pin stays until
+consumer compilation establishes whether it needs a verified published replacement.
 
 
 The original 2026-08-31 probe rejected `kioku-core-0.5.1.0` because its Keiro bound was
@@ -750,3 +766,5 @@ and current application sources. Added test-support, current workflow/identity b
 generated queue/catalog integration, runtime qualification, and explicit honest exclusions.
 Corrected edition-backup coverage, clean-scaffold timing, scratch-branch advice, and the
 assumption that all final wire expectations must remain unchanged.
+
+Revision note (2026-09-07 implementation): Recorded the successful refreshed solve, exact release metadata verification, baseline revision, and current applicability census. Edition migration and runtime acceptance remain pending.

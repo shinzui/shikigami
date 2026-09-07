@@ -1,4 +1,4 @@
-# Dependency cohort — August 2026
+# Dependency cohort — September 2026
 
 Shikigami builds against **one** coherent set of co-developed releases. This
 document is the contract: it names each explicitly managed cohort selection,
@@ -7,6 +7,23 @@ cohort holds together. `cabal.project` encodes the direct selections as a
 `constraints:` block; bound-driven transitive selections in the matrix are
 labelled as such. A drift between a direct-selection row and the solver is a
 bug in one of them.
+
+
+Plan 65 adoption starts at `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
+On 2026-09-07 the preferred-version endpoints for all seven Keiro and three Kioku
+packages still select 0.15.0.0 and 0.5.2.0 respectively. All ten released Cabal
+files match their upstream tag bytes exactly. The refreshed secure index is
+`2026-09-07T12:40:03Z`; `nix develop -c cabal build all --dry-run` succeeds with
+these selections and the existing unrelated constraints. Compilation, edition
+migration and runtime qualification remain in progress; older test counts below
+are historical evidence, not acceptance for this cohort.
+
+The Danwa plan `mori://shinzui/danwa/plans/13-upgrade-danwa-to-the-released-keiro-0-15-cohort`
+now records five non-migration library builds and three pure suites passing, but the
+existing source pin is retained until this consumer build requires a move and a
+published compatible commit is verified. Retire the pin on a compatible published
+package release, or advance it to a verified published cohort commit after checking
+its API changes and this service's full consumer tests.
 
 Two rules govern changes:
 
@@ -73,15 +90,16 @@ published; the current release status is called out immediately below it.
 |---|---|---|---|---|
 | `keiki` | 0.4.0.0 | **0.9.1.0** | `v0.9.1.0` | `15bc83b1eb38d78488862f24bb1d873aa32a919a` |
 | `keiki-codec-json` | 0.4.0.0 | **0.9.1.0** | `v0.9.1.0` | `15bc83b1eb38d78488862f24bb1d873aa32a919a` |
-| `keiro` | 0.4.0.1 | **0.14.0.0** | `keiro-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `keiro-core` | 0.4.0.1 | **0.14.0.0** | `keiro-core-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `keiro-dsl` | — | **0.14.0.0** | `keiro-dsl-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `keiro-migrations` | 0.4.0.1 | **0.14.0.0** | `keiro-migrations-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `keiro-ops` | — | **0.14.0.0** | `keiro-ops-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `keiro-pgmq` | — | **0.14.0.0** | `keiro-pgmq-0.14.0.0` | `0bdd4b7d9c3e766c394ea487333822ddf9a554a8` |
-| `kioku-api` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
-| `kioku-core` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
-| `kioku-migrations` | 0.2.0.0 | **0.5.1.0** | `v0.5.1.0` | `d071aea110bb3ca90bfcd1af70441dd0e2f2d086` |
+| `keiro` | 0.4.0.1 | **0.15.0.0** | `keiro-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-core` | 0.4.0.1 | **0.15.0.0** | `keiro-core-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-dsl` | — | **0.15.0.0** | `keiro-dsl-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-migrations` | 0.4.0.1 | **0.15.0.0** | `keiro-migrations-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-ops` | — | **0.15.0.0** | `keiro-ops-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-pgmq` | — | **0.15.0.0** | `keiro-pgmq-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-test-support` | — | **0.15.0.0** (test fixture adoption pending) | `keiro-test-support-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `kioku-api` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |
+| `kioku-core` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |
+| `kioku-migrations` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |
 | `shikumi` | 0.3.0.1 | **0.3.0.3** | `shikumi-0.3.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
 | `shikumi-tools` | — | **0.3.0.3** | `shikumi-tools-0.3.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
 | `shikumi-trace` (transitive) | — | **0.2.0.3** | `shikumi-trace-0.2.0.3` | `205219f75dde9350cad9fd47b97a5e1576674123` |
@@ -127,7 +145,7 @@ run-job consumer and is pinned with the rest of the Keiro family.
 `keiro-ops` is new to this cohort and is an ordinary library: `shikigami-server`
 links it so the `shikigami` administrative binary can mount Keiro's operator
 command tree instead of hand-writing one. Its own bounds are
-`keiro ^>=0.14.0.0`, `keiro-migrations ^>=0.14.0.0`, `keiro-pgmq ^>=0.14.0.0`,
+`keiro ^>=0.15.0.0`, `keiro-migrations ^>=0.15.0.0`, `keiro-pgmq ^>=0.15.0.0`,
 and `kiroku-store >=0.8 && <0.9`, all of which this cohort already satisfies, so
 it resolved without moving anything else. Adopted by
 `docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md`.
@@ -140,9 +158,9 @@ declared as `extra-packages: keiro-dsl` in `cabal.project` rather than as a
 Hackage package as if it were local, which is what lets `cabal run keiro-dsl --
 check ...` resolve to the pinned version from inside this project instead of
 depending on a developer's `PATH` or on a separate keiro checkout. The
-`constraints:` row pins it to the same `0.14.0.0` as the runtime packages,
-because the toolchain and the runtime move in lockstep: `keiro-dsl 0.14.0.0`
-declares `keiro-core ^>=0.14.0.0` and `keiki >=0.9 && <0.10`, both of which this
+`constraints:` row pins it to the same `0.15.0.0` as the runtime packages,
+because the toolchain and the runtime move in lockstep: `keiro-dsl 0.15.0.0`
+declares `keiro-core ^>=0.15.0.0` and `keiki >=0.9 && <0.10`, both of which this
 cohort already satisfies. Adopted by
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`.
 
@@ -234,7 +252,7 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 
 | Concern | Evidence |
 |---|---|
-| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.1.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.14.0.0`, and `keiro-core ^>=0.14.0.0`; `kioku-migrations-0.5.1.0` declares `keiro-migrations ^>=0.14.0.0`. The solver selects that exact released cohort. |
+| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.2.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.15.0.0`, and `keiro-core ^>=0.15.0.0`; `kioku-migrations-0.5.2.0` declares `keiro-migrations ^>=0.15.0.0`. The solver selects that exact released cohort. |
 | Kioku's own codec regression guard | Kioku 0.2.0.0 adds `Kioku.CodecCompatSpec`, which decodes literal pre-upgrade event payloads under the new cohort. |
 | Keiro terminal outbox rejection | Keiro 0.14 adds bounded `PublishRejection` values, `PublishRejected`, terminal `rejected` rows, rejection audit fields, and a `rejected` publisher-summary count. Shikigami constructs code `sink.permanent-failure` through `mkPublishRejection`; it never mutates Keiro-owned tables. |
 | Keiro snapshot state-shape hash | `StateCodec` gains `stateShapeHash`; migration `0019-keiro-snapshots-state-shape-hash.sql` adds the column and existing rows take the empty sentinel, invalidating each snapshot exactly once on next hydration. Journals and events are untouched. |
