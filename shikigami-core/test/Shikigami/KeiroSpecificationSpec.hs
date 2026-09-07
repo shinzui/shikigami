@@ -170,6 +170,9 @@ generatedModulePaths root = do
       entries <- listDirectory dir
       fmap concat . mapM (descend dir) $ entries
 
+    -- Immutable edition-migration backups are recovery artifacts, not modules
+    -- in the compiled source tree. Keep checking every live generated module.
+    descend _ ".keiro-dsl-generated-haskell-migrations" = pure []
     descend dir entry = do
       let path = dir </> entry
       isDir <- doesDirectoryExist path

@@ -100,7 +100,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -113,12 +113,12 @@ import Streamly.Data.Fold qualified as Fold
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "AgentWorkflow"
     [ testCase "behavior retry patch preserves old journals and uses only v2 when fresh" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -147,7 +147,7 @@ tests =
             assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
             assertEqual "fresh journal resolves even the empty overlay set" (Right True) (Map.member "resolve-capability-overlays" <$> freshIndex),
       testCase "an authorized overlay is acquired after recall and released before later lifecycle work" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
             active <- newIORef False
@@ -183,7 +183,7 @@ tests =
             assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "before:record", "before:complete"]
             assertEqual "the lease is gone when the workflow returns" False =<< readIORef active,
       testCase "a retry reacquires the journaled revision while a new run selects the new catalog revision" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
             active <- newIORef False
@@ -218,7 +218,7 @@ tests =
             loadCapabilityResolution appEnv freshJob >>= assertEqual "the fresh journal pins v2" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV2]))
             readIORef events >>= assertEqual "only the exact pinned provider is acquired per run" ["acquire:v1", "release:v1", "acquire:v2", "release:v2"],
       testCase "capability resolution refusals are permanent before open-session" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
             active <- newIORef False
@@ -255,7 +255,7 @@ tests =
               assertEqual (Text.unpack label <> " never opens a session") (Right False) (Map.member "open-session" <$> stepIndex)
             assertEqual "no permanent refusal reaches provider acquisition" [] =<< readIORef events,
       testCase "a release failure is transient and leaves the behavior result unjournaled" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
             active <- newIORef False
@@ -278,7 +278,7 @@ tests =
             assertEqual "resolution remains journaled" (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
             assertEqual "behavior result remains retryable" (Right False) (Map.member "run-behavior-v2" <$> stepIndex),
       testCase "transient v2 failure leaves no value and a later advance succeeds" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -306,7 +306,7 @@ tests =
             afterSuccess <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) transientRetryJob)) 0)
             assertEqual "successful retry appended the v2 value" (Right True) (Map.member "run-behavior-v2" <$> afterSuccess),
       testCase "permanent v2 failure is journaled once and replayed" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -334,7 +334,7 @@ tests =
       -- so it exercises the refusal layer without breaking the store the journal
       -- also needs.
       testCase "a refused session open fails the run instead of completing it" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -361,7 +361,7 @@ tests =
               Right (Completed (Left (PermanentAgentRunFailure _))) -> pure ()
               other -> assertFailure ("replay must keep the refusal, got " <> show other),
       testCase "Never completes a successful session without recording memory" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -387,7 +387,7 @@ tests =
               Right (Right (Just SessionRow {status})) -> assertEqual "session still completes" "completed" status
               other -> assertFailure ("session lookup should return a completed row, got " <> show other),
       testCase "Always records a failure memory before failing the session" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -407,7 +407,7 @@ tests =
                 assertBool "failure tag is present" (Set.member "failure" tags)
               other -> assertFailure ("expected one failure memory, got " <> show other),
       testCase "recallLimit caps fallback recall" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -416,7 +416,7 @@ tests =
             recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent "recall-limit-agent")) "recall fixture"
             assertEqual "declared bound caps fallback rows" 3 (length recalled),
       testCase "verified recall composes the principal scope with an accepted legacy alias" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -431,7 +431,7 @@ tests =
               ["legacy alias fixture"]
               (map (\MemoryRecord {content = memoryContent} -> memoryContent) recalled),
       testCase "reopening storage after a presentation rename retains agent_heartbeat recall and grant" do
-        withShikigamiMigratedDatabase \connStr -> do
+        (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           tracer <- noopTracer
           let settings = defaultConnectionSettings connStr
               appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
@@ -454,7 +454,7 @@ tests =
               Right () -> pure ()
               Left denial -> assertFailure ("post-restart principal grant was denied: " <> show denial),
       testCase "replays completed lifecycle steps for the same run id" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -476,7 +476,7 @@ tests =
       -- between them must stop the delivery even though the row is already
       -- queued and its journaled SinkResult truthfully says Enqueued.
       testCase "a revocation between enqueue and publish delivers nothing" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             received <- newIORef (Map.empty :: Map (Text, Text) Text)
             testWithApplication (pure (kawaDoorwayApplication received)) \port -> do
@@ -506,7 +506,7 @@ tests =
               assertBool ("the publish pass itself succeeded: " <> show published) (isRight' published)
               assertBool ("the run completed: " <> show runResult) (isCompleted runResult),
       testCase "resumes after a crash without rerunning journaled step bodies" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -556,7 +556,7 @@ tests =
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "recovered run enqueued one stable outbox row" (Right 1) (length <$> outboxRows),
       testCase "an unknown required profile refuses before opening a session" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -576,7 +576,7 @@ tests =
             outboxRows <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             assertEqual "no sink intent was enqueued" (Right 0) (length <$> outboxRows),
       testCase "a resumed run keeps the profile content and digest it originally resolved" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -631,7 +631,7 @@ tests =
             pinnedAfter <- loadProfileResolution appEnv profilePinningJob
             assertEqual "replay kept the original profile rather than the replacement" pinnedBefore pinnedAfter,
       testCase "a pinned tuple mismatch refuses before the provider or session boundary" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -657,7 +657,7 @@ tests =
               Right (Right rows) -> assertEqual "the provider seam was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
       testCase "a profiled Flow is constrained before its capability interpreters run" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -683,7 +683,7 @@ tests =
               Right (Right rows) -> assertEqual "the profiled Flow was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
       testCase "resumes after a crash between record and complete without duplicating memory" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -734,7 +734,7 @@ tests =
                 assertEqual "the completed session names the model that answered" (Just "stub-v1") modelUsed
               other -> assertFailure ("session lookup should return completed row, got " <> show other),
       testCase "runs Flow behavior through the agent workflow" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -760,7 +760,7 @@ tests =
       -- 'Shikigami.Agent.Run.recallPriorLearnings' falls back to
       -- @getActiveByScope@, which makes this deterministic in CI.
       testCase "a recalled escalation flips the flow's verdict on a calm payload" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -797,7 +797,7 @@ tests =
       testGroup
         "Conversation"
         [ testCase "new conversation session carries principal id under the name-keyed scope" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -821,7 +821,7 @@ tests =
                   Right (Right (Just SessionRow {agentId})) -> assertEqual "resolved session row" "agent_heartbeat" agentId
                   other -> assertFailure ("conversation session should be readable, got " <> show other),
           testCase "parks and resumes a danwa conversation as one workflow session" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -879,7 +879,7 @@ tests =
                     assertEqual "generation 1 armed the static next-message promise" ["awkid:next-message"] (filter ("awkid:" `Text.isPrefixOf`) (Map.keys secondKeys))
                   other -> assertFailure ("conversation turns should succeed, got " <> show other),
           testCase "conversation permanent v2 failure completes as a replayable typed failure" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -896,7 +896,7 @@ tests =
                 assertBool "conversation journals the static v2 label" (Map.member "run-behavior-v2" stepIndex)
                 assertBool "conversation never journals the legacy label" (not (Map.member "run-behavior" stepIndex)),
           testCase "conversation execution fails closed on a declared overlay" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -919,7 +919,7 @@ tests =
           -- subject: the exact row the scan had to walk past, and the exact row
           -- a mis-keyed lookup would return.
           testCase "resolves its own session and ignores a decoy in the same scope" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -963,7 +963,7 @@ tests =
           -- parked conversation, and refuses one that was never started rather
           -- than throwing.
           testCase "delivery resolves the live generation instead of assuming zero" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -994,7 +994,7 @@ tests =
           -- turn's worth of labels -- and all five turns still land in ONE kioku
           -- session, because rotation bounds the journal, not the conversation.
           testCase "rotates onto a fresh generation after every turn" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1052,7 +1052,7 @@ tests =
           -- next human message would have signalled, so the workflow ends
           -- through its own await rather than being killed from outside.
           testCase "completes the kioku session on idle timeout" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1089,7 +1089,7 @@ tests =
           -- somebody has to keep in step -- but it is only testable if the stale
           -- timer is actually fired.
           testCase "ignores a timer armed in a superseded generation" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1125,7 +1125,7 @@ tests =
           -- unconditionally Nothing before, which was the only honest answer
           -- while nothing ever completed a session.
           testCase "opens a new epoch after idle timeout, chaining session lineage" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1189,7 +1189,7 @@ tests =
           -- Because the turn then ends, the promise is withdrawn rather than
           -- left pending on a workflow that is over.
           testCase "arms the next promise before running the behavior" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1218,7 +1218,7 @@ tests =
           -- window deterministically: the instance is alive, nothing is armed,
           -- and a third message arrives.
           testCase "redelivers a message that finds no armed promise, rather than restarting" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1274,7 +1274,7 @@ tests =
       testGroup
         "Delegate"
         [ testCase "parent suspends awaiting delegated child and resumes with child output" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1304,7 +1304,7 @@ tests =
                 resumed <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
                 assertEqual "parent resumes with child behavior output" (Right (Completed childOutput)) resumed,
           testCase "a cycle is refused at the durable delegation boundary" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 parentSession <- genSessionId
@@ -1329,7 +1329,7 @@ tests =
                   Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected "heartbeat") err
                   Right outcome -> assertFailure ("cyclic delegation should fail before spawning, got " <> show outcome),
           testCase "an exhausted root budget is refused before child spawn" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 parentSession <- genSessionId
@@ -1345,7 +1345,7 @@ tests =
                   Left err -> assertEqual "the zero budget is exhausted" DelegationBudgetExhausted err
                   Right outcome -> assertFailure ("over-budget delegation should fail before spawning, got " <> show outcome),
           testCase "proof supervisor fans out to specialists and records lineage" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1418,7 +1418,7 @@ tests =
                       (lineageSummary rows)
                   other -> assertFailure ("getDelegationChildren should return rows, got " <> show (first (const ("store-error" :: String)) other)),
           testCase "Flow delegates through the governed capability" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1444,7 +1444,7 @@ tests =
                     assertEqual "Flow returns the delegated output" expectedWebFinding behaviorOutput
                   other -> assertFailure ("delegating Flow should complete, got " <> show other),
           testCase "Flow refuses a target absent from its declaration" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1455,7 +1455,7 @@ tests =
                 refused <- try @DelegationError (runAgentRunWorkflow deps flowDelegationDeniedJob)
                 assertEqual "the capability applies the agent allow-list" (Left (DelegationNotAllowed "web-researcher")) refused,
           testCase "awaitAllDelegated retains successes beside a failed child" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1481,7 +1481,7 @@ tests =
                     assertBool ("the failure should be retained as a delegated outcome: " <> Text.unpack failure) ("DelegatedChildFailed" `Text.isPrefixOf` failure)
                   other -> assertFailure ("collector should retain one success and one failure, got " <> show other),
           testCase "first observed failure cancels a running sibling truthfully" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1511,7 +1511,7 @@ tests =
       testGroup
         "Approval"
         [ testCase "Danwa ask, CLI-shaped resolution, child resume, and sink dispatch form one durable path" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 asks <- newIORef []
                 tracer <- noopTracer
@@ -1565,7 +1565,7 @@ tests =
                   afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                   assertEqual "approved sink is dispatched exactly once" (Right 1) (length <$> afterOutbox),
           testCase "approved answer resumes and dispatches sink once" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1593,7 +1593,7 @@ tests =
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "approved sink is dispatched once" (Right 1) (length <$> afterOutbox),
           testCase "rejected answer resumes and suppresses sink dispatch" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1616,7 +1616,7 @@ tests =
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "rejected sink is suppressed" (Right 0) (length <$> afterOutbox),
           testCase "permanent notification failure fails the parent without enqueuing" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1645,7 +1645,7 @@ tests =
                 outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "failed notification enqueues no sink" (Right 0) (length <$> outbox),
           testCase "transient notification failure leaves notify unrecorded and increments child attempts" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1682,7 +1682,7 @@ tests =
                 outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "transient notification enqueues no sink" (Right 0) (length <$> outbox),
           testCase "notification retry reuses one review identity and one decision token" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1743,7 +1743,7 @@ tests =
       testGroup
         "Deadline"
         [ testCase "timeout resumes and suppresses sink dispatch" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
@@ -1764,7 +1764,7 @@ tests =
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "timed-out sink is suppressed" (Right 0) (length <$> afterOutbox),
           testCase "approved answer before deadline wins over late timer" do
-            withShikigamiMigratedDatabase \connStr ->
+            (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv

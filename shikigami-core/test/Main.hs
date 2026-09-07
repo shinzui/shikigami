@@ -17,7 +17,6 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), S
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
-import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
@@ -29,15 +28,11 @@ import Shikigami.CapabilityOverlaySpec qualified as CapabilityOverlaySpec
 import Shikigami.CapabilityProviderSpec qualified as CapabilityProviderSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
-import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
-import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
-import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
-import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
@@ -45,15 +40,10 @@ import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
-import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
-import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
-import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
 import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
 import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
-import Shikigami.RouterWorkflowSpec qualified as RouterWorkflowSpec
-import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
 import Shikigami.Sink
   ( AgentIdentity,
     DanwaConfig (..),
@@ -71,14 +61,11 @@ import Shikigami.Sink qualified as Sink
 import Shikigami.Sink.KawaClient (buildEnvelope)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
-import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
 import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
-import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
-import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
@@ -101,34 +88,21 @@ main =
           CapabilityProviderSpec.tests,
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
-          DelegationBudgetSpec.tests,
           DirectorySpec.tests,
-          DirectoryStoreSpec.tests,
           EnqueueHardeningSpec.tests,
-          GrantStoreSpec.tests,
           KeiroSpecificationSpec.tests,
           KanmonClientSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
           PracticeReviewEvidenceSpec.tests,
-          PracticeReviewMemorySpec.tests,
-          PracticeReviewOrchestrationSpec.tests,
           PracticeReviewSpec.tests,
-          ProfileResolutionSpec.tests,
           RouterCatalogSpec.tests,
           RouterDecisionSpec.tests,
           RouterDeclarationSpec.tests,
-          RouterWorkflowSpec.tests,
-          RunEvidenceSpec.tests,
-          SinkDeliverySpec.tests,
           SinkHonestySpec.tests,
           SinkIntentSpec.tests,
           SinkAuthSpec.tests,
-          FlowLifecycleSpec.tests,
-          AgentWorkflowSpec.tests,
-          SpikeWorkflowSpec.tests,
-          WireCompatSpec.tests,
-          WorkflowVersioningSpec.tests
+          WireCompatSpec.tests
         ]
     )
 

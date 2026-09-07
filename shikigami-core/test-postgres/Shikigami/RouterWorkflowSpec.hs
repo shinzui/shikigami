@@ -50,7 +50,7 @@ import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -70,21 +70,21 @@ import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (.
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "RouterWorkflow"
-    [ testCase "journals semantic outcomes and rejects unauthorized proposals" semanticAndAuthorizationMatrix,
-      testCase "matched fan-out replays catalog, decision, child ids, and bounded telemetry" matchedReplayProof,
-      testCase "no-match and ambiguous complete without child workflows" nonExecutableOutcomesSpawnNothing,
-      testCase "an exhausted batch budget spawns no child" exhaustedBatchSpawnsNothing,
-      testCase "a delegated child failure remains an operational failure" childFailureEscapes
+    [ testCase "journals semantic outcomes and rejects unauthorized proposals" (semanticAndAuthorizationMatrix databaseFixture),
+      testCase "matched fan-out replays catalog, decision, child ids, and bounded telemetry" (matchedReplayProof databaseFixture),
+      testCase "no-match and ambiguous complete without child workflows" (nonExecutableOutcomesSpawnNothing databaseFixture),
+      testCase "an exhausted batch budget spawns no child" (exhaustedBatchSpawnsNothing databaseFixture),
+      testCase "a delegated child failure remains an operational failure" (childFailureEscapes databaseFixture)
     ]
 
-semanticAndAuthorizationMatrix :: IO ()
-semanticAndAuthorizationMatrix =
+semanticAndAuthorizationMatrix :: DatabaseFixture -> IO ()
+semanticAndAuthorizationMatrix databaseFixture =
   withTestTracer \tracer spansRef ->
-    withDatabaseTracer tracer \appEnv behaviorEnv -> do
+    (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
       let singleOutcome = Matched (selection "first" RoutingHigh "single" NonEmpty.:| [])
       singleProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion singleOutcome))
       single <- runDirect appEnv behaviorEnv "router-direct-single" singleProbe
@@ -134,10 +134,10 @@ semanticAndAuthorizationMatrix =
       validationErrors <- traverse (spanHasTextAttribute "routing.error.category" "validation") spans
       assertBool "invalid proposals leave a bounded validation error category" (or validationErrors)
 
-matchedReplayProof :: IO ()
-matchedReplayProof =
+matchedReplayProof :: DatabaseFixture -> IO ()
+matchedReplayProof databaseFixture =
   withTestTracer \tracer spansRef ->
-    withDatabaseTracer tracer \appEnv behaviorEnv -> do
+    (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
       let longRationale = Text.replicate 700 "r"
           decision =
             RouteDecision
@@ -208,10 +208,10 @@ matchedReplayProof =
       assertBool "trigger bodies are never trace attributes" (not (secretTrigger `Text.isInfixOf` renderedAttributes))
       assertBool "candidate descriptions are never trace attributes" (not (secretDescription `Text.isInfixOf` renderedAttributes))
 
-nonExecutableOutcomesSpawnNothing :: IO ()
-nonExecutableOutcomesSpawnNothing = do
+nonExecutableOutcomesSpawnNothing :: DatabaseFixture -> IO ()
+nonExecutableOutcomesSpawnNothing databaseFixture = do
   tracer <- noopTracer
-  withDatabaseTracer tracer \appEnv behaviorEnv -> do
+  (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     let cases =
           [ ("no-match", RouteDecision 1 testCatalogVersion (NoMatch "none")),
             ("ambiguous", RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "maybe" NonEmpty.:| []) "unclear"))
@@ -233,10 +233,10 @@ nonExecutableOutcomesSpawnNothing = do
       children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
       assertEqual (Text.unpack label <> " spawns zero children") (Right 0) (length <$> children)
 
-exhaustedBatchSpawnsNothing :: IO ()
-exhaustedBatchSpawnsNothing = do
+exhaustedBatchSpawnsNothing :: DatabaseFixture -> IO ()
+exhaustedBatchSpawnsNothing databaseFixture = do
   tracer <- noopTracer
-  withDatabaseTracer tracer \appEnv behaviorEnv -> do
+  (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     probe <- newProbe catalog (Aeson.toJSON (matchedDecision [selection "first" RoutingHigh "route"]))
     let job = routerJob "router:budget-exhausted"
         zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
@@ -247,10 +247,10 @@ exhaustedBatchSpawnsNothing = do
     children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
     assertEqual "no child is registered after rejected batch reservation" (Right 0) (length <$> children)
 
-childFailureEscapes :: IO ()
-childFailureEscapes = do
+childFailureEscapes :: DatabaseFixture -> IO ()
+childFailureEscapes databaseFixture = do
   tracer <- noopTracer
-  withDatabaseTracer tracer \appEnv behaviorEnv -> do
+  (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
         parentWorkflowId = WorkflowId ((.idempotencyKey) job)
@@ -512,9 +512,9 @@ secretPayload = object ["document" .= secretTrigger]
 fixedTime :: UTCTime
 fixedTime = UTCTime (fromGregorian 2026 8 23) 0
 
-withDatabaseTracer :: Otel.Tracer -> (AppEnv -> BehaviorEnv -> IO a) -> IO a
-withDatabaseTracer tracer use =
-  withShikigamiMigratedDatabase \connectionString ->
+withDatabaseTracer :: DatabaseFixture -> Otel.Tracer -> (AppEnv -> BehaviorEnv -> IO a) -> IO a
+withDatabaseTracer databaseFixture tracer use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString ->
     withStore (defaultConnectionSettings connectionString) \_ -> do
       behaviorEnv <- newBehaviorEnv
       use

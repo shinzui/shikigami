@@ -96,7 +96,7 @@ published; the current release status is called out immediately below it.
 | `keiro-migrations` | 0.4.0.1 | **0.15.0.0** | `keiro-migrations-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
 | `keiro-ops` | — | **0.15.0.0** | `keiro-ops-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
 | `keiro-pgmq` | — | **0.15.0.0** | `keiro-pgmq-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
-| `keiro-test-support` | — | **0.15.0.0** (test fixture adoption pending) | `keiro-test-support-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
+| `keiro-test-support` | — | **0.15.0.0** (migration test-support only) | `keiro-test-support-0.15.0.0` | `de574cdcb0add3fefbb0fdd96d820258d15f8997` |
 | `kioku-api` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |
 | `kioku-core` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |
 | `kioku-migrations` | 0.2.0.0 | **0.5.2.0** | `v0.5.2.0` | `14a7543f508a7d8110296383aa0500ab9e3b6a5d` |

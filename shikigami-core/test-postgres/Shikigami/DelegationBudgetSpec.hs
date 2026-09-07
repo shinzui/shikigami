@@ -11,7 +11,7 @@ import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Agent.Decl (DelegationBudget, mkDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Store.DelegationBudget
   ( BatchReservationResult (..),
     BudgetReservationError (..),
@@ -23,20 +23,20 @@ import Shikigami.Store.DelegationBudget
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "DelegationBudget"
-    [ testCase "replay reserves a deterministic child only once" replayIsIdempotent,
-      testCase "an oversized batch reserves no child" batchExhaustionIsAtomic,
-      testCase "replaying a batch consumes no additional slots" batchReplayIsIdempotent,
-      testCase "concurrent branches cannot overspend the root limit" concurrentLimit,
-      testCase "a descendant cannot invent a missing root ledger" missingLedger
+    [ testCase "replay reserves a deterministic child only once" (replayIsIdempotent databaseFixture),
+      testCase "an oversized batch reserves no child" (batchExhaustionIsAtomic databaseFixture),
+      testCase "replaying a batch consumes no additional slots" (batchReplayIsIdempotent databaseFixture),
+      testCase "concurrent branches cannot overspend the root limit" (concurrentLimit databaseFixture),
+      testCase "a descendant cannot invent a missing root ledger" (missingLedger databaseFixture)
     ]
 
-replayIsIdempotent :: IO ()
-replayIsIdempotent =
-  withFixture \appEnv -> do
+replayIsIdempotent :: DatabaseFixture -> IO ()
+replayIsIdempotent databaseFixture =
+  (withFixture databaseFixture) \appEnv -> do
     let root = WorkflowId "budget-root-replay"
         budgetId = delegationBudgetIdFor root
         child = WorkflowId "budget-child-replay"
@@ -45,9 +45,9 @@ replayIsIdempotent =
     assertEqual "first occurrence consumes one slot" (Right DelegationSlotReserved) first
     assertEqual "same child id is replay success" (Right DelegationSlotAlreadyReserved) second
 
-batchExhaustionIsAtomic :: IO ()
-batchExhaustionIsAtomic =
-  withFixture \appEnv -> do
+batchExhaustionIsAtomic :: DatabaseFixture -> IO ()
+batchExhaustionIsAtomic databaseFixture =
+  (withFixture databaseFixture) \appEnv -> do
     let root = WorkflowId "budget-root-atomic-batch"
         budgetId = delegationBudgetIdFor root
         firstChild = WorkflowId "budget-batch-first"
@@ -59,9 +59,9 @@ batchExhaustionIsAtomic =
     assertEqual "the failed batch left its first child unreserved" (Right DelegationSlotReserved) firstAfterRejection
     assertEqual "the failed batch consumed no hidden slot" (Right DelegationSlotsExhausted) secondAfterFirst
 
-batchReplayIsIdempotent :: IO ()
-batchReplayIsIdempotent =
-  withFixture \appEnv -> do
+batchReplayIsIdempotent :: DatabaseFixture -> IO ()
+batchReplayIsIdempotent databaseFixture =
+  (withFixture databaseFixture) \appEnv -> do
     let root = WorkflowId "budget-root-batch-replay"
         budgetId = delegationBudgetIdFor root
         children = WorkflowId "budget-batch-replay-first" :| [WorkflowId "budget-batch-replay-second"]
@@ -76,9 +76,9 @@ batchReplayIsIdempotent =
       (Right (DelegationBatchReserved 0 2))
       second
 
-concurrentLimit :: IO ()
-concurrentLimit =
-  withFixture \appEnv -> do
+concurrentLimit :: DatabaseFixture -> IO ()
+concurrentLimit databaseFixture =
+  (withFixture databaseFixture) \appEnv -> do
     let root = WorkflowId "budget-root-concurrent"
         budgetId = delegationBudgetIdFor root
         children = [WorkflowId ("budget-child-" <> Text.pack (show ordinal)) | ordinal <- [1 :: Int .. 10]]
@@ -102,9 +102,9 @@ concurrentLimit =
         assertEqual "a reserved child remains replayable after exhaustion" (Right DelegationSlotAlreadyReserved) replayed
       [] -> assertFailure "the concurrent reservation test produced no winner"
 
-missingLedger :: IO ()
-missingLedger =
-  withFixture \appEnv -> do
+missingLedger :: DatabaseFixture -> IO ()
+missingLedger databaseFixture =
+  (withFixture databaseFixture) \appEnv -> do
     let root = WorkflowId "budget-root-missing"
         budgetId = delegationBudgetIdFor root
     result <- reserve appEnv budgetId Nothing (WorkflowId "budget-child-missing")
@@ -127,9 +127,9 @@ budget value =
 fixedTime :: UTCTime
 fixedTime = UTCTime (fromGregorian 2026 8 22) 0
 
-withFixture :: (AppEnv -> IO a) -> IO a
-withFixture use =
-  withShikigamiMigratedDatabase \connectionString -> do
+withFixture :: DatabaseFixture -> (AppEnv -> IO a) -> IO a
+withFixture databaseFixture use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString -> do
     tracer <- noopTracer
     use
       AppEnv

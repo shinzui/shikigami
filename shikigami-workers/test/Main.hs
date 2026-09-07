@@ -2,6 +2,7 @@ module Main (main) where
 
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
+import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
@@ -15,15 +16,15 @@ main = do
   fixture <- lookupEnv "SHIKIGAMI_GRACEFUL_SHUTDOWN_FIXTURE"
   case fixture of
     Just "1" -> SupervisionSpec.gracefulShutdownFixture
-    _ ->
+    _ -> withShikigamiMigratedSuite \databaseFixture ->
       defaultMain
         ( testGroup
             "shikigami-workers"
             [ CommandSpec.tests,
               HealthWorkerSpec.tests,
-              RunJobWorkerSpec.tests,
-              SchedulerSpec.tests,
-              StreamInboxSpec.tests,
+              RunJobWorkerSpec.tests databaseFixture,
+              SchedulerSpec.tests databaseFixture,
+              StreamInboxSpec.tests databaseFixture,
               TelemetrySpec.tests,
               SupervisionSpec.tests
             ]

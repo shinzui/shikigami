@@ -5,6 +5,7 @@ import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.Server.AgentsSpec qualified as AgentsSpec
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
@@ -18,12 +19,12 @@ import Shikigami.Server.TelemetrySpec qualified as TelemetrySpec
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
-main =
+main = withShikigamiMigratedSuite \databaseFixture ->
   defaultMain
     ( testGroup
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
-          AgentsSpec.tests,
+          AgentsSpec.tests databaseFixture,
           CommandSpec.tests,
           DispatchSpec.tests,
           KawaStubSpec.tests,

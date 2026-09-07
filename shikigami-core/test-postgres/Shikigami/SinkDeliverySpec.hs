@@ -64,7 +64,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (AuthorizationFailed, DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -76,28 +76,28 @@ import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "SinkDelivery"
-    [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" journalTruth,
-      testCase "ChannelEgress enqueue snapshots minimal activity metadata" egressIntentMetadata,
-      testCase "paused enqueue journals a lifecycle skip without outbox or receipt" pausedEnqueue,
-      testCase "pause before publish records a terminal non-send without HTTP" pauseBeforePublish,
+    [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" (journalTruth databaseFixture),
+      testCase "ChannelEgress enqueue snapshots minimal activity metadata" (egressIntentMetadata databaseFixture),
+      testCase "paused enqueue journals a lifecycle skip without outbox or receipt" (pausedEnqueue databaseFixture),
+      testCase "pause before publish records a terminal non-send without HTTP" (pauseBeforePublish databaseFixture),
       testCase "permanent failure becomes a bounded terminal rejection" permanentRejection,
-      testCase "outbox trace context parents sink.publish and its HTTP traceparent" tracePropagation,
+      testCase "outbox trace context parents sink.publish and its HTTP traceparent" (tracePropagation databaseFixture),
       testCase "invalid traceparent is unparented and restores ambient context" invalidTraceContextIsolation,
-      testCase "publish records a delivered receipt with the downstream id" receiptRecording,
-      testCase "ChannelEgress publication records the Kanmon activity id and suppresses re-send" egressReceiptRecording,
-      testCase "ChannelEgress 403 records a dead receipt and terminal publication" egressPermanentRejection,
-      testCase "ungranted ChannelEgress creates no outbox, receipt, or HTTP effect" egressDenied,
-      testCase "C13 denial at enqueue creates no outbox or downstream effect" actionDeniedAtEnqueue,
-      testCase "C13 outage at enqueue is distinct and creates no outbox" actionUnavailableAtEnqueue,
-      testCase "C13 is checked again at publish and revocation prevents HTTP" actionRevokedBeforePublish,
-      testCase "re-publish of a delivered message does not re-POST kizashi" sendGuard,
-      testCase "terminal reconciliation materializes an unknown receipt" terminalReconciliation,
-      testCase "danwa post-failure retry reuses the started conversation" danwaReuse,
-      testCase "failing sink 0 does not block sink 1 in one publish pass" orderingIsolation
+      testCase "publish records a delivered receipt with the downstream id" (receiptRecording databaseFixture),
+      testCase "ChannelEgress publication records the Kanmon activity id and suppresses re-send" (egressReceiptRecording databaseFixture),
+      testCase "ChannelEgress 403 records a dead receipt and terminal publication" (egressPermanentRejection databaseFixture),
+      testCase "ungranted ChannelEgress creates no outbox, receipt, or HTTP effect" (egressDenied databaseFixture),
+      testCase "C13 denial at enqueue creates no outbox or downstream effect" (actionDeniedAtEnqueue databaseFixture),
+      testCase "C13 outage at enqueue is distinct and creates no outbox" (actionUnavailableAtEnqueue databaseFixture),
+      testCase "C13 is checked again at publish and revocation prevents HTTP" (actionRevokedBeforePublish databaseFixture),
+      testCase "re-publish of a delivered message does not re-POST kizashi" (sendGuard databaseFixture),
+      testCase "terminal reconciliation materializes an unknown receipt" (terminalReconciliation databaseFixture),
+      testCase "danwa post-failure retry reuses the started conversation" (danwaReuse databaseFixture),
+      testCase "failing sink 0 does not block sink 1 in one publish pass" (orderingIsolation databaseFixture)
     ]
 
 permanentRejection :: IO ()
@@ -109,13 +109,13 @@ permanentRejection = do
     Left err -> assertBool ("invalid rejection should explain itself: " <> Text.unpack err) ("invalid terminal sink rejection" `Text.isPrefixOf` err)
     Right other -> assertFailure ("an oversized rejection detail must be refused, got " <> show other)
 
-tracePropagation :: IO ()
-tracePropagation =
+tracePropagation :: DatabaseFixture -> IO ()
+tracePropagation databaseFixture =
   withTestTracer \tracer spansRef -> do
     requests <- newIORef []
     headers <- newIORef []
     testWithApplication (pure (captureHeaders headers (kizashiApp requests))) \port ->
-      withFixtureUsingTracer tracer "trace-propagation" [signalSink "trace"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+      (withFixtureUsingTracer databaseFixture) tracer "trace-propagation" [signalSink "trace"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
         [row] <- runWorkflowAndRows deps appEnv runJob
         storedContext <-
           case Integration.traceContext (rowEvent row) of
@@ -198,9 +198,9 @@ captureHeaders headers app request respond = do
   modifyIORef' headers (requestHeaders request :)
   app request respond
 
-pausedEnqueue :: IO ()
-pausedEnqueue =
-  withFixture "paused-enqueue" [signalSink "paused"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+pausedEnqueue :: DatabaseFixture -> IO ()
+pausedEnqueue databaseFixture =
+  (withFixture databaseFixture) "paused-enqueue" [signalSink "paused"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     directory <- directoryWith Paused
     rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "lifecycle refusal creates no outbox row" [] rows
@@ -213,12 +213,12 @@ pausedEnqueue =
         assertBool "journal names paused lifecycle" ("paused" `Text.isInfixOf` reason)
       other -> assertFailure ("expected one SkippedLifecycle result, got " <> show other)
 
-pauseBeforePublish :: IO ()
-pauseBeforePublish = do
+pauseBeforePublish :: DatabaseFixture -> IO ()
+pauseBeforePublish databaseFixture = do
   requests <- newIORef []
   lifecycleRef <- newIORef Active
   testWithApplication (pure (kizashiApp requests)) \port ->
-    withFixture "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       directory <- mutableDirectory lifecycleRef
       _ <- expectRight "reconcile verified heartbeat grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
       let gatedDeps = deps {AgentWorkflow.directory = directory}
@@ -249,9 +249,9 @@ pauseBeforePublish = do
       receipt <- lookupReceipt pool row
       assertEqual "paused publish is terminal" Delivery.Dead ((.status) receipt)
 
-journalTruth :: IO ()
-journalTruth =
-  withFixture "journal-truth" [signalSink "journal"] unreachableKizashi unreachableDanwa \deps appEnv _pool runJob -> do
+journalTruth :: DatabaseFixture -> IO ()
+journalTruth databaseFixture =
+  (withFixture databaseFixture) "journal-truth" [signalSink "journal"] unreachableKizashi unreachableDanwa \deps appEnv _pool runJob -> do
     rows <- runWorkflowAndRows deps appEnv runJob
     assertEqual "one sink intent was enqueued" 1 (length rows)
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
@@ -261,9 +261,9 @@ journalTruth =
         assertBool ("enqueue detail should name the outbox row: " <> Text.unpack detail) ("outbox:" `Text.isPrefixOf` detail)
       other -> assertFailure ("expected one Enqueued result, got " <> show other)
 
-egressIntentMetadata :: IO ()
-egressIntentMetadata =
-  withFixture "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+egressIntentMetadata :: DatabaseFixture -> IO ()
+egressIntentMetadata databaseFixture =
+  (withFixture databaseFixture) "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
     [row] <- runWorkflowAndRows deps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
@@ -286,11 +286,11 @@ triggeringActivity =
       Activity.idempotencyKey = "intercom-message-1"
     }
 
-egressReceiptRecording :: IO ()
-egressReceiptRecording = do
+egressReceiptRecording :: DatabaseFixture -> IO ()
+egressReceiptRecording databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kanmonApp requests)) \port ->
-    withFixture "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
       authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
       let configuredDeps =
@@ -320,11 +320,11 @@ egressReceiptRecording = do
           assertEqual "published triggering activity" (Just "act_channel_1") triggeringActivityId
         other -> assertFailure ("expected one decoded egress request, got " <> show other)
 
-egressPermanentRejection :: IO ()
-egressPermanentRejection = do
+egressPermanentRejection :: DatabaseFixture -> IO ()
+egressPermanentRejection databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
-    withFixture "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
       let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
       [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
@@ -336,11 +336,11 @@ egressPermanentRejection = do
       assertEqual "403 receipt is dead" Delivery.Dead ((.status) receipt)
       readIORef requests >>= assertEqual "one rejected HTTP request" 1
 
-egressDenied :: IO ()
-egressDenied = do
+egressDenied :: DatabaseFixture -> IO ()
+egressDenied databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
-    withFixture "egress-denied" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-denied" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
       rows <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       assertEqual "denied egress creates no outbox row" [] rows
@@ -352,10 +352,10 @@ egressDenied = do
         other -> assertFailure ("egress workflow did not journal DeniedOutcome: " <> show other)
       readIORef requests >>= assertEqual "denied egress sends no HTTP request" 0
 
-actionDeniedAtEnqueue :: IO ()
-actionDeniedAtEnqueue = do
+actionDeniedAtEnqueue :: DatabaseFixture -> IO ()
+actionDeniedAtEnqueue databaseFixture = do
   requests <- newIORef ([] :: [(Text, AgentAction)])
-  withFixture "action-denied-enqueue" [signalSink "denied"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+  (withFixture databaseFixture) "action-denied-enqueue" [signalSink "denied"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied"), AgentWorkflow.directory = directory}
@@ -373,10 +373,10 @@ actionDeniedAtEnqueue = do
         assertEqual "authorization uses exact recipient" "kizashi_recipient:recipient" (canonicalResourceText (actionResource action))
       other -> assertFailure ("expected one exact sink authorization, got " <> show other)
 
-actionUnavailableAtEnqueue :: IO ()
-actionUnavailableAtEnqueue = do
+actionUnavailableAtEnqueue :: DatabaseFixture -> IO ()
+actionUnavailableAtEnqueue databaseFixture = do
   requests <- newIORef ([] :: [(Text, AgentAction)])
-  withFixture "action-unavailable-enqueue" [signalSink "unavailable"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+  (withFixture databaseFixture) "action-unavailable-enqueue" [signalSink "unavailable"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage"), AgentWorkflow.directory = directory}
@@ -389,13 +389,13 @@ actionUnavailableAtEnqueue = do
       other -> assertFailure ("expected one AuthorizationFailed outcome, got " <> show other)
     readIORef requests >>= assertEqual "one fail-closed authorization attempt" 1 . length
 
-actionRevokedBeforePublish :: IO ()
-actionRevokedBeforePublish = do
+actionRevokedBeforePublish :: DatabaseFixture -> IO ()
+actionRevokedBeforePublish databaseFixture = do
   downstream <- newIORef []
   deny <- newIORef False
   decisions <- newIORef ([] :: [(Text, AgentAction)])
   testWithApplication (pure (kizashiApp downstream)) \port ->
-    withFixture "action-revoked-publish" [signalSink "revoked"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "action-revoked-publish" [signalSink "revoked"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
       directory <- directoryWith Active
       let ActionAuthorizer {authorize = allowFixture} = allowAllActionAuthorizerForTests
@@ -428,11 +428,11 @@ rejectingAuthorizer requests failure =
       kawaSource = "fixture"
     }
 
-receiptRecording :: IO ()
-receiptRecording = do
+receiptRecording :: DatabaseFixture -> IO ()
+receiptRecording databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kizashiApp requests)) \port ->
-    withFixture "receipt" [signalSink "receipt"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "receipt" [signalSink "receipt"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       [row] <- runWorkflowAndRows deps appEnv runJob
       before <- lookupReceipt pool row
       assertEqual "enqueue atomically records pending" Delivery.Pending ((.status) before)
@@ -443,11 +443,11 @@ receiptRecording = do
       assertEqual "downstream signal id is retained" (Just "sig_stub") ((.detail) receipt)
       assertEqual "one downstream request" 1 . length =<< readIORef requests
 
-sendGuard :: IO ()
-sendGuard = do
+sendGuard :: DatabaseFixture -> IO ()
+sendGuard databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kizashiApp requests)) \port ->
-    withFixture "send-guard" [signalSink "guard"] (kizashiAt port) unreachableDanwa \deps appEnv _pool runJob -> do
+    (withFixture databaseFixture) "send-guard" [signalSink "guard"] (kizashiAt port) unreachableDanwa \deps appEnv _pool runJob -> do
       [row] <- runWorkflowAndRows deps appEnv runJob
       firstOutcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
       secondOutcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
@@ -455,9 +455,9 @@ sendGuard = do
       assertEqual "guarded publish also succeeds" Outbox.PublishSucceeded secondOutcome
       assertEqual "the proved delivery is not sent twice" 1 . length =<< readIORef requests
 
-terminalReconciliation :: IO ()
-terminalReconciliation =
-  withFixture "reconciliation" [signalSink "reconciliation"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+terminalReconciliation :: DatabaseFixture -> IO ()
+terminalReconciliation databaseFixture =
+  (withFixture databaseFixture) "reconciliation" [signalSink "reconciliation"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     [row] <- runWorkflowAndRows deps appEnv runJob
     AgentWorkflow.reconcilePublishedSinkIntent deps row
     receipt <- lookupReceipt pool row
@@ -467,12 +467,12 @@ terminalReconciliation =
       (Just "outbox published without a terminal delivery receipt")
       ((.detail) receipt)
 
-danwaReuse :: IO ()
-danwaReuse = do
+danwaReuse :: DatabaseFixture -> IO ()
+danwaReuse databaseFixture = do
   starts <- newIORef (0 :: Int)
   posts <- newIORef (0 :: Int)
   testWithApplication (pure (flakyDanwaApp starts posts)) \port ->
-    withFixture "danwa-reuse" [DanwaConversation {topic = "support"}] unreachableKizashi (danwaAt port) \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "danwa-reuse" [DanwaConversation {topic = "support"}] unreachableKizashi (danwaAt port) \deps appEnv pool runJob -> do
       [row] <- runWorkflowAndRows deps appEnv runJob
       firstOutcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
       firstError <- case firstOutcome of
@@ -493,11 +493,11 @@ danwaReuse = do
       assertEqual "retry reuses the first conversation" 1 =<< readIORef starts
       assertEqual "one failed and one successful post" 2 =<< readIORef posts
 
-orderingIsolation :: IO ()
-orderingIsolation = do
+orderingIsolation :: DatabaseFixture -> IO ()
+orderingIsolation databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kizashiApp requests)) \port ->
-    withFixture "ordering" [signalSink "fail", signalSink "succeed"] (kizashiAt port) unreachableDanwa \deps appEnv _pool runJob -> do
+    (withFixture databaseFixture) "ordering" [signalSink "fail", signalSink "succeed"] (kizashiAt port) unreachableDanwa \deps appEnv _pool runJob -> do
       rows <- runWorkflowAndRows deps appEnv runJob
       assertEqual "two independent rows" 2 (length rows)
       case Integration.key . rowEvent <$> rows of
@@ -518,14 +518,14 @@ orderingIsolation = do
       assertEqual "one independent sink publishes" 1 (Outbox.published summary)
       assertEqual "the failing sink remains retryable" 1 (Outbox.retried summary)
 
-withFixture :: Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
-withFixture label sinks kizashi danwa use = do
+withFixture :: DatabaseFixture -> Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
+withFixture databaseFixture label sinks kizashi danwa use = do
   tracer <- noopTracer
-  withFixtureUsingTracer tracer label sinks kizashi danwa use
+  (withFixtureUsingTracer databaseFixture) tracer label sinks kizashi danwa use
 
-withFixtureUsingTracer :: Otel.Tracer -> Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
-withFixtureUsingTracer tracer label sinks kizashi danwa use =
-  withShikigamiMigratedDatabase \connectionString ->
+withFixtureUsingTracer :: DatabaseFixture -> Otel.Tracer -> Text -> [Sink] -> KizashiConfig -> DanwaConfig -> (AgentWorkflow.AgentRunDeps -> AppEnv -> Pool -> RunJob -> IO a) -> IO a
+withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString ->
     withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
       behaviorEnv <- newBehaviorEnv
       sinkHttp <- testSinkHttpFor danwa

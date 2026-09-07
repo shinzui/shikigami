@@ -24,7 +24,7 @@ import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
@@ -33,8 +33,8 @@ import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "Scheduler"
     [ testCase "nextDue returns the next minute for every-minute cron" do
@@ -50,7 +50,7 @@ tests =
         let dueAt = atMinute 5
         assertEqual "same agent and due time produce same id" (scheduleTimerId "heartbeat" dueAt) (scheduleTimerId "heartbeat" dueAt),
       testCase "fire action enqueues a run job and re-arms" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
@@ -82,7 +82,7 @@ tests =
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
             assertBool "re-armed next schedule timer fired" (either (const False) (maybe False (const True)) refired),
       testCase "paused schedule commits a trigger skip and enqueues no job" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
@@ -112,7 +112,7 @@ tests =
       -- fired, so a process that had been down for a day walked forward one
       -- stale minute per pass: 1440 runs with 1440 distinct idempotency keys.
       testCase "waking a day late arms exactly one future run (SkipMissed)" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
@@ -142,7 +142,7 @@ tests =
                   (fireAt > aDayLater)
               other -> assertFailure ("expected one timer armed after now, got " <> show (fmap (fmap fireAt) other)),
       testCase "FireAll still arms from the tick that fired" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
@@ -167,7 +167,7 @@ tests =
       -- composition point a failed enqueue and "this is not a schedule timer"
       -- were the same answer, and neither said anything.
       testCase "a failed schedule enqueue leaves the timer for requeue" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore ->
             withUnreachablePool connStr \brokenPool -> do
               tracer <- noopTracer
@@ -195,7 +195,7 @@ tests =
       -- do was leave a row whose kind nobody claims indistinguishable from one
       -- the approval action declined, and say nothing about either.
       testCase "an unknown timer kind is reported, not silently approved" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             (logger, captured) <- capturingLogger
@@ -242,7 +242,7 @@ tests =
         schedules <- schedulerSchedules logger True [scheduledAgent "good-agent" "*/5 * * * *"]
         assertEqual "the agent is scheduled" ["good-agent"] (Map.keys schedules),
       testCase "an approval-timeout payload still reaches the approval action" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             (logger, captured) <- capturingLogger

@@ -17,7 +17,11 @@
 -- history from.
 module Main (main) where
 
+import Control.Exception (IOException, bracket, try)
+import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.Int (Int64)
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Database.PostgreSQL.Migrate
   ( MigrationOutcome (AppliedNow),
@@ -26,22 +30,27 @@ import Database.PostgreSQL.Migrate
     defaultRunOptions,
     runMigrationPlan,
   )
+import Hasql.Connection qualified as Connection
 import Hasql.Connection.Settings qualified as Settings
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Session qualified as Session
+import Hasql.Statement (Statement, preparable)
 import Shikigami.Migrations (shikigamiMigrationPlan)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (withShikigamiFreshDatabase, withShikigamiMigratedSuite)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 main :: IO ()
-main =
+main = withShikigamiMigratedSuite \databaseFixture ->
   defaultMain
     ( testGroup
         "shikigami-migrations smoke"
         [ testCase "a fresh database applies the plan, and re-applying is a no-op" do
             plan <- either (fail . show) pure shikigamiMigrationPlan
-            withShikigamiMigratedDatabase \connectionString -> do
-              -- withShikigamiMigratedDatabase already applied the plan and
-              -- reconciled the read-model registry; this is the second pass.
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              -- The suite template already applied the plan; the fresh clone has
+              -- a reconciled read-model registry; this is the second pass.
               report <-
                 runMigrationPlan
                   defaultRunOptions
@@ -62,7 +71,7 @@ main =
               cleanupIssues report @?= [],
           testCase "the applied plan spans all four components" do
             plan <- either (fail . show) pure shikigamiMigrationPlan
-            withShikigamiMigratedDatabase \connectionString -> do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
               report <-
                 runMigrationPlan
                   defaultRunOptions
@@ -76,6 +85,61 @@ main =
                       (Text.unpack component <> " is missing from the applied ledger")
                       (component `Text.isInfixOf` rendered)
                 )
-                ["kiroku", "keiro", "kioku", "shikigami"]
+                ["kiroku", "keiro", "kioku", "shikigami"],
+          testCase "examples share one template and isolate their data" do
+            (firstName, firstTemplate) <- withShikigamiFreshDatabase databaseFixture \connectionString ->
+              withConnection connectionString \connection -> do
+                runSession connection (Session.script "CREATE TABLE public.fixture_sentinel (value integer); INSERT INTO public.fixture_sentinel VALUES (1)")
+                runSession connection (Session.statement () coordinates)
+            withShikigamiFreshDatabase databaseFixture \connectionString ->
+              withConnection connectionString \connection -> do
+                (secondName, secondTemplate) <- runSession connection (Session.statement () coordinates)
+                assertBool "fresh database per example" (firstName /= secondName)
+                firstTemplate @?= secondTemplate
+                runSession connection (Session.statement () noSentinel) >>= (@?= True)
+                runSession connection (Session.statement firstName databaseAbsent) >>= (@?= True),
+          testCase "an exception releases the clone before the next example" do
+            failedName <- newIORef ""
+            result <- try @IOException $ withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              withConnection connectionString \connection -> do
+                (name, _) <- runSession connection (Session.statement () coordinates)
+                writeIORef failedName name
+              ioError (userError "intentional fixture cleanup probe")
+            assertBool "the callback exception escapes" (either (const True) (const False) result)
+            name <- readIORef failedName
+            assertBool "callback reached the clone" (not (Text.null name))
+            withShikigamiFreshDatabase databaseFixture \connectionString ->
+              withConnection connectionString \connection ->
+                runSession connection (Session.statement name databaseAbsent) >>= (@?= True)
         ]
     )
+
+withConnection :: Text -> (Connection.Connection -> IO a) -> IO a
+withConnection connectionString =
+  bracket
+    (Connection.acquire (Settings.connectionString connectionString) >>= either (fail . show) pure)
+    Connection.release
+
+runSession :: Connection.Connection -> Session.Session a -> IO a
+runSession connection session = Connection.use connection session >>= either (fail . show) pure
+
+coordinates :: Statement () (Text, Int64)
+coordinates =
+  preparable
+    "SELECT current_database()::text, oid::bigint FROM pg_database WHERE datname = 'keiro_template'"
+    E.noParams
+    (D.singleRow ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.int8)))
+
+noSentinel :: Statement () Bool
+noSentinel =
+  preparable
+    "SELECT to_regclass('public.fixture_sentinel') IS NULL"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+databaseAbsent :: Statement Text Bool
+databaseAbsent =
+  preparable
+    "SELECT NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)"
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.bool)))

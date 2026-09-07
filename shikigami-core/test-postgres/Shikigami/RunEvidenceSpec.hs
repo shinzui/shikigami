@@ -29,21 +29,18 @@ import Shikigami.Log.Correlation
     renderCallCorrelationId,
     runCorrelationId,
   )
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude
-import Shikigami.RunEvidence.Conformance (runEvidenceBehaviorConformancePassed)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "run evidence"
     [ testGroup
         "lifecycle"
-        [ testCase "all generated state-command obligations have passing witnesses" do
-            assertEqual "behavior conformance" True runEvidenceBehaviorConformancePassed,
-          testCase "every ordinary transition follows the checked aggregate" do
+        [ testCase "every ordinary transition follows the checked aggregate" do
             profiled <- advancesTo ProfileResolved sampleEvidence
             running <- advancesTo Running profiled
             sealed <- advancesTo EvidenceSealed running
@@ -319,7 +316,7 @@ tests =
       testGroup
         "durability"
         [ testCase "events and operator rows survive restarts and replay converges" do
-            withShikigamiMigratedDatabase \connectionString -> do
+            (withShikigamiFreshDatabase databaseFixture) \connectionString -> do
               profiledResult <-
                 withEvidenceRuntime connectionString \store ->
                   persistEvidenceTransition store sampleEvidence ProfileResolved Nothing

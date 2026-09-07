@@ -14,16 +14,16 @@ import Hasql.Statement (Statement, preparable)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Loader (AgentLoadReport (..), loadAgentsReport)
 import Shikigami.Directory.Store
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "directory store"
     [ testCase "complete load reports persist successes and full failures" $
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           report <- loadAgentsReport "../agents"
           expectRight "recordLoadStates" =<< recordLoadStates pool "../agents" report
           rows <- queryLoadStates pool
@@ -36,7 +36,7 @@ tests =
               enabled @?= Nothing
               assertBool "the Dhall failure is absent" (maybe False (not . Text.null) problem),
       testCase "repeat writes are idempotent and stale paths are reconciled" $
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           report@AgentLoadReport {entries} <- loadAgentsReport "../agents"
           expectRight "first recordLoadStates" =<< recordLoadStates pool "../agents" report
           expectRight "repeat recordLoadStates" =<< recordLoadStates pool "../agents" report
@@ -45,7 +45,7 @@ tests =
           expectRight "reduced recordLoadStates" =<< recordLoadStates pool "../agents" reduced
           countLoadStates pool >>= (@?= 1),
       testCase "run skips are idempotent per stage and key" $
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           let triggerSkip =
                 RunSkip
                   { agentName = "heartbeat",
@@ -65,9 +65,9 @@ tests =
 
 type LoadStateRow = (Text, Maybe Text, Text, Maybe Bool, Maybe Text)
 
-withPool :: (Pool -> IO a) -> IO a
-withPool use =
-  withShikigamiMigratedDatabase \connectionString ->
+withPool :: DatabaseFixture -> (Pool -> IO a) -> IO a
+withPool databaseFixture use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString ->
     withStore (defaultConnectionSettings connectionString) (use . pool)
 
 queryLoadStates :: Pool -> IO [LoadStateRow]

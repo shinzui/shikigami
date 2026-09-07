@@ -22,7 +22,7 @@ import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Trigger.Consumer
   ( DeadLetterId (..),
     DeadLetterRecord (..),
@@ -39,12 +39,12 @@ import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "StreamInbox"
     [ testCase "matched event atomically records inbox row and enqueues run job" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
           hitCount <- newIORef (0 :: Int)
           disposition <-
@@ -66,7 +66,7 @@ tests =
           inbox <- readInbox appEnv
           assertEqual "completed inbox row" (Just InboxCompleted) (inboxStatus <$> inbox),
       testCase "redelivered event is InboxDuplicate and enqueues nothing" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
           first <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
           second <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
@@ -75,7 +75,7 @@ tests =
           jobs <- readRunJobs pool
           assertEqual "one queue message" 1 (length jobs),
       testCase "paused stream match commits skip with inbox and enqueues nothing" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
           directory <- directoryWith Paused
           first <-
@@ -111,7 +111,7 @@ tests =
               assertEqual "same key the run would use" "risk-agent:act_stream_1" ((.idempotencyKey) runSkip)
             other -> assertFailure ("expected one stream skip, got " <> show other),
       testCase "handler failure rolls back both inbox row and message" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
           dropped <- Pool.use pool (dropQueue runQueueName)
           case dropped of
@@ -139,7 +139,7 @@ tests =
           TransientFailure _ -> pure ()
           other -> assertFailure ("expected transient store failure, got " <> show other),
       testCase "poison record is durably dead-lettered before terminal ack" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureDeadQueue pool
           disposition <-
             processActivityRecord
@@ -166,7 +166,7 @@ tests =
               assertEqual "decode error is bounded" True (Text.length failure <= 2_048)
             other -> assertFailure ("expected one dead-letter record, got " <> show other),
       testCase "failed dead-letter persistence halts without terminal ack" do
-        withFixture \appEnv pool -> do
+        (withFixture databaseFixture) \appEnv pool -> do
           ensureDeadQueue pool
           dropped <- Pool.use pool (dropQueue deadLetterQueueName)
           case dropped of
@@ -196,9 +196,9 @@ tests =
           other -> assertFailure ("expected dead-letter decision, got " <> show other)
     ]
 
-withFixture :: (AppEnv -> Pool.Pool -> IO a) -> IO a
-withFixture use =
-  withShikigamiMigratedDatabase \connectionString -> do
+withFixture :: DatabaseFixture -> (AppEnv -> Pool.Pool -> IO a) -> IO a
+withFixture databaseFixture use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString -> do
     let settings = defaultConnectionSettings connectionString
     withStore settings \store -> do
       tracer <- noopTracer

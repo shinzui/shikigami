@@ -18,7 +18,7 @@ import Shikigami.Directory
 import Shikigami.Directory qualified as Directory
 import Shikigami.Memory.AliasStore (AliasReconciliation (..))
 import Shikigami.Memory.AliasStore qualified as AliasStore
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Server.Command.Agents
   ( AgentInventoryEntry (..),
     AliasSyncEntry (..),
@@ -29,8 +29,8 @@ import Shikigami.Server.Command.Agents
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "agent inventory"
     [ testCase "lists joined, declared-only, principal-only, and failed states" do
@@ -69,7 +69,7 @@ tests =
         assertBool "disabled marker" (not ((.directoryConfigured) heartbeat))
         assertBool "disabled mode invented a principal-only row" (not (any isDirectoryOnly inventory)),
       testCase "explicit rename aliases are idempotent and missing mappings remain untouched" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             report <- loadAgentsReport "../agents"
             directoryHandle <- directoryWithPrincipals [heartbeatPrincipal]
@@ -93,7 +93,7 @@ tests =
               [AliasSyncEntry {legacyName = "orphan", outcome = AliasMissingMapping}] -> pure ()
               other -> assertFailure ("expected an untouched missing mapping, got " <> show other),
       testCase "multiply claimed explicit aliases are reported without insertion" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             report <- loadAgentsReport "../agents"
             directoryHandle <- directoryWithPrincipals [heartbeatPrincipal, triagePrincipal]
@@ -111,7 +111,7 @@ tests =
                 assertEqual "both claims are named" ["agent_heartbeat", "agent_triage_note"] principals
               other -> assertFailure ("expected one multiply-claimed mapping, got " <> show other),
       testCase "an invalid explicit mapping blocks automatic reconciliation for that name" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             report <- loadAgentsReport "../agents"
             directoryHandle <- directoryWithPrincipals [heartbeatPrincipal]

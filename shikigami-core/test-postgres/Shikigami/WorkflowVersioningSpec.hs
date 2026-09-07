@@ -73,7 +73,7 @@ import Shikigami.Flow.Acknowledgement (runAcknowledgement)
 import Shikigami.Flow.Capability (MemoryEnv (..), SinkEnv (..), runActivity, runMemory, runSink)
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
@@ -82,8 +82,8 @@ import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowR
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "WorkflowVersioning"
     [ testCase "resume lease exceeds the synchronous behavior timeout" do
@@ -96,12 +96,12 @@ tests =
               } = shikigamiWorkflowResumeOptions appEnv timeout
         assertEqual "resume lease includes the scheduling margin" (secondsToNominalDiffTime 330) leaseTtl
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
-      testCase "in-flight workflow survives a simulated deploy under a patch guard" inFlightSurvivesDeploy,
-      testCase "behavior retry patch pins agent and conversation labels per deploy" behaviorRetryLabelsArePinned,
-      testCase "capability resolution is absent in flight and journaled when fresh" capabilityResolutionIsPinned,
+      testCase "in-flight workflow survives a simulated deploy under a patch guard" (inFlightSurvivesDeploy databaseFixture),
+      testCase "behavior retry patch pins agent and conversation labels per deploy" (behaviorRetryLabelsArePinned databaseFixture),
+      testCase "capability resolution is absent in flight and journaled when fresh" (capabilityResolutionIsPinned databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
-      testCase "approval patch preserves legacy flow and sink waits while fresh runs spawn children" approvalShapeIsPinned,
-      testCase "emitSignal ordinals preserved in flight, labels when fresh" emitSignalSchemeIsPinnedPerInstance
+      testCase "approval patch preserves legacy flow and sink waits while fresh runs spawn children" (approvalShapeIsPinned databaseFixture),
+      testCase "emitSignal ordinals preserved in flight, labels when fresh" (emitSignalSchemeIsPinnedPerInstance databaseFixture)
     ]
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────
@@ -119,9 +119,9 @@ tests =
 -- "Shikigami.Workflow.Versioning" on purpose: this case is about the mechanism,
 -- so it must not pass or fail because of which patches production happens to
 -- have active today.
-inFlightSurvivesDeploy :: IO ()
-inFlightSurvivesDeploy =
-  withShikigamiMigratedDatabase \connStr ->
+inFlightSurvivesDeploy :: DatabaseFixture -> IO ()
+inFlightSurvivesDeploy databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -250,9 +250,9 @@ countCollect ref = do
 -- instance started before deployment and selects only the v2 label for a fresh
 -- instance. Conversation labels carry a message id, but the patch decision is
 -- the same stable journal value.
-behaviorRetryLabelsArePinned :: IO ()
-behaviorRetryLabelsArePinned =
-  withShikigamiMigratedDatabase \connStr ->
+behaviorRetryLabelsArePinned :: DatabaseFixture -> IO ()
+behaviorRetryLabelsArePinned databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -313,9 +313,9 @@ newRetryShape oldLabel newLabel = do
 -- session boundary. An instance started by the old deploy takes the real False
 -- branch and never writes that step; a fresh instance under the new patch set
 -- writes it before parking.
-capabilityResolutionIsPinned :: IO ()
-capabilityResolutionIsPinned =
-  withShikigamiMigratedDatabase \connStr ->
+capabilityResolutionIsPinned :: DatabaseFixture -> IO ()
+capabilityResolutionIsPinned databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -389,9 +389,9 @@ approvalReviewIdentityIsStable = do
 -- @approval:KawaDigest:0@ family. An instance parked under either old shape
 -- must finish there after deploy, while a fresh parent records the policy and
 -- a child relation without writing a computed approval or notify label.
-approvalShapeIsPinned :: IO ()
-approvalShapeIsPinned =
-  withShikigamiMigratedDatabase \connStr ->
+approvalShapeIsPinned :: DatabaseFixture -> IO ()
+approvalShapeIsPinned databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       session <- genSessionId
@@ -584,9 +584,9 @@ readRequiredApprovalAid aidRef =
 -- Reverting the guard in "Shikigami.Flow.Capability" (forcing the label branch
 -- unconditionally) makes this case fail on exactly that: the escalation lands on
 -- @emit-signal:escalate@ instead of @emit-signal:1@.
-emitSignalSchemeIsPinnedPerInstance :: IO ()
-emitSignalSchemeIsPinnedPerInstance =
-  withShikigamiMigratedDatabase \connStr ->
+emitSignalSchemeIsPinnedPerInstance :: DatabaseFixture -> IO ()
+emitSignalSchemeIsPinnedPerInstance databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       session <- genSessionId

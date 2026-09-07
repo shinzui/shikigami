@@ -15,27 +15,27 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Resolve
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "profile resolution"
     [ testCase "resolves an active profile to its digest" do
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           let content = sampleProfile Active Nothing (ProfileVersion "1")
               digest = profileDigest content
           insertProfile pool content digest
           resolved <- resolveProfile (postgresProfileStore pool) testNow sampleId (Just (ProfileVersion "1"))
           assertEqual "the stored profile resolves" (Right (resolvedProfile content digest)) resolved,
       testCase "unknown id is refused by id" do
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           resolved <- resolveProfile (postgresProfileStore pool) testNow (ProfileId "missing") Nothing
           assertEqual "unknown profile" (Left (UnknownProfile (ProfileId "missing") Nothing)) resolved,
       testCase "expired profile is refused, naming the expiry" do
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           let expiry = UTCTime (fromGregorian 2026 8 18) 0
               content = sampleProfile Active (Just expiry) (ProfileVersion "1")
               digest = profileDigest content
@@ -43,14 +43,14 @@ tests =
           resolved <- resolveProfile (postgresProfileStore pool) testNow sampleId Nothing
           assertEqual "expired profile" (Left (ProfileExpired sampleId (ProfileVersion "1") expiry)) resolved,
       testCase "withdrawn profile is refused, naming the lifecycle" do
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           let content = sampleProfile Withdrawn Nothing (ProfileVersion "1")
               digest = profileDigest content
           insertProfile pool content digest
           resolved <- resolveProfile (postgresProfileStore pool) testNow sampleId Nothing
           assertEqual "withdrawn profile" (Left (ProfileWithdrawn sampleId (ProfileVersion "1") Withdrawn)) resolved,
       testCase "tampered content is refused as mutable" do
-        withPool \pool -> do
+        (withPool databaseFixture) \pool -> do
           let content = sampleProfile Active Nothing (ProfileVersion "1")
               claimed = profileDigest content
           insertProfile pool content claimed
@@ -79,9 +79,9 @@ tests =
           resolved
     ]
 
-withPool :: (Pool -> IO a) -> IO a
-withPool use =
-  withShikigamiMigratedDatabase \connectionString ->
+withPool :: DatabaseFixture -> (Pool -> IO a) -> IO a
+withPool databaseFixture use =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString ->
     withStore (defaultConnectionSettings connectionString) (use . pool)
 
 testNow :: UTCTime

@@ -48,13 +48,13 @@ import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage (..))
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "RunJob"
     [ testCase "typed codec preserves the producer's bare RunJob JSON" do
@@ -129,7 +129,7 @@ tests =
             ("conversation route under " <> show kind)
             (routeRunJob sampleJob {triggerKind = kind, routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
       testCase "drain gate enforces every configured lifecycle decision" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             let pool = StoreConnection.pool store
                 jobWith suffix = sampleJob {identity = UnresolvedLegacyIdentity, idempotencyKey = "codec-agent:event:" <> suffix}
@@ -165,7 +165,7 @@ tests =
               ]
               ((.idempotencyKey) <$> skips),
       testCase "worker-path heartbeat keeps one slow delivery leased" do
-        withShikigamiMigratedDatabase \connStr -> do
+        (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           callCount <- newIORef (0 :: Int)
           handlerDone <- newIORef False
           let tuning = requireTuning (mkJobTuning 1 1 (PollEvery 0.1))
@@ -199,7 +199,7 @@ tests =
           assertEqual "main queue is empty" 0 (queueLength metrics)
           assertEqual "reconciled DLQ is empty" 0 (queueLength dlqMetrics),
       testCase "permanent outcome reaches the reconciled DLQ" do
-        withShikigamiMigratedDatabase \connStr -> do
+        (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           let tuning = requireTuning (mkJobTuning 2 1 (PollEvery 0.1))
               permanent =
                 agentJobOutcome
@@ -234,7 +234,7 @@ tests =
       -- proof that a mis-declared route lands in the operator-visible DLQ rather
       -- than quietly running the other workflow.
       testCase "a route error reaches the reconciled DLQ" do
-        withShikigamiMigratedDatabase \connStr -> do
+        (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           let tuning = requireTuning (mkJobTuning 2 1 (PollEvery 0.1))
               misdeclared = sampleJob {routeKind = ConversationWorkflowRoute}
           reachedDlq <-

@@ -212,7 +212,6 @@ test-suite shikigami-core-test
   main-is:        Main.hs
   other-modules:
     Shikigami.AgentLoaderSpec
-    Shikigami.AgentWorkflowSpec
     Shikigami.AppConfigSpec
     Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
@@ -224,37 +223,99 @@ test-suite shikigami-core-test
     Shikigami.CapabilityProviderSpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBatchSpec
-    Shikigami.DelegationBudgetSpec
     Shikigami.DirectorySpec
-    Shikigami.DirectoryStoreSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
-    Shikigami.FlowLifecycleSpec
-    Shikigami.GrantStoreSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.PracticeReviewEvidenceSpec
-    Shikigami.PracticeReviewMemorySpec
-    Shikigami.PracticeReviewOrchestrationSpec
     Shikigami.PracticeReviewSpec
-    Shikigami.ProfileResolutionSpec
     Shikigami.RouterCatalogSpec
     Shikigami.RouterDecisionSpec
     Shikigami.RouterDeclarationSpec
-    Shikigami.RouterWorkflowSpec
-    Shikigami.RunEvidenceSpec
     Shikigami.SinkAuthSpec
-    Shikigami.SinkDeliverySpec
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
-    Shikigami.SpikeWorkflowSpec
     Shikigami.WireCompatSpec
-    Shikigami.WorkflowVersioningSpec
 
   hs-source-dirs: test
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , baikai
+    , base
+    , bytestring
+    , containers
+    , danwa-api
+    , danwa-client
+    , directory
+    , effectful
+    , filepath
+    , generic-lens
+    , handan-core
+    , hasql
+    , hasql-pool
+    , hasql-transaction
+    , hs-opentelemetry-api
+    , hs-opentelemetry-exporter-in-memory
+    , hs-opentelemetry-propagator-w3c
+    , hs-opentelemetry-sdk
+    , http-client
+    , http-types
+    , keiki
+    , keiro
+    , kikan-en-contract
+    , kioku-api
+    , kioku-core
+    , kiroku-store
+    , lens
+    , pgmq-hasql
+    , servant-client
+    , settei
+    , settei-env
+    , settei-optparse-applicative
+    , settei-yaml
+    , shibuya-core
+    , shikigami-core
+    , shikumi
+    , shikumi-tools
+    , streamly-core
+    , tasty
+    , tasty-hunit
+    , text
+    , time
+    , unordered-containers
+    , uuid
+    , vector
+    , wai
+    , warp
+
+test-suite shikigami-core-postgres-test
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  other-modules:
+    Shikigami.AgentWorkflowSpec
+    Shikigami.DelegationBudgetSpec
+    Shikigami.DirectoryStoreSpec
+    Shikigami.Fixture.KawaStub
+    Shikigami.Fixture.SinkHttp
+    Shikigami.FlowLifecycleSpec
+    Shikigami.GrantStoreSpec
+    Shikigami.PracticeReviewEvidenceSpec
+    Shikigami.PracticeReviewMemorySpec
+    Shikigami.PracticeReviewOrchestrationSpec
+    Shikigami.ProfileResolutionSpec
+    Shikigami.RouterWorkflowSpec
+    Shikigami.RunEvidenceSpec
+    Shikigami.SinkDeliverySpec
+    Shikigami.SpikeWorkflowSpec
+    Shikigami.WorkflowVersioningSpec
+
+  hs-source-dirs: test-postgres test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
@@ -306,3 +367,25 @@ test-suite shikigami-core-test
     , vector
     , wai
     , warp
+
+test-suite shikigami-core-domain-test
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test-domain
+  build-depends:
+    , base
+    , shikigami-core
+
+test-suite shikigami-core-diagrams-test
+  import:         common
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test-diagrams
+  build-depends:
+    , base
+    , keiki
+    , shikigami-core
+    , tasty
+    , tasty-hunit
+    , text

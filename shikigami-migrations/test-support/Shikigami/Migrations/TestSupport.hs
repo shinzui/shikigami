@@ -1,52 +1,38 @@
-{-# LANGUAGE MultilineStrings #-}
-
--- | Ephemeral, fully-migrated databases for the repository's database-backed
--- test suites.
---
--- This module drives 'Database.PostgreSQL.Migrate.Test.withMigratedDatabase' and
--- hands callers a connection string, because that is what @shikigami-core@ and
--- @shikigami-workers@ tests give their pools.
+-- | One migrated template per suite and an isolated database per example.
+-- Runtime packages must never acquire PostgreSQL through this test boundary.
 module Shikigami.Migrations.TestSupport
-  ( withShikigamiMigratedDatabase,
+  ( DatabaseFixture,
+    withShikigamiMigratedSuite,
+    withShikigamiFreshDatabase,
+    withShikigamiMigratedDatabase,
   )
 where
 
 import Data.Text (Text)
-import Database.PostgreSQL.Migrate.Test qualified as PgMigrate
-import Hasql.Connection qualified as Connection
-import Hasql.Decoders qualified as Decoders
-import Hasql.Encoders qualified as Encoders
-import Hasql.Session qualified as Session
-import Hasql.Statement (Statement, preparable)
-import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrationPlan)
+import Keiro.Test.Postgres qualified as Postgres
+import Kioku.Migrations qualified as Kioku
+import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrations)
 
+type DatabaseFixture = Postgres.Fixture
+
+-- | Keiro supplies Kiroku and Keiro. Add the application components exactly once;
+-- Shikigami's component includes the transport schema used by its workers.
+withShikigamiMigratedSuite :: (DatabaseFixture -> IO a) -> IO a
+withShikigamiMigratedSuite use = do
+  kioku <- either (fail . show) pure Kioku.kiokuMigrations
+  shikigami <- either (fail . show) pure shikigamiMigrations
+  Postgres.withMigratedSuiteWith [kioku, shikigami] use
+
+-- | Clone the suite template, reconcile Kioku's compiled read-model identities,
+-- and release the clone even when the example raises an exception. All caller
+-- connections must be bracketed inside the callback so they close before drop.
+withShikigamiFreshDatabase :: DatabaseFixture -> (Text -> IO a) -> IO a
+withShikigamiFreshDatabase fixture use =
+  Postgres.withFreshDatabase fixture \connectionString -> do
+    reconcileShikigamiReadModels connectionString
+    use connectionString
+
+-- | Convenience for a standalone check. Suites should share the suite fixture.
 withShikigamiMigratedDatabase :: (Text -> IO a) -> IO a
-withShikigamiMigratedDatabase use = do
-  plan <- either (fail . show) pure shikigamiMigrationPlan
-  result <-
-    PgMigrate.withMigratedDatabase plan \connection -> do
-      connectionStringResult <- Connection.use connection connectionStringSession
-      connectionString <- either (fail . show) pure connectionStringResult
-      -- Kioku 0.2 leaves the read-model registry to the host that applies the
-      -- plan. Without this, every projection query fails ReadModelUnregistered.
-      reconcileShikigamiReadModels connectionString
-      use connectionString
-  either (fail . show) pure result
-
--- pg-migrate-test-support supplies a live Hasql connection so assertions cannot
--- inherit runner session state. Shikigami's callers want a connection string, so
--- recover the ephemeral server's coordinates from that fresh callback session.
-connectionStringSession :: Session.Session Text
-connectionStringSession = Session.statement () connectionStringStatement
-
-connectionStringStatement :: Statement () Text
-connectionStringStatement =
-  preparable
-    """
-    SELECT 'host=' || split_part(current_setting('unix_socket_directories'), ',', 1)
-        || ' port=' || current_setting('port')
-        || ' dbname=' || current_database()
-        || ' user=' || current_user
-    """
-    Encoders.noParams
-    (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.text)))
+withShikigamiMigratedDatabase use =
+  withShikigamiMigratedSuite \fixture -> withShikigamiFreshDatabase fixture use

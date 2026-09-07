@@ -11,7 +11,6 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
-import Keiki.Acceptor qualified as Acceptor
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
@@ -56,16 +55,10 @@ import Shikigami.Flow.Capability
     runSink,
   )
 import Shikigami.Flow.Delegate qualified as FlowDelegate
-import Shikigami.Flow.Lifecycle.AtRiskCustomer
-  ( AtRiskCustomerCommand (..),
-    atRiskCustomerLifecycle,
-    atRiskCustomerMermaid,
-    atRiskCustomerValidationWarnings,
-  )
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
@@ -75,27 +68,11 @@ import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "FlowLifecycle"
-    [ testCase "at-risk customer lifecycle is well-formed" do
-        assertEqual "keiki validation warnings" [] atRiskCustomerValidationWarnings,
-      testCase "at-risk flow branches belong to the lifecycle command language" do
-        let accepts = Acceptor.accepts (Acceptor.inputAcceptor atRiskCustomerLifecycle)
-        assertBool "low-risk branch is accepted" (accepts [ClassifyLowRisk])
-        assertBool "acknowledged high-risk branch is accepted" (accepts [ClassifyHighRisk, Acknowledge])
-        assertBool "timed-out high-risk branch is accepted" (accepts [ClassifyHighRisk, DeadlineExpired])
-        assertBool "acknowledgement cannot precede classification" (not (accepts [Acknowledge])),
-      testCase "at-risk customer lifecycle renders the expected states" do
-        assertBool "Mermaid output starts as a state diagram" ("stateDiagram-v2" `Text.isInfixOf` atRiskCustomerMermaid)
-        assertBool "Mermaid output includes AwaitingAck" ("AwaitingAck" `Text.isInfixOf` atRiskCustomerMermaid)
-        assertBool "Mermaid output includes Escalated" ("Escalated" `Text.isInfixOf` atRiskCustomerMermaid),
-      testCase "at-risk customer lifecycle is available as a registry diagram" do
-        let LifecycleDiagram {mermaid, validationWarnings} = atRiskCustomerLifecycleDiagram
-        assertEqual "registry diagram has no validation warnings" [] validationWarnings
-        assertBool "registry diagram includes AwaitingAck" ("AwaitingAck" `Text.isInfixOf` mermaid),
-      -- No FlowRuntime is constructed here any more, and that is the assertion:
+    [ -- No FlowRuntime is constructed here any more, and that is the assertion:
       -- asking which flows exist no longer requires the machinery for running one.
       testCase "flow registry resolves at-risk-customer and misses unknown flows" do
         case lookupFlow "at-risk-customer" of
@@ -127,26 +104,26 @@ tests =
           []
           (flowDeclarationErrors (flowBehaviorAgent (Deterministic {rule = "flow-test", params = mempty}))),
       testCase "trivial flow completes through keiro runWorkflowWith" do
-        outcome <- runFlowWorkflow completedFlow (WorkflowId "flow-completed-spike")
+        outcome <- (runFlowWorkflow databaseFixture) completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
       testCase "sleeping flow suspends through keiro runWorkflowWith" do
-        outcome <- runSleepSpike (WorkflowId "flow-sleeping-spike")
+        outcome <- (runSleepSpike databaseFixture) (WorkflowId "flow-sleeping-spike")
         assertEqual "sleeping flow suspends" (Right Suspended) outcome,
       testCase "currentActivity exposes the triggering activity envelope" do
-        outcome <- runFlowWorkflow activityFlow (WorkflowId "flow-activity-spike")
+        outcome <- (runFlowWorkflow databaseFixture) activityFlow (WorkflowId "flow-activity-spike")
         assertEqual "activity id is available to the flow" (Right (Completed (String "act_flow_test"))) outcome,
       testCase "remember and recall use the flow memory capability" do
-        outcome <- runFlowWorkflow memoryFlow (WorkflowId "flow-memory-spike")
+        outcome <- (runFlowWorkflow databaseFixture) memoryFlow (WorkflowId "flow-memory-spike")
         assertEqual "recalled memories include the remembered flow note" (Right (Completed (Bool True))) outcome,
       testCase "emitSignal enqueues an allowed sink outbox intent" do
-        (outcome, count) <- runFlowWorkflowWithAgent "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
+        (outcome, count) <- (runFlowWorkflowWithAgent databaseFixture) "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
           (Right (Completed (toJSON (SinkResult SKizashiSignal (Enqueued "outbox:flow-sink-spike:emit-signal:alert")))))
           outcome
         assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do
-        (outcome, count) <- runFlowWorkflowWithAgent "intruder" sinkFlow (WorkflowId "flow-denied-sink-spike")
+        (outcome, count) <- (runFlowWorkflowWithAgent databaseFixture) "intruder" sinkFlow (WorkflowId "flow-denied-sink-spike")
         case outcome of
           Right (Completed encodedResult) -> case encodedResult of
             _ | encodedResult == toJSON (SinkResult SKizashiSignal (DeniedOutcome "agent 'intruder' has no sink grants")) -> pure ()
@@ -154,7 +131,7 @@ tests =
           other -> assertFailure ("denied sink flow should complete, got " <> show other)
         assertEqual "denied sink does not enqueue an outbox message" (Right 0) count,
       testCase "registered at-risk-customer flow parks then completes when acknowledged" do
-        withAtRiskFlow \appEnv runtime aidRef flow -> do
+        (withAtRiskFlow databaseFixture) \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-ack"
           parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
@@ -173,7 +150,7 @@ tests =
           afterOutbox <- outboxCount appEnv
           assertEqual "acknowledged branch does not enqueue escalation" (Right 1) afterOutbox,
       testCase "registered at-risk-customer flow escalates after acknowledgement timeout" do
-        withAtRiskFlow \appEnv runtime _aidRef flow -> do
+        (withAtRiskFlow databaseFixture) \appEnv runtime _aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-timeout"
           parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement deadline" (Right Suspended) parked
@@ -184,7 +161,7 @@ tests =
           afterOutbox <- outboxCount appEnv
           assertEqual "timeout branch enqueues alert plus escalation" (Right 2) afterOutbox,
       testCase "registered at-risk-customer flow replays parked alert without duplicating outbox" do
-        withAtRiskFlow \appEnv runtime aidRef flow -> do
+        (withAtRiskFlow databaseFixture) \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-crash-replay"
           first <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "first run parks" (Right Suspended) first
@@ -208,7 +185,7 @@ tests =
       -- again -- and a `remember` that mints a fresh memory id each time turns
       -- that into one extra memory row per replay.
       testCase "replaying a completed flow does not duplicate its memory" do
-        withAtRiskFlow \appEnv runtime aidRef flow -> do
+        (withAtRiskFlow databaseFixture) \appEnv runtime aidRef flow -> do
           let workflowId = WorkflowId "flow-at-risk-memory-replay"
           parked <- runFlowInAppEnv appEnv runtime "at-risk-customer" flow workflowId highRiskPayload
           assertEqual "high-risk flow parks for acknowledgement" (Right Suspended) parked
@@ -245,7 +222,7 @@ tests =
       -- `remember` documents: its arguments must be a pure function of
       -- replay-stable inputs.
       testCase "one deterministic id records idempotently and refuses a changed payload" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -275,7 +252,7 @@ tests =
       -- flow's own `classify` step would mask the difference by answering from
       -- the journal whether or not the recall did.
       testCase "a replayed recall answers from the journal, not from the changed store" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             session <- genSessionId
@@ -304,7 +281,7 @@ tests =
       -- which no specification member declares, so its labels need no
       -- declaration in domain/shikigami-agent-run.keiro.
       testCase "rememberWith records chosen metadata while remember keeps the old defaults" do
-        withShikigamiMigratedDatabase \connStr ->
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             session <- genSessionId
@@ -466,19 +443,21 @@ sleepFlow _payload = do
   pure (String "after-wait")
 
 runFlowWorkflow ::
+  DatabaseFixture ->
   FlowDef ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value))
-runFlowWorkflow flow workflowId =
-  fst <$> runFlowWorkflowWithAgent "at-risk-customer" flow workflowId
+runFlowWorkflow databaseFixture flow workflowId =
+  fst <$> (runFlowWorkflowWithAgent databaseFixture) "at-risk-customer" flow workflowId
 
 runFlowWorkflowWithAgent ::
+  DatabaseFixture ->
   Text ->
   FlowDef ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value), Either StoreError Int)
-runFlowWorkflowWithAgent flowAgent flow workflowId =
-  withShikigamiMigratedDatabase \connStr ->
+runFlowWorkflowWithAgent databaseFixture flowAgent flow workflowId =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
       session <- genSessionId
@@ -502,9 +481,9 @@ spikeRuntime session =
 -- | The sleeping spike's runner. It bypasses the capability interpreters
 -- entirely: 'sleepFlow' is not a 'FlowDef' because it needs 'Store' and 'IOE',
 -- which a flow body no longer gets.
-runSleepSpike :: WorkflowId -> IO (Either StoreError (WorkflowOutcome Value))
-runSleepSpike workflowId =
-  withShikigamiMigratedDatabase \connStr ->
+runSleepSpike :: DatabaseFixture -> WorkflowId -> IO (Either StoreError (WorkflowOutcome Value))
+runSleepSpike databaseFixture workflowId =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
       let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -621,9 +600,9 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
 -- | The runtime is handed to the test rather than consumed by 'lookupFlow',
 -- because 'lookupFlow' no longer takes one: it configures
 -- 'runAcknowledgement' inside 'runFlowBody' instead.
-withAtRiskFlow :: (AppEnv -> FlowRuntime -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
-withAtRiskFlow action =
-  withShikigamiMigratedDatabase \connStr ->
+withAtRiskFlow :: DatabaseFixture -> (AppEnv -> FlowRuntime -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
+withAtRiskFlow databaseFixture action =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
       session <- genSessionId

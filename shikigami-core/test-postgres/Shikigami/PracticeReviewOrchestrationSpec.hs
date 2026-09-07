@@ -52,7 +52,7 @@ import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.OpenTelemetryPracticeReview (opentelemetryPracticeReviewFlow)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview
   ( ClaimId (..),
     ClaimKind (Fact),
@@ -131,16 +131,16 @@ import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "practice review orchestration"
     [ authorizationTests,
       attentionIdentityTests,
-      completeClassificationTests,
-      agentRunSpecialistTests,
-      replayTests,
-      atomicAttentionTests
+      (completeClassificationTests databaseFixture),
+      (agentRunSpecialistTests databaseFixture),
+      (replayTests databaseFixture),
+      (atomicAttentionTests databaseFixture)
     ]
 
 authorizationTests :: TestTree
@@ -200,8 +200,8 @@ attentionIdentityTests =
         assertBool "material action did not affect attention identity" (deriveAttentionKey recipientsA changed /= Right key)
     ]
 
-completeClassificationTests :: TestTree
-completeClassificationTests =
+completeClassificationTests :: DatabaseFixture -> TestTree
+completeClassificationTests databaseFixture =
   testCase "complete evidence covers every model classification and approval attention branch" do
     verdicts <- readFixture "verdicts-valid.json" >>= decodeOrFail . LazyByteString.fromStrict
     (consistent, targetSuspect, referenceSuspect, exceptionRequired) <-
@@ -219,7 +219,7 @@ completeClassificationTests =
             ("legitimate-exception-required", LegitimateException, exceptionRequired, True),
             ("legitimate-exception-approved", LegitimateException, exceptionWithoutApproval, False)
           ]
-    withShikigamiMigratedDatabase \connectionString ->
+    (withShikigamiFreshDatabase databaseFixture) \connectionString ->
       withStore (defaultConnectionSettings connectionString) \_store -> do
         tracer <- noopTracer
         behaviorEnv <- newBehaviorEnv
@@ -330,11 +330,11 @@ completeClassificationTests =
         outboxAfterResolutions <- runAppIO appEnv (listOutbox "shinzui/shikigami")
         fmap length outboxAfterResolutions @?= Right (length cases + 1 + length resolutionCases)
 
-agentRunSpecialistTests :: TestTree
-agentRunSpecialistTests =
+agentRunSpecialistTests :: DatabaseFixture -> TestTree
+agentRunSpecialistTests databaseFixture =
   testCase "real AgentRun installs review patches, recorded lineage, memory, grants, and atomic attention" do
     let trigger = completeOpenTelemetryTrigger "agent-run-incomplete"
-    withShikigamiMigratedDatabase \connectionString ->
+    (withShikigamiFreshDatabase databaseFixture) \connectionString ->
       withStore (defaultConnectionSettings connectionString) \KirokuStore {pool} -> do
         tracer <- noopTracer
         behaviorEnv <- newBehaviorEnv
@@ -391,15 +391,15 @@ agentRunSpecialistTests =
             assertBool "real AgentRun omitted the attention step" (Map.member "practice-review-attention" index)
             assertBool "incomplete real AgentRun invoked the evaluator" (Map.notMember "practice-review-evaluate" index)
 
-replayTests :: TestTree
-replayTests =
+replayTests :: DatabaseFixture -> TestTree
+replayTests databaseFixture =
   testGroup
     "replay"
     [ testCase "incomplete evidence skips evaluation and replays every external result" do
         triggerBytes <- readFixture "trigger-valid.json"
         trigger <- decodeOrFail (LazyByteString.fromStrict triggerBytes) :: IO Value
         contractTrigger <- decodeOrFail (LazyByteString.fromStrict triggerBytes) :: IO PracticeReviewTrigger
-        withShikigamiMigratedDatabase \connectionString ->
+        (withShikigamiFreshDatabase databaseFixture) \connectionString ->
           withStore (defaultConnectionSettings connectionString) \_store -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
@@ -503,8 +503,8 @@ replayTests =
             fmap length outboxAfterResolution @?= Right 2
     ]
 
-atomicAttentionTests :: TestTree
-atomicAttentionTests =
+atomicAttentionTests :: DatabaseFixture -> TestTree
+atomicAttentionTests databaseFixture =
   testGroup
     "atomic attention"
     [ testCase "concurrent equivalent reviews share one reservation, outbox, and receipt" do
@@ -523,7 +523,7 @@ atomicAttentionTests =
                 )
             )
         recipients <- expectRight (mkAttentionRecipientMap [("team-example-service", "recipient_target")])
-        withShikigamiMigratedDatabase \connectionString ->
+        (withShikigamiFreshDatabase databaseFixture) \connectionString ->
           withStore (defaultConnectionSettings connectionString) \KirokuStore {pool} -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}

@@ -40,7 +40,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview
   ( Applicability (..),
     PracticeKey (..),
@@ -88,15 +88,15 @@ import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "PracticeReviewMemory"
     [ envelopeTests,
       identityTests,
       applicabilityTests,
       tagTests,
-      postgresTests
+      (postgresTests databaseFixture)
     ]
 
 envelopeTests :: TestTree
@@ -197,12 +197,12 @@ tagTests =
         assertBool "accepted outcome" (Set.member "outcome:accepted" tags)
     ]
 
-postgresTests :: TestTree
-postgresTests =
+postgresTests :: DatabaseFixture -> TestTree
+postgresTests databaseFixture =
   testGroup
     "PostgreSQL transitions"
     [ testCase "journals provisional replay with one row and refuses semantic drift" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           (verdicts, _) <- readValidatedContracts
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           let workflowId = WorkflowId "practice-review-provisional-replay"
@@ -268,7 +268,7 @@ postgresTests =
             Left (ReviewContentConflict conflictedId _) -> conflictedId @?= expectedId
             other -> assertFailure ("expected changed-content conflict, got " <> show other),
       testCase "classifies all four resolved outcomes and scope-narrows guidance" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           (verdicts, resolutions) <- readValidatedContracts
           pairs <- traverse (pairAt verdicts resolutions) [(1, 0), (2, 1), (3, 2), (4, 3)]
           resolvedIds <-
@@ -314,7 +314,7 @@ postgresTests =
           activeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
           Set.fromList (idText <$> resolvedIds) @?= Set.fromList (rowMemoryId <$> activeRows),
       testCase "a newer review retires the prior resolution and preserves the full chain" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           (verdicts, resolutions) <- readValidatedContracts
           original <- itemAt "target-suspect verdict" 1 verdicts
           accepted <- itemAt "accepted resolution" 0 resolutions
@@ -346,7 +346,7 @@ postgresTests =
           [status | PracticeReviewChainEntry {status} <- entries]
             @?= ["superseded", "superseded", "active"],
       testCase "malformed active content is diagnostic and never guidance" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           malformedId <- seedMalformedMemory appEnv session
           path <- expectRight (mkRelativePath "docs/adr/0001.md")
           recalled <- runRecall appEnv session (WorkflowId "practice-review-recall-malformed") (recallContext (Just path) Set.empty)
@@ -361,7 +361,7 @@ postgresTests =
               code @?= "invalid-envelope"
             other -> assertFailure ("expected one malformed diagnostic, got " <> show other),
       testCase "valid content stored under the wrong practice scope is diagnostic" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           (verdicts, _) <- readValidatedContracts
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           misplacedId <-
@@ -387,7 +387,7 @@ postgresTests =
               code @?= "scope-mismatch"
             other -> assertFailure ("expected one scope diagnostic, got " <> show other),
       testCase "competing resolutions converge on one active winner and retain the loser" do
-        withReviewEnv \appEnv session -> do
+        (withReviewEnv databaseFixture) \appEnv session -> do
           (verdicts, resolutions) <- readValidatedContracts
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           accepted <- itemAt "accepted resolution" 0 resolutions
@@ -435,9 +435,9 @@ postgresTests =
 reviewWorkflowName :: WorkflowName
 reviewWorkflowName = WorkflowName "shikigami.practice-review-memory.test"
 
-withReviewEnv :: (AppEnv -> SessionId -> IO value) -> IO value
-withReviewEnv action =
-  withShikigamiMigratedDatabase \connectionString ->
+withReviewEnv :: DatabaseFixture -> (AppEnv -> SessionId -> IO value) -> IO value
+withReviewEnv databaseFixture action =
+  (withShikigamiFreshDatabase databaseFixture) \connectionString ->
     withStore (defaultConnectionSettings connectionString) \_store -> do
       tracer <- noopTracer
       session <- genSessionId

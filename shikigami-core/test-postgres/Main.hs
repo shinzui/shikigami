@@ -1,0 +1,38 @@
+module Main (main) where
+
+import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
+import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
+import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
+import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
+import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
+import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
+import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
+import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
+import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
+import Shikigami.RouterWorkflowSpec qualified as RouterWorkflowSpec
+import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
+import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
+import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
+import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
+import Test.Tasty (defaultMain, testGroup)
+
+main :: IO ()
+main = withShikigamiMigratedSuite \databaseFixture ->
+  defaultMain
+    ( testGroup
+        "shikigami postgres"
+        [ AgentWorkflowSpec.tests databaseFixture,
+          DelegationBudgetSpec.tests databaseFixture,
+          DirectoryStoreSpec.tests databaseFixture,
+          FlowLifecycleSpec.tests databaseFixture,
+          GrantStoreSpec.tests databaseFixture,
+          PracticeReviewMemorySpec.tests databaseFixture,
+          PracticeReviewOrchestrationSpec.tests databaseFixture,
+          ProfileResolutionSpec.tests databaseFixture,
+          RouterWorkflowSpec.tests databaseFixture,
+          RunEvidenceSpec.tests databaseFixture,
+          SinkDeliverySpec.tests databaseFixture,
+          SpikeWorkflowSpec.tests databaseFixture,
+          WorkflowVersioningSpec.tests databaseFixture
+        ]
+    )

@@ -22,7 +22,7 @@ import Shikigami.Memory.AliasStore
     aliasesForPrincipal,
     reconcileAlias,
   )
-import Shikigami.Migrations.TestSupport (withShikigamiMigratedDatabase)
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Sink.GrantStore
   ( GrantCursor (..),
     GrantPage (..),
@@ -44,22 +44,22 @@ import Shikigami.Sink.Permission (Denied (..), SinkKind (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
-tests :: TestTree
-tests =
+tests :: DatabaseFixture -> TestTree
+tests databaseFixture =
   testGroup
     "GrantStore"
-    [ testGroup "seed data" seedTests,
-      testGroup "runtime grant and revoke" runtimeTests,
-      testGroup "principal reconciliation" principalReconciliationTests,
-      testGroup "principal-keyed grants" principalGrantTests,
-      testGroup "legacy aliases" aliasTests,
-      testGroup "paging" pagingTests
+    [ testGroup "seed data" (seedTests databaseFixture),
+      testGroup "runtime grant and revoke" (runtimeTests databaseFixture),
+      testGroup "principal reconciliation" (principalReconciliationTests databaseFixture),
+      testGroup "principal-keyed grants" (principalGrantTests databaseFixture),
+      testGroup "legacy aliases" (aliasTests databaseFixture),
+      testGroup "paging" (pagingTests databaseFixture)
     ]
 
 -- | Run a case against a fresh migrated database, handing it a pool.
-withPool :: (Pool -> IO a) -> IO a
-withPool use =
-  withShikigamiMigratedDatabase \connStr ->
+withPool :: DatabaseFixture -> (Pool -> IO a) -> IO a
+withPool databaseFixture use =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) (use . pool)
 
 -- | The gate's verdict, with the denial reason kept for failure messages.
@@ -95,17 +95,17 @@ assertDenied label pool agent kind =
     Right () -> assertFailure (label <> ": expected a denial, but the sink was granted")
     Left reason -> pure reason
 
-seedTests :: [TestTree]
-seedTests =
+seedTests :: DatabaseFixture -> [TestTree]
+seedTests databaseFixture =
   [ -- The migration's seed rows must reproduce defaultGrantTable exactly, or
     -- applying it silently changes who may deliver what.
     testCase "a seeded agent is granted the kind it was seeded with" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         assertGranted "heartbeat/KawaDigest" pool "heartbeat" SKawaDigest
         assertGranted "heartbeat/DanwaConversation" pool "heartbeat" SDanwaConversation
         assertGranted "triage-note/ReiAction" pool "triage-note" SReiAction,
     testCase "an unknown agent is denied, and the reason says no grant exists" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         reason <- assertDenied "intruder" pool "intruder" SKawaDigest
         assertBool
           ("reason should name the missing grant: " <> show reason)
@@ -113,28 +113,28 @@ seedTests =
     testCase "a seeded agent is denied a kind it was not seeded with" do
       -- danwa-heartbeat has DanwaConversation only. This is the case that would
       -- pass by accident if the gate keyed on the agent rather than the pair.
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         assertGranted "danwa-heartbeat/DanwaConversation" pool "danwa-heartbeat" SDanwaConversation
         _ <- assertDenied "danwa-heartbeat/KizashiSignal" pool "danwa-heartbeat" SKizashiSignal
         pure (),
     testCase "the proof agents ship denied" do
       -- The behavior-preserving seed deliberately omits them; granting one at
       -- runtime is the demonstration that runtime grants work.
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         _ <- assertDenied "digest-watcher" pool "digest-watcher" SKawaDigest
         _ <- assertDenied "web-researcher" pool "web-researcher" SKizashiSignal
         pure ()
   ]
 
-runtimeTests :: [TestTree]
-runtimeTests =
+runtimeTests :: DatabaseFixture -> [TestTree]
+runtimeTests databaseFixture =
   [ testCase "granting at runtime flips a denial to a grant" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         _ <- assertDenied "before" pool "digest-watcher" SKawaDigest
         compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "upsertGrant"
         assertGranted "after" pool "digest-watcher" SKawaDigest,
     testCase "revoking flips it back, and the reason distinguishes revoked from absent" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "upsertGrant"
         assertGranted "granted" pool "digest-watcher" SKawaDigest
         revoked <- compatRevoke pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "revokeGrant"
@@ -146,7 +146,7 @@ runtimeTests =
           ("reason should say revoked, got: " <> show reason)
           ("is revoked" `isInfixOfT` reason),
     testCase "a revoked row survives with its audit trail" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         compatGrant pool "digest-watcher" SKawaDigest (Just "granter") >>= expectRight "upsertGrant"
         _ <- compatRevoke pool "digest-watcher" SKawaDigest (Just "revoker") >>= expectRight "revokeGrant"
         row <- findRow pool "digest-watcher"
@@ -156,7 +156,7 @@ runtimeTests =
     testCase "re-granting clears the revocation rather than leaving it set" do
       -- A row claiming to be both granted and revoked would make the audit
       -- trail lie about the current state.
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         compatGrant pool "digest-watcher" SKawaDigest (Just "granter") >>= expectRight "upsertGrant"
         _ <- compatRevoke pool "digest-watcher" SKawaDigest (Just "revoker") >>= expectRight "revokeGrant"
         compatGrant pool "digest-watcher" SKawaDigest (Just "granter2") >>= expectRight "re-grant"
@@ -166,15 +166,15 @@ runtimeTests =
         assertEqual "revoked_by cleared" Nothing ((.revokedBy) row)
         assertEqual "revoked_at cleared" Nothing ((.revokedAt) row),
     testCase "revoking something never granted reports that it changed nothing" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         changed <- compatRevoke pool "nobody" SKawaDigest (Just "test") >>= expectRight "revokeGrant"
         assertEqual "no row affected" False changed
   ]
 
-principalReconciliationTests :: [TestTree]
-principalReconciliationTests =
+principalReconciliationTests :: DatabaseFixture -> [TestTree]
+principalReconciliationTests databaseFixture =
   [ testCase "fills null principal ids and verifies the same id idempotently" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         before <- findRows pool "heartbeat"
         assertBool "the seed unexpectedly carried a principal" (all ((== Nothing) . principalIdOf) before)
         first <-
@@ -192,7 +192,7 @@ principalReconciliationTests =
         assertEqual "idempotent fill count" 0 ((.filledCount) second)
         assertEqual "verified every row" (fromIntegral (length after)) ((.verifiedCount) second),
     testCase "a conflicting principal leaves null rows untouched" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "first grant"
         _ <-
           reconcileGrantPrincipal pool "digest-watcher" "agent_wrong"
@@ -210,16 +210,16 @@ principalReconciliationTests =
           (sort (map principalIdOf rows))
   ]
 
-principalGrantTests :: [TestTree]
-principalGrantTests =
+principalGrantTests :: DatabaseFixture -> [TestTree]
+principalGrantTests databaseFixture =
   [ testCase "verified lookup never falls back to a same-named compatibility grant" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         assertGranted "compatibility seed" pool "heartbeat" SKawaDigest
         checkGrant (DbGrants pool) (verifiedIdentity "agent_heartbeat") SKawaDigest >>= \case
           Left (Denied reason) -> assertBool "denial names the missing principal grant" ("has no grant" `isInfixOfT` reason)
           Right () -> assertFailure "verified lookup fell back to the compatibility row",
     testCase "a presentation rename retains the principal-keyed grant" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         _ <- reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat" >>= expectRight "reconcile heartbeat"
         assertVerifiedGranted "before rename" pool "agent_heartbeat" SKawaDigest
         upsertGrant pool "heartbeat-renamed" (verifiedIdentity "agent_heartbeat") SKawaDigest (Just "test")
@@ -229,10 +229,10 @@ principalGrantTests =
         assertEqual "the updated presentation has one row" 1 (length rows)
   ]
 
-aliasTests :: [TestTree]
-aliasTests =
+aliasTests :: DatabaseFixture -> [TestTree]
+aliasTests databaseFixture =
   [ testCase "alias reconciliation is idempotent and sorted" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         let principal = agentPrincipal "agent_heartbeat"
         first <- reconcileAlias pool principal "old-heartbeat" >>= expectRight "insert alias"
         case first of
@@ -247,7 +247,7 @@ aliasTests =
           >>= expectRight "list aliases"
           >>= assertEqual "aliases are stable" ["a-heartbeat", "old-heartbeat"],
     testCase "an alias already owned by another principal is never reassigned" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         let firstPrincipal = agentPrincipal "agent_first"
             secondPrincipal = agentPrincipal "agent_second"
         _ <- reconcileAlias pool firstPrincipal "legacy-name" >>= expectRight "seed alias"
@@ -271,10 +271,10 @@ assertVerifiedGranted label pool principal kind =
     Right () -> pure ()
     Left (Denied reason) -> assertFailure (label <> ": expected verified grant, got " <> Text.unpack reason)
 
-pagingTests :: [TestTree]
-pagingTests =
+pagingTests :: DatabaseFixture -> [TestTree]
+pagingTests databaseFixture =
   [ testCase "the default page returns the nine seed rows and no cursor" do
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         page <-
           listGrants pool GrantPageRequest {size = defaultPageSize, after = Nothing}
             >>= expectRight "listGrants"
@@ -283,7 +283,7 @@ pagingTests =
     testCase "paging traverses every row exactly once, with no gaps or duplicates" do
       -- Seeded past one page on purpose: the bug this catches is an off-by-one
       -- in the keyset predicate, which a single-page table cannot expose.
-      withPool \pool -> do
+      (withPool databaseFixture) \pool -> do
         mapM_
           (\i -> compatGrant pool ("agent-" <> pad i) SKizashiSignal (Just "test") >>= expectRight "seed")
           [1 .. 11 :: Int]
