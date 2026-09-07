@@ -52,7 +52,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
@@ -206,7 +206,7 @@ pausedEnqueue databaseFixture =
     assertEqual "lifecycle refusal creates no outbox row" [] rows
     receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
     assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
     case fromJSON encoded :: Result [SinkResult] of
       Success [SinkResult {outcome = SkippedLifecycle reason}] ->
@@ -254,7 +254,7 @@ journalTruth databaseFixture =
   (withFixture databaseFixture) "journal-truth" [signalSink "journal"] unreachableKizashi unreachableDanwa \deps appEnv _pool runJob -> do
     rows <- runWorkflowAndRows deps appEnv runJob
     assertEqual "one sink intent was enqueued" 1 (length rows)
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
     case fromJSON encoded :: Result [SinkResult] of
       Success [SinkResult {outcome = Enqueued detail}] ->
@@ -301,7 +301,7 @@ egressReceiptRecording databaseFixture = do
       [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       before <- lookupReceipt pool row
       assertEqual "enqueue atomically records pending" Delivery.Pending ((.status) before)
-      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
       case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
         Success [SinkResult {outcome = Enqueued _}] -> pure ()
         other -> assertFailure ("egress workflow did not journal Enqueued: " <> show other)
@@ -346,7 +346,7 @@ egressDenied databaseFixture = do
       assertEqual "denied egress creates no outbox row" [] rows
       receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
       assertEqual "denied egress creates no receipt" (Right Nothing) receipt
-      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
       case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
         Success [SinkResult {outcome = DeniedOutcome _}] -> pure ()
         other -> assertFailure ("egress workflow did not journal DeniedOutcome: " <> show other)
@@ -361,7 +361,7 @@ actionDeniedAtEnqueue databaseFixture = do
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied"), AgentWorkflow.directory = directory}
     rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "C13 denial creates no outbox" [] rows
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
       Success [SinkResult {outcome = DeniedOutcome reason}] ->
         assertBool "journal distinguishes exact policy denial" ("exact recipient denied" `Text.isInfixOf` reason)
@@ -382,7 +382,7 @@ actionUnavailableAtEnqueue databaseFixture = do
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage"), AgentWorkflow.directory = directory}
     rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "authorization outage creates no outbox" [] rows
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
       Success [SinkResult {outcome = AuthorizationFailed reason}] ->
         assertBool "journal distinguishes authorization outage" ("Kikan fixture outage" `Text.isInfixOf` reason)

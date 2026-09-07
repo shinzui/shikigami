@@ -5,13 +5,19 @@ module Shikigami.Agent.RunJob
   ( TriggerKind (..),
     RunRouteKind (..),
     RunJob (..),
+    runJobWorkflowId,
   )
 where
 
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID
+import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
+import Kioku.Id (SessionId)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
 import Shikigami.Agent.Principal (AgentIdentity (..))
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 -- | Which trigger class produced the job.
@@ -46,8 +52,8 @@ data RunJob = RunJob
     occurredAt :: !UTCTime,
     triggerPayload :: !Value,
     idempotencyKey :: !Text,
-    parentSessionId :: !(Maybe Text),
-    parentRunWorkflowId :: !(Maybe Text),
+    parentSessionId :: !(Maybe SessionId),
+    parentRunWorkflowId :: !(Maybe WorkflowId),
     delegationDepth :: !(Maybe Int),
     lineage :: ![Text],
     delegationBudgetId :: !(Maybe DelegationBudgetId),
@@ -70,7 +76,7 @@ instance ToJSON RunJob where
           "triggerPayload" Aeson..= triggerPayload,
           "idempotencyKey" Aeson..= idempotencyKey,
           "parentSessionId" Aeson..= parentSessionId,
-          "parentRunWorkflowId" Aeson..= parentRunWorkflowId,
+          "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) parentRunWorkflowId,
           "delegationDepth" Aeson..= delegationDepth
         ]
           <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
@@ -91,9 +97,18 @@ instance FromJSON RunJob where
     triggerPayload <- value Aeson..: "triggerPayload"
     idempotencyKey <- value Aeson..: "idempotencyKey"
     parentSessionId <- value Aeson..:? "parentSessionId"
-    parentRunWorkflowId <- value Aeson..:? "parentRunWorkflowId"
+    parentRunWorkflowId <- value Aeson..:? "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
     delegationDepth <- value Aeson..:? "delegationDepth"
     lineage <- value Aeson..:? "lineage" Aeson..!= []
     delegationBudgetId <- value Aeson..:? "delegationBudgetId"
     routeKind <- value Aeson..:? "routeKind" Aeson..!= InferredLegacyRoute
     pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}
+
+-- | Preserve valid natural workflow keys. Keys containing Keiro journal
+-- separators become deterministic UUIDv5 technical identities; they are not
+-- allocated entity IDs and must never be rebranded as TypeID-v7 values.
+runJobWorkflowId :: RunJob -> WorkflowId
+runJobWorkflowId job =
+  case mkWorkflowId job.idempotencyKey of
+    Right workflowId -> workflowId
+    Left _ -> WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.agent-run:" <> job.idempotencyKey))))

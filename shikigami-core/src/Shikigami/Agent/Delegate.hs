@@ -127,7 +127,6 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
   (_, parentWorkflowId) <- currentWorkflow
   let childWorkflowId = delegatedWorkflowId parentWorkflowId childAgent delegationKey
       WorkflowId childWorkflowIdText = childWorkflowId
-      WorkflowId parentWorkflowIdText = parentWorkflowId
       (budgetId, seed) =
         case existingBudgetId of
           Just existing -> (existing, Nothing)
@@ -152,7 +151,7 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
             triggerPayload = payload,
             idempotencyKey = childWorkflowIdText,
             parentSessionId = Just currentSession,
-            parentRunWorkflowId = Just parentWorkflowIdText,
+            parentRunWorkflowId = Just parentWorkflowId,
             delegationDepth = Just childDepth,
             lineage = currentLineage <> [childAgent],
             delegationBudgetId = Just budgetId

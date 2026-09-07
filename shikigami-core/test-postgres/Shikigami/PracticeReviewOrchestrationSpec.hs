@@ -30,6 +30,7 @@ import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId, idText)
+import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
@@ -356,8 +357,8 @@ agentRunSpecialistTests databaseFixture =
                   occurredAt = UTCTime (fromGregorian 2026 8 26) 0,
                   triggerPayload = Aeson.toJSON trigger,
                   idempotencyKey = "agent-run-practice-review-incomplete",
-                  parentSessionId = Just (idText parentSession),
-                  parentRunWorkflowId = Just "architecture-practice-router-parent",
+                  parentSessionId = Just parentSession,
+                  parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
                   delegationDepth = Just 1,
                   lineage = ["architecture-practice-router", reviewerAgent],
                   delegationBudgetId = Nothing
@@ -813,10 +814,10 @@ executionContextFixture :: PracticeReviewExecutionContext
 executionContextFixture =
   PracticeReviewExecutionContext
     { identity = compatibilityIdentity reviewerAgent,
-      parentWorkflowId = Just "architecture-practice-parent",
-      parentSessionId = Just "session_parent",
-      childWorkflowId = "practice-review-child",
-      childSessionId = "session_child"
+      parentWorkflowId = Just (WorkflowId "architecture-practice-parent"),
+      parentSessionId = Just nominalSessionFixture,
+      childWorkflowId = WorkflowId "practice-review-child",
+      childSessionId = nominalSessionFixture
     }
 
 sinkEnvFixture :: SessionId -> SinkEnv
@@ -941,3 +942,6 @@ repositoryRoot = go [".", ".."]
     go (candidate : rest) = do
       exists <- doesFileExist (candidate </> "cabal.project")
       if exists then pure candidate else go rest
+
+nominalSessionFixture :: NominalId.SessionId
+nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

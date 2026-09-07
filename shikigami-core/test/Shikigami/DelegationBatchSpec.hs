@@ -4,6 +4,7 @@ import Data.Aeson (Value (Null))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Keiro.Workflow (WorkflowId (..))
+import Kioku.Id qualified as NominalId
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     AmbiguousPolicy (ReturnAmbiguous),
@@ -96,7 +97,7 @@ delegateCtx =
   DelegateCtx
     { identity = compatibilityIdentity "router",
       delegateDepth = 0,
-      sessionId = Just "router-session",
+      sessionId = Just nominalSessionFixture,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = ["router"],
@@ -155,3 +156,6 @@ candidate name availability =
       expertise = [],
       availability
     }
+
+nominalSessionFixture :: NominalId.SessionId
+nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

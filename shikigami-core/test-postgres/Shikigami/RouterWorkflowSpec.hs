@@ -41,7 +41,7 @@ import Shikigami.Agent.Delegate (delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
@@ -149,7 +149,7 @@ matchedReplayProof databaseFixture =
                   )
               )
           job = routerJob "router:matched-replay"
-          parentWorkflowId = WorkflowId ((.idempotencyKey) job)
+          parentWorkflowId = runJobWorkflowId job
           firstChildId = delegatedWorkflowId parentWorkflowId "first" "architecture-practice-first"
           secondChildId = delegatedWorkflowId parentWorkflowId "second" "architecture-practice-second"
       originalProbe <- newProbe catalog (Aeson.toJSON decision)
@@ -159,7 +159,7 @@ matchedReplayProof databaseFixture =
       assertEqual "the parent waits after spawning the complete accepted batch" (Right Suspended) parked
       assertEqual "catalog resolver runs once before the first journal append" 1 =<< readIORef ((.resolverCalls) originalProbe)
       assertEqual "evaluator runs once before the second journal append" 1 =<< readIORef ((.evaluatorCalls) originalProbe)
-      initialChildren <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
+      initialChildren <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId job).unWorkflowId "shikigami.agent-run")
       assertEqual "exactly two child links are registered" (Right 2) (length <$> initialChildren)
 
       firstValue <- runSuccessfulChild appEnv deps firstChildId
@@ -182,7 +182,7 @@ matchedReplayProof databaseFixture =
 
       replayed <- AgentWorkflow.runAgentRunWorkflow changedDeps job
       assertEqual "completed replay returns the same parent value" resumed replayed
-      replayChildren <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
+      replayChildren <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId job).unWorkflowId "shikigami.agent-run")
       assertEqual "replay creates no duplicate child link" (length <$> initialChildren) (length <$> replayChildren)
 
       stepIndex <- runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName parentWorkflowId 0)
@@ -230,7 +230,7 @@ nonExecutableOutcomesSpawnNothing databaseFixture = do
             (object ["decision" .= decision, "results" .= ([] :: [Value])])
             behaviorOutput
         other -> assertFailure (Text.unpack label <> " should complete, got " <> show other)
-      children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
+      children <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId job).unWorkflowId "shikigami.agent-run")
       assertEqual (Text.unpack label <> " spawns zero children") (Right 0) (length <$> children)
 
 exhaustedBatchSpawnsNothing :: DatabaseFixture -> IO ()
@@ -244,7 +244,7 @@ exhaustedBatchSpawnsNothing databaseFixture = do
         deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [constrainedRouter, successSpecialist "first"]
     refused <- try @DelegationError (AgentWorkflow.runAgentRunWorkflow deps job)
     assertEqual "budget exhaustion remains an operational failure" (Left DelegationBudgetExhausted) refused
-    children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
+    children <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId job).unWorkflowId "shikigami.agent-run")
     assertEqual "no child is registered after rejected batch reservation" (Right 0) (length <$> children)
 
 childFailureEscapes :: DatabaseFixture -> IO ()
@@ -253,7 +253,7 @@ childFailureEscapes databaseFixture = do
   (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
-        parentWorkflowId = WorkflowId ((.idempotencyKey) job)
+        parentWorkflowId = runJobWorkflowId job
         childWorkflowId = delegatedWorkflowId parentWorkflowId "failing" "architecture-practice-failing"
     probe <- newProbe catalog (Aeson.toJSON decision)
     let deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, failingSpecialist]

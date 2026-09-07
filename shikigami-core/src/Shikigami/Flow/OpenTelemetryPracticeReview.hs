@@ -16,6 +16,7 @@ import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Effectful (Eff, (:>))
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Flow.Capability (Sink, emitSignal)
@@ -252,10 +253,10 @@ reviewLineage PracticeReviewExecutionContext {parentWorkflowId, parentSessionId,
     (Just recordedParentWorkflowId, Just recordedParentSessionId) ->
       Right
         ReviewLineage
-          { parentSessionId = recordedParentSessionId,
-            childSessionId,
-            parentWorkflowId = recordedParentWorkflowId,
-            childWorkflowId,
+          { parentSessionId = idText recordedParentSessionId,
+            childSessionId = idText childSessionId,
+            parentWorkflowId = recordedParentWorkflowId.unWorkflowId,
+            childWorkflowId = childWorkflowId.unWorkflowId,
             priorReviewId
           }
     _ -> Left "practice-review trigger requires recorded parent workflow and session lineage"

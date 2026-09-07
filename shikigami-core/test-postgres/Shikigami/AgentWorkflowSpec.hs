@@ -65,7 +65,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
@@ -132,17 +132,17 @@ tests databaseFixture =
                 runWorkflowWith
                   defaultWorkflowRunOptions
                   agentRunWorkflowName
-                  (WorkflowId ((.idempotencyKey) oldJob))
+                  (runJobWorkflowId oldJob)
                   (agentRunWorkflow deps (Just oldJob))
             assertBool ("optionless current run completes: " <> show oldOutcome) (isCompleted oldOutcome)
-            oldIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) oldJob)) 0)
+            oldIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId oldJob) 0)
             assertEqual "current journal omits the retired behavior label" (Right False) (Map.member "run-behavior" <$> oldIndex)
             assertEqual "current journal writes v2" (Right True) (Map.member "run-behavior-v2" <$> oldIndex)
             assertEqual "current journal resolves capability overlays" (Right True) (Map.member "resolve-capability-overlays" <$> oldIndex)
 
             freshOutcome <- runAgentRunWorkflow deps freshJob
             assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
-            freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) freshJob)) 0)
+            freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId freshJob) 0)
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
             assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
             assertEqual "fresh journal resolves even the empty overlay set" (Right True) (Map.member "resolve-capability-overlays" <$> freshIndex),
@@ -204,7 +204,7 @@ tests databaseFixture =
             case firstAttempt of
               Left _ -> pure ()
               Right outcome -> assertFailure ("missing v1 provider should be transient, got " <> show outcome)
-            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) firstJob)) 0)
+            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId firstJob) 0)
             assertEqual "v1 resolution is durable before acquisition" (Right True) (Map.member "resolve-capability-overlays" <$> afterFailure)
             assertEqual "the failed attempt writes no behavior result" (Right False) (Map.member "run-behavior-v2" <$> afterFailure)
             loadCapabilityResolution appEnv firstJob >>= assertEqual "the journal pins v1" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
@@ -250,7 +250,7 @@ tests databaseFixture =
               case result of
                 Right (Completed (Left (PermanentAgentRunFailure _))) -> pure ()
                 other -> assertFailure (Text.unpack label <> " should be a permanent refusal, got " <> show other)
-              stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+              stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
               assertEqual (Text.unpack label <> " journals the resolution refusal") (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
               assertEqual (Text.unpack label <> " never opens a session") (Right False) (Map.member "open-session" <$> stepIndex)
             assertEqual "no permanent refusal reaches provider acquisition" [] =<< readIORef events,
@@ -274,7 +274,7 @@ tests databaseFixture =
               Right outcome -> assertFailure ("release failure should escape transiently, got " <> show outcome)
             assertEqual "release was still attempted" ["acquire:v1", "release:v1"] =<< readIORef events
             assertEqual "the failed release leaves no live lease" False =<< readIORef active
-            stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+            stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
             assertEqual "resolution remains journaled" (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
             assertEqual "behavior result remains retryable" (Right False) (Map.member "run-behavior-v2" <$> stepIndex),
       testCase "transient v2 failure leaves no value and a later advance succeeds" do
@@ -297,13 +297,13 @@ tests databaseFixture =
             case firstAttempt of
               Left _ -> pure ()
               Right outcome -> assertFailure ("first transient attempt should escape, got " <> show outcome)
-            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) transientRetryJob)) 0)
+            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId transientRetryJob) 0)
             assertEqual "failed attempt appended no v2 value" (Right False) (Map.member "run-behavior-v2" <$> afterFailure)
 
             retried <- runAgentRunWorkflow deps transientRetryJob
             assertBool ("retry completes: " <> show retried) (isCompleted retried)
             assertEqual "the behavior body ran twice" 2 =<< readIORef attempts
-            afterSuccess <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) transientRetryJob)) 0)
+            afterSuccess <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId transientRetryJob) 0)
             assertEqual "successful retry appended the v2 value" (Right True) (Map.member "run-behavior-v2" <$> afterSuccess),
       testCase "permanent v2 failure is journaled once and replayed" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
@@ -1316,7 +1316,7 @@ tests databaseFixture =
                       DelegateCtx
                         { identity = compatibilityIdentity "heartbeat",
                           delegateDepth = 0,
-                          sessionId = Just (idText parentSession),
+                          sessionId = Just parentSession,
                           parentSessionId = Nothing,
                           parentRunWorkflowId = Nothing,
                           lineage = ["test-parent", "heartbeat"],
@@ -1352,7 +1352,7 @@ tests databaseFixture =
                 proofAgents <- loadProofAgents
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
-                    parentWorkflowId = WorkflowId "research-supervisor:test-fanout"
+                    parentWorkflowId = runJobWorkflowId researchSupervisorJob
                     webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "delegate-0"
                     codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" "delegate-1"
                     WorkflowId webWorkflowIdText = webWorkflowId
@@ -1365,7 +1365,7 @@ tests databaseFixture =
 
                 parked <- runAgentRunWorkflow deps researchSupervisorJob
                 assertEqual "research supervisor parks after spawning children" (Right Suspended) parked
-                childLinksAfterPark <- runAppIO appEnv (lookupChildrenOfParent "research-supervisor:test-fanout" "shikigami.agent-run")
+                childLinksAfterPark <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId researchSupervisorJob).unWorkflowId "shikigami.agent-run")
                 assertEqual
                   "initial park creates two running child workflow links"
                   (Right expectedRunningChildLinks)
@@ -1373,7 +1373,7 @@ tests databaseFixture =
 
                 replayedWhileChildrenPending <- runAgentRunWorkflow deps researchSupervisorJob
                 assertEqual "parent replay while children are pending parks again" (Right Suspended) replayedWhileChildrenPending
-                childLinksAfterReplay <- runAppIO appEnv (lookupChildrenOfParent "research-supervisor:test-fanout" "shikigami.agent-run")
+                childLinksAfterReplay <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId researchSupervisorJob).unWorkflowId "shikigami.agent-run")
                 assertEqual
                   "parent replay does not duplicate delegated children"
                   (childLinkSummary <$> childLinksAfterPark)
@@ -1425,7 +1425,7 @@ tests databaseFixture =
                 proofAgents <- loadProofAgents
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
-                    parentWorkflowId = WorkflowId ((.idempotencyKey) flowDelegationJob)
+                    parentWorkflowId = runJobWorkflowId flowDelegationJob
                     childWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web-researcher"
 
                 parked <- runAgentRunWorkflow deps flowDelegationJob
@@ -1536,9 +1536,9 @@ tests databaseFixture =
                           }
 
                   runAgentRunWorkflow deps approvalJob >>= assertEqual "parent parks on approval child" (Right Suspended)
-                  parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) approvalJob)) 0)
+                  parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId approvalJob) 0)
                   assertEqual "fresh parent journals its policy" (Right True) (Map.member "resolve-approval-policy" <$> parentSteps)
-                  children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) approvalJob) "shikigami.agent-run")
+                  children <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId approvalJob).unWorkflowId "shikigami.agent-run")
                   child <- case children of
                     Right [row] -> pure row
                     other -> assertFailure ("expected one approval child relation, got " <> show other)
@@ -1637,7 +1637,7 @@ tests databaseFixture =
                 runAgentRunWorkflow deps runJob >>= assertEqual "parent initially parks" (Right Suspended)
                 completedCount <- resumeApprovalToCompletion appEnv deps
                 assertEqual "permanent failure completes child and parent" 2 completedCount
-                parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+                parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
                 assertEqual "parent records fail-session" (Right True) (Map.member "fail-session" <$> parentSteps)
                 child <- onlyApprovalChild appEnv runJob
                 childSteps <- runAppIO appEnv (loadStepIndex ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)) 0)
@@ -1820,7 +1820,7 @@ parentDelegateContext currentSession =
   DelegateCtx
     { identity = compatibilityIdentity "test-parent",
       delegateDepth = 0,
-      sessionId = Just (idText currentSession),
+      sessionId = Just currentSession,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = ["test-parent"],
@@ -1994,7 +1994,7 @@ childStatusText = \case
 
 onlyApprovalChild :: AppEnv -> RunJob -> IO ChildRow
 onlyApprovalChild appEnv runJob = do
-  children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) runJob) "shikigami.agent-run")
+  children <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId runJob).unWorkflowId "shikigami.agent-run")
   case children of
     Right [child] -> pure child
     other -> assertFailure ("expected one approval child, got " <> show other)
@@ -2218,12 +2218,12 @@ resumeApprovalToCompletion appEnv deps = do
 -- bookkeeping removed so the assertion is about this workflow's own steps.
 loadLifecycleStepKeys :: AppEnv -> RunJob -> IO (Either String (Set.Set Text))
 loadLifecycleStepKeys appEnv runJob = do
-  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
   pure (first show (Set.delete patchSetStepName . Set.delete completedStepName . Map.keysSet <$> result))
 
 loadProfileResolution :: AppEnv -> RunJob -> IO (Either String (Maybe ResolvedProfile))
 loadProfileResolution appEnv runJob = do
-  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
   pure do
     journal <- first show result
     encoded <- maybe (Left "resolve-profile was not journaled") Right (Map.lookup "resolve-profile" journal)
@@ -2234,7 +2234,7 @@ loadProfileResolution appEnv runJob = do
 
 loadCapabilityResolution :: AppEnv -> RunJob -> IO (Either String CapabilityOverlay.ResolvedCapabilitySet)
 loadCapabilityResolution appEnv runJob = do
-  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
+  result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
   pure do
     journal <- first show result
     encoded <- maybe (Left "resolve-capability-overlays was not journaled") Right (Map.lookup "resolve-capability-overlays" journal)

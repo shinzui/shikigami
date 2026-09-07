@@ -55,6 +55,8 @@ import Data.Text.Lazy qualified as LazyText
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Keiro.Workflow (StepName (..), Workflow, step)
+import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
+import Kioku.Id (SessionId)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.PracticeReview
@@ -83,13 +85,33 @@ import Shikigami.Prelude
 -- payload JSON. A delegated review requires both parent values.
 data PracticeReviewExecutionContext = PracticeReviewExecutionContext
   { identity :: !AgentIdentity,
-    parentWorkflowId :: !(Maybe Text),
-    parentSessionId :: !(Maybe Text),
-    childWorkflowId :: !Text,
-    childSessionId :: !Text
+    parentWorkflowId :: !(Maybe WorkflowId),
+    parentSessionId :: !(Maybe SessionId),
+    childWorkflowId :: !WorkflowId,
+    childSessionId :: !SessionId
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON PracticeReviewExecutionContext where
+  toJSON context =
+    Aeson.object
+      [ "identity" Aeson..= context.identity,
+        "parentWorkflowId" Aeson..= fmap (.unWorkflowId) context.parentWorkflowId,
+        "parentSessionId" Aeson..= context.parentSessionId,
+        "childWorkflowId" Aeson..= context.childWorkflowId.unWorkflowId,
+        "childSessionId" Aeson..= context.childSessionId
+      ]
+
+instance FromJSON PracticeReviewExecutionContext where
+  parseJSON = Aeson.withObject "PracticeReviewExecutionContext" \value ->
+    PracticeReviewExecutionContext
+      <$> value Aeson..: "identity"
+      <*> (value Aeson..:? "parentWorkflowId" >>= traverse parseWorkflowId)
+      <*> value Aeson..:? "parentSessionId"
+      <*> (value Aeson..: "childWorkflowId" >>= parseWorkflowId)
+      <*> value Aeson..: "childSessionId"
+    where
+      parseWorkflowId = either (fail . show) pure . mkWorkflowId
 
 data ExecutionContext :: Effect where
   ReadExecutionContext :: ExecutionContext m PracticeReviewExecutionContext

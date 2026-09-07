@@ -51,6 +51,8 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Keiki.Core (RegFile)
 import Keiki.Core qualified as Keiki
+import Keiro.Workflow.Types (WorkflowId)
+import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ReviewRequestId (..))
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
@@ -245,8 +247,8 @@ data BehaviorTerminalState = BehaviorRunning | BehaviorSucceeded | BehaviorFaile
 -- | A child discovered through the lineage already carried by 'RunJob'.
 data RelevantChild = RelevantChild
   { childRunId :: !RunCorrelationId,
-    parentRunWorkflowId :: !Text,
-    parentSessionId :: !(Maybe Text),
+    parentRunWorkflowId :: !WorkflowId,
+    parentSessionId :: !(Maybe SessionId),
     phase :: !EvidencePhase,
     calls :: ![RecordedCallEvidence]
   }

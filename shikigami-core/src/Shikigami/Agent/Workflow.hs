@@ -63,7 +63,7 @@ import Keiro.Workflow.Child (WorkflowChildFailed (..))
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..))
-import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText, parseId)
+import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session qualified as Session
@@ -90,7 +90,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, identityText, resolveAgentIdentity, resolvedIdentityText)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
-import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
@@ -274,7 +274,7 @@ runAgentRunWorkflow deps job =
         $ runWorkflowWith
           (shikigamiWorkflowRunOptions env)
           agentRunWorkflowName
-          (WorkflowId (jobIdempotencyKey job))
+          (runJobWorkflowId job)
           (agentRunWorkflow deps (Just job))
 
 agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
@@ -511,7 +511,7 @@ finishRunFailure deps recordedIdentity decl sid err = do
 capabilityScopeForRun :: RunJob -> CapabilityScope
 capabilityScopeForRun job =
   CapabilityScope
-    { runId = jobIdempotencyKey job,
+    { runId = (runJobWorkflowId job).unWorkflowId,
       -- C13 always binds to the identity admitted for this concrete run. The
       -- manifest principal remains part of pure catalog admission, but it must
       -- never replace a verified Meibo run principal at an IO boundary.
@@ -697,13 +697,6 @@ openSession deps recordedIdentity job decl = liftIO do
   let sessionAgentId = resolvedIdentityText recordedIdentity
       focusTxt = behaviorKindText ((.behavior) decl)
       RunJob {parentSessionId = jobParentSessionId, delegationDepth = jobDelegationDepth} = job
-  parsedParent <-
-    case jobParentSessionId of
-      Nothing -> pure Nothing
-      Just raw ->
-        case parseId raw of
-          Right parsed -> pure (Just parsed)
-          Left err -> ioError (userError ("invalid parentSessionId on RunJob: " <> Text.unpack err))
   -- kioku answers with the session id it started, which is the one generated
   -- above; taking it from the answer keeps the step value the store's word.
   kiokuWrite "opening the run's kioku session" $
@@ -719,7 +712,7 @@ openSession deps recordedIdentity job decl = liftIO do
           scope = agentScope recordedIdentity,
           subjectRef = Just (idText sid),
           previousSessionId = Nothing,
-          parentSessionId = parsedParent,
+          parentSessionId = jobParentSessionId,
           delegationDepth = fromMaybe 0 jobDelegationDepth,
           startedAt = startedAt'
         }
@@ -769,7 +762,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
-      (_, WorkflowId childWorkflowId) <- currentWorkflow
+      (_, childWorkflowId) <- currentWorkflow
       let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
       attempted <-
         trySync
@@ -837,7 +830,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
           PracticeReview.parentWorkflowId = (.parentRunWorkflowId) job,
           PracticeReview.parentSessionId = (.parentSessionId) job,
           PracticeReview.childWorkflowId = childWorkflowId,
-          PracticeReview.childSessionId = idText sid
+          PracticeReview.childSessionId = sid
         }
     practiceReviewMemoryEnv =
       PracticeReviewMemory.PracticeReviewMemoryEnv
@@ -914,7 +907,7 @@ delegateContext deps decl currentSession RunJob {agentName, identity, parentSess
   DelegateCtx
     { delegateDepth = fromMaybe 0 delegationDepth,
       identity,
-      sessionId = Just (idText currentSession),
+      sessionId = Just currentSession,
       parentSessionId,
       parentRunWorkflowId,
       lineage = if null lineage then [agentName] else lineage,
@@ -1309,7 +1302,7 @@ logSinkResult logger job result =
     (levelFor ((.outcome) result))
     "sink.result"
     ( [ "agent" Aeson..= (.agentName) job,
-        Log.runIdKey Aeson..= jobIdempotencyKey job,
+        Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
         "sink_kind" Aeson..= sinkKindText ((.kind) result),
         "outcome" Aeson..= outcomeText ((.outcome) result)
       ]

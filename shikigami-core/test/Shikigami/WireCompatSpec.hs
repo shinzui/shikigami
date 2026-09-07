@@ -17,12 +17,14 @@
 module Shikigami.WireCompatSpec (tests) where
 
 import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON)
+import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.List qualified as List
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
+import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
 import Shikigami.Agent.Decl
   ( Priority (High),
@@ -31,7 +33,7 @@ import Shikigami.Agent.Decl
     Sink (..),
   )
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity))
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream), runJobWorkflowId)
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
 import Shikigami.Capability.Overlay
@@ -57,7 +59,8 @@ tests :: TestTree
 tests =
   testGroup
     "wire compatibility"
-    [ queueTests,
+    [ identityBoundaryTests,
+      queueTests,
       stepResultTests,
       capabilityResolutionTests,
       outboxTests,
@@ -353,3 +356,28 @@ assertSameJson label expected actual = do
       pure
       (eitherDecodeStrict @Value (LazyByteString.toStrict actual))
   assertEqual (label <> " round-trips to the same JSON") expectedValue actualValue
+
+identityBoundaryTests :: TestTree
+identityBoundaryTests =
+  testGroup
+    "runtime identity boundaries"
+    [ testCase "a memory ID cannot enter the parent session boundary" do
+        case toJSON sampleRunJob of
+          Object fields -> case Aeson.fromJSON @RunJob (Object (KeyMap.insert "parentSessionId" (Aeson.String "kioku_memory_01kvxa7d2cezhs874g3n8dfgme") fields)) of
+            Aeson.Error _ -> pure ()
+            Aeson.Success _ -> assertFailure "cross-domain session ID accepted"
+          _ -> assertFailure "job must be an object",
+      testCase "structural workflow separators are rejected at decoding" do
+        case toJSON sampleRunJob of
+          Object fields -> case Aeson.fromJSON @RunJob (Object (KeyMap.insert "parentRunWorkflowId" (Aeson.String "parent#1") fields)) of
+            Aeson.Error _ -> pure ()
+            Aeson.Success _ -> assertFailure "ambiguous workflow ID accepted"
+          _ -> assertFailure "job must be an object",
+      testCase "a natural deduplication key derives a stable valid workflow ID" do
+        let first = runJobWorkflowId sampleRunJob
+        runJobWorkflowId sampleRunJob @?= first
+        mkWorkflowId first.unWorkflowId @?= Right first
+        case runJobWorkflowId (sampleRunJob {idempotencyKey = "another:event"}) == first of
+          False -> pure ()
+          True -> assertFailure "distinct run keys collided"
+    ]

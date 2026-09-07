@@ -19,6 +19,7 @@ import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
 import Kioku.Api.Types (Confidence (HighConfidence, MediumConfidence), MemoryRecord (..), MemoryType (MemoryConstraint, MemoryPattern), confidenceToText, memoryTypeToText)
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (MemoryId, SessionId, genSessionId, idText)
+import Kioku.Id qualified as NominalId
 import Kioku.Memory (MemoryWriteError (..))
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.ReadModel (MemoryRow (..))
@@ -556,8 +557,8 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         { PracticeReview.identity = compatibilityIdentity flowAgent,
           PracticeReview.parentWorkflowId = Nothing,
           PracticeReview.parentSessionId = Nothing,
-          PracticeReview.childWorkflowId = "flow-test-workflow",
-          PracticeReview.childSessionId = "flow-test-session"
+          PracticeReview.childWorkflowId = WorkflowId "flow-test-workflow",
+          PracticeReview.childSessionId = nominalSessionFixture
         }
     practiceReviewMemoryEnv =
       PracticeReviewMemory.PracticeReviewMemoryEnv
@@ -573,7 +574,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             DelegateCtx
               { identity = compatibilityIdentity flowAgent,
                 delegateDepth = 0,
-                sessionId = Just (idText ((.currentSession) ((.approval) runtime))),
+                sessionId = Just ((.currentSession) ((.approval) runtime)),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = [flowAgent],
@@ -780,3 +781,6 @@ escalatedOutput =
     [ "status" .= ("escalated" :: Text),
       "verdict" .= expectedVerdict
     ]
+
+nominalSessionFixture :: NominalId.SessionId
+nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

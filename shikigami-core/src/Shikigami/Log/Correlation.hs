@@ -26,9 +26,9 @@
 --
 --   * A t'RunCorrelationId' is the run job's idempotency key, which is also the
 --     keiro workflow id (see @runAgentRunWorkflow@ in
---     "Shikigami.Agent.Workflow", which passes @WorkflowId (idempotencyKey
---     job)@). The workflow is /keyed/ by that value, so a resumed run is by
---     definition the run with the same one.
+--     "Shikigami.Agent.Workflow" uses the job's validated natural key or a
+--     deterministic UUIDv5 for keys containing journal separators. A resumed
+--     run uses the same recorded workflow identity.
 --
 --   * A t'CallCorrelationId' is derived from the run id, the name of the
 --     journaled step the call happens in, and the call's ordinal within that

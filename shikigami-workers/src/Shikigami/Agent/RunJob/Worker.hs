@@ -36,14 +36,14 @@ import Data.Void (absurd)
 import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
 import Hasql.Pool qualified
 import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..), aesonJobCodec, defaultRetryPolicy, queueRef)
-import Keiro.Workflow (WorkflowOutcome (..))
+import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), meiboPrincipal, principalText)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
@@ -360,7 +360,7 @@ runOneAgent env job =
       addAttribute traceSpan "agent.name" ((.agentName) job)
       addAttribute traceSpan "trigger.kind" (triggerKindText ((.triggerKind) job))
       addAttribute traceSpan "run.idempotency_key" ((.idempotencyKey) job)
-      addAttribute traceSpan "run.workflow_id" ((.idempotencyKey) job)
+      addAttribute traceSpan "run.workflow_id" (runJobWorkflowId job).unWorkflowId
       liftIO do
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
         case resE of
@@ -467,7 +467,7 @@ jobLog env job level event fields =
     level
     event
     ( [ "agent" Aeson..= (.agentName) job,
-        Log.runIdKey Aeson..= (.idempotencyKey) job,
+        Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
         "trigger_kind" Aeson..= triggerKindText ((.triggerKind) job)
       ]
         <> fields

@@ -11,7 +11,9 @@ import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Effectful (Eff)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Agent
@@ -432,7 +434,7 @@ assertStoredClosure
       recordedCallCount,
       calls
     } = do
-    assertEqual "aggregate id" (runEvidenceIdText sampleAggregateId) runEvidenceId
+    assertEqual "aggregate id" sampleAggregateId runEvidenceId
     assertEqual "run id" "run-evidence-m1" runId
     assertEqual "stored phase" EvidenceSealed status
     assertEqual "stored verdict" (Just VerdictSanctioned) verdict
@@ -631,8 +633,8 @@ pendingChild :: RelevantChild
 pendingChild =
   RelevantChild
     { childRunId = fixtureChildRunId,
-      parentRunWorkflowId = "run-evidence-m1",
-      parentSessionId = Just "session-parent",
+      parentRunWorkflowId = WorkflowId "run-evidence-m1",
+      parentSessionId = Just nominalSessionFixture,
       phase = Running,
       calls = []
     }
@@ -641,8 +643,8 @@ terminalChild :: RelevantChild
 terminalChild =
   RelevantChild
     { childRunId = fixtureChildRunId,
-      parentRunWorkflowId = "run-evidence-m1",
-      parentSessionId = Just "session-parent",
+      parentRunWorkflowId = WorkflowId "run-evidence-m1",
+      parentSessionId = Just nominalSessionFixture,
       phase = EvidenceSealed,
       calls = [childRecorded]
     }
@@ -942,3 +944,6 @@ childEvidenceJson =
     "response_commitment":"unobserved"
   }
   """
+
+nominalSessionFixture :: NominalId.SessionId
+nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

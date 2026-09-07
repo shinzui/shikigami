@@ -98,8 +98,12 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   cases pass, including the independent synthetic old/new framework patch test.
 - [x] (2026-09-07) Final complete conversation codecs pass all 191 PostgreSQL cases
   and generated conformance checks; retained the exact ten breaking reset findings.
-- [ ] Milestone 4 remaining: identity/nominal boundaries, deterministic generation,
-  and full validation.
+- [x] (2026-09-07) Runtime parent/session identity boundaries and stored generated
+  evidence IDs compile; all 191 PostgreSQL and 403 unit cases pass, including three
+  new identity boundary checks. Natural keys with journal separators derive stable
+  UUIDv5 workflow IDs; child lookups and run correlation use that same identity.
+- [ ] Milestone 4 remaining: service ID prefixes, queue scalar nominals, deterministic
+  generation, and full validation, reconciled with Milestone 5.
 - [ ] Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
   and close runtime identity and nominal-type gaps.
 - [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
@@ -178,6 +182,19 @@ Danwa's cohort plan has made partial progress but does not record a completed mi
 build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade HEAD.
 
 ## Decision Log
+
+- Decision (2026-09-07): retain Kioku SessionId and Keiro WorkflowId in delegation,
+  execution context, queued parents, and child evidence; decode their boundary values
+  explicitly without orphan JSON instances. Stored evidence returns the generated
+  RunEvidenceId. The review verdict remains an explicit external JSON adapter.
+  Keiro's smart constructor rejects structural separators in natural queue keys;
+  preserve accepted workflow keys and derive a namespace-URL UUIDv5 over
+  `shikigami.agent-run:` plus the natural key for the others. This deterministic
+  technical identity is not a TypeID-v7 entity. Review and delegation UUIDv5
+  derivations remain unchanged. Run correlation uses the resulting workflow ID.
+  Names, depths and run-key nominal validation will be reconciled with the complete
+  generated queue boundary, rather than adding a second competing wire shape.
+
 
 Pre-reset recheck (2026-09-07), baseline `9ebb079e650580c40d6ab12cc5e515edb62eda55`:
 apply ADR 0027/0037's one unused-service exception. The owner's same-day unused-service

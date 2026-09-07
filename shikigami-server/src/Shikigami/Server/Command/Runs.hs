@@ -17,9 +17,9 @@
 -- == How the two identities relate
 --
 -- They are not equal, and an early version of the plan behind this module
--- assumed they were. The workflow id is the run job's idempotency key
--- (@Shikigami.Agent.Workflow@, where the workflow is started as
--- @WorkflowId (jobIdempotencyKey job)@); the session id is minted fresh by
+-- assumed they were. The workflow id is derived by @runJobWorkflowId@ from
+-- the run job's natural idempotency key, hashing keys with journal separators
+-- to a stable UUIDv5. The session id is minted fresh by
 -- @genSessionId@ when the session is opened. Nothing derives either from the
 -- other.
 --

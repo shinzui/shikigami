@@ -32,6 +32,7 @@ import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as TxSessions
 import Keiro.Command (CommandError (..), defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Stream qualified as Stream
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
@@ -56,7 +57,7 @@ data ComplianceVerdict
   deriving stock (Eq, Show, Generic)
 
 data StoredRunEvidence = StoredRunEvidence
-  { runEvidenceId :: !Text,
+  { runEvidenceId :: !RunEvidenceId,
     runId :: !Text,
     status :: !EvidencePhase,
     verdict :: !(Maybe ComplianceVerdict),
@@ -163,7 +164,7 @@ persistEvidenceTransition evidenceStore runEvidence@RunEvidence {runEvidenceId =
                   stored <- liftIO (findRunEvidence evidenceStore correlationId)
                   pure case stored of
                     Just StoredRunEvidence {runEvidenceId = storedAggregateId, status}
-                      | storedAggregateId == runEvidenceIdText aggregateId,
+                      | storedAggregateId == aggregateId,
                         status == target ->
                           Right advanced
                     _ -> Left (EvidenceCommandFailed CommandRejected)
@@ -257,7 +258,7 @@ childValue :: RelevantChild -> Value
 childValue RelevantChild {childRunId, parentRunWorkflowId, parentSessionId, phase, calls} =
   Aeson.object
     [ "childRunId" Aeson..= renderRunCorrelationId childRunId,
-      "parentRunWorkflowId" Aeson..= parentRunWorkflowId,
+      "parentRunWorkflowId" Aeson..= parentRunWorkflowId.unWorkflowId,
       "parentSessionId" Aeson..= parentSessionId,
       "phase" Aeson..= phase,
       "callIds" Aeson..= (renderCallCorrelationId . recordedCallId <$> calls)
@@ -370,7 +371,8 @@ findRunTransaction renderedRunId = do
 type RawStoredRun = (Text, Text, Text, Maybe Text, Value, Value, Value, Int32, Int32)
 
 decodeStoredRun :: RawStoredRun -> [StoredCallEvidence] -> IO StoredRunEvidence
-decodeStoredRun (runEvidenceId, runId, statusText, verdictValue, reasonValue, binding, observations, expectedCount, recordedCount) calls = do
+decodeStoredRun (rawAggregateId, runId, statusText, verdictValue, reasonValue, binding, observations, expectedCount, recordedCount) calls = do
+  runEvidenceId <- either (ioError . userError . Text.unpack) pure (parseRunEvidenceId rawAggregateId)
   status <- either (ioError . userError . Text.unpack) pure (parsePhase statusText)
   verdict <- either (ioError . userError . Text.unpack) pure (traverse parseVerdict verdictValue)
   reasons <-

@@ -11,6 +11,8 @@ module Shikigami.Agent.Delegate.Context
 where
 
 import Control.Exception (Exception)
+import Keiro.Workflow.Types (WorkflowId)
+import Kioku.Id (SessionId)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Prelude
@@ -26,9 +28,9 @@ newtype DelegationBudgetId = DelegationBudgetId Text
 data DelegateCtx = DelegateCtx
   { delegateDepth :: !Int,
     identity :: !AgentIdentity,
-    sessionId :: !(Maybe Text),
-    parentSessionId :: !(Maybe Text),
-    parentRunWorkflowId :: !(Maybe Text),
+    sessionId :: !(Maybe SessionId),
+    parentSessionId :: !(Maybe SessionId),
+    parentRunWorkflowId :: !(Maybe WorkflowId),
     lineage :: ![Text],
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     budgetLimit :: !DelegationBudget
