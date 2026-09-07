@@ -1,3 +1,14 @@
+---
+type: "Guide"
+title: "Writing Agents"
+description: "Declare agent identity, behavior, triggers, sinks, memory policy, and routing in Dhall."
+docId: "DOC-3"
+tags: ["agents", "dhall"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Writing Agents
 
 An agent is a value in the typed Dhall schema at [`schema/Agent.dhall`](../../schema/Agent.dhall).

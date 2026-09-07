@@ -32,6 +32,13 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "user"
+        , path = "docs/user"
+        , profile = Some "docs/user/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some "Shikigami user documentation organized by reader intent"
+        }
+      , Schema.OkfBundle::{
         , name = "improvement-requests"
         , path = "docs/improvement-requests"
         , profile = Some "docs/improvement-requests/profile.dhall"

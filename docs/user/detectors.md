@@ -1,3 +1,14 @@
+---
+type: "Guide"
+title: "Detectors — the intelligence layer as declared agents"
+description: "Create detector agents using the shipped catalog and suppression rules."
+docId: "DOC-11"
+tags: ["detectors", "agents"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Detectors — the intelligence layer as declared agents
 
 A **detector** is just a [declared agent](./writing-agents.md) whose whole job is to *watch

@@ -1,3 +1,14 @@
+---
+type: "Navigation"
+title: "Shikigami — User Guide"
+description: "Find the right guide for declaring, running, and operating Shikigami agents."
+docId: "DOC-1"
+tags: ["navigation", "agents"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Shikigami — User Guide
 
 **Shikigami** (式神 — a summoned spirit-servant bound to its master's will) is a runtime
@@ -91,3 +102,16 @@ read Danwa's database or private event store.
 > own plans. Where a guide says "stub," the contract shape is real and the stub swaps for the
 > live client with no schema change. The full design is frozen in
 > [`docs/initial-spec.md`](../initial-spec.md).
+
+## Maintaining this documentation
+
+This directory is an OKF 0.2 bundle using the shared
+[user-documentation profile](mori://shinzui/okf-profiles/profiles/user-documentation).
+The generated `index.md` groups pages by reader intent; this page keeps the
+curated reading order. Each page has a stable `DOC-N` handle. Preserve that handle
+when renaming or revising a page, and allocate a new one for a new page.
+
+After editing pages, update `log.md`, regenerate the index with
+`just user-docs-index`, and run `just user-docs-validate`. The migration provenance
+records the format conversion; it does not claim independent verification of the
+existing runtime examples.

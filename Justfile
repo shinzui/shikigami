@@ -1,3 +1,17 @@
+# Validate user documentation against the shared reader-intent profile.
+[group("docs")]
+user-docs-validate:
+    okf validate docs/user \
+      --strict \
+      --profile docs/user/profile.dhall \
+      --profile-enforce \
+      --log-enforce
+
+# Regenerate the user documentation catalog while preserving the curated README.
+[group("docs")]
+user-docs-index:
+    okf index docs/user --write --okf-version 0.2
+
 # Strictly validate commit-pinned review records against the shared
 # assurance.reviews profile. Findings stay in the review body or become records
 # in the owning bug-report or improvement-request bundle.

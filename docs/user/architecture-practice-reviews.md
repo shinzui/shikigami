@@ -1,3 +1,14 @@
+---
+type: "Runbook"
+title: "Architecture-practice reviews"
+description: "Trigger and resolve practice reviews, configure attention, and recover delivery."
+docId: "DOC-7"
+tags: ["practice-reviews", "operations"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Architecture-practice reviews
 
 The checked-in `architecture-practice-router` delegates a version-1 review trigger to an

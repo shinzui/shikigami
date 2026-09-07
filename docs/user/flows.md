@@ -1,3 +1,14 @@
+---
+type: "Guide"
+title: "Flows"
+description: "Implement, register, and inspect durable lifecycle-backed Flow behaviors."
+docId: "DOC-6"
+tags: ["flows", "workflows"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Flows
 
 `Flow` is the Haskell behavior DSL for agents whose work is a durable process, not a

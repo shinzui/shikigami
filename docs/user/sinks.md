@@ -1,3 +1,14 @@
+---
+type: "Reference"
+title: "Sinks — what an agent produces"
+description: "Look up sink declarations, delivery behavior, and permission requirements."
+docId: "DOC-9"
+tags: ["sinks", "permissions"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Sinks — *what* an agent produces
 
 Agents are **producers, not just reactors**. A sink is an outward action the agent takes with

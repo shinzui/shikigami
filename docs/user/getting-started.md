@@ -1,3 +1,14 @@
+---
+type: "Tutorial"
+title: "Getting Started"
+description: "Build Shikigami, validate a first agent, and run it with memory."
+docId: "DOC-2"
+tags: ["getting-started", "installation"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Getting Started
 
 This guide takes you from a fresh checkout to validating your first declared agent and

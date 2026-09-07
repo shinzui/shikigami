@@ -1,3 +1,14 @@
+---
+type: "Reference"
+title: "CLI Reference"
+description: "Look up Shikigami commands, options, and database recipes."
+docId: "DOC-13"
+tags: ["cli", "commands"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # CLI Reference
 
 Shikigami is **several binaries, not one**. There is no umbrella `shikigami <subcommand>`

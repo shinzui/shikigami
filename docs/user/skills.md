@@ -1,3 +1,14 @@
+---
+type: "Guide"
+title: "Skills — authoring a SKILL.md behavior"
+description: "Author and validate a skill directory for a Shikigami Skill behavior."
+docId: "DOC-8"
+tags: ["skills", "behaviors"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Skills — authoring a `SKILL.md` behavior
 
 A **skill** is the lightweight behavior arm: a directory of instructions (and optional tools)

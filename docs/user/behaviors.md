@@ -1,3 +1,14 @@
+---
+type: "Reference"
+title: "Behaviors — what an agent does"
+description: "Compare deterministic, ShikumiProgram, Skill, and Flow behavior declarations."
+docId: "DOC-5"
+tags: ["behaviors"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Behaviors — *what* an agent does
 
 A behavior is the work an agent performs when its trigger fires. It is a **union** of four

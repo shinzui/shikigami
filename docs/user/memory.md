@@ -1,3 +1,14 @@
+---
+type: "Explanation"
+title: "Memory & Sessions"
+description: "Understand how agents recall and record memory across runs and sessions."
+docId: "DOC-10"
+tags: ["memory", "sessions"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Memory & Sessions
 
 An agent that runs every hour should not start blank each time. Shikigami records every agent

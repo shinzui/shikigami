@@ -1,3 +1,14 @@
+---
+type: "Reference"
+title: "Triggers — when an agent fires"
+description: "Look up schedule, stream, and addressed-event triggers and their feedback guards."
+docId: "DOC-4"
+tags: ["triggers", "scheduling", "events"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # Triggers — *when* an agent fires
 
 A trigger is one of three classes. They cover the whole space of "when should this agent

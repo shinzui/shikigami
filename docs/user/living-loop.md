@@ -1,3 +1,14 @@
+---
+type: "Tutorial"
+title: "The Living Loop — running agents end to end"
+description: "Exercise the worker, stream feedback loop, addressed conversations, and delegation."
+docId: "DOC-12"
+tags: ["workers", "events", "delegation"]
+generated:
+  by: process:shikigami-user-docs-okf-migration
+  at: 2026-09-07T14:41:30Z
+---
+
 # The Living Loop — running agents end to end
 
 The "living loop" is the system feeding itself: an agent produces a `KawaDigest`, that digest
