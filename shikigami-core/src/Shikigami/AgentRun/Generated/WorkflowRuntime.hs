@@ -3,7 +3,6 @@ module Shikigami.AgentRun.Generated.WorkflowRuntime
   ( workflowName
   , AwaitBinding
   , allocateDeclaredAwait
-  , awaitAckAwait
   , awaitLabels
   , declaredPatches
   , declaredPatchStepNames
@@ -33,14 +32,11 @@ allocateDeclaredAwait
   -> Eff es (AwakeableId, Eff es a)
 allocateDeclaredAwait (AwaitBinding label) = awakeableNamed label
 
-awaitAckAwait :: AwaitBinding
-awaitAckAwait = AwaitBinding (StepName "await-ack")
-
 awaitLabels :: [Text]
-awaitLabels = ["await-ack"]
+awaitLabels = []
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList [PatchId "shikigami-resolve-profile-v1", PatchId "shikigami-capability-overlays-v1", PatchId "shikigami-behavior-retry-v1", PatchId "shikigami-approval-workflow-v1", PatchId "shikigami-flow-memory-steps-v1", PatchId "shikigami-practice-review-memory-v1", PatchId "shikigami-practice-review-flow-v1", PatchId "shikigami-emit-signal-labels-v1"]
+declaredPatches = Set.fromList []
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

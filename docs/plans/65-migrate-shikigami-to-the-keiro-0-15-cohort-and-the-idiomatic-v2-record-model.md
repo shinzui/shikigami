@@ -91,6 +91,15 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   and the complete component build pass.
 - [x] (2026-09-07) Milestone 3: use keiro-test-support behind the migration fixture boundary and separate
   pure domain/diagram checks from PostgreSQL tests.
+- [x] (2026-09-07) Rechecked and recorded the four pre-v1 reset facts at `9ebb079`.
+  Retired all ten historical workflow-patch declarations and their runtime branches;
+  kept current profile/capability/policy snapshots, retry handling, journaled memory,
+  approval children, and rotating conversation labels. The 191 current PostgreSQL
+  cases pass, including the independent synthetic old/new framework patch test.
+- [x] (2026-09-07) Final complete conversation codecs pass all 191 PostgreSQL cases
+  and generated conformance checks; retained the exact ten breaking reset findings.
+- [ ] Milestone 4 remaining: identity/nominal boundaries, deterministic generation,
+  and full validation.
 - [ ] Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
   and close runtime identity and nominal-type gaps.
 - [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
@@ -101,6 +110,16 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+The released differ reports exactly ten `WorkflowPatchRemoved` breaking findings
+for the baseline reset, not `WorkflowBodyChanged`: eight on AgentRun and two on
+DanwaConversation. Their subjects are the removed declarations in the pre-reset
+specification. Its replay-impact report remains replay-neutral. This does not
+make the change safe for a deployed population: the removal findings remain
+breaking and are accepted only under the recorded unused-service exception.
+The exact reports are retained at
+[workflow-reset-diff.json](../evidence/plan-65/workflow-reset-diff.json) and
+[workflow-reset-replay-impact.json](../evidence/plan-65/workflow-reset-replay-impact.json).
 
 The first full unit run exposed an edition-recovery interaction: the specification
 scanner traversed the retained `.keiro-dsl-generated-haskell-migrations` directory
@@ -159,6 +178,18 @@ Danwa's cohort plan has made partial progress but does not record a completed mi
 build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade HEAD.
 
 ## Decision Log
+
+Pre-reset recheck (2026-09-07), baseline `9ebb079e650580c40d6ab12cc5e515edb62eda55`:
+apply ADR 0027/0037's one unused-service exception. The owner's same-day unused-service
+statement is the population evidence: no resumable user workflow journals, no queued or
+stored payloads requiring old codecs, and no external wire consumers. Repository and
+remote inspection finds no release tags; the only deployment definition is the local
+`process-compose.yaml` development stack, with no release/deployment pipeline freezing
+these shapes. Test journals and queues were created in bracketed ephemeral databases
+and are not a population to migrate. No database deletion is part of this reset.
+Remove historical application branches while preserving current semantics and explicit
+synthetic framework patch tests. Capture the deliberate evolution diagnostics against
+this revision before establishing the new baseline.
 
 
 - Decision: Target the complete released 0.15.0.0 Keiro set, including the now-applicable

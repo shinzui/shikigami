@@ -32,8 +32,7 @@ import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Projection (InlineProjection (InlineProjection, apply))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow
-  ( PatchId (..),
-    StepName (..),
+  ( StepName (..),
     Workflow,
     WorkflowId (..),
     WorkflowJournalEvent (StepRecorded),
@@ -47,7 +46,6 @@ import Keiro.Workflow
     currentRunGeneration,
     currentWorkflow,
     loadStepIndex,
-    patch,
     restoreSeed,
     runWorkflowWith,
     step,
@@ -81,8 +79,7 @@ import Shikigami.Agent.Principal
   )
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Agent.Workflow.Input (awaitInput)
-import Shikigami.Behavior.Run (BehaviorEnv, runBehavior, runBehaviorAttempt, triggerOnly)
+import Shikigami.Behavior.Run (BehaviorEnv, runBehaviorAttempt, triggerOnly)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
@@ -158,22 +155,7 @@ data ConversationStart = ConversationStart
     initialMessage :: !AddressedMessage
   }
   deriving stock (Eq, Show, Generic)
-
-instance ToJSON ConversationStart where
-  toJSON ConversationStart {agentName, identity, initialMessage} =
-    Aeson.object
-      ( [ "agentName" Aeson..= agentName,
-          "initialMessage" Aeson..= initialMessage
-        ]
-          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
-      )
-
-instance FromJSON ConversationStart where
-  parseJSON = Aeson.withObject "ConversationStart" \object ->
-    ConversationStart
-      <$> object Aeson..: "agentName"
-      <*> object Aeson..:? "identity" Aeson..!= UnresolvedLegacyIdentity
-      <*> object Aeson..: "initialMessage"
+  deriving anyclass (ToJSON, FromJSON)
 
 data RecordedTurn = RecordedTurn
   { turnId :: !Text,
@@ -182,16 +164,7 @@ data RecordedTurn = RecordedTurn
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | What the @record-assistant-and-reply@ step journals under the rotating
--- shape.
---
--- The legacy branch journals a bare @(RecordedTurn, SinkResult)@ tuple, which
--- encodes as a two-element JSON array, and it keeps doing so: those bytes are
--- already in journals under @record-assistant-and-reply:\<messageId\>@ and
--- 'docs/adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md'
--- is explicit that a journaled step keeps the bytes it already wrote. The static
--- label is new, so nothing has ever been written under it and it is free to
--- choose a shape the specification can name.
+-- | The typed result journaled by the static assistant-and-reply step.
 data AssistantTurnAndReply = AssistantTurnAndReply
   { assistantTurn :: !RecordedTurn,
     assistantReply :: !SinkResult
@@ -217,15 +190,8 @@ data ConversationWake
 
 -- | What one generation carries to the next.
 --
--- __The codec is hand-written and defaults every field on read.__ This value
--- crosses a durable boundary: 'Keiro.Workflow.continueAsNew' snapshots it onto
--- the next generation and 'Keiro.Workflow.restoreSeed' decodes it there, which
--- can happen after a deploy that added a field. A generic 'FromJSON' would
--- require every field it knows about and so would refuse to decode a seed
--- written by the previous binary — the exact replay break
--- 'docs/adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md'
--- describes. Defaulting on read means a new field costs a default, not a
--- stranded conversation.
+-- The complete current seed is the pre-v1 baseline. Future changes must follow
+-- docs/workflow-versioning.md when generations written by this version exist.
 --
 -- @pendingMessage@ is the message this generation is to process. It is
 -- 'Nothing' only on generation 0, where the @ConversationStart@ payload supplies
@@ -239,26 +205,7 @@ data ConversationSeed = ConversationSeed
     lastMessageId :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
-
-instance ToJSON ConversationSeed where
-  toJSON ConversationSeed {agentName, identity, turnsSoFar, pendingMessage, lastMessageId} =
-    Aeson.object
-      ( [ "agentName" Aeson..= agentName,
-          "turnsSoFar" Aeson..= turnsSoFar,
-          "pendingMessage" Aeson..= pendingMessage,
-          "lastMessageId" Aeson..= lastMessageId
-        ]
-          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
-      )
-
-instance FromJSON ConversationSeed where
-  parseJSON = Aeson.withObject "ConversationSeed" \o ->
-    ConversationSeed
-      <$> o Aeson..:? "agentName" Aeson..!= ""
-      <*> o Aeson..:? "identity" Aeson..!= UnresolvedLegacyIdentity
-      <*> o Aeson..:? "turnsSoFar" Aeson..!= 0
-      <*> o Aeson..:? "pendingMessage" Aeson..!= Nothing
-      <*> o Aeson..:? "lastMessageId" Aeson..!= Nothing
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | The seed generation 0 starts from, before any rotation has happened.
 emptyConversationSeed :: ConversationSeed
@@ -434,34 +381,12 @@ conversationRegistry :: ConversationEnv -> WorkflowRegistry AppEffects
 conversationRegistry env =
   Map.singleton conversationWorkflowName (WorkflowDef \_wid -> conversationWorkflow env Nothing)
 
--- | The conversation workflow, in either of its two shapes.
---
--- The guard is read once per interpreted run and decides everything after it.
--- 'True' is the rotating shape: one generation holds exactly one turn, every
--- label is static, and the generation ends by rotating onto the next. 'False'
--- is the shape this workflow had before rotation existed: one immortal
--- generation holding every turn of the conversation, with a computed
--- @:\<messageId\>@ suffix on every per-turn label so that two turns in one
--- generation do not collide.
---
--- The 'False' branch is not dead code and must not be deleted casually. It is
--- what keeps an instance that was already parked under the old shape coherent —
--- its journal was written with suffixed labels, and replay matches by label. It
--- is also why the guard exists at all:
--- 'docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md' records
--- that @keiro-dsl diff@ refuses any change to a declared body that is not wholly
--- contained in a new patch block, and that a guard the runtime ignores is a
--- declaration nobody honours. Retire both together, per ADR 0004's rule, once no
--- pre-change instance can still resume.
+-- | The current conversation baseline: one generation, one turn, static labels.
 conversationWorkflow ::
   ConversationEnv ->
   Maybe ConversationStart ->
   Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
-conversationWorkflow env mStart = do
-  rotating <- patch conversationRotationPatch
-  if rotating
-    then rotatingConversation env mStart
-    else legacyConversation env mStart
+conversationWorkflow = rotatingConversation
 
 -- | One generation, one turn, then rotate.
 --
@@ -505,20 +430,6 @@ rotatingConversation env mStart = do
       case wake of
         NextMessage next -> continueAsNew (nextConversationSeed seed start next)
         IdleTimedOut -> completeEpoch env recordedIdentity decl ((.initialMessage) start) result
-
--- | The pre-rotation shape: one immortal generation, suffixed labels.
-legacyConversation ::
-  ConversationEnv ->
-  Maybe ConversationStart ->
-  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
-legacyConversation env mStart = do
-  start <- step (StepName "ingest-start") (ingestStart emptyConversationSeed mStart)
-  decl <- resolveDeclStep env start
-  recordedIdentity <- liftIO (requireRight =<< resolveConversationIdentity env decl (start ^. #identity))
-  firstResult <- processTurn env recordedIdentity decl ((.initialMessage) start)
-  case firstResult of
-    Left err -> pure (Left err)
-    Right result -> loop env recordedIdentity decl 1 result
 
 resolveConversationIdentity :: ConversationEnv -> AgentDecl -> AgentIdentity -> IO (Either Text ResolvedAgentIdentity)
 resolveConversationIdentity env decl recorded =
@@ -729,75 +640,6 @@ resolveDeclStep env ConversationStart {agentName} =
       Just decl -> pure decl
       Nothing -> liftIO (ioError (userError ("unknown conversation agent " <> Text.unpack agentName)))
 
-loop ::
-  ConversationEnv ->
-  ResolvedAgentIdentity ->
-  AgentDecl ->
-  Int ->
-  ConversationTurnResult ->
-  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
-loop env recordedIdentity decl nextOrdinal _previous = do
-  nextMessage <- awaitInput (nextMessageStepName nextOrdinal)
-  result <- processTurn env recordedIdentity decl nextMessage
-  case result of
-    Left err -> pure (Left err)
-    Right completed -> loop env recordedIdentity decl (nextOrdinal + 1) completed
-
-processTurn ::
-  ConversationEnv ->
-  ResolvedAgentIdentity ->
-  AgentDecl ->
-  AddressedMessage ->
-  Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
-processTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
-  sid <- step (StepName "resolve-session") (liftIO (requireRight =<< resolveSession env recordedIdentity decl msgConversationId))
-  userTurn <-
-    step (StepName ("record-user:" <> msgMessageId)) $
-      liftIO do
-        turns <- loadTurns env sid
-        recordTurnOnce env recordedIdentity sid ("danwa:user:" <> msgMessageId) Nothing "user" msgContent turns
-  useRetrySemantics <- patch behaviorRetryPatch
-  outputE <-
-    if useRetrySemantics
-      then step (StepName ("run-behavior-v2:" <> msgMessageId)) do
-        prior <- liftIO (loadTurns env sid)
-        liftIO
-          ( runBehaviorAttempt
-              (conversationRunTimeout env)
-              ((.behaviorEnv) env)
-              decl
-              (triggerOnly (behaviorPayload msg prior))
-          )
-      else do
-        legacy <-
-          step (StepName ("run-behavior:" <> msgMessageId)) do
-            prior <- liftIO (loadTurns env sid)
-            -- No recalled memories: a conversation turn's context is the turn
-            -- history, and that already travels inside the payload.
-            liftIO (first (Text.pack . show) <$> runBehavior ((.behaviorEnv) env) decl (triggerOnly (behaviorPayload msg prior)))
-        Right <$> either (liftIO . ioError . userError . Text.unpack) pure legacy
-  case outputE of
-    Left err -> pure (Left err)
-    Right output -> do
-      let replyText = renderLearning output
-      (asstTurn, sinkResult) <-
-        step (assistantReplyStepName msgMessageId) do
-          turns <- liftIO (loadTurns env sid)
-          let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply ((.directory) env) ((.grants) env) recordedIdentity decl sid msg replyText userTurnIndex turns
-          either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
-      let replyMessageId = sinkResultDetail sinkResult
-          RecordedTurn {turnId = recordedUserTurnId} = userTurn
-          RecordedTurn {turnId = recordedAsstTurnId} = asstTurn
-          result =
-            ConversationTurnResult
-              { sessionId = sid,
-                userTurnId = recordedUserTurnId,
-                asstTurnId = recordedAsstTurnId,
-                replyMessageId
-              }
-      Right <$> step (turnResultStepName msgMessageId) (pure result)
-
 -- | One turn, on static labels.
 --
 -- Every label here is written at most once, because a generation holds exactly
@@ -811,13 +653,6 @@ processTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msg
 -- 'recordAssistantTurnAndEnqueueReply' keys on @danwa:assistant:\<messageId\>@,
 -- and both return the existing turn when it is already recorded. Dropping the
 -- suffix costs nothing there.
---
--- Unlike the legacy branch this always takes attempt semantics. An instance can
--- only be on the rotating shape if it started after that shape shipped, and
--- @shikigami-behavior-retry-v1@ has been active far longer, so there is no
--- rotating instance whose journal was written under the pre-retry branch. Not
--- reading the guard here is therefore the honest thing rather than an omission:
--- see docs/adr/0001-declare-only-what-the-runtime-executes.md.
 processRotatingTurn ::
   ConversationEnv ->
   ResolvedAgentIdentity ->
@@ -863,14 +698,6 @@ processRotatingTurn env recordedIdentity decl msg@AddressedMessage {conversation
                 replyMessageId
               }
       Right <$> step (StepName "turn-result") (pure result)
-
-behaviorRetryPatch :: PatchId
-behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
-
--- | Which shape an instance runs: rotating with static labels, or the immortal
--- loop with suffixed ones. See 'conversationWorkflow'.
-conversationRotationPatch :: PatchId
-conversationRotationPatch = PatchId "shikigami-conversation-rotation-v1"
 
 runConversationWorkflow ::
   ConversationEnv ->
@@ -918,47 +745,18 @@ deliverConversationInputFromApp appEnv' msg@AddressedMessage {conversationId = m
     Right delivered -> delivered
     Left _ -> False
 
--- | An armed @next-message@ promise, and which shape armed it.
---
--- The shape matters because the two branches await different payloads: the
--- rotating body awaits a 'ConversationWake' so that the idle timer can signal
--- the same promise, while the legacy body awaits a bare 'AddressedMessage'.
--- Signalling the wrong encoding would journal a value the awaiting body cannot
--- decode, and it would do so /successfully/ -- the mistake would surface later
--- as a wedged conversation rather than as a failed delivery.
-data PendingInput = PendingInput
-  { pendingAid :: !AwakeableId,
-    pendingRotating :: !Bool
-  }
-
--- | The armed promises in one generation's step index.
---
--- The label is what says which shape allocated it, so this reads it rather than
--- guessing: the rotating shape allocates the bare @next-message@, the legacy
--- shape allocates @next-message:\<ordinal\>@.
-pendingInputAids :: Map.Map Text Value -> [PendingInput]
+-- | Read the published opaque id from the current generation's allocation.
+-- There is one declared input label, and both ingress and idle expiry signal
+-- its ConversationWake payload. Never derive a generation-zero token.
+pendingInputAids :: Map.Map Text Value -> [AwakeableId]
 pendingInputAids stepIndex =
-  mapMaybe pending (Map.keys stepIndex)
-  where
-    rotatingKey = awakeableAllocStepPrefix <> "next-message"
-    legacyPrefix = rotatingKey <> ":"
+  maybe [] pure (Map.lookup (awakeableAllocStepPrefix <> "next-message") stepIndex >>= parseMaybe Aeson.parseJSON)
 
-    pending key
-      | key == rotatingKey = (\aid -> PendingInput {pendingAid = aid, pendingRotating = True}) <$> parseAid key
-      | legacyPrefix `Text.isPrefixOf` key = (\aid -> PendingInput {pendingAid = aid, pendingRotating = False}) <$> parseAid key
-      | otherwise = Nothing
-
-    parseAid key =
-      Map.lookup key stepIndex >>= parseMaybe Aeson.parseJSON
-
-signalFirst :: (Store :> es, IOE :> es) => AddressedMessage -> [PendingInput] -> Eff es Bool
+signalFirst :: (Store :> es, IOE :> es) => AddressedMessage -> [AwakeableId] -> Eff es Bool
 signalFirst msg = \case
   [] -> pure False
-  PendingInput {pendingAid, pendingRotating} : rest -> do
-    signalled <-
-      if pendingRotating
-        then signalAwakeable pendingAid (NextMessage msg)
-        else signalAwakeable pendingAid msg
+  aid : rest -> do
+    signalled <- signalAwakeable aid (NextMessage msg)
     if signalled then pure True else signalFirst msg rest
 
 -- | Read this message's turn result back out of the journal.
@@ -975,9 +773,7 @@ signalFirst msg = \case
 -- with no message id in it, so "the turn-result step" is not by itself an answer
 -- to "the result for /this/ message". The match is made on
 -- 'ConversationTurnResult.userTurnId', which is derived from the message id
--- (@danwa:user:\<messageId\>@) and is therefore exact. The legacy shape's
--- suffixed label is tried too, so an instance still on the old branch resolves
--- the same way it always did.
+-- (@danwa:user:\<messageId\>@) and is therefore exact.
 loadConversationResult :: ConversationEnv -> WorkflowId -> Text -> IO (Maybe ConversationTurnResult)
 loadConversationResult env workflowId msgMessageId = do
   result <- runAppIO ((.appEnv) env) do
@@ -997,23 +793,11 @@ loadConversationResult env workflowId msgMessageId = do
     turnResultIn stepIndex =
       listToMaybe
         [ result
-        | label <- [unStepName (turnResultStepName msgMessageId), "turn-result"],
+        | label <- ["turn-result"],
           Just value <- [Map.lookup label stepIndex],
           Just result <- [parseMaybe Aeson.parseJSON value],
           (.userTurnId) result == wantedUserTurnId
         ]
-
-nextMessageStepName :: Int -> StepName
-nextMessageStepName ordinal =
-  StepName ("next-message:" <> Text.pack (show ordinal))
-
-turnResultStepName :: Text -> StepName
-turnResultStepName msgMessageId =
-  StepName ("turn-result:" <> msgMessageId)
-
-assistantReplyStepName :: Text -> StepName
-assistantReplyStepName msgMessageId =
-  StepName ("record-assistant-and-reply:" <> msgMessageId)
 
 replySinkStepName :: Text -> StepName
 replySinkStepName msgMessageId =

@@ -71,7 +71,6 @@ import Shikigami.PracticeReview.Memory
     appliesTo,
     decodePracticeReviewMemory,
     encodePracticeReviewMemory,
-    practiceReviewMemoryPatch,
     practiceReviewScope,
     practiceReviewTags,
     provisionalMemoryId,
@@ -221,16 +220,6 @@ postgresTests databaseFixture =
               (rememberProvisional Nothing verdict)
           crossWorkflowId <- expectCompletedRight crossWorkflow
           crossWorkflowId @?= expectedId
-          legacy <-
-            runReviewOperationWith
-              defaultWorkflowRunOptions
-              appEnv
-              session
-              (WorkflowId "practice-review-provisional-legacy-branch")
-              (rememberProvisional Nothing verdict)
-          legacyId <- expectCompletedRight legacy
-          legacyId @?= expectedId
-
           row <- requireMemoryRow appEnv expectedId
           let MemoryRow
                 { status,
@@ -251,11 +240,6 @@ postgresTests databaseFixture =
           length scopeRows @?= 1
           journal <- loadReviewStepIndex appEnv workflowId
           assertBool "fixed remember step is journaled" (Map.member "practice-review-remember-provisional" journal)
-          legacyJournal <- loadReviewStepIndex appEnv (WorkflowId "practice-review-provisional-legacy-branch")
-          assertBool
-            "legacy branch performs the same write without the future operation step"
-            (not (Map.member "practice-review-remember-provisional" legacyJournal))
-
           let changedRaw = validatedVerdictValue verdict & #recommendedAction .~ "semantically changed action"
           changed <- expectRight (validateVerdict changedRaw)
           changedResult <-
@@ -481,10 +465,7 @@ runReviewOperationWith runOptions appEnv session workflowId operation =
         }
 
 reviewRunOptions :: WorkflowRunOptions
-reviewRunOptions =
-  defaultWorkflowRunOptions
-    & #activePatches
-      .~ Set.singleton practiceReviewMemoryPatch
+reviewRunOptions = defaultWorkflowRunOptions
 
 reviewAgentDecl :: AgentDecl
 reviewAgentDecl =

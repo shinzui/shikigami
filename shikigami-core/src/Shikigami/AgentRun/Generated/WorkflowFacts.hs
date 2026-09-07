@@ -20,9 +20,9 @@ workflowFacts =
     { name = "shikigami.agent-run"
     , idVia = "idText"
     , idField = "idempotencyKey"
-    , body = ["step:ingest-job", "step:lookup-agent", "patch:shikigami-resolve-profile-v1(step:resolve-profile)", "patch:shikigami-capability-overlays-v1(step:resolve-capability-overlays)", "step:open-session", "step:recall", "step:run-behavior", "patch:shikigami-behavior-retry-v1(step:run-behavior-v2)", "step:classify", "await:await-ack", "patch:shikigami-approval-workflow-v1(step:resolve-approval-policy,child:approval)", "step:route-catalog-architecture-practice", "step:route-decision-architecture-practice", "patch:shikigami-flow-memory-steps-v1(step:recall-risk-history,step:remember-acknowledged,step:remember-declined,step:remember-escalated)", "patch:shikigami-practice-review-memory-v1(step:practice-review-remember-provisional,step:practice-review-resolve,step:practice-review-recall,step:practice-review-chain)", "patch:shikigami-practice-review-flow-v1(step:practice-review-evidence,step:practice-review-evaluate,step:practice-review-attention)", "patch:shikigami-emit-signal-labels-v1()", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
-    , awaitLabels = ["await-ack"]
-    , patchIds = ["shikigami-resolve-profile-v1", "shikigami-capability-overlays-v1", "shikigami-behavior-retry-v1", "shikigami-approval-workflow-v1", "shikigami-flow-memory-steps-v1", "shikigami-practice-review-memory-v1", "shikigami-practice-review-flow-v1", "shikigami-emit-signal-labels-v1"]
+    , body = ["step:ingest-job", "step:lookup-agent", "step:resolve-profile", "step:resolve-capability-overlays", "step:resolve-approval-policy", "step:open-session", "step:recall", "step:run-behavior-v2", "step:classify", "child:approval", "step:route-catalog-architecture-practice", "step:route-decision-architecture-practice", "step:recall-risk-history", "step:remember-acknowledged", "step:remember-declined", "step:remember-escalated", "step:practice-review-remember-provisional", "step:practice-review-resolve", "step:practice-review-recall", "step:practice-review-chain", "step:practice-review-evidence", "step:practice-review-evaluate", "step:practice-review-attention", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
+    , awaitLabels = []
+    , patchIds = []
     }
 
 -- | Base-library projection used by the service-level conformance facade.

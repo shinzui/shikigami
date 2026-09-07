@@ -8,8 +8,6 @@ module Shikigami.Agent.Approval.Workflow
     ApprovalNotifier (..),
     ApprovalWorkflowEnv (..),
     defaultApprovalWorkflowEnv,
-    approvalWorkflowPatch,
-    approvalWorkflowPatchDeclared,
     approvalWorkflowName,
     approvalWorkflow,
     approvalRegistry,
@@ -20,13 +18,11 @@ where
 import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.Workflow
-  ( PatchId (..),
-    StepName (..),
+  ( StepName (..),
     Workflow,
     WorkflowJournalEvent (..),
     WorkflowName,
@@ -49,7 +45,6 @@ import Shikigami.Agent.Approval
     armApprovalDeadline,
     reviewRequestIdFor,
   )
-import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRunGenerated
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Prelude
 
@@ -105,19 +100,6 @@ defaultApprovalWorkflowEnv =
             postAsk = \_ _ _ _ -> pure (Right ())
           }
     }
-
--- | The permanent parent compatibility branch declared in
--- @domain/shikigami-agent-run.keiro@. Keiro DSL 0.14 generates the checked set
--- but not individual patch constants, so the versioning tests assert this
--- runtime value is a member of that generated set.
-approvalWorkflowPatch :: PatchId
-approvalWorkflowPatch = PatchId "shikigami-approval-workflow-v1"
-
--- | Whether the hand-owned runtime value is present in the generated parent
--- contract. Exported for the deploy-simulation test that pins the boundary.
-approvalWorkflowPatchDeclared :: Bool
-approvalWorkflowPatchDeclared =
-  Set.member approvalWorkflowPatch AgentRunGenerated.declaredPatches
 
 approvalWorkflowName :: WorkflowName
 approvalWorkflowName = Generated.workflowName

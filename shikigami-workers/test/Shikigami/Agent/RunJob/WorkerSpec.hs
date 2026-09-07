@@ -66,9 +66,6 @@ tests databaseFixture =
       testCase "typed outcome table covers every workflow disposition" do
         assertRetryDefault "store failure" (agentJobOutcome "agent" (Left ()))
         assertDone "completed" (agentJobOutcome "agent" (Right (Completed (Right ()))))
-        assertRetryDefault
-          "legacy failure"
-          (agentJobOutcome "agent" (Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure "legacy")))))
         assertDeadWith
           "permanent failure"
           "shikigami.permanent_workflow_failure:"

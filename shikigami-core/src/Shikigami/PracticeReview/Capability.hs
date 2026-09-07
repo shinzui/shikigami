@@ -28,7 +28,6 @@ module Shikigami.PracticeReview.Capability
     unavailablePracticeReviewRuntimeWithRecipients,
     failClosedPracticeReviewRuntime,
     modelPracticeReviewEvaluator,
-    practiceReviewFlowPatch,
     runPracticeReviewEvidence,
     runPracticeReviewEvaluator,
     runPracticeReviewAttention,
@@ -55,7 +54,7 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.Lazy qualified as LazyText
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
-import Keiro.Workflow (PatchId (..), StepName (..), Workflow, step)
+import Keiro.Workflow (StepName (..), Workflow, step)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.PracticeReview
@@ -324,9 +323,6 @@ practiceReviewUserPrompt evidence RecalledPracticeReviews {guiding, doNotRepeat,
 
 boundedEvaluatorDetail :: Text -> Text
 boundedEvaluatorDetail = Text.take 512
-
-practiceReviewFlowPatch :: PatchId
-practiceReviewFlowPatch = PatchId "shikigami-practice-review-flow-v1"
 
 runPracticeReviewEvidence ::
   (Workflow :> es, IOE :> es) =>

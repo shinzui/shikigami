@@ -36,7 +36,7 @@ import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
-import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
+import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecordPolicy (Never), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
@@ -625,8 +625,6 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      AgentWorkflow.approval = defaultApprovalEnv,
-      AgentWorkflow.deadline = Nothing,
       AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,

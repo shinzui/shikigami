@@ -7,10 +7,9 @@
 -- practice scope, and Kioku's separate record/retire protocol. Flow code gets
 -- those four operations and no Kioku environment or IO capability.
 --
--- This module does not install the effect into the production Flow row. The
--- specialist Flow introduced by plan 46 must add the interpreter, the four
--- static step declarations, and 'practiceReviewMemoryPatch' in the same
--- workflow-versioned change that first calls the capability.
+-- The specialist Flow installs this interpreter with four static journal
+-- labels declared in domain/shikigami-agent-run.keiro. Every durable call
+-- journals its operation; the explicit unjournaled interpreter is test-only.
 module Shikigami.PracticeReview.Memory
   ( PracticeReviewMemory,
     PracticeReviewMemoryEnv (..),
@@ -22,7 +21,6 @@ module Shikigami.PracticeReview.Memory
     PracticeReviewChainEntry (..),
     PracticeReviewChain (..),
     ReviewMemoryError (..),
-    practiceReviewMemoryPatch,
     provisionalMemoryId,
     resolvedMemoryId,
     practiceReviewScope,
@@ -65,7 +63,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
-import Keiro.Workflow (PatchId (..), StepName (..), Workflow, patch, step)
+import Keiro.Workflow (StepName (..), Workflow, step)
 import Kioku.Api.Scope (MemoryScope (..), ScopeKind (..))
 import Kioku.Api.Types qualified as Kioku
 import Kioku.App (AppEnv, runAppIO)
@@ -438,19 +436,12 @@ recallPracticeReviews context = send (RecallPracticeReviews context)
 recallPracticeReviewChain :: (PracticeReviewMemory :> es) => ReviewId -> Eff es PracticeReviewChain
 recallPracticeReviewChain review = send (RecallPracticeReviewChain review)
 
--- | Declared durable guard for the four fixed review-memory labels.
-practiceReviewMemoryPatch :: PatchId
-practiceReviewMemoryPatch = PatchId "shikigami-practice-review-memory-v1"
-
 -- | Interpret review persistence through fixed, declarable Keiro steps.
 runPracticeReviewMemory :: (Workflow :> es, IOE :> es) => PracticeReviewMemoryEnv -> Eff (PracticeReviewMemory : es) a -> Eff es a
-runPracticeReviewMemory env action = do
-  journalReviewMemory <- patch practiceReviewMemoryPatch
-  runPracticeReviewMemoryWithJournal journalReviewMemory env action
+runPracticeReviewMemory = runPracticeReviewMemoryWithJournal True
 
--- | Test/legacy interpreter that installs the same narrow capability without
--- adding the review-memory patch to an unrelated workflow's journal. AgentRun
--- production always uses 'runPracticeReviewMemory'.
+-- | Test interpreter for exercising several operations without fixed journal
+-- labels. Durable runtime code always uses 'runPracticeReviewMemory'.
 runPracticeReviewMemoryUnjournaled :: (Workflow :> es, IOE :> es) => PracticeReviewMemoryEnv -> Eff (PracticeReviewMemory : es) a -> Eff es a
 runPracticeReviewMemoryUnjournaled = runPracticeReviewMemoryWithJournal False
 

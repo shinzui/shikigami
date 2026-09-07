@@ -211,8 +211,6 @@ agentRunDeps env =
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
-      AgentWorkflow.approval = Approval.defaultApprovalEnv,
-      AgentWorkflow.deadline = Just (envApprovalDeadline env),
       AgentWorkflow.runTimeout = envRunTimeout env,
       AgentWorkflow.delegationBudget = envDelegationBudget env,
       AgentWorkflow.logger = envLogger env,

@@ -1,148 +1,49 @@
-# The durable agent-run workflow: one fired trigger becomes one agent run.
-#
-# The hand-owned runtime is Shikigami.Agent.Workflow in shikigami-core. This
-# member owns the workflow's stable identity and the journal labels it writes,
-# because those are the values a later change must not move silently.
-#
-# Not declared here, and why:
-#
-#   * The shikigami_run_jobs pgmq queue that feeds this workflow. Declaring it
-#     as a `workqueue` would put Keiro's schema-version-1 {v,t,data} envelope on
-#     a payload that Shikigami.Trigger.Enqueue sends bare, which is a codec
-#     change disguised as a documentation change. See
-#     docs/architecture/shikigami-domain-inventory.md.
-#   * The legacy per-approval awaits `approval:<SinkKind>:<ordinal>` and their
-#     `:notify` steps, and the flow path's `emit-signal:<label>` steps. A
-#     workflow label is a compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*);
-#     it can carry neither a colon nor a runtime-computed suffix. Fresh
-#     approvals use the declared shikigami.approval child workflow behind the
-#     patch below. The emit-signal labels are stable as of their own patch, but
-#     a colon still keeps them out of this specification; that family's owner
-#     is docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md.
+# Current pre-v1 agent-run baseline, established by plan 65 and ADR 0027.
+# This is a label inventory across paths, not a control-flow program.
+# Flow emit-signal:<label> entries remain hand-owned because the DSL's wire
+# words cannot contain colons. The run-job queue is adopted in plan 65's next
+# milestone, on producer and consumer together.
 language keiro-dsl 5
 context shikigami
 layout collocated
 
 workflow AgentRun
   name "shikigami.agent-run"
-  # Shikigami.Agent.RunJob.RunJob. Only the fields this specification refers to
-  # are inventoried; the rest of the record is hand-owned until a declared node
-  # consumes it.
   in RunJob {
     agentName:Text
     idempotencyKey:Id
     occurredAt:Time
   }
   out AgentRunResult
-  # WorkflowId is the job's idempotency key verbatim
-  # (Shikigami.Agent.Workflow.runAgentRunWorkflow).
   id from input.idempotencyKey via idText
   body
-    # The body is ordered for reading; replay matches journal records by label,
-    # so this is the label inventory of every path through the workflow, not a
-    # control-flow program. `run-behavior` and the flow path's `classify` /
-    # `await-ack` are alternatives, and `fail-session` is exclusive with
-    # `record` / `complete`.
     step ingest-job -> RunJob
     step lookup-agent -> AgentDecl
-    # Instances already in flight when profile resolution ships must retain
-    # their old body shape. Fresh instances resolve (or explicitly journal that
-    # no profile is required) before opening a session.
-    patch shikigami-resolve-profile-v1 {
-      step resolve-profile -> ProfileResolution
-    }
-    # The operator catalog and authorization decision are resolved once for a
-    # fresh run and journaled as public immutable descriptors. Instances that
-    # began before this patch retain the old shape and acquire no overlays.
-    patch shikigami-capability-overlays-v1 {
-      step resolve-capability-overlays -> CapabilityOverlayResolution
-    }
+    step resolve-profile -> ProfileResolution
+    step resolve-capability-overlays -> CapabilityOverlayResolution
+    step resolve-approval-policy -> ApprovalPolicySnapshot
     step open-session -> SessionId
     step recall -> RecalledLearnings
-    step run-behavior -> BehaviorOutput
-    # Fresh instances use the v2 label so transient failures can escape before
-    # any result is appended. Pre-patch instances retain run-behavior and its
-    # original Either Text Value decoder.
-    patch shikigami-behavior-retry-v1 {
-      step run-behavior-v2 -> BehaviorOutput
-    }
+    step run-behavior-v2 -> BehaviorOutput
     step classify -> RiskVerdict
-    await await-ack -> ApprovalDecision
-    # Fresh runs snapshot approval policy once and execute each Flow or sink
-    # approval as a dedicated child with static labels. Instances already in
-    # flight keep the direct await-ack and computed approval label family.
-    patch shikigami-approval-workflow-v1 {
-      step resolve-approval-policy -> ApprovalPolicySnapshot
-      child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
-    }
-    # The first registered router uses these two static call-site labels.
-    # Shikigami.Flow.Routing journals the complete bounded catalog before the
-    # raw evaluator value, then validates the latter against the former. They
-    # enter directly as part of the pre-release v1 baseline under ADR 0027;
-    # there is deliberately no patch id or legacy branch for an empty durable
-    # population.
+    child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
     step route-catalog-architecture-practice -> CandidateCatalog
     step route-decision-architecture-practice -> RouteDecision
-    # The flow path's memory labels. Shikigami.Flow.Capability.runMemory
-    # journals a flow's `recall` and `remember` under the label the flow passes
-    # it, so `recall-risk-history` and the three `remember-*` steps are the
-    # labels Shikigami.Flow.AtRiskCustomer reaches. Unlike the emit-signal
-    # family below, a memory label is a plain hyphenated wire word, so it can be
-    # declared here and this gate governs it. Adding a labeled memory call to a
-    # *registered* flow means adding its label here too.
-    #
-    # These sit inside a patch block for the reason every added step in this
-    # body does: `keiro-dsl diff` classifies ANY change to a declared workflow
-    # body as BREAKING unless the whole change is contained in a NEW patch
-    # guard — appends included. The guard is not decoration. runMemory reads it
-    # once per interpreted flow run and an instance that was already in flight
-    # keeps the un-journaled behavior its journal was written under, exactly as
-    # `shikigami-emit-signal-labels-v1` does for sink labels. Delete the guard,
-    # the False branch, and this block together once no pre-change flow can
-    # still resume; see docs/workflow-versioning.md.
-    #
-    # The labels are declared here rather than beside `classify` because a
-    # patch block must contain the entire change contiguously, and the body is
-    # ordered for reading rather than for control flow: replay matches journal
-    # records by label, so position carries no meaning.
-    patch shikigami-flow-memory-steps-v1 {
-      step recall-risk-history -> RecalledLearnings
-      step remember-acknowledged -> RecordedLearning
-      step remember-declined -> RecordedLearning
-      step remember-escalated -> RecordedLearning
-    }
-    # Architecture-practice review memory is a distinct typed state machine.
-    # Its four labels and interpreter patch landed together so a pre-change
-    # reviewer can retain the exact body its journal was written against.
-    patch shikigami-practice-review-memory-v1 {
-      step practice-review-remember-provisional -> PracticeReviewMemoryResult
-      step practice-review-resolve -> PracticeReviewMemoryResult
-      step practice-review-recall -> RecalledPracticeReviews
-      step practice-review-chain -> PracticeReviewChain
-    }
-    # The specialist's evidence snapshot, raw evaluator proposal, and atomic
-    # attention decision are the complete v1 review-flow step topology.
-    patch shikigami-practice-review-flow-v1 {
-      step practice-review-evidence -> EvidenceBundle
-      step practice-review-evaluate -> PracticeReviewEvaluation
-      step practice-review-attention -> AttentionReservationResult
-    }
-    # Shikigami.Flow.Capability.runSink decides once per interpreted flow run
-    # whether a sink emission's journal label is the caller's stable token
-    # (`emit-signal:alert`) or the old per-run ordinal (`emit-signal:0`). The
-    # guard is required because switching schemes renames every emission at
-    # once, which would orphan a parked flow's alert record and enqueue it a
-    # second time. The block is empty because every label it guards carries a
-    # colon and so cannot be declared; see docs/workflow-versioning.md.
-    patch shikigami-emit-signal-labels-v1 {
-    }
+    step recall-risk-history -> RecalledLearnings
+    step remember-acknowledged -> RecordedLearning
+    step remember-declined -> RecordedLearning
+    step remember-escalated -> RecordedLearning
+    step practice-review-remember-provisional -> PracticeReviewMemoryResult
+    step practice-review-resolve -> PracticeReviewMemoryResult
+    step practice-review-recall -> RecalledPracticeReviews
+    step practice-review-chain -> PracticeReviewChain
+    step practice-review-evidence -> EvidenceBundle
+    step practice-review-evaluate -> PracticeReviewEvaluation
+    step practice-review-attention -> AttentionReservationResult
     step dispatch-sinks -> SinkResults
     step fail-session -> FailedSession
     step record -> RecordedLearning
     step complete -> CompletedSession
-    # Shikigami.Agent.Delegate.delegate spawns a child of this same workflow;
-    # the child id comes from the parent workflow id, the child agent name, and
-    # a caller-supplied stable delegation key.
     child delegate id input via delegatedWorkflowId -> AgentRunResult
 
 operation RunAgentRun

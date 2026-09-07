@@ -40,7 +40,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Time (NominalDiffTime, secondsToNominalDiffTime)
+import Data.Time (NominalDiffTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError_)
@@ -51,13 +51,11 @@ import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox (OutboxRow (..), PublishOutcome (..), mkPublishRejection)
 import Keiro.Telemetry (traceContextFromCurrentSpan)
 import Keiro.Workflow
-  ( PatchId (..),
-    StepName (..),
+  ( StepName (..),
     Workflow,
     WorkflowId (..),
     WorkflowOutcome,
     currentWorkflow,
-    patch,
     runWorkflowWith,
     step,
   )
@@ -79,13 +77,10 @@ import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval
   ( ApprovalDecision (..),
-    ApprovalEnv (..),
     ApprovalPolicySnapshot,
     ApprovalRequest (..),
-    ApprovalRequirement (..),
     approvalPolicyChannel,
     approvalPolicyDeadline,
-    awaitApproval,
     requiresApprovalFor,
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -96,7 +91,6 @@ import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), Reso
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..))
-import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
@@ -104,7 +98,7 @@ import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), bounde
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
 import Shikigami.Capability.Catalog qualified as Capability
-import Shikigami.Capability.Overlay (ResolvedCapabilitySet, emptyResolvedCapabilitySet)
+import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Capability.Provider
   ( CapabilityRuntime (..),
     CapabilityRuntimeError,
@@ -116,7 +110,6 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement
   ( ApprovalAcknowledgementFailed (..),
-    runAcknowledgement,
     runAcknowledgementWithChild,
   )
 import Shikigami.Flow.Capability qualified as FlowCapability
@@ -169,14 +162,11 @@ data AgentRunDeps = AgentRunDeps
     -- or outbox serialization boundary.
     http :: !SinkHttp,
     hooks :: !AgentRunHooks,
-    -- | Mutable process policy. Fresh runs record it once before use; legacy
-    -- patch branches never consult it.
+    -- | Mutable process policy, snapshotted once in each new run.
     approvalPolicy :: !ApprovalPolicySnapshot,
     -- | Process resources for the approval child registered alongside this
     -- agent-run workflow. The value itself never crosses a journal boundary.
     approvalWorkflow :: !ApprovalWorkflow.ApprovalWorkflowEnv,
-    approval :: !(SessionId -> ApprovalEnv),
-    deadline :: !(Maybe NominalDiffTime),
     runTimeout :: !NominalDiffTime,
     -- | Root-run descendant limit used when an agent declaration leaves its
     -- own delegation budget absent.
@@ -303,27 +293,15 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runResolvedAgent deps job decl = do
-  resolveProfileForRun <- patch profileResolutionPatch
-  profileResolution <-
-    if resolveProfileForRun
-      then
-        runStep
-          deps
-          (StepName "resolve-profile")
-          (liftIO (resolveRequiredProfile deps decl))
-      else pure (Right Nothing)
+  profileResolution <- runStep deps (StepName "resolve-profile") (liftIO (resolveRequiredProfile deps decl))
   case profileResolution of
     Left refusal -> pure (Left (PermanentAgentRunFailure (renderProfileResolutionError refusal)))
     Right resolvedProfile -> do
-      resolveCapabilityOverlaysForRun <- patch capabilityOverlayPatch
       capabilityResolution <-
-        if resolveCapabilityOverlaysForRun
-          then
-            runStep
-              deps
-              (StepName "resolve-capability-overlays")
-              (pure (resolveCapabilitiesForRun ((.capabilities) deps) decl resolvedProfile))
-          else pure (Right emptyResolvedCapabilitySet)
+        runStep
+          deps
+          (StepName "resolve-capability-overlays")
+          (pure (resolveCapabilitiesForRun ((.capabilities) deps) decl resolvedProfile))
       case capabilityResolution of
         Left refusal ->
           pure
@@ -334,12 +312,6 @@ runResolvedAgent deps job decl = do
             )
         Right resolvedOverlays ->
           runProfiledAgent deps job decl resolvedProfile resolvedOverlays
-
-profileResolutionPatch :: PatchId
-profileResolutionPatch = PatchId "shikigami-resolve-profile-v1"
-
-capabilityOverlayPatch :: PatchId
-capabilityOverlayPatch = PatchId "shikigami-capability-overlays-v1"
 
 -- | Resolve an agent-authored request through one operator runtime snapshot.
 -- The already journaled profile is part of the authorization subject; policy
@@ -408,11 +380,7 @@ runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl =
         addAttribute traceSpan "agent.name" ((.agentName) job)
         addAttribute traceSpan "trigger.kind" (triggerKindText ((.trigger) decl))
         addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
-      useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
-      approvalPolicyForRun <-
-        if useApprovalChild
-          then Just <$> runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
-          else pure Nothing
+      approvalPolicyForRun <- runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
       opened <- runStep deps (StepName "open-session") (requireStore (openSession deps recordedIdentity job decl))
       case opened of
         -- kioku refused to open the session. The same command will be refused on
@@ -425,7 +393,7 @@ runSessionedAgent ::
   AgentRunDeps ->
   BehaviorEnv ->
   ResolvedCapabilitySet ->
-  Maybe ApprovalPolicySnapshot ->
+  ApprovalPolicySnapshot ->
   ResolvedAgentIdentity ->
   RunJob ->
   AgentDecl ->
@@ -433,7 +401,6 @@ runSessionedAgent ::
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
   prior <- runStep deps (StepName "recall") (liftIO (recallAgentLearnings ((.appEnv) deps) ((.deliveryPool) deps) declaredRecallLimit recordedIdentity (recallQuery decl (behaviorKindText ((.behavior) decl)) ((.triggerPayload) job))))
-  useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
@@ -443,7 +410,7 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun r
         _
           | not (null ((.delegates) decl)) ->
               first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior
-          | useRetrySemantics ->
+          | otherwise ->
               first PermanentAgentRunFailure
                 <$> runStep
                   deps
@@ -471,9 +438,6 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun r
                               Right behaviorResult -> pure behaviorResult
                       )
                   )
-          | otherwise ->
-              first LegacyBehaviorFailure
-                <$> runStep deps (StepName "run-behavior") (runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior)
   case behaviorE of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
     Right output -> finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity job decl sid prior output
@@ -481,7 +445,7 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun r
 finishSuccessfulRun ::
   AgentRunDeps ->
   BehaviorEnv ->
-  Maybe ApprovalPolicySnapshot ->
+  ApprovalPolicySnapshot ->
   ResolvedAgentIdentity ->
   RunJob ->
   AgentDecl ->
@@ -543,9 +507,6 @@ finishRunFailure deps recordedIdentity decl sid err = do
         ( PermanentAgentRunFailure
             (agentRunFailureDetail err <> " (and " <> detail <> ")")
         )
-
-behaviorRetryPatch :: PatchId
-behaviorRetryPatch = PatchId "shikigami-behavior-retry-v1"
 
 capabilityScopeForRun :: RunJob -> CapabilityScope
 capabilityScopeForRun job =
@@ -666,33 +627,17 @@ runStep deps stepName action =
 approveSinks ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   AgentRunDeps ->
-  Maybe ApprovalPolicySnapshot ->
+  ApprovalPolicySnapshot ->
   SessionId ->
   RunJob ->
   AgentDecl ->
   Value ->
   Eff es (Either AgentRunFailure [Sink])
-approveSinks deps approvalPolicyForRun sid job decl output =
-  case approvalPolicyForRun of
-    Nothing -> Right . catMaybes <$> traverse approveLegacy indexedSinks
-    Just policy -> do
-      decisions <- traverse (approveWithPolicy policy) indexedSinks
-      pure (catMaybes <$> sequence decisions)
+approveSinks deps approvalPolicyForRun sid job decl output = do
+  decisions <- traverse (approveWithPolicy approvalPolicyForRun) indexedSinks
+  pure (catMaybes <$> sequence decisions)
   where
     indexedSinks = zip [0 :: Int ..] ((.sinks) decl)
-    legacyEnv = (.approval) deps sid
-
-    approveLegacy (ordinal, sink) = do
-      let kind = sinkKindOf sink
-      requirement <- liftIO ((.requiresApproval) legacyEnv ((.identity) job) kind output)
-      case requirement of
-        ApprovalNotRequired -> pure (Just sink)
-        ApprovalRequired request -> do
-          decision <- awaitApproval legacyEnv (approvalStepName ordinal kind) request ((.deadline) deps)
-          pure case decision of
-            Approved _ -> Just sink
-            Rejected _ -> Nothing
-            TimedOut -> Nothing
 
     approveWithPolicy policy (ordinal, sink)
       | not (requiresApprovalFor policy kind) = pure (Right (Just sink))
@@ -737,9 +682,6 @@ approveSinks deps approvalPolicyForRun sid job decl output =
                 )
       where
         kind = sinkKindOf sink
-
-    approvalStepName ordinal kind =
-      StepName ("approval:" <> sinkKindText kind <> ":" <> Text.pack (show ordinal))
 
 -- | Open the run's kioku session.
 --
@@ -794,7 +736,7 @@ runBehaviorStep ::
   (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
-  Maybe ApprovalPolicySnapshot ->
+  ApprovalPolicySnapshot ->
   ResolvedAgentIdentity ->
   SessionId ->
   AgentDecl ->
@@ -816,7 +758,7 @@ runFlowBehavior ::
   (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
-  Maybe ApprovalPolicySnapshot ->
+  ApprovalPolicySnapshot ->
   ResolvedAgentIdentity ->
   SessionId ->
   AgentDecl ->
@@ -828,10 +770,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just Flow.FlowDef {Flow.run} -> do
       (_, WorkflowId childWorkflowId) <- currentWorkflow
-      journalPracticeReview <- patch PracticeReview.practiceReviewFlowPatch
-      let attentionInterpreter
-            | journalPracticeReview = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
-            | otherwise = PracticeReview.runPracticeReviewAttention False ((.practiceReview) deps)
+      let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
       attempted <-
         trySync
           ( FlowCapability.runActivity (activityFromJob job)
@@ -841,8 +780,8 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
               . FlowRouting.runRouting routingEnv
               . acknowledgementInterpreter
               . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
-              . PracticeReview.runPracticeReviewEvidence journalPracticeReview ((.practiceReview) deps)
-              . PracticeReview.runPracticeReviewEvaluator journalPracticeReview activeBehaviorEnv ((.practiceReview) deps)
+              . PracticeReview.runPracticeReviewEvidence True ((.practiceReview) deps)
+              . PracticeReview.runPracticeReviewEvaluator True activeBehaviorEnv ((.practiceReview) deps)
               . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
               . attentionInterpreter
               $ run ((.triggerPayload) job)
@@ -855,16 +794,10 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
         Right output -> pure (Right output)
   where
     acknowledgementInterpreter =
-      case approvalPolicyForRun of
-        Nothing ->
-          runAcknowledgement
-            ((.approval) deps sid)
-            (fromMaybe (secondsToNominalDiffTime 900) ((.deadline) deps))
-        Just policy ->
-          runAcknowledgementWithChild
-            sid
-            (approvalPolicyChannel policy)
-            (approvalPolicyDeadline policy)
+      runAcknowledgementWithChild
+        sid
+        (approvalPolicyChannel approvalPolicyForRun)
+        (approvalPolicyDeadline approvalPolicyForRun)
     memoryEnv =
       FlowCapability.MemoryEnv
         { FlowCapability.appEnv = (.appEnv) deps,

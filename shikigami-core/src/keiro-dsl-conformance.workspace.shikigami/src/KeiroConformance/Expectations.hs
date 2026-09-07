@@ -3,12 +3,12 @@ module KeiroConformance.Expectations (expectedServiceConformanceFacts) where
 
 expectedServiceConformanceFacts :: [(String, String)]
 expectedServiceConformanceFacts =
-  [ ("workflow/AgentRun/awaits", "[\"await-ack\"]"),
-    ("workflow/AgentRun/body", "[\"step:ingest-job\",\"step:lookup-agent\",\"patch:shikigami-resolve-profile-v1(step:resolve-profile)\",\"patch:shikigami-capability-overlays-v1(step:resolve-capability-overlays)\",\"step:open-session\",\"step:recall\",\"step:run-behavior\",\"patch:shikigami-behavior-retry-v1(step:run-behavior-v2)\",\"step:classify\",\"await:await-ack\",\"patch:shikigami-approval-workflow-v1(step:resolve-approval-policy,child:approval)\",\"step:route-catalog-architecture-practice\",\"step:route-decision-architecture-practice\",\"patch:shikigami-flow-memory-steps-v1(step:recall-risk-history,step:remember-acknowledged,step:remember-declined,step:remember-escalated)\",\"patch:shikigami-practice-review-memory-v1(step:practice-review-remember-provisional,step:practice-review-resolve,step:practice-review-recall,step:practice-review-chain)\",\"patch:shikigami-practice-review-flow-v1(step:practice-review-evidence,step:practice-review-evaluate,step:practice-review-attention)\",\"patch:shikigami-emit-signal-labels-v1()\",\"step:dispatch-sinks\",\"step:fail-session\",\"step:record\",\"step:complete\",\"child:delegate\"]"),
+  [ ("workflow/AgentRun/awaits", "[]"),
+    ("workflow/AgentRun/body", "[\"step:ingest-job\",\"step:lookup-agent\",\"step:resolve-profile\",\"step:resolve-capability-overlays\",\"step:resolve-approval-policy\",\"step:open-session\",\"step:recall\",\"step:run-behavior-v2\",\"step:classify\",\"child:approval\",\"step:route-catalog-architecture-practice\",\"step:route-decision-architecture-practice\",\"step:recall-risk-history\",\"step:remember-acknowledged\",\"step:remember-declined\",\"step:remember-escalated\",\"step:practice-review-remember-provisional\",\"step:practice-review-resolve\",\"step:practice-review-recall\",\"step:practice-review-chain\",\"step:practice-review-evidence\",\"step:practice-review-evaluate\",\"step:practice-review-attention\",\"step:dispatch-sinks\",\"step:fail-session\",\"step:record\",\"step:complete\",\"child:delegate\"]"),
     ("workflow/AgentRun/idField", "idempotencyKey"),
     ("workflow/AgentRun/idVia", "idText"),
     ("workflow/AgentRun/name", "shikigami.agent-run"),
-    ("workflow/AgentRun/patches", "[\"shikigami-resolve-profile-v1\",\"shikigami-capability-overlays-v1\",\"shikigami-behavior-retry-v1\",\"shikigami-approval-workflow-v1\",\"shikigami-flow-memory-steps-v1\",\"shikigami-practice-review-memory-v1\",\"shikigami-practice-review-flow-v1\",\"shikigami-emit-signal-labels-v1\"]"),
+    ("workflow/AgentRun/patches", "[]"),
     ("workflow/Approval/awaits", "[\"decision\"]"),
     ("workflow/Approval/body", "[\"step:ingest-approval\",\"step:notify\",\"await:decision\"]"),
     ("workflow/Approval/idField", "reviewRequestId"),
@@ -16,9 +16,9 @@ expectedServiceConformanceFacts =
     ("workflow/Approval/name", "shikigami.approval"),
     ("workflow/Approval/patches", "[]"),
     ("workflow/DanwaConversation/awaits", "[\"next-message\"]"),
-    ("workflow/DanwaConversation/body", "[\"step:ingest-start\",\"step:lookup-agent\",\"step:resolve-session\",\"patch:shikigami-behavior-retry-v1()\",\"patch:shikigami-conversation-rotation-v1(step:record-user,step:run-behavior-v2,step:record-assistant-and-reply,step:turn-result,await:next-message,step:idle-timeout)\",\"continueAsNew:ConversationSeed\"]"),
+    ("workflow/DanwaConversation/body", "[\"step:ingest-start\",\"step:lookup-agent\",\"step:resolve-session\",\"step:record-user\",\"step:run-behavior-v2\",\"step:record-assistant-and-reply\",\"step:turn-result\",\"await:next-message\",\"step:idle-timeout\",\"continueAsNew:ConversationSeed\"]"),
     ("workflow/DanwaConversation/idField", "input"),
     ("workflow/DanwaConversation/idVia", "conversationWorkflowId"),
     ("workflow/DanwaConversation/name", "shikigami.danwa-conversation"),
-    ("workflow/DanwaConversation/patches", "[\"shikigami-behavior-retry-v1\",\"shikigami-conversation-rotation-v1\"]")
+    ("workflow/DanwaConversation/patches", "[]")
   ]

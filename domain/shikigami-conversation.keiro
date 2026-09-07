@@ -1,96 +1,29 @@
-# The durable Danwa conversation workflow: one addressed message becomes one
-# conversation turn, and one journal generation holds exactly one turn.
-#
-# The hand-owned runtime is Shikigami.Agent.Conversation in shikigami-core.
-#
-# This body is ordered for reading; replay matches journal records by label, so
-# it is the label inventory of every path through the workflow, not a
-# control-flow program.
-#
-# Why the labels are static now. A keiro journal matches records to steps by
-# label, so two turns in one generation must not both write `record-user`. The
-# old body ran every turn of a conversation in one immortal generation, which is
-# why every per-message label carried a computed `:<messageId>` suffix — and a
-# workflow label is a compile-time wire word ([A-Za-z0-9][A-Za-z0-9_-]*), so a
-# colon kept the whole turn body out of this specification. Rotating onto a
-# fresh generation after every turn removes the constraint at its root: a
-# generation holds one turn, so each label is written at most once and needs no
-# suffix. That is what makes the body below declarable and puts it under
-# `just keiro-gate` for the first time.
-#
-# Not declared here, and why:
-#
-#   * The legacy loop's per-message labels — `record-user:<messageId>`,
-#     `run-behavior:<messageId>`, `run-behavior-v2:<messageId>`,
-#     `record-assistant-and-reply:<messageId>`, `turn-result:<messageId>` — and
-#     its per-turn await `next-message:<ordinal>`. They still exist: they are
-#     the False branch of `shikigami-conversation-rotation-v1`, which is what
-#     keeps an instance parked under the old shape coherent. A label this
-#     specification cannot hold is genuinely free, because there is no declared
-#     body for the differ to compare; see
-#     docs/adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md.
-#   * `danwa-reply:<messageId>`, which is a sink-intent step name rather than a
-#     journaled step — it names the outbox row, and nothing appends it to the
-#     journal.
+# Current pre-v1 conversation baseline: exactly one turn per generation.
+# Static labels cover every journaled step. The hand-owned danwa-reply:<id>
+# token identifies an outbox row and is not a workflow step.
 language keiro-dsl 5
 context shikigami
 layout collocated
 
 workflow DanwaConversation
   name "shikigami.danwa-conversation"
-  # Shikigami.Agent.Conversation.ConversationStart.
   in ConversationStart {
     agentName:Text
   }
   out ConversationTurnResult
-  # WorkflowId is "danwa-conversation:" <> the initial message's conversationId
-  # (Shikigami.Agent.Conversation.conversationWorkflowId), so it derives from
-  # the whole input rather than from one declared field.
   id from input via conversationWorkflowId
   body
     step ingest-start -> ConversationStart
     step lookup-agent -> AgentDecl
     step resolve-session -> SessionId
-    # Plan 17's guard. Its labels are the legacy loop's
-    # `run-behavior-v2:<messageId>` — stable per message but undeclarable
-    # because the suffix is computed and contains a colon — so this checked
-    # block stays intentionally empty. The rotating branch below journals the
-    # static `run-behavior-v2` instead and always uses attempt semantics, so it
-    # does not read this guard.
-    patch shikigami-behavior-retry-v1 {
-    }
-    # One turn per generation, and with it every static label.
-    #
-    # The guard is not decoration and the block's contiguity is not a style
-    # choice. `keiro-dsl diff` classifies ANY change to a declared workflow body
-    # as BREAKING unless the whole change is contained in a NEW patch guard
-    # (appends included) or is a terminal `continueAsNew`; `stripNewPatches`
-    # removes this block wholesale before comparing, so an edit outside it
-    # re-breaks the comparison. Shikigami.Agent.Conversation reads the guard
-    # once per interpreted run: True takes the rotating shape below, False keeps
-    # the immortal loop and its suffixed labels, so an instance already in
-    # flight replays the shape its journal was written under. Delete the guard,
-    # the False branch, and this block together once no pre-change instance can
-    # still resume; see docs/workflow-versioning.md.
-    patch shikigami-conversation-rotation-v1 {
-      step record-user -> RecordedTurn
-      step run-behavior-v2 -> BehaviorOutput
-      step record-assistant-and-reply -> AssistantTurnAndReply
-      step turn-result -> ConversationTurnResult
-      # One awakeable, two signalers. The ingress path signals it with the next
-      # human message; the idle-timeout timer signals the same awakeable with a
-      # timeout. Whichever arrives first wins and the loser is a no-op, because
-      # signalAwakeable returns False on an already-completed awakeable.
-      await next-message -> ConversationWake
-      # The epoch's terminal step, taken only on the timeout arm: it completes
-      # the conversation's kioku session and the workflow returns. Journaled
-      # rather than done on the way out, because closing the session is an
-      # external effect and a replay must return the recorded answer instead of
-      # re-issuing the command.
-      step idle-timeout -> SessionId
-    }
-    # Terminal, and therefore never inside a patch block: continueAsNew unwinds
-    # the body, so it is the last thing the body can do.
+    step record-user -> RecordedTurn
+    step run-behavior-v2 -> BehaviorOutput
+    step record-assistant-and-reply -> AssistantTurnAndReply
+    step turn-result -> ConversationTurnResult
+    # Ingress and idle expiry race on the same opaque token. The loser is a
+    # no-op. Rotation publishes a new token in the new generation's journal.
+    await next-message -> ConversationWake
+    step idle-timeout -> SessionId
     continueAsNew ConversationSeed
 
 operation RunDanwaConversation

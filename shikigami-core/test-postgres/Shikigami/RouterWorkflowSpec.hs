@@ -22,7 +22,7 @@ import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAtt
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
-import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
+import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -338,8 +338,6 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      AgentWorkflow.approval = defaultApprovalEnv,
-      AgentWorkflow.deadline = Nothing,
       AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,

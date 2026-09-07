@@ -37,7 +37,7 @@ import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Approval (autoApprovePolicy, defaultApprovalEnv)
+import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -548,8 +548,6 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
                 AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
                 AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-                AgentWorkflow.approval = defaultApprovalEnv,
-                AgentWorkflow.deadline = Nothing,
                 AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
                 AgentWorkflow.delegationBudget = defaultDelegationBudget,
                 AgentWorkflow.grants = DbGrants pool,

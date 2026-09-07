@@ -380,18 +380,6 @@ runOneAgent env job =
             runMetric Metrics.recordRunCompleted env job
             jobLog env job Log.Info "worker.job.completed" []
             pure ()
-          Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure err))) -> do
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunRetried env job
-            jobLog
-              env
-              job
-              Log.Error
-              "worker.job.retried"
-              [ "error" Aeson..= err,
-                "reason" Aeson..= ("legacy_behavior_failure" :: Text)
-              ]
-            pure ()
           Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
             let err = AgentWorkflow.agentRunFailureDetail failure
             runMetric Metrics.recordRunFailed env job
@@ -440,7 +428,6 @@ agentJobOutcome :: Text -> Either e (WorkflowOutcome (Either AgentWorkflow.Agent
 agentJobOutcome agent = \case
   Left _storeError -> RetryDefault
   Right (Completed (Right _result)) -> Done
-  Right (Completed (Left (AgentWorkflow.LegacyBehaviorFailure _))) -> RetryDefault
   Right (Completed (Left (AgentWorkflow.PermanentAgentRunFailure detail))) ->
     deadOutcome "permanent_workflow_failure" detail
   Right Suspended -> Done

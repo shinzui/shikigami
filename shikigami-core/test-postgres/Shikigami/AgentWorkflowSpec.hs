@@ -117,7 +117,7 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "AgentWorkflow"
-    [ testCase "behavior retry patch preserves old journals and uses only v2 when fresh" do
+    [ testCase "the current baseline journals v2 and capability resolution without patch activation" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
@@ -134,11 +134,11 @@ tests databaseFixture =
                   agentRunWorkflowName
                   (WorkflowId ((.idempotencyKey) oldJob))
                   (agentRunWorkflow deps (Just oldJob))
-            assertBool ("pre-patch agent run decodes and completes: " <> show oldOutcome) (isCompleted oldOutcome)
+            assertBool ("optionless current run completes: " <> show oldOutcome) (isCompleted oldOutcome)
             oldIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) oldJob)) 0)
-            assertEqual "pre-patch journal keeps the old behavior label" (Right True) (Map.member "run-behavior" <$> oldIndex)
-            assertEqual "pre-patch journal never writes v2" (Right False) (Map.member "run-behavior-v2" <$> oldIndex)
-            assertEqual "pre-patch journal never resolves capability overlays" (Right False) (Map.member "resolve-capability-overlays" <$> oldIndex)
+            assertEqual "current journal omits the retired behavior label" (Right False) (Map.member "run-behavior" <$> oldIndex)
+            assertEqual "current journal writes v2" (Right True) (Map.member "run-behavior-v2" <$> oldIndex)
+            assertEqual "current journal resolves capability overlays" (Right True) (Map.member "resolve-capability-overlays" <$> oldIndex)
 
             freshOutcome <- runAgentRunWorkflow deps freshJob
             assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
@@ -1852,8 +1852,6 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       hooks,
       approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      approval = defaultApprovalEnv,
-      deadline = Nothing,
       runTimeout = secondsToNominalDiffTime 300,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
@@ -1891,8 +1889,6 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
             deadline = fromMaybe (secondsToNominalDiffTime 900) deadline
           },
       approvalWorkflow = approvalWorkflowFromLegacy approval,
-      approval,
-      deadline,
       runTimeout = secondsToNominalDiffTime 300,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
@@ -2108,13 +2104,7 @@ drainConversationResumes appEnv env = go (0 :: Int) (8 :: Int)
 -- | One resume pass over the conversation registry, configured the way
 -- production configures it.
 --
--- __The options are not incidental.__ 'defaultWorkflowResumeOptions' carries an
--- empty active patch set, so a generation that a rotation created — and whose
--- patch decision has therefore not been journaled yet — reads
--- @shikigami-conversation-rotation-v1@ as 'False', takes the legacy branch, and
--- crashes on a body whose journal was written under the rotating one. That is
--- ADR 0004's whole point, and it is why every durable run goes through
--- 'shikigamiWorkflowResumeOptions'.
+-- Run and resume share the service's options construction site.
 resumeConversationOnce :: AppEnv -> Conversation.ConversationEnv -> Eff AppEffects ResumeSummary
 resumeConversationOnce appEnv env =
   resumeWorkflowsOnce
@@ -2226,13 +2216,6 @@ resumeApprovalToCompletion appEnv deps = do
 
 -- | The lifecycle step names one agent run journaled, with Keiro's reserved
 -- bookkeeping removed so the assertion is about this workflow's own steps.
---
--- @__workflow_patches__@ is filtered alongside @__workflow_completed__@ because
--- a fresh generation records the deployment's active patch set under it whenever
--- that set is non-empty (@recordPatchSetIfFresh@ in @Keiro.Workflow@). Shikigami's
--- set became non-empty when @Shikigami.Flow.Capability.runSink@ took its
--- @shikigami-emit-signal-labels-v1@ guard, so every agent-run journal carries the
--- record now. It is additive bookkeeping, not a lifecycle step.
 loadLifecycleStepKeys :: AppEnv -> RunJob -> IO (Either String (Set.Set Text))
 loadLifecycleStepKeys appEnv runJob = do
   result <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
@@ -2431,15 +2414,11 @@ expectedLifecycleSteps =
   Set.fromList
     [ "ingest-job",
       "lookup-agent",
-      "patch:shikigami-resolve-profile-v1",
       "resolve-profile",
-      "patch:shikigami-capability-overlays-v1",
       "resolve-capability-overlays",
-      "patch:shikigami-approval-workflow-v1",
       "resolve-approval-policy",
       "open-session",
       "recall",
-      "patch:shikigami-behavior-retry-v1",
       "run-behavior-v2",
       "dispatch-sinks",
       "record",

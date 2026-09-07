@@ -35,7 +35,7 @@ import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
-import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), LifecycleDiagram (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
+import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
