@@ -36,6 +36,7 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChildrenOfParent)
+import Keiro.Workflow.Gc qualified as Gc
 import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
@@ -106,7 +107,8 @@ import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
-import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
+import Shikigami.Workflow.Registry qualified as Registry
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), mkTool)
 import Streamly.Data.Fold qualified as Fold
@@ -1578,12 +1580,20 @@ tests databaseFixture =
                   Right Suspended -> pure ()
                   other -> assertEqual "workflow parks for approval" "Suspended" (show other)
 
+                let registry = Registry.workflowRegistry deps (testConversationEnv appEnv behaviorEnv [conversationDecl])
+                assertEqual
+                  "production registry covers all three families"
+                  ["shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation"]
+                  (map unWorkflowName (Map.keys registry))
                 driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables
                 assertEqual "one awakeable is pending while parked" (Right 1) pending
                 beforeOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                 assertEqual "sink is not dispatched before approval" (Right 0) (length <$> beforeOutbox)
 
+                now <- getCurrentTime
+                protected <- runAppIO appEnv (Gc.listWorkflowGcCandidates (addUTCTime (91 * 86400) now) terminalWorkflowRetention)
+                assertEqual "even old live parent and approval child are not collectible" (Right []) protected
                 aid <- readCapturedAwakeable aidRef
                 resolved <- resolveApproval appEnv aid (Approved (object ["approved" .= True]))
                 assertBool "approval signal resolves the awakeable" resolved
@@ -1591,7 +1601,11 @@ tests databaseFixture =
                 assertEqual "resume passes complete child and parent" 2 completedCount
 
                 afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
-                assertEqual "approved sink is dispatched once" (Right 1) (length <$> afterOutbox),
+                assertEqual "approved sink is dispatched once" (Right 1) (length <$> afterOutbox)
+                recent <- runAppIO appEnv (Gc.listWorkflowGcCandidates now terminalWorkflowRetention)
+                assertEqual "newly terminal instances retain their journals" (Right []) recent
+                collected <- runAppIO appEnv (Gc.gcWorkflowsOnce (addUTCTime (91 * 86400) now) terminalWorkflowRetention)
+                assertEqual "expired terminal parent and approval child are collected" (Right 2) ((.deleted) <$> collected),
           testCase "rejected answer resumes and suppresses sink dispatch" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do

@@ -18,7 +18,8 @@ import Control.Exception (Exception, throwIO, try)
 import Control.Monad (forever, void)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (isInfixOf)
-import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), runResumeLoopWith)
+import Keiro.Workflow.Resume (ResumeSummary (..), emptyResumeSummary)
+import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), drainResumePasses, runResumeLoopWith)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, ResumeLoop, TimerLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Shutdown (withGracefulShutdown)
@@ -37,6 +38,7 @@ tests =
     "loop supervision"
     [ superviseTests,
       resumeRetryTests,
+      boundedResumeTests,
       gracefulShutdownTests
     ]
 
@@ -242,3 +244,22 @@ data Boom = Boom
   deriving stock (Eq, Show)
 
 instance Exception Boom
+
+boundedResumeTests :: TestTree
+boundedResumeTests =
+  testGroup
+    "bounded resume"
+    [ testCase "discoverable blocked work stops after one pass" do
+        count <- newIORef (0 :: Int)
+        summaries <- drainResumePasses 10 do
+          atomicModifyIORef' count (\n -> (n + 1, ()))
+          pure emptyResumeSummary {discovered = 4, sleepDue = 1, paced = 1, unknownName = 1, leaseSkipped = 1}
+        length summaries @?= 1
+        readIORef count >>= (@?= 1),
+      testCase "progress cannot exceed the pass budget" do
+        summaries <- drainResumePasses 3 (pure emptyResumeSummary {discovered = 1, advanced = 1})
+        length summaries @?= 3,
+      testCase "zero budget performs no discovery" do
+        summaries <- drainResumePasses 0 (error "zero budget executed the pass" :: IO ResumeSummary)
+        summaries @?= []
+    ]

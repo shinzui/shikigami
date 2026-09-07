@@ -83,6 +83,7 @@ library
     , settei-optparse-applicative           ==0.2.0.0
     , shikigami-api
     , shikigami-core
+    , shikigami-migrations
     , text                                  >=2.1
     , time                                  >=1.12
     , unix

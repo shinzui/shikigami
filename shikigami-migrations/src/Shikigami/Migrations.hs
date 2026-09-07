@@ -28,6 +28,7 @@ module Shikigami.Migrations
     shikigamiMigrations,
     shikigamiMigrationPlan,
     reconcileShikigamiReadModels,
+    verifyShikigamiMigrations,
   )
 where
 
@@ -41,10 +42,14 @@ import Database.PostgreSQL.Migrate
     MigrationComponent,
     MigrationPlan,
     PlanError,
+    VerificationReport (..),
+    defaultRunOptions,
     migrationComponentFromEmbeddedSql,
     migrationPlan,
+    verifyMigrationPlan,
   )
 import Database.PostgreSQL.Migrate.Embed (embedMigrationManifest)
+import Hasql.Connection.Settings qualified as Settings
 import Keiro.Migrations qualified as Keiro
 import Kioku.App (runAppIO, withNoopAppEnv)
 import Kioku.Migrations qualified as Kioku
@@ -105,3 +110,15 @@ reconcileShikigamiReadModels connectionString =
   withNoopAppEnv (defaultConnectionSettings connectionString) \env -> do
     outcome <- runAppIO env reconcileReadModelRegistry
     either throwIO (const (pure ())) outcome
+
+-- | Read-only startup handshake. Refuse missing, changed, failed or unknown
+-- migration history before acquiring runtime resources. Only the migration
+-- executable applies or repairs the composed plan.
+verifyShikigamiMigrations :: Text -> IO ()
+verifyShikigamiMigrations connectionString = do
+  plan <- either (ioError . userError . show) pure shikigamiMigrationPlan
+  result <- verifyMigrationPlan defaultRunOptions (Settings.connectionString connectionString) plan
+  case result of
+    Right report
+      | null report.issues && null report.pendingMigrations && null report.unknownMigrations -> pure ()
+    other -> ioError (userError ("runtime migration verification failed: " <> show other))

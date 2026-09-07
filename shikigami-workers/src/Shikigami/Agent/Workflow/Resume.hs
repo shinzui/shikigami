@@ -6,12 +6,18 @@
 -- journal and continues from the first step that did not.
 --
 -- The resume worker needs a /registry/: a map from workflow name to the code
--- that runs it. Both workflow families are registered here — agent runs and
--- conversations — because a resume worker that knows only one of them would
+-- that runs it. All three workflow families are registered here — agent runs, approval
+-- children and conversations — because a resume worker that knows only one of them would
 -- silently leave the other suspended forever.
 module Shikigami.Agent.Workflow.Resume
   ( runResumeWorker,
     workflowRegistry,
+    ResumeSummary (..),
+    runBoundedResumeWorker,
+    drainResumePasses,
+    resumeSummaryFields,
+    runWorkflowGc,
+    terminalWorkflowRetention,
 
     -- * Restart policy
     ResumeRetry (..),
@@ -23,26 +29,27 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
+import Control.Lens ((&), (.~))
 import Data.Aeson qualified as Aeson
-import Data.Map.Strict qualified as Map
+import Data.Aeson.Types (Pair)
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
-import Keiro.Workflow.Resume (WorkflowRegistry, runWorkflowResumeWorkerWith)
+import Keiro.Workflow.Gc (runWorkflowGcWorkerWith)
+import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowRegistry, resumeWorkflowsOnceUpTo, runWorkflowResumeWorkerWith)
 import Kioku.App (AppEffects, runAppIO)
-import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Health.Worker (LoopName (ResumeLoop))
+import Shikigami.Health.Worker (LoopName (ResumeLoop, WorkflowGcLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited))
-import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
+import Shikigami.Workflow.Registry qualified as Registry
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
 
 -- | Every workflow this process knows how to resume.
 workflowRegistry :: WorkerEnv -> WorkflowRegistry AppEffects
 workflowRegistry env =
-  AgentWorkflow.agentRunRegistry (agentRunDeps env)
-    `Map.union` Conversation.conversationRegistry (conversationEnv env)
+  Registry.workflowRegistry (agentRunDeps env) (conversationEnv env)
 
 -- | How a returning resume runner is retried before the process gives up.
 --
@@ -115,7 +122,7 @@ defaultResumeRetry =
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env@WorkerEnv {runTimeout} =
   runResumeLoop defaultResumeRetry (envLogger env) do
-    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) runTimeout) (workflowRegistry env))
+    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) runTimeout & #logEvent .~ logResumeEvent (envLogger env)) (workflowRegistry env))
     pure case result of
       Left err -> Text.pack (show err)
       Right () -> "the resume runner returned without an error, which a forever loop should never do"
@@ -169,3 +176,62 @@ runResumeLoopWith sleep retry logger runOnce = do
         else do
           sleep (if healthy then (.initialBackoffMicros) retry else backoffMicros)
           go failures nextBackoff
+
+-- | Worker-owned operational action preserving the complete Kioku resource
+-- effect row. Each pass has a candidate cap, and the drain has a pass cap.
+-- A discovered but parked, paced, unknown or sleep-blocked row is not progress.
+runBoundedResumeWorker :: Int -> Int -> WorkerEnv -> IO [ResumeSummary]
+runBoundedResumeWorker passLimit candidateLimit env =
+  drainResumePasses passLimit do
+    let options =
+          shikigamiWorkflowResumeOptions env.appEnv env.runTimeout
+            & #maxConcurrentAdvances .~ 1
+            & #logEvent .~ logResumeEvent (envLogger env)
+    result <- runAppIO env.appEnv (resumeWorkflowsOnceUpTo candidateLimit options (workflowRegistry env))
+    summary <- either throwIO pure result
+    Log.logInfo (envLogger env) "worker.resume.pass" (resumeSummaryFields summary)
+    pure summary
+
+-- | A finite drain stops on zero durable progress, even when candidates remain.
+drainResumePasses :: (Monad m) => Int -> m ResumeSummary -> m [ResumeSummary]
+drainResumePasses limit pass
+  | limit <= 0 = pure []
+  | otherwise = do
+      summary <- pass
+      rest <- if summary.advanced > 0 then drainResumePasses (limit - 1) pass else pure []
+      pure (summary : rest)
+
+-- | Every released summary field is observable at the bounded boundary.
+resumeSummaryFields :: ResumeSummary -> [Pair]
+resumeSummaryFields summary =
+  [ "discovered" Aeson..= summary.discovered,
+    "advanced" Aeson..= summary.advanced,
+    "resumed" Aeson..= summary.resumed,
+    "completed" Aeson..= summary.completed,
+    "still_suspended" Aeson..= summary.stillSuspended,
+    "unknown_name" Aeson..= summary.unknownName,
+    "failed" Aeson..= summary.failed,
+    "transient_errors" Aeson..= summary.transientErrors,
+    "lease_skipped" Aeson..= summary.leaseSkipped,
+    "paced" Aeson..= summary.paced,
+    "sleep_due" Aeson..= summary.sleepDue,
+    "unregistered_names" Aeson..= summary.unregisteredNames
+  ]
+
+-- The process Logger writes each JSON line under the Handle lock, including
+-- callbacks from concurrent upstream advances. Upstream supplies failures here;
+-- successful continuous-pass summaries are not exposed by its released hook.
+logResumeEvent :: (Show event) => Log.Logger -> event -> IO ()
+logResumeEvent logger event = Log.logWarn logger "worker.resume.event" ["detail" Aeson..= show event]
+
+runWorkflowGc :: WorkerEnv -> IO ()
+runWorkflowGc env = do
+  result <-
+    runAppIO
+      env.appEnv
+      ( runWorkflowGcWorkerWith
+          terminalWorkflowRetention
+          3_600_000_000
+          (\detail -> Log.logWarn (envLogger env) "worker.workflow_gc.failed" ["detail" Aeson..= detail])
+      )
+  either throwIO (const (throwIO (LoopExited WorkflowGcLoop))) result

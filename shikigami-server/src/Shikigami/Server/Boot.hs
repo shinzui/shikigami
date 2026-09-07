@@ -22,6 +22,7 @@ import Data.Aeson qualified as Aeson
 import Data.String (fromString)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
+import Keiro.Telemetry (keiroInstrumentationLibrary, newKeiroMetrics)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp qualified as Warp
@@ -34,7 +35,8 @@ import Shikigami.App.Config (AppConfig, Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Health.Handler (mkHealthChecks)
 import Shikigami.Log qualified as Log
-import Shikigami.Runtime (registerRuntimeCatalog)
+import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Server.App (exceptionBoundary, shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
 import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
@@ -95,9 +97,12 @@ runServer :: AppConfig -> IO ()
 runServer config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
+  verifyShikigamiMigrations connStr
   let serverConfig = serverConfigFrom config
-      settings = StoreConnection.defaultConnectionSettings connStr
-  withServerTelemetry \telemetry@ServerTelemetry {tracer = serverTracer} ->
+  withServerTelemetry \telemetry@ServerTelemetry {tracer = serverTracer} -> do
+    meter <- Metric.getMeter telemetry.meterProvider keiroInstrumentationLibrary
+    metrics <- newKeiroMetrics meter
+    let settings = runtimeConnectionSettings logger (Just metrics) connStr
     StoreConnection.withStore settings \st -> do
       registerRuntimeCatalog st
       env <- newServerEnv serverTracer (StoreConnection.pool st) config

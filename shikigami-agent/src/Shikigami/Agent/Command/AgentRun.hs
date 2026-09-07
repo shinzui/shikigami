@@ -12,7 +12,7 @@ import Data.Time (getCurrentTime)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Kioku.App (AppEnv (..), noopTracer)
 import Kioku.Id (genSessionId, idText)
-import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
@@ -32,8 +32,9 @@ import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
-import Shikigami.Runtime (registerRuntimeCatalog)
+import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import System.Exit (exitFailure)
@@ -56,10 +57,11 @@ runAgentRun agentArg mActivity workspace config = do
       exitFailure
     Right decl -> do
       connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
-      let settings = defaultConnectionSettings connStr
+      verifyShikigamiMigrations connStr
+      tr <- noopTracer
+      let settings = runtimeConnectionSettings logger Nothing connStr
       withStore settings $ \store -> do
         registerRuntimeCatalog store
-        tr <- noopTracer
         let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
         case mActivity of
           Just actPath -> do

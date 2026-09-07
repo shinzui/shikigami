@@ -30,9 +30,9 @@ import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueueWi
 import Kioku.App (AppEnv (..))
 import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, getAppMetrics, waitApp)
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
-import Shikigami.Agent.Workflow.Resume (runResumeWorker)
+import Shikigami.Agent.Workflow.Resume (runResumeWorker, runWorkflowGc)
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
-import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop), registerReport, supervisedLoopVerdict)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.RunJobs qualified as RunJobs
@@ -54,6 +54,7 @@ runWorkers env = do
   let durableLoops =
         [ (QueueLoop, runQueueWorker env),
           (ResumeLoop, runResumeWorker env),
+          (WorkflowGcLoop, runWorkflowGc env),
           (OutboxLoop, runOutboxPublisher env),
           (TimerLoop, runTimerWorker env),
           (TelemetryLoop, runTelemetrySampler env)

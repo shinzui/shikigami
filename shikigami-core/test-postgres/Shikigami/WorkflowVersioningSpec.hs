@@ -15,8 +15,11 @@
 -- A change to a rule there should change a case here.
 module Shikigami.WorkflowVersioningSpec (tests) where
 
+import Control.Exception (SomeException, try)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -25,7 +28,8 @@ import Data.Text (Text)
 import Data.Time (secondsToNominalDiffTime)
 import Effectful (Eff, IOE, liftIO, (:>))
 import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), defaultWorkflowRunOptions, loadStepIndex, patch, patchSetStepName, patchStepName, runWorkflowWith, step)
-import Keiro.Workflow.Resume (WorkflowResumeOptions (..))
+import Keiro.Workflow.Instance (ResurrectOutcome (..), resurrectFailedWorkflow)
+import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowDef (..), WorkflowResumeOptions (..), resumeWorkflowsOnceUpTo)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
@@ -51,6 +55,7 @@ tests databaseFixture =
         assertEqual "resume lease includes the scheduling margin" (secondsToNominalDiffTime 330) leaseTtl
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
       testCase "in-flight workflow survives a simulated deploy under a patch guard" (inFlightSurvivesDeploy databaseFixture),
+      testCase "failed workflows resurrect through the public owner" (failedWorkflowResurrects databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
       testCase "the current baseline declares no historical application patches" do
         assertEqual "active application patches" Set.empty shikigamiActivePatches
@@ -222,3 +227,26 @@ loadStepIndexFor appEnv workflowName workflowId =
 loadStepNames :: AppEnv -> WorkflowName -> WorkflowId -> IO (Either StoreError [Text])
 loadStepNames appEnv workflowName workflowId =
   fmap Map.keys <$> loadStepIndexFor appEnv workflowName workflowId
+
+-- The first run leaves a resumable instance; the bounded resume pass records a
+-- terminal failure at its configured ceiling. Repair retains the journal and
+-- allows the same stable step to finish after its external dependency recovers.
+failedWorkflowResurrects :: DatabaseFixture -> IO ()
+failedWorkflowResurrects databaseFixture =
+  withShikigamiFreshDatabase databaseFixture \connStr -> do
+    tracer <- noopTracer
+    let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+        name = WorkflowName "plan65.failure"
+        wid = WorkflowId "resurrect"
+        ingested = step (StepName "ingest") (pure () :: Eff (Workflow : AppEffects) ())
+        broken = ingested >> step (StepName "dependency") (liftIO (ioError (userError "dependency unavailable")) :: Eff (Workflow : AppEffects) ())
+        healthy = ingested >> step (StepName "dependency") (pure () :: Eff (Workflow : AppEffects) ())
+        options = shikigamiWorkflowResumeOptions appEnv 60 & #maxAttempts .~ 1
+    first <- try @SomeException (runAppIO appEnv (runWorkflowWith defaultWorkflowRunOptions name wid broken))
+    assertBool "the initial dependency failure escapes" (either (const True) (const False) first)
+    failed <- runAppIO appEnv (resumeWorkflowsOnceUpTo 1 options (Map.singleton name (WorkflowDef (const broken))))
+    assertEqual ("bounded pass records terminal failure: " <> show failed) (Right 1) ((.failed) <$> failed)
+    repaired <- runAppIO appEnv (resurrectFailedWorkflow name wid)
+    assertEqual "supported owner resurrects the instance" (Right WorkflowResurrected) repaired
+    completed <- runAppIO appEnv (resumeWorkflowsOnceUpTo 1 options (Map.singleton name (WorkflowDef (const healthy))))
+    assertEqual "the recovered dependency completes" (Right 1) ((.completed) <$> completed)

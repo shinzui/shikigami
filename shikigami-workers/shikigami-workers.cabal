@@ -69,6 +69,7 @@ library
     , kioku-api
     , kioku-core
     , kiroku-store
+    , lens                            >=5.2
     , optparse-applicative            >=0.19    && <0.20
     , pgmq-hasql
     , servant                         >=0.20    && <0.21
@@ -80,6 +81,7 @@ library
     , shibuya-core
     , shibuya-kafka-adapter
     , shikigami-core
+    , shikigami-migrations
     , text                            >=2.1
     , time                            >=1.12
     , unix

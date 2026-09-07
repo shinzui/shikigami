@@ -40,7 +40,7 @@ background loops, Kafka, PGMQ, Postgres, and the Kikan platform around it.
 A **one-off agent run** is the other. Someone who is *not* running Kikan takes a declared
 agent and runs it once, from a command line, against a payload or a repository. This is what
 makes Shikigami versatile to consumers with simpler needs, and **Kikan itself does not use
-it**. It is served by `shikigami-agent`, which depends on `shikigami-core` and nothing else,
+it**. It is served by `shikigami-agent`, which depends on `shikigami-core` and the migration library for its read-only startup check,
 so a consumer building it acquires none of the platform's messaging, queueing, or
 telemetry-export stack — in particular not `librdkafka`, the C library behind
 `hw-kafka-client`.
@@ -57,20 +57,20 @@ to argue against it explicitly.
 | Package | Role | Depends on (Shikigami siblings) |
 |---|---|---|
 | `shikigami-core` | Domain: declarations, agent runs, behaviors, flows, sinks, memory, durable workflow logic | none |
-| `shikigami-agent` | One-off agent runs for consumers not operating the platform | `shikigami-core` |
+| `shikigami-agent` | One-off agent runs for consumers not operating the platform | `shikigami-core`, `shikigami-migrations` |
 | `shikigami-api` | Public HTTP contract: Servant route records, DTOs, problem details, OpenAPI generation | `shikigami-core` |
-| `shikigami-server` | Servant/WAI execution, HTTP provider lifetimes, administrative and test-stub commands | `shikigami-core`, `shikigami-api` |
-| `shikigami-workers` | Supervised background loops: queue processing, stream subscriptions, scheduler, outbox, timers, resume | `shikigami-core` |
+| `shikigami-server` | Servant/WAI execution, HTTP provider lifetimes, administrative and test-stub commands | `shikigami-core`, `shikigami-api`, `shikigami-migrations` |
+| `shikigami-workers` | Supervised background loops: queue processing, stream subscriptions, scheduler, outbox, timers, resume | `shikigami-core`, `shikigami-migrations` |
 | `shikigami-migrations` | Database evolution and the public `test-support` sublibrary | none |
 | `shikigami-client` | Typed HTTP client derived from the served route type | `shikigami-api` |
 
 The legal arrows, and only these:
 
 ```text
-shikigami-agent   -> shikigami-core
+shikigami-agent   -> shikigami-core, shikigami-migrations
 shikigami-api     -> shikigami-core
-shikigami-server  -> shikigami-core, shikigami-api
-shikigami-workers -> shikigami-core
+shikigami-server  -> shikigami-core, shikigami-api, shikigami-migrations
+shikigami-workers -> shikigami-core, shikigami-migrations
 shikigami-client  -> shikigami-api
 ```
 
@@ -130,6 +130,8 @@ overlay registry and cannot be replaced by an adapter.
    name of its *concept*. Moving `Shikigami.Trigger.Consumer` from core to workers does
    not rename it; it is still the trigger vertical.
 2. Technical composition module names are limited to this allowlist:
+   - `Shikigami.Runtime`, `Shikigami.Workflow.Registry` — validated runtime startup
+     wiring and the shared three-family workflow registry (plan 65 / ADR 0038).
    - `Shikigami.App.Config`, `Shikigami.App.Config.Load` — the one process-configuration
      declaration and its loader, in `shikigami-core`. Application-configured executables
      resolve their settings from these two modules. The migration CLI owns its
@@ -233,3 +235,18 @@ Regenerate and verify with:
 cabal run shikigami-openapi
 git diff --exit-code docs/api/openapi.json
 ```
+
+## Runtime startup and maintenance
+
+[Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md)
+and [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md)
+extend the role packages' legal arrows with the migration library. Its read-only
+handshake runs before telemetry, pools, catalog registration and listeners. Core has
+no production sibling dependency. The migration executable remains independently
+configured and never imports the application roles.
+
+Core owns the complete three-family workflow registry and retention policy. Workers
+own the continuous runners, bounded resume command, shared timer dispatcher and hourly
+terminal GC. The server mounts lifecycle replay audit and preserve-only catalog
+operations; its embedded resume hook remains absent because its effects do not match
+Kioku's resource-aware workflows.

@@ -16,6 +16,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Trigger.Enqueue (addressedRunKey, enqueueAddressedRunWithKey, ensureRunQueue)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -63,6 +64,7 @@ runEnqueueRun agent mpayload conversation mkey config = do
       ((.name) decl)
       >>= either (die . Text.unpack) pure
   connStr <- revealSecretText <$> requireDatabaseUrl "enqueue-run" config
+  verifyShikigamiMigrations connStr
   withStore (defaultConnectionSettings connStr) $ \st -> do
     -- This is one of the two startup paths that used to rely on the per-send
     -- createQueue inside enqueueRunJob, so it reconciles the queue itself now.

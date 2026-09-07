@@ -113,6 +113,7 @@ import Shikigami.Prelude
 data LoopName
   = QueueLoop
   | ResumeLoop
+  | WorkflowGcLoop
   | OutboxLoop
   | TimerLoop
   | TelemetryLoop
@@ -127,6 +128,7 @@ loopCheckName :: LoopName -> Text
 loopCheckName = \case
   QueueLoop -> "loop.queue"
   ResumeLoop -> "loop.resume"
+  WorkflowGcLoop -> "loop.workflow_gc"
   OutboxLoop -> "loop.outbox"
   TimerLoop -> "loop.timer"
   TelemetryLoop -> "loop.telemetry"
@@ -154,6 +156,7 @@ loopStaleAfter :: LoopName -> NominalDiffTime
 loopStaleAfter = \case
   QueueLoop -> 60
   ResumeLoop -> 10
+  WorkflowGcLoop -> 7200
   OutboxLoop -> 10
   TimerLoop -> 10
   TelemetryLoop -> 45

@@ -43,7 +43,7 @@ runOutboxPublisher env = do
   forever do
     let deps = agentRunDeps env
     attempted <- newIORef []
-    -- Keiro 0.4 hands the publisher a whole claimed batch and expects one
+    -- The released Keiro publisher hands the publisher a whole claimed batch and expects one
     -- outcome per row, so the single-row dispatcher is lifted rather than
     -- rewritten: the batch semantics (ordering policy, marking) stay Keiro's.
     let publishBatch rows = do

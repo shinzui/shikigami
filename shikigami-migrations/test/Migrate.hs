@@ -36,7 +36,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
-import Shikigami.Migrations (shikigamiMigrationPlan)
+import Shikigami.Migrations (shikigamiMigrationPlan, verifyShikigamiMigrations)
 import Shikigami.Migrations.TestSupport (withShikigamiFreshDatabase, withShikigamiMigratedSuite)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -46,7 +46,35 @@ main = withShikigamiMigratedSuite \databaseFixture ->
   defaultMain
     ( testGroup
         "shikigami-migrations smoke"
-        [ testCase "a fresh database applies the plan, and re-applying is a no-op" do
+        [ testCase "startup verifies the complete migrated ledger without applying work" do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              verifyShikigamiMigrations connectionString
+              verifyShikigamiMigrations connectionString,
+          testCase "startup refuses a pending migration and does not apply it" do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              -- Deliberately corrupt only this disposable clone to model a
+              -- rollout whose last application migration has not run.
+              withConnection connectionString \connection ->
+                runSession connection (Session.script "DELETE FROM pgmigrate.migrations WHERE component = 'shikigami' AND position = (SELECT max(position) FROM pgmigrate.migrations WHERE component = 'shikigami')")
+              result <- try @IOException (verifyShikigamiMigrations connectionString)
+              assertBool "pending migration refuses startup" (either (Text.isInfixOf "PendingMigration" . Text.pack . show) (const False) result)
+              again <- try @IOException (verifyShikigamiMigrations connectionString)
+              assertBool "verification did not repair the ledger" (either (const True) (const False) again),
+          testCase "startup refuses a missing ledger and does not initialize it" do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              withConnection connectionString \connection ->
+                runSession connection (Session.script "DROP SCHEMA pgmigrate CASCADE")
+              result <- try @IOException (verifyShikigamiMigrations connectionString)
+              assertBool "missing ledger refuses startup" (either (const True) (const False) result)
+              withConnection connectionString \connection ->
+                runSession connection (Session.statement () noLedger) >>= (@?= True),
+          testCase "startup refuses changed migration bytes" do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              withConnection connectionString \connection ->
+                runSession connection (Session.script "UPDATE pgmigrate.migrations SET checksum = decode(repeat('0',64),'hex') WHERE component = 'shikigami'")
+              result <- try @IOException (verifyShikigamiMigrations connectionString)
+              assertBool "checksum mismatch refuses startup" (either (Text.isInfixOf "MigrationChecksumMismatch" . Text.pack . show) (const False) result),
+          testCase "a fresh database applies the plan, and re-applying is a no-op" do
             plan <- either (fail . show) pure shikigamiMigrationPlan
             withShikigamiFreshDatabase databaseFixture \connectionString -> do
               -- The suite template already applied the plan; the fresh clone has
@@ -142,4 +170,11 @@ databaseAbsent =
   preparable
     "SELECT NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)"
     (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+noLedger :: Statement () Bool
+noLedger =
+  preparable
+    "SELECT to_regnamespace('pgmigrate') IS NULL"
+    E.noParams
     (D.singleRow (D.column (D.nonNullable D.bool)))

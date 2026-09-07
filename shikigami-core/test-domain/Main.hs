@@ -1,10 +1,12 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import Shikigami.RunEvidence.Conformance (runEvidenceDomainAssertions)
+import Shikigami.RunEvidence.Conformance (runEvidenceBehaviorReportJson, runEvidenceDomainAssertions)
 
 main :: IO ()
-main = mapM_ check runEvidenceDomainAssertions
+main = do
+  mapM_ check runEvidenceDomainAssertions
+  putStrLn runEvidenceBehaviorReportJson
   where
     check (label, passed) = do
       unless passed (fail label)

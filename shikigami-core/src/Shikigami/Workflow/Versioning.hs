@@ -30,6 +30,7 @@ module Shikigami.Workflow.Versioning
   ( shikigamiActivePatches,
     shikigamiWorkflowRunOptions,
     shikigamiWorkflowResumeOptions,
+    terminalWorkflowRetention,
   )
 where
 
@@ -38,6 +39,7 @@ import Data.Generics.Labels ()
 import Data.Set (Set)
 import Data.Time (NominalDiffTime)
 import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptions)
+import Keiro.Workflow.Gc (WorkflowGcPolicy (..))
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
 import Kioku.App (AppEnv (..))
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
@@ -82,3 +84,11 @@ shikigamiWorkflowResumeOptions appEnv timeout =
   defaultWorkflowResumeOptions
     & #runOptions .~ shikigamiWorkflowRunOptions appEnv
     & #leaseTtl .~ (timeout + 30)
+    & #maxConcurrentAdvances .~ 1
+
+-- | Keep terminal workflow journals for ninety days. This bounds the workflow
+-- idempotency window; redelivery older than that requires operator review.
+-- Keiro excludes live instances and completed children of live parents.
+-- Evidence streams/rows and sink receipts have separate ownership and survive.
+terminalWorkflowRetention :: WorkflowGcPolicy
+terminalWorkflowRetention = WorkflowGcPolicy {retention = 90 * 86400, batchSize = 100}

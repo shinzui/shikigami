@@ -88,6 +88,7 @@ import Shikigami.Agent.Workflow (StepResult (StepProduced, StepRefused))
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Memory.Access (shikigamiMemorySpace)
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -116,6 +117,7 @@ data SessionLink
 runRunsShow :: Text -> Text -> Bool -> AppConfig -> IO ()
 runRunsShow wfName wfId asJson config = do
   connectionString <- revealSecretText <$> requireDatabaseUrl "runs show" config
+  verifyShikigamiMigrations connectionString
   withStore (defaultConnectionSettings connectionString) \store -> do
     gathered <- gather store wfName wfId
     case gathered of

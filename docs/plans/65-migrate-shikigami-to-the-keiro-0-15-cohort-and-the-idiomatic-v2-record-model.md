@@ -121,16 +121,41 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   403 unit, 193 PostgreSQL, 29 agent, 46 server and 81 worker cases pass. The final
   focused 41-case evidence suite adds non-destructive preview and real lifecycle
   audit checks. All 37 generated conformance checks and strict Language 5 checks pass.
-- [ ] Milestone 5 remaining: final behavior evidence/report reconciliation and
-  ordinary gate after committing the catalog checkpoint.
-- [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
+- [x] (2026-09-07) Catalog checkpoint `a76d193` plus generated source-location
+  reconciliation `6f21b6e` passes the ordinary unmodified gate. The census records
+  current generated queue/catalog execution and the live-only operational limit.
+- [x] (2026-09-07) Executed behavior evidence is retained in
+  `docs/evidence/plan-65/behavior-conformance.json`: all 56 obligations filled;
+  pending/missing/duplicate/stale/failed empty, 50 verified and six unverified.
+  The six identity/register equality guards are not proved total by the DSL;
+  all generated total-guard requirements are required to be verified by core.
+- [x] (2026-09-07) Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
   prove every generated artifact is used and every remaining exclusion is justified.
-- [ ] Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
+- [x] (2026-09-07) Eight migration smoke tests pass: valid startup is read-only;
+  missing ledger, pending migration and checksum mismatch refuse startup. Runtime
+  roles call that handshake before telemetry and resources; migration dependencies
+  remain in the role packages, not core.
+- [x] (2026-09-07) Shared registry, bounded worker CLI, full summary logging,
+  100-timer batches and 90-day/hourly terminal GC are implemented and qualified.
+  ADR 0038 and the package/census/runtime docs record their ownership and limits.
+- [x] (2026-09-07) All 85 worker, 46 server and 29 agent tests pass. Added
+  bounded drain limits/quiescence, batched sleep wake/cancel, actual three-family
+  registry and live-approval/terminal-GC assertions. The complete PostgreSQL pass
+  had 194 passing cases; the corrected recovery fixture also passes, proving public
+  failure recording, resurrection and completion after dependency recovery.
+  All 195 current PostgreSQL cases have passed; final full-suite repetition is M7.
+- [x] (2026-09-07) Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
   wiring against the released public APIs.
 - [ ] Milestone 7: run scenario acceptance, deterministic regeneration, full serial suites,
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+Recovery qualification (2026-09-07): an exception before the first journal append
+leaves no discoverable workflow instance. The new recovery fixture must commit its
+ingress step before simulating dependency failure, matching real AgentRun ingestion.
+The queue owns retry before that durable boundary; resumption owns recorded instances.
+
 
 Catalog integration (2026-09-07): the released typed ProjectionSet accepts a live
 closure capturing rich evidence. Revalidating the generated catalog with that
@@ -229,6 +254,15 @@ Danwa's cohort plan has made partial progress but does not record a completed mi
 build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade HEAD.
 
 ## Decision Log
+
+- Decision (2026-09-07): Runtime role libraries depend on the migration library
+  solely for read-only startup verification; core stays independent. Centralize
+  the three-family registry and configure terminal GC for 90 days, hourly batches
+  of 100. Worker-owned bounded resume previews unless forced, caps candidates and
+  passes, and stops on zero durable progress. ADR 0038 records the durable boundary.
+  Rationale: released pg-migrate has verifyMigrationPlan rather than the stale
+  missingMigrations guidance API; released embedded ResumeHook cannot interpret
+  Kioku resource effects, while the worker already owns the honest interpreter.
 
 - Decision (2026-09-07): retain Kioku SessionId and Keiro WorkflowId in delegation,
   execution context, queued parents, and child evidence; decode their boundary values

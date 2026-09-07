@@ -1,9 +1,11 @@
 module Shikigami.Workers.Command.Worker
   ( runWorkerCmd,
+    runResumeCmd,
   )
 where
 
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
+import Control.Monad (void)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Set qualified as Set
@@ -19,6 +21,7 @@ import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChan
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.Agent.Workflow.Resume (runBoundedResumeWorker)
 import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -27,8 +30,9 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Prelude (Text)
-import Shikigami.Runtime (registerRuntimeCatalog)
+import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
@@ -51,12 +55,28 @@ import System.Exit qualified as Exit
 -- The logger is built first, before anything that could want to log, and every
 -- line this process writes goes through it as one JSON object per line.
 runWorkerCmd :: AppConfig -> IO ()
-runWorkerCmd config = do
+runWorkerCmd = runWorkerCmdWith Nothing
+
+-- | Bounded operational resume owns the same dependencies as the worker.
+-- Without force this reports the budgets and performs no workflow advancement.
+runResumeCmd :: Int -> Int -> Bool -> AppConfig -> IO ()
+runResumeCmd passes candidates force config
+  | force = runWorkerCmdWith (Just (passes, candidates)) config
+  | otherwise = do
+      logger <- Log.newStderrLogger Log.Info
+      Log.logInfo
+        logger
+        "worker.resume.preview"
+        ["passes" Aeson..= passes, "candidates_per_pass" Aeson..= candidates, "force_required" Aeson..= True]
+
+runWorkerCmdWith :: Maybe (Int, Int) -> AppConfig -> IO ()
+runWorkerCmdWith resumeBudget config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
+  verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
     behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
-    let settings = StoreConnection.defaultConnectionSettings connStr
+    let settings = runtimeConnectionSettings logger keiroMetrics connStr
     StoreConnection.withStore settings $ \st -> do
       registerRuntimeCatalog st
       let manifestDirectory = (.agentsDirectory) config
@@ -127,9 +147,8 @@ runWorkerCmd config = do
       -- Registered before the loops start, so a loop that never gets going is a
       -- stale heartbeat rather than an absent one the probe would skip.
       --
-      -- The resume loop is deliberately absent: it is still a run-once action
-      -- rather than a loop, so it has no cadence to be stale against. It joins
-      -- this list when it becomes a loop.
+      -- Resume and GC use upstream continuous runners with failure callbacks,
+      -- but no success heartbeat. Supervision detects their unexpected exit.
       registry <-
         newHeartbeatsWithStaleness
           ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop, TelemetryLoop]]
@@ -171,13 +190,16 @@ runWorkerCmd config = do
                 directoryRefresher,
                 practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
               }
-      serveProbesWith
-        logger
-        ((.httpHost) config)
-        (Config.healthPortFor WorkerRole config)
-        storePool
-        registry
-        (runWorkers env)
+      case resumeBudget of
+        Just (passes, candidates) -> void (runBoundedResumeWorker passes candidates env)
+        Nothing ->
+          serveProbesWith
+            logger
+            ((.httpHost) config)
+            (Config.healthPortFor WorkerRole config)
+            storePool
+            registry
+            (runWorkers env)
 
 credentialPresence :: Maybe a -> Text
 credentialPresence = maybe "none" (const "token")

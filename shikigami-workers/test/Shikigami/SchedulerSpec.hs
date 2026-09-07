@@ -9,11 +9,13 @@ import Data.Map.Strict qualified as Map
 import Data.String (fromString)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (UTCTime (..), addUTCTime, fromGregorian, secondsToDiffTime)
+import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToDiffTime)
 import Data.Vector qualified as Vector
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Keiro.Timer (TimerRow (..), TimerStatus (Firing), lookupTimer)
+import Keiro.Workflow qualified as Workflow
+import Keiro.Workflow.Sleep qualified as Sleep
 import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
@@ -38,7 +40,40 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "Scheduler"
-    [ testCase "nextDue returns the next minute for every-minute cron" do
+    [ testCase "one bounded dispatcher wakes a batch and cancellation wins" do
+        withShikigamiFreshDatabase databaseFixture \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                env = testSchedulerEnv (StoreConnection.pool store) Map.empty SkipMissed Log.silentLogger
+                name = Workflow.WorkflowName "plan65.sleep"
+                first = Workflow.WorkflowId "first"
+                second = Workflow.WorkflowId "second"
+                cancelled = Workflow.WorkflowId "cancelled"
+                sleeper = Sleep.sleepNamed (Workflow.StepName "wait") 60
+            mapM_
+              ( \wid -> do
+                  parked <- runAppIO appEnv (Workflow.runWorkflow name wid sleeper)
+                  assertEqual "sleep parks" (Right Workflow.Suspended) parked
+              )
+              [first, second, cancelled]
+            now <- getCurrentTime
+            early <- runAppIO appEnv (runSchedulerTimerWorker appEnv env now)
+            assertEqual "parked sleeps are quiescent before due" (Right 0) early
+            _ <- runAppIO appEnv (Workflow.cancelWorkflow name cancelled)
+            batch <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (addUTCTime 120 now))
+            assertBool "one pass drains both live sleeps" (either (const False) (>= 2) batch)
+            mapM_
+              ( \wid -> do
+                  completed <- runAppIO appEnv (Workflow.runWorkflow name wid sleeper)
+                  assertEqual "due sleep completes" (Right (Workflow.Completed ())) completed
+              )
+              [first, second]
+            terminal <- runAppIO appEnv (Workflow.runWorkflow name cancelled sleeper)
+            assertEqual "cancelled workflow never advances" (Right Workflow.Cancelled) terminal
+            drained <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (addUTCTime 120 now))
+            assertEqual "no further timer delivery" (Right 0) drained,
+      testCase "nextDue returns the next minute for every-minute cron" do
         cron <- parseCronOrFail "* * * * *"
         let now = atSecond 30
             expected = atMinute 1
@@ -68,7 +103,7 @@ tests databaseFixture =
             assertEqual "initial arm succeeds" (Right ()) armed
 
             fired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env firstDue)
-            assertBool "due schedule timer fired" (either (const False) (maybe False (const True)) fired)
+            assertBool "due schedule timer fired" (either (const False) (> 0) fired)
 
             messages <- readRunJobs pool
             case messages of
@@ -81,7 +116,7 @@ tests databaseFixture =
               other -> assertFailure ("expected one run job, got " <> show other)
 
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
-            assertBool "re-armed next schedule timer fired" (either (const False) (maybe False (const True)) refired),
+            assertBool "re-armed next schedule timer fired" (either (const False) (> 0) refired),
       testCase "paused schedule commits a trigger skip and enqueues no job" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do

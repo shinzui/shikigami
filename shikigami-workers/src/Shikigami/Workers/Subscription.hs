@@ -6,7 +6,7 @@ where
 
 import Data.Aeson qualified as Aeson
 import Kioku.App (AppEnv (..))
-import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
@@ -24,7 +24,8 @@ import Shikigami.Health.Worker
     supervisedLoopVerdict,
   )
 import Shikigami.Log qualified as Log
-import Shikigami.Runtime (registerRuntimeCatalog)
+import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
@@ -47,55 +48,57 @@ runConsumeStream config = do
       broker = (.kafkaBroker) config
       topic = (.kafkaActivityTopic) config
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
-  let settings = defaultConnectionSettings connStr
-  withStore settings $ \st -> withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
-    registerRuntimeCatalog st
-    let manifestDirectory = (.agentsDirectory) config
-        storePool = pool st
-    report <-
-      loadAgentsLoud
+  verifyShikigamiMigrations connStr
+  withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
+    let settings = runtimeConnectionSettings logger keiroMetrics connStr
+    withStore settings $ \st -> do
+      registerRuntimeCatalog st
+      let manifestDirectory = (.agentsDirectory) config
+          storePool = pool st
+      report <-
+        loadAgentsLoud
+          logger
+          manifestDirectory
+          ((.agentsStrict) config)
+          (persistAgentLoadReport logger storePool manifestDirectory)
+      agents <- enabledAgentsFromReport logger report
+      Log.logInfo
         logger
-        manifestDirectory
-        ((.agentsStrict) config)
-        (persistAgentLoadReport logger storePool manifestDirectory)
-    agents <- enabledAgentsFromReport logger report
-    Log.logInfo
-      logger
-      "stream.consumer.started"
-      ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
-    queueResult <- ensureRunQueue storePool
-    case queueResult of
-      Left err -> fail ("run-job queue reconciliation failed: " <> show err)
-      Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
-    case deadLetterResult of
-      Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
-      Right () -> pure ()
-    let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
-        cfg =
-          StreamConfig
-            { broker = broker,
-              topic = topic,
-              consumerGroupId = (.kafkaStreamGroup) config,
-              deadLetterQueue = (.kafkaDeadLetterQueue) config
-            }
-        onHit StreamHit {agentName} = do
-          let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
-          Log.logInfo logger "stream.record.matched" matched
-    registry <-
-      newHeartbeatsWithStaleness
-        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
-    DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-      startProcessDirectory logger registry ((.directorySettings) config)
-    let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg include agents onHit
-        directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
-    serveProbesWith
-      logger
-      ((.httpHost) config)
-      (Config.healthPortFor StreamConsumerRole config)
-      storePool
-      registry
-      (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
+        "stream.consumer.started"
+        ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+      queueResult <- ensureRunQueue storePool
+      case queueResult of
+        Left err -> fail ("run-job queue reconciliation failed: " <> show err)
+        Right () -> pure ()
+      deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
+      case deadLetterResult of
+        Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
+        Right () -> pure ()
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+          cfg =
+            StreamConfig
+              { broker = broker,
+                topic = topic,
+                consumerGroupId = (.kafkaStreamGroup) config,
+                deadLetterQueue = (.kafkaDeadLetterQueue) config
+              }
+          onHit StreamHit {agentName} = do
+            let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
+            Log.logInfo logger "stream.record.matched" matched
+      registry <-
+        newHeartbeatsWithStaleness
+          ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
+      DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+        startProcessDirectory logger registry ((.directorySettings) config)
+      let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg include agents onHit
+          directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
+      serveProbesWith
+        logger
+        ((.httpHost) config)
+        (Config.healthPortFor StreamConsumerRole config)
+        storePool
+        registry
+        (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
 
 -- | Consume public integration events and enqueue matching @Trigger.Event@
 -- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
@@ -109,60 +112,62 @@ runConsumeEvents config = do
   let broker = (.kafkaBroker) config
       topic = (.kafkaEventsTopic) config
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
-  let settings = defaultConnectionSettings connStr
-  withStore settings $ \st -> withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
-    registerRuntimeCatalog st
-    let manifestDirectory = (.agentsDirectory) config
-        storePool = pool st
-    report <-
-      loadAgentsLoud
+  verifyShikigamiMigrations connStr
+  withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
+    let settings = runtimeConnectionSettings logger keiroMetrics connStr
+    withStore settings $ \st -> do
+      registerRuntimeCatalog st
+      let manifestDirectory = (.agentsDirectory) config
+          storePool = pool st
+      report <-
+        loadAgentsLoud
+          logger
+          manifestDirectory
+          ((.agentsStrict) config)
+          (persistAgentLoadReport logger storePool manifestDirectory)
+      agents <- enabledAgentsFromReport logger report
+      Log.logInfo
         logger
-        manifestDirectory
-        ((.agentsStrict) config)
-        (persistAgentLoadReport logger storePool manifestDirectory)
-    agents <- enabledAgentsFromReport logger report
-    Log.logInfo
-      logger
-      "events.consumer.started"
-      ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
-    queueResult <- ensureRunQueue storePool
-    case queueResult of
-      Left err -> fail ("run-job queue reconciliation failed: " <> show err)
-      Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
-    case deadLetterResult of
-      Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
-      Right () -> pure ()
-    let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
-        cfg =
-          StreamConfig
-            { broker = broker,
-              topic = topic,
-              consumerGroupId = (.kafkaEventsGroup) config,
-              deadLetterQueue = (.kafkaDeadLetterQueue) config
-            }
-        onHit EventHit {agentName, eventType, integrationMessageId} = do
-          let matched =
-                [ "agent" Aeson..= agentName,
-                  "event_type" Aeson..= eventType,
-                  "topic" Aeson..= topic
-                ]
-          Log.logInfo logger "events.record.matched" matched
-          Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
-    registry <-
-      newHeartbeatsWithStaleness
-        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
-    DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-      startProcessDirectory logger registry ((.directorySettings) config)
-    let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg agents onHit
-        directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
-    serveProbesWith
-      logger
-      ((.httpHost) config)
-      (Config.healthPortFor EventConsumerRole config)
-      storePool
-      registry
-      (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
+        "events.consumer.started"
+        ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+      queueResult <- ensureRunQueue storePool
+      case queueResult of
+        Left err -> fail ("run-job queue reconciliation failed: " <> show err)
+        Right () -> pure ()
+      deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
+      case deadLetterResult of
+        Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
+        Right () -> pure ()
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+          cfg =
+            StreamConfig
+              { broker = broker,
+                topic = topic,
+                consumerGroupId = (.kafkaEventsGroup) config,
+                deadLetterQueue = (.kafkaDeadLetterQueue) config
+              }
+          onHit EventHit {agentName, eventType, integrationMessageId} = do
+            let matched =
+                  [ "agent" Aeson..= agentName,
+                    "event_type" Aeson..= eventType,
+                    "topic" Aeson..= topic
+                  ]
+            Log.logInfo logger "events.record.matched" matched
+            Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
+      registry <-
+        newHeartbeatsWithStaleness
+          ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
+      DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
+        startProcessDirectory logger registry ((.directorySettings) config)
+      let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg agents onHit
+          directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
+      serveProbesWith
+        logger
+        ((.httpHost) config)
+        (Config.healthPortFor EventConsumerRole config)
+        storePool
+        registry
+        (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
 
 -- | Turn the consumer's report of its own supervisor into a liveness verdict.
 --

@@ -569,3 +569,26 @@ there.
   declared only when the generated artifact is the one the runtime executes.
 * `docs/architecture/shikigami-domain-inventory.md` — the declared and
   undeclared surface census.
+
+## Runtime maintenance after the first-release baseline
+
+[ADR 0038](adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) owns
+startup and retention. The runtime verifies migrations before acquiring resources,
+registers the evidence catalog, and uses one core registry for agent runs, approval
+children and conversations. The worker's bounded resume command previews by default:
+
+```bash
+shikigami-worker --resume-passes 10 --resume-limit 100
+shikigami-worker --resume-passes 10 --resume-limit 100 --force
+```
+
+Each pass logs all released summary fields. Zero `advanced` ends the drain even
+when blocked candidates remain; `discovered` is not a progress test. The continuous
+runner retains upstream failure isolation. The released success-summary callback is
+absent, so successful per-pass summaries are available through the bounded action.
+
+One dispatcher drains up to 100 sleep/custom timers per pass. Hourly GC collects at
+most 100 terminal instances older than 90 days, excluding live workflows and completed
+children of live parents. This bounds workflow deduplication: older job redelivery
+requires operator review. Evidence streams, rich query rows and sink delivery receipts
+are separate retention owners and are not collected by this workflow policy.

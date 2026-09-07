@@ -52,6 +52,7 @@ library
     , process
     , regex-tdfa
     , shikigami-core
+    , shikigami-migrations
     , shikumi               ==0.3.0.3
     , shikumi-tools         ==0.3.0.3
     , text                  >=2.1

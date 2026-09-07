@@ -24,7 +24,7 @@ import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Hasql.Pool (Pool)
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
-import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Keiro.Workflow.Sleep (drainWorkflowSleepTimers)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
@@ -228,6 +228,6 @@ runSchedulerTimerWorker ::
   AppEnv ->
   SchedulerEnv ->
   UTCTime ->
-  Eff es (Maybe TimerRow)
+  Eff es Int
 runSchedulerTimerWorker appEnv env now =
-  runWorkflowTimerWorker (metrics appEnv) now (shikigamiTimerFallback env now)
+  drainWorkflowSleepTimers (metrics appEnv) now 100 (shikigamiTimerFallback env now)

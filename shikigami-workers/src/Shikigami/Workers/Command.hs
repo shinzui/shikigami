@@ -16,7 +16,7 @@
 -- == How configuration reaches a role
 --
 -- Every role's parser produces a pair: the action to run, which takes the
--- resolved 'Shikigami.App.Config.AppConfig', and the command-line configuration
+-- resolved 'AppConfig', and the command-line configuration
 -- sources its own flags supplied. The flags an operator already knows —
 -- @--agents@, @--broker@, @--topic@, @--group@, @--kawa-url@ and the rest —
 -- survive, but as ordinary Settei sources aimed at declared keys rather than as
@@ -52,7 +52,8 @@ import Options.Applicative
 import Settei.Optparse (cliOverride, cliSources, namedOption)
 import Settei.Source (Source)
 import Shikigami.App.Config
-  ( Role (..),
+  ( AppConfig,
+    Role (..),
     agentsDirectoryKey,
     kafkaActivityTopicKey,
     kafkaBrokerKey,
@@ -69,7 +70,7 @@ import Shikigami.App.Config
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
-import Shikigami.Workers.Command.Worker (runWorkerCmd)
+import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
 
 -- | Every worker executable, in the order they are documented.
@@ -95,7 +96,7 @@ workerRoleInfo =
       parserInfo =
         withConfigOptions
           "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
-          (pure runWorkerCmd)
+          (workerAction)
           ( sourcesOf
               [ agentsOption,
                 kawaUrlOption,
@@ -258,3 +259,18 @@ danwaAgentOption =
     "--danwa-agent"
     sinksDanwaAgentParticipantKey
     (long "danwa-agent" <> metavar "PARTICIPANT" <> help "danwa agent participant id (sets sinks.danwa.agent_participant)")
+
+-- Bounded maintenance stays in the resource-owning worker binary; the embedded
+-- server hook cannot interpret the application's Kioku effect row.
+workerAction :: Parser (AppConfig -> IO ())
+workerAction =
+  choose
+    <$> optional (option positiveInt (long "resume-passes" <> metavar "N" <> help "Preview bounded workflow resume; use --force to advance"))
+    <*> option positiveInt (long "resume-limit" <> value 100 <> metavar "N" <> help "Maximum candidates per bounded resume pass")
+    <*> switch (long "force" <> help "Execute the bounded resume action")
+  where
+    choose Nothing _ _ = runWorkerCmd
+    choose (Just passes) candidates force = runResumeCmd passes candidates force
+    positiveInt = eitherReader \raw -> case reads raw of
+      [(value, "")] | value > 0 -> Right value
+      _ -> Left "expected a positive integer"

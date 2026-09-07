@@ -62,6 +62,7 @@ import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore (AliasReconciliation (..))
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (shikigamiNamespace)
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Sink.GrantStore
   ( GrantIdentityEvidence (..),
     GrantPrincipalSync (..),
@@ -733,6 +734,7 @@ padRow widths cells =
 withKirokuStore :: AppConfig -> String -> (KirokuStore -> IO a) -> IO a
 withKirokuStore config context use = do
   connectionString <- revealSecretText <$> requireDatabaseUrl (Text.pack context) config
+  verifyShikigamiMigrations connectionString
   withStore (defaultConnectionSettings connectionString) use
 
 die :: String -> Text -> IO a

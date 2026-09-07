@@ -31,6 +31,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Sink.GrantStore
   ( GrantCursor (..),
     GrantPage (..),
@@ -147,6 +148,7 @@ requireKind ctx raw =
 withPool :: AppConfig -> String -> (Pool -> IO a) -> IO a
 withPool config ctx use = do
   connStr <- revealSecretText <$> requireDatabaseUrl (Text.pack ctx) config
+  verifyShikigamiMigrations connStr
   withStore (defaultConnectionSettings connStr) (use . pool)
 
 withResolvedIdentity :: AppConfig -> String -> Text -> (AgentIdentity -> IO a) -> IO a

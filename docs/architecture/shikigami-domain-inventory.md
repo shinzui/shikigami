@@ -12,19 +12,18 @@ Paths in this section are relative to `shikigami-core/src/`.
 
 | Surface | Declaration and execution owner | Observable proof / remaining work |
 |---|---|---|
-| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Plan 65 retires unused historical patch branches after verifying the pre-v1 exception. |
+| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. The reviewed pre-v1 reset retired all historical application patch branches. |
 | `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
-| `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. Historical nonrotating/per-message-label branches remain pending retirement. |
+| `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
 | Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
-The worker registry in `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs`
-composes the agent-run registry (including approval children) with conversations.
-Its old comment saying two families is stale. Plan 65 must prove all three registrations,
-bounded termination on zero durable advances, restart/resume, and rotation token invalidation.
-Generated workflow facts inventory static declared steps; `docs/workflow-versioning.md`
-still inventories historical computed labels until their reviewed removal.
+`Shikigami.Workflow.Registry` in core composes agent runs, approval children and
+conversations. The worker consumes this exact registry; the approval integration
+case verifies all three names. Bounded resume stops on zero durable advances and
+exports all summary fields. Generated facts describe the current static workflow
+bodies; the synthetic versioning test preserves future patch-gate coverage.
 
 `Shikigami/Flow/Lifecycle/AtRiskCustomer.hs` is a diagram-only Keiki transducer
 with no emitted events. Its durable execution state belongs to the workflow journal.
@@ -92,30 +91,33 @@ same remote key; the journal alone cannot promise exactly-once HTTP delivery.
 with schedule, approval and conversation-timeout payload handlers. Schedule allocation lives
 in `Trigger/Scheduler.hs`; approval allocation in core's approval vertical; conversation idle
 allocation in the conversation vertical. These are custom timer rows, not a saga process.
-RunEvidence's existence does not supply a process that dispatches their commands. Plan 65
-adds bounded Keiro sleep draining within the owning dispatcher and proves wake/cancel/rotation
-behavior without competing unfiltered consumers.
+RunEvidence does not supply a process that dispatches their commands. The owning
+dispatcher drains up to 100 Keiro sleep or custom timers per pass. Scheduler and
+conversation tests prove wake-up, cancellation, rearming and rotation behavior.
 
-Workers.Config, worker command entry points, server startup and the one-off agent path own
-resource acquisition and telemetry. Required proof covers migration handshake before listeners,
-telemetry before store callbacks, validated streams/catalog, registry completeness, resume
-summaries, quiescent waits and safe terminal retention. Existing wiring is retained when tests
-prove it meets the released contract.
+Runtime entry points first verify the complete migration ledger read-only, then
+construct telemetry, acquire the store and register validated streams/catalogs before
+serving requests. Store callbacks use bounded log fields and the released Keiro
+metrics bridge. Missing, pending and changed migrations refuse startup without repair.
 
-`shikigami-server/src/Shikigami/Server/Command/Ops.hs` mounts generated lifecycle audit
-and validated catalog operations. Its catalog preview proves no destructive target reset.
-The released ResumeHook effect row lacks the resource-aware Kioku effects required here;
-plan 65 must either supply an honest interpreter or expose bounded resume at the worker-owned
-operational boundary and document the exact unsupported embedded type. Timer mutation stays
-with its dispatcher. No cast or direct private SQL is an acceptable integration.
+The server mounts generated lifecycle audit and validated catalog operations. Its
+catalog preview has no destructive reset. The embedded ResumeHook's exact
+`[Store, Error StoreError, IOE]` row lacks Kioku's resource/tracing effects, so
+resumption stays in the worker binary: `--resume-passes N --resume-limit N` previews,
+and `--force` advances through the same runtime registry. Timer mutation stays with
+its dispatcher. No cast or private production SQL substitutes for these owners.
+
+Terminal workflow GC runs hourly in batches of 100 after 90 days. Live approvals
+and completed children of live parents remain protected. Application evidence and
+sink receipts have independent ownership and retention. See
+[ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md).
 
 `shikigami-migrations:test-support` is the only database-test acquisition boundary.
-It currently wraps pg-migrate's per-database fixture. Plan 65 replaces that implementation
-with keiro-test-support's migrated suite/template and isolated per-example clones, preserving
-the complete migration ledger and Kioku reconciliation. Core's domain/diagram checks will move
-to database-independent drivers, with PostgreSQL tests in a separate suite. Server and worker
-integration tests retain their package ownership. Cleanup on exceptions, distinct example
-databases and a no-op second migration are mandatory acceptance.
+It uses the released migrated-suite template with isolated per-example clones and
+Kioku reconciliation. Core's domain and diagram drivers require no PostgreSQL;
+its PostgreSQL suite is separate. Server and worker integration tests retain their
+package ownership. Smoke tests prove shared template identity, isolated data,
+exception cleanup, no-op reapplication and startup ledger refusal.
 
 ## Evolution and conformance
 
@@ -124,6 +126,11 @@ with the project-pinned tool. Check retains `--min-language 5`, `--deny-warnings
 and coverage reports, and `--fail-on-opaque`. Behavior obligations are nonzero and must
 execute; the former zero-obligation claim is obsolete. After committing reviewed generation,
 ordinary scaffold must change no bytes. `just keiro-gate <baseline>` remains strict.
+The executed report in `docs/evidence/plan-65/behavior-conformance.json` has 56 filled
+obligations, 50 verified and six unverified, with every failure/coverage-gap set empty.
+The six command/register identity-equality guards have passing witnesses but are not
+proved total by the released DSL. The core facade additionally requires every generated
+total-guard requirement to appear in the verified set; it never relabels the others.
 
 There are no local release tags or checked-in deployment pipeline; process-compose and
 example config describe the development stack. Plan 65 records the owner's 2026-09-07
