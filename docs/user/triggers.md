@@ -34,8 +34,8 @@ let Trigger =
 trigger = A.Trigger.Schedule { cron = "* * * * *" }   -- every minute
 ```
 
-A standard five-field cron expression. The worker enqueues a due-time job and runs the agent
-when it fires. Use this for recurring work — a digest every morning, a heartbeat every
+A standard five-field cron expression. `shikigami-scheduler` arms schedule timers;
+timer firing enqueues a due-time job that `shikigami-worker` executes. Use this for recurring work — a digest every morning, a heartbeat every
 minute, a weekly rollup.
 
 ## Stream — observe `activity.v1`

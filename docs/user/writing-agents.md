@@ -45,7 +45,7 @@ let Agent =
           { name : Text
           , description : Text
           , trigger : Trigger          -- one of three classes
-          , behavior : Behavior         -- one of three arms
+          , behavior : Behavior         -- four schema arms; see runtime support below
           , sinks : List Sink           -- zero or more producer outputs
           , delegates : List Text
           , delegationBudget : Optional Natural
@@ -118,10 +118,14 @@ When `identity` is absent, the declaration's `name` joins by case-normalized Mei
 compatibility. `shikigami agents list` shows the join and lifecycle; `shikigami agents sync`
 persists load state and fills or verifies the same principal id on existing sink grants.
 
-Explicit `directory.mode=disabled` preserves compatibility: the declared id is carried for
-session attribution but is not directory-verified, and the operator inventory labels the
-lifecycle `DISABLED` rather than implying `active`. The broader migration of name-keyed durable
-state remains in [plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md).
+Explicit `directory.mode=disabled` admits work under a name-derived compatibility
+identity, rather than treating a declared id as verified. The operator inventory labels the
+lifecycle `DISABLED` rather than implying `active`. Admitted durable jobs record a
+verified principal or an explicit compatibility identity. Sessions, memory scopes,
+and workflow identity use that recorded identity, so verified agents retain
+continuity across renames. `shikigami agents sync --alias LEGACY_NAME=agent_...` associates
+legacy name-scoped memory with a verified principal without rewriting old rows;
+see the [operator CLI](../operations/operator-cli.md).
 
 ## Memory policy
 
@@ -204,19 +208,22 @@ contract.
 
 ## The three axes
 
-The schema deliberately keeps three concerns independent. Any combination is valid:
+The schema keeps three concerns independent, but execution also requires a supported
+behavior and any necessary grants and action authorization:
 
 ```text
 behavior  ×  trigger  ×  sinks
 ( what )     ( when )    ( produces )
 ```
 
-- A **deterministic rule** on a **stream** trigger raising a **signal** → a cheap detector.
+- A **registered program** on a **stream** trigger raising a **signal** → a detector.
+  The `Deterministic` arm is schema-only today and fails with `UnsupportedBehavior`.
 - A **shikumi program** on a **schedule** writing a **kawa digest** → a recurring summarizer.
 - A **skill** on a public **event** trigger opening a **danwa conversation** → an addressed responder.
 - A **skill** on an external conversation activity using **ChannelEgress** → a guarded reply through Kanmon.
 
-You mix and match freely; the runtime dispatches on each part independently.
+A `Flow` needs durable execution; `shikigami-run-behavior` supports only
+registered programs and Skills. See [Behaviors](./behaviors.md).
 
 ## A worked example
 
@@ -242,7 +249,7 @@ in  A.Agent::{
             , priority = A.Priority.Normal
             , importance = 45
             , recipientFrom = A.RecipientFrom.SubjectOwner
-            , defaultRecipient = Some "person:nadeem"
+            , defaultRecipient = Some "person_nadeem"
             , intentTemplate = "triage this ticket"
             , extraContextTags = [ "verb:ticket.received", "subject:ticket" ]
             }
@@ -259,8 +266,8 @@ This says: *when a `ticket.received` activity about a `ticket` subject arrives o
 - `agents/*.dhall` — top-level declared agents the worker loads from its `--agents`
   directory.
 - `agents/detectors/*.dhall` — the intelligence-layer **detectors** (see
-  **[Detectors](./detectors.md)**). Drop a file in and it is loaded; there is no registry to
-  edit and no migration step.
+  **[Detectors](./detectors.md)**). Point both worker and consumer at that directory.
+  Directory loading is not recursive; a new program or Flow also needs a compiled registry entry.
 - `agents/skills/<name>/SKILL.md` — skill behaviors referenced by `Skill { path = … }` (see
   **[Skills](./skills.md)**).
 

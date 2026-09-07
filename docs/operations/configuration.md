@@ -1,13 +1,13 @@
 # Configuring Shikigami
 
-Every Shikigami executable that consumes application settings — the HTTP server, the six
-worker roles, and the administrative commands — is configured the same way, from one
+Every Shikigami executable that consumes application settings — the HTTP server, the four
+worker roles, the two one-off commands, and the administrative commands — is configured the same way, from one
 declaration. This document is the
 operator-facing description of that surface. It is owned by
 `docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md`.
 
 The authoritative source is the declaration itself, in
-`shikigami-core/src/Shikigami/App/Config.hs`. Every binary can print it:
+`shikigami-core/src/Shikigami/App/Config.hs`. Every `AppConfig` consumer can print it:
 
 ```bash
 $ shikigami-worker --describe-config
@@ -15,7 +15,9 @@ $ shikigami-worker --describe-config
 
 If this document and that output ever disagree, the output is right.
 
-The executable exception is `shikigami-migrate`, which reads `DATABASE_URL` itself. See
+`shikigami-openapi` has no configuration parser. `shikigami-client` accepts only
+its own `health [--server URL]` command and does not consume `AppConfig`. The migration executable
+`shikigami-migrate` reads `DATABASE_URL` itself. See
 [The two exceptions](#the-two-exceptions) below.
 
 
@@ -24,9 +26,9 @@ The executable exception is `shikigami-migrate`, which reads `DATABASE_URL` itse
 Sources are resolved from lowest precedence to highest. A later source wins, and the
 earlier candidate stays visible in `--explain-config` rather than disappearing.
 
-1. **Declared defaults.** Every setting except the database connection string has one,
-   so a process starts with no configuration at all and behaves the way a development
-   machine expects.
+1. **Declared defaults.** Many settings have development defaults. Optional
+   endpoints and credentials may be absent; role-specific and conditional
+   requirements must still be supplied before the process starts.
 2. **`--config PATH`**, once per file, in the order the options appear. Files are YAML.
 3. **Environment variables**, but only the ones explicitly bound below. A variable that
    is not in that table does nothing, however plausible its name.
@@ -154,8 +156,12 @@ nested under `kafka`.
 | `authorization.actions.en.issuer_public_keys` | *(none)* | `SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS` | En Biscuit verifier keyset, required in `kikan` mode. |
 | `authorization.actions.en.schema_hashes` | *(none)* | `SHIKIGAMI_ACTION_EN_SCHEMA_HASHES` | Accepted Kikan schema hashes, required in `kikan` mode. |
 | `authorization.actions.caller_id` | *(none)* | `SHIKIGAMI_ACTION_CALLER_ID` | Public audit caller id, required in `kikan` mode. |
+| `delegation.default_budget` | `16` | `SHIKIGAMI_DELEGATION_DEFAULT_BUDGET` | Root-run descendant budget when the declaration supplies none (0–1000). |
+| `conversation.idle_timeout_seconds` | `1800` | `SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS` | End a rotating conversation epoch after this idle wait. |
+| `http.request_max_bytes` | `8388608` | `SHIKIGAMI_HTTP_REQUEST_MAX_BYTES` | Encoded outbound sink request limit in bytes (1024–67108864). |
+| `http.response_max_bytes` | `8388608` | `SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES` | Outbound sink response limit in bytes (1024–67108864). |
 
-The three duration settings are whole seconds in the range 1–86400. The upper bound keeps
+The duration settings are whole seconds in the range 1–86400. The upper bound keeps
 conversion to the microsecond timeout representation safe on the 64-bit platforms
 supported by the deployment flake. `worker.run_timeout_seconds` bounds each synchronous
 provider or program attempt; it does not time an entire durable workflow or a suspended
@@ -255,7 +261,7 @@ $ shikigami-run-behavior --config /run/secrets/anthropic.yaml \
 
 ## Which binary needs what
 
-Every binary accepts every key, so one configuration file can serve a whole deployment.
+Every `AppConfig` consumer accepts every key, so one configuration file can serve a whole deployment.
 What differs is which keys a binary refuses to start without. `--check-config` answers for
 the binary you ran it on.
 

@@ -27,6 +27,14 @@ The dev shell provides GHC, `cabal`, `psql`/`createdb`, and the `PG*` environmen
 (`PGHOST` is a Unix-socket directory inside the repo; `PGDATABASE=shikigami`). Everything
 below assumes you are **inside the dev shell**.
 
+The current `cabal.project` includes co-developed contract and client packages from
+`mori://shinzui/kikan-en/packages/kikan-en-contract` and
+`mori://shinzui/kikan-en/packages/kikan-en-client`. The checkout must occupy the sibling
+location recorded in `cabal.project`. A standalone Shikigami checkout is not yet
+sufficient to resolve the whole project. See the
+[dependency cohort](../dependency-cohort.md) for the current selections and
+qualification status.
+
 Build everything once:
 
 ```bash
@@ -86,24 +94,25 @@ so this works in CI and on a fresh checkout.
 
 The `agent-run` and `worker` commands record sessions and memory via **kioku**. The
 `enqueue-run`, `consume-stream`, and `consume-events` commands use the run queue or Keiro
-inbox. All of those paths need Postgres. Create and migrate the dev database (idempotent):
+inbox. All of those paths need Postgres. Start the bundled service in another dev-shell
+terminal; it runs `just create-database` after PostgreSQL is ready:
+
+```bash
+$ process-compose up
+```
+
+If PostgreSQL is already running, create and migrate the dev database explicitly:
 
 ```bash
 $ just create-database     # creates the DB if missing, then runs `just migrate`
 ```
 
-This installs the kiroku event-store schema *and* shikigami's own read-model migrations
-(the suppression table) in one pass. The connection string is exposed as
+This applies the Kiroku, Keiro, Kioku, and Shikigami migration components in
+dependency order and reconciles Keiro's read-model registry. The connection string is exposed as
 `PG_CONNECTION_STRING` by the dev shell, which is the environment variable bound to the
 `database.connection_string` setting, so runtime commands pick it up automatically. See
 [Configuration](../operations/configuration.md) for the full surface and for the
-`--check-config` / `--explain-config` diagnostics every binary offers.
-
-To run Postgres itself locally, use the bundled process-compose:
-
-```bash
-$ process-compose up       # starts postgres and runs `just create-database`
-```
+`--check-config` / `--explain-config` diagnostics application-configured binaries offer.
 
 ## Run an agent end to end with memory
 

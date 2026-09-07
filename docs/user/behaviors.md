@@ -28,13 +28,14 @@ let Behavior =
 
 | Arm | Runs via | Needs a model key? | Use for |
 | --- | --- | --- | --- |
-| **Deterministic** | a named rule, in-process | No | cheap, rule-based decisions (thresholds, staleness, counting) |
-| **ShikumiProgram** | `shinzui/handan` + `shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
-| **Skill** | `shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
-| **Flow** | `shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
+| **Deterministic** | schema only; runner returns `UnsupportedBehavior` | — | reserved rule declaration |
+| **ShikumiProgram** | `mori://shinzui/handan` + `mori://shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
+| **Skill** | `mori://shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
+| **Flow** | `mori://shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
 
-Whatever the arm, its output is a JSON value handed to the agent's **sinks** identically — the
-downstream wiring (sinks, sessions, memory) is shared across all four.
+Supported behaviors return JSON to the shared session, memory, and sink lifecycle.
+Flows execute through the durable agent workflow, while the synchronous runner
+supports registered programs and Skills.
 
 ## Deterministic — a named rule
 
@@ -46,12 +47,10 @@ behavior =
     }
 ```
 
-The cheapest arm: a named rule evaluated in-process with no model and no credentials. `rule`
-names the logic; `params` is a string→string map of configuration (here, the staleness
-threshold in days). This is the workhorse for detectors whose condition is a clear rule —
-"declared but no action for N days," "count exceeded threshold," "field missing."
-
-Because it needs no key, the Deterministic path always runs in CI and on a fresh checkout.
+The schema accepts this arm, but `Shikigami.Behavior.Run.runBehavior` returns
+`UnsupportedBehavior "Deterministic"`. The worker uses that same runner for this
+arm. A valid manifest therefore does not imply an executable rule. Implement
+rule logic as a registered program or compiled Flow until this arm has a runner.
 
 ## ShikumiProgram — the typed path
 
@@ -59,27 +58,27 @@ Because it needs no key, the Deterministic path always runs in CI and on a fresh
 behavior =
   A.Behavior.ShikumiProgram
     { task = "noop-summary"      -- a registered handan/shikumi task
-    , preferEnrichment = False   -- prefer upstream enrichment facts when available
-    , grounding = None Text      -- optional OKF knowledge grounding reference
-    , enabledBy = None Text      -- optional env var that gates this behavior on
+    , preferEnrichment = False   -- schema metadata; task must implement this
+    , grounding = None Text      -- schema metadata; task must implement this
+    , enabledBy = None Text      -- schema metadata; not an enforced gate
     }
 ```
 
-Names a typed task in the program registry, run through `shinzui/handan` over a
-`shinzui/shikumi` `Program`. This is the path for **structured, typed, evaluable** work —
+Names a typed task in the program registry, run through `mori://shinzui/handan` over a
+`mori://shinzui/shikumi` `Program`. This is the path for **structured, typed, evaluable** work —
 schemas, validation, ensembles, an eval harness. Fields:
 
-- `task` — the registered task name. The runtime ships a deterministic stub task,
-  **`noop-summary`**, that returns a fixed JSON body with **no model call**, so the loop is
-  provable without a provider configured. Real detectors register tasks that call a model.
-- `preferEnrichment` — when `True`, prefer pre-computed enrichment facts on the activity
-  payload (e.g. `payload.enrichment.sentiment`) and fall back to classifying raw text only if
-  they are absent.
-- `grounding` — an optional reference to OKF knowledge grounding (what concepts *mean*),
-  kept deliberately distinct from a skill's instructions (how-to).
-- `enabledBy` — an optional environment-variable name that must be set for the behavior to
-  run. Lets an LLM-backed program ship **opt-in** (e.g. behind `TOMOSHIBI_ENABLE_LLM_DETECTORS`)
-  so the default path stays credential-free and CI stays hermetic.
+- `task` selects a compiled entry in `Shikigami.Program.Registry`. Its current
+  entries are `noop-summary`, `web-researcher`, and `code-researcher`, all deterministic
+  proof programs. The durable agent workflow additionally handles the
+  `research-supervisor` delegation program; the synchronous runner cannot run it.
+- `preferEnrichment`, `grounding`, and `enabledBy` are accepted declaration fields
+  but are not consulted by the current dispatcher. In particular, `enabledBy`
+  does not provide an environment-variable execution gate. Use `enabled = False`
+  to exclude an agent from long-running loaders.
+
+The runner supplies trigger payload and recalled memory through the task argument
+map. New tasks must implement any enrichment or grounding behavior themselves.
 
 ## Skill — the lightweight path
 
@@ -89,15 +88,17 @@ behavior = A.Behavior.Skill { path = "agents/skills/triage-note" }
 
 Points at a **skill directory** following the [Agent Skills specification](https://agentskills.io/specification):
 a folder with a `SKILL.md` (YAML frontmatter + Markdown instructions), run directly through
-`shinzui/baikai`. This is the lightweight path for the many agents that are "follow these
+`mori://shinzui/baikai`. This is the lightweight path for the many agents that are "follow these
 instructions, maybe call these tools" rather than a typed pipeline.
 
 The runtime loads the skill's `SKILL.md`, builds a `baikai` context from its instructions,
-maps its `allowed-tools` to tool definitions, and runs a completion (plus a tool-use loop if
-the skill calls tools). A **stub provider** satisfies CI, so a skill-agent runs without a
+and advertises the runtime-supplied tool registry. The current loader ignores
+`allowed-tools`; it neither installs nor restricts tools. Overlay admission and
+per-action authorization govern the tools supplied to a run. A completion can enter a bounded
+tool-use loop when actual tools are available. A **stub provider** satisfies CI, so a skill-agent runs without a
 model key — exactly as `noop-summary` does. See **[Skills](./skills.md)** for authoring one.
 
-> **Sandbox note.** A skill's *instructions* and `allowed-tools` run. Executing a skill's
+> **Sandbox note.** The skill's instructions run through the model; tools come from the runtime registry. Executing a skill's
 > `scripts/` (arbitrary executable code) needs a sandbox and is **not** run by this runtime —
 > a deferred concern.
 
@@ -131,7 +132,7 @@ quickest way to iterate on what an agent produces.
 
 | If the work is… | Use |
 | --- | --- |
-| a clear rule over structured fields | `Deterministic` |
+| a clear rule over structured fields | a registered `ShikumiProgram` |
 | a typed pipeline you want to evaluate/optimize | `ShikumiProgram` |
 | natural-language instructions, optionally with tools | `Skill` |
 | a durable process that must wait or resume | `Flow` |

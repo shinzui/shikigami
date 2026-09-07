@@ -32,7 +32,7 @@ Stay with the simpler behavior arms when the agent can run once and return one J
 
 | Need | Use |
 | --- | --- |
-| A cheap rule over structured fields | `Deterministic` |
+| A cheap rule over structured fields | A registered `ShikumiProgram`; `Deterministic` execution is not implemented |
 | A typed pipeline or model-backed classifier | `ShikumiProgram` |
 | Natural-language instructions and tools | `Skill` |
 
@@ -57,32 +57,25 @@ A flow is an `effectful` Haskell function under `FlowEffects`:
 myFlow :: FlowEffects es => Value -> Eff es Value
 myFlow payload = do
   activity <- currentActivity
-  prior <- recall (MemoryQuery "relevant prior memory")
+  prior <- recall "history" (MemoryQuery "relevant prior memory")
   verdict <- step (StepName "classify") (pure (classify payload activity prior))
   if isLowRisk verdict
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (alertFor verdict) (toJSON verdict)
-      _ <- remember (toJSON ("alert emitted" :: Text))
+      _ <- emitSignal "alert" (alertFor verdict) (toJSON verdict)
+      _ <- remember "alert-note" (toJSON ("alert emitted" :: Text))
       pure (toJSON verdict)
 ```
 
-`FlowEffects` includes keiro workflow effects plus shikigami domain effects:
+`FlowEffects` is defined in `Shikigami.Flow`. It includes `Workflow`, `Memory`,
+`Sink`, `Activity`, `Acknowledgement`, `Delegate`, `Routing`, and the practice-review
+capabilities. It exposes neither `IOE` nor `Store`: external effects go through
+capability interpreters, which own their journal and authorization boundaries.
+A named `step` in a flow body can checkpoint a pure result.
 
-```haskell
-type FlowEffects es =
-  ( Workflow :> es
-  , Store :> es
-  , IOE :> es
-  , Memory :> es
-  , Sink :> es
-  , Activity :> es
-  )
-```
-
-The important rule is that external side effects must go through the DSL capabilities or a
-named keiro `step`. Completed steps are replayed from the journal after a restart, so
-step names are part of the durable contract.
+Memory and sink calls take explicit stable labels. Their resulting journal names
+are durable identifiers. Follow [Workflow versioning](../workflow-versioning.md)
+when adding or changing a flow, including its `domain/` declaration and gate checks.
 
 ## Minimal Haskell example
 
@@ -90,7 +83,7 @@ To add a new flow, create a Haskell module under `shikigami-core/src/Shikigami/F
 expose it in `shikigami-core.cabal`, register it in `Shikigami.Flow.flowRegistry`, then
 point a Dhall manifest at the registered name.
 
-Example module:
+Example module (using the package's GHC2024 and `OverloadedRecordDot` settings):
 
 ```haskell
 module Shikigami.Flow.OwnerReminder
@@ -102,11 +95,10 @@ import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import Keiro.Workflow (StepName (..), Workflow, step)
-import Kiroku.Store.Effect (Store)
-import Shikigami.Api.Activity (ActivityEnvelope (..))
-import Shikigami.Api.Agent qualified as Agent
+import Shikigami.Activity (ActivityEnvelope (..))
+import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Flow.Capability
   ( Activity,
     Memory,
@@ -116,15 +108,16 @@ import Shikigami.Flow.Capability
     recall,
     remember,
   )
+
 import Shikigami.Flow.Capability qualified as Capability
 
 ownerReminderFlow ::
-  (Workflow :> es, Store :> es, IOE :> es, Memory :> es, Capability.Sink :> es, Activity :> es) =>
+  (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es) =>
   Value ->
   Eff es Value
 ownerReminderFlow payload = do
   activity <- currentActivity
-  prior <- recall (MemoryQuery "recent owner reminder")
+  prior <- recall "history" (MemoryQuery "recent owner reminder")
   missing <- step (StepName "check-owner") (pure (missingOwner payload))
   if not missing
     then
@@ -138,10 +131,10 @@ ownerReminderFlow payload = do
       let output =
             object
               [ "status" .= ("reminder-sent" :: Text),
-                "activityId" .= activityId activity
+                "activityId" .= activity.activityId
               ]
-      _ <- emitSignal ownerReminderSignal output
-      _ <- remember output
+      _ <- emitSignal "owner-reminder" ownerReminderSignal output
+      _ <- remember "owner-reminder" output
       pure output
 
 missingOwner :: Value -> Bool
@@ -171,12 +164,12 @@ Then register it:
 ```haskell
 import Shikigami.Flow.OwnerReminder (ownerReminderFlow)
 
-flowRegistry :: FlowRuntime -> [FlowDef]
-flowRegistry runtime =
+flowRegistry :: [FlowDef]
+flowRegistry =
   [ FlowDef
       { name = "at-risk-customer",
         lifecycle = atRiskCustomerLifecycleDiagram,
-        run = atRiskCustomerFlow (approval runtime) (acknowledgementDeadline runtime)
+        run = atRiskCustomerFlow
       },
     FlowDef
       { name = "owner-reminder",
@@ -227,25 +220,26 @@ expresses "this agent runs that compiled flow when this trigger matches."
 Returns the triggering `ActivityEnvelope`. Use this instead of reparsing the run job. The
 worker supplies the original activity when available and synthesizes one for addressed runs.
 
-`recall (MemoryQuery text)`
+`recall "label" (MemoryQuery text)`
 
 Looks up prior kioku memories in the current agent scope. Use it before classification when
 the flow should account for history.
 
-`remember value`
+`remember "label" value`
 
 Records a kioku memory attached to the current flow session. Use it for durable notes such
 as "acknowledged by X", "declined because Y", or "escalated after timeout".
 
-`emitSignal sink output`
+`emitSignal "label" sink output`
 
 Enqueues a sink intent into the transactional outbox from inside the workflow. This is for
 mid-run effects such as "raise alert before waiting" or "send escalation after timeout".
 It is permission-gated and replay-safe; it does not synchronously POST to the sink service.
 
-`awaitAcknowledgement approval stepName request deadline`
+`awaitAck stepName request`
 
-Parks the workflow until a human approves, rejects, or the deadline fires. It returns:
+The `Shikigami.Flow.Acknowledgement` capability parks the workflow until a human
+approves, rejects, or the configured deadline fires. It returns:
 
 ```haskell
 data Ack = Acknowledged Value | Declined Text | TimedOut
@@ -260,19 +254,19 @@ choose a different branch."
 Add the flow body and register it in `Shikigami.Flow.flowRegistry`:
 
 ```haskell
-flowRegistry :: FlowRuntime -> [FlowDef]
-flowRegistry runtime =
+flowRegistry :: [FlowDef]
+flowRegistry =
   [ FlowDef
       { name = "my-flow"
       , lifecycle = myLifecycleDiagram
-      , run = myFlow (approval runtime) (acknowledgementDeadline runtime)
+      , run = myFlow
       }
   ]
 ```
 
-`FlowRuntime` carries run-specific dependencies that cannot live in Dhall, such as the
-current approval environment and acknowledgement deadline. The worker constructs it when it
-routes a `Flow { name }` behavior through the durable agent workflow.
+The registry is a plain list. `FlowRuntime` supplies the approval environment and
+acknowledgement deadline to the interpreter; flow bodies do not close over those
+deployment values. Extend the existing registry instead of replacing its entries.
 
 Then declare the agent in Dhall:
 

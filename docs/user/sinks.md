@@ -12,8 +12,10 @@ generated:
 # Sinks — *what* an agent produces
 
 Agents are **producers, not just reactors**. A sink is an outward action the agent takes with
-its behavior's output. An agent declares zero or more sinks; each is dispatched after the
-behavior runs and is **gated by a permission check**.
+its behavior's output. An agent declares zero or more sinks; each is considered after the
+behavior runs and is **gated by lifecycle, sink-kind permission, and exact action
+authorization**. Default `authorization.actions.mode=disabled` allows no protected
+external action, including delivery to a stub.
 
 ```dhall
 let Sink =

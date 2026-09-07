@@ -12,7 +12,7 @@ okf_version: "0.2"
 
 # Guide
 
-- [Detectors — the intelligence layer as declared agents](detectors.md) - Create detector agents using the shipped catalog and suppression rules.
+- [Detectors — the intelligence layer as declared agents](detectors.md) - Check detector execution support and configure supported agents.
 - [Flows](flows.md) - Implement, register, and inspect durable lifecycle-backed Flow behaviors.
 - [Skills — authoring a SKILL.md behavior](skills.md) - Author and validate a skill directory for a Shikigami Skill behavior.
 - [Writing Agents](writing-agents.md) - Declare agent identity, behavior, triggers, sinks, memory policy, and routing in Dhall.

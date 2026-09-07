@@ -1,7 +1,7 @@
 ---
 type: "Guide"
 title: "Detectors — the intelligence layer as declared agents"
-description: "Create detector agents using the shipped catalog and suppression rules."
+description: "Check detector execution support and configure supported agents."
 docId: "DOC-11"
 tags: ["detectors", "agents"]
 generated:
@@ -11,87 +11,42 @@ generated:
 
 # Detectors — the intelligence layer as declared agents
 
-A **detector** is just a [declared agent](./writing-agents.md) whose whole job is to *watch
-the unified activity stream and raise a signal when a pattern matters*. The "intelligence
-layer" of the platform is exactly a small **set of detectors declared as agents** on the
-shikigami runtime — there is no separate intelligence service and no hardcoded registry that
-later migrates. Detectors are the runtime's first declarations.
+A detector is a declared agent that matches activity and produces an awareness
+signal. The manifests in [agents/detectors](../../agents/detectors/) include both
+executable examples and declarations for behavior that is not implemented yet.
 
-They live in [`agents/detectors/`](../../agents/detectors/). Drop a `.dhall` file there and the
-runtime loads it — **no Haskell, no migration, no registry to edit.**
+## Current catalog
 
-## The shipped catalog
+| Manifest | Current execution behavior |
+| --- | --- |
+| [stalled-intention.dhall](../../agents/detectors/stalled-intention.dhall) | Parses, but the runner rejects its `Deterministic` arm with `UnsupportedBehavior`. |
+| [at-risk-customer.dhall](../../agents/detectors/at-risk-customer.dhall) | Parses, but its `at-risk-customer` task is absent from the program registry and fails with `UnknownTask`. |
+| [at-risk-customer-flow.dhall](../../agents/detectors/at-risk-customer-flow.dhall) | Names the registered durable `at-risk-customer` Flow, with classification, alert, acknowledgement, and timeout branches. |
 
-| File | Trigger | Behavior | Sink |
-| --- | --- | --- | --- |
-| [`stalled-intention.dhall`](../../agents/detectors/stalled-intention.dhall) | `activity.v1` where `subject.type = intention` | `Deterministic` rule (N days, no action) | `KizashiSignal` (Reminder) |
-| [`at-risk-customer.dhall`](../../agents/detectors/at-risk-customer.dhall) | `activity.v1` where `subject.type = ticket` | `ShikumiProgram` (LLM, opt-in) | `KizashiSignal` (Alert) |
+The program declaration's `preferEnrichment`, `grounding`, and `enabledBy` fields
+are not interpreted by the dispatcher. Setting `TOMOSHIBI_ENABLE_LLM_DETECTORS`
+does not install the missing classifier or gate execution. See
+[Behaviors](./behaviors.md) and [Flows](./flows.md).
 
-- **`stalled-intention`** — the cheap, deterministic case: "an `intention` was declared but
-  has had no `action.recorded` for N days (default 7)." It is `rei`'s `OnIntentionStalled`
-  reactor lifted out of rei's bounded context and run portfolio-wide over the whole river — as
-  a declared agent, not rei-internal code. It observes rei's work *as `activity.v1`
-  activities*, never by reading rei's database.
-- **`at-risk-customer`** — the LLM-backed case: a judgment over unstructured ticket text. It
-  prefers upstream enrichment facts (`payload.enrichment.*`) and falls back to classifying
-  `payload.text` with a shikumi program via handan. It is **opt-in** behind an environment
-  variable (default off), so the deterministic path needs no credentials and CI stays
-  hermetic.
+## Load and run a detector
 
-## Anatomy of a detector
+1. Author a manifest using [the canonical schema](../../schema/Agent.dhall).
+   Select an existing program, Skill, or Flow; new compiled behavior requires a
+   registry entry and rebuild.
+2. Validate it with `cabal run shikigami -- validate agents/detectors/<name>.dhall`.
+   Parsing does not prove that a program task or deterministic rule can execute.
+3. Point both `shikigami-worker` and `shikigami-consume-stream` at
+   `--agents agents/detectors`. Directory loading is not recursive. Disable or
+   remove non-executable seed manifests from a deployed manifest directory.
+4. Configure the agent directory, sink grants, and
+   [per-action authorization](../operations/action-authorization.md) before expecting
+   external signals. For a Flow, follow the [workflow versioning rules](../workflow-versioning.md).
 
-A detector uses the same three axes as any agent — it's a recognizable *shape*, not a special
-type:
+## Suppression status
 
-- **Trigger** — the **Stream** class: an `activity.v1` pattern. Because the stream is
-  **subject-keyed**, all activity about one subject arrives in order on one partition, so a
-  detector can reason over a consistent per-subject window.
-- **Behavior** — `Deterministic` (a rule, no model), `ShikumiProgram` (a typed judgment),
-  or `Skill`. Not everything needs a model.
-- **Sink** — typically `KizashiSignal` (raise awareness). A detector concerning a specific
-  intention can instead use the `ReiAction` bridge.
-
-See [`stalled-intention.dhall`](../../agents/detectors/stalled-intention.dhall) for a fully
-commented example.
-
-## Suppression — don't spam the inbox
-
-A still-true condition (a stalled intention stays stalled) would raise a new signal on every
-evaluation. Before raising, the runtime checks a suppression table keyed on
-`(detector, subject, window-key)`:
-
-```sql
-CREATE TABLE IF NOT EXISTS shikigami_fired (
-  detector     TEXT        NOT NULL,
-  subject_type TEXT        NOT NULL,
-  subject_id   TEXT        NOT NULL,
-  window_key   TEXT        NOT NULL,
-  signal_id    TEXT        NOT NULL,
-  fired_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (detector, subject_type, subject_id, window_key)
-);
-```
-
-The flow: compute the finding; if it already fired for this window-key → **skip the signal**;
-otherwise raise it and record the firing (`INSERT … ON CONFLICT DO NOTHING`). The **window-key**
-defines "the same condition" — for `stalled-intention` it's the declaration's `occurred_at`
-truncated to the day, so the same staleness *episode* dedups, but a *new* declaration (after
-the first resolved) gets a new key and may legitimately fire again. This sits on top of the
-keiro inbox's delivery-level dedup.
-
-## Add a detector (recipe)
-
-1. **Author** `<name>.dhall` in `agents/detectors/`, a value in the C5
-   `{ name, behavior, trigger, sinks }` schema. Copy `stalled-intention.dhall` (deterministic)
-   or `at-risk-customer.dhall` (LLM) as a starting point.
-2. **Validate** it: `cabal run shikigami -- validate agents/detectors/<name>.dhall`.
-3. **Point the stream consumer at the directory** so the runtime loads and matches it:
-   `cabal run shikigami-consume-stream -- --agents agents/detectors`.
-
-There is no hardcoded registry and no migration step: a detector *is* a declared agent.
-
-> See the in-tree [`agents/detectors/README.md`](../../agents/detectors/README.md) for the
-> deeper design notes (per-subject windowing, the signal-field derivation table, the rei
-> boundary). Note that file predates the final CLI and references an `agents` subcommand that
-> does not exist — use `validate` / `consume-stream` / `worker` as shown here and in the
-> **[CLI Reference](./cli.md)**.
+The migrations include a `shikigami_fired` table for detector/subject/window
+suppression, but no current runtime path reads or writes it. The intended
+stalled-intention episode suppression is therefore not implemented. Durable inbox
+and sink idempotency handle delivery duplicates; they do not implement a
+semantic detector window. Practice-review attention has its own implemented
+reservation mechanism, described in [Architecture-practice reviews](./architecture-practice-reviews.md).

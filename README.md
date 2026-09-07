@@ -16,9 +16,10 @@ identity  = under whose authority it acts
 memory    = what it carries forward across runs
 ```
 
-For simple agents, Dhall can name a deterministic rule, a `shikumi` / `handan`
-program, or a `baikai` skill. For lifecycle-backed work, Dhall names a compiled
-Haskell `FlowDef`; the Haskell flow owns the durable control flow, journaled
+For synchronous agents, Dhall names a registered `shikumi` / `handan` program
+or a `baikai` skill. The schema also accepts `Deterministic` rules, but the
+current runner rejects that arm as unsupported. For lifecycle-backed work, Dhall
+names a compiled Haskell `FlowDef`; the Haskell flow owns the durable control flow, journaled
 steps, waits, mid-run sink emissions, memory writes, and timeout or
 acknowledgement branches.
 
@@ -45,7 +46,7 @@ flows working as one inspectable system. Shikigami is one way that mechanism act
 
 - Loads and validates typed Dhall agent declarations from `agents/*.dhall`.
 - Supports schedule, activity-stream, and addressed-event triggers.
-- Runs deterministic rules, `shikumi` / `handan` programs, `baikai` skills, and
+- Runs registered `shikumi` / `handan` programs, `baikai` skills, and
   durable Haskell `Flow` behaviors on `keiro`.
 - Dispatches permission-gated sinks such as Kawa digests, Kizashi signals, Rei
   actions, and Danwa conversations.
@@ -87,7 +88,10 @@ Enter the development shell:
 nix develop
 ```
 
-Build the project:
+The current project also requires the co-developed Kikan-En contract and client
+checkout at the sibling paths listed in `cabal.project`. See the
+[dependency cohort](docs/dependency-cohort.md) for source pins, local prerequisites,
+and migration qualification status. Build inside the development shell:
 
 ```sh
 cabal build all
@@ -105,21 +109,19 @@ Run only its behavior with deterministic stubs, without a database or model key:
 cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
 ```
 
-Run an identity-bearing Skill agent with its declared, bounded read-only view of a Git
-worktree:
+The one-off commands recognize `--workspace` for declared `workspace.read` overlays,
+but their current action authorizer denies capability acquisition. The workspace proof
+manifest therefore reports an authorization refusal; it is not a working local-read
+quick start. Ordinary agents without overlays can still run.
+
+Start the bundled PostgreSQL service in a separate dev-shell terminal:
 
 ```sh
-cabal run shikigami-run-behavior -- \
-  --agent agents/proof/workspace-read.dhall \
-  --workspace . \
-  --payload '{"task":"read README.md and report its first heading"}'
+process-compose up
 ```
 
-The workspace is resolved only when the agent requests `workspace.read`; other agents keep
-the original database-free behavior and do not invoke Git.
-
-Create and migrate the local development database for session, memory, queue, and
-worker paths:
+It creates and migrates the database after PostgreSQL is ready. If PostgreSQL is
+already running, create and migrate explicitly:
 
 ```sh
 just create-database
@@ -160,9 +162,9 @@ shikigami-migrate up                   # database migrations
 `shikigami-run-behavior` and `shikigami-agent-run` live in `shikigami-agent`, which depends
 only on `shikigami-core`. A consumer who is not running the Kikan platform can build and use
 just those two without acquiring the messaging, queueing, or telemetry stack the deployed
-service needs. Both commands can expose the operator-owned `workspace.read` overlay to a
-Skill agent that explicitly requests it. Its namespaced read, grep, and glob tools are
-bounded to one canonical Git worktree and are acquired only for the behavior call.
+service needs. Both commands accept `--workspace`, but currently use a deny-all action authorizer,
+so requesting an overlay does not authorize its acquisition. See the
+[CLI reference](docs/user/cli.md) for current one-off limitations.
 
 See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
 
@@ -180,6 +182,10 @@ See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
   behaviors.
 - [The living loop](docs/user/living-loop.md) shows Shikigami operating end to
   end with the stream and stub services.
+- [Operator CLI](docs/operations/operator-cli.md),
+  [configuration](docs/operations/configuration.md), and
+  [action authorization](docs/operations/action-authorization.md) cover deployment.
+- [Workflow versioning](docs/workflow-versioning.md) governs durable code changes.
 - [Initial architecture spec](docs/initial-spec.md) records the original design
   and Kikan contract context.
 

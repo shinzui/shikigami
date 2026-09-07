@@ -41,10 +41,11 @@ code asks for a name the old journal happens to hold, it gets the old value —
 even when the new code meant something entirely different by that name.
 
 Five properties of the runner follow from this, and every rule below is a
-consequence of one of them. They are verified against keiro 0.13.0.0, whose
-source is reachable at the path `mori registry show keiro --full` reports;
-`keiro/src/Keiro/Workflow.hs` below means that checkout's
-`keiro/src/Keiro/Workflow.hs`.
+consequence of one of them. The source references below use the selected Keiro
+0.15.0.0 tag in `mori://shinzui/keiro`, located through Mori. File references
+under `keiro/` and `keiro-dsl/` are relative to that canonical project;
+artifact-level source-file URIs are pending. The
+[dependency cohort](dependency-cohort.md) records the selection and qualification status.
 
 **Replay is keyed by step name, not by source position.** Moving a `step` call
 earlier or later in the body, or wrapping it in a different `if`, changes
@@ -154,9 +155,11 @@ the new generation allocates a fresh opaque id, and the id published before
 rotation no longer wakes the live instance. Whoever holds it must be re-notified
 through the same idempotent, id-keyed callback.
 
-Nothing in Shikigami calls `continueAsNew` today. The conversation loop is its
-intended first consumer, in
-`docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md`.
+The conversation loop uses `restoreSeed` and `continueAsNew` in its rotating
+branch, guarded by `shikigami-conversation-rotation-v1`. It processes one turn
+per generation and carries the next message and conversation state into the
+next generation. The legacy branch remains for pre-patch journals. See
+[plan 26](plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md).
 
 
 ## The rules
@@ -205,8 +208,8 @@ structural: the differ does not consult its own replay verdict, which can say
 adds failures.
 
 So adding a step to a declared workflow costs a patch id, and rule 4's mechanism
-applies even when rule 4's *reasoning* does not. Every step ever added to
-`domain/shikigami-agent-run.keiro` arrived that way: `resolve-profile` inside
+applies even when rule 4's *reasoning* does not. Earlier patch-guarded additions to
+`domain/shikigami-agent-run.keiro` include: `resolve-profile` inside
 `shikigami-resolve-profile-v1`, `run-behavior-v2` inside
 `shikigami-behavior-retry-v1`, and the flow memory labels inside
 `shikigami-flow-memory-steps-v1`. Because ADR-0001 forbids declaring a guard the
@@ -273,13 +276,14 @@ branch. Shikigami therefore constructs `WorkflowRunOptions` in exactly one place
 ```haskell
 -- shikigami-core/src/Shikigami/Workflow/Versioning.hs
 shikigamiActivePatches       :: Set PatchId
-shikigamiWorkflowRunOptions  :: WorkflowRunOptions
-shikigamiWorkflowResumeOptions :: WorkflowResumeOptions
+shikigamiWorkflowRunOptions  :: AppEnv -> WorkflowRunOptions
+shikigamiWorkflowResumeOptions :: AppEnv -> NominalDiffTime -> WorkflowResumeOptions
 ```
 
 Every durable workflow run goes through those values: the agent-run workflow
 (`shikigami-core/src/Shikigami/Agent/Workflow.hs`), the conversation workflow
-(`shikigami-core/src/Shikigami/Agent/Conversation.hs`), and the resume worker
+(`shikigami-core/src/Shikigami/Agent/Conversation.hs`), the approval child
+(`shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs`), and the resume worker
 that re-invokes both after a crash or a wake
 (`shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs`). The resume worker
 carries them through `WorkflowResumeOptions.runOptions`
@@ -301,7 +305,8 @@ A patch id is a **declared surface**, not just a Haskell literal. It is written
 in the checked specification, and the Haskell value is generated from it.
 
 1. Declare the patch inside the owning workflow's body in
-   `domain/shikigami-agent-run.keiro` or `domain/shikigami-conversation.keiro`:
+   `domain/shikigami-agent-run.keiro`, `domain/shikigami-conversation.keiro`,
+   or `domain/shikigami-approval.keiro`:
 
    ```text
    patch shikigami-emit-signal-labels-v1 {
@@ -414,89 +419,34 @@ permissible but discouraged; prefer a static token.
 
 ## What Shikigami journals today
 
-Every step name any Shikigami workflow can write, as of this document. A change
-to this table is a change to a persisted compatibility identifier and is governed
-by the rules above.
+The checked specification and generated facts are the maintained inventory of
+static labels. Read them together with the body and capability interpreters for
+computed label families; a duplicated line-number census quickly becomes stale.
 
-```text
-agent run  (workflow "shikigami.agent-run",
-            shikigami-core/src/Shikigami/Agent/Workflow.hs)
-  ingest-job                       :187
-  lookup-agent                     :188
-  resolve-profile                 runResolvedAgent -- declared; post-patch
-  resolve-capability-overlays     runResolvedAgent -- declared; post-patch
-  open-session                     :228
-  recall                           :229
-  run-behavior                     :236
-  run-behavior-v2                 runSessionedAgent -- declared; post-patch
-  fail-session                     :239
-  record                           :249
-  complete                         :250
-  dispatch-sinks                   :491
-  approval:<SinkKind>:<ordinal>    :299-300   -- ordinal-derived; see below
-  child:<childWorkflowId>          Shikigami/Agent/Delegate.hs:46-62
+| Workflow | Declaration | Generated facts | Runtime body |
+| --- | --- | --- | --- |
+| `shikigami.agent-run` | [Agent run](../domain/shikigami-agent-run.keiro) | [AgentRun facts](../shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs) | [Workflow.hs](../shikigami-core/src/Shikigami/Agent/Workflow.hs) |
+| `shikigami.danwa-conversation` | [Conversation](../domain/shikigami-conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
+| `shikigami.approval` | [Approval](../domain/shikigami-approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
 
-conversation  (workflow "shikigami.danwa-conversation",
-               shikigami-core/src/Shikigami/Agent/Conversation.hs)
+The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
+Fresh agent runs use it behind `shikigami-approval-workflow-v1`; legacy approval
+machinery remains for old patch decisions. Agent runs also declare profile and
+overlay resolution, routing, practice-review evidence/evaluation/attention, and
+practice-review memory transitions. These are persisted contracts, not optional
+additions to the census.
 
-  rotating shape (patch shikigami-conversation-rotation-v1 = True; declared)
-  ingest-start                     rotatingConversation
-  lookup-agent                     resolveDeclStep
-  resolve-session                  processRotatingTurn
-  record-user                      processRotatingTurn
-  run-behavior-v2                  processRotatingTurn
-  record-assistant-and-reply       processRotatingTurn
-  turn-result                      processRotatingTurn
-  next-message                     awaitConversationWake
-  danwa-reply:<messageId>          replySinkStepName -- sink-intent id, not a journal step
+Flow capability families include `recall-<label>`, `remember-<label>`, and
+`emit-signal:<label>`. Legacy sink emissions retain their ordinal scheme. Child
+identity comes from the governed delegation/approval call site. Conversation
+rotation uses static per-turn labels; the legacy branch retains message-id and
+ordinal suffixes. `danwa-reply:<messageId>` identifies a sink intent rather than
+a workflow journal step.
 
-  legacy shape (patch shikigami-conversation-rotation-v1 = False; undeclarable)
-  ingest-start                     legacyConversation
-  lookup-agent                     resolveDeclStep
-  resolve-session                  processTurn
-  record-user:<messageId>          processTurn
-  run-behavior:<messageId>         processTurn -- pre behavior-retry-v1
-  run-behavior-v2:<messageId>      processTurn -- post behavior-retry-v1
-  record-assistant-and-reply:<messageId>  assistantReplyStepName
-  turn-result:<messageId>          turnResultStepName
-  danwa-reply:<messageId>          replySinkStepName -- sink-intent id, not a journal step
-  next-message:<ordinal>           nextMessageStepName -- ordinal-derived; see below
-
-flow capabilities  (run inside the agent-run workflow)
-  classify                         Shikigami/Flow/AtRiskCustomer.hs:45
-  await-ack                        Shikigami/Flow/AtRiskCustomer.hs:50
-  route-catalog-architecture-practice
-                                   Shikigami/Flow/Routing.hs -- declared; direct pre-v1 baseline
-  route-decision-architecture-practice
-                                   Shikigami/Flow/Routing.hs -- declared; direct pre-v1 baseline
-  recall-<label>                   Shikigami/Flow/Capability.hs   -- declared; post-patch
-  remember-<label>                 Shikigami/Flow/Capability.hs   -- declared; post-patch
-  <step>:notify                    Shikigami/Agent/Approval.hs:157
-  emit-signal:<label>              Shikigami/Flow/Capability.hs   -- post-patch
-  emit-signal:<ordinal>            (pre-patch; in-flight instances only)
-
-written by keiro on this service's behalf, as of the first patch
-  __workflow_patches__             every fresh agent-run and conversation journal
-  patch:shikigami-emit-signal-labels-v1
-                                   every agent-run that interprets a flow's sinks
-  patch:shikigami-flow-memory-steps-v1
-                                   every agent-run that interprets a flow's memory
-  patch:shikigami-capability-overlays-v1
-                                   every fresh agent-run
-
-reserved by keiro  (keiro/src/Keiro/Workflow/Types.hs)
-  __workflow_completed__           :318
-  __workflow_cancelled__           :327
-  __workflow_failed__              :332
-  __workflow_continued_as_new__    :345
-  __workflow_seed__                :355
-  __workflow_patches__             :389
-  patch:<patchId>                  :393
-  sleep:<label>                    :360
-  awk:<uuid>                       :365
-  awkid:<label>                    :371
-  child:<childWorkflowId>          :376
-```
+Keiro writes reserved patch, terminal, generation, sleep, awakeable, and child
+records as well. Their definitions belong to `mori://shinzui/keiro`, at
+project-relative `keiro/src/Keiro/Workflow/Types.hs` (artifact-level URI pending).
+Never reuse a reserved name for an application step.
 
 The two memory families are marked `declared` because they are the first
 flow-side journal names this service can gate rather than merely keep stable by
@@ -519,22 +469,21 @@ step name is additive at run time and that the differ's own replay verdict says
 `replay-neutral`; the body rule is structural, conservative, and has no waiver
 flag. So `shikigami-flow-memory-steps-v1` guards the four labels, `runMemory`
 reads it once per interpreted flow run, and an instance already in flight keeps
-the un-journaled behavior its journal was written under. Every step ever added to
-`domain/shikigami-agent-run.keiro` arrived this way: `resolve-profile` inside
+the un-journaled behavior its journal was written under. Earlier patch-guarded additions to
+`domain/shikigami-agent-run.keiro` include: `resolve-profile` inside
 `shikigami-resolve-profile-v1`, `run-behavior-v2` inside
 `shikigami-behavior-retry-v1`. Outside ADR-0027's explicitly verified
 pre-release reset, budget for a patch id whenever a declared body grows, and
 delete the guard and its `False` branch together once no pre-change instance can
 resume.
 
-Two ordinal-derived names remain, and this document records their owners.
-that they are governed by rule 5 and names their owners.
+Legacy ordinal-derived names remain and are governed by rule 5.
 `approval:<SinkKind>:<ordinal>` counts approvals within one run, so inserting a
 sink into an agent declaration shifts the names of every later approval.
 `next-message:<ordinal>` counted conversation turns; it survives only on the
 `False` branch of `shikigami-conversation-rotation-v1`, because the rotating
 shape holds one turn per generation and so awaits the bare `next-message`. A
-Delegated child identity no longer shares that hazard: `delegate` derives a child
+delegated child identity no longer shares that hazard: `delegate` derives a child
 workflow id from the parent workflow id, target agent, and a caller-supplied stable
 key. The declaration-driven supervisor derives its keys from the `delegates` list
 stored in the journaled `lookup-agent` result, so a later manifest edit cannot move

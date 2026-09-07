@@ -22,10 +22,10 @@ the activity stream, or when addressed by a public integration event. There is n
 deploy: an agent is a declaration.
 
 ```text
-behavior  = what the agent does     (a deterministic rule, a typed shikumi program, a Skill, or a Flow)
+behavior  = what the agent does     (a registered shikumi program, a Skill, or a durable Flow)
 trigger   = when it does it         (a schedule, an activity.v1 stream pattern, or a public addressed event)
-sinks     = what it produces        (a kawa digest, a kizashi signal, a rei action, a danwa conversation)
-identity  = under whose authority   (each sink is gated by a permission grant)
+sinks     = what it produces        (a kawa digest, a kizashi signal, a rei action, a danwa conversation, channel egress)
+identity  = under whose authority   (principal lifecycle, sink grants, and exact action authorization)
 ```
 
 Instead of asking *"which service do I build to automate this coordination?"*, the question
@@ -83,9 +83,9 @@ Agent declarations (agents/*.dhall, schema/Agent.dhall)
   ▼
 Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (public integration event)
   ▼
-Behavior runs  ──  Deterministic rule │ shikumi program (handan) │ Skill (baikai) │ Flow (keiro)
+Behavior runs  ──  Registered shikumi program (handan) │ Skill (baikai) │ Flow (keiro)
   ▼
-Sinks dispatch ──  KawaDigest │ KizashiSignal │ ReiAction │ DanwaConversation   (each permission-gated)
+Sinks dispatch ──  KawaDigest │ KizashiSignal │ ReiAction │ DanwaConversation │ ChannelEgress (permission-gated)
   ▼
 Session recorded (kioku) ── prior learnings recalled before, new learning recorded after
   ▼
@@ -97,11 +97,11 @@ Danwa addressed conversations use the Event path: Danwa publishes
 public topic with `consume-events`, and replies through Danwa's HTTP API. Shikigami does not
 read Danwa's database or private event store.
 
-> **Status note.** Several downstream services (`kawa`, `shomei`, `kanmon`, `danwa`) are
-> proven against **stubs and fixtures** in this runtime; their live wiring is owned by their
-> own plans. Where a guide says "stub," the contract shape is real and the stub swaps for the
-> live client with no schema change. The full design is frozen in
-> [`docs/initial-spec.md`](../initial-spec.md).
+> **Status note.** The schema's `Deterministic` arm and some detector seed tasks
+> are not executable yet; see [Behaviors](./behaviors.md) and [Detectors](./detectors.md).
+> Protected external actions fail closed by default and need deployment authorization.
+> Stubs and fixtures provide local contract proofs; the
+> [initial spec](../initial-spec.md) records the original design, not current feature status.
 
 ## Maintaining this documentation
 

@@ -1,5 +1,12 @@
 # Shikigami implementation order
 
+> This document records dated planning and completion assessments. Earlier status
+> sections describe their original checkpoints; they are not the current runtime
+> support matrix. Consult the [user guide](../user/README.md),
+> [package map](packages.md), and [dependency cohort](../dependency-cohort.md)
+> for current behavior, package boundaries, and migration qualification.
+
+
 Reviewed **2026-08-26** after plans 41, 42, 32, 14, and 45 landed, superseding the post-delivery
 2026-08-23 review. Goal of this revision: recognize the declarative-router initiative and the
 production-completion lane as complete; move MasterPlan 9 to the front of the remaining service

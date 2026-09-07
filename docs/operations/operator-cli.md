@@ -84,6 +84,17 @@ row for that agent untouched, and makes the command exit non-zero. Repair the
 identity deliberately and rerun; a clean rerun is idempotent and reports
 `filled=0` with the verified count.
 
+**"Keep a renamed agent's legacy memories available."** — `agents sync --alias`.
+
+```bash
+cabal run shikigami -- agents sync --alias old-agent-name=agent_01h000000000000000heartbeat
+```
+
+The option is repeatable. Each target is a principal id with an unambiguous current declaration/directory join.
+Shikigami records the legacy name in `shikigami.agent_scope_aliases` and includes
+that scope when recalling the principal's memories. It does not rewrite historical
+Kioku rows. An alias already owned by another principal is a conflict.
+
 **"How do I run the hermetic ChannelEgress downstream?"** — `stub-kanmon`.
 
 ```bash

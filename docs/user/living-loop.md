@@ -60,6 +60,21 @@ publish-fixture ──▶ activity.v1 ──▶ consume-stream (matches agents) 
   > standard development environment, the separate broker is the global Redpanda service;
   > do not start a repository-private broker on the same port.
 
+The sink-producing parts below additionally require an active verified Meibo agent
+identity, a database sink grant, and the complete Kikan action-authorization trust
+configuration. Configure these for every process admitting work; see
+[operator inventory and sync](../operations/operator-cli.md) and
+[action authorization](../operations/action-authorization.md). Default disabled
+authorization permits no protected external action, even against a downstream stub.
+The proof manifests need matching directory handles or declared principal ids.
+
+With the shared environment configured, bind the heartbeat grant before starting:
+
+```bash
+$ cabal run shikigami -- grants grant heartbeat KawaDigest --by operator
+$ cabal run shikigami -- --set agents.directory=agents/proof agents sync
+```
+
 ## Walkthrough
 
 ### 1. Start the kawa stub (republishing)
@@ -77,26 +92,34 @@ each accepted `KawaDigest` back onto the stream (exactly what real kawa's outbox
 ### 2. Start the worker
 
 ```bash
-$ cabal run shikigami-worker -- --agents agents \
+$ cabal run shikigami-worker -- --agents agents/proof \
     --kawa-url http://localhost:8088 --kizashi-url http://localhost:8089
-[worker] loaded N agents
+{"event":"agents.manifest.loaded", ...}
 ```
 
 The worker loads every `.dhall` in `--agents`, then drains `shikigami_run_jobs`: for each job
 it runs the agent's behavior, dispatches its (permission-gated) sinks to the configured kawa
 and kizashi URLs, and records a kioku session.
 
-### 3. Feed the stream
+### 3. Start the consumer and enqueue the heartbeat
 
-Publish a fixture envelope and let the consumer match it:
+Run the consumer in a separate terminal against the same proof directory. Enable
+agent-produced activity so `digest-watcher` can observe the heartbeat output:
 
 ```bash
-$ cabal run shikigami-consume-stream -- --agents agents --broker 127.0.0.1:9092 &
-$ cabal run shikigami -- publish-fixture fixtures/envelope.json --broker 127.0.0.1:9092
+$ cabal run shikigami-consume-stream -- --agents agents/proof \
+    --broker 127.0.0.1:9092 --include-agent-actors
 ```
 
-`consume-stream` matches the envelope against each declared **Stream** agent's predicate and
-enqueues a run job for every match. The worker (step 2) then runs the agent.
+Then enqueue the producer (the worker alone does not arm Schedule triggers):
+
+```bash
+$ cabal run shikigami -- enqueue-run heartbeat --payload '{}' --key living-loop-1
+```
+
+Use a new `--key` when deliberately starting another run. To test ordinary stream
+matching independently, `shikigami publish-fixture fixtures/envelope.json` publishes
+the ticket fixture, but it does not address the Schedule-triggered heartbeat.
 
 ### 4. Watch the loop close
 
@@ -108,11 +131,11 @@ fed itself.
 ### The feedback guard
 
 The republished digest carries `actor.kind = "agent"`. By default `consume-stream` **excludes
-agent-produced activities**, so a digest only triggers agents that explicitly opt in. To let
+agent-produced activities**, so the consumer must explicitly opt in for this walkthrough. To let
 meta-detectors match agent output:
 
 ```bash
-$ cabal run shikigami-consume-stream -- --agents agents --include-agent-actors
+$ cabal run shikigami-consume-stream -- --agents agents/proof --include-agent-actors
 ```
 
 Publishing `fixtures/envelope-agent.json` (an `actor.kind: "agent"` envelope) without that
@@ -161,7 +184,8 @@ database, event store, read models, or outbox tables.
 
 ## Delegation
 
-The proof agents under `agents/proof/` show the imperative parent/child path. The supervisor
+The proof agents under `agents/proof/` show the governed parent/child path.
+The two specialists return fixed proof findings; they do not perform live web or code research. The supervisor
 agent starts two named specialists, parks durably while they run, and resumes with both results.
 
 Start the worker against the proof manifests:
@@ -181,16 +205,15 @@ The worker first logs the supervisor as suspended, then the resume worker drives
 `web-researcher` and `code-researcher`, and then the supervisor completes. The synthesized
 result is recorded in kioku as the supervisor run's behavior output.
 
-To inspect lineage, query the session rows after the run:
+To inspect the parent and child runs, use the supported operator commands:
 
-```sql
-SELECT session_id, agent_id, parent_session_id, delegation_depth, status
-FROM kioku_sessions
-WHERE agent_id IN ('research-supervisor', 'web-researcher', 'code-researcher')
-ORDER BY started_at;
+```bash
+$ cabal run shikigami -- wf list --name shikigami.agent-run
+$ cabal run shikigami -- runs show shikigami.agent-run <workflow-id> --json
 ```
 
-The supervisor row has `parent_session_id` `NULL` and `delegation_depth` `0`; both specialist
-rows point at the supervisor session id and have `delegation_depth` `1`. If the worker exits
+The run/session evidence records parent session identity and delegation depth.
+See [the operator CLI](../operations/operator-cli.md) for journal and lifecycle inspection.
+If the worker exits
 after the supervisor suspends, restart it with the same command: the parent workflow replays its
 journal, observes the child results when they are available, and resumes instead of starting over.

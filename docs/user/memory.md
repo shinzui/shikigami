@@ -19,17 +19,20 @@ agent's declared memory policy. Knowledge accumulates across runs without making
 behavior output mandatory memory.
 
 > kioku replaces the design's original bespoke `agent_runs` SQL table. A run is a kioku
-> **Session**; a learning is a kioku **Memory**. Both are scoped to the agent by its stable
-> `name`, so memory accumulates per agent.
+> **Session**; a learning is a kioku **Memory**. Verified durable runs use their
+> recorded Meibo principal as the agent scope. Directory-disabled and one-off runs
+> use an explicit compatibility identity derived from the agent name. Legacy
+> name scopes remain readable through operator-managed aliases; see
+> [the operator CLI](../operations/operator-cli.md).
 
 ## The run lifecycle
 
 `agent-run` (and the worker) execute this lifecycle for each run:
 
 ```text
-1. open session     ── scoped to the agent name; focus = the behavior arm
+1. open session     ── scoped to the recorded identity; focus = the behavior arm
 2. recall            ── fetch the agent's prior learnings for this scope
-3. run behavior      ── Deterministic / ShikumiProgram / Skill
+3. run behavior      ── registered ShikumiProgram / Skill / durable Flow
 4. apply record policy ── optionally persist the success or failure as memory
 5. complete session    ── or fail the session on a behavior error
 ```

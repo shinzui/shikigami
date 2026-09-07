@@ -1,5 +1,9 @@
 # Shikigami (式神) — Declared-Agent Runtime — Architecture Spec
 
+> Historical pre-implementation design. The repository now contains the runtime;
+> feature support and commands are documented in the [README](../README.md) and
+> [user guide](user/README.md). Statements below describe the original proposal.
+
 ## Status
 
 Architecture spec, pre-implementation. This document is the design of `shinzui/shikigami` (式神 —

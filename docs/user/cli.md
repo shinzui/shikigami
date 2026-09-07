@@ -11,8 +11,7 @@ generated:
 
 # CLI Reference
 
-Shikigami is **several binaries, not one**. There is no umbrella `shikigami <subcommand>`
-dispatcher: each long-running role is its own executable so an operator can scale, restart, and
+Shikigami is **several binaries, not one**. The `shikigami` administrative dispatcher does not start worker roles: each long-running role is its own executable so an operator can scale, restart, and
 roll them out independently, and because one process could not honestly link both the HTTP
 server and the worker implementations. See
 [the package architecture](../architecture/packages.md).
@@ -28,7 +27,7 @@ $ cabal run <binary> -- [command] [options]
 ```text
 shikigami validate <FILE>
 shikigami render-lifecycle <FILE>
-shikigami enqueue-run <AGENT> [--payload <JSON>]
+shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
@@ -36,7 +35,15 @@ shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <
 shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
 shikigami grants grant <AGENT> <KIND> [--by <WHO>]
 shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
+shikigami stub-kanmon --port <PORT> [--allow-conversation <KEY>]
+shikigami agents list [--json]
+shikigami agents sync [--json] [--alias <LEGACY_NAME=agent_...>]
+shikigami runs show <WORKFLOW-NAME> <WORKFLOW-ID> [--json]
 ```
+
+The administrative binary also mounts Keiro's `wf`, `timer`, `outbox`, `inbox`,
+`pgmq`, `projection`, `shard`, `snapshot`, and `stream` commands. See the
+[operator CLI](../operations/operator-cli.md) for their usage and mutation previews.
 
 **One-off agent runs** — from `shikigami-agent`, which links none of the platform's messaging,
 queueing, or telemetry stack, so a consumer who is not running the Kikan platform can build and
@@ -50,7 +57,7 @@ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <D
 **Long-running roles** — from `shikigami-workers`:
 
 ```text
-shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--kanmon-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
 shikigami-scheduler [--agents <DIR>]
 shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
 shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
@@ -78,11 +85,15 @@ dev shell exports `PG_CONNECTION_STRING`, the environment variable bound to that
 `shikigami validate`, `shikigami render-lifecycle`, and `shikigami-run-behavior` need neither a
 database nor a model key.
 
-Every binary also accepts `--config PATH`, `--set KEY=VALUE`, and the five configuration
+Application-configured binaries also accept `--config PATH`, `--set KEY=VALUE`, and the five configuration
 diagnostics (`--describe-config`, `--describe-config-json`, `--explain-config`,
 `--explain-config-json`, `--check-config`). See
 [Configuration](../operations/configuration.md) for the complete accepted surface, the
-precedence order, and which binary refuses to start without what.
+precedence order, and which binary refuses to start without what. The migration
+CLI uses its own command parser and `DATABASE_URL`; `shikigami-openapi` takes no
+arguments or configuration options. `shikigami-client` has a separate parser:
+`shikigami-client health [--server URL]` queries both probes (default server
+`http://localhost:8080`) and does not accept the shared configuration flags.
 
 ---
 
@@ -93,7 +104,8 @@ $ shikigami validate <FILE>
 ```
 
 Parse a `.dhall` manifest, decode it into the typed `AgentDecl`, and pretty-print it. For a
-**skill-agent** it also validates the skill directory and `SKILL.md` frontmatter. Exits 0 on
+**skill-agent** it also loads `SKILL.md` and requires `name` and `description`
+frontmatter keys. It does not enforce the full skill specification. Exits 0 on
 success, non-zero with a typed error on any load/skill failure. **No DB or key.**
 
 → See [Getting Started](./getting-started.md), [Writing Agents](./writing-agents.md).
@@ -116,18 +128,28 @@ for that flow's Keiki transducer. **No DB or key.**
 $ shikigami-run-behavior --agent <FILE> [--payload <JSON>] [--workspace <DIR>]
 ```
 
-Load a manifest and run **only its behavior** with deterministic stubs, printing the output
-JSON. Does not touch the DB or dispatch sinks. `--payload` supplies the trigger payload as
+Load a manifest and run **only a registered program or Skill**, printing the output
+JSON. `behavior.provider` defaults to `stub`; an explicitly configured Anthropic
+provider makes real model calls. Does not touch the DB or dispatch sinks. `--payload` supplies the trigger payload as
 JSON (defaults to `null`; invalid JSON exits non-zero). **No DB or key.**
 
-An identity-bearing Skill agent may request the `workspace.read` capability overlay. Only
+An identity-bearing Skill agent may declare the `workspace.read` capability overlay. Only
 then does the command resolve `--workspace` (or the Git worktree containing the current
-directory) and advertise the bounded observation tools
+directory) and prepare the bounded observation tools
 `overlay__workspace-read__read`, `overlay__workspace-read__grep`, and
 `overlay__workspace-read__glob`. Paths must be relative to that worktree; absolute paths,
 traversal, symlinks, Git internals, noisy build directories, binary files, and excessive
 input or output are refused. Agents without the request receive no workspace tools, and the
 command performs no Git discovery for them.
+
+**Current limitation:** both one-off commands install `denyAllActionAuthorizer`.
+A workspace request therefore fails before acquiring its provider; neither
+`--workspace` nor Kikan authorization settings override that wiring. These commands
+do not currently provide a working workspace-read run.
+
+`shikigami-run-behavior` rejects sanctioned-profile requirements before dispatch;
+use `shikigami-agent-run` to resolve those from the database. It also rejects
+`Flow` and `Deterministic` behavior arms.
 
 → See [Behaviors](./behaviors.md).
 
@@ -145,22 +167,26 @@ With `--from-activity <FILE>`, instead of running the behavior it folds an `acti
 envelope (JSON) directly into the agent's memory (payload → content; verb/subject → tags).
 **Needs the DB** (`database.connection_string`).
 
-For a normal behavior run, `--workspace` enables the same opt-in `workspace.read` overlay as
-`shikigami-run-behavior`. Its provider lease exists only around the behavior call: workspace
-tools are acquired after memory recall and released before learning is recorded and the
-session is completed. The activity-ingest branch does not resolve or use a workspace.
+For a normal behavior run, `--workspace` requests the same opt-in `workspace.read` overlay as
+`shikigami-run-behavior`. Its provider lease is scoped to the behavior call:
+the acquisition boundary is after memory recall and release precedes learning
+recording. The deny-all authorizer currently prevents acquisition. The activity-ingest
+branch does not resolve or use a workspace. One-off runs use compatibility identity
+and also deny protected sink actions; they do not publish an agent's sinks to services.
 
 → See [Memory & Sessions](./memory.md).
 
 ## `shikigami enqueue-run`
 
 ```bash
-$ shikigami enqueue-run <AGENT> [--payload <JSON>]
+$ shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>]
 ```
 
 Enqueue an **addressed run job** for a named agent onto the worker's `shikigami_run_jobs`
 queue — the Event trigger class. `--payload` is the addressed run payload as JSON. A running
-`worker` drains and executes it.
+`worker` drains and executes it. `--conversation` selects the Danwa conversation
+route explicitly; `--key` overrides the idempotency key. By default that key is
+derived from the agent and payload, so repeat submissions can deduplicate.
 
 → See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
 
@@ -242,14 +268,15 @@ database, event store, read models, or outbox tables.
 ## `shikigami-worker`
 
 ```bash
-$ shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+$ shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--kanmon-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
 ```
 
 Boot the supervised worker. Loads every `.dhall` in `--agents`, then drains
 `shikigami_run_jobs`: for each job, run the agent's behavior, dispatch its (permission-gated)
 sinks to the configured services, and record a kioku session. Defaults:
 `--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`,
-`--danwa-url http://localhost:8080`, `--danwa-agent part_shikigami`. Each of those flags
+`--kanmon-url http://localhost:8090`, `--danwa-url http://localhost:8080`,
+`--danwa-agent part_shikigami`. Each of those flags
 sets a declared configuration key, so `--kawa-url URL` and `--set sinks.kawa.base_url=URL`
 are the same thing.
 **Needs the DB** (`database.connection_string`).
@@ -304,7 +331,8 @@ against a running Danwa, not part of the runtime path.
 | Recipe | Effect |
 | --- | --- |
 | `just create-database` | create the dev DB if missing, then `just migrate` (idempotent) |
-| `just migrate` | apply the kiroku event-store schema + shikigami's read-model migrations |
-| `just new-migration name=<slug>` | scaffold a new timestamped migration file |
+| `just migrate` | apply Kiroku, Keiro, Kioku, and Shikigami components and reconcile read models |
+| `just migrate-status` | inspect the migration status |
+| `just new-migration <slug>` | scaffold a new timestamped migration file |
 
 → See [Getting Started](./getting-started.md).

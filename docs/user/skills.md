@@ -12,7 +12,7 @@ generated:
 # Skills — authoring a `SKILL.md` behavior
 
 A **skill** is the lightweight behavior arm: a directory of instructions (and optional tools)
-the runtime drives through `shinzui/baikai`, instead of a typed program. It follows the open
+the runtime drives through `mori://shinzui/baikai`, instead of a typed program. It follows the open
 [Agent Skills specification](https://agentskills.io/specification), so skills are *reused, not
 invented* — the same format the portfolio already uses.
 
@@ -28,12 +28,13 @@ behavior = A.Behavior.Skill { path = "agents/skills/triage-note" }
 agents/skills/triage-note/
   SKILL.md         -- REQUIRED: YAML frontmatter + Markdown instructions
   scripts/         -- optional executable code (NOT run by this runtime — see below)
-  references/      -- optional docs loaded on demand
+  references/      -- optional supporting docs (not automatically loaded)
   assets/          -- optional templates / data
 ```
 
-At minimum a skill is a folder with a `SKILL.md`. The folder name **must** match the skill's
-`name` frontmatter field.
+At minimum a skill is a folder with a `SKILL.md`. For portable skill authoring,
+match the folder name to the `name` field. Shikigami's current loader only requires
+the presence of `name` and `description`; it does not enforce the full specification.
 
 ## The `SKILL.md` file
 
@@ -50,21 +51,22 @@ Read the ticket text in the trigger payload and produce a concise triage note.
 
 ### Frontmatter fields
 
-| Field | Required | Notes |
-| --- | --- | --- |
-| `name` | ✅ | 1–64 chars, lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens; **must match the directory name** |
-| `description` | ✅ | 1–1024 chars; says *what* the skill does **and** *when* to use it; keyword-rich |
-| `license` | | optional |
-| `compatibility` | | optional, ≤500 chars; environment requirements |
-| `metadata` | | optional string→string map |
-| `allowed-tools` | | optional, space-separated pre-approved tools, e.g. `Bash(git:*) Read` (experimental) |
+| Field | Current Shikigami handling |
+| --- | --- |
+| `name` | Required flat frontmatter key; length, spelling, and directory-name match are not validated. |
+| `description` | Required flat frontmatter key; supplied as the system prompt. |
+| `license`, `compatibility`, `metadata` | Not interpreted. |
+| `allowed-tools` | Ignored by the current parser; does not restrict or grant tools. |
+
+The loader splits flat `key: value` lines rather than parsing full YAML. Use plain
+single-line values for the required fields. Nested metadata and YAML multiline
+scalars are not supported by this loader.
 
 ### The body
 
-Markdown with no format restrictions. Keep it under ~500 lines / <5000 tokens and push detail
-into `references/`. **Progressive disclosure** governs loading: the metadata (~100 tokens) is
-known up front, the full body loads on activation, and `scripts/`/`references/`/`assets/` load
-only as needed.
+The Markdown body supplies the model instructions. Supporting files may be useful
+when authoring a skill, but this runtime does not automatically read `references/`
+or `assets/` on demand. Any file access needs an installed and authorized tool.
 
 ## How the runtime runs a skill
 
@@ -72,15 +74,21 @@ When a skill-agent fires, the runtime:
 
 1. Loads `SKILL.md` from the declared directory.
 2. Builds a `baikai` context whose system prompt / messages carry the skill's instructions
-   (plus any `references/`/`assets/` pulled in as the run needs them).
-3. Maps the skill's `allowed-tools` to `baikai` tool definitions.
+   and the trigger payload and recalled memories.
+3. Advertises the tools in the runtime-supplied registry. Agent capability
+   admission and per-action authorization govern overlay tools; the skill's
+   ignored `allowed-tools` field is not an enforcement boundary.
 4. Runs a completion. If the model requests tools, it runs a **tool-use loop** — dispatch the
-   calls, fold the results back, complete again — until the model stops requesting tools.
+   calls, fold the results back, complete again — bounded by the runtime
+   turn limit (eight by default).
 5. Hands the final completion to the agent's sinks, exactly as a program's output.
 
-A **stub `baikai` provider** satisfies CI, so a skill-agent runs **without a model key**.
+The default **stub provider** needs no model key. Setting `behavior.provider=anthropic`
+and supplying its credential enables real model calls. Tool-using Skills additionally
+need installed tools and action authorization. The one-off workspace limitation is
+documented in the [CLI reference](./cli.md).
 
-> **Sandbox note.** A skill's *instructions* and `allowed-tools` run. Executing a skill's
+> **Sandbox note.** Instructions are supplied to the model; tools come from the runtime registry. Executing a skill's
 > `scripts/` (arbitrary executable code) needs a sandbox and is a **deferred** concern — this
 > runtime does not execute `scripts/`.
 
@@ -88,14 +96,15 @@ A **stub `baikai` provider** satisfies CI, so a skill-agent runs **without a mod
 
 A skill's *instructions* (the how-to in `SKILL.md`) are deliberately **distinct from OKF
 grounding** (the *knowledge* an agent loads to understand what things mean). Don't put concept
-definitions in a skill body; that is grounding, configured separately on the
-`ShikumiProgram` behavior's `grounding` field. The three input axes for any agent are:
+definitions in a skill body when they belong in reusable knowledge. The schema has
+a `ShikumiProgram.grounding` field, but the current dispatcher does not resolve it. The three input axes for any agent are:
 **behavior** (program or skill) × **grounding** (knowledge) × the **trigger/sink** wiring.
 
 ## Validate a skill
 
-`validate` checks a skill-agent's directory and `SKILL.md` frontmatter (a required `name`
-matching the directory, and a required `description`):
+`validate` checks that the skill-agent's `SKILL.md` can be loaded and contains
+`name` and `description` fields. It does not validate name/directory matching or
+the full Agent Skills specification:
 
 ```bash
 $ cabal run shikigami -- validate agents/triage-note.dhall

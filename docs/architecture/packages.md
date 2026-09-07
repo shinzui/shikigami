@@ -74,7 +74,7 @@ shikigami-workers -> shikigami-core
 shikigami-client  -> shikigami-api
 ```
 
-Read the other way round: `shikigami-core` is consumed by api, server, and workers;
+Read the other way round: `shikigami-core` is consumed by agent, api, server, and workers;
 `shikigami-api` is consumed by server and client. Every other sibling edge is
 forbidden. In particular `shikigami-workers` must never depend on `shikigami-api` or
 `shikigami-server`, `shikigami-server` must never depend on `shikigami-workers`, and
@@ -131,15 +131,17 @@ overlay registry and cannot be replaced by an adapter.
    not rename it; it is still the trigger vertical.
 2. Technical composition module names are limited to this allowlist:
    - `Shikigami.App.Config`, `Shikigami.App.Config.Load` — the one process-configuration
-     declaration and its loader, in `shikigami-core`. Every executable in every package
-     resolves its settings from these two modules; no other module may read the
-     environment. See `docs/operations/configuration.md`.
+     declaration and its loader, in `shikigami-core`. Application-configured executables
+     resolve their settings from these two modules. The migration CLI owns its
+     `DATABASE_URL` boundary, the client has its own `health --server` parser, the OpenAPI generator takes no
+     configuration, and
+     standard `OTEL_*` variables remain SDK-owned. See `docs/operations/configuration.md`.
    - `Shikigami.Server.App`, `Shikigami.Server.Boot`, `Shikigami.Server.Config`,
      `Shikigami.Server.Seam`
    - `Shikigami.Workers.Config`, `Shikigami.Workers.Registry`,
      `Shikigami.Workers.Subscription`
    - `Shikigami.App.Role` — the `RoleInfo` record and `runRole`, in `shikigami-core`.
-     Every executable in every package resolves configuration through it, for the same
+     Application-configured executables resolve configuration through it, for the same
      reason they all resolve settings through `Shikigami.App.Config`: `runRole` *is* the
      resolution order (parse, resolve, act), and two copies could disagree about when
      `--check-config` runs relative to the action opening a database.
@@ -173,7 +175,7 @@ their role and live in the package that owns that role.
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
 | `shikigami-consume-stream` | `shikigami-workers` | Consumes `activity.v1` and enqueues matching run jobs. |
 | `shikigami-consume-events` | `shikigami-workers` | Consumes public integration events and enqueues addressed run jobs. |
-| `shikigami-run-behavior` | `shikigami-agent` | Runs one agent's behavior with deterministic stubs (no database, no key), optionally with its declared bounded workspace overlay. |
+| `shikigami-run-behavior` | `shikigami-agent` | Runs a registered program or Skill without a database; the provider defaults to a stub. Workspace requests currently fail action authorization. |
 | `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle; a workspace overlay lease covers only the behavior call. |
 | `shikigami-migrate` | `shikigami-migrations` | Applies database migrations. |
 | `shikigami-client` | `shikigami-client` | Calls a running server through the typed client. |
