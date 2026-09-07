@@ -14,8 +14,8 @@ module Shikigami.Attestation.Resolve
   )
 where
 
+import Contravariant.Extras (contrazip2)
 import Data.Aeson (Result (..), Value)
-import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
@@ -158,8 +158,9 @@ findProfilesStatement =
        AND ($2::text IS NULL OR version = $2)
      ORDER BY version
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nullable Encoders.text))
     )
     ( Decoders.rowList
         ( (,,,)

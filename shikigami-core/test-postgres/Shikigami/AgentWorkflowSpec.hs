@@ -1,8 +1,9 @@
 module Shikigami.AgentWorkflowSpec (tests) where
 
 import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
+import Contravariant.Extras (contrazip5)
 import Control.Exception (SomeException, throwIO, try)
-import Control.Lens ((&), (.~))
+import Control.Lens (view, (&), (.~))
 import Control.Monad (forM_, void, when)
 import Data.Aeson (Result (..), ToJSON, Value (..), eitherDecode, fromJSON, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -2937,19 +2938,32 @@ insertWorkflowProfile :: Pool -> SanctionedExecutionProfile -> ProfileDigest -> 
 insertWorkflowProfile pool content claimedDigest = do
   let SanctionedExecutionProfile {profileId, version, issuer, validFrom, validUntil} = content
       params =
-        ( profileIdText profileId,
-          profileVersionText version,
-          issuerText issuer,
-          "active",
-          validFrom,
-          validUntil,
-          toJSON content,
-          profileDigestText claimedDigest
-        )
+        InsertProfile
+          { profileId = profileIdText profileId,
+            version = profileVersionText version,
+            issuer = issuerText issuer,
+            lifecycle = "active",
+            validFrom = validFrom,
+            validUntil = validUntil,
+            content = toJSON content,
+            digest = profileDigestText claimedDigest
+          }
   result <- Pool.use pool (HasqlSession.statement params insertWorkflowProfileStatement)
   either (assertFailure . show) pure result
 
-insertWorkflowProfileStatement :: Statement (Text, Text, Text, Text, UTCTime, Maybe UTCTime, Value, Text) ()
+data InsertProfile = InsertProfile
+  { profileId :: !Text,
+    version :: !Text,
+    issuer :: !Text,
+    lifecycle :: !Text,
+    validFrom :: !UTCTime,
+    validUntil :: !(Maybe UTCTime),
+    content :: !Value,
+    digest :: !Text
+  }
+  deriving stock (Generic)
+
+insertWorkflowProfileStatement :: Statement InsertProfile ()
 insertWorkflowProfileStatement =
   preparable
     """
@@ -2957,14 +2971,14 @@ insertWorkflowProfileStatement =
       (profile_id, version, issuer, lifecycle, valid_from, valid_until, profile_content, profile_digest)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     """
-    ( ((\(a, _, _, _, _, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, b, _, _, _, _, _, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, c, _, _, _, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, d, _, _, _, _) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, _, e, _, _, _) -> e) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
-        <> ((\(_, _, _, _, _, f, _, _) -> f) >$< Encoders.param (Encoders.nullable Encoders.timestamptz))
-        <> ((\(_, _, _, _, _, _, g, _) -> g) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
-        <> ((\(_, _, _, _, _, _, _, h) -> h) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( (view #profileId >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #version >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #issuer >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #lifecycle >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #validFrom >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+        <> (view #validUntil >$< Encoders.param (Encoders.nullable Encoders.timestamptz))
+        <> (view #content >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
+        <> (view #digest >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.noResult
 
@@ -2989,11 +3003,12 @@ replaceWorkflowProfileStatement =
        SET version = $3, profile_content = $4, profile_digest = $5
      WHERE profile_id = $1 AND version = $2
     """
-    ( ((\(a, _, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, b, _, _, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, c, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, d, _) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
-        <> ((\(_, _, _, _, e) -> e) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip5
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.jsonb))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.noResult
 

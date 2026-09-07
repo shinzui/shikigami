@@ -1,10 +1,14 @@
 module Shikigami.ProfileResolutionSpec (tests) where
 
+import Contravariant.Extras (contrazip2)
+import Control.Lens (view)
 import Data.Aeson (Value, toJSON)
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
+import GHC.Generics (Generic)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
@@ -127,19 +131,32 @@ insertProfile :: Pool -> SanctionedExecutionProfile -> ProfileDigest -> IO ()
 insertProfile pool content claimedDigest = do
   let SanctionedExecutionProfile {profileId, version, issuer, lifecycle, validFrom, validUntil} = content
       params =
-        ( profileIdText profileId,
-          profileVersionText version,
-          issuerText issuer,
-          lifecycleText lifecycle,
-          validFrom,
-          validUntil,
-          toJSON content,
-          profileDigestText claimedDigest
-        )
+        InsertProfile
+          { profileId = profileIdText profileId,
+            version = profileVersionText version,
+            issuer = issuerText issuer,
+            lifecycle = lifecycleText lifecycle,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            content = toJSON content,
+            digest = profileDigestText claimedDigest
+          }
   result <- Pool.use pool (Session.statement params insertProfileStatement)
   either (assertFailure . show) pure result
 
-insertProfileStatement :: Statement (Text, Text, Text, Text, UTCTime, Maybe UTCTime, Value, Text) ()
+data InsertProfile = InsertProfile
+  { profileId :: !Text,
+    version :: !Text,
+    issuer :: !Text,
+    lifecycle :: !Text,
+    validFrom :: !UTCTime,
+    validUntil :: !(Maybe UTCTime),
+    content :: !Value,
+    digest :: !Text
+  }
+  deriving stock (Generic)
+
+insertProfileStatement :: Statement InsertProfile ()
 insertProfileStatement =
   preparable
     """
@@ -147,14 +164,14 @@ insertProfileStatement =
       (profile_id, version, issuer, lifecycle, valid_from, valid_until, profile_content, profile_digest)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     """
-    ( ((\(a, _, _, _, _, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, b, _, _, _, _, _, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, c, _, _, _, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, d, _, _, _, _) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, _, e, _, _, _) -> e) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
-        <> ((\(_, _, _, _, _, f, _, _) -> f) >$< Encoders.param (Encoders.nullable Encoders.timestamptz))
-        <> ((\(_, _, _, _, _, _, g, _) -> g) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
-        <> ((\(_, _, _, _, _, _, _, h) -> h) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( (view #profileId >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #version >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #issuer >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #lifecycle >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (view #validFrom >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+        <> (view #validUntil >$< Encoders.param (Encoders.nullable Encoders.timestamptz))
+        <> (view #content >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
+        <> (view #digest >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.noResult
 
@@ -177,8 +194,9 @@ tamperProfileStatement =
        SET profile_content = jsonb_set(profile_content, '{requiredCorrelationFields}', '["request-id", "tampered"]'::jsonb)
      WHERE profile_id = $1 AND version = $2
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.noResult
 

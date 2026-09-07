@@ -16,6 +16,7 @@ module Shikigami.Store.DelegationBudget
   )
 where
 
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
 import Data.List.NonEmpty qualified as NonEmpty
@@ -139,10 +140,11 @@ insertBudgetStatement =
     VALUES ($1, $2, $3, 0, $4, $4)
     ON CONFLICT DO NOTHING
     """
-    ( ((\(DelegationBudgetId value, _, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, WorkflowId value, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, value, _) -> fromIntegral (delegationBudgetInt value)) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> ((\(_, _, _, value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( contrazip4
+        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (fromIntegral . delegationBudgetInt >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
 
@@ -173,8 +175,9 @@ reservationExistsStatement =
       WHERE budget_id = $1 AND child_workflow_id = $2
     )
     """
-    ( ((\(DelegationBudgetId value, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
 
@@ -186,9 +189,10 @@ insertReservationStatement =
       (budget_id, child_workflow_id, reserved_at)
     VALUES ($1, $2, $3)
     """
-    ( ((\(DelegationBudgetId value, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, WorkflowId value, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( contrazip3
+        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
 
@@ -201,8 +205,9 @@ incrementBudgetStatement =
         updated_at = $3
     WHERE budget_id = $1
     """
-    ( ((\(DelegationBudgetId value, _, _) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, value, _) -> fromIntegral value) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> ((\(_, _, value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( contrazip3
+        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (fromIntegral >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult

@@ -10,8 +10,8 @@ module Shikigami.Memory.AliasStore
   )
 where
 
+import Contravariant.Extras (contrazip2)
 import Data.Bifunctor (first)
-import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
@@ -116,8 +116,9 @@ insertStatement =
     RETURNING principal_id, legacy_agent_name, created_at, updated_at,
               (xmax = 0) AS inserted
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.singleRow ((,) <$> aliasRow <*> Decoders.column (Decoders.nonNullable Decoders.bool)))
 

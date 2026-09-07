@@ -1,6 +1,6 @@
 module Shikigami.DirectoryStoreSpec (tests) where
 
-import Data.Functor.Contravariant ((>$<))
+import Contravariant.Extras (contrazip2)
 import Data.Int (Int64)
 import Data.List (find)
 import Data.Text (Text)
@@ -120,8 +120,9 @@ countRunSkipsStatement :: Statement (Text, Text) Int64
 countRunSkipsStatement =
   preparable
     "SELECT count(*) FROM shikigami.run_skips WHERE stage = $1 AND idempotency_key = $2"
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int8)))
 

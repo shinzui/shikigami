@@ -12,12 +12,14 @@ module Shikigami.PracticeReview.Attention
 where
 
 import Baikai.Evidence (commitmentDigest)
+import Contravariant.Extras (contrazip3)
 import Control.Exception qualified as Exception
 import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.ByteString qualified as ByteString
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.Int (Int32)
 import Data.List (sortOn)
 import Data.Set qualified as Set
@@ -342,19 +344,20 @@ insertAttentionStatement =
     ON CONFLICT DO NOTHING
     RETURNING attention_key
     """
-    ( ((\(AttentionProjection {attentionKey = AttentionKey value}, _, _) -> value) >$< textParam)
-        <> ((\(AttentionProjection {schemaVersion}, _, _) -> fromIntegral schemaVersion) >$< intParam)
-        <> ((\(AttentionProjection {targetProject}, _, _) -> targetProject) >$< textParam)
-        <> ((\(AttentionProjection {practiceKey}, _, _) -> practiceKey) >$< textParam)
-        <> ((\(AttentionProjection {classification}, _, _) -> classification) >$< textParam)
-        <> ((\(AttentionProjection {ownerRole}, _, _) -> ownerRole) >$< textParam)
-        <> ((\(AttentionProjection {recipient}, _, _) -> recipient) >$< textParam)
-        <> ((\(AttentionProjection {reviewId}, _, _) -> reviewId) >$< textParam)
-        <> ((\(AttentionProjection {claimEvidenceDigest}, _, _) -> claimEvidenceDigest) >$< textParam)
-        <> ((\(_, outboxMessageId, _) -> outboxMessageId) >$< textParam)
-        <> ((\(_, _, createdAt) -> createdAt) >$< timeParam)
-    )
+    (contrazip3 attentionProjectionParams textParam timeParam)
     (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.text)))
+
+attentionProjectionParams :: Encoders.Params AttentionProjection
+attentionProjectionParams =
+  (view (#attentionKey . #value) >$< textParam)
+    <> (fromIntegral . view #schemaVersion >$< intParam)
+    <> (view #targetProject >$< textParam)
+    <> (view #practiceKey >$< textParam)
+    <> (view #classification >$< textParam)
+    <> (view #ownerRole >$< textParam)
+    <> (view #recipient >$< textParam)
+    <> (view #reviewId >$< textParam)
+    <> (view #claimEvidenceDigest >$< textParam)
 
 lookupAttentionOutboxStatement :: Statement Text (Maybe Text)
 lookupAttentionOutboxStatement =
@@ -376,9 +379,10 @@ linkAttentionReviewStatement =
     VALUES ($1, $2, $3)
     ON CONFLICT DO NOTHING
     """
-    ( ((\(key, _, _) -> key) >$< textParam)
-        <> ((\(_, reviewId, _) -> reviewId) >$< textParam)
-        <> ((\(_, _, linkedAt) -> linkedAt) >$< timeParam)
+    ( contrazip3
+        textParam
+        textParam
+        timeParam
     )
     Decoders.noResult
 

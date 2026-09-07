@@ -58,8 +58,8 @@ module Shikigami.Sink.GrantStore
   )
 where
 
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Bifunctor (first)
-import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
@@ -252,8 +252,9 @@ lookupVerifiedStatement =
      WHERE principal_id = $1
        AND sink_kind = $2
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
 
@@ -267,8 +268,9 @@ lookupCompatibilityStatement =
        AND principal_id IS NULL
        AND sink_kind = $2
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
 
@@ -333,10 +335,11 @@ listStatement =
      ORDER BY agent_name, sink_kind
      LIMIT $4
     """
-    ( ((\(a, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, k, _, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, u, _) -> u) >$< Encoders.param (Encoders.nonNullable Encoders.bool))
-        <> ((\(_, _, _, l) -> l) >$< Encoders.param (Encoders.nonNullable Encoders.int8))
+    ( contrazip4
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.bool))
+        (Encoders.param (Encoders.nonNullable Encoders.int8))
     )
     (Decoders.rowList grantRow)
 
@@ -382,10 +385,11 @@ upsertVerifiedStatement =
            revoked_at = NULL,
            updated_at = now()
     """
-    ( ((\(a, _, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, p, _, _) -> p) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    ( contrazip4
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nullable Encoders.text))
     )
     Decoders.noResult
 
@@ -404,9 +408,10 @@ upsertCompatibilityStatement =
            revoked_at = NULL,
            updated_at = now()
     """
-    ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    ( contrazip3
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nullable Encoders.text))
     )
     Decoders.noResult
 
@@ -435,9 +440,10 @@ revokeVerifiedStatement =
      WHERE principal_id = $1
        AND sink_kind = $2
     """
-    ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    ( contrazip3
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nullable Encoders.text))
     )
     Decoders.rowsAffected
 
@@ -454,9 +460,10 @@ revokeCompatibilityStatement =
        AND principal_id IS NULL
        AND sink_kind = $2
     """
-    ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, k, _) -> k) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, b) -> b) >$< Encoders.param (Encoders.nullable Encoders.text))
+    ( contrazip3
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nullable Encoders.text))
     )
     Decoders.rowsAffected
 
@@ -517,8 +524,9 @@ fillGrantPrincipalsStatement =
      WHERE agent_name = $1
        AND principal_id IS NULL
     """
-    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.rowsAffected
 

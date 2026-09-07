@@ -34,6 +34,7 @@ module Shikigami.Agent.Conversation.SessionIndex
   )
 where
 
+import Contravariant.Extras (contrazip3)
 import Data.Functor.Contravariant ((>$<))
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as Decoders
@@ -121,9 +122,10 @@ advanceConversationEpochStmt =
       SET epoch = GREATEST(shikigami.conversation_sessions.epoch, EXCLUDED.epoch),
           updated_at = EXCLUDED.updated_at
     """
-    ( ((\(c, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, e, _) -> fromIntegral e) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> ((\(_, _, t) -> t) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( contrazip3
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (fromIntegral >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
 
@@ -137,8 +139,9 @@ upsertConversationSessionStmt =
       SET session_id = EXCLUDED.session_id,
           updated_at = EXCLUDED.updated_at
     """
-    ( ((\(c, _, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, s, _) -> s) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((\(_, _, t) -> t) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( contrazip3
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
