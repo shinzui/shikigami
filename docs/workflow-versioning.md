@@ -581,7 +581,8 @@ The workflow reset is `f1118af`, followed by strict runtime identities in
 `8a70c92` and the generated queue/evidence-prefix reset in `f43b0ca`. The exact
 accepted diagnostics are retained under [plan-65 evidence](evidence/plan-65/).
 Ordinary gates passed on the reconciled catalog (`6f21b6e`), runtime assembly
-(`66ffd29`) and nominal scalar checkpoint (`a083d88`). These later gates do not
+(`66ffd29`), nominal scalar checkpoint (`a083d88`) and final qualification
+(`8b0a98a`). The final report has no findings. These later gates do not
 waive or reclassify the earlier intentional breaks.
 
 Generation zero has one explicitly unbound conversation seed. Its complete

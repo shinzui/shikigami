@@ -10,6 +10,8 @@ records release verification, the four unused-state facts and qualification comm
 - `behavior-conformance.json` is the executed domain report: 56 filled obligations,
   50 verified, six unverified with passing witnesses, and no failed or missing
   obligations. Unverified proof coverage is not relabeled as verified.
+- `final-gate-diff.json` and its replay-impact companion record the passing
+  ordinary gate against `8b0a98a`: no findings and replay-neutral behavior.
 - `final-suites.json` records all 14 passing serial suites: 847 counted checks
   plus two custom dependency drivers.
 - `bounded-resume-preview.txt` records the built worker CLI reporting its finite

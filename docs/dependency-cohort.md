@@ -493,3 +493,9 @@ the validated evidence catalog. The generated run-job codec/policy, bounded
 resume registry, batched timer routing and terminal GC policy execute through
 their production owners. See the [domain inventory](architecture/shikigami-domain-inventory.md)
 and [runtime ADR](adr/0038-runtime-startup-and-maintenance-share-validated-owners.md).
+
+`just keiro-gate 8b0a98a` passes unmodified: strict Language 5 checks, deterministic
+regeneration, no compatibility findings, replay-neutral impact and all 37
+conformance checks. The [final gate report](evidence/plan-65/final-gate-diff.json)
+records this exact source/acceptance baseline. A separate deliberately incompatible
+fixture still fails the differ with `WorkflowBodyChanged`.

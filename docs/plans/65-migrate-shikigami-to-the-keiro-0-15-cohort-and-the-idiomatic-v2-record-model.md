@@ -164,8 +164,10 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   797 Tasty tests, 13 domain assertions, 37 conformance checks, plus both custom
   Kikan-En dependency drivers. The built bounded-resume CLI previews its budget
   without database access. Results are retained under docs/evidence/plan-65.
-- [ ] Milestone 7 remaining: commit final qualification and run the ordinary
-  unmodified gate against that exact committed revision.
+- [x] (2026-09-07) Milestone 7 complete: qualification committed as 8b0a98a;
+  `just keiro-gate 8b0a98a` passes unmodified. Strict check/inspect, unchanged
+  regeneration, an empty compatibility report, replay-neutral impact and all
+  37 generated conformance checks pass. Final gate reports are retained.
 
 ## Surprises & Discoveries
 
@@ -374,10 +376,11 @@ this revision before establishing the new baseline.
 
 ## Outcomes & Retrospective
 
-Implementation checkpoint (2026-09-07): all seven milestones' source changes
-are implemented. The full all-component build and all 14 serial suites pass (847 counted
-checks plus two custom dependency drivers). The final ordinary gate remains
-before acceptance is declared. Release selection is Keiro
+Completed (2026-09-07): all seven milestones are implemented and qualified.
+The full all-component build and all 14 serial suites pass (847 counted checks
+plus two custom dependency drivers). The ordinary unmodified gate passes against
+the final source/acceptance baseline `8b0a98a`: no generated drift, no compatibility
+findings, replay-neutral impact and all 37 conformance checks passing. Release selection is Keiro
 0.15.0.0 (all seven packages) with Kioku 0.5.2.0 (all three packages); the
 existing Danwa pin compiles without being moved. The edition-only commit
 `cc397af` preserved wire and replay observations before intentional resets.
@@ -407,6 +410,24 @@ ADRs 0001, 0004, 0010, 0012, 0027, 0030 and 0037 have dated implementation
 evidence; ADR 0038 records startup, runtime ownership and retention decisions.
 
 
+Final qualification commands and observations (repository root):
+
+```bash
+cabal build all --enable-tests -j1 --ghc-options=-fmax-errors=10000
+just keiro-gate 8b0a98a
+```
+
+Both exit zero. Between them, every test binary listed by the solved
+`dist-newstyle/cache/plan.json` was executed serially from its package directory.
+Tasty receives `--num-threads=1`; threaded core, migration, server and worker
+suites receive `+RTS -N2 -RTS`. Base-only domain and generated conformance drivers
+receive no Tasty or RTS flags. The exact suite names, counts and exit codes are
+in `docs/evidence/plan-65/final-suites.json`; the dependency-cohort document has
+the readable table. The final gate's differ and replay-impact reports are in
+`docs/evidence/plan-65/final-gate-diff.json` and
+`docs/evidence/plan-65/final-gate-replay-impact.json`. The incompatible fixture
+exits one by design and is retained separately, not mixed into the passing gate.
+
 ## Context and Orientation
 
 
@@ -420,23 +441,25 @@ Build inside the Nix development shell because native linking needs its librarie
 Their presence is part of the complete solve, not permission to edit sibling sources.
 
 `domain/shikigami.keiro-workspace` declares `runtime-package shikigami-core` and collocated
-layout. Its four members are `domain/shikigami-agent-run.keiro`,
-`domain/shikigami-approval.keiro`, `domain/shikigami-conversation.keiro`, and
-`domain/shikigami-run-evidence.keiro`. Each declares stable Language 5. A workspace is the
+layout. Its five members are `domain/shikigami-agent-run.keiro`,
+`domain/shikigami-approval.keiro`, `domain/shikigami-conversation.keiro`,
+`domain/shikigami-run-evidence.keiro` and `domain/shikigami-run-jobs.keiro`. Each
+declares stable Language 5. A workspace is the
 single checked ownership boundary for these files; a generated edition is the Haskell
 presentation convention and is independent of the source language version.
 
-The current generated layer contains 18 Haskell modules under
-`shikigami-core/src/Shikigami/Generated/` and the `AgentRun`, `Approval`,
-`DanwaConversation`, and `RunEvidence` verticals' `Generated/` directories.
-`shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt` records idiomatic-v1.
+The current scaffold ledger lists 25 generated Haskell modules and three
+hand-owned hole modules under `shikigami-core/src/Shikigami/Generated/` and
+the `AgentRun`, `Approval`, `DanwaConversation`, `RunEvidence`, `RunEvidenceLookup`
+and `RunJobs` verticals.
+`shikigami-core/src/keiro-dsl-ledger.workspace.shikigami.txt` records idiomatic-v2.
 The neighboring migration report and `keiro-dsl-conformance.workspace.shikigami/`
 package are committed. The Cabal fragment is ignored but must be reconciled after scaffold.
 The service facade `Shikigami.Generated.Conformance` remains exposed by core.
 `Shikigami.RunEvidence.BehaviorHoles` and the conformance package's
 `src/KeiroConformance/Expectations.hs` are create-once, hand-owned files, not overwrite targets.
 
-`Justfile` already provides `keiro-check`, `keiro-inspect`, `keiro-scaffold`,
+`justfile` provides `keiro-check`, `keiro-inspect`, `keiro-scaffold`,
 `keiro-diff <ref>`, and `keiro-gate <ref>`. The check denies warnings, requires Language 5,
 emits binding/coverage reports, and fails opaque persisted boundaries. Scaffold checks the
 working tree against Git, so its clean-diff assertion is meaningful after reviewed changes
@@ -1002,3 +1025,9 @@ Corrected edition-backup coverage, clean-scaffold timing, scratch-branch advice,
 assumption that all final wire expectations must remain unchanged.
 
 Revision note (2026-09-07 implementation): Recorded the successful refreshed solve, exact release metadata verification, baseline revision, and current applicability census. Edition migration and runtime acceptance remain pending.
+
+
+Revision note (2026-09-07): completed all seven milestones, updated the context to
+five workspace members and idiomatic-v2, retained exact reset/future-break/final
+gate evidence, and distilled runtime constraints into the ADR corpus. No
+implementation or acceptance work remains in this plan.
