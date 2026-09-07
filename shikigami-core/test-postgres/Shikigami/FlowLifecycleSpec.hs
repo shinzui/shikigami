@@ -32,7 +32,9 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -573,11 +575,11 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
           FlowDelegate.context =
             DelegateCtx
               { identity = compatibilityIdentity flowAgent,
-                delegateDepth = 0,
+                depth = DelegationDepth 0,
                 sessionId = Just ((.currentSession) ((.approval) runtime)),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
-                lineage = [flowAgent],
+                lineage = map AgentName [flowAgent],
                 delegationBudgetId = Nothing,
                 budgetLimit = defaultDelegationBudget
               },

@@ -3,6 +3,8 @@ module Shikigami.DelegateContextSpec (tests) where
 import Data.Foldable (traverse_)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
@@ -28,6 +30,11 @@ tests =
           "the error reports the attempted child depth"
           (Left (DelegationDepthExceeded 5))
           (checkDepth (ctxAt 4)),
+      testCase "a maximal wire depth cannot overflow into an admitted child" do
+        assertEqual
+          "depth arithmetic does not wrap"
+          (Left (DelegationDepthExceeded (toInteger (maxBound :: Int) + 1)))
+          (checkDepth (ctxAt maxBound)),
       testCase "allow-list refuses undeclared targets" do
         assertEqual "declared target is admitted" (Right ()) (assertMayDelegate delegatingAgent "worker")
         assertEqual "undeclared target is refused" (Left (DelegationNotAllowed "intruder")) (assertMayDelegate delegatingAgent "intruder"),
@@ -40,11 +47,11 @@ ctxAt :: Int -> DelegateCtx
 ctxAt depth =
   DelegateCtx
     { identity = compatibilityIdentity "lead",
-      delegateDepth = depth,
+      depth = DelegationDepth depth,
       sessionId = Nothing,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      lineage = ["root", "lead"],
+      lineage = map AgentName ["root", "lead"],
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }

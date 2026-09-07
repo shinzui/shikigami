@@ -312,15 +312,15 @@ limitReasons Profile.SanctionedExecutionProfile {Profile.limits} RunEvidence {ca
     [ exceeded "maxCalls" ((.maxCalls) limits) (length calls),
       exceeded "maxRetries" ((.maxRetries) limits) (length [() | RecordedCallEvidence {relationship = RetryOf _} <- calls]),
       exceeded "maxDelegatedChildRuns" ((.maxDelegatedChildRuns) limits) (length delegatedChildren),
-      exceeded "maxTokens" ((.maxTokens) limits) (fromIntegral (totalTokens calls)),
+      exceeded "maxTokens" ((.maxTokens) limits) (totalTokens calls),
       exceededInteger "maxCostMicroUsd" ((.maxCostMicroUsd) limits) (costMicroUsd calls),
-      maybe [] (\observed -> exceeded "maxDurationSeconds" ((.maxDurationSeconds) limits) observed) durationSeconds,
-      maybe [] (\observed -> exceeded "maxConcurrency" ((.maxConcurrency) limits) observed) peakConcurrency
+      maybe [] (\(RunDurationSeconds observed) -> exceeded "maxDurationSeconds" ((.maxDurationSeconds) limits) observed) durationSeconds,
+      maybe [] (\(PeakConcurrency observed) -> exceeded "maxConcurrency" ((.maxConcurrency) limits) observed) peakConcurrency
     ]
 
-exceeded :: Text -> Maybe Int -> Int -> [NonConformingReason]
+exceeded :: (Integral quantity, Show quantity) => Text -> Maybe Int -> quantity -> [NonConformingReason]
 exceeded name limit observed =
-  [LimitExceeded name (showText maximumValue) (showText observed) | Just maximumValue <- [limit], observed > maximumValue]
+  [LimitExceeded name (showText maximumValue) (showText observed) | Just maximumValue <- [limit], toInteger observed > toInteger maximumValue]
 
 exceededInteger :: Text -> Maybe Integer -> Rational -> [NonConformingReason]
 exceededInteger name limit observed =

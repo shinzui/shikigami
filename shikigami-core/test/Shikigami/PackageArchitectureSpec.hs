@@ -46,15 +46,16 @@ expectedPackages =
 -- | Which siblings each package's /production library/ may depend on.
 --
 -- Read as the arrows in @docs\/architecture\/packages.md@: api, workers, and
--- agent see core; server sees core and api; client sees api; core and
+-- agent see core; serving roles also verify through migrations. Server sees
+-- core and api; client sees api; core and
 -- migrations see no sibling at all.
 allowedLibraryEdges :: [(Text, [Text])]
 allowedLibraryEdges =
   [ ("shikigami-core", []),
-    ("shikigami-agent", ["shikigami-core"]),
+    ("shikigami-agent", ["shikigami-core", "shikigami-migrations"]),
     ("shikigami-api", ["shikigami-core"]),
-    ("shikigami-server", ["shikigami-core", "shikigami-api"]),
-    ("shikigami-workers", ["shikigami-core"]),
+    ("shikigami-server", ["shikigami-core", "shikigami-api", "shikigami-migrations"]),
+    ("shikigami-workers", ["shikigami-core", "shikigami-migrations"]),
     ("shikigami-migrations", []),
     ("shikigami-client", ["shikigami-api"])
   ]

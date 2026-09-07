@@ -31,7 +31,9 @@ import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQue
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
@@ -68,17 +70,17 @@ runJobFromEnvelope resolvedOccurredAt decl =
 runJobFromEnvelopeWithIdentity :: UTCTime -> AgentIdentity -> AgentDecl -> ActivityEnvelope -> RunJob
 runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
   RunJob
-    { agentName = (.name) decl,
+    { agentName = AgentName ((.name) decl),
       identity,
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
-      idempotencyKey = (.name) decl <> ":" <> envActivityId,
+      idempotencyKey = RunKey ((.name) decl <> ":" <> envActivityId),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = [(.name) decl],
+      lineage = [AgentName ((.name) decl)],
       delegationBudgetId = Nothing
     }
   where
@@ -146,17 +148,17 @@ enqueueAddressedRunWithKey pool identity agent route payload key = do
   enqueueRunJob
     pool
     RunJob
-      { agentName = agent,
+      { agentName = AgentName agent,
         identity,
         triggerKind = TriggeredByEvent,
         routeKind = route,
         occurredAt = now,
         triggerPayload = payload,
-        idempotencyKey = key,
+        idempotencyKey = RunKey key,
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
-        lineage = [agent],
+        lineage = [AgentName agent],
         delegationBudgetId = Nothing
       }
 
@@ -166,7 +168,7 @@ enqueueScheduledRun pool identity agent dueAt =
   enqueueRunJob
     pool
     RunJob
-      { agentName = agent,
+      { agentName = AgentName agent,
         identity,
         triggerKind = TriggeredBySchedule,
         routeKind = AgentWorkflowRoute,
@@ -177,11 +179,11 @@ enqueueScheduledRun pool identity agent dueAt =
               "agent" Aeson..= agent,
               "dueAt" Aeson..= dueAt
             ],
-        idempotencyKey = scheduleRunIdempotencyKey agent dueAt,
+        idempotencyKey = RunKey (scheduleRunIdempotencyKey agent dueAt),
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
-        lineage = [agent],
+        lineage = [AgentName agent],
         delegationBudgetId = Nothing
       }
 

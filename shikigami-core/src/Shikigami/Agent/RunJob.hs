@@ -16,7 +16,10 @@ import Data.UUID.V5 qualified as UUID
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
+import Shikigami.Agent.Delegate.Depth (DelegationDepth)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
+import Shikigami.Agent.Run.Key (RunKey, runKeyText)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
@@ -41,16 +44,16 @@ data RunRouteKind
 
 -- | A request to run one declared agent, with the trigger occurrence and payload.
 data RunJob = RunJob
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     identity :: !AgentIdentity,
     triggerKind :: !TriggerKind,
     occurredAt :: !UTCTime,
     triggerPayload :: !Value,
-    idempotencyKey :: !Text,
+    idempotencyKey :: !RunKey,
     parentSessionId :: !(Maybe SessionId),
     parentRunWorkflowId :: !(Maybe WorkflowId),
-    delegationDepth :: !(Maybe Int),
-    lineage :: ![Text],
+    delegationDepth :: !(Maybe DelegationDepth),
+    lineage :: ![AgentName],
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     routeKind :: !RunRouteKind
   }
@@ -99,6 +102,6 @@ instance FromJSON RunJob where
 -- allocated entity IDs and must never be rebranded as TypeID-v7 values.
 runJobWorkflowId :: RunJob -> WorkflowId
 runJobWorkflowId job =
-  case mkWorkflowId job.idempotencyKey of
+  case mkWorkflowId (runKeyText job.idempotencyKey) of
     Right workflowId -> workflowId
-    Left _ -> WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.agent-run:" <> job.idempotencyKey))))
+    Left _ -> WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.agent-run:" <> runKeyText job.idempotencyKey))))

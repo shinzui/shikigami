@@ -102,9 +102,16 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evidence IDs compile; all 191 PostgreSQL and 403 unit cases pass, including three
   new identity boundary checks. Natural keys with journal separators derive stable
   UUIDv5 workflow IDs; child lookups and run correlation use that same identity.
-- [ ] Milestone 4 remaining: service ID prefixes, queue scalar nominals, deterministic
-  generation, and full validation, reconciled with Milestone 5.
-- [ ] Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
+- [x] (2026-09-07) AgentName, RunKey and DelegationDepth remain nominal in
+  RunJob/delegation, and conversation seeds retain AgentName. Queue adapters unwrap
+  explicitly and decode scalar invariants. Evidence uses RunKey plus distinct
+  nonnegative duration/concurrency measurements; existing version/digest/locator
+  wrappers and authority-owned IDs retain their contracts.
+- [x] (2026-09-07) Scalar checkpoint builds all five affected test suites;
+  405 unit, 196 PostgreSQL, 29 agent, 46 server and 85 worker cases pass.
+  Scaffold is unchanged. The ordinary gate follows this commit; full all-component
+  qualification remains Milestone 7.
+- [x] (2026-09-07) Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
   and close runtime identity and nominal-type gaps.
 - [x] (2026-09-07) The complete generated RunJobMessage envelope is the runtime
   producer/consumer codec; queue policy, provisioning and ordering are wired.
@@ -150,6 +157,14 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+- Scalar qualification exposed the journaled generation-zero unbound seed: its
+  empty agent name is intentional only with unresolved identity, zero turns and
+  no messages. A complete custom seed decoder preserves those exact bytes and
+  rejects empty names on carried generations. The session-refusal fixture now
+  uses positive depth on a root session, which passes scalar validation and
+  exercises Kioku's real lineage rejection.
+
 
 Recovery qualification (2026-09-07): an exception before the first journal append
 leaves no discoverable workflow instance. The new recovery fixture must commit its
@@ -254,6 +269,15 @@ Danwa's cohort plan has made partial progress but does not record a completed mi
 build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade HEAD.
 
 ## Decision Log
+
+- Decision (2026-09-07): Own AgentName in the agent vertical, RunKey in agent-run,
+  and DelegationDepth in delegation. Keep explicit construction for trusted values
+  and validation on JSON ingress; add no IsString, Num or Semigroup shortcuts.
+  Evidence duration/concurrency use separate Natural-backed types. Preserve the
+  exact string/number wire representation and deterministic key derivations.
+  Rationale: the compiler now distinguishes unrelated names/keys/quantities without
+  changing the generated envelope or any durable workflow step shape. Depth-limit
+  arithmetic uses Integer to prevent overflow from admitting a child.
 
 - Decision (2026-09-07): Runtime role libraries depend on the migration library
   solely for read-only startup verification; core stays independent. Centralize

@@ -23,6 +23,8 @@ module Shikigami.Attestation.Evidence
     observeArtifactDigest,
     observeResultDigests,
     observeRuntimeMeasurements,
+    RunDurationSeconds (..),
+    PeakConcurrency (..),
     BehaviorTerminalState (..),
     RelevantChild (..),
     SealRefusal (..),
@@ -55,6 +57,7 @@ import Keiro.Workflow.Types (WorkflowId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ReviewRequestId (..))
+import Shikigami.Agent.Run.Key (RunKey)
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Reviewed (DiffDigest, ResultDigest, ReviewedArtifact)
@@ -232,7 +235,7 @@ observeResultDigests :: ResultDigest -> ResultDigest -> RunEvidence -> RunEviden
 observeResultDigests expected actual runEvidence =
   runEvidence & #resultEvidence .~ Just (ResultEvidence expected actual)
 
-observeRuntimeMeasurements :: Int -> Int -> RunEvidence -> RunEvidence
+observeRuntimeMeasurements :: RunDurationSeconds -> PeakConcurrency -> RunEvidence -> RunEvidence
 observeRuntimeMeasurements durationSeconds peakConcurrency runEvidence =
   runEvidence
     & #durationSeconds
@@ -355,6 +358,16 @@ upsertBy keyOf value existing =
 stableNub :: (Eq value) => [value] -> [value]
 stableNub = foldl' (\seen value -> if value `elem` seen then seen else seen <> [value]) []
 
+-- | Nonnegative measurements keep unlike quantities distinct. Their JSON is
+-- still a number; Natural rejects negative values at decoding.
+newtype RunDurationSeconds = RunDurationSeconds Natural
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+newtype PeakConcurrency = PeakConcurrency Natural
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (ToJSON, FromJSON)
+
 -- | Evidence lifecycle plus every immutable fact committed when the profile is
 -- resolved. Calls are added by the collection milestone; lifecycle comes first
 -- so the aggregate can reject sealing and reopening independently of payload
@@ -368,7 +381,7 @@ data RunEvidence = RunEvidence
     reviewed :: !ReviewedArtifact,
     profile :: !SanctionedExecutionProfileRef,
     reviewRequestId :: !ReviewRequestId,
-    idempotencyKey :: !Text,
+    idempotencyKey :: !RunKey,
     expectedCalls :: ![ExpectedCall],
     calls :: ![RecordedCallEvidence],
     deterministicSteps :: ![Text],
@@ -376,8 +389,8 @@ data RunEvidence = RunEvidence
     delegatedChildren :: ![RelevantChild],
     observedArtifactDigest :: !(Maybe DiffDigest),
     resultEvidence :: !(Maybe ResultEvidence),
-    durationSeconds :: !(Maybe Int),
-    peakConcurrency :: !(Maybe Int)
+    durationSeconds :: !(Maybe RunDurationSeconds),
+    peakConcurrency :: !(Maybe PeakConcurrency)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -391,7 +404,7 @@ requestEvidence ::
   ReviewedArtifact ->
   SanctionedExecutionProfileRef ->
   ReviewRequestId ->
-  Text ->
+  RunKey ->
   RunEvidence
 requestEvidence runEvidenceId runId agentVersion artifacts reviewed profile reviewRequestId idempotencyKey =
   RunEvidence

@@ -34,9 +34,12 @@ library
     Shikigami.Agent.Decl
     Shikigami.Agent.Delegate
     Shikigami.Agent.Delegate.Context
+    Shikigami.Agent.Delegate.Depth
     Shikigami.Agent.Loader
+    Shikigami.Agent.Name
     Shikigami.Agent.Principal
     Shikigami.Agent.Run
+    Shikigami.Agent.Run.Key
     Shikigami.Agent.RunFailure
     Shikigami.Agent.RunJob
     Shikigami.Agent.Skill

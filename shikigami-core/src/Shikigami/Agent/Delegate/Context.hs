@@ -14,6 +14,8 @@ import Control.Exception (Exception)
 import Keiro.Workflow.Types (WorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..), depthInt)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Prelude
 
@@ -26,12 +28,12 @@ newtype DelegationBudgetId = DelegationBudgetId Text
 
 -- | Context a run needs to decide whether it may delegate further.
 data DelegateCtx = DelegateCtx
-  { delegateDepth :: !Int,
+  { depth :: !DelegationDepth,
     identity :: !AgentIdentity,
     sessionId :: !(Maybe SessionId),
     parentSessionId :: !(Maybe SessionId),
     parentRunWorkflowId :: !(Maybe WorkflowId),
-    lineage :: ![Text],
+    lineage :: ![AgentName],
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     budgetLimit :: !DelegationBudget
   }
@@ -44,7 +46,7 @@ maxDelegationDepth = 4
 
 -- | Delegation failed before creating a child.
 data DelegationError
-  = DelegationDepthExceeded !Int
+  = DelegationDepthExceeded !Integer
   | DelegationMissingSessionId
   | DelegationCycleDetected !Text
   | DelegationBudgetExhausted
@@ -67,18 +69,18 @@ assertMayDelegate AgentDecl {delegates} target
 -- | Refuse an edge back to the current agent or any of its ancestors.
 checkCycle :: DelegateCtx -> Text -> Either DelegationError ()
 checkCycle DelegateCtx {lineage} target
-  | target `elem` lineage = Left (DelegationCycleDetected target)
+  | AgentName target `elem` lineage = Left (DelegationCycleDetected target)
   | otherwise = Right ()
 
 -- | Validate that a child can be created and return the child's depth context.
 checkDepth :: DelegateCtx -> Either DelegationError DelegateCtx
-checkDepth DelegateCtx {delegateDepth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, budgetLimit} =
-  let attemptedDepth = delegateDepth + 1
-   in if attemptedDepth < maxDelegationDepth
+checkDepth DelegateCtx {depth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, budgetLimit} =
+  let attemptedDepth = toInteger (depthInt depth) + 1
+   in if attemptedDepth < toInteger maxDelegationDepth
         then
           Right
             DelegateCtx
-              { delegateDepth = attemptedDepth,
+              { depth = DelegationDepth (fromInteger attemptedDepth),
                 identity,
                 sessionId,
                 parentSessionId,

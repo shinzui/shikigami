@@ -70,6 +70,7 @@ import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Name (AgentName (..), agentNameText)
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
     ResolvedAgentIdentity,
@@ -150,7 +151,7 @@ conversationTurnFailureDetail = \case
   ConversationBusy detail -> detail
 
 data ConversationStart = ConversationStart
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     identity :: !AgentIdentity,
     initialMessage :: !AddressedMessage
   }
@@ -198,20 +199,35 @@ data ConversationWake
 -- it instead. @lastMessageId@ is the message the previous generation finished,
 -- which lets a generation recognise a redelivery before doing any work.
 data ConversationSeed = ConversationSeed
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     identity :: !AgentIdentity,
     turnsSoFar :: !Int,
     pendingMessage :: !(Maybe AddressedMessage),
     lastMessageId :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+-- The initial seed is an explicit unbound value, not an ingress agent name.
+-- Retain its bytes while requiring every field and rejecting an empty name in
+-- any carried generation. ConversationStart and RunJob use strict AgentName.
+instance FromJSON ConversationSeed where
+  parseJSON = Aeson.withObject "ConversationSeed" \obj -> do
+    rawName <- obj Aeson..: "agentName"
+    identity <- obj Aeson..: "identity"
+    turnsSoFar <- obj Aeson..: "turnsSoFar"
+    pendingMessage <- obj Aeson..: "pendingMessage"
+    lastMessageId <- obj Aeson..: "lastMessageId"
+    let initial = identity == UnresolvedLegacyIdentity && turnsSoFar == 0 && pendingMessage == Nothing && lastMessageId == Nothing
+    if Text.null rawName && not initial
+      then fail "a carried conversation seed requires an agent name"
+      else pure ConversationSeed {agentName = AgentName rawName, identity, turnsSoFar, pendingMessage, lastMessageId}
 
 -- | The seed generation 0 starts from, before any rotation has happened.
 emptyConversationSeed :: ConversationSeed
 emptyConversationSeed =
   ConversationSeed
-    { agentName = "",
+    { agentName = AgentName "",
       identity = UnresolvedLegacyIdentity,
       turnsSoFar = 0,
       pendingMessage = Nothing,
@@ -297,7 +313,7 @@ runConversationTurnWithIdentity env decl identity msg@AddressedMessage {conversa
                         ("conversation is mid-turn; redelivering " <> (.messageId) msg)
                     )
                 )
-            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = (.name) decl, identity, initialMessage = msg})
+            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = AgentName ((.name) decl), identity, initialMessage = msg})
 
 -- | Is there a workflow instance for this epoch that could still accept work?
 --
@@ -636,9 +652,9 @@ conversationIdleTimeoutFireAction TimerRow {payload = timerPayload} =
 resolveDeclStep :: ConversationEnv -> ConversationStart -> Eff (Workflow : AppEffects) AgentDecl
 resolveDeclStep env ConversationStart {agentName} =
   step (StepName "lookup-agent") do
-    case find ((== agentName) . (.name)) ((.agents) env) of
+    case find ((== agentNameText agentName) . (.name)) ((.agents) env) of
       Just decl -> pure decl
-      Nothing -> liftIO (ioError (userError ("unknown conversation agent " <> Text.unpack agentName)))
+      Nothing -> liftIO (ioError (userError ("unknown conversation agent " <> Text.unpack (agentNameText agentName))))
 
 -- | One turn, on static labels.
 --

@@ -20,8 +20,10 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig)
@@ -113,12 +115,12 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
   freshId <- genSessionId
   let job =
         RunJob
-          { agentName = (.name) decl,
+          { agentName = AgentName ((.name) decl),
             identity = compatibilityIdentity ((.name) decl),
             triggerKind = TriggeredByEvent,
             occurredAt,
             triggerPayload = Aeson.Null,
-            idempotencyKey = (.name) decl <> ":cli:" <> idText freshId,
+            idempotencyKey = RunKey ((.name) decl <> ":cli:" <> idText freshId),
             parentSessionId = Nothing,
             parentRunWorkflowId = Nothing,
             delegationDepth = Nothing,

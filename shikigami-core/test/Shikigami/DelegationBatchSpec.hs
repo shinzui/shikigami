@@ -24,6 +24,8 @@ import Shikigami.Agent.Delegate
     preflightDelegationBatch,
   )
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
 import Shikigami.Router.Catalog
@@ -72,7 +74,7 @@ tests =
               "the declaration allow-list remains authoritative"
               (DelegationBatchGovernanceRejected (Just "intruder") (DelegationNotAllowed "intruder") `elem` found),
       testCase "preflight checks complete lineage, depth, and parent session before reservation" do
-        let blockedCtx = delegateCtx {delegateDepth = 3, sessionId = Nothing, lineage = ["root", "first"]}
+        let blockedCtx = delegateCtx {depth = DelegationDepth 3, sessionId = Nothing, lineage = map AgentName ["root", "first"]}
         case preflightDelegationBatch routerDecl blockedCtx catalog parentWorkflowId (batchRequest "cycle" "first" NonEmpty.:| []) of
           Right _ -> assertFailure "expected lineage, depth, and session rejection"
           Left errors -> do
@@ -96,11 +98,11 @@ delegateCtx :: DelegateCtx
 delegateCtx =
   DelegateCtx
     { identity = compatibilityIdentity "router",
-      delegateDepth = 0,
+      depth = DelegationDepth 0,
       sessionId = Just nominalSessionFixture,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      lineage = ["router"],
+      lineage = map AgentName ["router"],
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }

@@ -22,6 +22,9 @@ import Keiro.PGMQ (Job (..), JobCodec (..), JobDecodeError (..), queueRef)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (idText)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
+import Shikigami.Agent.Delegate.Depth (depthInt)
+import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.RunJobs.Generated.Queue (queuePhysical, queueTable)
 import Shikigami.RunJobs.Generated.Queue qualified as Queue
@@ -52,16 +55,16 @@ decodeRunJob value = do
 toMessage :: RunJob -> Queue.RunJobMessage
 toMessage job =
   Queue.RunJobMessage
-    { agentName = job.agentName,
+    { agentName = agentNameText job.agentName,
       identity = toJSON job.identity,
       triggerKind = triggerText job.triggerKind,
       occurredAt = job.occurredAt,
       triggerPayload = job.triggerPayload,
-      idempotencyKey = job.idempotencyKey,
+      idempotencyKey = runKeyText job.idempotencyKey,
       parentSessionId = idText <$> job.parentSessionId,
       parentRunWorkflowId = (.unWorkflowId) <$> job.parentRunWorkflowId,
-      delegationDepth = job.delegationDepth,
-      lineage = job.lineage,
+      delegationDepth = depthInt <$> job.delegationDepth,
+      lineage = agentNameText <$> job.lineage,
       delegationBudgetId = budgetText <$> job.delegationBudgetId,
       routeKind = routeText job.routeKind
     }

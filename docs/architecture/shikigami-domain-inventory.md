@@ -19,6 +19,13 @@ Paths in this section are relative to `shikigami-core/src/`.
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
 | Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
+RunJob retains `AgentName`, `RunKey`, `DelegationDepth`, parent `SessionId` and
+`WorkflowId` values through orchestration. Its generated transport adapter renders
+scalars explicitly and validates them on decode. Conversation seeds keep AgentName;
+delegation context carries nominal lineage and depth. Evidence uses generated
+RunEvidenceId, RunKey and distinct nonnegative duration/concurrency types. Existing
+attestation versions, digests and locators keep their owning nominal types.
+
 `Shikigami.Workflow.Registry` in core composes agent runs, approval children and
 conversations. The worker consumes this exact registry; the approval integration
 case verifies all three names. Bounded resume stops on zero durable advances and

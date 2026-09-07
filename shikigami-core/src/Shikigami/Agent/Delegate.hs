@@ -34,7 +34,9 @@ import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), RouterPolicy (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
@@ -119,7 +121,7 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
           delegationBudgetId = existingBudgetId,
           budgetLimit = currentBudgetLimit
         } = ctx
-      DelegateCtx {delegateDepth = childDepth} = childCtx
+      DelegateCtx {depth = childDepth} = childCtx
   currentSession <-
     case currentCtxSessionId of
       Just sid -> pure sid
@@ -143,17 +145,17 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
     Right DelegationSlotAlreadyReserved -> pure ()
   let childJob =
         RunJob
-          { agentName = childAgent,
+          { agentName = AgentName childAgent,
             identity = childIdentity,
             triggerKind = TriggeredByDelegation,
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,
-            idempotencyKey = childWorkflowIdText,
+            idempotencyKey = RunKey childWorkflowIdText,
             parentSessionId = Just currentSession,
             parentRunWorkflowId = Just parentWorkflowId,
             delegationDepth = Just childDepth,
-            lineage = currentLineage <> [childAgent],
+            lineage = currentLineage <> [AgentName childAgent],
             delegationBudgetId = Just budgetId
           }
   handle <-

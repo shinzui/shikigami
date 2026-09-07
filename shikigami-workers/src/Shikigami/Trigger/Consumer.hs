@@ -77,7 +77,9 @@ import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Directory qualified as Directory
@@ -606,17 +608,17 @@ prepareEventHits directory receivedAt agents payloadValue event =
     prepare agent = do
       let job =
             RunJob
-              { agentName = agent ^. #name,
+              { agentName = AgentName (agent ^. #name),
                 identity = UnresolvedLegacyIdentity,
                 triggerKind = TriggeredByEvent,
                 routeKind = eventRouteOf agent,
                 occurredAt = receivedAt,
                 triggerPayload = payloadValue,
-                idempotencyKey = agent ^. #name <> ":" <> event ^. #messageId,
+                idempotencyKey = RunKey (agent ^. #name <> ":" <> event ^. #messageId),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 delegationDepth = Nothing,
-                lineage = [agent ^. #name],
+                lineage = [AgentName (agent ^. #name)],
                 delegationBudgetId = Nothing
               }
           hit =
@@ -653,7 +655,7 @@ prepareTrigger directory detail agent job hit = do
             stage = TriggerStage,
             detail,
             reason,
-            idempotencyKey = job ^. #idempotencyKey
+            idempotencyKey = runKeyText (job ^. #idempotencyKey)
           }
 
 commitTrigger :: PreparedTrigger hit -> Tx.Transaction (CommittedTrigger hit)

@@ -9,6 +9,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Foldable (for_)
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
@@ -19,7 +20,9 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream), runJobWorkflowId)
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
@@ -147,13 +150,13 @@ queueTests =
 sampleRunJob :: RunJob
 sampleRunJob =
   RunJob
-    { agentName = "at-risk-watch",
+    { agentName = AgentName "at-risk-watch",
       identity = compatibilityIdentity "at-risk-watch",
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,
-      idempotencyKey = "at-risk-watch:act_1",
+      idempotencyKey = RunKey "at-risk-watch:act_1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -325,7 +328,16 @@ identityBoundaryTests :: TestTree
 identityBoundaryTests =
   testGroup
     "runtime identity boundaries"
-    [ testCase "a memory ID cannot enter the parent session boundary" do
+    [ testCase "generated queue ingress rejects invalid scalar domains" do
+        for_ [("agentName", Aeson.String ""), ("idempotencyKey", Aeson.String ""), ("delegationDepth", toJSON (-1 :: Int)), ("lineage", toJSON ([""] :: [Text]))] \(field, invalid) ->
+          case RunJobs.encodeRunJob sampleRunJob of
+            Object envelope -> case KeyMap.lookup "data" envelope of
+              Just (Object payload) -> case RunJobs.decodeRunJob (Object (KeyMap.insert "data" (Object (KeyMap.insert field invalid payload)) envelope)) of
+                Left _ -> pure ()
+                Right _ -> assertFailure ("invalid scalar accepted: " <> show field)
+              _ -> assertFailure "queue payload must be an object"
+            _ -> assertFailure "queue envelope must be an object",
+      testCase "a memory ID cannot enter the parent session boundary" do
         case toJSON sampleRunJob of
           Object fields -> case Aeson.fromJSON @RunJob (Object (KeyMap.insert "parentSessionId" (Aeson.String "kioku_memory_01kvxa7d2cezhs874g3n8dfgme") fields)) of
             Aeson.Error _ -> pure ()
@@ -341,7 +353,7 @@ identityBoundaryTests =
         let first = runJobWorkflowId sampleRunJob
         runJobWorkflowId sampleRunJob @?= first
         mkWorkflowId first.unWorkflowId @?= Right first
-        case runJobWorkflowId (sampleRunJob {idempotencyKey = "another:event"}) == first of
+        case runJobWorkflowId (sampleRunJob {idempotencyKey = RunKey "another:event"}) == first of
           False -> pure ()
           True -> assertFailure "distinct run keys collided"
     ]

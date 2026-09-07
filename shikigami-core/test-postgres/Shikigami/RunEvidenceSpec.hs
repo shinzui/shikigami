@@ -27,6 +27,7 @@ import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Attestation.Agent
 import Shikigami.Attestation.Compliance
 import Shikigami.Attestation.Compliance qualified as Compliance
@@ -46,7 +47,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude
 import Shikigami.RunEvidence.Catalog qualified as EvidenceCatalog
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
 tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
@@ -84,7 +85,12 @@ tests databaseFixture =
         ],
       testGroup
         "collection"
-        [ testCase "Options.evidence carries run, attempt, retry, and required strength" do
+        [ testCase "runtime measurements keep numeric wire values and reject negatives" do
+            assertEqual "duration JSON" (Right (RunDurationSeconds 12)) (eitherDecode "12")
+            assertEqual "concurrency JSON" (Right (PeakConcurrency 3)) (eitherDecode "3")
+            assertBool "negative duration refused" (either (const True) (const False) (eitherDecode "-1" :: Either String RunDurationSeconds))
+            assertBool "negative concurrency refused" (either (const True) (const False) (eitherDecode "-1" :: Either String PeakConcurrency)),
+          testCase "Options.evidence carries run, attempt, retry, and required strength" do
             let runId = runCorrelationId "run-evidence-options"
                 callId = callCorrelationId runId "run-behavior-v2" 1
                 configured =
@@ -572,7 +578,7 @@ sampleEvidence =
     sampleReviewed
     sampleProfileRef
     (ReviewRequestId "review-request-1")
-    "review-request-1:attempt-1"
+    (RunKey "review-request-1:attempt-1")
 
 sampleAggregateId :: RunEvidenceId
 sampleAggregateId =
@@ -586,7 +592,7 @@ rejectedSampleEvidence =
     & #runId
     .~ rejectedRunId
     & #idempotencyKey
-    .~ "review-request-2:attempt-1"
+    .~ RunKey "review-request-2:attempt-1"
 
 rejectedAggregateId :: RunEvidenceId
 rejectedAggregateId =

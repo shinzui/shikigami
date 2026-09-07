@@ -51,7 +51,9 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
@@ -204,7 +206,7 @@ pausedEnqueue databaseFixture =
     directory <- directoryWith Paused
     rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "lifecycle refusal creates no outbox row" [] rows
-    receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
+    receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((runKeyText ((.idempotencyKey) runJob)) <> ":sink:0"))
     assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
@@ -344,7 +346,7 @@ egressDenied databaseFixture = do
       let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
       rows <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       assertEqual "denied egress creates no outbox row" [] rows
-      receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
+      receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((runKeyText ((.idempotencyKey) runJob)) <> ":sink:0"))
       assertEqual "denied egress creates no receipt" (Right Nothing) receipt
       index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
       case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
@@ -632,13 +634,13 @@ agentDeclaration sinks =
 testJob :: Text -> RunJob
 testJob label =
   RunJob
-    { agentName = "heartbeat",
+    { agentName = AgentName "heartbeat",
       identity = compatibilityIdentity "heartbeat",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 21) 0,
       triggerPayload = object [],
-      idempotencyKey = "heartbeat:sink-delivery:" <> label,
+      idempotencyKey = RunKey ("heartbeat:sink-delivery:" <> label),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,

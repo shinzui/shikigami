@@ -22,6 +22,8 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
@@ -108,10 +110,10 @@ tests databaseFixture =
             messages <- readRunJobs pool
             case messages of
               [RunJob {agentName, triggerKind, occurredAt, idempotencyKey, triggerPayload}] -> do
-                assertEqual "agent name" "heartbeat" agentName
+                assertEqual "agent name" (AgentName "heartbeat") agentName
                 assertEqual "trigger kind" TriggeredBySchedule triggerKind
                 assertEqual "occurred at due minute" firstDue occurredAt
-                assertEqual "stable schedule idempotency key" "heartbeat:sched:2026-06-20T00:01:00Z" idempotencyKey
+                assertEqual "stable schedule idempotency key" (RunKey "heartbeat:sched:2026-06-20T00:01:00Z") idempotencyKey
                 assertEqual "payload parses as schedule" (Just ("heartbeat", firstDue)) (parseSchedulePayload triggerPayload)
               other -> assertFailure ("expected one run job, got " <> show other)
 
@@ -163,7 +165,7 @@ tests databaseFixture =
             messages <- readRunJobs pool
             assertEqual
               "waking a day late enqueues exactly the one run it was armed for"
-              ["heartbeat:sched:2026-06-20T00:01:00Z"]
+              [RunKey "heartbeat:sched:2026-06-20T00:01:00Z"]
               [(.idempotencyKey) job | job <- messages]
 
             staleNext <- expectedNext cron staleDue

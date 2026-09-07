@@ -41,7 +41,9 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, meiboPrincipal, principalText)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.RunJob.Worker (DrainAdmission (..), RunRoute (..), admitRunJobWith, agentJobOutcome, conversationJobOutcome, drainAdmissionOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -137,7 +139,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             let pool = StoreConnection.pool store
-                jobWith suffix = sampleJob {identity = UnresolvedLegacyIdentity, idempotencyKey = "codec-agent:event:" <> suffix}
+                jobWith suffix = sampleJob {identity = UnresolvedLegacyIdentity, idempotencyKey = RunKey ("codec-agent:event:" <> suffix)}
             activeDirectory <- directoryWith [principalRecord Active]
             active <- admitRunJobWith pool activeDirectory [drainAgent] (jobWith "active")
             assertAllowedAs "active principal continues" "agent_codec" active
@@ -343,13 +345,13 @@ assertDeadWith label prefix = \case
 sampleJob :: RunJob
 sampleJob =
   RunJob
-    { agentName = "codec-agent",
+    { agentName = AgentName "codec-agent",
       identity = compatibilityIdentity "codec-agent",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
       triggerPayload = Aeson.object ["kind" Aeson..= ("test" :: Text)],
-      idempotencyKey = "codec-agent:event:1",
+      idempotencyKey = RunKey "codec-agent:event:1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,

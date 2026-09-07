@@ -39,8 +39,10 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Delegate (delegatedWorkflowId)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
@@ -359,17 +361,17 @@ runSuccessfulChild appEnv deps childWorkflowId = do
 routerJob :: Text -> RunJob
 routerJob key =
   RunJob
-    { agentName = "router",
+    { agentName = AgentName "router",
       identity = compatibilityIdentity "router",
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = fixedTime,
       triggerPayload = secretPayload,
-      idempotencyKey = key,
+      idempotencyKey = RunKey key,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = ["router"],
+      lineage = map AgentName ["router"],
       delegationBudgetId = Nothing
     }
 

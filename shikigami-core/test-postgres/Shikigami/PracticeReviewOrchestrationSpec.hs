@@ -40,8 +40,11 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecordPolicy (Never), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
@@ -350,17 +353,17 @@ agentRunSpecialistTests databaseFixture =
             deps = specialistAgentRunDeps appEnv behaviorEnv runtime
             job =
               RunJob
-                { agentName = reviewerAgent,
+                { agentName = AgentName reviewerAgent,
                   identity = compatibilityIdentity reviewerAgent,
                   triggerKind = TriggeredByEvent,
                   routeKind = AgentWorkflowRoute,
                   occurredAt = UTCTime (fromGregorian 2026 8 26) 0,
                   triggerPayload = Aeson.toJSON trigger,
-                  idempotencyKey = "agent-run-practice-review-incomplete",
+                  idempotencyKey = RunKey "agent-run-practice-review-incomplete",
                   parentSessionId = Just parentSession,
                   parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
-                  delegationDepth = Just 1,
-                  lineage = ["architecture-practice-router", reviewerAgent],
+                  delegationDepth = Just (DelegationDepth 1),
+                  lineage = map AgentName ["architecture-practice-router", reviewerAgent],
                   delegationBudgetId = Nothing
                 }
         first <- AgentWorkflow.runAgentRunWorkflow deps job

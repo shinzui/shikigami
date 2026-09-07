@@ -87,8 +87,11 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..), depthInt)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, identityText, resolveAgentIdentity, resolvedIdentityText)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
+import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
@@ -215,7 +218,7 @@ agentDeclName :: AgentDecl -> Text
 agentDeclName AgentDecl {name} = name
 
 jobIdempotencyKey :: RunJob -> Text
-jobIdempotencyKey RunJob {idempotencyKey} = idempotencyKey
+jobIdempotencyKey RunJob {idempotencyKey} = runKeyText idempotencyKey
 
 -- | Named rather than used as a bare selector because 'SinkContext' also has a
 -- @logger@ field, and @DuplicateRecordFields@ makes the unqualified use
@@ -255,9 +258,9 @@ agentRunWorkflow ::
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps ingestJobStepName (ingestJob mJob)
-  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== (.agentName) job) . agentDeclName) ((.agents) deps)))
+  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== (agentNameText ((.agentName) job))) . agentDeclName) ((.agents) deps)))
   case mDecl of
-    Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (.agentName) job)))
+    Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (agentNameText ((.agentName) job)))))
     Just decl -> runResolvedAgent deps job decl
 
 runAgentRunWorkflow ::
@@ -377,7 +380,7 @@ runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl =
   where
     runResolved recordedIdentity = do
       withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
-        addAttribute traceSpan "agent.name" ((.agentName) job)
+        addAttribute traceSpan "agent.name" ((agentNameText ((.agentName) job)))
         addAttribute traceSpan "trigger.kind" (triggerKindText ((.trigger) decl))
         addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
       approvalPolicyForRun <- runStep deps (StepName "resolve-approval-policy") (pure (depsApprovalPolicy deps))
@@ -465,7 +468,7 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity
           enqueueSinkIntents
             (depsDirectory deps)
             (depsGrants deps)
-            ((.agentName) job)
+            ((agentNameText ((.agentName) job)))
             ((.identity) job)
             (runJobOccurredAt job)
             (activityFromJob job)
@@ -648,7 +651,7 @@ approveSinks deps approvalPolicyForRun sid job decl output = do
                   ("sink-" <> sinkKindText kind <> "-" <> Text.pack (show ordinal))
                   sid
                   ApprovalRequest
-                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> (.agentName) job <> "?",
+                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> (agentNameText ((.agentName) job)) <> "?",
                       context = output,
                       channel = approvalPolicyChannel policy
                     }
@@ -713,7 +716,7 @@ openSession deps recordedIdentity job decl = liftIO do
           subjectRef = Just (idText sid),
           previousSessionId = Nothing,
           parentSessionId = jobParentSessionId,
-          delegationDepth = fromMaybe 0 jobDelegationDepth,
+          delegationDepth = maybe 0 depthInt jobDelegationDepth,
           startedAt = startedAt'
         }
       & runKioku deps
@@ -815,7 +818,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
         }
     sinkEnv =
       FlowCapability.SinkEnv
-        { FlowCapability.agent = (.agentName) job,
+        { FlowCapability.agent = (agentNameText ((.agentName) job)),
           FlowCapability.runId = idText sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,
@@ -841,7 +844,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
         }
     practiceReviewAttentionEnv =
       PracticeReviewAttention.PracticeReviewAttentionEnv
-        { PracticeReviewAttention.agent = (.agentName) job,
+        { PracticeReviewAttention.agent = (agentNameText ((.agentName) job)),
           PracticeReviewAttention.identity = (.identity) job,
           PracticeReviewAttention.runId = idText sid,
           PracticeReviewAttention.occurredAt = Just (runJobOccurredAt job),
@@ -860,15 +863,15 @@ activityFromJob job@RunJob {triggerPayload} =
 syntheticActivityFromJob :: RunJob -> Activity.ActivityEnvelope
 syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempotencyKey} =
   Activity.ActivityEnvelope
-    { Activity.activityId = idempotencyKey,
+    { Activity.activityId = runKeyText idempotencyKey,
       Activity.occurredAt = Text.pack (iso8601Show occurredAt),
       Activity.source = "shinzui/shikigami",
-      Activity.actor = Activity.Actor {Activity.kind = "service", Activity.id = agentName, Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.subjectType = "run", Activity.subjectId = idempotencyKey},
+      Activity.actor = Activity.Actor {Activity.kind = "service", Activity.id = agentNameText agentName, Activity.session = Nothing},
+      Activity.subject = Activity.Subject {Activity.subjectType = "run", Activity.subjectId = runKeyText idempotencyKey},
       Activity.verb = "run.triggered",
       Activity.payload = triggerPayload,
       Activity.contextRefs = [],
-      Activity.idempotencyKey = idempotencyKey
+      Activity.idempotencyKey = runKeyText idempotencyKey
     }
 
 runDeclaredSupervisor ::
@@ -905,7 +908,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
 delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} =
   DelegateCtx
-    { delegateDepth = fromMaybe 0 delegationDepth,
+    { depth = fromMaybe (DelegationDepth 0) delegationDepth,
       identity,
       sessionId = Just currentSession,
       parentSessionId,
@@ -1301,7 +1304,7 @@ logSinkResult logger job result =
     logger
     (levelFor ((.outcome) result))
     "sink.result"
-    ( [ "agent" Aeson..= (.agentName) job,
+    ( [ "agent" Aeson..= (agentNameText ((.agentName) job)),
         Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
         "sink_kind" Aeson..= sinkKindText ((.kind) result),
         "outcome" Aeson..= outcomeText ((.outcome) result)

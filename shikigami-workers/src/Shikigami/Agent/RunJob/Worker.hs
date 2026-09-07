@@ -33,14 +33,16 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.Void (absurd)
 import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
 import Hasql.Pool qualified
-import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..))
+import Keiro.PGMQ (JobContext (..), JobOutcome (..))
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), meiboPrincipal, principalText)
+import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
@@ -126,7 +128,7 @@ admitRunJob env = admitRunJobWith ((.pool) env) (envDirectory env) ((.agents) en
 -- | The drain gate with its concrete dependencies exposed for focused tests.
 admitRunJobWith :: Hasql.Pool.Pool -> Directory.DirectoryHandle -> [AgentDecl] -> RunJob -> IO DrainAdmission
 admitRunJobWith storePool directory declarations job =
-  case find ((== (.agentName) job) . (.name)) declarations of
+  case find ((== (agentNameText ((.agentName) job))) . (.name)) declarations of
     Nothing -> recordRefusal Nothing "unknown agent declaration"
     Just AgentDecl {name, identity} -> do
       let declaredPrincipalId = principalOf <$> identity
@@ -146,12 +148,12 @@ admitRunJobWith storePool directory declarations job =
     recordRefusal resolvedPrincipalId skipReason = do
       let runSkip =
             DirectoryStore.RunSkip
-              { DirectoryStore.agentName = (.agentName) job,
+              { DirectoryStore.agentName = (agentNameText ((.agentName) job)),
                 DirectoryStore.principalId = resolvedPrincipalId,
                 DirectoryStore.stage = DirectoryStore.DrainStage,
                 DirectoryStore.detail = routeKindText ((.routeKind) job),
                 DirectoryStore.reason = skipReason,
-                DirectoryStore.idempotencyKey = (.idempotencyKey) job
+                DirectoryStore.idempotencyKey = (runKeyText ((.idempotencyKey) job))
               }
       DirectoryStore.recordRunSkip storePool runSkip >>= \case
         Left problem -> pure (DrainAuditFailed problem)
@@ -240,18 +242,12 @@ dispatchRunJob env job = do
 routeErrorJobOutcome :: Text -> JobOutcome
 routeErrorJobOutcome = deadOutcome "invalid_route_payload"
 
-routeText :: RunRoute -> Text
-routeText = \case
-  ConversationRoute _ -> "conversation"
-  AgentRunRoute -> "agent_run"
-  RouteError _ -> "route_error"
-
 -- | Drive one turn of a conversation agent.
 runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome
 runConversationAgent env job addressed =
-  case find ((== (.agentName) job) . (.name)) ((.agents) env) of
+  case find ((== (agentNameText ((.agentName) job))) . (.name)) ((.agents) env) of
     Nothing -> do
-      let detail = "unknown agent " <> (.agentName) job
+      let detail = "unknown agent " <> (agentNameText ((.agentName) job))
       runMetric Metrics.recordRunFailed env job
       runMetric Metrics.recordRunDeadLettered env job
       jobLog
@@ -331,9 +327,9 @@ runOneAgent :: WorkerEnv -> RunJob -> IO JobOutcome
 runOneAgent env job =
   runEff . runTracing (tracer ((.appEnv) env)) $
     withSpan' "agent.run" (spanArgs Consumer) \traceSpan -> do
-      addAttribute traceSpan "agent.name" ((.agentName) job)
+      addAttribute traceSpan "agent.name" ((agentNameText ((.agentName) job)))
       addAttribute traceSpan "trigger.kind" (triggerKindText ((.triggerKind) job))
-      addAttribute traceSpan "run.idempotency_key" ((.idempotencyKey) job)
+      addAttribute traceSpan "run.idempotency_key" ((runKeyText ((.idempotencyKey) job)))
       addAttribute traceSpan "run.workflow_id" (runJobWorkflowId job).unWorkflowId
       liftIO do
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
@@ -393,7 +389,7 @@ runOneAgent env job =
           Right ContinuedAsNew -> do
             jobLog env job Log.Info "worker.job.continued_as_new" []
             pure ()
-        pure (agentJobOutcome ((.agentName) job) resE)
+        pure (agentJobOutcome ((agentNameText ((.agentName) job))) resE)
 
 -- | The complete agent-workflow outcome table. The store error is deliberately
 -- polymorphic: its value is diagnostic only, while every store failure is a
@@ -440,7 +436,7 @@ jobLog env job level event fields =
     (envLogger env)
     level
     event
-    ( [ "agent" Aeson..= (.agentName) job,
+    ( [ "agent" Aeson..= (agentNameText ((.agentName) job)),
         Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
         "trigger_kind" Aeson..= triggerKindText ((.triggerKind) job)
       ]
@@ -456,7 +452,7 @@ triggerKindText = \case
 
 runMetric :: (Metrics.ShikigamiMetrics -> Text -> Text -> IO ()) -> WorkerEnv -> RunJob -> IO ()
 runMetric record env job =
-  record (envMetrics env) ((.agentName) job) (triggerKindText ((.triggerKind) job))
+  record (envMetrics env) ((agentNameText ((.agentName) job))) (triggerKindText ((.triggerKind) job))
 
 spanArgs :: SpanKind -> SpanArguments
 spanArgs spanKind =

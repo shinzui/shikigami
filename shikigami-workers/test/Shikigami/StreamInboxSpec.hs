@@ -18,6 +18,7 @@ import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQu
 import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
@@ -62,7 +63,7 @@ tests databaseFixture =
           jobs <- readRunJobs pool
           case jobs of
             [RunJob {idempotencyKey}] ->
-              assertEqual "stable stream idempotency key" "risk-agent:act_stream_1" idempotencyKey
+              assertEqual "stable stream idempotency key" (RunKey "risk-agent:act_stream_1") idempotencyKey
             other -> assertFailure ("expected one RunJob, got " <> show other)
           inbox <- readInbox appEnv
           assertEqual "completed inbox row" (Just InboxCompleted) (inboxStatus <$> inbox),
