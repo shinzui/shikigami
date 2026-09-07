@@ -36,7 +36,7 @@ runValidate path = do
       exitFailure
     Right decl -> do
       print decl -- the Show-rendered manifest
-      when (not (enabled decl)) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
+      when (not ((.enabled) decl)) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
       case routerDeclarationErrors decl of
         errors@(_ : _) -> do
           traverse_ (\err -> hPutStrLn stderr ("validate: router error: " <> Text.unpack (renderRouterDeclarationError err))) errors
@@ -52,7 +52,7 @@ runValidate path = do
           traverse_ (\err -> hPutStrLn stderr ("validate: " <> Text.unpack err)) errors
           exitFailure
         [] -> pure ()
-      case behavior decl of
+      case (.behavior) decl of
         Skill {path = skillDir} -> do
           let skillDir' = Text.unpack skillDir
           skillResult <- validateSkill skillDir'

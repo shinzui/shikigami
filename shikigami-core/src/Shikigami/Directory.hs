@@ -274,13 +274,13 @@ consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecisio
 consultLifecycle DisabledDirectory _ _ = pure (AllowRun Nothing)
 consultLifecycle directoryHandle@(ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
-  case snapshot state of
-    Nothing -> pure (DirectoryUnavailable (maybe "directory has no valid snapshot" id (lastError state)))
+  case (.snapshot) state of
+    Nothing -> pure (DirectoryUnavailable (maybe "directory has no valid snapshot" id ((.lastError) state)))
     Just _ -> do
       found <- lookupPrincipal directoryHandle declaredPrincipalId agentHandle
       pure case found of
         Nothing -> UnknownPrincipal (maybe agentHandle id declaredPrincipalId)
-        Just principal -> case lifecycle principal of
+        Just principal -> case (.lifecycle) principal of
           Active -> AllowRun (Just principal)
           Paused -> SkipRun principal "principal lifecycle is paused"
           Deactivated -> SkipRun principal "principal lifecycle is deactivated"
@@ -292,7 +292,7 @@ lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
   fmap
     ( \case
         AllowRun Nothing -> Right declaredPrincipalId
-        AllowRun (Just principal) -> Right (Just (principalId principal))
+        AllowRun (Just principal) -> Right (Just ((.principalId) principal))
         SkipRun _ reason -> Left reason
         UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
@@ -309,7 +309,7 @@ identityAdmission directoryHandle declaredPrincipalId agentHandle =
   fmap
     ( \case
         AllowRun Nothing -> Right (compatibilityIdentity agentHandle)
-        AllowRun (Just principal) -> VerifiedIdentity <$> mkAgentPrincipal (principalId principal)
+        AllowRun (Just principal) -> VerifiedIdentity <$> mkAgentPrincipal ((.principalId) principal)
         SkipRun _ reason -> Left reason
         UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
@@ -352,7 +352,7 @@ identityLifecycleAdmission directoryHandle recordedIdentity =
 principalAttribution :: DirectoryHandle -> Maybe Text -> Text -> IO Text
 principalAttribution directoryHandle declaredPrincipalId agentHandle = do
   found <- lookupPrincipal directoryHandle declaredPrincipalId agentHandle
-  pure (maybe (maybe agentHandle id declaredPrincipalId) principalId found)
+  pure (maybe (maybe agentHandle id declaredPrincipalId) (.principalId) found)
 
 -- | Look up by authoritative principal id, or by normalized handle only when
 -- no id was declared.
@@ -361,19 +361,19 @@ lookupPrincipal DisabledDirectory _ _ = pure Nothing
 lookupPrincipal (ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
   pure do
-    view <- snapshot state
+    view <- (.snapshot) state
     case declaredPrincipalId of
-      Just identifier -> Map.lookup identifier (byPrincipalId view)
-      Nothing -> Map.lookup (normalizeHandle agentHandle) (byHandle view)
+      Just identifier -> Map.lookup identifier ((.byPrincipalId) view)
+      Nothing -> Map.lookup (normalizeHandle agentHandle) ((.byHandle) view)
 
 -- | Principals in deterministic handle order, for inspection and sync commands.
 directoryPrincipals :: DirectoryHandle -> IO [PrincipalRecord]
 directoryPrincipals DisabledDirectory = pure []
 directoryPrincipals (ConfiguredDirectory _ _ stateRef) = do
   state <- readIORef stateRef
-  pure case snapshot state of
+  pure case (.snapshot) state of
     Nothing -> []
-    Just view -> sortOn (normalizeHandle . principalHandle) (Map.elems (byPrincipalId view))
+    Just view -> sortOn (normalizeHandle . principalHandle) (Map.elems ((.byPrincipalId) view))
 
 -- | Capture one complete directory generation for a larger decision boundary.
 -- A refresh after this read cannot alter the returned value.
@@ -385,14 +385,14 @@ readDirectorySnapshot DisabledDirectory =
       }
 readDirectorySnapshot (ConfiguredDirectory sourceKind _ stateRef) = do
   state <- readIORef stateRef
-  pure case snapshot state of
+  pure case (.snapshot) state of
     Nothing ->
       DirectoryUnavailableSnapshot
         { source = sourceKind,
           version = directorySnapshotVersion sourceKind "unavailable" []
         }
     Just view ->
-      let principals = Map.elems (byPrincipalId view)
+      let principals = Map.elems ((.byPrincipalId) view)
        in DirectoryConfiguredSnapshot
             { source = sourceKind,
               version = directorySnapshotVersion sourceKind "available" principals,
@@ -426,16 +426,16 @@ durationMicroseconds = ceiling . (* 1_000_000) . nominalDiffTimeToSeconds
 buildDirectoryView :: UTCTime -> [PrincipalRecord] -> Either Text DirectoryView
 buildDirectoryView loadedAt principals = do
   validated <- traverse validatePrincipal principals
-  principalIndex <- uniqueIndex "principal id" principalId validated
+  principalIndex <- uniqueIndex "principal id" (.principalId) validated
   handleIndex <- uniqueIndex "normalized handle" (normalizeHandle . principalHandle) validated
   pure DirectoryView {byPrincipalId = principalIndex, byHandle = handleIndex, loadedAt}
 
 validatePrincipal :: PrincipalRecord -> Either Text PrincipalRecord
 validatePrincipal principal
-  | not ("agent_" `Text.isPrefixOf` principalId principal) =
-      Left ("principal id must begin with agent_: " <> principalId principal)
+  | not ("agent_" `Text.isPrefixOf` (.principalId) principal) =
+      Left ("principal id must begin with agent_: " <> (.principalId) principal)
   | Text.null (normalizeHandle (principalHandle principal)) =
-      Left ("principal handle must not be empty: " <> principalId principal)
+      Left ("principal handle must not be empty: " <> (.principalId) principal)
   | otherwise = Right principal
 
 uniqueIndex :: Text -> (PrincipalRecord -> Text) -> [PrincipalRecord] -> Either Text (Map Text PrincipalRecord)
@@ -464,7 +464,7 @@ directorySnapshotVersion sourceKind state principals =
                 ( nameBytes
                     ( canonicalValues
                         ( ["shikigami-directory-snapshot-v1", renderDirectorySourceKind sourceKind, state]
-                            <> concatMap principalValues (sortOn principalId principals)
+                            <> concatMap principalValues (sortOn (.principalId) principals)
                         )
                     )
                 )

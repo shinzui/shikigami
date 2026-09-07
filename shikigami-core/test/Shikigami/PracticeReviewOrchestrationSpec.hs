@@ -84,9 +84,9 @@ import Shikigami.PracticeReview.Attention
   )
 import Shikigami.PracticeReview.Authorization
   ( AuthorizedPracticeReviewResolution (..),
+    AuthorizedResolutionReceipt (authorizationId),
     ResolutionAuthorityKind (Human),
     ResolutionAuthorizationError (..),
-    authorizationId,
     mkAuthorizedResolutionReceipt,
     validateAuthorizedPracticeReviewResolution,
   )
@@ -154,7 +154,7 @@ authorizationTests =
         let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = receipt}
         decoded <- decodeOrFail (encode envelope)
         validateAuthorizedPracticeReviewResolution decoded @?= Right (validated, receipt)
-        authorizationId receipt @?= "7898dedb-294d-5f61-872b-211c0df7c6af",
+        (.authorizationId) receipt @?= "7898dedb-294d-5f61-872b-211c0df7c6af",
       testCase "subject mismatch, disallowed source, and altered receipt are refused" do
         resolution <- firstResolution
         validated <- expectRight (validateResolution resolution)

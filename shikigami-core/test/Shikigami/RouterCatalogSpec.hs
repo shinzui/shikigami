@@ -61,7 +61,7 @@ tests =
           @?= ["opentelemetry-reviewer", "disabled-reviewer", "duplicate-reviewer", "missing-reviewer"]
         candidateAvailabilities catalog
           @?= [Available, Excluded Disabled, Excluded DuplicateDeclaration, Excluded MissingDeclaration]
-        unassociatedLoadFailures catalog @?= 1,
+        (.unassociatedLoadFailures) catalog @?= 1,
       testCase "one immutable lifecycle snapshot" do
         principalsRef <- newIORef [principalRecord "opentelemetry-reviewer" Directory.Active]
         directoryHandle <- newDirectoryHandle (readIORef principalsRef >>= staticDirectorySource)
@@ -75,7 +75,7 @@ tests =
             currentCatalog = build report current ["opentelemetry-reviewer"]
         candidateAvailabilities capturedCatalog @?= [Available]
         candidateAvailabilities currentCatalog @?= [Excluded Paused]
-        assertBool "lifecycle change changes catalog version" (version capturedCatalog /= version currentCatalog),
+        assertBool "lifecycle change changes catalog version" ((.version) capturedCatalog /= (.version) currentCatalog),
       testCase "lifecycle exclusions are explicit" do
         snapshot <-
           configuredSnapshot
@@ -94,7 +94,7 @@ tests =
                 specialist "explicit-handle" True (Just "agent_unknown")
               ]
             catalog = build (reportOf declarations) snapshot names
-        lifecycleSource catalog @?= DirectoryFileSource
+        (.lifecycleSource) catalog @?= DirectoryFileSource
         candidateAvailabilities catalog
           @?= [ Available,
                 Excluded Paused,
@@ -115,10 +115,10 @@ tests =
             localCatalog = build report localEnabled names
             unavailableJson = renderCatalog unavailableCatalog
             localJson = renderCatalog localCatalog
-        lifecycleSource unavailableCatalog @?= DirectoryFileSource
+        (.lifecycleSource) unavailableCatalog @?= DirectoryFileSource
         candidateAvailabilities unavailableCatalog @?= [Excluded LifecycleUnavailable, Excluded Disabled]
         assertBool "file mode is honestly attributed" ("directory-file" `Text.isInfixOf` unavailableJson)
-        lifecycleSource localCatalog @?= DirectoryDisabledSource
+        (.lifecycleSource) localCatalog @?= DirectoryDisabledSource
         candidateAvailabilities localCatalog @?= [Available, Excluded Disabled]
         assertBool "disabled mode is honestly attributed" ("local-enabled" `Text.isInfixOf` localJson)
         assertBool "neither shipped mode claims a live client" (not ("meibo-client" `Text.isInfixOf` (unavailableJson <> localJson))),
@@ -129,7 +129,7 @@ tests =
                 (reportOf [specialist "reviewer" True Nothing, specialistWithDescription "conflicting description" "reviewer" True Nothing])
                 snapshot
                 ["reviewer"]
-        candidates catalog
+        (.candidates) catalog
           @?= [ CandidateEntry
                   { name = "reviewer",
                     description = Nothing,
@@ -146,7 +146,7 @@ tests =
                 snapshot
                 ["reviewer"]
             rendered = Text.Encoding.decodeUtf8 (LBS.toStrict (encode catalog))
-        unassociatedLoadFailures catalog @?= 1
+        (.unassociatedLoadFailures) catalog @?= 1
         assertBool "behavior body is redacted" (not ("secret behavior prompt" `Text.isInfixOf` rendered))
         assertBool "failure path is redacted" (not ("secret/path" `Text.isInfixOf` rendered))
         assertBool "failure diagnostic is redacted" (not ("secret diagnostic" `Text.isInfixOf` rendered)),
@@ -155,7 +155,7 @@ tests =
         let report = reportOf [specialist "reviewer" True Nothing]
             first = build report snapshot ["reviewer"]
             second = build report snapshot ["reviewer"]
-        version first @?= version second
+        (.version) first @?= (.version) second
         encode first @?= encode second
         eitherDecode (encode first) @?= Right first,
       testCase "every model-visible change changes the catalog version" do
@@ -165,9 +165,9 @@ tests =
             changedDescription = build (reportOf [specialistWithDescription "changed" "reviewer" True Nothing]) activeSnapshot ["reviewer"]
             changedLifecycle = build (reportOf [specialist "reviewer" True Nothing]) pausedSnapshot ["reviewer"]
             changedFailureCount = build (AgentLoadReport [loaded "reviewer.dhall" (specialist "reviewer" True Nothing), failed "broken.dhall" "broken"]) activeSnapshot ["reviewer"]
-        assertBool "description changes version" (version first /= version changedDescription)
-        assertBool "lifecycle changes version" (version first /= version changedLifecycle)
-        assertBool "failure count changes version" (version first /= version changedFailureCount)
+        assertBool "description changes version" ((.version) first /= (.version) changedDescription)
+        assertBool "lifecycle changes version" ((.version) first /= (.version) changedLifecycle)
+        assertBool "failure count changes version" ((.version) first /= (.version) changedFailureCount)
     ]
 
 build :: AgentLoadReport -> DirectorySnapshot -> [Text] -> CandidateCatalog

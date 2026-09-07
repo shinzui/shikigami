@@ -78,8 +78,8 @@ runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
   let runtime =
         JobRuntime
-          { runtimePool = pool env,
-            runtimeTracer = Just (tracer (appEnv env))
+          { runtimePool = (.pool) env,
+            runtimeTracer = Just (tracer ((.appEnv) env))
           }
   result <- runJobEff runtime do
     -- Queue reconciliation owns both the main queue and its policy-enabled DLQ.

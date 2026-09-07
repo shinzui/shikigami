@@ -21,7 +21,7 @@ import System.IO (hPutStrLn, stderr)
 -- @--danwa-url@ is a command-line source for that key.
 runDanwaSpike :: String -> String -> AppConfig -> IO ()
 runDanwaSpike humanArg agentArg config = do
-  let danwaUrl = Text.unpack (Config.danwaBaseUrl config)
+  let danwaUrl = Text.unpack ((.danwaBaseUrl) config)
       human = Text.pack humanArg
       agent = Text.pack agentArg
       action = do

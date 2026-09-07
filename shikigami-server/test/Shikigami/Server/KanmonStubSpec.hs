@@ -32,7 +32,7 @@ tests =
           let EgressActionResponse {activityId, verb} = decodeResponse response
           assertBool "activity id is a bounded fixture id" ("act_" `Text.isPrefixOf` activityId)
           verb @?= "conversation.reply_sent"
-          acceptedEffects <$> readIORef state >>= (@?= 1),
+          (.acceptedEffects) <$> readIORef state >>= (@?= 1),
       testCase "authenticates before attempting to parse a body" do
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
@@ -40,7 +40,7 @@ tests =
           wrong <- postAction port route (Just "Bearer wrong-token") "not-json"
           assertUnauthorized missing
           assertUnauthorized wrong
-          acceptedEffects <$> readIORef state >>= (@?= 0),
+          (.acceptedEffects) <$> readIORef state >>= (@?= 0),
       testCase "rejects malformed JSON, forbidden destinations, and unknown routes" do
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
@@ -50,7 +50,7 @@ tests =
           statusCode (Http.responseStatus malformed) @?= 400
           statusCode (Http.responseStatus forbidden) @?= 403
           statusCode (Http.responseStatus missing) @?= 404
-          acceptedEffects <$> readIORef state >>= (@?= 0),
+          (.acceptedEffects) <$> readIORef state >>= (@?= 0),
       testCase "same idempotency key returns one id and records one accepted effect" do
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
@@ -58,15 +58,15 @@ tests =
           second <- postAction port route (Just expectedAuthorization) (encode actionRequest)
           decodeResponse first @?= decodeResponse second
           snapshot <- readIORef state
-          acceptedEffects snapshot @?= 1
-          length (idempotency snapshot) @?= 1,
+          (.acceptedEffects) snapshot @?= 1
+          length ((.idempotency) snapshot) @?= 1,
       testCase "requests without idempotency keys remain fresh effects" do
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
           first <- postAction port route (Just expectedAuthorization) (encode (actionRequest {idempotencyKey = Nothing}))
           second <- postAction port route (Just expectedAuthorization) (encode (actionRequest {idempotencyKey = Nothing}))
-          assertBool "fresh requests receive different ids" (activityId (decodeResponse first) /= activityId (decodeResponse second))
-          acceptedEffects <$> readIORef state >>= (@?= 2)
+          assertBool "fresh requests receive different ids" ((.activityId) (decodeResponse first) /= (.activityId) (decodeResponse second))
+          (.acceptedEffects) <$> readIORef state >>= (@?= 2)
     ]
 
 allowed :: Set.Set Text

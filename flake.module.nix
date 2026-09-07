@@ -29,6 +29,8 @@
     # any other.
     treefmt.settings.global.excludes = [
       "shikigami-core/src/Shikigami/Generated/*.hs"
+      "shikigami-core/src/Shikigami/Generated/Nominals/*.hs"
+      "shikigami-core/src/.keiro-dsl-generated-haskell-migrations/**"
       "shikigami-core/src/Shikigami/*/Generated/*.hs"
       "shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal"
       "shikigami-core/src/keiro-dsl-conformance.workspace.*/src/Main.hs"

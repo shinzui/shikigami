@@ -64,41 +64,41 @@ dispatch ctx sink output = do
   let kind = sinkKindOf sink
       agent = sinkIdentityText ctx
       resolvedConversation = case ctx of SinkContext {conversationKey = value} -> value
-  lifecycle <- Directory.identityLifecycleAdmission (directory ctx) (identity ctx)
+  lifecycle <- Directory.identityLifecycleAdmission ((.directory) ctx) ((.identity) ctx)
   case lifecycle of
     Left reason -> do
       Log.logWarn
-        (logger ctx)
+        ((.logger) ctx)
         "sink.lifecycle_skipped"
         [ "agent" Aeson..= agent,
-          Log.runIdKey Aeson..= runId ctx,
+          Log.runIdKey Aeson..= (.runId) ctx,
           "sink_kind" Aeson..= sinkKindText kind,
           "reason" Aeson..= reason
         ]
       pure (SinkResult kind (SkippedLifecycle reason))
     Right _ -> do
-      grant <- checkGrant (grants ctx) (identity ctx) kind
+      grant <- checkGrant ((.grants) ctx) ((.identity) ctx) kind
       case grant of
         Left (Denied reason) -> do
           Log.logWarn
-            (logger ctx)
+            ((.logger) ctx)
             "sink.denied"
             [ "agent" Aeson..= sinkIdentityText ctx,
-              Log.runIdKey Aeson..= runId ctx,
+              Log.runIdKey Aeson..= (.runId) ctx,
               "sink_kind" Aeson..= sinkKindText kind,
               "reason" Aeson..= reason
             ]
           pure (SinkResult kind (DeniedOutcome reason))
         Right () -> do
           now <- getCurrentTime
-          authorizeSinkAction (actionAuthorizerFor (grants ctx)) (identity ctx) sink (danwaTarget ctx) (recipientOverride ctx) resolvedConversation now >>= \case
+          authorizeSinkAction (actionAuthorizerFor ((.grants) ctx)) ((.identity) ctx) sink ((.danwaTarget) ctx) ((.recipientOverride) ctx) resolvedConversation now >>= \case
             Left failure@ActionPolicyDenied {} -> do
               let reason = authorizationFailureDetail failure
-              Log.logWarn (logger ctx) "sink.action_denied" ["agent" Aeson..= agent, Log.runIdKey Aeson..= runId ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              Log.logWarn ((.logger) ctx) "sink.action_denied" ["agent" Aeson..= agent, Log.runIdKey Aeson..= (.runId) ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
               pure (SinkResult kind (DeniedOutcome reason))
             Left failure -> do
               let reason = authorizationFailureDetail failure
-              Log.logError (logger ctx) "sink.authorization_failed" ["agent" Aeson..= agent, Log.runIdKey Aeson..= runId ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              Log.logError ((.logger) ctx) "sink.authorization_failed" ["agent" Aeson..= agent, Log.runIdKey Aeson..= (.runId) ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
               pure (SinkResult kind (AuthorizationFailed reason))
             Right _ -> SinkResult kind <$> runSink ctx sink output
 
@@ -110,7 +110,7 @@ runSink ctx sink output = case sink of
       Left err@KawaPayloadError {} -> pure (PermanentFailure (renderKawaError err))
       Left err -> pure (kawaFailure err)
       Right env -> do
-        r <- postEnvelopeWithHeaders (http ctx ^. #kawa) (traceHeaders ctx) (kawa ctx) env
+        r <- postEnvelopeWithHeaders ((.http) ctx ^. #kawa) ((.traceHeaders) ctx) ((.kawa) ctx) env
         pure (either kawaFailure Delivered r)
   KizashiSignal {} -> do
     -- A strategy that was declared and could not be honored is said out loud;
@@ -118,35 +118,35 @@ runSink ctx sink output = case sink of
     traverse_
       ( \warning ->
           Log.logWarn
-            (logger ctx)
+            ((.logger) ctx)
             "sink.recipient.unresolved"
             [ "agent" Aeson..= sinkIdentityText ctx,
-              Log.runIdKey Aeson..= runId ctx,
+              Log.runIdKey Aeson..= (.runId) ctx,
               "sink_kind" Aeson..= sinkKindText SKizashiSignal,
               "detail" Aeson..= warning
             ]
       )
-      (unresolvableRecipientWarning sink (recipientOverride ctx))
-    case buildSignalReq (kizashi ctx) (recipientOverride ctx) sink (identity ctx) output of
+      (unresolvableRecipientWarning sink ((.recipientOverride) ctx))
+    case buildSignalReq ((.kizashi) ctx) ((.recipientOverride) ctx) sink ((.identity) ctx) output of
       Left e -> pure (Failed e)
       Right req -> do
-        r <- postSignalWithHeaders (http ctx ^. #kizashi) (traceHeaders ctx) (kizashi ctx) req
-        pure (either kizashiFailure (Delivered . signalId) r)
+        r <- postSignalWithHeaders ((.http) ctx ^. #kizashi) ((.traceHeaders) ctx) ((.kizashi) ctx) req
+        pure (either kizashiFailure (Delivered . (.signalId)) r)
   ReiAction {} -> do
-    r <- runReiAction (Http.unauthenticatedHttpEnv (http ctx ^. #kawa)) (rei ctx) ctx sink output
+    r <- runReiAction (Http.unauthenticatedHttpEnv ((.http) ctx ^. #kawa)) ((.rei) ctx) ctx sink output
     pure (either Failed Delivered r)
   DanwaConversation {} -> do
-    r <- runDanwaWithHeaders (http ctx ^. #danwa) (traceHeaders ctx) (danwa ctx) (identity ctx) (receipts ctx) (danwaTarget ctx) sink output
+    r <- runDanwaWithHeaders ((.http) ctx ^. #danwa) ((.traceHeaders) ctx) ((.danwa) ctx) ((.identity) ctx) ((.receipts) ctx) ((.danwaTarget) ctx) sink output
     pure (either danwaFailure Delivered r)
   ChannelEgress {channel, action} ->
     case buildEgressRequest ctx output of
       Left failure -> pure (PermanentFailure failure)
       Right request -> do
-        result <- postEgressWithHeaders (http ctx ^. #kanmon) (traceHeaders ctx) (kanmon ctx) channel action request
-        pure (either kanmonFailure (Delivered . activityId) result)
+        result <- postEgressWithHeaders ((.http) ctx ^. #kanmon) ((.traceHeaders) ctx) ((.kanmon) ctx) channel action request
+        pure (either kanmonFailure (Delivered . (.activityId)) result)
 
 sinkIdentityText :: SinkContext -> Text
-sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (identityText (identity ctx))
+sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (identityText ((.identity) ctx))
 
 kawaFailure :: KawaError -> SinkOutcome
 kawaFailure failure = case failure of

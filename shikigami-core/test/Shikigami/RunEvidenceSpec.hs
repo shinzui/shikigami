@@ -108,7 +108,7 @@ tests =
                 Baikai.EvidenceRequestedOnly
                 Nothing
             _ <- BaikaiTrace.withTrace sink stubModel emptyContext options
-            collected <- terminalCallsFor source runId
+            collected <- (.terminalCallsFor) source runId
             case collected of
               [RecordedCallEvidence {callId = collectedId, relationship = RootCall, evidence = terminal}] -> do
                 assertEqual "correlation id" (renderCallCorrelationId callId) (renderCallCorrelationId collectedId)
@@ -378,7 +378,7 @@ tests =
               let rejectedEvidence = recordCall rejectedWrongModelCall rejectedRunning
                   rejectedRollUp = evaluateCompliance baselineProfile rejectedEvidence
                   expectedRejection = ModelNotPermitted rejectedCall0Text "model-x"
-              assertEqual "rejected fixture accumulates its reason" [expectedRejection] (Compliance.reasons rejectedRollUp)
+              assertEqual "rejected fixture accumulates its reason" [expectedRejection] ((.reasons) rejectedRollUp)
               rejectedResult <-
                 withEvidenceRuntime connectionString \store ->
                   persistEvidenceTransition store rejectedEvidence NonConforming (Just rejectedRollUp)

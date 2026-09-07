@@ -281,7 +281,7 @@ reiActionTests =
     [ testCase "with no endpoint configured it fails rather than claiming delivery" do
         result <- dispatch (ctxWith (ReiConfig {baseUrl = Nothing})) sampleReiSink sampleOutput
         kindOf result @?= SReiAction
-        case outcome result of
+        case (.outcome) result of
           Failed reason -> do
             reason @?= unconfiguredMessage "int_42"
             -- The operator reading a repeating publisher log needs the
@@ -293,7 +293,7 @@ reiActionTests =
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
           result <- dispatch (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
-          case outcome result of
+          case (.outcome) result of
             Delivered detail -> assertBool ("the detail should name the intention: " <> Text.unpack detail) ("int_42" `Text.isInfixOf` detail)
             other -> assertFailure ("a configured rei sink should deliver, got " <> show other)
           posted <- readIORef recorded
@@ -313,7 +313,7 @@ reiActionTests =
         recorded <- newIORef []
         testWithApplication (pure (refusingReiApp recorded)) \port -> do
           result <- dispatch (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
-          case outcome result of
+          case (.outcome) result of
             Failed reason -> assertBool ("the failure should name the status:\n" <> Text.unpack reason) ("503" `Text.isInfixOf` reason)
             other -> assertFailure ("a refused POST must fail, got " <> show other),
       testCase "a denied agent never reaches the handler at all" do
@@ -321,7 +321,7 @@ reiActionTests =
         testWithApplication (pure (stubReiApp recorded)) \port -> do
           let ctx = ctxWithIdentity (compatibilityIdentity "intruder") (ReiConfig {baseUrl = Just (localBaseUrl port)})
           result <- dispatch ctx sampleReiSink sampleOutput
-          case outcome result of
+          case (.outcome) result of
             DeniedOutcome _ -> pure ()
             other -> assertFailure ("an ungranted agent must be denied, got " <> show other)
           posted <- readIORef recorded

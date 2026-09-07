@@ -75,31 +75,31 @@ runAgentRun agentArg mActivity workspace config = do
 
 runDurableAgent :: Log.Logger -> KirokuStore -> AppEnv -> Maybe FilePath -> AppConfig -> AgentDecl -> IO ()
 runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
-  behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
+  behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
   capabilities <-
     oneOffCapabilityRuntime workspace decl >>= \case
       Left err -> dieAgentRun (renderOneOffCapabilityError err)
       Right runtime -> pure runtime
   let kizashiConfig =
         KizashiConfig
-          { baseUrl = Config.kizashiBaseUrl config,
-            defaultRecipient = Config.kizashiDefaultRecipient config
+          { baseUrl = (.kizashiBaseUrl) config,
+            defaultRecipient = (.kizashiDefaultRecipient) config
           }
       kawaConfig =
         KawaConfig
-          { baseUrl = Config.kawaBaseUrl config,
-            sourceSegment = Config.kawaSourceSegment config
+          { baseUrl = (.kawaBaseUrl) config,
+            sourceSegment = (.kawaSourceSegment) config
           }
-      kanmonConfig = KanmonConfig {baseUrl = Config.kanmonBaseUrl config}
+      kanmonConfig = KanmonConfig {baseUrl = (.kanmonBaseUrl) config}
       danwaConfig =
         DanwaConfig
-          { baseUrl = Config.danwaBaseUrl config,
-            agentParticipant = Config.danwaAgentParticipant config
+          { baseUrl = (.danwaBaseUrl) config,
+            agentParticipant = (.danwaAgentParticipant) config
           }
       httpLimits =
         HttpLimits
-          { requestBytes = Config.httpRequestMaxBytes config,
-            responseBytes = Config.httpResponseMaxBytes config
+          { requestBytes = (.httpRequestMaxBytes) config,
+            responseBytes = (.httpResponseMaxBytes) config
           }
   sinkHttp <-
     newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
@@ -109,12 +109,12 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
   freshId <- genSessionId
   let job =
         RunJob
-          { agentName = name decl,
-            identity = compatibilityIdentity (name decl),
+          { agentName = (.name) decl,
+            identity = compatibilityIdentity ((.name) decl),
             triggerKind = TriggeredByEvent,
             occurredAt,
             triggerPayload = Aeson.Null,
-            idempotencyKey = name decl <> ":cli:" <> idText freshId,
+            idempotencyKey = (.name) decl <> ":cli:" <> idText freshId,
             parentSessionId = Nothing,
             parentRunWorkflowId = Nothing,
             delegationDepth = Nothing,
@@ -133,15 +133,15 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.kawa = kawaConfig,
             AgentWorkflow.kanmon = kanmonConfig,
             AgentWorkflow.danwa = danwaConfig,
-            AgentWorkflow.rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
+            AgentWorkflow.rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-            AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy (Config.approvalDeadline config),
+            AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy ((.approvalDeadline) config),
             AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
             AgentWorkflow.approval = Approval.defaultApprovalEnv,
-            AgentWorkflow.deadline = Just (Config.approvalDeadline config),
-            AgentWorkflow.runTimeout = Config.runTimeout config,
-            AgentWorkflow.delegationBudget = Config.delegationBudget config,
+            AgentWorkflow.deadline = Just ((.approvalDeadline) config),
+            AgentWorkflow.runTimeout = (.runTimeout) config,
+            AgentWorkflow.delegationBudget = (.delegationBudget) config,
             AgentWorkflow.grants = DbGrants pool,
             AgentWorkflow.directory = disabledDirectoryHandle,
             AgentWorkflow.routing =
@@ -166,13 +166,13 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
 
 renderRunResult :: AgentDecl -> AgentRunResult -> IO ()
 renderRunResult decl result = do
-  putStrLn ("agent " <> show (name decl) <> " run " <> Text.unpack (idText (sessionId result)))
-  putStrLn ("recalled " <> show (length (recalledPrior result)) <> " prior memories:")
-  mapM_ (TIO.putStrLn . ("  - " <>) . renderMemoryRecord) (recalledPrior result)
+  putStrLn ("agent " <> show ((.name) decl) <> " run " <> Text.unpack (idText ((.sessionId) result)))
+  putStrLn ("recalled " <> show (length ((.recalledPrior) result)) <> " prior memories:")
+  mapM_ (TIO.putStrLn . ("  - " <>) . renderMemoryRecord) ((.recalledPrior) result)
   maybe
     (pure ())
     (\memoryId -> putStrLn ("recorded learning " <> Text.unpack (idText memoryId)))
-    (recordedMemId result)
+    ((.recordedMemId) result)
 
 dieAgentRun :: Text -> IO a
 dieAgentRun detail = do

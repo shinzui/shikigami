@@ -57,7 +57,7 @@ tests =
           ( \info -> do
               let rendered = helpTextOf info
               assertBool
-                (binaryName info <> ": --help produced no usage line:\n" <> rendered)
+                ((.binaryName) info <> ": --help produced no usage line:\n" <> rendered)
                 ("Usage:" `isInfixOf` rendered)
           )
           workerRoles,
@@ -65,14 +65,14 @@ tests =
       -- "Shikigami.Agent.CommandSpec". Their absence here is the assertion that
       -- they did not stay behind and quietly keep linking Kafka and PGMQ.
       testCase "the four worker roles are named exactly once each" $
-        fmap binaryName workerRoles
+        fmap (.binaryName) workerRoles
           @?= [ "shikigami-worker",
                 "shikigami-scheduler",
                 "shikigami-consume-stream",
                 "shikigami-consume-events"
               ],
       testCase "each binary is wired to the role whose requirements it must meet" $
-        fmap role workerRoles
+        fmap (.role) workerRoles
           @?= [ WorkerRole,
                 SchedulerRole,
                 StreamConsumerRole,
@@ -156,37 +156,37 @@ resolutionTests =
               "--danwa-agent",
               "part_from_flag"
             ]
-        agentsDirectory config @?= "/srv/agents"
-        kawaBaseUrl config @?= "http://kawa.internal"
-        kizashiBaseUrl config @?= "http://kizashi.internal"
-        kanmonBaseUrl config @?= "http://kanmon.internal"
-        danwaBaseUrl config @?= "http://danwa.internal"
-        danwaAgentParticipant config @?= "part_from_flag",
+        (.agentsDirectory) config @?= "/srv/agents"
+        (.kawaBaseUrl) config @?= "http://kawa.internal"
+        (.kizashiBaseUrl) config @?= "http://kizashi.internal"
+        (.kanmonBaseUrl) config @?= "http://kanmon.internal"
+        (.danwaBaseUrl) config @?= "http://danwa.internal"
+        (.danwaAgentParticipant) config @?= "part_from_flag",
       testCase "the stream consumer's flags land on the activity-stream settings" do
         config <-
           resolveArgs
             consumeStreamRoleInfo
             ["--broker", "b:9092", "--topic", "activity.test", "--group", "stream-test", "--include-agent-actors"]
-        kafkaBroker config @?= "b:9092"
-        kafkaActivityTopic config @?= "activity.test"
-        kafkaStreamGroup config @?= "stream-test"
-        kafkaIncludeAgentActors config @?= True
+        (.kafkaBroker) config @?= "b:9092"
+        (.kafkaActivityTopic) config @?= "activity.test"
+        (.kafkaStreamGroup) config @?= "stream-test"
+        (.kafkaIncludeAgentActors) config @?= True
         -- The event consumer's settings must be untouched by the stream
         -- consumer's identically-spelled flags.
-        kafkaEventsTopic config @?= kafkaEventsTopic defaultAppConfig
-        kafkaEventsGroup config @?= kafkaEventsGroup defaultAppConfig,
+        (.kafkaEventsTopic) config @?= (.kafkaEventsTopic) defaultAppConfig
+        (.kafkaEventsGroup) config @?= (.kafkaEventsGroup) defaultAppConfig,
       testCase "the event consumer's flags land on the integration-event settings" do
         config <- resolveArgs consumeEventsRoleInfo ["--topic", "events.test", "--group", "events-test"]
-        kafkaEventsTopic config @?= "events.test"
-        kafkaEventsGroup config @?= "events-test"
-        kafkaActivityTopic config @?= kafkaActivityTopic defaultAppConfig
-        kafkaStreamGroup config @?= kafkaStreamGroup defaultAppConfig,
+        (.kafkaEventsTopic) config @?= "events.test"
+        (.kafkaEventsGroup) config @?= "events-test"
+        (.kafkaActivityTopic) config @?= (.kafkaActivityTopic) defaultAppConfig
+        (.kafkaStreamGroup) config @?= (.kafkaStreamGroup) defaultAppConfig,
       testCase "omitting the feedback-guard switch leaves the guard on" do
         config <- resolveArgs consumeStreamRoleInfo ["--broker", "b:9092"]
-        kafkaIncludeAgentActors config @?= False,
+        (.kafkaIncludeAgentActors) config @?= False,
       testCase "a --set override beats the equivalent named flag" do
         config <- resolveArgs workerRoleInfo ["--agents", "/from-flag", "--set", "agents.directory=/from-set"]
-        agentsDirectory config @?= "/from-set"
+        (.agentsDirectory) config @?= "/from-set"
     ]
 
 -- | Parse the given arguments with a role's real parser, then resolve the
@@ -198,26 +198,26 @@ resolutionTests =
 -- these cases are about where the /other/ values come from.
 resolveArgs :: RoleInfo -> [String] -> IO AppConfig
 resolveArgs info args =
-  case execParserPure defaultPrefs (parserInfo info) args of
+  case execParserPure defaultPrefs ((.parserInfo) info) args of
     Success (_, options) ->
       let environment =
             environmentSource
               environmentBindings
               (envSnapshot [("PG_CONNECTION_STRING", "postgresql:///shikigami-test")])
-          run = appConfigRun (role info) options (Right []) environment
-       in case resolved run of
+          run = appConfigRun ((.role) info) options (Right []) environment
+       in case (.resolved) run of
             Just config -> pure config
             Nothing ->
               assertFailure
-                ( binaryName info
+                ( (.binaryName) info
                     <> ": expected a resolved configuration, got exit "
-                    <> show (exitCode run)
+                    <> show ((.exitCode) run)
                     <> ":\n"
-                    <> Text.unpack (standardError run)
+                    <> Text.unpack ((.standardError) run)
                 )
     Failure failure ->
-      let (message, _) = renderFailure failure (binaryName info)
-       in assertFailure (binaryName info <> ": arguments did not parse:\n" <> message)
+      let (message, _) = renderFailure failure ((.binaryName) info)
+       in assertFailure ((.binaryName) info <> ": arguments did not parse:\n" <> message)
     CompletionInvoked _ -> assertFailure "unexpected completion invocation"
 
 -- | Assert the rendered help mentions every flag the command is documented to take.
@@ -226,7 +226,7 @@ assertHasAll info flags =
   mapM_
     ( \flag ->
         assertBool
-          (binaryName info <> ": --help does not mention " <> flag <> ":\n" <> rendered)
+          ((.binaryName) info <> ": --help does not mention " <> flag <> ":\n" <> rendered)
           (flag `isInfixOf` rendered)
     )
     flags
@@ -240,7 +240,7 @@ assertHasAll info flags =
 -- all, which is itself the bug these tests look for.
 helpTextOf :: RoleInfo -> String
 helpTextOf info =
-  case execParserPure defaultPrefs (parserInfo info) ["--help"] of
-    Failure failure -> let (message, _) = renderFailure failure (binaryName info) in message
+  case execParserPure defaultPrefs ((.parserInfo) info) ["--help"] of
+    Failure failure -> let (message, _) = renderFailure failure ((.binaryName) info) in message
     Success _ -> "unexpected success: the parser did not handle --help"
     CompletionInvoked _ -> "unexpected completion invocation"

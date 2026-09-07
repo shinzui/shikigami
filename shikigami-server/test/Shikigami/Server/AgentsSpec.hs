@@ -56,17 +56,17 @@ tests =
         assertEqual
           "joined principal"
           (Just "agent_heartbeat")
-          (Directory.principalId <$> principal heartbeat)
+          ((.principalId) <$> (.principal) heartbeat)
         triage <- findDeclared "triage-note" inventory
-        assertEqual "declared-only principal" Nothing (principal triage)
+        assertEqual "declared-only principal" Nothing ((.principal) triage)
         assertBool "broken manifest missing" (any isFailure inventory)
         assertBool "directory-only principal missing" (any isDirectoryOnly inventory),
       testCase "disabled mode labels declarations without inventing principals" do
         report <- loadAgentsReport "../agents"
         inventory <- buildAgentInventory False disabledDirectoryHandle report
         heartbeat <- findDeclared "heartbeat" inventory
-        assertEqual "disabled join" Nothing (principal heartbeat)
-        assertBool "disabled marker" (not (directoryConfigured heartbeat))
+        assertEqual "disabled join" Nothing ((.principal) heartbeat)
+        assertBool "disabled marker" (not ((.directoryConfigured) heartbeat))
         assertBool "disabled mode invented a principal-only row" (not (any isDirectoryOnly inventory)),
       testCase "explicit rename aliases are idempotent and missing mappings remain untouched" do
         withShikigamiMigratedDatabase \connStr ->
@@ -160,7 +160,7 @@ findDeclared wanted inventory =
     Just entry -> pure entry
     Nothing -> assertFailure ("missing declaration " <> show wanted)
   where
-    matches AgentInventoryEntry {declaration = Just decl} = name decl == wanted
+    matches AgentInventoryEntry {declaration = Just decl} = (.name) decl == wanted
     matches _ = False
 
 isFailure :: AgentInventoryEntry -> Bool
@@ -169,5 +169,5 @@ isFailure _ = False
 
 isDirectoryOnly :: AgentInventoryEntry -> Bool
 isDirectoryOnly AgentInventoryEntry {declaration = Nothing, principal = Just joined} =
-  Directory.principalId joined == "agent_directory_only"
+  (.principalId) joined == "agent_directory_only"
 isDirectoryOnly _ = False

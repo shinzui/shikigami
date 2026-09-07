@@ -125,7 +125,7 @@ runAdmin = do
       hPutStrLn stderr "shikigami: no command given; run 'shikigami --help' for the list"
       exitWith (ExitFailure usageExitCode)
     Just (action, sources) -> do
-      config <- runAppConfig AdminRole options {namedSources = namedSources options <> sources}
+      config <- runAppConfig AdminRole options {namedSources = (.namedSources) options <> sources}
       action config
 
 -- | Every subcommand, paired with its name.

@@ -192,7 +192,7 @@ newEvidenceCollector runId stepName firstOrdinal maximumStrength existingSink = 
 -- | Read the source once and converge duplicate correlation ids by replacement.
 collectEvidence :: EvidenceSource -> RunEvidence -> IO RunEvidence
 collectEvidence EvidenceSource {terminalCallsFor} runEvidence = do
-  collected <- terminalCallsFor (runId runEvidence)
+  collected <- terminalCallsFor ((.runId) runEvidence)
   pure (foldl' (flip recordCall) runEvidence collected)
 
 -- | Declare one call that must eventually have terminal evidence.
@@ -200,7 +200,7 @@ expectCall :: ExpectedCall -> RunEvidence -> RunEvidence
 expectCall expected runEvidence =
   runEvidence
     & #expectedCalls
-    .~ upsertBy expectedCallId expected (expectedCalls runEvidence)
+    .~ upsertBy expectedCallId expected ((.expectedCalls) runEvidence)
 
 -- | Record one terminal call. Replaying the same correlation id replaces its
 -- row in place instead of manufacturing a duplicate.
@@ -214,13 +214,13 @@ recordDeterministicStep :: Text -> RunEvidence -> RunEvidence
 recordDeterministicStep step runEvidence =
   runEvidence
     & #deterministicSteps
-    .~ stableNub (deterministicSteps runEvidence <> [step])
+    .~ stableNub ((.deterministicSteps) runEvidence <> [step])
 
 expectDelegatedChild :: RunCorrelationId -> RunEvidence -> RunEvidence
 expectDelegatedChild expectedChild runEvidence =
   runEvidence
     & #expectedChildRunIds
-    .~ stableNub (expectedChildRunIds runEvidence <> [expectedChild])
+    .~ stableNub ((.expectedChildRunIds) runEvidence <> [expectedChild])
 
 observeArtifactDigest :: DiffDigest -> RunEvidence -> RunEvidence
 observeArtifactDigest observed runEvidence =
@@ -300,7 +300,7 @@ addChildCalls runEvidence RelevantChild {calls} =
 
 findPendingChild :: [RelevantChild] -> Maybe Text
 findPendingChild relevantChildren =
-  renderRunCorrelationId . childRunId <$> find (not . childEvidenceClosed) relevantChildren
+  renderRunCorrelationId . (.childRunId) <$> find (not . childEvidenceClosed) relevantChildren
 
 childEvidenceClosed :: RelevantChild -> Bool
 childEvidenceClosed RelevantChild {phase} =
@@ -469,36 +469,36 @@ commandFor evidence = \case
   Incomplete -> Just (Generated.MarkIncomplete (Generated.MarkIncompleteData aggregateId correlationId))
   Failed -> Just (Generated.MarkFailed (Generated.MarkFailedData aggregateId correlationId))
   where
-    aggregateId = runEvidenceId evidence
-    correlationId = renderRunCorrelationId (runId evidence)
+    aggregateId = (.runEvidenceId) evidence
+    correlationId = renderRunCorrelationId ((.runId) evidence)
 
 profileBound :: RunEvidence -> Generated.RunEvidenceEvent
 profileBound evidence =
-  Generated.ProfileBound (Generated.ProfileBoundData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.ProfileBound (Generated.ProfileBoundData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 collectionStarted :: RunEvidence -> Generated.RunEvidenceEvent
 collectionStarted evidence =
-  Generated.CollectionStarted (Generated.CollectionStartedData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.CollectionStarted (Generated.CollectionStartedData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 evidenceSealed :: RunEvidence -> Generated.RunEvidenceEvent
 evidenceSealed evidence =
-  Generated.EvidenceSealed (Generated.EvidenceSealedData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.EvidenceSealed (Generated.EvidenceSealedData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 evidenceAttested :: RunEvidence -> Generated.RunEvidenceEvent
 evidenceAttested evidence =
-  Generated.EvidenceAttested (Generated.EvidenceAttestedData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.EvidenceAttested (Generated.EvidenceAttestedData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 evidenceNonConforming :: RunEvidence -> Generated.RunEvidenceEvent
 evidenceNonConforming evidence =
-  Generated.EvidenceNonConforming (Generated.EvidenceNonConformingData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.EvidenceNonConforming (Generated.EvidenceNonConformingData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 evidenceIncomplete :: RunEvidence -> Generated.RunEvidenceEvent
 evidenceIncomplete evidence =
-  Generated.EvidenceIncomplete (Generated.EvidenceIncompleteData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.EvidenceIncomplete (Generated.EvidenceIncompleteData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 evidenceFailed :: RunEvidence -> Generated.RunEvidenceEvent
 evidenceFailed evidence =
-  Generated.EvidenceFailed (Generated.EvidenceFailedData (runEvidenceId evidence) (renderRunCorrelationId (runId evidence)))
+  Generated.EvidenceFailed (Generated.EvidenceFailedData ((.runEvidenceId) evidence) (renderRunCorrelationId ((.runId) evidence)))
 
 phaseFromVertex :: Generated.RunEvidenceVertex -> EvidencePhase
 phaseFromVertex = \case

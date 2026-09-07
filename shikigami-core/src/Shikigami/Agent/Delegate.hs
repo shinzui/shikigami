@@ -264,7 +264,7 @@ delegateBatch declarations directory decl ctx catalog requests = do
             let created = delegationBudgetIdFor parentWorkflowId
              in (created, Just (parentWorkflowId, currentBudgetLimit))
   now <- liftIO getCurrentTime
-  reserved <- reserveDelegationSlots budgetId seed (childWorkflowId <$> prepared) now
+  reserved <- reserveDelegationSlots budgetId seed ((.childWorkflowId) <$> prepared) now
   case reserved of
     Left (DelegationBudgetLedgerMissing missing) ->
       throwIO (DelegationBudgetUnavailable (Text.pack (show missing)))
@@ -276,7 +276,7 @@ delegateBatch declarations directory decl ctx catalog requests = do
       delegate declarations directory decl ctx key target payload
 
 declaredPrincipalId :: AgentDecl -> Maybe Text
-declaredPrincipalId AgentDecl {identity} = principal <$> identity
+declaredPrincipalId AgentDecl {identity} = (.principal) <$> identity
 
 -- | Suspend until the delegated child completes and decode its behavior output.
 awaitDelegated ::

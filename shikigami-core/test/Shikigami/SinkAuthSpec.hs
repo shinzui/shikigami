@@ -140,7 +140,7 @@ limitTests =
         testWithApplication (pure (consumeAndCount calls)) \port -> do
           env <- testEnv Nothing limits
           postJSON env (localBaseUrl port) exact >>= assertRight
-          postJSON env (localBaseUrl port) over >>= (@?= Left (PermanentHttpFailure (RequestTooLarge 1_025 (requestBytes limits))))
+          postJSON env (localBaseUrl port) over >>= (@?= Left (PermanentHttpFailure (RequestTooLarge 1_025 ((.requestBytes) limits))))
           readIORef calls >>= (@?= 1),
       testCase "response accepts the exact boundary and rejects one byte over" do
         env <- testEnv Nothing (limitsAt 1_024 1_024)

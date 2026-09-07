@@ -325,14 +325,14 @@ recordFlowMemory
   RememberOptions {priority, confidence, memoryType, supersedes, extraTags}
   value = do
     recordedAt <- getCurrentTime
-    let focus = behaviorKindText (behavior decl)
+    let focus = behaviorKindText ((.behavior) decl)
         record =
           RecordMemoryData
             { memoryId = mid,
               memorySpaceId = shikigamiMemorySpace,
               actorPrincipal = agentActor identity,
               ownerPrincipal = Nothing,
-              agentId = name decl,
+              agentId = (.name) decl,
               sessionId,
               scope = agentScope identity,
               memoryType,

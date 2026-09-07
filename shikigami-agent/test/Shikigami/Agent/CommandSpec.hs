@@ -52,15 +52,15 @@ tests =
           ( \info -> do
               let rendered = helpTextOf info
               assertBool
-                (binaryName info <> ": --help produced no usage line:\n" <> rendered)
+                ((.binaryName) info <> ": --help produced no usage line:\n" <> rendered)
                 ("Usage:" `isInfixOf` rendered)
           )
           agentRoles,
       testCase "the two one-off roles are named exactly once each" $
-        fmap binaryName agentRoles
+        fmap (.binaryName) agentRoles
           @?= ["shikigami-run-behavior", "shikigami-agent-run"],
       testCase "each binary is wired to the role whose requirements it must meet" $
-        fmap role agentRoles @?= [RunBehaviorRole, AgentRunRole],
+        fmap (.role) agentRoles @?= [RunBehaviorRole, AgentRunRole],
       testCase "every one-off executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) agentRoles,
       testCase "run-behavior keeps its agent and payload options" $
@@ -109,13 +109,13 @@ assertHasAll info flags =
    in mapM_
         ( \flag ->
             assertBool
-              (binaryName info <> ": --help does not mention " <> flag <> ":\n" <> rendered)
+              ((.binaryName) info <> ": --help does not mention " <> flag <> ":\n" <> rendered)
               (flag `isInfixOf` rendered)
         )
         flags
 
 helpTextOf :: RoleInfo -> String
 helpTextOf info =
-  case execParserPure defaultPrefs (parserInfo info) ["--help"] of
-    Failure failure -> let (message, _) = renderFailure failure (binaryName info) in message
+  case execParserPure defaultPrefs ((.parserInfo) info) ["--help"] of
+    Failure failure -> let (message, _) = renderFailure failure ((.binaryName) info) in message
     _ -> ""

@@ -26,7 +26,7 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.App.Config (AppConfig, directorySettings, revealSecretText)
+import Shikigami.App.Config (AppConfig (directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
@@ -151,9 +151,9 @@ withPool config ctx use = do
 
 withResolvedIdentity :: AppConfig -> String -> Text -> (AgentIdentity -> IO a) -> IO a
 withResolvedIdentity config context selector use = do
-  runtime <- Directory.startDirectory Log.silentLogger (directorySettings config) >>= either (die context) pure
-  let cleanup = maybe (pure ()) id (refresher runtime)
-  (Directory.identityAdmission (handle runtime) Nothing selector >>= either (die context) use) `finally` cleanup
+  runtime <- Directory.startDirectory Log.silentLogger ((.directorySettings) config) >>= either (die context) pure
+  let cleanup = maybe (pure ()) id ((.refresher) runtime)
+  (Directory.identityAdmission ((.handle) runtime) Nothing selector >>= either (die context) use) `finally` cleanup
 
 die :: String -> Text -> IO a
 die ctx msg = do

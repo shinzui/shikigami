@@ -151,22 +151,22 @@ runBehavior env decl input
       pure
         ( Left
             ( CapabilityOverlayMismatch
-                (capabilityOverlays decl)
-                (Set.toAscList (activeOverlays env))
+                ((.capabilityOverlays) decl)
+                (Set.toAscList ((.activeOverlays) env))
             )
         )
-  | otherwise = case behavior decl of
+  | otherwise = case (.behavior) decl of
       ShikumiProgram {task = t} ->
         case lookupTask t of
           Nothing -> pure (Left (UnknownTask t))
-          Just tk -> runProgramTask (runtime env) tk input
+          Just tk -> runProgramTask ((.runtime) env) tk input
       Skill {path = p} ->
         runSkillWithTrace
-          (traceSink env)
-          (model env)
-          (options env)
-          (tools env)
-          (toolTurnLimit env)
+          ((.traceSink) env)
+          ((.model) env)
+          ((.options) env)
+          ((.tools) env)
+          ((.toolTurnLimit) env)
           (SkillDir (Text.unpack p))
           input
       Flow {} ->

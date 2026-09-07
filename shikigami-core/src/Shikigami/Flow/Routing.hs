@@ -94,7 +94,7 @@ data Routing :: Effect where
 type instance DispatchOf Routing = Dynamic
 
 route :: (Routing :> es) => RouteLabel -> Value -> Eff es RouteDecision
-route label payload = decision <$> routeWithCatalog label payload
+route label payload = (.decision) <$> routeWithCatalog label payload
 
 routeWithCatalog :: (Routing :> es) => RouteLabel -> Value -> Eff es RoutedRoute
 routeWithCatalog label payload = send (Route label payload)
@@ -137,7 +137,7 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
         case Aeson.fromJSON rawDecision of
           Aeson.Error detail -> throwIO (RoutingDecisionDecodeFailed (boundedDetail (Text.pack detail)))
           Aeson.Success decoded -> pure decoded
-      case validateRouteDecision (policy validatedDeclaration) catalog decision of
+      case validateRouteDecision ((.policy) validatedDeclaration) catalog decision of
         Left refusals -> throwIO (RoutingDecisionInvalid refusals)
         Right _ -> do
           recordDecisionAttributes traceSpan decision

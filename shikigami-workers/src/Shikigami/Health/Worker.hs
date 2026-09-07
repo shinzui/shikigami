@@ -263,7 +263,7 @@ loopLivenessCheck registry = getCurrentTime >>= loopLivenessAt registry
 -- none of the arithmetic below.
 loopLivenessAt :: Heartbeats -> UTCTime -> IO ProbeVerdict
 loopLivenessAt registry@Heartbeats {beats, staleAfter} now = do
-  reported <- readIORef (reports registry)
+  reported <- readIORef ((.reports) registry)
   go reported [minBound .. maxBound]
   where
     go _ [] = pure Healthy

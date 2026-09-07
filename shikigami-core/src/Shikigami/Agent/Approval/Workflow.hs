@@ -133,21 +133,21 @@ approvalWorkflow ApprovalWorkflowEnv {notifier} mInput = do
   notification <-
     step (StepName "notify") do
       liftIO
-        ( recordPark
+        ( (.recordPark)
             notifier
-            (sessionId input)
-            (reviewRequestId input)
+            ((.sessionId) input)
+            ((.reviewRequestId) input)
             awakeableId
-            (request input)
+            ((.request) input)
         )
-      liftIO (postAsk notifier (reviewRequestId input) awakeableId (deadline input) (request input)) >>= \case
+      liftIO ((.postAsk) notifier ((.reviewRequestId) input) awakeableId ((.deadline) input) ((.request) input)) >>= \case
         Right () -> pure ApprovalNotificationSent
         Left (PermanentNotification detail) -> pure (ApprovalNotificationPermanentFailure detail)
         Left (TransientNotification detail) -> throwIO (ApprovalNotificationTransientFailure detail)
   case notification of
     ApprovalNotificationPermanentFailure detail -> pure (ApprovalNotificationFailed detail)
     ApprovalNotificationSent -> do
-      armApprovalDeadline (StepName "decision") awakeableId (deadline input)
+      armApprovalDeadline (StepName "decision") awakeableId ((.deadline) input)
       ApprovalResolved <$> awaitDecision
 
 approvalRegistry :: ApprovalWorkflowEnv -> WorkflowRegistry AppEffects

@@ -44,11 +44,11 @@ approvalNotifier logger SinkHttp {danwa = danwaClient, kizashi = kizashiHttp} da
           "approval.request.parked"
           [ "review_request_id" Aeson..= reviewRequestIdText reviewId,
             "session_id" Aeson..= idText session,
-            "channel" Aeson..= renderChannel (channel request)
+            "channel" Aeson..= renderChannel ((.channel) request)
           ],
       postAsk = \reviewId awakeableId deadline request -> do
         let message = renderApprovalMessage reviewId awakeableId deadline request
-        result <- case channel request of
+        result <- case (.channel) request of
           ViaDanwa -> (() <$) . first classifyDanwa <$> postText danwaClient danwaConfig message
           ViaKizashi ->
             (() <$) . first classifyKizashi
@@ -57,7 +57,7 @@ approvalNotifier logger SinkHttp {danwa = danwaClient, kizashi = kizashiHttp} da
                 kizashiConfig
                 CreateSignalReq
                   { actor = "shikigami",
-                    recipient = defaultRecipient kizashiConfig,
+                    recipient = (.defaultRecipient) kizashiConfig,
                     source = "shinzui/shikigami",
                     signalType = AgentRequest,
                     intent = message,

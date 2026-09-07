@@ -219,12 +219,12 @@ renderHttpFailureReason = \case
 postJSONWithHeaders :: (ToJSON a) => HttpEnv -> [Header] -> Text -> a -> IO (Either HttpFailure LBS.ByteString)
 postJSONWithHeaders env extraHeaders url body = do
   let encoded = encode body
-      requestLimit = requestBytes (limits env)
+      requestLimit = (.requestBytes) ((.limits) env)
       actualBytes = toInteger (LBS.length encoded)
   if actualBytes > toInteger (byteLimitBytes requestLimit)
     then pure (Left (PermanentHttpFailure (RequestTooLarge actualBytes requestLimit)))
     else
-      resolveHeaders (token env) extraHeaders >>= \case
+      resolveHeaders ((.token) env) extraHeaders >>= \case
         Left failure -> pure (Left (TransientHttpFailure (CredentialUnavailable failure)))
         Right headers -> do
           parsed <- trySynchronous (parseRequest (Text.unpack url)) :: IO (Either SomeException Request)
@@ -251,8 +251,8 @@ execute :: HttpEnv -> LBS.ByteString -> [Header] -> Request -> IO (Either HttpFa
 execute env encoded headers request = do
   result <-
     trySynchronous
-      ( withResponse configured (manager env) \response -> do
-          bounded <- readBounded (responseBytes (limits env)) (responseBody response)
+      ( withResponse configured ((.manager) env) \response -> do
+          bounded <- readBounded ((.responseBytes) ((.limits) env)) (responseBody response)
           pure case bounded of
             Left failure -> Left failure
             Right responseBytes' -> classifyResponse response responseBytes'
@@ -382,14 +382,14 @@ newDanwaManager httpLimits source =
     baseSettings
       { managerResponseTimeout = responseTimeoutMicro 30_000_000,
         managerModifyRequest = managerModifyRequest baseSettings >=> configureDanwaRequest httpLimits source,
-        managerModifyResponse = managerModifyResponse baseSettings >=> boundDanwaResponse (responseBytes httpLimits)
+        managerModifyResponse = managerModifyResponse baseSettings >=> boundDanwaResponse ((.responseBytes) httpLimits)
       }
   where
     baseSettings = tlsManagerSettings
 
 configureDanwaRequest :: HttpLimits -> Maybe TokenSource -> Request -> IO Request
 configureDanwaRequest httpLimits source request = do
-  checkedBody <- checkDanwaRequestBody (requestBytes httpLimits) (requestBody request)
+  checkedBody <- checkDanwaRequestBody ((.requestBytes) httpLimits) (requestBody request)
   headers <- case source of
     Nothing -> pure (filter ((/= hAuthorization) . fst) (requestHeaders request))
     Just TokenSource {fetchToken} ->

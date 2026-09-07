@@ -45,7 +45,7 @@ atRiskCustomerFlow payload = do
   activity <- currentActivity
   prior <- recall "risk-history" (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))
-  if level verdict /= "high"
+  if (.level) verdict /= "high"
     then pure (toJSON verdict)
     else do
       _ <- emitSignal "alert" (alertFor verdict activity) (toJSON verdict)
@@ -77,12 +77,12 @@ atRiskCustomerFlow payload = do
 -- it was, so a fresh database still produces the verdict the workflow tests pin.
 classifyRisk :: ActivityEnvelope -> [MemoryRecord] -> Value -> RiskVerdict
 classifyRisk activity prior input =
-  let ticket = subjectId (subject activity)
-      textBlob = Text.toLower (Text.unwords (textFields input <> textFields (payload activity)))
-      risks = riskFields input <> riskFields (payload activity)
+  let ticket = (.subjectId) ((.subject) activity)
+      textBlob = Text.toLower (Text.unwords (textFields input <> textFields ((.payload) activity)))
+      risks = riskFields input <> riskFields ((.payload) activity)
       highByEnrichment =
         any (Text.isInfixOf "churn risk" . Text.toLower) risks
-          && any (== "negative") (sentimentFields input <> sentimentFields (payload activity))
+          && any (== "negative") (sentimentFields input <> sentimentFields ((.payload) activity))
       highByText = any (`Text.isInfixOf` textBlob) ["cancel", "churn", "leaving", "lawsuit"]
       highByMemory = any (mentionsPriorEscalation ticket) prior
    in RiskVerdict
@@ -105,7 +105,7 @@ mentionsPriorEscalation ticket MemoryRecord {content} =
 
 riskQuery :: ActivityEnvelope -> MemoryQuery
 riskQuery ActivityEnvelope {subject} =
-  MemoryQuery ("customer risk history for " <> subjectId subject)
+  MemoryQuery ("customer risk history for " <> (.subjectId) subject)
 
 alertFor :: RiskVerdict -> ActivityEnvelope -> Sink
 alertFor verdict activity =
@@ -115,8 +115,8 @@ alertFor verdict activity =
     80
     [ "verb:relationship.at_risk",
       "subject:" <> activitySubjectType activity,
-      "activity:" <> activityId activity,
-      "ticket:" <> ticketId verdict
+      "activity:" <> (.activityId) activity,
+      "ticket:" <> (.ticketId) verdict
     ]
 
 escalationFor :: RiskVerdict -> ActivityEnvelope -> Sink
@@ -127,8 +127,8 @@ escalationFor verdict activity =
     95
     [ "verb:relationship.escalation_required",
       "subject:" <> activitySubjectType activity,
-      "activity:" <> activityId activity,
-      "ticket:" <> ticketId verdict
+      "activity:" <> (.activityId) activity,
+      "ticket:" <> (.ticketId) verdict
     ]
 
 riskSignal :: Text -> Priority -> Natural -> [Text] -> Sink
@@ -154,8 +154,8 @@ ackRequest verdict activity =
       context =
         object
           [ "verdict" .= verdict,
-            "activity_id" .= activityId activity,
-            "ticket_id" .= ticketId verdict
+            "activity_id" .= (.activityId) activity,
+            "ticket_id" .= (.ticketId) verdict
           ],
       channel = ViaDanwa
     }

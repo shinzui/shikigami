@@ -62,22 +62,22 @@ envelopeOccurredAt ActivityEnvelope {occurredAt = envOccurredAt} =
 -- the same shape @eventInboxHandler@ already uses with its @receivedAt@.
 runJobFromEnvelope :: UTCTime -> AgentDecl -> ActivityEnvelope -> RunJob
 runJobFromEnvelope resolvedOccurredAt decl =
-  runJobFromEnvelopeWithIdentity resolvedOccurredAt (compatibilityIdentity (name decl)) decl
+  runJobFromEnvelopeWithIdentity resolvedOccurredAt (compatibilityIdentity ((.name) decl)) decl
 
 runJobFromEnvelopeWithIdentity :: UTCTime -> AgentIdentity -> AgentDecl -> ActivityEnvelope -> RunJob
 runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
   RunJob
-    { agentName = name decl,
+    { agentName = (.name) decl,
       identity,
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
-      idempotencyKey = name decl <> ":" <> envActivityId,
+      idempotencyKey = (.name) decl <> ":" <> envActivityId,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = [name decl],
+      lineage = [(.name) decl],
       delegationBudgetId = Nothing
     }
   where

@@ -122,18 +122,18 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
   case parseSchedulePayload timerPayload of
     Nothing -> pure Nothing
     Just (agent, dueAt) -> do
-      let declaredPrincipalId = Map.findWithDefault Nothing agent (principalIds env)
-      decision <- liftIO (Directory.consultLifecycle (directory env) declaredPrincipalId agent)
+      let declaredPrincipalId = Map.findWithDefault Nothing agent ((.principalIds) env)
+      decision <- liftIO (Directory.consultLifecycle ((.directory) env) declaredPrincipalId agent)
       let advance = do
-            let armFrom = case catchUpPolicy env of
+            let armFrom = case (.catchUpPolicy) env of
                   SkipMissed -> now
                   FireAll -> dueAt
-            for_ (Map.lookup agent (schedules env)) \cron ->
+            for_ (Map.lookup agent ((.schedules) env)) \cron ->
               armNextRun cron agent armFrom
             pure (Just (scheduleFiredEventId agent dueAt))
       case admittedIdentity agent declaredPrincipalId decision of
         Right identity -> do
-          enqueued <- liftIO (enqueueScheduledRun (pool env) identity agent dueAt)
+          enqueued <- liftIO (enqueueScheduledRun ((.pool) env) identity agent dueAt)
           case enqueued of
             -- Returning Nothing leaves the row in Firing for keiro to requeue. The
             -- log line is what makes that retry visible: before it, a failed enqueue
@@ -141,7 +141,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
             Left err -> do
               liftIO $
                 Log.logError
-                  (logger env)
+                  ((.logger) env)
                   "scheduler.schedule.enqueue_failed"
                   [ "agent" Aeson..= agent,
                     "due_at" Aeson..= dueAt,
@@ -159,11 +159,11 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                     reason,
                     idempotencyKey = scheduleRunIdempotencyKey agent dueAt
                   }
-          liftIO (recordRunSkip (pool env) runSkip) >>= \case
+          liftIO (recordRunSkip ((.pool) env) runSkip) >>= \case
             Left problem -> do
               liftIO $
                 Log.logError
-                  (logger env)
+                  ((.logger) env)
                   "scheduler.schedule.skip_failed"
                   [ "agent" Aeson..= agent,
                     "due_at" Aeson..= dueAt,
@@ -174,7 +174,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
             Right () -> do
               liftIO $
                 Log.logInfo
-                  (logger env)
+                  ((.logger) env)
                   "scheduler.schedule.skipped"
                   [ "agent" Aeson..= agent,
                     "due_at" Aeson..= dueAt,
@@ -187,10 +187,10 @@ admittedIdentity :: Text -> Maybe Text -> Directory.LifecycleDecision -> Either 
 admittedIdentity agent declaredPrincipalId = \case
   Directory.AllowRun Nothing -> Right (compatibilityIdentity agent)
   Directory.AllowRun (Just principal) ->
-    case mkAgentPrincipal (Directory.principalId principal) of
-      Left reason -> Left (Just (Directory.principalId principal), reason)
+    case mkAgentPrincipal ((.principalId) principal) of
+      Left reason -> Left (Just ((.principalId) principal), reason)
       Right admittedPrincipal -> Right (VerifiedIdentity admittedPrincipal)
-  Directory.SkipRun principal reason -> Left (Just (Directory.principalId principal), reason)
+  Directory.SkipRun principal reason -> Left (Just ((.principalId) principal), reason)
   Directory.UnknownPrincipal identifier -> Left (declaredPrincipalId, "unknown principal: " <> identifier)
   Directory.DirectoryUnavailable problem -> Left (declaredPrincipalId, "directory unavailable: " <> problem)
 
@@ -216,7 +216,7 @@ shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = T
     other -> do
       liftIO $
         Log.logError
-          (logger env)
+          ((.logger) env)
           "scheduler.timer.unknown_kind"
           [ "timer_id" Aeson..= show rowTimerId,
             "timer_kind" Aeson..= other

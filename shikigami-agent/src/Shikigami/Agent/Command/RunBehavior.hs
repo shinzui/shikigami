@@ -53,7 +53,7 @@ runRunBehavior path mpayload workspace config = do
           hPutStrLn stderr ("run-behavior: " <> Text.unpack refusal)
           exitFailure
         Nothing -> do
-          env <- newBehaviorEnvFor logger (Config.behaviorProvider config) Nothing
+          env <- newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
           resultE <-

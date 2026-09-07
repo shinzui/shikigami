@@ -116,10 +116,10 @@ tests =
         disabled <- loadAgent (root </> "agents" </> "proof" </> "workspace-read-disabled.dhall")
         case (requested, disabled) of
           (Right requestedDecl, Right disabledDecl) -> do
-            fmap capabilityIdText (capabilityOverlays requestedDecl) @?= ["workspace.read"]
-            capabilityOverlays disabledDecl @?= []
-            behavior requestedDecl @?= behavior disabledDecl
-            identity requestedDecl @?= identity disabledDecl
+            fmap capabilityIdText ((.capabilityOverlays) requestedDecl) @?= ["workspace.read"]
+            (.capabilityOverlays) disabledDecl @?= []
+            (.behavior) requestedDecl @?= (.behavior) disabledDecl
+            (.identity) requestedDecl @?= (.identity) disabledDecl
           other -> assertFailure ("proof manifests did not load: " <> show other),
       testCase "only the opted-in agent receives tools through the scripted model loop" $
         withRepository \RepositoryFixture {repository, outsideFile} -> do
@@ -257,7 +257,7 @@ next :: IORef Int -> IO Int
 next ref = atomicModifyIORef' ref (\value -> (value + 1, value))
 
 withRepository :: (RepositoryFixture -> IO value) -> IO value
-withRepository = bracket createRepository (removePathForcibly . container)
+withRepository = bracket createRepository (removePathForcibly . (.container))
 
 createRepository :: IO RepositoryFixture
 createRepository = do

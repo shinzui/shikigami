@@ -101,11 +101,11 @@ tests =
             skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
             case skips of
               [runSkip] -> do
-                assertEqual "agent" "heartbeat" (DirectoryStore.agentName runSkip)
-                assertEqual "principal" (Just "agent_heartbeat") (DirectoryStore.principalId runSkip)
-                assertEqual "trigger boundary" DirectoryStore.TriggerStage (DirectoryStore.stage runSkip)
-                assertEqual "source" "schedule" (DirectoryStore.detail runSkip)
-                assertEqual "same key the run would use" "heartbeat:sched:2026-06-20T00:01:00Z" (DirectoryStore.idempotencyKey runSkip)
+                assertEqual "agent" "heartbeat" ((.agentName) runSkip)
+                assertEqual "principal" (Just "agent_heartbeat") ((.principalId) runSkip)
+                assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
+                assertEqual "source" "schedule" ((.detail) runSkip)
+                assertEqual "same key the run would use" "heartbeat:sched:2026-06-20T00:01:00Z" ((.idempotencyKey) runSkip)
               other -> assertFailure ("expected one schedule skip, got " <> show other),
       -- The catch-up policy is a choice of what instant the next timer is armed
       -- from. Before it, a schedule fire always re-armed from the tick that just
@@ -128,7 +128,7 @@ tests =
             assertEqual
               "waking a day late enqueues exactly the one run it was armed for"
               ["heartbeat:sched:2026-06-20T00:01:00Z"]
-              [idempotencyKey job | job <- messages]
+              [(.idempotencyKey) job | job <- messages]
 
             staleNext <- expectedNext cron staleDue
             skippedNext <- expectedNext cron aDayLater

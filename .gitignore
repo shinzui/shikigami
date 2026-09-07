@@ -23,3 +23,6 @@ shikigami-core/src/keiro-dsl-cabal-fragment.workspace.*.txt
 
 # keiro-dsl check/coverage/diff reports (`just keiro-check`, `just keiro-diff`).
 build/
+
+# Immutable generated-edition migration backups stay local.
+shikigami-core/src/.keiro-dsl-generated-haskell-migrations/

@@ -20,7 +20,7 @@ runRenderLifecycle path = do
       hPutStrLn stderr ("render-lifecycle: load error in " <> path <> ":\n" <> Text.unpack msg)
       exitFailure
     Right decl ->
-      case behavior decl of
+      case (.behavior) decl of
         Flow {name = flowName} -> renderFlow flowName
         other -> do
           hPutStrLn stderr ("render-lifecycle: expected Flow behavior, found " <> show other)
@@ -39,4 +39,4 @@ renderFlow flowName =
       hPutStrLn stderr ("render-lifecycle: unknown flow " <> Text.unpack flowName)
       exitFailure
     Just flow ->
-      TIO.putStrLn (Flow.mermaid (Flow.lifecycle flow))
+      TIO.putStrLn ((.mermaid) ((.lifecycle) flow))

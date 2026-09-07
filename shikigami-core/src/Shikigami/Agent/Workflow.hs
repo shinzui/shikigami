@@ -265,9 +265,9 @@ agentRunWorkflow ::
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps ingestJobStepName (ingestJob mJob)
-  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== agentName job) . agentDeclName) (agents deps)))
+  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== (.agentName) job) . agentDeclName) ((.agents) deps)))
   case mDecl of
-    Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> agentName job)))
+    Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (.agentName) job)))
     Just decl -> runResolvedAgent deps job decl
 
 runAgentRunWorkflow ::
@@ -275,7 +275,7 @@ runAgentRunWorkflow ::
   RunJob ->
   IO (Either StoreError (WorkflowOutcome (Either AgentRunFailure AgentRunResult)))
 runAgentRunWorkflow deps job =
-  let env = appEnv deps
+  let env = (.appEnv) deps
    in runEff
         . runTracing (tracer env)
         . runErrorNoCallStack
@@ -290,7 +290,7 @@ runAgentRunWorkflow deps job =
 agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 agentRunRegistry deps =
   Map.singleton agentRunWorkflowName (WorkflowDef \_wid -> agentRunWorkflow deps Nothing)
-    `Map.union` ApprovalWorkflow.approvalRegistry (approvalWorkflow deps)
+    `Map.union` ApprovalWorkflow.approvalRegistry ((.approvalWorkflow) deps)
 
 ingestJob :: (IOE :> es) => Maybe RunJob -> Eff es RunJob
 ingestJob = \case
@@ -322,7 +322,7 @@ runResolvedAgent deps job decl = do
             runStep
               deps
               (StepName "resolve-capability-overlays")
-              (pure (resolveCapabilitiesForRun (capabilities deps) decl resolvedProfile))
+              (pure (resolveCapabilitiesForRun ((.capabilities) deps) decl resolvedProfile))
           else pure (Right emptyResolvedCapabilitySet)
       case capabilityResolution of
         Left refusal ->
@@ -374,7 +374,7 @@ runProfiledAgent ::
   ResolvedCapabilitySet ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runProfiledAgent deps job decl resolvedProfile resolvedOverlays =
-  case behaviorEnvForProfile decl resolvedProfile (behaviorEnv deps) of
+  case behaviorEnvForProfile decl resolvedProfile ((.behaviorEnv) deps) of
     Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
     Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl
 
@@ -405,8 +405,8 @@ runProfiledAgentWith deps activeBehaviorEnv resolvedOverlays job decl =
   where
     runResolved recordedIdentity = do
       withSpan' "trigger" (spanArgs Internal) \traceSpan -> do
-        addAttribute traceSpan "agent.name" (agentName job)
-        addAttribute traceSpan "trigger.kind" (triggerKindText (trigger decl))
+        addAttribute traceSpan "agent.name" ((.agentName) job)
+        addAttribute traceSpan "trigger.kind" (triggerKindText ((.trigger) decl))
         addAttribute traceSpan "run.idempotency_key" (jobIdempotencyKey job)
       useApprovalChild <- patch ApprovalWorkflow.approvalWorkflowPatch
       approvalPolicyForRun <-
@@ -432,16 +432,16 @@ runSessionedAgent ::
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
-  prior <- runStep deps (StepName "recall") (liftIO (recallAgentLearnings (appEnv deps) (deliveryPool deps) declaredRecallLimit recordedIdentity (recallQuery decl (behaviorKindText (behavior decl)) (triggerPayload job))))
+  prior <- runStep deps (StepName "recall") (liftIO (recallAgentLearnings ((.appEnv) deps) ((.deliveryPool) deps) declaredRecallLimit recordedIdentity (recallQuery decl (behaviorKindText ((.behavior) decl)) ((.triggerPayload) job))))
   useRetrySemantics <- patch behaviorRetryPatch
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
-      addAttribute traceSpan "behavior.kind" (behaviorKindText (behavior decl))
-      case behavior decl of
+      addAttribute traceSpan "behavior.kind" (behaviorKindText ((.behavior) decl))
+      case (.behavior) decl of
         Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior
         _
-          | not (null (delegates decl)) ->
+          | not (null ((.delegates) decl)) ->
               first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job prior
           | useRetrySemantics ->
               first PermanentAgentRunFailure
@@ -455,13 +455,13 @@ runSessionedAgent deps activeBehaviorEnv resolvedOverlays approvalPolicyForRun r
                             acquired <-
                               runBehaviorWithCapabilities
                                 (depsLogger deps)
-                                (actionAuthorizer deps)
-                                (capabilities deps)
+                                ((.actionAuthorizer) deps)
+                                ((.capabilities) deps)
                                 (capabilityScopeForRun job)
                                 resolvedOverlays
                                 activeBehaviorEnv
                                 decl
-                                BehaviorInput {payload = triggerPayload job, recalled = prior}
+                                BehaviorInput {payload = (.triggerPayload) job, recalled = prior}
                             case acquired of
                               Left runtimeError ->
                                 throwIO
@@ -501,8 +501,8 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity
           enqueueSinkIntents
             (depsDirectory deps)
             (depsGrants deps)
-            (agentName job)
-            (RunJob.identity job)
+            ((.agentName) job)
+            ((.identity) job)
             (runJobOccurredAt job)
             (activityFromJob job)
             approvedSinks
@@ -554,7 +554,7 @@ capabilityScopeForRun job =
       -- C13 always binds to the identity admitted for this concrete run. The
       -- manifest principal remains part of pure catalog admission, but it must
       -- never replace a verified Meibo run principal at an IO boundary.
-      principal = either (const "") id (identityText (RunJob.identity job)),
+      principal = either (const "") id (identityText ((.identity) job)),
       mode = Capability.Durable
     }
 
@@ -590,7 +590,7 @@ resolveRequiredProfile deps AgentDecl {sanctionedProfile} =
     Nothing -> pure (Right Nothing)
     Just ProfileRequirement {profileId, version} ->
       fmap Just
-        <$> resolveRunProfile
+        <$> (.resolveRunProfile)
           deps
           (ProfileId profileId)
           (ProfileVersion <$> version)
@@ -658,9 +658,9 @@ runStep ::
   Eff es a
 runStep deps stepName action =
   step stepName do
-    liftIO (beforeStepBody (hooks deps) stepName)
+    liftIO ((.beforeStepBody) ((.hooks) deps) stepName)
     result <- action
-    liftIO (afterStepBody (hooks deps) stepName)
+    liftIO ((.afterStepBody) ((.hooks) deps) stepName)
     pure result
 
 approveSinks ::
@@ -679,16 +679,16 @@ approveSinks deps approvalPolicyForRun sid job decl output =
       decisions <- traverse (approveWithPolicy policy) indexedSinks
       pure (catMaybes <$> sequence decisions)
   where
-    indexedSinks = zip [0 :: Int ..] (sinks decl)
-    legacyEnv = approval deps sid
+    indexedSinks = zip [0 :: Int ..] ((.sinks) decl)
+    legacyEnv = (.approval) deps sid
 
     approveLegacy (ordinal, sink) = do
       let kind = sinkKindOf sink
-      requirement <- liftIO (requiresApproval legacyEnv (RunJob.identity job) kind output)
+      requirement <- liftIO ((.requiresApproval) legacyEnv ((.identity) job) kind output)
       case requirement of
         ApprovalNotRequired -> pure (Just sink)
         ApprovalRequired request -> do
-          decision <- awaitApproval legacyEnv (approvalStepName ordinal kind) request (deadline deps)
+          decision <- awaitApproval legacyEnv (approvalStepName ordinal kind) request ((.deadline) deps)
           pure case decision of
             Approved _ -> Just sink
             Rejected _ -> Nothing
@@ -703,7 +703,7 @@ approveSinks deps approvalPolicyForRun sid job decl output =
                   ("sink-" <> sinkKindText kind <> "-" <> Text.pack (show ordinal))
                   sid
                   ApprovalRequest
-                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> agentName job <> "?",
+                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> (.agentName) job <> "?",
                       context = output,
                       channel = approvalPolicyChannel policy
                     }
@@ -753,7 +753,7 @@ openSession deps recordedIdentity job decl = liftIO do
   startedAt' <- getCurrentTime
   sid <- genSessionId
   let sessionAgentId = resolvedIdentityText recordedIdentity
-      focusTxt = behaviorKindText (behavior decl)
+      focusTxt = behaviorKindText ((.behavior) decl)
       RunJob {parentSessionId = jobParentSessionId, delegationDepth = jobDelegationDepth} = job
   parsedParent <-
     case jobParentSessionId of
@@ -805,7 +805,7 @@ runBehaviorStep deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid decl job flowName
     _
-      | not (null (delegates decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
+      | not (null ((.delegates) decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
           liftIO
             ( first (Text.pack . show)
@@ -831,7 +831,7 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
       journalPracticeReview <- patch PracticeReview.practiceReviewFlowPatch
       let attentionInterpreter
             | journalPracticeReview = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
-            | otherwise = PracticeReview.runPracticeReviewAttention False (practiceReview deps)
+            | otherwise = PracticeReview.runPracticeReviewAttention False ((.practiceReview) deps)
       attempted <-
         trySync
           ( FlowCapability.runActivity (activityFromJob job)
@@ -841,11 +841,11 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
               . FlowRouting.runRouting routingEnv
               . acknowledgementInterpreter
               . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
-              . PracticeReview.runPracticeReviewEvidence journalPracticeReview (practiceReview deps)
-              . PracticeReview.runPracticeReviewEvaluator journalPracticeReview activeBehaviorEnv (practiceReview deps)
+              . PracticeReview.runPracticeReviewEvidence journalPracticeReview ((.practiceReview) deps)
+              . PracticeReview.runPracticeReviewEvaluator journalPracticeReview activeBehaviorEnv ((.practiceReview) deps)
               . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
               . attentionInterpreter
-              $ run (triggerPayload job)
+              $ run ((.triggerPayload) job)
           )
       case attempted of
         Left err ->
@@ -858,8 +858,8 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
       case approvalPolicyForRun of
         Nothing ->
           runAcknowledgement
-            (approval deps sid)
-            (fromMaybe (secondsToNominalDiffTime 900) (deadline deps))
+            ((.approval) deps sid)
+            (fromMaybe (secondsToNominalDiffTime 900) ((.deadline) deps))
         Just policy ->
           runAcknowledgementWithChild
             sid
@@ -867,17 +867,17 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
             (approvalPolicyDeadline policy)
     memoryEnv =
       FlowCapability.MemoryEnv
-        { FlowCapability.appEnv = appEnv deps,
+        { FlowCapability.appEnv = (.appEnv) deps,
           FlowCapability.agent = decl,
           FlowCapability.identity = recordedIdentity,
-          FlowCapability.aliasPool = deliveryPool deps,
+          FlowCapability.aliasPool = (.deliveryPool) deps,
           FlowCapability.sessionId = Just sid
         }
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = decl,
           FlowDelegate.context = delegateContext deps decl sid job,
-          FlowDelegate.agents = agents deps,
+          FlowDelegate.agents = (.agents) deps,
           FlowDelegate.directory = depsDirectory deps
         }
     routingEnv =
@@ -889,40 +889,40 @@ runFlowBehavior deps activeBehaviorEnv approvalPolicyForRun recordedIdentity sid
         }
     sinkEnv =
       FlowCapability.SinkEnv
-        { FlowCapability.agent = agentName job,
+        { FlowCapability.agent = (.agentName) job,
           FlowCapability.runId = idText sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,
           FlowCapability.activity = Just (activityFromJob job),
           FlowCapability.grants = depsGrants deps,
           FlowCapability.directory = depsDirectory deps,
-          FlowCapability.identity = RunJob.identity job
+          FlowCapability.identity = (.identity) job
         }
     practiceReviewExecutionContext childWorkflowId =
       PracticeReview.PracticeReviewExecutionContext
-        { PracticeReview.identity = RunJob.identity job,
-          PracticeReview.parentWorkflowId = RunJob.parentRunWorkflowId job,
-          PracticeReview.parentSessionId = RunJob.parentSessionId job,
+        { PracticeReview.identity = (.identity) job,
+          PracticeReview.parentWorkflowId = (.parentRunWorkflowId) job,
+          PracticeReview.parentSessionId = (.parentSessionId) job,
           PracticeReview.childWorkflowId = childWorkflowId,
           PracticeReview.childSessionId = idText sid
         }
     practiceReviewMemoryEnv =
       PracticeReviewMemory.PracticeReviewMemoryEnv
-        { PracticeReviewMemory.appEnv = appEnv deps,
+        { PracticeReviewMemory.appEnv = (.appEnv) deps,
           PracticeReviewMemory.agent = decl,
           PracticeReviewMemory.identity = recordedIdentity,
           PracticeReviewMemory.sessionId = Just sid
         }
     practiceReviewAttentionEnv =
       PracticeReviewAttention.PracticeReviewAttentionEnv
-        { PracticeReviewAttention.agent = agentName job,
-          PracticeReviewAttention.identity = RunJob.identity job,
+        { PracticeReviewAttention.agent = (.agentName) job,
+          PracticeReviewAttention.identity = (.identity) job,
           PracticeReviewAttention.runId = idText sid,
           PracticeReviewAttention.occurredAt = Just (runJobOccurredAt job),
           PracticeReviewAttention.activity = Just (activityFromJob job),
           PracticeReviewAttention.grants = depsGrants deps,
           PracticeReviewAttention.directory = depsDirectory deps,
-          PracticeReviewAttention.recipients = PracticeReview.attentionRecipients (practiceReview deps)
+          PracticeReviewAttention.recipients = (.attentionRecipients) ((.practiceReview) deps)
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope
@@ -963,7 +963,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
           ]
   childHandles <-
     traverse
-      (\(ordinal, target) -> delegate (agents deps) (depsDirectory deps) decl ctx (delegationKey ordinal) target (childPayload target))
+      (\(ordinal, target) -> delegate ((.agents) deps) (depsDirectory deps) decl ctx (delegationKey ordinal) target (childPayload target))
       (zip [(0 :: Int) ..] delegateTargets)
   findings <- awaitAllDelegated childHandles
   pure
@@ -1101,7 +1101,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
               pure result
 
 publishUntracked :: SinkResult -> PublishOutcome
-publishUntracked result = case outcome result of
+publishUntracked result = case (.outcome) result of
   Failed err -> PublishFailed err
   AuthorizationFailed err -> PublishFailed err
   PermanentFailure err -> either PublishFailed id (permanentPublishOutcome err)
@@ -1147,7 +1147,7 @@ publishTracked logger pool messageId kind intent send = do
       now <- getCurrentTime
       Delivery.recordDelivery pool (deliveryReceiptFor messageId kind receiptStatus receiptDetail now intent)
 
-    finish result = case outcome result of
+    finish result = case (.outcome) result of
       Delivered downstreamId -> do
         recordReceipt Delivery.Delivered (Just downstreamId) >>= \case
           Right () -> pure PublishSucceeded
@@ -1296,7 +1296,7 @@ recordLearning deps recordedIdentity decl@AgentDecl {memory = MemoryPolicy {reco
         decl
         sid
         (renderLearning output)
-        (Set.fromList ["agent-run", behaviorKindText (behavior decl)])
+        (Set.fromList ["agent-run", behaviorKindText ((.behavior) decl)])
 
 recordMemory :: AgentRunDeps -> ResolvedAgentIdentity -> AgentDecl -> SessionId -> Text -> Set.Set Text -> IO (Either StoreError (StepResult MemoryId))
 recordMemory deps recordedIdentity decl sid content' tags' = do
@@ -1352,7 +1352,7 @@ completeSession deps activeBehaviorEnv recordedIdentity sid = liftIO do
 
 runKioku :: AgentRunDeps -> Eff AppEffects a -> IO (Either StoreError a)
 runKioku deps action =
-  let env = appEnv deps
+  let env = (.appEnv) deps
    in runEff
         . runTracing (tracer env)
         . runErrorNoCallStack
@@ -1373,14 +1373,14 @@ logSinkResult :: Log.Logger -> RunJob -> SinkResult -> IO ()
 logSinkResult logger job result =
   Log.logEvent
     logger
-    (levelFor (outcome result))
+    (levelFor ((.outcome) result))
     "sink.result"
-    ( [ "agent" Aeson..= agentName job,
+    ( [ "agent" Aeson..= (.agentName) job,
         Log.runIdKey Aeson..= jobIdempotencyKey job,
-        "sink_kind" Aeson..= sinkKindText (kind result),
-        "outcome" Aeson..= outcomeText (outcome result)
+        "sink_kind" Aeson..= sinkKindText ((.kind) result),
+        "outcome" Aeson..= outcomeText ((.outcome) result)
       ]
-        <> detailField (outcome result)
+        <> detailField ((.outcome) result)
     )
   where
     levelFor = \case

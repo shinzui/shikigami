@@ -171,7 +171,7 @@ persistEvidenceTransition evidenceStore runEvidence@RunEvidence {runEvidenceId =
 
 validateVerdict :: EvidencePhase -> Maybe ComplianceRollUp -> Either EvidencePersistenceError ()
 validateVerdict target rollUp =
-  case (target, sanctioned <$> rollUp) of
+  case (target, (.sanctioned) <$> rollUp) of
     (EvidenceSealed, Nothing) -> Left (MissingComplianceRollUp target)
     (EvidenceSealed, Just False) -> Left (VerdictDoesNotMatchPhase target False)
     (Attested, Just False) -> Left (VerdictDoesNotMatchPhase target False)
@@ -191,7 +191,7 @@ runProjection runEvidence@RunEvidence {runEvidenceId, runId, phase, expectedCall
       runId = renderRunCorrelationId runId,
       status = phaseText phase,
       verdict = verdictText <$> verdictFor phase rollUp,
-      reasons = toJSON (maybe [] Compliance.reasons rollUp),
+      reasons = toJSON (maybe [] (.reasons) rollUp),
       binding = bindingValue runEvidence,
       observations = observationsValue runEvidence,
       expectedCallCount = fromIntegral (length expectedCalls),
@@ -200,7 +200,7 @@ runProjection runEvidence@RunEvidence {runEvidenceId, runId, phase, expectedCall
 
 verdictFor :: EvidencePhase -> Maybe ComplianceRollUp -> Maybe ComplianceVerdict
 verdictFor phase rollUp =
-  case sanctioned <$> rollUp of
+  case (.sanctioned) <$> rollUp of
     Just True -> Just VerdictSanctioned
     Just False -> Just VerdictNotSanctioned
     Nothing -> case phase of

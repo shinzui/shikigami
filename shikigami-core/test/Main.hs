@@ -304,7 +304,7 @@ kizashiTests =
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
               ctx = ctxFor (compatibilityIdentity "heartbeat") kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
-          outcome r @?= Delivered "sig_stub"
+          (.outcome) r @?= Delivered "sig_stub"
           reqs <- readIORef ref
           assertEqual "one signal recorded" 1 (length reqs)
           case reqs of
@@ -316,7 +316,7 @@ kizashiTests =
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
               ctx = ctxFor (compatibilityIdentity "intruder") kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
-          case outcome r of
+          case (.outcome) r of
             DeniedOutcome _ -> pure ()
             other -> assertBool ("expected DeniedOutcome, got " <> show other) False
           reqs <- readIORef ref
@@ -336,7 +336,7 @@ kawaTests =
               sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
           r1 <- Sink.dispatch ctx sink sampleOutput
           r2 <- Sink.dispatch ctx sink sampleOutput
-          case (outcome r1, outcome r2) of
+          case ((.outcome) r1, (.outcome) r2) of
             (Delivered a1, Delivered a2) -> do
               assertBool "activity id non-empty" (not (Text.null a1))
               assertEqual "same activity id on retry (deduplicated)" a1 a2
@@ -369,7 +369,7 @@ kawaTests =
               sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
               output = object ["context_refs" .= [object ["scheme" .= ("https://" :: Text), "ref" .= ("example.invalid" :: Text)]]]
           result <- Sink.dispatch ctx sink output
-          case outcome result of
+          case (.outcome) result of
             PermanentFailure detail -> assertBool "failure does not name the bad scheme" ("unknown context_refs scheme" `Text.isInfixOf` detail)
             other -> assertFailure ("malformed context refs were not permanent: " <> show other)
           stored <- readIORef store
@@ -442,7 +442,7 @@ danwaTests =
               sink = DanwaConversation {topic = "support"}
           ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg target
           r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
-          outcome r @?= Delivered "msg_reply"
+          (.outcome) r @?= Delivered "msg_reply"
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
           postedContent reqs @?= Just "reply text",
@@ -456,7 +456,7 @@ danwaTests =
               sink = DanwaConversation {topic = "support"}
           ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg Nothing
           r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
-          outcome r @?= Delivered "msg_stub"
+          (.outcome) r @?= Delivered "msg_stub"
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
           postedContent reqs @?= Just "[support]\nfresh thread text",
@@ -467,7 +467,7 @@ danwaTests =
               sink = DanwaConversation {topic = ""}
           ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg Nothing
           result <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
-          case outcome result of
+          case (.outcome) result of
             AuthorizationFailed reason -> assertBool "the missing exact target is explicit" ("invalid coordinates" `Text.isInfixOf` reason)
             other -> assertFailure ("expected fail-closed authorization, got " <> show other)
           reqs <- readIORef ref

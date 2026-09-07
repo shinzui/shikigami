@@ -81,30 +81,30 @@ newShikigamiMetrics meter = liftIO do
 
 recordRunStarted :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
 recordRunStarted metrics agent trigger =
-  recordRun (runsStarted metrics) agent trigger Nothing
+  recordRun ((.runsStarted) metrics) agent trigger Nothing
 
 recordRunCompleted :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
 recordRunCompleted metrics agent trigger =
-  recordRun (runsCompleted metrics) agent trigger (Just "completed")
+  recordRun ((.runsCompleted) metrics) agent trigger (Just "completed")
 
 recordRunFailed :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
 recordRunFailed metrics agent trigger =
-  recordRun (runsFailed metrics) agent trigger (Just "failed")
+  recordRun ((.runsFailed) metrics) agent trigger (Just "failed")
 
 recordRunRetried :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
 recordRunRetried metrics agent trigger =
-  recordRun (runsRetried metrics) agent trigger (Just "retried")
+  recordRun ((.runsRetried) metrics) agent trigger (Just "retried")
 
 recordRunDeadLettered :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
 recordRunDeadLettered metrics agent trigger =
-  recordRun (runsDeadLettered metrics) agent trigger (Just "dead_lettered")
+  recordRun ((.runsDeadLettered) metrics) agent trigger (Just "dead_lettered")
 
 recordQueueDepth :: (MonadIO m) => ShikigamiMetrics -> Int64 -> m ()
-recordQueueDepth metrics value = liftIO (gaugeRecord (queueDepth metrics) value emptyAttributes)
+recordQueueDepth metrics value = liftIO (gaugeRecord ((.queueDepth) metrics) value emptyAttributes)
 
 recordConsumerRecord :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
 recordConsumerRecord metrics topic =
-  liftIO (counterAdd (consumerRecords metrics) 1 (attributes (attr "topic" topic)))
+  liftIO (counterAdd ((.consumerRecords) metrics) 1 (attributes (attr "topic" topic)))
 
 recordRun :: (MonadIO m) => Counter Int64 -> Text -> Text -> Maybe Text -> m ()
 recordRun instrument agent trigger outcome =

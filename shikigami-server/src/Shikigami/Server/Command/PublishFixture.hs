@@ -26,11 +26,11 @@ runPublishFixture path config = do
       hPutStrLn stderr ("publish-fixture: cannot decode " <> path <> ": " <> e)
       exitFailure
     Right env -> do
-      r <- publishEnvelope (Config.kafkaBroker config) topic env
+      r <- publishEnvelope ((.kafkaBroker) config) topic env
       case r of
         Left e -> do
           hPutStrLn stderr ("publish-fixture: " <> Text.unpack e)
           exitFailure
         Right () -> putStrLn ("published " <> path <> " to topic " <> Text.unpack topic)
   where
-    topic = Config.kafkaActivityTopic config
+    topic = (.kafkaActivityTopic) config

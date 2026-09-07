@@ -17,6 +17,7 @@ module Shikigami.Server.Seam
 
     -- * Handler monad
     ServerM (..),
+    unServerM,
     runServerM,
 
     -- * Failures
@@ -52,7 +53,7 @@ data ServerEnv = ServerEnv
   }
 
 -- | The monad every handler is written in.
-newtype ServerM a = ServerM {unServerM :: ReaderT ServerEnv Handler a}
+newtype ServerM a = ServerM (ReaderT ServerEnv Handler a)
   deriving newtype
     ( Functor,
       Applicative,
@@ -61,6 +62,10 @@ newtype ServerM a = ServerM {unServerM :: ReaderT ServerEnv Handler a}
       MonadReader ServerEnv,
       MonadError ServerError
     )
+
+-- | Explicit public unwrapper; independent of record selector generation.
+unServerM :: ServerM a -> ReaderT ServerEnv Handler a
+unServerM (ServerM action) = action
 
 -- | The natural transformation Servant needs: run a handler in a fixed
 -- environment.

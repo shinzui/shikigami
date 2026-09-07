@@ -167,7 +167,7 @@ silentLogger = Logger {minLevel = Error, sink = \_ -> pure ()}
 -- win over anything of the same name in @fields@; see the module header.
 logEvent :: (MonadIO m) => Logger -> Level -> Text -> [Pair] -> m ()
 logEvent logger level event fields
-  | level < minLevel logger = pure ()
+  | level < (.minLevel) logger = pure ()
   | otherwise = liftIO do
       now <- getCurrentTime
       let line =
@@ -178,7 +178,7 @@ logEvent logger level event fields
                        "event" Aeson..= event
                      ]
               )
-      sink logger (LBS.toStrict (Aeson.encode line) <> "\n")
+      (.sink) logger (LBS.toStrict (Aeson.encode line) <> "\n")
 
 -- | 'logEvent' at 'Debug'.
 logDebug :: (MonadIO m) => Logger -> Text -> [Pair] -> m ()

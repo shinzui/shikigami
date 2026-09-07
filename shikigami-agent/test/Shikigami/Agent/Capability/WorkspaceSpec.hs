@@ -261,7 +261,7 @@ fixtureScope Fixture {repository} = do
     Right scope -> pure scope
 
 withFixture :: (Fixture -> IO value) -> IO value
-withFixture = bracket createFixture (removePathForcibly . container)
+withFixture = bracket createFixture (removePathForcibly . (.container))
 
 createFixture :: IO Fixture
 createFixture = do

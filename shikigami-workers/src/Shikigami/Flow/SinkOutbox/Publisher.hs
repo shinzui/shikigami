@@ -53,7 +53,7 @@ runOutboxPublisher env = do
               rows
           unsafeEff_ (modifyIORef' attempted (<> zip rows (snd <$> outcomes)))
           pure outcomes
-    result <- runAppIO (appEnv env) (publishClaimedOutbox publishBatch defaultPublishOptions (envKeiroMetrics env))
+    result <- runAppIO ((.appEnv) env) (publishClaimedOutbox publishBatch defaultPublishOptions (envKeiroMetrics env))
     case result of
       Left err -> Log.logError (envLogger env) "worker.outbox.failed" ["error" Aeson..= Text.pack (show err)]
       Right summary -> do

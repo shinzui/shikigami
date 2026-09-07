@@ -638,10 +638,10 @@ prepareTrigger directory detail agent job hit = do
   pure case decision of
     Directory.AllowRun Nothing -> EnqueueTrigger (job {RunJob.identity = compatibilityIdentity (agent ^. #name)}) hit
     Directory.AllowRun (Just principal) ->
-      case mkAgentPrincipal (Directory.principalId principal) of
+      case mkAgentPrincipal ((.principalId) principal) of
         Right admittedPrincipal -> EnqueueTrigger (job {RunJob.identity = VerifiedIdentity admittedPrincipal}) hit
-        Left reason -> refused (Just (Directory.principalId principal)) reason
-    Directory.SkipRun principal reason -> refused (Just (Directory.principalId principal)) reason
+        Left reason -> refused (Just ((.principalId) principal)) reason
+    Directory.SkipRun principal reason -> refused (Just ((.principalId) principal)) reason
     Directory.UnknownPrincipal identifier -> refused declaredPrincipalId ("unknown principal: " <> identifier)
     Directory.DirectoryUnavailable problem -> refused declaredPrincipalId ("directory unavailable: " <> problem)
   where

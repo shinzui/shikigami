@@ -107,7 +107,7 @@ callReasons
         permitted = toList allowedCalls
         modelReasons =
           [ ModelNotPermitted renderedCallId resolvedModelId
-          | not (any (\allowed -> Profile.modelId allowed == resolvedModelId) permitted)
+          | not (any (\allowed -> (.modelId) allowed == resolvedModelId) permitted)
           ]
         endpointReasons =
           [ ProhibitedEndpoint renderedCallId endpointClass
@@ -117,12 +117,12 @@ callReasons
         aliasReasons =
           [ ProhibitedAlias renderedCallId alias resolvedModelId
           | Just alias <- [requestedAlias],
-            not (Profile.aliasesAllowed prohibitions)
+            not ((.aliasesAllowed) prohibitions)
           ]
         transportReasons =
           [ ProhibitedTransport renderedCallId (renderTransport transport)
           | transport == Baikai.TransportSubprocess,
-            not (Profile.cliTransportsAllowed prohibitions)
+            not ((.cliTransportsAllowed) prohibitions)
           ]
         fallbackReasons = relationshipReasons prohibitions allCalls recorded
         strengthReasons =
@@ -163,7 +163,7 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
     defaultReasons =
       [ ProhibitedDefaultThinking callId
       | isNothing requested,
-        not (Profile.defaultedThinkingAllowed prohibitions)
+        not ((.defaultedThinkingAllowed) prohibitions)
       ]
     tupleReasons =
       [ ThinkingTranslationNotPermitted callId requestedText (effectiveThinkingText translation)
@@ -173,8 +173,8 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
           ( any
               ( \allowed ->
                   surfaceMatches provider api endpointClass allowed
-                    && Profile.modelId allowed == modelId
-                    && Profile.thinking allowed == requestedLevel
+                    && (.modelId) allowed == modelId
+                    && (.thinking) allowed == requestedLevel
               )
               permitted
           )
@@ -182,7 +182,7 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
     adjustmentReasons =
       [ ProhibitedEffortClamping callId requestedText effective
       | adjustment <- adjustments,
-        not (Profile.effortClampingAllowed prohibitions),
+        not ((.effortClampingAllowed) prohibitions),
         Just (requestedText, effective) <- [renderAdjustment adjustment]
       ]
 
@@ -227,11 +227,11 @@ relationshipReasons prohibitions allCalls RecordedCallEvidence {callId, relation
               renderedCallId = renderCallCorrelationId callId
            in [ ProhibitedProviderFallback renderedCallId previousProvider currentProvider
               | previousProvider /= currentProvider,
-                not (Profile.providerFallbackAllowed prohibitions)
+                not ((.providerFallbackAllowed) prohibitions)
               ]
                 <> [ ProhibitedModelFallback renderedCallId previousModel resolvedModelId
                    | previousModel /= resolvedModelId,
-                     not (Profile.modelFallbackAllowed prohibitions)
+                     not ((.modelFallbackAllowed) prohibitions)
                    ]
     _ -> []
 
@@ -309,13 +309,13 @@ resultReasons RunEvidence {resultEvidence} =
 limitReasons :: Profile.SanctionedExecutionProfile -> RunEvidence -> [NonConformingReason]
 limitReasons Profile.SanctionedExecutionProfile {Profile.limits} RunEvidence {calls, delegatedChildren, durationSeconds, peakConcurrency} =
   concat
-    [ exceeded "maxCalls" (Profile.maxCalls limits) (length calls),
-      exceeded "maxRetries" (Profile.maxRetries limits) (length [() | RecordedCallEvidence {relationship = RetryOf _} <- calls]),
-      exceeded "maxDelegatedChildRuns" (Profile.maxDelegatedChildRuns limits) (length delegatedChildren),
-      exceeded "maxTokens" (Profile.maxTokens limits) (fromIntegral (totalTokens calls)),
-      exceededInteger "maxCostMicroUsd" (Profile.maxCostMicroUsd limits) (costMicroUsd calls),
-      maybe [] (\observed -> exceeded "maxDurationSeconds" (Profile.maxDurationSeconds limits) observed) durationSeconds,
-      maybe [] (\observed -> exceeded "maxConcurrency" (Profile.maxConcurrency limits) observed) peakConcurrency
+    [ exceeded "maxCalls" ((.maxCalls) limits) (length calls),
+      exceeded "maxRetries" ((.maxRetries) limits) (length [() | RecordedCallEvidence {relationship = RetryOf _} <- calls]),
+      exceeded "maxDelegatedChildRuns" ((.maxDelegatedChildRuns) limits) (length delegatedChildren),
+      exceeded "maxTokens" ((.maxTokens) limits) (fromIntegral (totalTokens calls)),
+      exceededInteger "maxCostMicroUsd" ((.maxCostMicroUsd) limits) (costMicroUsd calls),
+      maybe [] (\observed -> exceeded "maxDurationSeconds" ((.maxDurationSeconds) limits) observed) durationSeconds,
+      maybe [] (\observed -> exceeded "maxConcurrency" ((.maxConcurrency) limits) observed) peakConcurrency
     ]
 
 exceeded :: Text -> Maybe Int -> Int -> [NonConformingReason]

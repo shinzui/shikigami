@@ -186,49 +186,49 @@ surfaceTests =
       testCase "every declared key can be set from the environment" $
         sort (fmap snd boundVariables) @?= sort (fmap renderKey declaredKeys),
       testCase "with no source at all, the declared defaults are what a process gets" do
-        agentsDirectory defaultAppConfig @?= "agents"
+        (.agentsDirectory) defaultAppConfig @?= "agents"
         -- Skip-missed is the deliberate behavior change on upgrade: waking late
         -- arms one future tick rather than replaying every minute of downtime.
-        schedulerCatchUp defaultAppConfig @?= SkipMissed
+        (.schedulerCatchUp) defaultAppConfig @?= SkipMissed
         -- Lenient by default: upgrading must not turn a tolerated broken
         -- manifest into a failed deploy without an explicit configuration change.
-        agentsStrict defaultAppConfig @?= False
-        directorySettings defaultAppConfig @?= DirectoryDisabled
-        delegationBudgetNatural (delegationBudget defaultAppConfig) @?= 16
-        portNumber (httpPort defaultAppConfig) @?= 8080
-        httpHost defaultAppConfig @?= "127.0.0.1"
-        byteLimitBytes (httpRequestMaxBytes defaultAppConfig) @?= 8_388_608
-        byteLimitBytes (httpResponseMaxBytes defaultAppConfig) @?= 8_388_608
-        runTimeout defaultAppConfig @?= secondsToNominalDiffTime 300
-        approvalRequiredSinks defaultAppConfig @?= Set.empty
-        approvalChannel defaultAppConfig @?= ViaDanwa
-        approvalDeadline defaultAppConfig @?= secondsToNominalDiffTime 900
-        renderAttentionRecipientMap (practiceReviewAttentionRecipients defaultAppConfig) @?= ""
-        kafkaBroker defaultAppConfig @?= "127.0.0.1:9092"
-        kafkaActivityTopic defaultAppConfig @?= "activity.v1"
-        kafkaEventsTopic defaultAppConfig @?= "danwa.message-addressed.v1"
-        kafkaStreamGroup defaultAppConfig @?= "shikigami-stream"
-        kafkaEventsGroup defaultAppConfig @?= "shikigami-events"
-        kafkaIncludeAgentActors defaultAppConfig @?= False
-        queueNameToText (kafkaDeadLetterQueue defaultAppConfig) @?= "shikigami_stream_dead_letters"
-        kawaBaseUrl defaultAppConfig @?= "http://localhost:8088"
-        kawaSourceSegment defaultAppConfig @?= "shinzui/shikigami"
-        assertBool "kawa has no default credential" (isNothing (kawaToken defaultAppConfig))
-        kizashiBaseUrl defaultAppConfig @?= "http://localhost:8089"
-        kizashiDefaultRecipient defaultAppConfig @?= "recipient_default"
-        assertBool "kizashi has no default credential" (isNothing (kizashiToken defaultAppConfig))
-        kanmonBaseUrl defaultAppConfig @?= "http://localhost:8090"
-        assertBool "Kanmon has no default credential" (isNothing (kanmonToken defaultAppConfig))
-        danwaBaseUrl defaultAppConfig @?= "http://localhost:8080"
-        danwaAgentParticipant defaultAppConfig @?= "part_shikigami"
-        assertBool "danwa has no default credential" (isNothing (danwaToken defaultAppConfig))
-        case actionAuthorization defaultAppConfig of
+        (.agentsStrict) defaultAppConfig @?= False
+        (.directorySettings) defaultAppConfig @?= DirectoryDisabled
+        delegationBudgetNatural ((.delegationBudget) defaultAppConfig) @?= 16
+        portNumber ((.httpPort) defaultAppConfig) @?= 8080
+        (.httpHost) defaultAppConfig @?= "127.0.0.1"
+        byteLimitBytes ((.httpRequestMaxBytes) defaultAppConfig) @?= 8_388_608
+        byteLimitBytes ((.httpResponseMaxBytes) defaultAppConfig) @?= 8_388_608
+        (.runTimeout) defaultAppConfig @?= secondsToNominalDiffTime 300
+        (.approvalRequiredSinks) defaultAppConfig @?= Set.empty
+        (.approvalChannel) defaultAppConfig @?= ViaDanwa
+        (.approvalDeadline) defaultAppConfig @?= secondsToNominalDiffTime 900
+        renderAttentionRecipientMap ((.practiceReviewAttentionRecipients) defaultAppConfig) @?= ""
+        (.kafkaBroker) defaultAppConfig @?= "127.0.0.1:9092"
+        (.kafkaActivityTopic) defaultAppConfig @?= "activity.v1"
+        (.kafkaEventsTopic) defaultAppConfig @?= "danwa.message-addressed.v1"
+        (.kafkaStreamGroup) defaultAppConfig @?= "shikigami-stream"
+        (.kafkaEventsGroup) defaultAppConfig @?= "shikigami-events"
+        (.kafkaIncludeAgentActors) defaultAppConfig @?= False
+        queueNameToText ((.kafkaDeadLetterQueue) defaultAppConfig) @?= "shikigami_stream_dead_letters"
+        (.kawaBaseUrl) defaultAppConfig @?= "http://localhost:8088"
+        (.kawaSourceSegment) defaultAppConfig @?= "shinzui/shikigami"
+        assertBool "kawa has no default credential" (isNothing ((.kawaToken) defaultAppConfig))
+        (.kizashiBaseUrl) defaultAppConfig @?= "http://localhost:8089"
+        (.kizashiDefaultRecipient) defaultAppConfig @?= "recipient_default"
+        assertBool "kizashi has no default credential" (isNothing ((.kizashiToken) defaultAppConfig))
+        (.kanmonBaseUrl) defaultAppConfig @?= "http://localhost:8090"
+        assertBool "Kanmon has no default credential" (isNothing ((.kanmonToken) defaultAppConfig))
+        (.danwaBaseUrl) defaultAppConfig @?= "http://localhost:8080"
+        (.danwaAgentParticipant) defaultAppConfig @?= "part_shikigami"
+        assertBool "danwa has no default credential" (isNothing ((.danwaToken) defaultAppConfig))
+        case (.actionAuthorization) defaultAppConfig of
           ActionAuthorizationDisabled -> pure ()
           KikanActionAuthorization {} -> assertFailure "action authorization must default to fail-closed disabled mode"
         -- Deliberately absent rather than pointing somewhere: rei has no HTTP
         -- surface, and a defaulted URL would turn "nowhere to send" into
         -- "connection refused to a host nobody chose".
-        reiBaseUrl defaultAppConfig @?= Nothing
+        (.reiBaseUrl) defaultAppConfig @?= Nothing
     ]
 
 boundVariables :: [(Text, Text)]
@@ -250,14 +250,14 @@ precedenceTests =
             (optionsWith [] [])
             [yaml "file" "kafka:\n  broker: from-file:9092\n"]
             [("SHIKIGAMI_KAFKA_BROKER", "from-env:9092")]
-        kafkaBroker config @?= "from-env:9092",
+        (.kafkaBroker) config @?= "from-env:9092",
       testCase "a named command-line flag beats the environment" do
         config <-
           resolveOrFail
             (optionsWith [namedSource "--broker" kafkaBrokerKey "from-flag:9092"] [])
             []
             [("SHIKIGAMI_KAFKA_BROKER", "from-env:9092")]
-        kafkaBroker config @?= "from-flag:9092",
+        (.kafkaBroker) config @?= "from-flag:9092",
       testCase "a --set override beats a named flag" do
         config <-
           resolveOrFail
@@ -267,7 +267,7 @@ precedenceTests =
             )
             []
             []
-        kafkaBroker config @?= "from-set:9092",
+        (.kafkaBroker) config @?= "from-set:9092",
       testCase "the last of several --config files wins" do
         config <-
           resolveOrFail
@@ -276,18 +276,18 @@ precedenceTests =
               yaml "second" "agents:\n  directory: second\n"
             ]
             []
-        agentsDirectory config @?= "second",
+        (.agentsDirectory) config @?= "second",
       testCase "the last of several --set overrides wins" do
         config <-
           resolveOrFail
             (optionsWith [] [cliOverride agentsDirectoryKey "first", cliOverride agentsDirectoryKey "second"])
             []
             []
-        agentsDirectory config @?= "second",
+        (.agentsDirectory) config @?= "second",
       testCase "an unset key keeps its declared default even when its neighbours are set" do
         config <- resolveOrFail (optionsWith [] []) [yaml "file" "kafka:\n  broker: only-this:9092\n"] []
-        kafkaBroker config @?= "only-this:9092"
-        kafkaActivityTopic config @?= "activity.v1",
+        (.kafkaBroker) config @?= "only-this:9092"
+        (.kafkaActivityTopic) config @?= "activity.v1",
       testCase "duration budgets resolve in YAML, environment, then CLI precedence" do
         config <-
           resolveOrFail
@@ -304,8 +304,8 @@ precedenceTests =
             [ ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "180"),
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "720")
             ]
-        runTimeout config @?= secondsToNominalDiffTime 240
-        approvalDeadline config @?= secondsToNominalDiffTime 840,
+        (.runTimeout) config @?= secondsToNominalDiffTime 240
+        (.approvalDeadline) config @?= secondsToNominalDiffTime 840,
       testCase "approval policy resolves in YAML, environment, then CLI precedence" do
         config <-
           resolveOrFail
@@ -319,23 +319,23 @@ precedenceTests =
             [ ("SHIKIGAMI_APPROVAL_REQUIRE", "ReiAction"),
               ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")
             ]
-        approvalRequiredSinks config @?= Set.fromList [SKizashiSignal, SDanwaConversation]
-        approvalChannel config @?= ViaDanwa,
+        (.approvalRequiredSinks) config @?= Set.fromList [SKizashiSignal, SDanwaConversation]
+        (.approvalChannel) config @?= ViaDanwa,
       testCase "an empty approval requirement preserves auto-approval" do
         config <-
           resolveOrFail
             (optionsWith [] [])
             []
             [("SHIKIGAMI_APPROVAL_REQUIRE", ""), ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")]
-        approvalRequiredSinks config @?= Set.empty
-        approvalChannel config @?= ViaKizashi,
+        (.approvalRequiredSinks) config @?= Set.empty
+        (.approvalChannel) config @?= ViaKizashi,
       testCase "file directory settings resolve as one conditional value" do
         config <-
           resolveOrFail
             (optionsWith [] [])
             [yaml "file" "directory:\n  mode: file\n  file:\n    path: /etc/shikigami/principals.json\n"]
             [("SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS", "7")]
-        directorySettings config
+        (.directorySettings) config
           @?= DirectoryFile
             { path = "/etc/shikigami/principals.json",
               refreshInterval = secondsToNominalDiffTime 7
@@ -349,49 +349,49 @@ strictnessTests =
   testGroup
     "strictness"
     [ testCase "an unknown key in a file is rejected rather than ignored" $
-        exitCode (runWith (optionsWith [] []) [yaml "file" "kafka:\n  brokers: typo:9092\n"] [])
+        (.exitCode) (runWith (optionsWith [] []) [yaml "file" "kafka:\n  brokers: typo:9092\n"] [])
           @?= resolutionExitCode,
       -- The tempting alternative is to fall back to the environment's valid
       -- 8080. That would start a listener on a port nobody asked for.
       testCase "a malformed winning value is fatal and does not fall back" do
         let run = runWith (optionsWith [] [cliOverride httpPortKey "not-a-port"]) [] [("SHIKIGAMI_HTTP_PORT", "8080")]
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the port key and the accepted range:\n" <> Text.unpack (standardError run))
-          ("http.port" `Text.isInfixOf` standardError run && "65535" `Text.isInfixOf` standardError run),
+          ("the failure should name the port key and the accepted range:\n" <> Text.unpack ((.standardError) run))
+          ("http.port" `Text.isInfixOf` (.standardError) run && "65535" `Text.isInfixOf` (.standardError) run),
       testCase "a port outside 1-65535 is rejected at resolution time" $
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride httpPortKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride httpPortKey bad]) [] []) @?= resolutionExitCode)
           ["0", "65536", "-1"],
       testCase "the boundary port is accepted" do
         config <- resolveOrFail (optionsWith [] [cliOverride httpPortKey "65535"]) [] []
-        portNumber (httpPort config) @?= 65535,
+        portNumber ((.httpPort) config) @?= 65535,
       testCase "HTTP body limits reject values outside 1 KiB through 64 MiB" $
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride httpRequestMaxBytesKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride httpRequestMaxBytesKey bad]) [] []) @?= resolutionExitCode)
           ["1023", "67108865", "-1", "1.5"],
       testCase "HTTP body-limit boundaries are accepted" do
         low <- resolveOrFail (optionsWith [] [cliOverride httpRequestMaxBytesKey "1024"]) [] []
         high <- resolveOrFail (optionsWith [] [cliOverride httpResponseMaxBytesKey "67108864"]) [] []
-        byteLimitBytes (httpRequestMaxBytes low) @?= 1_024
-        byteLimitBytes (httpResponseMaxBytes high) @?= 67_108_864,
+        byteLimitBytes ((.httpRequestMaxBytes) low) @?= 1_024
+        byteLimitBytes ((.httpResponseMaxBytes) high) @?= 67_108_864,
       testCase "duration budgets reject non-positive and unsafe values" $
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride workerRunTimeoutSecondsKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride workerRunTimeoutSecondsKey bad]) [] []) @?= resolutionExitCode)
           ["0", "86401", "-1", "1.5"],
       testCase "duration budget boundaries are accepted" do
         low <- resolveOrFail (optionsWith [] [cliOverride workerRunTimeoutSecondsKey "1"]) [] []
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
-        runTimeout low @?= secondsToNominalDiffTime 1
-        approvalDeadline high @?= secondsToNominalDiffTime 86_400,
+        (.runTimeout) low @?= secondsToNominalDiffTime 1
+        (.approvalDeadline) high @?= secondsToNominalDiffTime 86_400,
       testCase "approval policy rejects duplicates, unknown sink kinds, and unknown channels" do
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
           ["KawaDigest,KawaDigest", "KawaDigest,Unknown", ","]
-        exitCode (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
+        (.exitCode) (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
       testCase "practice-review recipients reject noncanonical destinations and duplicate owner sets" do
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride practiceReviewAttentionRecipientsKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride practiceReviewAttentionRecipientsKey bad]) [] []) @?= resolutionExitCode)
           [ "target-owner=recipient:wrong",
             "target-owner=recipient_one,target-owner=recipient_two",
             "target-owner+triage=recipient_one,triage+target-owner=recipient_two"
@@ -402,11 +402,11 @@ strictnessTests =
                 (optionsWith [] [cliOverride approvalRequireKey "Unknown"])
                 []
                 [("SHIKIGAMI_APPROVAL_REQUIRE", "KawaDigest")]
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the key and every valid sink kind:\n" <> Text.unpack (standardError run))
+          ("the failure should name the key and every valid sink kind:\n" <> Text.unpack ((.standardError) run))
           ( all
-              (`Text.isInfixOf` standardError run)
+              (`Text.isInfixOf` (.standardError) run)
               [ "approval.require",
                 "KawaDigest",
                 "KizashiSignal",
@@ -417,14 +417,14 @@ strictnessTests =
           ),
       testCase "file directory mode requires a path" do
         let run = runWith (optionsWith [] [cliOverride directoryModeKey "file"]) [] []
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the missing file path:\n" <> Text.unpack (standardError run))
-          ("directory.file.path" `Text.isInfixOf` standardError run),
+          ("the failure should name the missing file path:\n" <> Text.unpack ((.standardError) run))
+          ("directory.file.path" `Text.isInfixOf` (.standardError) run),
       testCase "directory refresh interval uses the bounded duration decoder" $
         mapM_
           ( \bad ->
-              exitCode
+              (.exitCode)
                 ( runWith
                     ( optionsWith
                         []
@@ -442,21 +442,21 @@ strictnessTests =
       testCase "delegation budgets are bounded before runtime" do
         low <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "0"]) [] []
         high <- resolveOrFail (optionsWith [] [cliOverride delegationBudgetKey "1000"]) [] []
-        delegationBudgetNatural (delegationBudget low) @?= 0
-        delegationBudgetNatural (delegationBudget high) @?= 1000
+        delegationBudgetNatural ((.delegationBudget) low) @?= 0
+        delegationBudgetNatural ((.delegationBudget) high) @?= 1000
         mapM_
-          (\bad -> exitCode (runWith (optionsWith [] [cliOverride delegationBudgetKey bad]) [] []) @?= resolutionExitCode)
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride delegationBudgetKey bad]) [] []) @?= resolutionExitCode)
           ["1001", "-1", "1.5"],
       testCase "a source that could not be read exits with the source status" do
         let run = appConfigRun AdminRole (optionsWith [] []) (Left "config.yaml: does not exist") (emptyEnvironment [])
-        exitCode run @?= sourceExitCode
-        standardError run @?= "config.yaml: does not exist",
+        (.exitCode) run @?= sourceExitCode
+        (.standardError) run @?= "config.yaml: does not exist",
       testCase "a textual boolean from the environment decodes" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "true")]
-        kafkaIncludeAgentActors config @?= True,
+        (.kafkaIncludeAgentActors) config @?= True,
       testCase "Kikan action authorization resolves only as one complete trust configuration" do
         config <- resolveOrFail (optionsWith [] []) [] completeActionAuthorizationEnvironment
-        case actionAuthorization config of
+        case (.actionAuthorization) config of
           ActionAuthorizationDisabled -> assertFailure "complete Kikan action configuration resolved as disabled"
           KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, acceptedSchemaHashes, callerId} -> do
             kikanBaseUrl @?= "https://kikan.example.test"
@@ -466,24 +466,24 @@ strictnessTests =
             callerId @?= "shikigami-worker",
       testCase "partial Kikan action authorization is rejected at resolution" do
         let run = runWith (optionsWith [] []) [] [("SHIKIGAMI_ACTION_AUTHORIZATION_MODE", "kikan")]
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the grouped failure should name missing trust coordinates:\n" <> Text.unpack (standardError run))
-          ( "authorization.actions.kikan_en.base_url" `Text.isInfixOf` standardError run
-              && "credentials.authorization.actions.shomei.client_secret" `Text.isInfixOf` standardError run
+          ("the grouped failure should name missing trust coordinates:\n" <> Text.unpack ((.standardError) run))
+          ( "authorization.actions.kikan_en.base_url" `Text.isInfixOf` (.standardError) run
+              && "credentials.authorization.actions.shomei.client_secret" `Text.isInfixOf` (.standardError) run
           ),
       testCase "malformed proof trust material is rejected before the worker starts" do
         let run = runWith (optionsWith [] []) [] (("SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS", "1:not-hex") : filter ((/= "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") . fst) completeActionAuthorizationEnvironment)
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should identify the issuer key setting:\n" <> Text.unpack (standardError run))
-          ("authorization.actions.en.issuer_public_keys" `Text.isInfixOf` standardError run),
+          ("the failure should identify the issuer key setting:\n" <> Text.unpack ((.standardError) run))
+          ("authorization.actions.en.issuer_public_keys" `Text.isInfixOf` (.standardError) run),
       testCase "an invalid dead-letter queue name is rejected at resolution time" do
         let run = runWith (optionsWith [] [cliOverride kafkaDeadLetterQueueKey "Not-A-PGMQ-Queue"]) [] []
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the queue key and grammar:\n" <> Text.unpack (standardError run))
-          ("kafka.dead_letter.queue" `Text.isInfixOf` standardError run && "lowercase" `Text.isInfixOf` standardError run)
+          ("the failure should name the queue key and grammar:\n" <> Text.unpack ((.standardError) run))
+          ("kafka.dead_letter.queue" `Text.isInfixOf` (.standardError) run && "lowercase" `Text.isInfixOf` (.standardError) run)
     ]
 
 -- ── Per-role requirements ───────────────────────────────────────────────────
@@ -510,11 +510,11 @@ requirementTests =
         fmap renderKey (missingRequirements WorkerRole config) @?= ["database.connection_string"],
       testCase "a worker started without a connection string fails at configuration time" do
         let run = appConfigRun WorkerRole (optionsWith [] []) (Right []) (emptyEnvironment [])
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the binary and the key:\n" <> Text.unpack (standardError run))
-          ( "shikigami-worker" `Text.isInfixOf` standardError run
-              && "database.connection_string" `Text.isInfixOf` standardError run
+          ("the failure should name the binary and the key:\n" <> Text.unpack ((.standardError) run))
+          ( "shikigami-worker" `Text.isInfixOf` (.standardError) run
+              && "database.connection_string" `Text.isInfixOf` (.standardError) run
           ),
       -- The server joined the database list when its readiness probe started
       -- pinging PostgreSQL. Without this, a server started with no connection
@@ -522,11 +522,11 @@ requirementTests =
       -- which reads as a broken deploy rather than a missing setting.
       testCase "a server started without a connection string fails at configuration time" do
         let run = appConfigRun ServerRole (optionsWith [] []) (Right []) (emptyEnvironment [])
-        exitCode run @?= resolutionExitCode
+        (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the binary and the key:\n" <> Text.unpack (standardError run))
-          ( "shikigami-server" `Text.isInfixOf` standardError run
-              && "database.connection_string" `Text.isInfixOf` standardError run
+          ("the failure should name the binary and the key:\n" <> Text.unpack ((.standardError) run))
+          ( "shikigami-server" `Text.isInfixOf` (.standardError) run
+              && "database.connection_string" `Text.isInfixOf` (.standardError) run
           ),
       -- The four worker processes routinely run on one host, so a shared probe
       -- default would make three of them fail to bind. Pinning the distinctness
@@ -577,32 +577,32 @@ diagnosticTests =
         mapM_
           ( \mode -> do
               let run = appConfigRun AdminRole (diagnosticOptions mode) (Left "unreadable") (emptyEnvironment [])
-              exitCode run @?= 0
-              assertBool "schema output should not be empty" (not (Text.null (standardOutput run)))
+              (.exitCode) run @?= 0
+              assertBool "schema output should not be empty" (not (Text.null ((.standardOutput) run)))
           )
           [DescribeConfigText, DescribeConfigJson],
       testCase "every diagnostic mode exits zero and returns no configuration to run with" $
         mapM_
           ( \mode -> do
               let run = runWith (diagnosticOptions mode) [] []
-              exitCode run @?= 0
-              assertBool ("mode " <> show mode <> " printed nothing") (not (Text.null (standardOutput run)))
+              (.exitCode) run @?= 0
+              assertBool ("mode " <> show mode <> " printed nothing") (not (Text.null ((.standardOutput) run)))
               assertBool ("mode " <> show mode <> " must not let the process continue") (not (hasConfig run))
           )
           [DescribeConfigText, DescribeConfigJson, ExplainText, ExplainJson, CheckConfig],
       testCase "--check-config says so plainly" $
-        standardOutput (runWith (diagnosticOptions CheckConfig) [] []) @?= "configuration valid\n",
+        (.standardOutput) (runWith (diagnosticOptions CheckConfig) [] []) @?= "configuration valid\n",
       testCase "a check of an invalid configuration fails with the resolution status" $
-        exitCode (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_HTTP_PORT", "no")])
+        (.exitCode) (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_HTTP_PORT", "no")])
           @?= resolutionExitCode,
       testCase "--explain-config names where a value came from" do
         let run = runWith (diagnosticOptions ExplainText) [] [("SHIKIGAMI_KAFKA_BROKER", "explained:9092")]
         assertBool
-          ("the explanation should name the variable:\n" <> Text.unpack (standardOutput run))
-          ("SHIKIGAMI_KAFKA_BROKER" `Text.isInfixOf` standardOutput run),
+          ("the explanation should name the variable:\n" <> Text.unpack ((.standardOutput) run))
+          ("SHIKIGAMI_KAFKA_BROKER" `Text.isInfixOf` (.standardOutput) run),
       testCase "schema and explanation expose the duration policies" do
         let schema = renderSchemaText appConfigSchema
-            explained = standardOutput (runWith (diagnosticOptions ExplainText) [] [])
+            explained = (.standardOutput) (runWith (diagnosticOptions ExplainText) [] [])
         mapM_
           ( \key -> do
               assertBool (Text.unpack key <> " missing from schema") (key `Text.isInfixOf` schema)
@@ -611,8 +611,8 @@ diagnosticTests =
           ["worker.run_timeout_seconds", "approval.require", "approval.channel", "approval.deadline_seconds", "directory.refresh_interval_seconds"],
       testCase "with no diagnostic, a valid configuration lets the process continue" do
         let run = runWith (optionsWith [] []) [] []
-        exitCode run @?= 0
-        standardOutput run @?= ""
+        (.exitCode) run @?= 0
+        (.standardOutput) run @?= ""
         assertBool "a valid run must produce a configuration" (hasConfig run)
     ]
 
@@ -648,13 +648,13 @@ secrecyTests =
           ],
       testCase "an opaque token source renders and compares no plaintext at its public boundary" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAWA_TOKEN", plantedToken)]
-        case kawaToken config of
+        case (.kawaToken) config of
           Nothing -> assertFailure "the configured kawa token did not resolve"
           Just secret -> do
             let token = credentialToken secret
             assertBool "the exact bearer header should match" (matchesBearerHeader token ("Bearer " <> ByteString.pack (Text.unpack plantedToken)))
             assertBool "a different bearer header must not match" (not (matchesBearerHeader token "Bearer wrong"))
-            fetched <- fetchToken (staticTokenSource token)
+            fetched <- (.fetchToken) (staticTokenSource token)
             case fetched of
               Left _ -> assertFailure "a static token source failed"
               Right fetchedToken -> assertBool "the fetched token should remain usable without rendering" (matchesBearerHeader fetchedToken ("Bearer " <> ByteString.pack (Text.unpack plantedToken))),
@@ -666,8 +666,8 @@ secrecyTests =
                 (optionsWith [] [cliOverride databaseConnectionStringKey planted, cliOverride httpPortKey "not-a-port"])
                 []
                 []
-        exitCode run @?= resolutionExitCode
-        assertAbsent "the failure message" (standardError run),
+        (.exitCode) run @?= resolutionExitCode
+        assertAbsent "the failure message" ((.standardError) run),
       testCase "the schema itself never carries a value" do
         assertAbsent "the text schema" (renderSchemaText appConfigSchema)
         assertAbsent "the JSON schema" (renderSchemaJson appConfigSchema)
@@ -706,8 +706,8 @@ assertNoLeak (label, files, environment, sets) = do
   mapM_
     ( \mode -> do
         let run = runWith (optionsWith [] sets) {diagnosticMode = mode} files environment
-        assertAbsent (label <> ", " <> show mode <> " stdout") (standardOutput run)
-        assertAbsent (label <> ", " <> show mode <> " stderr") (standardError run)
+        assertAbsent (label <> ", " <> show mode <> " stdout") ((.standardOutput) run)
+        assertAbsent (label <> ", " <> show mode <> " stderr") ((.standardError) run)
     )
     [DescribeConfigText, DescribeConfigJson, ExplainText, ExplainJson, CheckConfig]
   let ResolveResult {report} = resolveAppConfig (optionsWith [] sets) files (emptyEnvironment environment)
@@ -732,7 +732,7 @@ resolveOrFail options files environment =
     Just config -> pure config
     Nothing ->
       assertFailure
-        ("expected a resolved configuration, got exit " <> show (exitCode run) <> ":\n" <> Text.unpack (standardError run))
+        ("expected a resolved configuration, got exit " <> show ((.exitCode) run) <> ":\n" <> Text.unpack ((.standardError) run))
   where
     run = runWith options files environment
 

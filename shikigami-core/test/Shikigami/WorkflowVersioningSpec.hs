@@ -536,7 +536,7 @@ patchedApprovalShape _childEnv session requestKey legacyStep legacyEnv = do
                   Approval.deadline = secondsToNominalDiffTime 60
                 }
           )
-      ApprovalWorkflow.requestApproval requestKey session approvalVersioningRequest (Approval.deadline policy)
+      ApprovalWorkflow.requestApproval requestKey session approvalVersioningRequest ((.deadline) policy)
     else legacyApprovalShape legacyEnv legacyStep
 
 capturingLegacyApprovalEnv :: SessionId -> IORef (Maybe AwakeableId) -> Approval.ApprovalEnv
@@ -712,7 +712,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
                       (AgentLoadReport [AgentLoaded "flow-versioning.dhall" flowAgentDecl])
                       disabledDirectoryHandle
                 }
-            . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            . runAcknowledgement ((.approval) runtime) ((.acknowledgementDeadline) runtime)
             . PracticeReview.runExecutionContext practiceReviewExecutionContext
             . PracticeReview.runPracticeReviewEvidence False PracticeReview.unavailablePracticeReviewRuntime
             . PracticeReview.runPracticeReviewEvaluator False behaviorEnv PracticeReview.unavailablePracticeReviewRuntime
@@ -744,7 +744,7 @@ runFlow appEnv runtime options FlowDef {run} workflowId =
             DelegateCtx
               { identity = compatibilityIdentity "at-risk-customer",
                 delegateDepth = 0,
-                sessionId = Just (idText (Approval.currentSession (approval runtime))),
+                sessionId = Just (idText ((.currentSession) ((.approval) runtime))),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = ["at-risk-customer"],

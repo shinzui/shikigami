@@ -4,7 +4,7 @@ manifest: shikigami.keiro-workspace
 context: shikigami
 module-root: (none)
 layout: collocated
-naming-edition idiomatic-v1
+naming-edition idiomatic-v2
 member shikigami-agent-run.keiro
 member shikigami-approval.keiro
 member shikigami-conversation.keiro

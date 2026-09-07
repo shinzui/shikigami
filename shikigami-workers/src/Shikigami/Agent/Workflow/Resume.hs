@@ -115,7 +115,7 @@ defaultResumeRetry =
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env@WorkerEnv {runTimeout} =
   runResumeLoop defaultResumeRetry (envLogger env) do
-    result <- runAppIO (appEnv env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions (appEnv env) runTimeout) (workflowRegistry env))
+    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) runTimeout) (workflowRegistry env))
     pure case result of
       Left err -> Text.pack (show err)
       Right () -> "the resume runner returned without an error, which a forever loop should never do"
@@ -139,19 +139,19 @@ runResumeLoop = runResumeLoopWith threadDelay
 runResumeLoopWith :: (Int -> IO ()) -> ResumeRetry -> Log.Logger -> IO Text -> IO ()
 runResumeLoopWith sleep retry logger runOnce = do
   Log.logInfo logger "worker.resume.started" []
-  go 0 (initialBackoffMicros retry)
+  go 0 ((.initialBackoffMicros) retry)
   where
     go consecutiveFailures backoffMicros = do
       startedAt <- getCurrentTime
       reason <- runOnce
       endedAt <- getCurrentTime
       let lasted = diffUTCTime endedAt startedAt
-          healthy = lasted >= healthyRunSeconds retry
+          healthy = lasted >= (.healthyRunSeconds) retry
           failures = if healthy then 1 else consecutiveFailures + 1
           nextBackoff =
             if healthy
-              then initialBackoffMicros retry
-              else min (maxBackoffMicros retry) (backoffMicros * 2)
+              then (.initialBackoffMicros) retry
+              else min ((.maxBackoffMicros) retry) (backoffMicros * 2)
       Log.logError
         logger
         "worker.resume.failed"
@@ -159,13 +159,13 @@ runResumeLoopWith sleep retry logger runOnce = do
           "ran_for_seconds" Aeson..= (realToFrac lasted :: Double),
           "consecutive_failures" Aeson..= failures
         ]
-      if failures >= failureCeiling retry
+      if failures >= (.failureCeiling) retry
         then do
           Log.logError
             logger
             "worker.resume.exhausted"
-            ["consecutive_failures" Aeson..= failures, "ceiling" Aeson..= failureCeiling retry]
+            ["consecutive_failures" Aeson..= failures, "ceiling" Aeson..= (.failureCeiling) retry]
           throwIO (LoopExited ResumeLoop)
         else do
-          sleep (if healthy then initialBackoffMicros retry else backoffMicros)
+          sleep (if healthy then (.initialBackoffMicros) retry else backoffMicros)
           go failures nextBackoff

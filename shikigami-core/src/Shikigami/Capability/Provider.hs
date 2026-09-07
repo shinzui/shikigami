@@ -223,7 +223,7 @@ withCapabilityOverlays ::
 withCapabilityOverlays logger actionAuthorizer registry scope resolved base callback =
   mask \restore ->
     acquireAll
-      (\provider -> restore (acquire provider scope))
+      (\provider -> restore ((.acquire) provider scope))
       (\composed active -> restore (callback composed active))
       []
       []

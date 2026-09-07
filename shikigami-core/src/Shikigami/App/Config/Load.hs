@@ -203,14 +203,14 @@ data ConfigRun = ConfigRun
 -- here, before the caller has opened anything.
 runAppConfig :: Role -> ConfigOptions -> IO AppConfig
 runAppConfig role options = do
-  fileSources <- readConfigSources (configPaths options)
+  fileSources <- readConfigSources ((.configPaths) options)
   environment <- readEnvironmentSource environmentBindings
   let run = appConfigRun role options fileSources environment
-  TextIO.putStr (standardOutput run)
-  TextIO.hPutStr IO.stderr (standardError run)
-  case resolved run of
-    Just config | exitCode run == 0 -> pure config
-    _ -> exitWith (if exitCode run == 0 then ExitSuccess else ExitFailure (exitCode run))
+  TextIO.putStr ((.standardOutput) run)
+  TextIO.hPutStr IO.stderr ((.standardError) run)
+  case (.resolved) run of
+    Just config | (.exitCode) run == 0 -> pure config
+    _ -> exitWith (if (.exitCode) run == 0 then ExitSuccess else ExitFailure ((.exitCode) run))
 
 -- | Read every @--config PATH@ file, in order.
 --
@@ -244,7 +244,7 @@ appConfigRun ::
   Source ->
   ConfigRun
 appConfigRun role options fileSources environment =
-  case schemaDiagnostic (diagnosticMode options) appConfigSchema of
+  case schemaDiagnostic ((.diagnosticMode) options) appConfigSchema of
     Just output -> succeeded output ""
     Nothing -> case fileSources of
       Left problem -> failed sourceExitCode problem
@@ -255,7 +255,7 @@ appConfigRun role options fileSources environment =
               Left problems -> failed resolutionExitCode (renderErrorsText problems <> explainOnFailure options result)
               Right config -> case missingRequirements role config of
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
-                [] -> case resolutionDiagnostic (diagnosticMode options) result of
+                [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of
                   Just output -> succeeded output warnings
                   Nothing -> (succeeded "" warnings) {resolved = Just config}
   where
@@ -274,8 +274,8 @@ resolveAppConfig options files environment =
     ResolveOptions {unknownKeyPolicy = RejectUnknownKeys}
     ( files
         <> [environment]
-        <> namedSources options
-        <> cliSources "arguments" (overrides options)
+        <> (.namedSources) options
+        <> cliSources "arguments" ((.overrides) options)
     )
     appConfig
 
@@ -285,7 +285,7 @@ resolveAppConfig options files environment =
 -- every failure would put file paths and variable names into logs that only
 -- needed the error.
 explainOnFailure :: ConfigOptions -> ResolveResult AppConfig -> Text
-explainOnFailure options result = case diagnosticMode options of
+explainOnFailure options result = case (.diagnosticMode) options of
   ExplainText -> renderResolutionText (reportOf result)
   ExplainJson -> renderResolutionJson (reportOf result) <> "\n"
   _ -> ""
@@ -305,7 +305,7 @@ renderMissing role missing =
 -- names the same key an operator would set, and the exit code is the same one a
 -- missing required key produces anywhere else.
 requireDatabaseUrl :: Text -> AppConfig -> IO SecretText
-requireDatabaseUrl commandName config = case databaseUrl config of
+requireDatabaseUrl commandName config = case (.databaseUrl) config of
   Just secret | not (Text.null (revealSecretText secret)) -> pure secret
   _ -> do
     TextIO.hPutStrLn

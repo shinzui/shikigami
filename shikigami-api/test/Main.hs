@@ -80,14 +80,14 @@ problemTests =
               @?= (["code", "detail", "retryable", "status", "title", "type"] :: [String])
           other -> assertBool ("expected a JSON object, got " <> show other) False,
       testCase "type stays about:blank until documentation URIs exist" $
-        problemType (problem Internal "boom") @?= "about:blank",
+        (.problemType) (problem Internal "boom") @?= "about:blank",
       testCase "title, status and retryable come from the code, not the call site" do
         let a = problem RateLimited "first"
             b = problem RateLimited "second"
-        title a @?= title b
-        status a @?= status b
-        retryable a @?= retryable b
-        detail a @?= "first",
+        (.title) a @?= (.title) b
+        (.status) a @?= (.status) b
+        (.retryable) a @?= (.retryable) b
+        (.detail) a @?= "first",
       testCase "every code has a distinct machine-readable identifier" do
         let texts = fmap problemCodeText allCodes
         assertEqual "no duplicate codes" (length allCodes) (length (dedupe texts))

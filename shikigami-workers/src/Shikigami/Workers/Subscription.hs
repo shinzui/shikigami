@@ -42,19 +42,19 @@ import Shikigami.Workers.Supervision (superviseLoops)
 runConsumeStream :: AppConfig -> IO ()
 runConsumeStream config = do
   logger <- Log.newStderrLogger Log.Info
-  let include = if Config.kafkaIncludeAgentActors config then IncludeAgentActors else ExcludeAgentActors
-      broker = Config.kafkaBroker config
-      topic = Config.kafkaActivityTopic config
+  let include = if (.kafkaIncludeAgentActors) config then IncludeAgentActors else ExcludeAgentActors
+      broker = (.kafkaBroker) config
+      topic = (.kafkaActivityTopic) config
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
-    let manifestDirectory = Config.agentsDirectory config
+    let manifestDirectory = (.agentsDirectory) config
         storePool = pool st
     report <-
       loadAgentsLoud
         logger
         manifestDirectory
-        (Config.agentsStrict config)
+        ((.agentsStrict) config)
         (persistAgentLoadReport logger storePool manifestDirectory)
     agents <- enabledAgentsFromReport logger report
     Log.logInfo
@@ -65,7 +65,7 @@ runConsumeStream config = do
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue storePool (Config.kafkaDeadLetterQueue config)
+    deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
     case deadLetterResult of
       Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
       Right () -> pure ()
@@ -74,22 +74,22 @@ runConsumeStream config = do
           StreamConfig
             { broker = broker,
               topic = topic,
-              consumerGroupId = Config.kafkaStreamGroup config,
-              deadLetterQueue = Config.kafkaDeadLetterQueue config
+              consumerGroupId = (.kafkaStreamGroup) config,
+              deadLetterQueue = (.kafkaDeadLetterQueue) config
             }
         onHit StreamHit {agentName} = do
           let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
           Log.logInfo logger "stream.record.matched" matched
     registry <-
       newHeartbeatsWithStaleness
-        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration (Config.directorySettings config))
+        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
     DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-      startProcessDirectory logger registry (Config.directorySettings config)
+      startProcessDirectory logger registry ((.directorySettings) config)
     let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg include agents onHit
         directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
-      (Config.httpHost config)
+      ((.httpHost) config)
       (Config.healthPortFor StreamConsumerRole config)
       storePool
       registry
@@ -104,18 +104,18 @@ runConsumeStream config = do
 runConsumeEvents :: AppConfig -> IO ()
 runConsumeEvents config = do
   logger <- Log.newStderrLogger Log.Info
-  let broker = Config.kafkaBroker config
-      topic = Config.kafkaEventsTopic config
+  let broker = (.kafkaBroker) config
+      topic = (.kafkaEventsTopic) config
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
-    let manifestDirectory = Config.agentsDirectory config
+    let manifestDirectory = (.agentsDirectory) config
         storePool = pool st
     report <-
       loadAgentsLoud
         logger
         manifestDirectory
-        (Config.agentsStrict config)
+        ((.agentsStrict) config)
         (persistAgentLoadReport logger storePool manifestDirectory)
     agents <- enabledAgentsFromReport logger report
     Log.logInfo
@@ -126,7 +126,7 @@ runConsumeEvents config = do
     case queueResult of
       Left err -> fail ("run-job queue reconciliation failed: " <> show err)
       Right () -> pure ()
-    deadLetterResult <- ensureDeadLetterQueue storePool (Config.kafkaDeadLetterQueue config)
+    deadLetterResult <- ensureDeadLetterQueue storePool ((.kafkaDeadLetterQueue) config)
     case deadLetterResult of
       Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
       Right () -> pure ()
@@ -135,8 +135,8 @@ runConsumeEvents config = do
           StreamConfig
             { broker = broker,
               topic = topic,
-              consumerGroupId = Config.kafkaEventsGroup config,
-              deadLetterQueue = Config.kafkaDeadLetterQueue config
+              consumerGroupId = (.kafkaEventsGroup) config,
+              deadLetterQueue = (.kafkaDeadLetterQueue) config
             }
         onHit EventHit {agentName, eventType, integrationMessageId} = do
           let matched =
@@ -148,14 +148,14 @@ runConsumeEvents config = do
           Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
     registry <-
       newHeartbeatsWithStaleness
-        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration (Config.directorySettings config))
+        ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
     DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-      startProcessDirectory logger registry (Config.directorySettings config)
+      startProcessDirectory logger registry ((.directorySettings) config)
     let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg agents onHit
         directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
-      (Config.httpHost config)
+      ((.httpHost) config)
       (Config.healthPortFor EventConsumerRole config)
       storePool
       registry

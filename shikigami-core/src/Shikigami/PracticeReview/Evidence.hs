@@ -393,10 +393,10 @@ validatePinnedContent limits role project requested requestedPath response = do
     (returnedPath == requestedPath)
     (PathMismatch (relativePathText requestedPath) (response ^. #path) True)
   validateHash True (response ^. #path) (response ^. #contentHash)
-  validateSize True "blob-bytes" (byteLimit (blobBytes limits)) responsePath (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
+  validateSize True "blob-bytes" (byteLimit ((.blobBytes) limits)) responsePath (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
   unlessEither
-    (response ^. #declaredSize <= byteLimit (blobBytes limits))
-    (EvidenceLimitExceeded "blob-bytes" (byteLimit (blobBytes limits)) (response ^. #declaredSize) True)
+    (response ^. #declaredSize <= byteLimit ((.blobBytes) limits))
+    (EvidenceLimitExceeded "blob-bytes" (byteLimit ((.blobBytes) limits)) (response ^. #declaredSize) True)
   let stamp = response ^. #provenance
       citation =
         EvidenceItem
@@ -433,13 +433,13 @@ validatePinnedDiff limits requestedRepository requestedBase requestedHead reques
     (PathMismatch (maybe "<all>" relativePathText requestedPath) (fromMaybe "<all>" (response ^. #path)) True)
   normalizedChangedPaths <- traverse (validatePath True) (response ^. #changedPaths)
   unlessEither
-    (length normalizedChangedPaths <= countLimit (pathCount limits))
-    (EvidenceLimitExceeded "changed-paths" (countLimit (pathCount limits)) (length normalizedChangedPaths) True)
+    (length normalizedChangedPaths <= countLimit ((.pathCount) limits))
+    (EvidenceLimitExceeded "changed-paths" (countLimit ((.pathCount) limits)) (length normalizedChangedPaths) True)
   validateHash True "<diff>" (response ^. #contentHash)
-  validateSize True "diff-bytes" (byteLimit (diffBytes limits)) "<diff>" (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
+  validateSize True "diff-bytes" (byteLimit ((.diffBytes) limits)) "<diff>" (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
   unlessEither
-    (response ^. #declaredSize <= byteLimit (diffBytes limits))
-    (EvidenceLimitExceeded "diff-bytes" (byteLimit (diffBytes limits)) (response ^. #declaredSize) True)
+    (response ^. #declaredSize <= byteLimit ((.diffBytes) limits))
+    (EvidenceLimitExceeded "diff-bytes" (byteLimit ((.diffBytes) limits)) (response ^. #declaredSize) True)
   pure
     ValidatedPinnedDiff
       { repository = requestedRepository,
@@ -488,9 +488,9 @@ acquireEvidence limits reader pinResolver validatedTrigger binding validatedPrio
       retainedPriorResolutions = selectPriorResolutions trigger binding targetPaths validatedPriorResolutions
   pure
     EvidenceBundle
-      { target = source <$> successfulTargetReads,
-        references = source <$> dedupeReads referenceReads,
-        upstream = source <$> dedupeReads upstreamReads,
+      { target = (.source) <$> successfulTargetReads,
+        references = (.source) <$> dedupeReads referenceReads,
+        upstream = (.source) <$> dedupeReads upstreamReads,
         priorResolutions = retainedPriorResolutions,
         problems = allProblems,
         completeness = if null allProblems then Complete else Incomplete
@@ -515,7 +515,7 @@ acquireTargetDiff limits reader project range =
     Just base -> do
       let repository = project ^. #repository
           targetHead = range ^. #head
-      result <- readDiff reader repository base targetHead Nothing
+      result <- (.readDiff) reader repository base targetHead Nothing
       case result of
         Left failure ->
           pure
@@ -529,7 +529,7 @@ acquireTargetDiff limits reader project range =
 
 readRequiredSource :: EvidenceLimits -> EvidenceReader -> EvidenceRole -> ProjectRef -> RepoRef -> RelativePath -> IO (Either EvidenceProblem ReadResult)
 readRequiredSource limits reader role project requested path = do
-  result <- readBlob reader requested path
+  result <- (.readBlob) reader requested path
   pure case result of
     Left failure ->
       Left
@@ -583,7 +583,7 @@ acquireReferenceDocument :: EvidenceLimits -> EvidenceReader -> ProjectRef -> Re
 acquireReferenceDocument limits reader project reference documentId =
   case mkRelativePath documentId of
     Right directPath -> do
-      direct <- readBlob reader reference directPath
+      direct <- (.readBlob) reader reference directPath
       case direct of
         Right response ->
           case validatePinnedContent limits ReferenceEvidence project reference directPath response of
@@ -619,8 +619,8 @@ discoverReferencePaths :: EvidenceLimits -> EvidenceReader -> RepoRef -> Text ->
 discoverReferencePaths limits reader reference documentId =
   go 0 0 Nothing Set.empty [] []
   where
-    maximumPages = countLimit (grepPages limits)
-    maximumMatches = countLimit (grepMatches limits)
+    maximumPages = countLimit ((.grepPages) limits)
+    maximumMatches = countLimit ((.grepMatches) limits)
     evidenceQuery = EvidenceQuery {query = documentId, path = Nothing}
 
     go pagesRead matchesRead cursor seenCursors collected collectedProblems
@@ -637,7 +637,7 @@ discoverReferencePaths limits reader reference documentId =
       | otherwise = do
           let remaining = maximumMatches - matchesRead
               request = PageRequest {first = min 100 remaining, cursor}
-          result <- grep reader reference evidenceQuery request
+          result <- (.grep) reader reference evidenceQuery request
           case result of
             Left failure ->
               pure
@@ -718,7 +718,7 @@ acquireUpstreamEvidence limits reader pinResolver binding targetReads = do
 
 acquireRegisteredUpstream :: EvidenceLimits -> EvidenceReader -> DependencyPinResolver -> [(RelativePath, ByteString)] -> RegisteredUpstreamProject -> IO ([ReadResult], [EvidenceProblem])
 acquireRegisteredUpstream limits reader pinResolver pinInputs registered =
-  case resolvePin pinResolver registered pinInputs of
+  case (.resolvePin) pinResolver registered pinInputs of
     Left reason -> pure ([], [IncompatibleUpstreamVersion dependency reason])
     Right selection
       | Text.null (Text.strip (selection ^. #mutableRef)) ->
@@ -726,7 +726,7 @@ acquireRegisteredUpstream limits reader pinResolver pinInputs registered =
       | null (selection ^. #paths) ->
           pure ([], [IncompatibleUpstreamVersion dependency "dependency pin selected no required upstream paths"])
       | otherwise -> do
-          resolved <- resolveRef reader upstreamRepository (selection ^. #mutableRef)
+          resolved <- (.resolveRef) reader upstreamRepository (selection ^. #mutableRef)
           case resolved of
             Left failure ->
               pure
@@ -808,7 +808,7 @@ normalizeName = Text.toCaseFold . Text.strip
 boundPaths :: EvidenceLimits -> Text -> [RelativePath] -> ([RelativePath], [EvidenceProblem])
 boundPaths limits label rawPaths =
   let paths = uniquePaths rawPaths
-      maximumPaths = countLimit (pathCount limits)
+      maximumPaths = countLimit ((.pathCount) limits)
    in if length paths <= maximumPaths
         then (paths, [])
         else

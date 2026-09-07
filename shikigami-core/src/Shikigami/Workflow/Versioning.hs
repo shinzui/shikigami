@@ -33,6 +33,8 @@ module Shikigami.Workflow.Versioning
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Set (Set)
 import Data.Time (NominalDiffTime)
 import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptions)
@@ -69,16 +71,14 @@ shikigamiActivePatches =
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions
 shikigamiWorkflowRunOptions AppEnv {tracer = appTracer, metrics = appMetrics} =
   defaultWorkflowRunOptions
-    { activePatches = shikigamiActivePatches,
-      tracer = Just appTracer,
-      metrics = appMetrics
-    }
+    & #activePatches .~ shikigamiActivePatches
+    & #tracer .~ Just appTracer
+    & #metrics .~ appMetrics
 
 -- | The options the resume worker uses, carrying 'shikigamiWorkflowRunOptions'
 -- so a resumed run is configured exactly as its first run was.
 shikigamiWorkflowResumeOptions :: AppEnv -> NominalDiffTime -> WorkflowResumeOptions
 shikigamiWorkflowResumeOptions appEnv timeout =
   defaultWorkflowResumeOptions
-    { runOptions = shikigamiWorkflowRunOptions appEnv,
-      leaseTtl = timeout + 30
-    }
+    & #runOptions .~ shikigamiWorkflowRunOptions appEnv
+    & #leaseTtl .~ (timeout + 30)

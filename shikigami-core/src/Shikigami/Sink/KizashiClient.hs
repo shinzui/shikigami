@@ -79,7 +79,7 @@ postSignal http = postSignalWithHeaders http []
 -- | 'postSignal' with dispatch-scoped propagation headers.
 postSignalWithHeaders :: HttpEnv -> [Header] -> KizashiConfig -> CreateSignalReq -> IO (Either KizashiError SignalResponse)
 postSignalWithHeaders http headers cfg req = do
-  let url = baseUrl cfg <> "/v1/signals"
+  let url = (.baseUrl) cfg <> "/v1/signals"
   respE <- postJSONWithHeaders http headers url req
   pure $ case respE of
     Left failure -> Left (KizashiHttpError failure)

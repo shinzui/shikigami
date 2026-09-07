@@ -24,6 +24,6 @@ runStubKawaCmd listenPort mtopic config =
     StubKawaOptions
       { port = listenPort,
         republishTopic = Text.pack <$> mtopic,
-        broker = Just (Config.kafkaBroker config),
-        requireToken = credentialToken <$> Config.kawaToken config
+        broker = Just ((.kafkaBroker) config),
+        requireToken = credentialToken <$> (.kawaToken) config
       }

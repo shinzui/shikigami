@@ -43,7 +43,7 @@ shikigamiClient = genericClient
 -- Written as its own binding so callers say @live healthClient@ rather than
 -- reaching through the umbrella record every time.
 healthClient :: HealthApi (AsClientT ClientM)
-healthClient = health shikigamiClient
+healthClient = (.health) shikigamiClient
 
 -- | Build the environment a call runs in from a server base URL.
 --

@@ -39,15 +39,16 @@ constraints:
   -- durable execution, event model, and agent memory
     keiki                   ==0.9.1.0
   , keiki-codec-json        ==0.9.1.0
-  , keiro                   ==0.14.0.0
-  , keiro-core              ==0.14.0.0
-  , keiro-dsl               ==0.14.0.0
-  , keiro-migrations        ==0.14.0.0
-  , keiro-ops               ==0.14.0.0
-  , keiro-pgmq              ==0.14.0.0
-  , kioku-api               ==0.5.1.0
-  , kioku-core              ==0.5.1.0
-  , kioku-migrations        ==0.5.1.0
+  , keiro                   ==0.15.0.0
+  , keiro-core              ==0.15.0.0
+  , keiro-dsl               ==0.15.0.0
+  , keiro-migrations        ==0.15.0.0
+  , keiro-ops               ==0.15.0.0
+  , keiro-pgmq              ==0.15.0.0
+  , keiro-test-support      ==0.15.0.0
+  , kioku-api               ==0.5.2.0
+  , kioku-core              ==0.5.2.0
+  , kioku-migrations        ==0.5.2.0
 
   -- typed model programs and providers
   , shikumi                 ==0.3.0.3

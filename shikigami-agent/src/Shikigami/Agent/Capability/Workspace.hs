@@ -301,7 +301,7 @@ grepWorkspace scope patternText requestedRoot ignoreCase =
     collectMatches _ [] accumulated _ =
       pure (boundedResponse "grep" (WorkspaceGrepResponse {matches = reverse accumulated}))
     collectMatches regex (relative : rest) accumulated responseBytes = do
-      let absolute = root scope </> relative
+      let absolute = (.root) scope </> relative
       size <- getFileSize absolute
       if size > fromIntegral maxSearchFileBytes
         then collectMatches regex rest accumulated responseBytes
@@ -357,7 +357,7 @@ globWorkspace scope patternText requestedRoot = do
 walkWorkspace :: WorkspaceScope -> Maybe FilePath -> IO (Either WorkspaceError [FilePath])
 walkWorkspace scope requestedRoot = do
   rootResult <- case requestedRoot of
-    Nothing -> pure (Right (root scope))
+    Nothing -> pure (Right ((.root) scope))
     Just raw -> do
       resolved <- resolveExistingPath scope True raw
       pure resolved
@@ -407,7 +407,7 @@ walkWorkspace scope requestedRoot = do
                           pure
                             ( Right
                                 ( seen + 1,
-                                  files <> [makeRelative (root scope) child]
+                                  files <> [makeRelative ((.root) scope) child]
                                 )
                             )
 

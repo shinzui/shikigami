@@ -319,7 +319,7 @@ conversationEpochOfWorkflowId (WorkflowId wid) =
 
 runConversationTurn :: ConversationEnv -> AgentDecl -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
 runConversationTurn env decl msg = do
-  admitted <- Directory.identityAdmission (directory env) (declaredPrincipalId decl) (name decl)
+  admitted <- Directory.identityAdmission ((.directory) env) (declaredPrincipalId decl) ((.name) decl)
   case admitted of
     Left reason -> pure (Left (ConversationPermanentFailure reason))
     Right identity -> runConversationTurnWithIdentity env decl identity msg
@@ -347,10 +347,10 @@ runConversationTurnWithIdentity env decl identity msg@AddressedMessage {conversa
               pure
                 ( Left
                     ( ConversationBusy
-                        ("conversation is mid-turn; redelivering " <> messageId msg)
+                        ("conversation is mid-turn; redelivering " <> (.messageId) msg)
                     )
                 )
-            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = name decl, identity, initialMessage = msg})
+            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = (.name) decl, identity, initialMessage = msg})
 
 -- | Is there a workflow instance for this epoch that could still accept work?
 --
@@ -409,7 +409,7 @@ driveConversationTurn env epoch msg budget mStart = do
     Right (Completed result) -> pure (first ConversationPermanentFailure result)
     Right Suspended -> completedTurn env epoch msg
     Right ContinuedAsNew -> do
-      loaded <- loadConversationResult env (conversationWorkflowId epoch msg) (messageId msg)
+      loaded <- loadConversationResult env (conversationWorkflowId epoch msg) ((.messageId) msg)
       case loaded of
         Just result -> pure (Right result)
         Nothing
@@ -418,17 +418,17 @@ driveConversationTurn env epoch msg budget mStart = do
               pure
                 ( Left
                     ( ConversationTransientFailure
-                        ("conversation workflow kept rotating without recording a turn result for " <> messageId msg)
+                        ("conversation workflow kept rotating without recording a turn result for " <> (.messageId) msg)
                     )
                 )
 
 -- | Read back the turn this run journaled.
 completedTurn :: ConversationEnv -> Int -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
 completedTurn env epoch msg = do
-  loaded <- loadConversationResult env (conversationWorkflowId epoch msg) (messageId msg)
+  loaded <- loadConversationResult env (conversationWorkflowId epoch msg) ((.messageId) msg)
   pure case loaded of
     Just result -> Right result
-    Nothing -> Left (ConversationTransientFailure ("conversation workflow recorded no turn result for " <> messageId msg))
+    Nothing -> Left (ConversationTransientFailure ("conversation workflow recorded no turn result for " <> (.messageId) msg))
 
 conversationRegistry :: ConversationEnv -> WorkflowRegistry AppEffects
 conversationRegistry env =
@@ -487,7 +487,7 @@ rotatingConversation env mStart = do
   -- journaled step (@awkid:next-message@), so it is replay-stable: a resumed
   -- generation hands out the id it already handed out.
   (aid, awaitWake) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
-  turn <- processRotatingTurn env recordedIdentity decl (initialMessage start)
+  turn <- processRotatingTurn env recordedIdentity decl ((.initialMessage) start)
   case turn of
     -- The promise was armed before we knew the turn would fail, so it is
     -- withdrawn rather than left pending on a workflow that is about to end.
@@ -504,7 +504,7 @@ rotatingConversation env mStart = do
       wake <- awaitWake
       case wake of
         NextMessage next -> continueAsNew (nextConversationSeed seed start next)
-        IdleTimedOut -> completeEpoch env recordedIdentity decl (initialMessage start) result
+        IdleTimedOut -> completeEpoch env recordedIdentity decl ((.initialMessage) start) result
 
 -- | The pre-rotation shape: one immortal generation, suffixed labels.
 legacyConversation ::
@@ -515,7 +515,7 @@ legacyConversation env mStart = do
   start <- step (StepName "ingest-start") (ingestStart emptyConversationSeed mStart)
   decl <- resolveDeclStep env start
   recordedIdentity <- liftIO (requireRight =<< resolveConversationIdentity env decl (start ^. #identity))
-  firstResult <- processTurn env recordedIdentity decl (initialMessage start)
+  firstResult <- processTurn env recordedIdentity decl ((.initialMessage) start)
   case firstResult of
     Left err -> pure (Left err)
     Right result -> loop env recordedIdentity decl 1 result
@@ -525,7 +525,7 @@ resolveConversationIdentity env decl recorded =
   case resolveAgentIdentity recorded of
     Right resolved -> pure (Right resolved)
     Left _ -> do
-      admitted <- Directory.identityAdmission (directory env) (declaredPrincipalId decl) (name decl)
+      admitted <- Directory.identityAdmission ((.directory) env) (declaredPrincipalId decl) ((.name) decl)
       pure (admitted >>= resolveAgentIdentity)
 
 -- | The one place the two entry paths meet.
@@ -552,7 +552,7 @@ nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName 
       identity,
       turnsSoFar = turnsSoFar + 1,
       pendingMessage = Just next,
-      lastMessageId = Just (messageId finished)
+      lastMessageId = Just ((.messageId) finished)
     }
 
 -- | End this epoch: close the kioku session, then let the workflow complete.
@@ -725,7 +725,7 @@ conversationIdleTimeoutFireAction TimerRow {payload = timerPayload} =
 resolveDeclStep :: ConversationEnv -> ConversationStart -> Eff (Workflow : AppEffects) AgentDecl
 resolveDeclStep env ConversationStart {agentName} =
   step (StepName "lookup-agent") do
-    case find ((== agentName) . name) (agents env) of
+    case find ((== agentName) . (.name)) ((.agents) env) of
       Just decl -> pure decl
       Nothing -> liftIO (ioError (userError ("unknown conversation agent " <> Text.unpack agentName)))
 
@@ -764,7 +764,7 @@ processTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msg
         liftIO
           ( runBehaviorAttempt
               (conversationRunTimeout env)
-              (behaviorEnv env)
+              ((.behaviorEnv) env)
               decl
               (triggerOnly (behaviorPayload msg prior))
           )
@@ -774,7 +774,7 @@ processTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msg
             prior <- liftIO (loadTurns env sid)
             -- No recalled memories: a conversation turn's context is the turn
             -- history, and that already travels inside the payload.
-            liftIO (first (Text.pack . show) <$> runBehavior (behaviorEnv env) decl (triggerOnly (behaviorPayload msg prior)))
+            liftIO (first (Text.pack . show) <$> runBehavior ((.behaviorEnv) env) decl (triggerOnly (behaviorPayload msg prior)))
         Right <$> either (liftIO . ioError . userError . Text.unpack) pure legacy
   case outputE of
     Left err -> pure (Left err)
@@ -784,7 +784,7 @@ processTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msg
         step (assistantReplyStepName msgMessageId) do
           turns <- liftIO (loadTurns env sid)
           let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (directory env) (grants env) recordedIdentity decl sid msg replyText userTurnIndex turns
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply ((.directory) env) ((.grants) env) recordedIdentity decl sid msg replyText userTurnIndex turns
           either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
       let replyMessageId = sinkResultDetail sinkResult
           RecordedTurn {turnId = recordedUserTurnId} = userTurn
@@ -837,7 +837,7 @@ processRotatingTurn env recordedIdentity decl msg@AddressedMessage {conversation
       liftIO
         ( runBehaviorAttempt
             (conversationRunTimeout env)
-            (behaviorEnv env)
+            ((.behaviorEnv) env)
             decl
             (triggerOnly (behaviorPayload msg prior))
         )
@@ -849,7 +849,7 @@ processRotatingTurn env recordedIdentity decl msg@AddressedMessage {conversation
         step (StepName "record-assistant-and-reply") do
           turns <- liftIO (loadTurns env sid)
           let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply (directory env) (grants env) recordedIdentity decl sid msg replyText userTurnIndex turns
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply ((.directory) env) ((.grants) env) recordedIdentity decl sid msg replyText userTurnIndex turns
           (recordedTurn, recordedReply) <- either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
           pure AssistantTurnAndReply {assistantTurn = recordedTurn, assistantReply = recordedReply}
       let replyMessageId = sinkResultDetail sinkResult
@@ -879,20 +879,20 @@ runConversationWorkflow ::
   AddressedMessage ->
   IO (Either StoreError (WorkflowOutcome (Either Text ConversationTurnResult)))
 runConversationWorkflow env epoch mStart msg =
-  let AppEnv {connectionSettings, tracer} = appEnv env
+  let AppEnv {connectionSettings, tracer} = (.appEnv) env
    in runEff
         . runTracing tracer
         . runErrorNoCallStack
         . withKirokuStore connectionSettings
         . runStoreResource
         $ runWorkflowWith
-          (shikigamiWorkflowRunOptions (appEnv env))
+          (shikigamiWorkflowRunOptions ((.appEnv) env))
           conversationWorkflowName
           (conversationWorkflowId epoch msg)
           (conversationWorkflow env mStart)
 
 deliverConversationInput :: ConversationEnv -> AddressedMessage -> IO Bool
-deliverConversationInput env = deliverConversationInputFromApp (appEnv env)
+deliverConversationInput env = deliverConversationInputFromApp ((.appEnv) env)
 
 -- | Signal the live @next-message@ awakeable, if one is armed.
 --
@@ -980,7 +980,7 @@ signalFirst msg = \case
 -- the same way it always did.
 loadConversationResult :: ConversationEnv -> WorkflowId -> Text -> IO (Maybe ConversationTurnResult)
 loadConversationResult env workflowId msgMessageId = do
-  result <- runAppIO (appEnv env) do
+  result <- runAppIO ((.appEnv) env) do
     generation <- currentGeneration conversationWorkflowName workflowId
     traverse (loadStepIndex conversationWorkflowName workflowId) (generationsToSearch generation)
   pure case result of
@@ -1000,7 +1000,7 @@ loadConversationResult env workflowId msgMessageId = do
         | label <- [unStepName (turnResultStepName msgMessageId), "turn-result"],
           Just value <- [Map.lookup label stepIndex],
           Just result <- [parseMaybe Aeson.parseJSON value],
-          userTurnId result == wantedUserTurnId
+          (.userTurnId) result == wantedUserTurnId
         ]
 
 nextMessageStepName :: Int -> StepName
@@ -1304,7 +1304,7 @@ prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity 
     (resolvedIdentity recordedIdentity)
     (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
-    (name decl)
+    ((.name) decl)
     (idText sid)
     0
     Nothing
@@ -1348,7 +1348,7 @@ recordTurn env recordedIdentity sid turnId turnIndex role content = do
     Right (Right _) -> Right ()
 
 runKioku :: ConversationEnv -> Eff AppEffects a -> IO (Either StoreError a)
-runKioku env action = runAppIO (appEnv env) action
+runKioku env action = runAppIO ((.appEnv) env) action
 
 requireRight :: Either Text a -> IO a
 requireRight = \case

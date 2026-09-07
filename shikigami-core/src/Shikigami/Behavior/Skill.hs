@@ -131,11 +131,11 @@ runSkillWith model options registry turnLimit dir BehaviorInput {payload, recall
     Right manifest -> do
       let ctx =
             emptyContext
-              & #systemPrompt .~ Just (description manifest)
+              & #systemPrompt .~ Just ((.description) manifest)
               & #messages
                 .~ V.singleton
                   ( user
-                      ( body manifest
+                      ( (.body) manifest
                           <> "\n\nTrigger payload: "
                           <> renderPayload payload
                           <> renderPriorLearnings recalled

@@ -105,10 +105,10 @@ tests =
           skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
           case skips of
             [runSkip] -> do
-              assertEqual "principal" (Just "agent_risk") (DirectoryStore.principalId runSkip)
-              assertEqual "trigger boundary" DirectoryStore.TriggerStage (DirectoryStore.stage runSkip)
-              assertEqual "source" "stream" (DirectoryStore.detail runSkip)
-              assertEqual "same key the run would use" "risk-agent:act_stream_1" (DirectoryStore.idempotencyKey runSkip)
+              assertEqual "principal" (Just "agent_risk") ((.principalId) runSkip)
+              assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
+              assertEqual "source" "stream" ((.detail) runSkip)
+              assertEqual "same key the run would use" "risk-agent:act_stream_1" ((.idempotencyKey) runSkip)
             other -> assertFailure ("expected one stream skip, got " <> show other),
       testCase "handler failure rolls back both inbox row and message" do
         withFixture \appEnv pool -> do

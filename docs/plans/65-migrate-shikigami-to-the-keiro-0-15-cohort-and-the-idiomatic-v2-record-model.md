@@ -57,7 +57,24 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   passed the full dependency solve, refreshed the executable ownership/applicability census,
   and recorded pre-adoption revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 - [x] (2026-09-07) Selected Keiro 0.15.0.0 and Kioku 0.5.2.0 in project constraints
-  and direct bounds. Building the DSL tool; no generated edition or workflow reset yet.
+  and direct bounds; built the project-local keiro-dsl successfully.
+- [x] (2026-09-07) Captured ordinary scaffold refusal (18 generated files, two sidecars,
+  five attributable hand-owned uses), applied idiomatic-v2 with its retained backup,
+  reconciled the full Cabal fragment and seven-package extensions, and fixed witness reads
+  and nested generated formatter exclusions.
+- [x] (2026-09-07) Core library and its complete released dependency closure compile
+  with NoFieldSelectors. Compiler-directed field-read migration preserves all domain
+  declarations and wire fixtures; abstract receipt fields export without their constructor.
+- [x] (2026-09-07) Core test executable compiles; all 21 unchanged literal wire checks
+  and all 30 generated conformance checks pass.
+- [x] (2026-09-07) The PostgreSQL Spike crash/replay test passes with the released
+  cohort: the completed first step is replayed without repeating its side effect.
+- [x] (2026-09-07) `cabal build all --enable-tests -j1 --ghc-options=-fmax-errors=10000`
+  passes for every library, executable and test component across all seven packages
+  (build log `/tmp/shikigami-plan65-all-pass-29.log`).
+- [ ] Milestone 2 remaining:
+  reviewed commit, deterministic scaffold and pre-adoption evolution gate.
+  No workflow/body/queue reset has occurred.
 - [ ] Milestone 2: adopt Keiro 0.15.0.0, Kioku 0.5.2.0, idiomatic-v2, and the common record
   compilation model across all seven Shikigami packages; preserve baseline wire fixtures.
 - [ ] Milestone 3: use keiro-test-support behind the migration fixture boundary and separate
@@ -161,6 +178,12 @@ build. Its current Shikigami pin must not be moved to an arbitrary mid-upgrade H
   Date: 2026-09-07.
 
 ## Outcomes & Retrospective
+
+Implementation checkpoint (2026-09-07): Milestone 1 is committed as `95342e5`.
+The full solver and DSL build pass. Edition apply succeeded and the backup remains
+under the ignored generated-edition migration directory. All seven package defaults
+now satisfy the generated record contract; core compilation and all runtime acceptance
+remain pending. No workflow-body or queue-format reset has occurred.
 
 
 Planning revision completed on 2026-09-07. The obsolete Kioku blocker is removed and the

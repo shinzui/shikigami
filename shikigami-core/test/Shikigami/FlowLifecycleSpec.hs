@@ -383,7 +383,7 @@ activityFlow =
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
-        pure (String (activityId activity))
+        pure (String ((.activityId) activity))
     }
 
 memoryFlow :: FlowDef
@@ -561,7 +561,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
                       (AgentLoadReport [AgentLoaded "flow-test.dhall" flowDecl])
                       disabledDirectoryHandle
                 }
-            . runAcknowledgement (approval runtime) (acknowledgementDeadline runtime)
+            . runAcknowledgement ((.approval) runtime) ((.acknowledgementDeadline) runtime)
             . PracticeReview.runExecutionContext practiceReviewExecutionContext
             . PracticeReview.runPracticeReviewEvidence False PracticeReview.unavailablePracticeReviewRuntime
             . PracticeReview.runPracticeReviewEvaluator False behaviorEnv PracticeReview.unavailablePracticeReviewRuntime
@@ -594,7 +594,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             DelegateCtx
               { identity = compatibilityIdentity flowAgent,
                 delegateDepth = 0,
-                sessionId = Just (idText (Approval.currentSession (approval runtime))),
+                sessionId = Just (idText ((.currentSession) ((.approval) runtime))),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = [flowAgent],

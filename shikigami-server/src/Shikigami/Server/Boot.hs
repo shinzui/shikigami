@@ -103,8 +103,8 @@ runServer config = do
       Log.logInfo
         logger
         "server.listening"
-        [ "host" Aeson..= host serverConfig,
-          "port" Aeson..= port serverConfig,
+        [ "host" Aeson..= (.host) serverConfig,
+          "port" Aeson..= (.port) serverConfig,
           "probes" Aeson..= (["/health/live", "/health/ready"] :: [Text.Text])
         ]
       Warp.runSettings (warpSettings serverConfig) application
@@ -126,8 +126,8 @@ warpSettings :: ServerConfig -> Warp.Settings
 warpSettings serverConfig =
   Warp.setInstallShutdownHandler installShutdownHandlers
     . Warp.setGracefulShutdownTimeout (Just 30)
-    . Warp.setPort (port serverConfig)
-    . Warp.setHost (fromString (Text.unpack (host serverConfig)))
+    . Warp.setPort ((.port) serverConfig)
+    . Warp.setHost (fromString (Text.unpack ((.host) serverConfig)))
     $ Warp.defaultSettings
 
 -- | Close the listener on either conventional graceful process signal.

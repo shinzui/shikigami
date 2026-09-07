@@ -51,8 +51,8 @@ data ServerConfig = ServerConfig
 serverConfigFrom :: AppConfig -> ServerConfig
 serverConfigFrom config =
   ServerConfig
-    { port = portNumber (httpPort config),
-      host = httpHost config
+    { port = portNumber ((.httpPort) config),
+      host = (.httpHost) config
     }
 
 -- | Loopback on port 8080: what the declaration's defaults resolve to, and safe

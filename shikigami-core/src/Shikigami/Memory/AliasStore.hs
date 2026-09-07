@@ -67,14 +67,14 @@ reconcileAlias pool principal rawLegacyName
       case existing of
         Left err -> pure (Left err)
         Right (Just row)
-          | principalId row == expected -> pure (Right (AliasAlreadyPresent row))
+          | (.principalId) row == expected -> pure (Right (AliasAlreadyPresent row))
           | otherwise ->
               pure
                 ( Right
                     AliasConflict
                       { legacyAgentName = legacyName,
                         expectedPrincipalId = expected,
-                        existingPrincipalId = principalId row
+                        existingPrincipalId = (.principalId) row
                       }
                 )
         Right Nothing -> do
@@ -82,13 +82,13 @@ reconcileAlias pool principal rawLegacyName
           pure do
             (row, inserted) <- renderUsage insertedResult
             pure
-              if principalId row == expected
+              if (.principalId) row == expected
                 then if inserted then AliasInserted row else AliasAlreadyPresent row
                 else
                   AliasConflict
                     { legacyAgentName = legacyName,
                       expectedPrincipalId = expected,
-                      existingPrincipalId = principalId row
+                      existingPrincipalId = (.principalId) row
                     }
   where
     legacyName = Text.strip rawLegacyName

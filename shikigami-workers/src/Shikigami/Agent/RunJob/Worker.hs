@@ -80,9 +80,9 @@ handleRunJob env context job =
             job
             Log.Info
             "worker.job.lifecycle_skipped"
-            [ "principal_id" Aeson..= DirectoryStore.principalId runSkip,
-              "route" Aeson..= DirectoryStore.detail runSkip,
-              "reason" Aeson..= DirectoryStore.reason runSkip
+            [ "principal_id" Aeson..= (.principalId) runSkip,
+              "route" Aeson..= (.detail) runSkip,
+              "reason" Aeson..= (.reason) runSkip
             ]
         pure Done
       DrainAuditFailed problem -> do
@@ -134,16 +134,16 @@ drainAdmissionOutcome = \case
 -- A durable refusal is acknowledged; a refusal whose audit row cannot be
 -- committed is retried so the queue remains the source of truth.
 admitRunJob :: WorkerEnv -> RunJob -> IO DrainAdmission
-admitRunJob env = admitRunJobWith (pool env) (envDirectory env) (agents env)
+admitRunJob env = admitRunJobWith ((.pool) env) (envDirectory env) ((.agents) env)
 
 -- | The drain gate with its concrete dependencies exposed for focused tests.
 admitRunJobWith :: Hasql.Pool.Pool -> Directory.DirectoryHandle -> [AgentDecl] -> RunJob -> IO DrainAdmission
 admitRunJobWith storePool directory declarations job =
-  case find ((== agentName job) . name) declarations of
+  case find ((== (.agentName) job) . (.name)) declarations of
     Nothing -> recordRefusal Nothing "unknown agent declaration"
     Just AgentDecl {name, identity} -> do
       let declaredPrincipalId = principalOf <$> identity
-      admitted <- case Shikigami.Agent.RunJob.identity job of
+      admitted <- case (.identity) job of
         UnresolvedLegacyIdentity -> Directory.identityAdmission directory declaredPrincipalId name
         recorded -> pure (Right recorded)
       case admitted of
@@ -159,12 +159,12 @@ admitRunJobWith storePool directory declarations job =
     recordRefusal resolvedPrincipalId skipReason = do
       let runSkip =
             DirectoryStore.RunSkip
-              { DirectoryStore.agentName = agentName job,
+              { DirectoryStore.agentName = (.agentName) job,
                 DirectoryStore.principalId = resolvedPrincipalId,
                 DirectoryStore.stage = DirectoryStore.DrainStage,
-                DirectoryStore.detail = routeKindText (routeKind job),
+                DirectoryStore.detail = routeKindText ((.routeKind) job),
                 DirectoryStore.reason = skipReason,
-                DirectoryStore.idempotencyKey = idempotencyKey job
+                DirectoryStore.idempotencyKey = (.idempotencyKey) job
               }
       DirectoryStore.recordRunSkip storePool runSkip >>= \case
         Left problem -> pure (DrainAuditFailed problem)
@@ -173,7 +173,7 @@ admitRunJobWith storePool directory declarations job =
 lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
 lifecycleRefusal declaredPrincipalId = \case
   Directory.AllowRun _ -> Nothing
-  Directory.SkipRun principal skipReason -> Just (Just (Directory.principalId principal), skipReason)
+  Directory.SkipRun principal skipReason -> Just (Just ((.principalId) principal), skipReason)
   Directory.UnknownPrincipal identifier -> Just (declaredPrincipalId, "unknown principal: " <> identifier)
   Directory.DirectoryUnavailable problem -> Just (declaredPrincipalId, "directory unavailable: " <> problem)
 
@@ -222,21 +222,21 @@ data RunRoute
 -- never chooses one. 'InferredLegacyRoute' is the single exception, and only
 -- because it means "enqueued before the discriminator existed".
 routeRunJob :: RunJob -> RunRoute
-routeRunJob job = case routeKind job of
+routeRunJob job = case (.routeKind) job of
   AgentWorkflowRoute -> AgentRunRoute
   ConversationWorkflowRoute ->
-    case Aeson.fromJSON (triggerPayload job) of
+    case Aeson.fromJSON ((.triggerPayload) job) of
       Aeson.Success addressed -> ConversationRoute addressed
       Aeson.Error err -> RouteError (Text.pack err)
   InferredLegacyRoute ->
-    case Aeson.fromJSON (triggerPayload job) of
+    case Aeson.fromJSON ((.triggerPayload) job) of
       Aeson.Success addressed -> ConversationRoute addressed
       Aeson.Error _ -> AgentRunRoute
 
 dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
 dispatchRunJob env job = do
   let route = routeRunJob job
-  when (routeKind job == InferredLegacyRoute) $
+  when ((.routeKind) job == InferredLegacyRoute) $
     jobLog
       env
       job
@@ -275,9 +275,9 @@ routeText = \case
 -- | Drive one turn of a conversation agent.
 runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome
 runConversationAgent env job addressed =
-  case find ((== agentName job) . name) (agents env) of
+  case find ((== (.agentName) job) . (.name)) ((.agents) env) of
     Nothing -> do
-      let detail = "unknown agent " <> agentName job
+      let detail = "unknown agent " <> (.agentName) job
       runMetric Metrics.recordRunFailed env job
       runMetric Metrics.recordRunDeadLettered env job
       jobLog
@@ -355,12 +355,12 @@ runConversationAgent env job addressed =
 -- its sinks.
 runOneAgent :: WorkerEnv -> RunJob -> IO JobOutcome
 runOneAgent env job =
-  runEff . runTracing (tracer (appEnv env)) $
+  runEff . runTracing (tracer ((.appEnv) env)) $
     withSpan' "agent.run" (spanArgs Consumer) \traceSpan -> do
-      addAttribute traceSpan "agent.name" (agentName job)
-      addAttribute traceSpan "trigger.kind" (triggerKindText (triggerKind job))
-      addAttribute traceSpan "run.idempotency_key" (idempotencyKey job)
-      addAttribute traceSpan "run.workflow_id" (idempotencyKey job)
+      addAttribute traceSpan "agent.name" ((.agentName) job)
+      addAttribute traceSpan "trigger.kind" (triggerKindText ((.triggerKind) job))
+      addAttribute traceSpan "run.idempotency_key" ((.idempotencyKey) job)
+      addAttribute traceSpan "run.workflow_id" ((.idempotencyKey) job)
       liftIO do
         resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
         case resE of
@@ -431,7 +431,7 @@ runOneAgent env job =
           Right ContinuedAsNew -> do
             jobLog env job Log.Info "worker.job.continued_as_new" []
             pure ()
-        pure (agentJobOutcome (agentName job) resE)
+        pure (agentJobOutcome ((.agentName) job) resE)
 
 -- | The complete agent-workflow outcome table. The store error is deliberately
 -- polymorphic: its value is diagnostic only, while every store failure is a
@@ -479,9 +479,9 @@ jobLog env job level event fields =
     (envLogger env)
     level
     event
-    ( [ "agent" Aeson..= agentName job,
-        Log.runIdKey Aeson..= idempotencyKey job,
-        "trigger_kind" Aeson..= triggerKindText (triggerKind job)
+    ( [ "agent" Aeson..= (.agentName) job,
+        Log.runIdKey Aeson..= (.idempotencyKey) job,
+        "trigger_kind" Aeson..= triggerKindText ((.triggerKind) job)
       ]
         <> fields
     )
@@ -495,7 +495,7 @@ triggerKindText = \case
 
 runMetric :: (Metrics.ShikigamiMetrics -> Text -> Text -> IO ()) -> WorkerEnv -> RunJob -> IO ()
 runMetric record env job =
-  record (envMetrics env) (agentName job) (triggerKindText (triggerKind job))
+  record (envMetrics env) ((.agentName) job) (triggerKindText ((.triggerKind) job))
 
 spanArgs :: SpanKind -> SpanArguments
 spanArgs spanKind =

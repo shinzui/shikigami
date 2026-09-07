@@ -243,8 +243,8 @@ awaitApproval env stepName req deadline = do
   _ <-
     step (notifyStepName stepName) $
       liftIO do
-        recordPark env (currentSession env) aid req
-        postAsk env (requestChannel req) req aid
+        (.recordPark) env ((.currentSession) env) aid req
+        (.postAsk) env (requestChannel req) req aid
   traverse_ (armApprovalDeadline stepName aid) deadline
   awaitAnswer
 

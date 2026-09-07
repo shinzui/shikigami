@@ -72,7 +72,7 @@ shikigamiApplication env =
 shikigamiServer :: ServerEnv -> ShikigamiApi (AsServerT ServerM)
 shikigamiServer env =
   ShikigamiApi
-    { health = healthServer (liveness env) (readiness env)
+    { health = healthServer ((.liveness) env) ((.readiness) env)
     }
 
 -- | Render every Servant-generated parse or routing failure as problem details.

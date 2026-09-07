@@ -18,7 +18,9 @@ common common
     DeriveAnyClass
     DuplicateRecordFields
     MultilineStrings
+    NoFieldSelectors
     OverloadedLabels
+    OverloadedRecordDot
     OverloadedStrings
 
   ghc-options:

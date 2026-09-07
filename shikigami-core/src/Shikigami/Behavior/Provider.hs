@@ -103,13 +103,13 @@ data ProfileViolation
 constrainBehaviorEnv :: ResolvedProfile -> BehaviorEnv -> Either ProfileViolation BehaviorEnv
 constrainBehaviorEnv ResolvedProfile {profile, ref} env =
   let call = providerCall env
-      restrictions = Profile.prohibitions profile
-      permitted = any (matchesCall restrictions call) (Profile.allowedCalls profile)
-   in if endpointClass call == "cli" && not (Profile.cliTransportsAllowed restrictions)
+      restrictions = (.prohibitions) profile
+      permitted = any (matchesCall restrictions call) ((.allowedCalls) profile)
+   in if (.endpointClass) call == "cli" && not ((.cliTransportsAllowed) restrictions)
         then Left (CliTransportForbidden call ref)
-        else case thinking call of
+        else case (.thinking) call of
           Nothing
-            | not (Profile.defaultedThinkingAllowed restrictions) ->
+            | not ((.defaultedThinkingAllowed) restrictions) ->
                 Left (DefaultedThinkingForbidden call ref)
           _
             | permitted -> Right env
@@ -242,26 +242,26 @@ callSurface = \case
 
 matchesCall :: Profile.Prohibitions -> ProviderCall -> Profile.AllowedCall -> Bool
 matchesCall restrictions call allowed =
-  provider call == Profile.provider allowed
-    && api call == Profile.api allowed
-    && endpointClass call == Profile.endpointClass allowed
-    && modelId call == Profile.modelId allowed
-    && case thinking call of
-      Just requested -> requested == Profile.thinking allowed
-      Nothing -> Profile.defaultedThinkingAllowed restrictions
+  (.provider) call == (.provider) allowed
+    && (.api) call == (.api) allowed
+    && (.endpointClass) call == (.endpointClass) allowed
+    && (.modelId) call == (.modelId) allowed
+    && case (.thinking) call of
+      Just requested -> requested == (.thinking) allowed
+      Nothing -> (.defaultedThinkingAllowed) restrictions
 
 renderProviderCall :: ProviderCall -> Text
 renderProviderCall call =
   "(provider="
-    <> provider call
+    <> (.provider) call
     <> ", api="
-    <> api call
+    <> (.api) call
     <> ", endpointClass="
-    <> endpointClass call
+    <> (.endpointClass) call
     <> ", model="
-    <> modelId call
+    <> (.modelId) call
     <> ", thinking="
-    <> maybe "defaulted" renderThinkingLevel (thinking call)
+    <> maybe "defaulted" renderThinkingLevel ((.thinking) call)
     <> ")"
 
 renderProfileRef :: Profile.SanctionedExecutionProfileRef -> Text

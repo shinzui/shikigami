@@ -45,8 +45,8 @@ runTelemetrySampler env = forever do
 sampleTelemetryOnce :: WorkerEnv -> IO ()
 sampleTelemetryOnce env =
   sampleTelemetryWith
-    (first (Text.pack . show) . fmap queueLength <$> Pool.use (pool env) (Pgmq.queueMetrics runQueueName))
-    (first (Text.pack . show) <$> runAppIO (appEnv env) (sampleOutboxBacklog (envKeiroMetrics env)))
+    (first (Text.pack . show) . fmap queueLength <$> Pool.use ((.pool) env) (Pgmq.queueMetrics runQueueName))
+    (first (Text.pack . show) <$> runAppIO ((.appEnv) env) (sampleOutboxBacklog (envKeiroMetrics env)))
     (recordQueueDepth (envMetrics env))
     logFailure
   where

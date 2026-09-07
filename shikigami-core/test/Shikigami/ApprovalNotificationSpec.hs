@@ -51,7 +51,7 @@ tests =
               kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
           sinkHttp <- testSinkHttpFor danwaConfig
           let notifier = approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
-          outcome <- postAsk notifier reviewId awakeableId (secondsToNominalDiffTime 60) request
+          outcome <- (.postAsk) notifier reviewId awakeableId (secondsToNominalDiffTime 60) request
           outcome @?= Right ()
           posted <- readIORef messages
           assertBool "Danwa receives the review id" (any (Text.isInfixOf "review_test") posted)
@@ -59,19 +59,19 @@ tests =
       testCase "Danwa notifier classifies retryable and permanent HTTP failures" do
         testWithApplication (pure (failingDanwaApplication status500)) \transientPort -> do
           notifier <- notifierForDanwa transientPort
-          postAsk notifier reviewId awakeableId 60 request >>= \case
+          (.postAsk) notifier reviewId awakeableId 60 request >>= \case
             Left TransientNotification {} -> pure ()
             other -> assertFailure ("expected transient Danwa failure, got " <> show other)
         testWithApplication (pure (failingDanwaApplication status403)) \permanentPort -> do
           notifier <- notifierForDanwa permanentPort
-          postAsk notifier reviewId awakeableId 60 request >>= \case
+          (.postAsk) notifier reviewId awakeableId 60 request >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent Danwa failure, got " <> show other),
       testCase "Kizashi notifier emits AgentRequest and classifies HTTP/decode failures" do
         requests <- newIORef []
         testWithApplication (pure (kizashiApplication status200 requests)) \successPort -> do
           notifier <- notifierForKizashi successPort
-          postAsk notifier reviewId awakeableId (secondsToNominalDiffTime 60) request {channel = ViaKizashi} >>= (@?= Right ())
+          (.postAsk) notifier reviewId awakeableId (secondsToNominalDiffTime 60) request {channel = ViaKizashi} >>= (@?= Right ())
           posted <- readIORef requests
           case posted of
             [Wire.CreateSignalReq {Wire.signalType, Wire.priority, Wire.intent, Wire.contextTags}] -> do
@@ -82,17 +82,17 @@ tests =
             other -> assertFailure ("expected one Kizashi request, got " <> show other)
         testWithApplication (pure (kizashiApplication status500 requests)) \transientPort -> do
           notifier <- notifierForKizashi transientPort
-          postAsk notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
             Left TransientNotification {} -> pure ()
             other -> assertFailure ("expected transient notification failure, got " <> show other)
         testWithApplication (pure (kizashiApplication status403 requests)) \permanentPort -> do
           notifier <- notifierForKizashi permanentPort
-          postAsk notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent notification failure, got " <> show other)
         testWithApplication (pure invalidKizashiApplication) \invalidPort -> do
           notifier <- notifierForKizashi invalidPort
-          postAsk notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent decode failure, got " <> show other)
     ]

@@ -35,7 +35,7 @@ runTimerWorker env = do
   Log.logInfo (envLogger env) "worker.timer.started" []
   forever do
     now <- getCurrentTime
-    result <- runAppIO (appEnv env) (runWorkflowTimerWorker (envKeiroMetrics env) now (Scheduler.shikigamiTimerFallback (schedulerEnv env) now))
+    result <- runAppIO ((.appEnv) env) (runWorkflowTimerWorker (envKeiroMetrics env) now (Scheduler.shikigamiTimerFallback (schedulerEnv env) now))
     case result of
       Left err -> Log.logError (envLogger env) "worker.timer.failed" ["error" Aeson..= Text.pack (show err)]
       Right _row -> pure ()

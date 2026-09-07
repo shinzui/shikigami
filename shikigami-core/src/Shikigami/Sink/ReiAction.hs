@@ -58,7 +58,7 @@ runReiAction http ReiConfig {baseUrl} ctx sink output =
                     output,
                     sourceEventId = mkSourceEventId ctx
                   }
-          result <- postJSONWithHeaders http (traceHeaders ctx) (url <> reiActionPath) req
+          result <- postJSONWithHeaders http ((.traceHeaders) ctx) (url <> reiActionPath) req
           pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> iid))) result)
     _ -> pure (Left "runReiAction: not a ReiAction sink")
 

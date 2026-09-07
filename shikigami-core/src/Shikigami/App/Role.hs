@@ -42,6 +42,6 @@ data RoleInfo = RoleInfo
 -- database, joins a consumer group, or registers a processor.
 runRole :: RoleInfo -> IO ()
 runRole info = do
-  (action, options) <- execParser (parserInfo info)
-  config <- runAppConfig (role info) options
+  (action, options) <- execParser ((.parserInfo) info)
+  config <- runAppConfig ((.role) info) options
   action config

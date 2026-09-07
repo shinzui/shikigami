@@ -131,7 +131,7 @@ withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@Agen
                           providers
                           runtimeScope
                           resolved
-                          (Behavior.tools baseEnv)
+                          ((.tools) baseEnv)
                           (\registry _active -> callback (Behavior.withCapabilityTools resolved registry baseEnv))
                       pure case runtimeResult of
                         Left err -> Left (OneOffCapabilityRuntimeFailed err)
@@ -141,7 +141,7 @@ withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@Agen
       ResolutionSubject
         { principal = principalText decl,
           mode = OneOff,
-          behavior = Agent.behavior decl,
+          behavior = (.behavior) decl,
           profile = Nothing
         }
 

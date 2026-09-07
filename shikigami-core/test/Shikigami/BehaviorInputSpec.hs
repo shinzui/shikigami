@@ -72,20 +72,20 @@ classificationTests =
     "a recalled escalation changes the at-risk verdict"
     [ testCase "a calm message about a previously escalated subject is high risk" do
         let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_42"] calmPayload
-        level verdict @?= "high"
-        rationale verdict @?= "prior escalation on this subject: customer relationship at risk",
+        (.level) verdict @?= "high"
+        (.rationale) verdict @?= "prior escalation on this subject: customer relationship at risk",
       testCase "the same message with nothing recalled is unchanged" do
         let verdict = classifyRisk (activityFor "tkt_42") [] calmPayload
-        level verdict @?= "low"
-        rationale verdict @?= "no high-risk signal detected",
+        (.level) verdict @?= "low"
+        (.rationale) verdict @?= "no high-risk signal detected",
       -- Memory about a different customer is not evidence about this one.
       testCase "an escalation on another subject does not carry over" do
         let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_99"] calmPayload
-        level verdict @?= "low",
+        (.level) verdict @?= "low",
       testCase "a memory that merely mentions the subject is not an escalation" do
         let remembered = memoryWith "tkt_42 asked about invoicing"
             verdict = classifyRisk (activityFor "tkt_42") [remembered] calmPayload
-        level verdict @?= "low"
+        (.level) verdict @?= "low"
     ]
 
 calmPayload :: Value

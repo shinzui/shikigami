@@ -197,17 +197,17 @@ envConversationIdleTimeout WorkerEnv {conversationIdleTimeout = timeout} = timeo
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
   AgentWorkflow.AgentRunDeps
-    { AgentWorkflow.appEnv = appEnv env,
-      AgentWorkflow.behaviorEnv = behaviorEnv env,
-      AgentWorkflow.actionAuthorizer = actionAuthorizer env,
+    { AgentWorkflow.appEnv = (.appEnv) env,
+      AgentWorkflow.behaviorEnv = (.behaviorEnv) env,
+      AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
       AgentWorkflow.capabilities = emptyCapabilityRuntime,
-      AgentWorkflow.agents = agents env,
-      AgentWorkflow.kizashi = kizashi env,
-      AgentWorkflow.kawa = kawa env,
-      AgentWorkflow.kanmon = kanmon env,
-      AgentWorkflow.danwa = danwa env,
-      AgentWorkflow.rei = rei env,
-      AgentWorkflow.http = http env,
+      AgentWorkflow.agents = (.agents) env,
+      AgentWorkflow.kizashi = (.kizashi) env,
+      AgentWorkflow.kawa = (.kawa) env,
+      AgentWorkflow.kanmon = (.kanmon) env,
+      AgentWorkflow.danwa = (.danwa) env,
+      AgentWorkflow.rei = (.rei) env,
+      AgentWorkflow.http = (.http) env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
@@ -218,8 +218,8 @@ agentRunDeps env =
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.directory = envDirectory env,
-      AgentWorkflow.routing = Routing.routingRuntime (agentReport env) (envDirectory env),
-      AgentWorkflow.practiceReview = PracticeReviewCapability.failClosedPracticeReviewRuntime (practiceReviewAttentionRecipients env),
+      AgentWorkflow.routing = Routing.routingRuntime ((.agentReport) env) (envDirectory env),
+      AgentWorkflow.practiceReview = PracticeReviewCapability.failClosedPracticeReviewRuntime ((.practiceReviewAttentionRecipients) env),
       AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime
@@ -233,12 +233,12 @@ envPool WorkerEnv {pool = p} = p
 conversationEnv :: WorkerEnv -> Conversation.ConversationEnv
 conversationEnv env =
   Conversation.ConversationEnv
-    { Conversation.appEnv = appEnv env,
-      Conversation.behaviorEnv = behaviorEnv env,
+    { Conversation.appEnv = (.appEnv) env,
+      Conversation.behaviorEnv = (.behaviorEnv) env,
       Conversation.runTimeout = envRunTimeout env,
       Conversation.idleTimeout = envConversationIdleTimeout env,
-      Conversation.danwa = danwa env,
-      Conversation.agents = agents env,
+      Conversation.danwa = (.danwa) env,
+      Conversation.agents = (.agents) env,
       Conversation.grants = envGrants env,
       Conversation.directory = envDirectory env
     }
@@ -281,9 +281,9 @@ schedulerSchedules logger strictMode declarations = do
 schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
 schedulerEnv env =
   Scheduler.SchedulerEnv
-    { Scheduler.pool = pool env,
+    { Scheduler.pool = (.pool) env,
       Scheduler.schedules = envSchedules env,
-      Scheduler.principalIds = principalIdsByAgent (agents env),
+      Scheduler.principalIds = principalIdsByAgent ((.agents) env),
       Scheduler.directory = envDirectory env,
       Scheduler.catchUpPolicy = envCatchUpPolicy env,
       Scheduler.logger = envLogger env

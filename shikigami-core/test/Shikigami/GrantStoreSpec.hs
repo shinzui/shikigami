@@ -151,8 +151,8 @@ runtimeTests =
         _ <- compatRevoke pool "digest-watcher" SKawaDigest (Just "revoker") >>= expectRight "revokeGrant"
         row <- findRow pool "digest-watcher"
         assertEqual "granted flag" False (granted' row)
-        assertEqual "revoked_by" (Just "revoker") (revokedBy row)
-        assertBool "revoked_at is set" (revokedAt row /= Nothing),
+        assertEqual "revoked_by" (Just "revoker") ((.revokedBy) row)
+        assertBool "revoked_at is set" ((.revokedAt) row /= Nothing),
     testCase "re-granting clears the revocation rather than leaving it set" do
       -- A row claiming to be both granted and revoked would make the audit
       -- trail lie about the current state.
@@ -163,8 +163,8 @@ runtimeTests =
         assertGranted "re-granted" pool "digest-watcher" SKawaDigest
         row <- findRow pool "digest-watcher"
         assertEqual "granted flag" True (granted' row)
-        assertEqual "revoked_by cleared" Nothing (revokedBy row)
-        assertEqual "revoked_at cleared" Nothing (revokedAt row),
+        assertEqual "revoked_by cleared" Nothing ((.revokedBy) row)
+        assertEqual "revoked_at cleared" Nothing ((.revokedAt) row),
     testCase "revoking something never granted reports that it changed nothing" do
       withPool \pool -> do
         changed <- compatRevoke pool "nobody" SKawaDigest (Just "test") >>= expectRight "revokeGrant"
@@ -180,17 +180,17 @@ principalReconciliationTests =
         first <-
           reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
             >>= expectRight "first reconcileGrantPrincipal"
-        assertEqual "first status" PrincipalSynced (status first)
-        assertEqual "filled every row" (fromIntegral (length before)) (filledCount first)
-        assertEqual "nothing was already verified" 0 (verifiedCount first)
+        assertEqual "first status" PrincipalSynced ((.status) first)
+        assertEqual "filled every row" (fromIntegral (length before)) ((.filledCount) first)
+        assertEqual "nothing was already verified" 0 ((.verifiedCount) first)
         after <- findRows pool "heartbeat"
         assertBool "a principal stayed null" (all ((== Just "agent_heartbeat") . principalIdOf) after)
         second <-
           reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
             >>= expectRight "second reconcileGrantPrincipal"
-        assertEqual "second status" PrincipalSynced (status second)
-        assertEqual "idempotent fill count" 0 (filledCount second)
-        assertEqual "verified every row" (fromIntegral (length after)) (verifiedCount second),
+        assertEqual "second status" PrincipalSynced ((.status) second)
+        assertEqual "idempotent fill count" 0 ((.filledCount) second)
+        assertEqual "verified every row" (fromIntegral (length after)) ((.verifiedCount) second),
     testCase "a conflicting principal leaves null rows untouched" do
       withPool \pool -> do
         compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "first grant"
@@ -201,8 +201,8 @@ principalReconciliationTests =
         result <-
           reconcileGrantPrincipal pool "digest-watcher" "agent_digest_watcher"
             >>= expectRight "conflicting reconcileGrantPrincipal"
-        assertEqual "no row filled" 0 (filledCount result)
-        assertEqual "conflict is explicit" (PrincipalConflict (Set.singleton "agent_wrong")) (status result)
+        assertEqual "no row filled" 0 ((.filledCount) result)
+        assertEqual "conflict is explicit" (PrincipalConflict (Set.singleton "agent_wrong")) ((.status) result)
         rows <- findRows pool "digest-watcher"
         assertEqual
           "the null and conflicting values are unchanged"
@@ -278,8 +278,8 @@ pagingTests =
         page <-
           listGrants pool GrantPageRequest {size = defaultPageSize, after = Nothing}
             >>= expectRight "listGrants"
-        assertEqual "seed row count" 9 (length (items page))
-        assertEqual "no next page" Nothing (fmap cursorKey (next page)),
+        assertEqual "seed row count" 9 (length ((.items) page))
+        assertEqual "no next page" Nothing (fmap cursorKey ((.next) page)),
     testCase "paging traverses every row exactly once, with no gaps or duplicates" do
       -- Seeded past one page on purpose: the bug this catches is an off-by-one
       -- in the keyset predicate, which a single-page table cannot expose.
@@ -300,8 +300,8 @@ pagingTests =
 drain :: Pool -> PageSize -> Maybe GrantCursor -> [(Text, Text)] -> IO [(Text, Text)]
 drain pool size after acc = do
   page <- listGrants pool GrantPageRequest {size, after} >>= expectRight "listGrants"
-  let acc' = acc <> fmap rowKey (items page)
-  case next page of
+  let acc' = acc <> fmap rowKey ((.items) page)
+  case (.next) page of
     Nothing -> pure acc'
     Just cursor -> drain pool size (Just cursor) acc'
 
@@ -318,7 +318,7 @@ findRow pool agent = do
   page <-
     listGrants pool GrantPageRequest {size = defaultPageSize, after = Nothing}
       >>= expectRight "listGrants"
-  case filter (\GrantRow {agentName} -> agentName == agent) (items page) of
+  case filter (\GrantRow {agentName} -> agentName == agent) ((.items) page) of
     [row] -> pure row
     other -> assertFailure ("expected exactly one row for " <> show agent <> ", got " <> show (length other))
 
@@ -327,7 +327,7 @@ findRows pool agent = do
   page <-
     listGrants pool GrantPageRequest {size = defaultPageSize, after = Nothing}
       >>= expectRight "listGrants"
-  pure (filter (\GrantRow {agentName} -> agentName == agent) (items page))
+  pure (filter (\GrantRow {agentName} -> agentName == agent) ((.items) page))
 
 principalIdOf :: GrantRow -> Maybe Text
 principalIdOf GrantRow {principalId} = principalId

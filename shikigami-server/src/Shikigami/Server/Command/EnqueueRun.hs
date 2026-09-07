@@ -11,7 +11,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
-import Shikigami.App.Config (AppConfig, agentsDirectory, directorySettings, revealSecretText)
+import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
@@ -47,20 +47,20 @@ runEnqueueRun agent mpayload conversation mkey config = do
       Nothing -> do
         hPutStrLn stderr ("enqueue-run: --payload is not valid JSON: " <> raw)
         exitFailure
-  report <- loadAgentsReport (agentsDirectory config)
+  report <- loadAgentsReport ((.agentsDirectory) config)
   decl <-
-    case find ((== Text.pack agent) . name) (loadedAgents report) of
+    case find ((== Text.pack agent) . (.name)) (loadedAgents report) of
       Nothing -> die ("unknown or unloadable agent " <> agent)
       Just found -> pure found
   directoryRuntime <-
-    Directory.startDirectory Log.silentLogger (directorySettings config) >>= \case
+    Directory.startDirectory Log.silentLogger ((.directorySettings) config) >>= \case
       Left problem -> die ("directory admission failed: " <> Text.unpack problem)
       Right runtime -> pure runtime
   admittedIdentity <-
     Directory.identityAdmission
-      (handle directoryRuntime)
+      ((.handle) directoryRuntime)
       (declaredPrincipalId decl)
-      (name decl)
+      ((.name) decl)
       >>= either (die . Text.unpack) pure
   connStr <- revealSecretText <$> requireDatabaseUrl "enqueue-run" config
   withStore (defaultConnectionSettings connStr) $ \st -> do

@@ -2,12 +2,7 @@
 module Shikigami.PracticeReview.Authorization
   ( ResolutionAuthorityKind (..),
     ResolutionSubmissionEvidence (..),
-    AuthorizedResolutionReceipt,
-    authorizationId,
-    authorityKind,
-    verifiedSubject,
-    sourceReference,
-    authorizedAt,
+    AuthorizedResolutionReceipt (authorizationId, authorityKind, verifiedSubject, sourceReference, authorizedAt),
     AuthorizedPracticeReviewResolution (..),
     ReviewResolutionAuthorizer (..),
     ResolutionAuthorizationError (..),

@@ -221,7 +221,7 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
                   event = sinkIntentEvent messageId orderingKey jobOccurredAt capturedTraceContext intent
                   outboxId = deterministicOutboxId workflowId ordinal
                   receipt = pendingDeliveryReceipt messageId kind now intent
-              authorizeSinkAction (actionAuthorizerFor grantSource) identity sink Nothing (resolvedRecipient intent) resolvedConversationKey now >>= \case
+              authorizeSinkAction (actionAuthorizerFor grantSource) identity sink Nothing ((.resolvedRecipient) intent) resolvedConversationKey now >>= \case
                 Left failure -> pure (SinkResult kind (authorizationOutcome failure), Nothing)
                 Right _ -> pure (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
 
@@ -432,7 +432,7 @@ egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe Text, Maybe 
 egressMetadata sink activity output = case sink of
   ChannelEgress {} ->
     ( resolveConversationKey sink activity output,
-      Activity.activityId <$> activity
+      (.activityId) <$> activity
     )
   _ -> (Nothing, Nothing)
 

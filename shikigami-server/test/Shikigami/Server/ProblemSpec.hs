@@ -100,9 +100,9 @@ assertProblemBody body expectedCode expectedStatus expectedRetryable =
   case decode body :: Maybe ProblemDetails of
     Nothing -> assertBool ("body is not ProblemDetails: " <> LBS8.unpack body) False
     Just details -> do
-      code details @?= expectedCode
-      status details @?= expectedStatus
-      retryable details @?= expectedRetryable
-      problemType details @?= "about:blank"
-      assertBool "title is non-empty" (title details /= "")
-      assertBool "detail is non-empty" (detail details /= "")
+      (.code) details @?= expectedCode
+      (.status) details @?= expectedStatus
+      (.retryable) details @?= expectedRetryable
+      (.problemType) details @?= "about:blank"
+      assertBool "title is non-empty" ((.title) details /= "")
+      assertBool "detail is non-empty" ((.detail) details /= "")

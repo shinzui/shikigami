@@ -78,7 +78,7 @@ withTopicLine topic content
   | otherwise = "[" <> Text.strip topic <> "]\n" <> content
 
 postReply :: ClientEnv -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
-postReply clientEnv cfg = postReplyWithHeaders clientEnv [] cfg (agentParticipant cfg)
+postReply clientEnv cfg = postReplyWithHeaders clientEnv [] cfg ((.agentParticipant) cfg)
 
 -- | Open a fresh thread, join the configured agent participant, and post one
 -- text message. Unlike the sink path this helper owns no outbox receipt: its
@@ -92,7 +92,7 @@ postText clientEnv cfg content = do
         clientEnv
         []
         cfg
-        (agentParticipant cfg)
+        ((.agentParticipant) cfg)
         DanwaTarget {conversationId = cid, parentMessageId = Nothing}
         content
 
@@ -134,7 +134,7 @@ postToFreshConversation clientEnv headers cfg author receipts sink content =
     guardedConversation = case receipts of
       Nothing -> startJoinAndRemember Nothing
       Just deliveryGuard -> do
-        lookedUp <- tryIO (lookupReceipt deliveryGuard "conv")
+        lookedUp <- tryIO ((.lookupReceipt) deliveryGuard "conv")
         case lookedUp of
           Left _ -> pure (Left (DanwaReceiptFailure "danwa conversation receipt lookup failed"))
           Right (Just cid) -> pure (Right cid)
@@ -147,7 +147,7 @@ postToFreshConversation clientEnv headers cfg author receipts sink content =
 
     rememberConversation Nothing cid = pure (Right cid)
     rememberConversation (Just deliveryGuard) cid =
-      tryIO (recordReceipt deliveryGuard "conv" cid) <&> \case
+      tryIO ((.recordReceipt) deliveryGuard "conv" cid) <&> \case
         Left _ -> Left (DanwaReceiptFailure "danwa conversation receipt write failed")
         Right () -> Right cid
 
@@ -160,7 +160,7 @@ startJoinedConversation clientEnv headers cfg = do
     runDanwaClientWithHeaders headers clientEnv $
       Danwa.startConversation
         Conv.StartConversationRequest
-          { Conv.startedBy = agentParticipant cfg,
+          { Conv.startedBy = (.agentParticipant) cfg,
             Conv.kind = "thread",
             Conv.parentConversationId = Nothing
           }
@@ -172,7 +172,7 @@ startJoinedConversation clientEnv headers cfg = do
           Danwa.joinConversation
             cid
             Conv.JoinConversationRequest
-              { Conv.participantId = agentParticipant cfg,
+              { Conv.participantId = (.agentParticipant) cfg,
                 Conv.participantType = "agent"
               }
       pure case joined of

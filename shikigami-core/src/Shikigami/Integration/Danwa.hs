@@ -30,15 +30,15 @@ data AddressedMessage = AddressedMessage
 instance ToJSON AddressedMessage where
   toJSON msg =
     Aeson.object
-      [ "conversationId" Aeson..= conversationId msg,
-        "messageId" Aeson..= messageId msg,
-        "parentMessageId" Aeson..= parentMessageId msg,
-        "author" Aeson..= author msg,
-        "content" Aeson..= content msg,
-        "agentParticipantId" Aeson..= agentParticipantId msg,
-        "embellishmentId" Aeson..= embellishmentId msg,
-        "mentionedBy" Aeson..= mentionedBy msg,
-        "occurredAt" Aeson..= occurredAt msg
+      [ "conversationId" Aeson..= (.conversationId) msg,
+        "messageId" Aeson..= (.messageId) msg,
+        "parentMessageId" Aeson..= (.parentMessageId) msg,
+        "author" Aeson..= (.author) msg,
+        "content" Aeson..= (.content) msg,
+        "agentParticipantId" Aeson..= (.agentParticipantId) msg,
+        "embellishmentId" Aeson..= (.embellishmentId) msg,
+        "mentionedBy" Aeson..= (.mentionedBy) msg,
+        "occurredAt" Aeson..= (.occurredAt) msg
       ]
 
 instance FromJSON AddressedMessage where

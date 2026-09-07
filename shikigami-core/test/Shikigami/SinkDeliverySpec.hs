@@ -204,9 +204,9 @@ pausedEnqueue =
     directory <- directoryWith Paused
     rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "lifecycle refusal creates no outbox row" [] rows
-    receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey (idempotencyKey runJob <> ":sink:0"))
+    receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
     assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
     case fromJSON encoded :: Result [SinkResult] of
       Success [SinkResult {outcome = SkippedLifecycle reason}] ->
@@ -247,14 +247,14 @@ pauseBeforePublish = do
       assertEqual "lifecycle non-send publishes the outbox row" 1 (Outbox.published summary)
       assertEqual "paused publish performs no HTTP request" [] =<< readIORef requests
       receipt <- lookupReceipt pool row
-      assertEqual "paused publish is terminal" Delivery.Dead (Delivery.status receipt)
+      assertEqual "paused publish is terminal" Delivery.Dead ((.status) receipt)
 
 journalTruth :: IO ()
 journalTruth =
   withFixture "journal-truth" [signalSink "journal"] unreachableKizashi unreachableDanwa \deps appEnv _pool runJob -> do
     rows <- runWorkflowAndRows deps appEnv runJob
     assertEqual "one sink intent was enqueued" 1 (length rows)
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
     case fromJSON encoded :: Result [SinkResult] of
       Success [SinkResult {outcome = Enqueued detail}] ->
@@ -300,8 +300,8 @@ egressReceiptRecording = do
               }
       [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       before <- lookupReceipt pool row
-      assertEqual "enqueue atomically records pending" Delivery.Pending (Delivery.status before)
-      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+      assertEqual "enqueue atomically records pending" Delivery.Pending ((.status) before)
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
       case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
         Success [SinkResult {outcome = Enqueued _}] -> pure ()
         other -> assertFailure ("egress workflow did not journal Enqueued: " <> show other)
@@ -310,8 +310,8 @@ egressReceiptRecording = do
       assertEqual "first publication succeeds" Outbox.PublishSucceeded first
       assertEqual "delivered receipt suppresses the second HTTP request" Outbox.PublishSucceeded second
       receipt <- lookupReceipt pool row
-      assertEqual "receipt is delivered" Delivery.Delivered (Delivery.status receipt)
-      assertEqual "Kanmon activity id is retained" (Just "act_reply_1") (Delivery.detail receipt)
+      assertEqual "receipt is delivered" Delivery.Delivered ((.status) receipt)
+      assertEqual "Kanmon activity id is retained" (Just "act_reply_1") ((.detail) receipt)
       observed <- readIORef requests
       assertEqual "Kanmon receives one request" 1 (length observed)
       case observed of
@@ -333,7 +333,7 @@ egressPermanentRejection = do
         Outbox.PublishRejected _ -> pure ()
         other -> assertFailure ("403 should terminally reject publication, got " <> show other)
       receipt <- lookupReceipt pool row
-      assertEqual "403 receipt is dead" Delivery.Dead (Delivery.status receipt)
+      assertEqual "403 receipt is dead" Delivery.Dead ((.status) receipt)
       readIORef requests >>= assertEqual "one rejected HTTP request" 1
 
 egressDenied :: IO ()
@@ -344,9 +344,9 @@ egressDenied = do
       let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
       rows <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
       assertEqual "denied egress creates no outbox row" [] rows
-      receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey (idempotencyKey runJob <> ":sink:0"))
+      receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((.idempotencyKey) runJob <> ":sink:0"))
       assertEqual "denied egress creates no receipt" (Right Nothing) receipt
-      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+      index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
       case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
         Success [SinkResult {outcome = DeniedOutcome _}] -> pure ()
         other -> assertFailure ("egress workflow did not journal DeniedOutcome: " <> show other)
@@ -361,7 +361,7 @@ actionDeniedAtEnqueue = do
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied"), AgentWorkflow.directory = directory}
     rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "C13 denial creates no outbox" [] rows
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
       Success [SinkResult {outcome = DeniedOutcome reason}] ->
         assertBool "journal distinguishes exact policy denial" ("exact recipient denied" `Text.isInfixOf` reason)
@@ -382,7 +382,7 @@ actionUnavailableAtEnqueue = do
     let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage"), AgentWorkflow.directory = directory}
     rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
     assertEqual "authorization outage creates no outbox" [] rows
-    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId (idempotencyKey runJob)) 0)
+    index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (WorkflowId ((.idempotencyKey) runJob)) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
       Success [SinkResult {outcome = AuthorizationFailed reason}] ->
         assertBool "journal distinguishes authorization outage" ("Kikan fixture outage" `Text.isInfixOf` reason)
@@ -417,7 +417,7 @@ actionRevokedBeforePublish = do
       readIORef downstream >>= assertEqual "revocation prevents downstream HTTP" []
       readIORef decisions >>= assertEqual "C13 runs once at enqueue and once at publish" 2 . length
       receipt <- lookupReceipt pool row
-      assertEqual "publish-time denial closes the pending receipt" Delivery.Dead (Delivery.status receipt)
+      assertEqual "publish-time denial closes the pending receipt" Delivery.Dead ((.status) receipt)
 
 rejectingAuthorizer :: IORef [(Text, AgentAction)] -> ActionAuthorizationFailure -> ActionAuthorizer
 rejectingAuthorizer requests failure =
@@ -435,12 +435,12 @@ receiptRecording = do
     withFixture "receipt" [signalSink "receipt"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       [row] <- runWorkflowAndRows deps appEnv runJob
       before <- lookupReceipt pool row
-      assertEqual "enqueue atomically records pending" Delivery.Pending (Delivery.status before)
+      assertEqual "enqueue atomically records pending" Delivery.Pending ((.status) before)
       published <- runEff (AgentWorkflow.publishSinkIntent deps row)
       assertEqual "transport succeeds" Outbox.PublishSucceeded published
       receipt <- lookupReceipt pool row
-      assertEqual "receipt is delivered" Delivery.Delivered (Delivery.status receipt)
-      assertEqual "downstream signal id is retained" (Just "sig_stub") (Delivery.detail receipt)
+      assertEqual "receipt is delivered" Delivery.Delivered ((.status) receipt)
+      assertEqual "downstream signal id is retained" (Just "sig_stub") ((.detail) receipt)
       assertEqual "one downstream request" 1 . length =<< readIORef requests
 
 sendGuard :: IO ()
@@ -461,11 +461,11 @@ terminalReconciliation =
     [row] <- runWorkflowAndRows deps appEnv runJob
     AgentWorkflow.reconcilePublishedSinkIntent deps row
     receipt <- lookupReceipt pool row
-    assertEqual "unproved terminal publication is explicit" Delivery.Unknown (Delivery.status receipt)
+    assertEqual "unproved terminal publication is explicit" Delivery.Unknown ((.status) receipt)
     assertEqual
       "unknown explains why proof is missing"
       (Just "outbox published without a terminal delivery receipt")
-      (Delivery.detail receipt)
+      ((.detail) receipt)
 
 danwaReuse :: IO ()
 danwaReuse = do

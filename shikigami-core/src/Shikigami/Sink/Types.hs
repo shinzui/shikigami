@@ -124,6 +124,6 @@ data SinkResult = SinkResult
 -- of the same run re-POSTs the same key, so the doorway dedups it.
 mkSourceEventId :: SinkContext -> Text
 mkSourceEventId ctx =
-  identityLabel (identity ctx) <> ":" <> runId ctx <> ":" <> Text.pack (show (ordinal ctx))
+  identityLabel ((.identity) ctx) <> ":" <> (.runId) ctx <> ":" <> Text.pack (show ((.ordinal) ctx))
   where
     identityLabel = either (const "unresolved-legacy") id . identityText

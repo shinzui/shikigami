@@ -18,7 +18,7 @@ runStubKanmonCmd listenPort requestedConversations config =
   runStubKanmon
     StubKanmonOptions
       { port = listenPort,
-        requireToken = credentialToken <$> Config.kanmonToken config,
+        requireToken = credentialToken <$> (.kanmonToken) config,
         allowedConversations =
           Set.fromList
             (Text.pack <$> if null requestedConversations then ["conv_55012"] else requestedConversations)

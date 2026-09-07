@@ -253,7 +253,7 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
           Nothing
           activity
           messageId
-          (recipient projection)
+          ((.recipient) projection)
           sink
           output
           now

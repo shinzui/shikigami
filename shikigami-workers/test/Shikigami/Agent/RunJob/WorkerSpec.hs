@@ -163,7 +163,7 @@ tests =
                 "codec-agent:event:unknown",
                 "codec-agent:event:unavailable"
               ]
-              (DirectoryStore.idempotencyKey <$> skips),
+              ((.idempotencyKey) <$> skips),
       testCase "worker-path heartbeat keeps one slow delivery leased" do
         withShikigamiMigratedDatabase \connStr -> do
           callCount <- newIORef (0 :: Int)
@@ -383,7 +383,7 @@ directoryWith principals = do
 
 assertSkipped :: String -> DrainAdmission -> IO ()
 assertSkipped _ (DrainSkipped runSkip) =
-  assertEqual "drain stage" DirectoryStore.DrainStage (DirectoryStore.stage runSkip)
+  assertEqual "drain stage" DirectoryStore.DrainStage ((.stage) runSkip)
 assertSkipped label other = assertFailure (label <> ": expected DrainSkipped, got " <> show other)
 
 assertAllowedAs :: String -> Text -> DrainAdmission -> IO ()

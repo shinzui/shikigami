@@ -45,11 +45,11 @@ tests =
         now <- getCurrentTime
         let job = runJobFromEnvelope now streamAgent (envelopeAt "yesterday afternoon")
         assertBool
-          ("the caller's clock is used, not the epoch: " <> show (RunJob.occurredAt job))
-          (abs (diffUTCTime (RunJob.occurredAt job) now) < 1)
+          ("the caller's clock is used, not the epoch: " <> show ((.occurredAt) job))
+          (abs (diffUTCTime ((.occurredAt) job) now) < 1)
         assertBool
           "and it is nowhere near 1970"
-          (RunJob.occurredAt job > UTCTime (fromGregorian 2000 1 1) 0),
+          ((.occurredAt) job > UTCTime (fromGregorian 2000 1 1) 0),
       -- The key this replaced was built from getCurrentTime, so retrying
       -- `shikigami enqueue-run` after a timeout ran the agent a second time.
       testCase "the same logical event enqueues one stable idempotency key" do

@@ -363,8 +363,8 @@ reviewedTests =
       -- commits, which is the point: it can never be what a verdict rests on.
       testCase "a pull-request identity does not substitute for the commits" do
         let withPr = sampleReviewedArtifact {pullRequest = Just "4173"}
-        assertEqual "base is unchanged" (baseCommit sampleReviewedArtifact) (baseCommit withPr)
-        assertEqual "head is unchanged" (headCommit sampleReviewedArtifact) (headCommit withPr)
+        assertEqual "base is unchanged" ((.baseCommit) sampleReviewedArtifact) ((.baseCommit) withPr)
+        assertEqual "head is unchanged" ((.headCommit) sampleReviewedArtifact) ((.headCommit) withPr)
         roundTrips "artifact with a pull request" withPr,
       testCase "an absent pull request leaves no null behind" do
         assertBool
@@ -579,8 +579,8 @@ envelopeTests =
         let signed = sampleAttestation {signature = Just "sig", keyId = Just "key-1"}
         assertEqual
           "signing does not change the payload digest"
-          (attestationPayloadDigest (payload sampleAttestation))
-          (attestationPayloadDigest (payload signed)),
+          (attestationPayloadDigest ((.payload) sampleAttestation))
+          (attestationPayloadDigest ((.payload) signed)),
       -- Changing any covered field must change the digest, or the binding is
       -- worthless.
       testCase "changing a covered field changes the digest" do

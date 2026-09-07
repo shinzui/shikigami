@@ -114,15 +114,15 @@ recordStatement =
           detail = EXCLUDED.detail,
           updated_at = EXCLUDED.updated_at
     """
-    ( (receiptKey >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (outboxMessageId >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (runId >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (agent >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (fromIntegral . ordinal >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> (sinkKind >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (renderDeliveryStatus . status >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (detail >$< Encoders.param (Encoders.nullable Encoders.text))
-        <> (updatedAt >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+    ( ((.receiptKey) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((.outboxMessageId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((.runId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((.agent) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (fromIntegral . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        <> ((.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (renderDeliveryStatus . (.status) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((.detail) >$< Encoders.param (Encoders.nullable Encoders.text))
+        <> ((.updatedAt) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
 

@@ -54,40 +54,40 @@ runWorkerCmd config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
-    behEnv <- newBehaviorEnvFor logger (Config.behaviorProvider config) (Just (otelSink tr))
+    behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
-      let manifestDirectory = Config.agentsDirectory config
+      let manifestDirectory = (.agentsDirectory) config
           storePool = StoreConnection.pool st
       report <-
         loadAgentsLoud
           logger
           manifestDirectory
-          (Config.agentsStrict config)
+          ((.agentsStrict) config)
           (persistAgentLoadReport logger storePool manifestDirectory)
       agents <- enabledAgentsFromReport logger report
       Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
       refuseUndeployableAgents logger agents
       let kizashiConfig =
             KizashiConfig
-              { baseUrl = Config.kizashiBaseUrl config,
-                defaultRecipient = Config.kizashiDefaultRecipient config
+              { baseUrl = (.kizashiBaseUrl) config,
+                defaultRecipient = (.kizashiDefaultRecipient) config
               }
           kawaConfig =
             KawaConfig
-              { baseUrl = Config.kawaBaseUrl config,
-                sourceSegment = Config.kawaSourceSegment config
+              { baseUrl = (.kawaBaseUrl) config,
+                sourceSegment = (.kawaSourceSegment) config
               }
-          kanmonConfig = KanmonConfig {baseUrl = Config.kanmonBaseUrl config}
+          kanmonConfig = KanmonConfig {baseUrl = (.kanmonBaseUrl) config}
           danwaConfig =
             DanwaConfig
-              { baseUrl = Config.danwaBaseUrl config,
-                agentParticipant = Config.danwaAgentParticipant config
+              { baseUrl = (.danwaBaseUrl) config,
+                agentParticipant = (.danwaAgentParticipant) config
               }
           httpLimits =
             HttpLimits
-              { requestBytes = Config.httpRequestMaxBytes config,
-                responseBytes = Config.httpResponseMaxBytes config
+              { requestBytes = (.httpRequestMaxBytes) config,
+                responseBytes = (.httpResponseMaxBytes) config
               }
       sinkHttp <-
         newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
@@ -96,32 +96,32 @@ runWorkerCmd config = do
       actionAuthorizer <- buildActionAuthorizer logger config
       let policy =
             ApprovalPolicySnapshot
-              { requireFor = Config.approvalRequiredSinks config,
-                channel = Config.approvalChannel config,
-                deadline = Config.approvalDeadline config
+              { requireFor = (.approvalRequiredSinks) config,
+                channel = (.approvalChannel) config,
+                deadline = (.approvalDeadline) config
               }
           notifier = ApprovalNotification.approvalNotifier logger sinkHttp danwaConfig kizashiConfig
-          requiredKinds = sinkKindText <$> Set.toAscList (Config.approvalRequiredSinks config)
+          requiredKinds = sinkKindText <$> Set.toAscList ((.approvalRequiredSinks) config)
       Log.logInfo
         logger
         "worker.approval.policy"
         [ "mode" Aeson..= if null requiredKinds then ("auto_approve" :: Text) else "required",
           "required_sink_kinds" Aeson..= requiredKinds,
-          "channel" Aeson..= renderApprovalChannel (Config.approvalChannel config),
-          "deadline_seconds" Aeson..= (floor (nominalDiffTimeToSeconds (Config.approvalDeadline config)) :: Integer)
+          "channel" Aeson..= renderApprovalChannel ((.approvalChannel) config),
+          "deadline_seconds" Aeson..= (floor (nominalDiffTimeToSeconds ((.approvalDeadline) config)) :: Integer)
         ]
       Log.logInfo
         logger
         "worker.sink_credentials.configured"
-        [ "kawa" Aeson..= credentialPresence (Config.kawaToken config),
-          "kizashi" Aeson..= credentialPresence (Config.kizashiToken config),
-          "kanmon" Aeson..= credentialPresence (Config.kanmonToken config),
-          "danwa" Aeson..= credentialPresence (Config.danwaToken config)
+        [ "kawa" Aeson..= credentialPresence ((.kawaToken) config),
+          "kizashi" Aeson..= credentialPresence ((.kizashiToken) config),
+          "kanmon" Aeson..= credentialPresence ((.kanmonToken) config),
+          "danwa" Aeson..= credentialPresence ((.danwaToken) config)
         ]
       -- Resolved here, at the composition root, so an unparseable cron is
       -- reported (and under agents.strict refused) once at boot rather than
       -- dropped silently on every pass of the timer loop.
-      schedules <- schedulerSchedules logger (Config.agentsStrict config) agents
+      schedules <- schedulerSchedules logger ((.agentsStrict) config) agents
       -- Registered before the loops start, so a loop that never gets going is a
       -- stale heartbeat rather than an absent one the probe would skip.
       --
@@ -131,10 +131,10 @@ runWorkerCmd config = do
       registry <-
         newHeartbeatsWithStaleness
           ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop, TelemetryLoop]]
-              <> directoryLoopRegistration (Config.directorySettings config)
+              <> directoryLoopRegistration ((.directorySettings) config)
           )
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-        startProcessDirectory logger registry (Config.directorySettings config)
+        startProcessDirectory logger registry ((.directorySettings) config)
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
           env =
             WorkerEnv
@@ -144,19 +144,19 @@ runWorkerCmd config = do
                 agentReport = report,
                 behaviorEnv = behEnv,
                 actionAuthorizer,
-                runTimeout = Config.runTimeout config,
-                delegationBudget = Config.delegationBudget config,
-                approvalDeadline = Config.approvalDeadline config,
+                runTimeout = (.runTimeout) config,
+                delegationBudget = (.delegationBudget) config,
+                approvalDeadline = (.approvalDeadline) config,
                 approvalPolicy = policy,
                 approvalNotifier = notifier,
-                conversationIdleTimeout = Config.conversationIdleTimeout config,
-                catchUpPolicy = Config.schedulerCatchUp config,
+                conversationIdleTimeout = (.conversationIdleTimeout) config,
+                catchUpPolicy = (.schedulerCatchUp) config,
                 schedules,
                 kizashi = kizashiConfig,
                 kawa = kawaConfig,
                 kanmon = kanmonConfig,
                 danwa = danwaConfig,
-                rei = ReiConfig {baseUrl = Config.reiBaseUrl config},
+                rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
                 http = sinkHttp,
                 metrics = shikigamiMetrics,
                 logger,
@@ -167,11 +167,11 @@ runWorkerCmd config = do
                 heartbeats = registry,
                 directory,
                 directoryRefresher,
-                practiceReviewAttentionRecipients = Config.practiceReviewAttentionRecipients config
+                practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
               }
       serveProbesWith
         logger
-        (Config.httpHost config)
+        ((.httpHost) config)
         (Config.healthPortFor WorkerRole config)
         storePool
         registry
@@ -187,7 +187,7 @@ refuseInvalidSinkHttp logger failure = do
 
 buildActionAuthorizer :: Log.Logger -> AppConfig -> IO ActionAuthorizer
 buildActionAuthorizer logger config =
-  case Config.actionAuthorization config of
+  case (.actionAuthorization) config of
     Config.ActionAuthorizationDisabled -> pure denyAllActionAuthorizer
     Config.KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId} -> do
       kikanBase <- either (refuse "Kikan-En" kikanBaseUrl) pure (parseBaseUrl (Text.unpack kikanBaseUrl))
@@ -196,7 +196,7 @@ buildActionAuthorizer logger config =
       let verifier = newActionProofVerifier issuerPublicKeys acceptedSchemaHashes (const (pure False))
           client = newKikanEnClient (mkClientEnv manager kikanBase) verifier
           tokenSource = shomeiClientCredentialsToken (mkClientEnv manager shomeiBase) shomeiClientId (Config.revealSecretText shomeiClientSecret)
-      pure (newKikanActionAuthorizer logger callerId (Config.kawaSourceSegment config) client tokenSource)
+      pure (newKikanActionAuthorizer logger callerId ((.kawaSourceSegment) config) client tokenSource)
   where
     refuse serviceName baseUrl _ =
       Exit.die ("shikigami-worker: invalid " <> Text.unpack serviceName <> " authorization base URL: " <> Text.unpack baseUrl)

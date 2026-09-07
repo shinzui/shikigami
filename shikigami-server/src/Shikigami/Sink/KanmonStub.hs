@@ -95,16 +95,16 @@ acceptEffect :: IORef StubKanmonState -> Text -> EgressActionRequest -> IO (Text
 acceptEffect state channel EgressActionRequest {idempotencyKey} = do
   candidate <- toText <$> genKindID @"act"
   atomicModifyIORef' state \current ->
-    case idempotencyKey >>= (\key -> Map.lookup (channel, key) (idempotency current)) of
+    case idempotencyKey >>= (\key -> Map.lookup (channel, key) ((.idempotency) current)) of
       Just existing -> (current, (existing, True))
       Nothing ->
         let updatedIdempotency = case idempotencyKey of
-              Nothing -> idempotency current
-              Just key -> Map.insert (channel, key) candidate (idempotency current)
+              Nothing -> (.idempotency) current
+              Just key -> Map.insert (channel, key) candidate ((.idempotency) current)
             updated =
               current
                 { idempotency = updatedIdempotency,
-                  acceptedEffects = acceptedEffects current + 1
+                  acceptedEffects = (.acceptedEffects) current + 1
                 }
          in (updated, (candidate, False))
 

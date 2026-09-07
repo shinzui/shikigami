@@ -17,17 +17,17 @@ behaviorWitnesses = witness <$> behaviorRequirements
 witness :: BehaviorRequirement -> BehaviorWitness
 witness requirement =
   LiveWitness
-    { witnessKey = requirementKey requirement,
-      witnessHistory = historyFor (requirementSource requirement),
-      witnessCommand = commandFor (requirementCommandName requirement),
-      witnessExpected = expectationFor requirement
+    { key = requirement.key,
+      history = historyFor requirement.source,
+      command = commandFor requirement.commandName,
+      expected = expectationFor requirement
     }
 
 expectationFor :: BehaviorRequirement -> LiveExpectation
-expectationFor BehaviorRequirement {requirementKind, requirementCommandName, requirementSource} =
-  case requirementKind of
-    LiveTransition -> Emits (eventFor requirementCommandName :| [])
-    RequiredRejection -> Rejects (rejectionFor requirementSource)
+expectationFor BehaviorRequirement {kind, commandName, source} =
+  case kind of
+    LiveTransition -> Emits (eventFor commandName :| [])
+    RequiredRejection -> Rejects (rejectionFor source)
     ReplayTransition -> error "RunEvidence has no replay-only behavior requirement"
 
 rejectionFor :: RunEvidenceVertex -> RejectionClass

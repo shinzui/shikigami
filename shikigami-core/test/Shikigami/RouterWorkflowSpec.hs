@@ -149,24 +149,24 @@ matchedReplayProof =
                   )
               )
           job = routerJob "router:matched-replay"
-          parentWorkflowId = WorkflowId (idempotencyKey job)
+          parentWorkflowId = WorkflowId ((.idempotencyKey) job)
           firstChildId = delegatedWorkflowId parentWorkflowId "first" "architecture-practice-first"
           secondChildId = delegatedWorkflowId parentWorkflowId "second" "architecture-practice-second"
       originalProbe <- newProbe catalog (Aeson.toJSON decision)
-      let deps = routerDeps appEnv behaviorEnv (runtime originalProbe) [routerDecl, successSpecialist "first", successSpecialist "second"]
+      let deps = routerDeps appEnv behaviorEnv ((.runtime) originalProbe) [routerDecl, successSpecialist "first", successSpecialist "second"]
 
       parked <- AgentWorkflow.runAgentRunWorkflow deps job
       assertEqual "the parent waits after spawning the complete accepted batch" (Right Suspended) parked
-      assertEqual "catalog resolver runs once before the first journal append" 1 =<< readIORef (resolverCalls originalProbe)
-      assertEqual "evaluator runs once before the second journal append" 1 =<< readIORef (evaluatorCalls originalProbe)
-      initialChildren <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey job) "shikigami.agent-run")
+      assertEqual "catalog resolver runs once before the first journal append" 1 =<< readIORef ((.resolverCalls) originalProbe)
+      assertEqual "evaluator runs once before the second journal append" 1 =<< readIORef ((.evaluatorCalls) originalProbe)
+      initialChildren <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
       assertEqual "exactly two child links are registered" (Right 2) (length <$> initialChildren)
 
       firstValue <- runSuccessfulChild appEnv deps firstChildId
       secondValue <- runSuccessfulChild appEnv deps secondChildId
 
       changedProbe <- newProbe changedCatalog (String "changed evaluator must not run")
-      let changedDeps = (routerDeps appEnv behaviorEnv (runtime changedProbe) [routerDecl, successSpecialist "first", successSpecialist "second"])
+      let changedDeps = (routerDeps appEnv behaviorEnv ((.runtime) changedProbe) [routerDecl, successSpecialist "first", successSpecialist "second"])
       resumed <- AgentWorkflow.runAgentRunWorkflow changedDeps job
       parentOutput <- case resumed of
         Right (Completed (Right AgentRunResult {behaviorOutput})) -> pure behaviorOutput
@@ -175,14 +175,14 @@ matchedReplayProof =
         "parent preserves selection order and the recorded decision"
         (object ["decision" .= decision, "results" .= [firstValue, secondValue]])
         parentOutput
-      assertEqual "changed catalog resolver is skipped on replay" 0 =<< readIORef (resolverCalls changedProbe)
-      assertEqual "changed evaluator is skipped on replay" 0 =<< readIORef (evaluatorCalls changedProbe)
-      assertEqual "the original resolver still ran exactly once" 1 =<< readIORef (resolverCalls originalProbe)
-      assertEqual "the original evaluator still ran exactly once" 1 =<< readIORef (evaluatorCalls originalProbe)
+      assertEqual "changed catalog resolver is skipped on replay" 0 =<< readIORef ((.resolverCalls) changedProbe)
+      assertEqual "changed evaluator is skipped on replay" 0 =<< readIORef ((.evaluatorCalls) changedProbe)
+      assertEqual "the original resolver still ran exactly once" 1 =<< readIORef ((.resolverCalls) originalProbe)
+      assertEqual "the original evaluator still ran exactly once" 1 =<< readIORef ((.evaluatorCalls) originalProbe)
 
       replayed <- AgentWorkflow.runAgentRunWorkflow changedDeps job
       assertEqual "completed replay returns the same parent value" resumed replayed
-      replayChildren <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey job) "shikigami.agent-run")
+      replayChildren <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
       assertEqual "replay creates no duplicate child link" (length <$> initialChildren) (length <$> replayChildren)
 
       stepIndex <- runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName parentWorkflowId 0)
@@ -221,7 +221,7 @@ nonExecutableOutcomesSpawnNothing = do
     runCase appEnv behaviorEnv (label, decision) = do
       probe <- newProbe catalog (Aeson.toJSON decision)
       let job = routerJob ("router:" <> label)
-          deps = routerDeps appEnv behaviorEnv (runtime probe) [routerDecl, successSpecialist "first"]
+          deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, successSpecialist "first"]
       outcome <- AgentWorkflow.runAgentRunWorkflow deps job
       case outcome of
         Right (Completed (Right AgentRunResult {behaviorOutput})) ->
@@ -230,7 +230,7 @@ nonExecutableOutcomesSpawnNothing = do
             (object ["decision" .= decision, "results" .= ([] :: [Value])])
             behaviorOutput
         other -> assertFailure (Text.unpack label <> " should complete, got " <> show other)
-      children <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey job) "shikigami.agent-run")
+      children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
       assertEqual (Text.unpack label <> " spawns zero children") (Right 0) (length <$> children)
 
 exhaustedBatchSpawnsNothing :: IO ()
@@ -241,10 +241,10 @@ exhaustedBatchSpawnsNothing = do
     let job = routerJob "router:budget-exhausted"
         zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
         constrainedRouter = routerDecl {delegationBudget = Just zeroBudget}
-        deps = routerDeps appEnv behaviorEnv (runtime probe) [constrainedRouter, successSpecialist "first"]
+        deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [constrainedRouter, successSpecialist "first"]
     refused <- try @DelegationError (AgentWorkflow.runAgentRunWorkflow deps job)
     assertEqual "budget exhaustion remains an operational failure" (Left DelegationBudgetExhausted) refused
-    children <- runAppIO appEnv (lookupChildrenOfParent (idempotencyKey job) "shikigami.agent-run")
+    children <- runAppIO appEnv (lookupChildrenOfParent ((.idempotencyKey) job) "shikigami.agent-run")
     assertEqual "no child is registered after rejected batch reservation" (Right 0) (length <$> children)
 
 childFailureEscapes :: IO ()
@@ -253,10 +253,10 @@ childFailureEscapes = do
   withDatabaseTracer tracer \appEnv behaviorEnv -> do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
-        parentWorkflowId = WorkflowId (idempotencyKey job)
+        parentWorkflowId = WorkflowId ((.idempotencyKey) job)
         childWorkflowId = delegatedWorkflowId parentWorkflowId "failing" "architecture-practice-failing"
     probe <- newProbe catalog (Aeson.toJSON decision)
-    let deps = routerDeps appEnv behaviorEnv (runtime probe) [routerDecl, failingSpecialist]
+    let deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, failingSpecialist]
     parked <- AgentWorkflow.runAgentRunWorkflow deps job
     assertEqual "parent parks on the failing child" (Right Suspended) parked
     child <- runAppIO appEnv (runChildWorkflow defaultWorkflowRunOptions AgentWorkflow.agentRunWorkflowName childWorkflowId (AgentWorkflow.agentRunWorkflow deps Nothing))
@@ -301,7 +301,7 @@ runDirect appEnv behaviorEnv workflowId probe =
               { Routing.agent = routerDecl,
                 Routing.sessionId = "direct-router-session",
                 Routing.behaviorEnv = behaviorEnv,
-                Routing.runtime = runtime probe
+                Routing.runtime = (.runtime) probe
               }
             (Routing.routeWithCatalog Routing.ArchitecturePractice secretPayload)
         )

@@ -52,7 +52,7 @@ import Shikigami.Agent.Loader
   )
 import Shikigami.Agent.Principal (AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Agent.Run (behaviorKindText)
-import Shikigami.App.Config (AppConfig, agentsDirectory, directorySettings, revealSecretText)
+import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), Lifecycle (..), PrincipalRecord (..))
 import Shikigami.Directory qualified as Directory
@@ -131,7 +131,7 @@ buildAgentInventory configured directoryHandle AgentLoadReport {entries} = do
   principals <- Directory.directoryPrincipals directoryHandle
   let joinedIds =
         Set.fromList
-          [ Directory.principalId joined
+          [ (.principalId) joined
           | AgentInventoryEntry {principal = Just joined, declaration = Just _} <- manifestEntries
           ]
       principalOnly =
@@ -143,7 +143,7 @@ buildAgentInventory configured directoryHandle AgentLoadReport {entries} = do
               directoryConfigured = configured
             }
         | directoryPrincipal <- principals,
-          Directory.principalId directoryPrincipal `Set.notMember` joinedIds
+          (.principalId) directoryPrincipal `Set.notMember` joinedIds
         ]
   pure (manifestEntries <> principalOnly)
   where
@@ -175,7 +175,7 @@ reconcileAgentInventory pool inventory =
   foldM reconcileOne (Right []) inventory
   where
     joinedKeys =
-      [ (declName decl, Directory.principalId joined)
+      [ (declName decl, (.principalId) joined)
       | AgentInventoryEntry {declaration = Just decl, principal = Just joined} <- inventory
       ]
     nameCounts = Map.fromListWith (+) [(agentName, 1 :: Int) | (agentName, _) <- joinedKeys]
@@ -188,7 +188,7 @@ reconcileAgentInventory pool inventory =
 
     reconcileEntry AgentInventoryEntry {declaration = Just decl, principal = Just joined} = do
       let agentName = declName decl
-          joinedId = Directory.principalId joined
+          joinedId = (.principalId) joined
           nameCount = Map.findWithDefault 0 agentName nameCounts
           principalCount = Map.findWithDefault 0 joinedId principalCounts
       if nameCount == 1 && principalCount == 1
@@ -244,7 +244,7 @@ reconcileAgentInventory pool inventory =
         ( Right
             AgentSyncEntry
               { name = principalHandle directoryPrincipal,
-                principalId = Just (Directory.principalId directoryPrincipal),
+                principalId = Just ((.principalId) directoryPrincipal),
                 outcome = MissingManifest
               }
         )
@@ -268,7 +268,7 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
     joined =
       [ (declName decl, rawPrincipal)
       | AgentInventoryEntry {declaration = Just decl, principal = Just directoryPrincipal} <- inventory,
-        let rawPrincipal = Directory.principalId directoryPrincipal
+        let rawPrincipal = (.principalId) directoryPrincipal
       ]
     nameCounts = Map.fromListWith (+) [(agentName, 1 :: Int) | (agentName, _) <- joined]
     principalCounts = Map.fromListWith (+) [(rawPrincipal, 1 :: Int) | (_, rawPrincipal) <- joined]
@@ -418,8 +418,8 @@ discoverLegacyAgentScopes store =
 -- closed, consistently with long-running roles.
 runAgentsList :: Bool -> AppConfig -> IO ()
 runAgentsList asJson config = do
-  report <- loadAgentsReport (agentsDirectory config)
-  (configured, directoryHandle) <- loadDirectory "agents list" (directorySettings config)
+  report <- loadAgentsReport ((.agentsDirectory) config)
+  (configured, directoryHandle) <- loadDirectory "agents list" ((.directorySettings) config)
   inventory <- buildAgentInventory configured directoryHandle report
   if asJson
     then LazyChar8.putStrLn (Aeson.encode (map inventoryJson inventory))
@@ -434,13 +434,13 @@ runAgentsList asJson config = do
 -- already asserted and this command deliberately refused to overwrite it.
 runAgentsSync :: Bool -> [Text] -> AppConfig -> IO ()
 runAgentsSync asJson explicitAliases config = do
-  report <- loadAgentsReport (agentsDirectory config)
+  report <- loadAgentsReport ((.agentsDirectory) config)
   withKirokuStore config "agents sync" \store -> do
     let storePool = pool store
-    recordLoadStates storePool (agentsDirectory config) report >>= \case
+    recordLoadStates storePool ((.agentsDirectory) config) report >>= \case
       Left err -> die "agents sync" err
       Right () -> pure ()
-    (configured, directoryHandle) <- loadDirectory "agents sync" (directorySettings config)
+    (configured, directoryHandle) <- loadDirectory "agents sync" ((.directorySettings) config)
     inventory <- buildAgentInventory configured directoryHandle report
     legacyScopes <- discoverLegacyAgentScopes store >>= either (die "agents sync") pure
     grantEvidence <- listGrantIdentityEvidence storePool >>= either (die "agents sync") pure
@@ -502,13 +502,13 @@ inventoryHeader = ["NAME", "BEHAVIOR", "TRIGGER", "ENABLED", "MANIFEST", "PRINCI
 inventoryRow :: AgentInventoryEntry -> [Text]
 inventoryRow AgentInventoryEntry {declaration = Just decl, principal, directoryConfigured} =
   [ declName decl,
-    behaviorKindText (behavior decl),
-    triggerSummary (trigger decl),
-    if enabled decl then "yes" else "no",
+    behaviorKindText ((.behavior) decl),
+    triggerSummary ((.trigger) decl),
+    if (.enabled) decl then "yes" else "no",
     "loaded",
-    maybe "NO PRINCIPAL" Directory.principalId principal,
+    maybe "NO PRINCIPAL" (.principalId) principal,
     case principal of
-      Just joined -> renderLifecycle (Directory.lifecycle joined)
+      Just joined -> renderLifecycle ((.lifecycle) joined)
       Nothing
         | directoryConfigured -> "-"
         | otherwise -> "DISABLED"
@@ -521,8 +521,8 @@ inventoryRow AgentInventoryEntry {principal = Just directoryPrincipal} =
     "-",
     "-",
     "NO MANIFEST",
-    Directory.principalId directoryPrincipal,
-    renderLifecycle (Directory.lifecycle directoryPrincipal)
+    (.principalId) directoryPrincipal,
+    renderLifecycle ((.lifecycle) directoryPrincipal)
   ]
 inventoryRow _ = ["INVALID", "-", "-", "-", "-", "-", "-"]
 
@@ -532,13 +532,13 @@ inventoryJson AgentInventoryEntry {manifestPath = Just path, declaration = Just 
     [ "state" .= ("loaded" :: Text),
       "path" .= path,
       "name" .= declName decl,
-      "behavior" .= behaviorKindText (behavior decl),
-      "trigger" .= triggerSummary (trigger decl),
-      "enabled" .= enabled decl,
-      "principal_id" .= fmap Directory.principalId principal,
+      "behavior" .= behaviorKindText ((.behavior) decl),
+      "trigger" .= triggerSummary ((.trigger) decl),
+      "enabled" .= (.enabled) decl,
+      "principal_id" .= fmap (.principalId) principal,
       "lifecycle"
         .= case principal of
-          Just joined -> Just (renderLifecycle (Directory.lifecycle joined))
+          Just joined -> Just (renderLifecycle ((.lifecycle) joined))
           Nothing
             | directoryConfigured -> Nothing
             | otherwise -> Just ("disabled" :: Text)
@@ -553,8 +553,8 @@ inventoryJson AgentInventoryEntry {principal = Just directoryPrincipal} =
   object
     [ "state" .= ("no-manifest" :: Text),
       "name" .= principalHandle directoryPrincipal,
-      "principal_id" .= Directory.principalId directoryPrincipal,
-      "lifecycle" .= renderLifecycle (Directory.lifecycle directoryPrincipal)
+      "principal_id" .= (.principalId) directoryPrincipal,
+      "lifecycle" .= renderLifecycle ((.lifecycle) directoryPrincipal)
     ]
 inventoryJson _ = object ["state" .= ("invalid" :: Text)]
 

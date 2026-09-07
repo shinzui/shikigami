@@ -192,7 +192,7 @@ reviewTrigger validatedTrigger = do
   recalled <- recallPracticeReviews recallContext
   evidence <- acquirePracticeReviewEvidence validatedTrigger adoption (recalledResolutions recalled)
   validatedVerdict <-
-    case completeness evidence of
+    case (.completeness) evidence of
       Complete -> do
         rawProposal <- evaluatePracticeReview evidence recalled
         rawVerdict <- case Aeson.fromJSON rawProposal of
@@ -389,7 +389,7 @@ provisionalReview wanted PracticeReviewChain {entries} =
     extract _ = Nothing
 
 citations :: [EvidenceSource] -> [EvidenceItem]
-citations = fmap citation
+citations = fmap (.citation)
 
 allCitations :: EvidenceBundle -> [EvidenceItem]
 allCitations EvidenceBundle {target, references, upstream} = citations (target <> references <> upstream)

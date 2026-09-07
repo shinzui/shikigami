@@ -46,19 +46,19 @@ runSchedulerCmd config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
   StoreConnection.withStore settings \st -> withRunTelemetry "shikigami.scheduler" \tr keiroMetrics _ -> do
-    let manifestDirectory = Config.agentsDirectory config
+    let manifestDirectory = (.agentsDirectory) config
         storePool = StoreConnection.pool st
     report <-
       loadAgentsLoud
         logger
         manifestDirectory
-        (Config.agentsStrict config)
+        ((.agentsStrict) config)
         (persistAgentLoadReport logger storePool manifestDirectory)
     agents <- enabledAgentsFromReport logger report
     -- The same resolution the worker's timer loop uses, so both processes
     -- report a bad cron the same way instead of one raising an ioError and the
     -- other dropping the agent in silence.
-    scheduleMap <- schedulerSchedules logger (Config.agentsStrict config) agents
+    scheduleMap <- schedulerSchedules logger ((.agentsStrict) config) agents
     let schedules = Map.toList scheduleMap
     Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
     -- The other startup path that used to rely on the per-send createQueue
@@ -74,10 +74,10 @@ runSchedulerCmd config = do
     registry <-
       newHeartbeatsWithStaleness
         ( (SchedulerLoop, loopStaleAfter SchedulerLoop)
-            : directoryLoopRegistration (Config.directorySettings config)
+            : directoryLoopRegistration ((.directorySettings) config)
         )
     DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
-      startProcessDirectory logger registry (Config.directorySettings config)
+      startProcessDirectory logger registry ((.directorySettings) config)
     let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
         env =
           SchedulerEnv
@@ -85,7 +85,7 @@ runSchedulerCmd config = do
               schedules = scheduleMap,
               principalIds = principalIdsByAgent agents,
               directory,
-              catchUpPolicy = Config.schedulerCatchUp config,
+              catchUpPolicy = (.schedulerCatchUp) config,
               logger
             }
     armAll logger appEnv schedules
@@ -102,7 +102,7 @@ runSchedulerCmd config = do
         directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
     serveProbesWith
       logger
-      (Config.httpHost config)
+      ((.httpHost) config)
       (Config.healthPortFor SchedulerRole config)
       storePool
       registry

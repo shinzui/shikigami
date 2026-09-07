@@ -1314,7 +1314,7 @@ healthPortFor :: Role -> AppConfig -> Maybe Port
 healthPortFor role config =
   case defaultHealthPort role of
     Nothing -> Nothing
-    roleDefault -> maybe roleDefault Just (healthPort config)
+    roleDefault -> maybe roleDefault Just ((.healthPort) config)
 
 -- | Keys a role cannot start without.
 --
@@ -1354,5 +1354,5 @@ missingRequirements role config =
   ]
   where
     satisfied key
-      | key == databaseConnectionStringKey = maybe False (not . Text.null . revealSecretText) (databaseUrl config)
+      | key == databaseConnectionStringKey = maybe False (not . Text.null . revealSecretText) ((.databaseUrl) config)
       | otherwise = True

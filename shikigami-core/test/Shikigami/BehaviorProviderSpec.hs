@@ -55,11 +55,11 @@ import Data.Vector qualified as V
 import Settei.Env (envSnapshot, environmentSource)
 import Settei.Optparse (CliOverride, DiagnosticMode (NoDiagnostic), cliOverride)
 import Shikigami.App.Config
-  ( ProviderSelection (..),
+  ( AppConfig (behaviorProvider),
+    ProviderSelection (..),
     Role (RunBehaviorRole),
     anthropicApiKeyKey,
     behaviorModelKey,
-    behaviorProvider,
     behaviorProviderKey,
     environmentBindings,
   )
@@ -139,11 +139,11 @@ credentialTests =
 -- constructor applied by hand would prove nothing about the declaration.
 selectionFor :: [CliOverride] -> IO ProviderSelection
 selectionFor overrides =
-  case resolved run of
-    Just config -> pure (behaviorProvider config)
+  case (.resolved) run of
+    Just config -> pure ((.behaviorProvider) config)
     Nothing ->
       assertFailure
-        ("expected a resolved configuration, got exit " <> show (exitCode run) <> ":\n" <> Text.unpack (standardError run))
+        ("expected a resolved configuration, got exit " <> show ((.exitCode) run) <> ":\n" <> Text.unpack ((.standardError) run))
   where
     run =
       appConfigRun

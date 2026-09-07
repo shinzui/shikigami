@@ -27,7 +27,7 @@ tests =
           report <- loadAgentsReport "../agents"
           expectRight "recordLoadStates" =<< recordLoadStates pool "../agents" report
           rows <- queryLoadStates pool
-          length rows @?= length (entries report)
+          length rows @?= length ((.entries) report)
           case find (Text.isSuffixOf "/broken.dhall" . manifestPathOf) rows of
             Nothing -> assertFailure "broken.dhall has no durable load-state row"
             Just (_, agent, status, enabled, problem) -> do
