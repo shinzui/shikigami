@@ -114,3 +114,10 @@ fact.
 * `mori://shinzui/baikai/packages/baikai` — encode-only call-evidence vocabulary.
 * `mori://shinzui/keiro/packages/keiro` — transactional command runner and
   checked event stream.
+
+
+## Implementation evidence — 2026-09-07
+
+The catalog-aware runCommandWithCatalogProjections now replaces runCommandWithSqlEvents at this boundary. A validated generated catalog fences both the atomic lifecycle/payload write and generated read-model query. Rich evidence remains LiveOnly with Preserve targets: rebuild preview is non-destructive and cannot reconstruct missing rich payloads. SQL-fault rollback, fences, restart convergence and read-only audit are tested. Review metadata is supplied by the sanctioned caller; ordinary agent execution does not fabricate a review binding.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

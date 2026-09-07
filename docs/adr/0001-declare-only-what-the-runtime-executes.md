@@ -110,3 +110,10 @@ its consolidation is ordinary Haskell work instead.
   standard for what belongs in a specification.
 * `mori://shinzui/keiro-runtime-patterns/docs/keiro-mapped-consumer-surfaces` —
   why a green harness is not evidence that an old queued payload is compatible.
+
+
+## Implementation evidence — 2026-09-07
+
+The run_jobs workqueue now supplies the producer/consumer envelope, retry policy and provisioning. RunEvidence has executable catalog targets, guarded projection writes and a generated read-model contract. The five-member specification has 56 behavior requirements (50 verified, six honestly unverified with passing witnesses), not zero. External Danwa JSON and HTTP sink publication remain hand-owned for the semantic reasons above.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

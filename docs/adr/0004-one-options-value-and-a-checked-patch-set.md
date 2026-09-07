@@ -163,3 +163,10 @@ served by code that no longer contains the new branch.
   stable `patch`."
 * `mori://shinzui/keiro-runtime-patterns/docs/keiro-evolution-and-rollout` — the
   gate ladder and the durable-value rollout ordering rules.
+
+
+## Implementation evidence — 2026-09-07
+
+The options owner and generated patch-set union remain authoritative. The active application patch set is empty after the verified pre-v1 reset. The production registry includes agent-run, approval and conversation; resume limits, timer routing and terminal retention share the owners described in ADR 0038. The deploy-simulation patch test remains in the PostgreSQL suite.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

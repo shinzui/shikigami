@@ -142,3 +142,10 @@ document that produced the wrong expectation.
 * `mori://shinzui/keiro-runtime-patterns/docs/keiro-evolution-and-rollout` — the
   fleet's gate ladder: "each gate answers a question the earlier ones cannot, so
   none of them substitutes for another."
+
+
+## Implementation evidence — 2026-09-07
+
+The ten unused application patches and their false branches were retired together under ADRs 0027 and 0037, with exact breaking diagnostics retained in Plan 65. The differ remains strict for subsequent edits; the pre-v1 reset is not an additive-change exemption.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

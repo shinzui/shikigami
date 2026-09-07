@@ -1,0 +1,10 @@
+shikigami postgres
+  AgentWorkflow
+    Conversation
+      rotates onto a fresh generation after every turn:                      OK (1.03s)
+    Approval
+      generated job, restart, approval, evidence and delivery converge:      OK (0.66s)
+  SinkDelivery
+    remote acceptance survives a receipt commit gap with the same dedup key: OK (0.44s)
+
+All 3 tests passed (2.13s)

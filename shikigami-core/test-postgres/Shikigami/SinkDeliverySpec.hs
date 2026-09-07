@@ -61,6 +61,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -97,6 +98,7 @@ tests databaseFixture =
       testCase "C13 outage at enqueue is distinct and creates no outbox" (actionUnavailableAtEnqueue databaseFixture),
       testCase "C13 is checked again at publish and revocation prevents HTTP" (actionRevokedBeforePublish databaseFixture),
       testCase "re-publish of a delivered message does not re-POST kizashi" (sendGuard databaseFixture),
+      testCase "remote acceptance survives a receipt commit gap with the same dedup key" (receiptCommitGap databaseFixture),
       testCase "terminal reconciliation materializes an unknown receipt" (terminalReconciliation databaseFixture),
       testCase "danwa post-failure retry reuses the started conversation" (danwaReuse databaseFixture),
       testCase "failing sink 0 does not block sink 1 in one publish pass" (orderingIsolation databaseFixture)
@@ -782,3 +784,30 @@ rowEvent Outbox.OutboxRow {Outbox.event = event} = event
 
 rowOutboxId :: Outbox.OutboxRow -> Outbox.OutboxId
 rowOutboxId Outbox.OutboxRow {Outbox.outboxId = outboxId} = outboxId
+
+-- SQL faults affect only this cloned service table. The remote doorway remains
+-- available and records effects by its real source/source_event_id contract.
+receiptCommitGap :: DatabaseFixture -> IO ()
+receiptCommitGap databaseFixture = do
+  remote <- newIORef Map.empty
+  posts <- newIORef (0 :: Int)
+  testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
+    withFixture databaseFixture "receipt-gap" [KawaDigest {subjectType = "agent", verb = "completed"}] unreachableKizashi unreachableDanwa \base appEnv pool runJob -> do
+      let deps = base {AgentWorkflow.kawa = KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}}
+      [row] <- runWorkflowAndRows deps appEnv runJob
+      expectRight "inject receipt commit failure" =<< Pool.use pool (Session.statement () (preparable "ALTER TABLE shikigami.sink_deliveries ADD CONSTRAINT receipt_gap CHECK (status <> 'delivered') NOT VALID" Encoders.noParams Decoders.noResult))
+      assertEqual "acknowledged downstream acceptance is terminal" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+      uncertain <- lookupReceipt pool row
+      assertEqual "uncommitted delivery proof is explicit" Delivery.Unknown uncertain.status
+      original <- readIORef remote
+      assertEqual "one effect accepted before receipt commit" 1 (Map.size original)
+      expectRight "remove injected fault" =<< Pool.use pool (Session.statement () (preparable "ALTER TABLE shikigami.sink_deliveries DROP CONSTRAINT receipt_gap" Encoders.noParams Decoders.noResult))
+      -- Simulate redelivery after the acknowledgement/finalization gap. This is
+      -- a second HTTP request, not an exactly-once transport claim.
+      assertEqual "redelivery converges" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+      assertEqual "retry reuses the remote source event key" original =<< readIORef remote
+      assertEqual "two HTTP attempts reached the remote deduplicator" 2 =<< readIORef posts
+      delivered <- lookupReceipt pool row
+      assertEqual "receipt eventually proves delivery" Delivery.Delivered delivered.status
+      assertEqual "proved delivery suppresses subsequent sends" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+      assertEqual "no third HTTP attempt" 2 =<< readIORef posts

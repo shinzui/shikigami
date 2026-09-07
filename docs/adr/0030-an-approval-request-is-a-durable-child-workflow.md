@@ -135,3 +135,10 @@ decision deliberately introduces a reviewed mapping.
   — authenticated notification clients and HTTP failure classes.
 * `mori://shinzui/keiro/packages/keiro` — child workflow, awakeable, timer, patch, and resume
   contracts.
+
+
+## Implementation evidence — 2026-09-07
+
+Plan 65 removed shikigami-approval-workflow-v1 and its unused false branch under the verified ADR 0027 exception. Every current agent run journals its policy and uses the dedicated approval child. Public review identity remains distinct from the random journaled one-shot token. Restart and duplicate-resolution acceptance use the token actually rendered by the Danwa notifier.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

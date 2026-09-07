@@ -1,4 +1,4 @@
-module Shikigami.RunEvidenceSpec (tests) where
+module Shikigami.RunEvidenceSpec (tests, completeScenarioEvidence) where
 
 import Baikai.Context (emptyContext)
 import Baikai.Evidence qualified as Baikai
@@ -1035,3 +1035,24 @@ evidenceEventCount =
       (StoreTypes.streamNameInCategory (StoreTypes.CategoryName "runEvidence") (runEvidenceIdText sampleAggregateId))
       (StoreTypes.StreamVersion 0)
       100
+
+-- | The scenario caller supplies review metadata; ordinary agent runs do not
+-- invent review bindings. Exercise the real persistence owner under the job ID.
+completeScenarioEvidence :: Text -> RunCorrelationId -> RunKey -> IO ()
+completeScenarioEvidence connectionString correlation key =
+  withEvidenceRuntime connectionString \store -> do
+    let requested = sampleEvidence & #runId .~ correlation & #idempotencyKey .~ key
+    profiled <- liftIO . assertPersisted =<< persistEvidenceTransition store requested ProfileResolved Nothing
+    running <- liftIO . assertPersisted =<< persistEvidenceTransition store profiled Running Nothing
+    closed <- either (liftIO . assertFailure . show) pure (prepareEvidenceClosure running BehaviorSucceeded [])
+    let rollUp = evaluateCompliance baselineProfile closed
+    liftIO (assertEqual "scenario compliance evaluated" True (rollSanctioned rollUp))
+    sealed <- liftIO . assertPersisted =<< persistEvidenceTransition store closed EvidenceSealed (Just rollUp)
+    _ <- liftIO . assertPersisted =<< persistEvidenceTransition store closed EvidenceSealed (Just rollUp)
+    stored <- liftIO (findRunEvidence store correlation)
+    case stored of
+      Just row -> liftIO do
+        assertEqual "scenario evidence converges after repeated commit" EvidenceSealed row.status
+        assertEqual "caller-owned evidence identity survives" sealed.runEvidenceId row.runEvidenceId
+        assertEqual "no fabricated model calls" [] row.calls
+      Nothing -> liftIO (assertFailure "scenario evidence missing")

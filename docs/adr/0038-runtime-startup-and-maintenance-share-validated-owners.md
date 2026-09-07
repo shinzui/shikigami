@@ -61,7 +61,10 @@ a shorter horizon would unnecessarily narrow ordinary retry and investigation wi
 
 Runtime roles link the migration library and refuse incompatible databases early.
 Operators have a finite, explicit resume command and a documented retention horizon.
-Application evidence retention remains separate. Future changes to the horizon must
+Application evidence retention remains separate. A crash before the first committed
+journal entry has no discoverable workflow instance: queue redelivery owns that
+retry. Failed-workflow resurrection applies once ingestion has committed; the
+recovery fixture pins that distinction. Future changes to the horizon must
 consider delayed queue redelivery and operator recovery, not just storage usage.
 
 ## References

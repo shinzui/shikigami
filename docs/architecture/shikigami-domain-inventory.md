@@ -1,7 +1,7 @@
 # Shikigami domain inventory
 
 This census was refreshed on 2026-09-07 for [plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md), starting at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
-It describes executed ownership and explicitly identifies pending adoption. A declaration
+It describes executed ownership and the reasons other surfaces remain hand-owned. A declaration
 counts only when its generated contract is used by production code (ADR 0001).
 The workspace currently contains five Language 5 members: agent-run, approval,
 conversation, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
@@ -10,7 +10,7 @@ conversation, RunEvidence and run-jobs. The evidence member also declares its ca
 
 Paths in this section are relative to `shikigami-core/src/`.
 
-| Surface | Declaration and execution owner | Observable proof / remaining work |
+| Surface | Declaration and execution owner | Observable proof |
 |---|---|---|
 | `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. The reviewed pre-v1 reset retired all historical application patch branches. |
 | `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
@@ -88,9 +88,10 @@ workqueue worker-binding clause: the Haskell worker registration is the executab
 | Sink grants | `shikigami-core/src/Shikigami/Sink/Permission.hs`, `Sink/GrantStore.hs` | Authorization policy tables are not an event-sourced aggregate or an unused generated enum. Permission/grant tests own the boundary. |
 
 The outbox publisher already uses Keiro's claim-batch callback and exports rejected counts.
-Plan 65 audits actual permanent/transient outcomes and terminal claim races before replacing
-any already-correct behavior. A remote acceptance followed by journal failure must reuse the
-same remote key; the journal alone cannot promise exactly-once HTTP delivery.
+The receipt-gap test injects a failed delivered-receipt commit after remote acceptance,
+then redelivers through the real publisher. Two HTTP requests carry one remote key and
+converge on one downstream activity and one delivered receipt. Permanent refusal is terminal
+and transient failures remain retryable; journals alone cannot promise exactly-once HTTP.
 
 ## Timers, startup, operations and tests
 
@@ -144,3 +145,15 @@ example config describe the development stack. Plan 65 records the owner's 2026-
 unused-service statement. Repository configuration alone cannot prove an empty remote
 population: immediately before any workflow/wire reset, record all four pre-v1 facts in
 that plan and preserve compatibility if contrary evidence appears.
+
+
+## Assembled scenario acceptance
+
+AgentWorkflowSpec connects the generated queue job to the real workflow, Danwa
+approval notification, recreated behavior runtime, opaque-token resolution,
+approval-child resumption, HTTP sink publication and receipt guard. Redelivered
+jobs and tokens retain one intent and one remote effect. The scenario caller
+explicitly supplies review metadata to the real evidence persistence owner under
+the same workflow correlation ID; ordinary runs do not invent review bindings.
+Conversation qualification reads the tokens actually published in successive
+generation journals: an old token is refused and the live token accepts input.

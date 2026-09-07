@@ -107,3 +107,10 @@ new, separately approved migration strategy covers real durable state.
 * [`docs/workflow-versioning.md`](../workflow-versioning.md) — the normative
   replay and release rules.
 
+
+
+## Implementation evidence — 2026-09-07
+
+Plan 65 rechecked the four unused-state facts before its workflow and queue/identity resets. Commits f1118af and f43b0ca retain exact accepted diagnostics under docs/evidence/plan-65. No developer database was reset. Subsequent ordinary gates pass against the new committed baseline, with no weakened flags.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).

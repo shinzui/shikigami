@@ -107,3 +107,16 @@ deployment. Shared/external contracts and authorization constraints remain intac
 * `mori://shinzui/keiro-runtime-patterns/docs/keiro-runtime-assembly`
 * `mori://shinzui/keiro-runtime-patterns/docs/architecture-test-layout`
 * `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`
+
+
+## Implementation evidence — 2026-09-07
+
+The released cohort and idiomatic-v2 edition are implemented, including the generated queue, guarded evidence catalog, isolated test fixture and runtime owners. Scalar adapters preserve nominal identity through execution without selector compatibility aliases. ADR 0038 records startup and maintenance decisions; Plan 65 carries the exact reset reports and qualification results.
+
+See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).
+
+The nominal scalar migration preserves the initial unbound conversation seed's
+bytes. Its complete decoder allows an empty agent name only with unresolved
+identity, zero turns and absent messages. Ingress and carried-generation names
+remain strict. Treating every internal seed as an ingress value would make
+existing generation-zero journals fail to decode.

@@ -153,10 +153,34 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   All 195 current PostgreSQL cases have passed; final full-suite repetition is M7.
 - [x] (2026-09-07) Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
   wiring against the released public APIs.
-- [ ] Milestone 7: run scenario acceptance, deterministic regeneration, full serial suites,
-  evolution checks, documentation reconciliation, and ADR distillation.
+- [x] (2026-09-07) Ordinary gate against scalar checkpoint a083d88 passes.
+  The disposable incompatible-body probe fails exactly as required.
+- [x] (2026-09-07) All three assembled acceptance cases pass: generated queue
+  through restart/approval/evidence/delivery, generation-token rotation and sixth
+  turn execution, and two HTTP attempts sharing one remote key across a failed
+  receipt commit. ADRs 0001/0004/0010/0012/0027/0030/0037 carry implementation
+  evidence; cohort, runtime and inventory prose describes the current baseline.
+- [x] (2026-09-07) Full all-component build passes. All 14 serial suites pass:
+  797 Tasty tests, 13 domain assertions, 37 conformance checks, plus both custom
+  Kikan-En dependency drivers. The built bounded-resume CLI previews its budget
+  without database access. Results are retained under docs/evidence/plan-65.
+- [ ] Milestone 7 remaining: commit final qualification and run the ordinary
+  unmodified gate against that exact committed revision.
 
 ## Surprises & Discoveries
+
+- The assembled scenario must supply explicit caller-owned review metadata.
+  Ordinary Agent.Workflow does not create RunEvidence review bindings; inventing
+  those from a workflow ID would misrepresent production. Its fixture supplies
+  the reviewed artifact/profile and shares the actual workflow correlation ID,
+  then evaluates compliance before sealing through the real persistence owner.
+- The disposable future-change probe renames ingest-job to
+  ingest-job-incompatible in a copied workspace. The unmodified released differ
+  exits 1 with exactly WorkflowBodyChanged (private-history-read and
+  old-binary-read-new-events breaking), retained in
+  docs/evidence/plan-65/future-incompatible-diff.json. The reset did not weaken
+  future evolution checks.
+
 
 - Scalar qualification exposed the journaled generation-zero unbound seed: its
   empty agent name is intentional only with unresolved identity, zero turns and
@@ -350,36 +374,38 @@ this revision before establishing the new baseline.
 
 ## Outcomes & Retrospective
 
-Current checkpoint (2026-09-07): queue and catalog integration are implemented;
-workflow reset and runtime identity commits are reviewed. Catalog writes and queries
-now use generated contracts, with atomic fault/fence tests and lifecycle replay audit.
-Scalar nominal completion, startup/progress qualification and assembled scenario
-acceptance remain. Earlier checkpoint paragraphs below record their historical state.
+Implementation checkpoint (2026-09-07): all seven milestones' source changes
+are implemented. The full all-component build and all 14 serial suites pass (847 counted
+checks plus two custom dependency drivers). The final ordinary gate remains
+before acceptance is declared. Release selection is Keiro
+0.15.0.0 (all seven packages) with Kioku 0.5.2.0 (all three packages); the
+existing Danwa pin compiles without being moved. The edition-only commit
+`cc397af` preserved wire and replay observations before intentional resets.
 
-Implementation checkpoint (2026-09-07): release/record adoption and the published
-PostgreSQL fixture are implemented and validated. The edition commit `cc397af`
-passed the complete pre-adoption evolution gate; it preserved wire and replay
-behavior. Database tests now migrate one complete template per suite and clone
-per example, including exception cleanup. The domain and diagram drivers run
-without a database. Milestones 4–7 remain: no historical workflow branch or
-queue baseline has yet been reset, and queue/catalog/runtime adoption is pending.
+The reviewed reset removed ten obsolete application patch branches, the bare
+RunJob decoder, inferred queue routes and incomplete journal input defaults.
+Generated queue envelopes/policy and the evidence catalog now execute on real
+runtime paths. Rich evidence remains encode-only, LiveOnly and preserved;
+lifecycle replay does not reconstruct missing rich payloads. Synthetic patch
+replay and the disposable incompatible-body probe retain future evolution
+coverage. No gate is weakened and no shared database has been reset.
 
-Implementation checkpoint (2026-09-07): Milestone 1 is committed as `95342e5`.
-The full solver and DSL build pass. Edition apply succeeded and the backup remains
-under the ignored generated-edition migration directory. All seven package defaults
-now satisfy the generated record contract; core compilation and all runtime acceptance
-remain pending. No workflow-body or queue-format reset has occurred.
+All three assembled scenarios pass: generated producer-to-consumer ingestion,
+recreated runtime plus published approval token and converged sink/evidence;
+conversation rotation with old-token refusal and sixth-turn execution; and two
+HTTP attempts carrying one remote deduplication identity after a receipt commit
+failure. The review fixture explicitly supplies caller-owned review metadata.
+It does not claim ordinary agent runs create a sanctioned-review binding.
 
+The adoption census explains the remaining hand-owned external Danwa codec,
+open Kafka matching, Flow routing and HTTP sink dispatcher. The released embedded
+Ops resume hook has an insufficient effect row for Kioku workflows, so the
+bounded worker CLI executes through the real registry instead. Continuous resume
+exposes failure hooks; complete pass summaries are emitted by bounded drains.
+These are explicit supported ownership choices, not missing applicable facades.
+ADRs 0001, 0004, 0010, 0012, 0027, 0030 and 0037 have dated implementation
+evidence; ADR 0038 records startup, runtime ownership and retention decisions.
 
-Planning revision completed on 2026-09-07. The obsolete Kioku blocker is removed and the
-remaining work now covers seven implementation milestones. No dependency constraints,
-generated sources, runtime code, databases, or upstream repositories were changed by this
-update. Implementation, the fresh solver check, and all runtime acceptance remain pending.
-
-At completion record the selected package plan, source/gate revisions, retired compatibility
-paths, adopted DSL surfaces, justified exclusions, scenario results, and remaining upstream
-limitations. Do not mark this plan complete while an applicable execution path remains only
-documented or while a required upstream API gap is unresolved.
 
 ## Context and Orientation
 

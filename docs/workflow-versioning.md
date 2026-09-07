@@ -155,10 +155,10 @@ the new generation allocates a fresh opaque id, and the id published before
 rotation no longer wakes the live instance. Whoever holds it must be re-notified
 through the same idempotent, id-keyed callback.
 
-The conversation loop uses `restoreSeed` and `continueAsNew` in its rotating
-branch, guarded by `shikigami-conversation-rotation-v1`. It processes one turn
-per generation and carries the next message and conversation state into the
-next generation. The legacy branch remains for pre-patch journals. See
+The conversation loop always uses `restoreSeed` and `continueAsNew`. It processes
+one turn per generation and carries the next message and conversation state into
+the next generation. Plan 65 retired the pre-release legacy branch and patch
+after verifying ADR 0027's unused-state conditions. See
 [plan 26](plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md).
 
 
@@ -346,8 +346,10 @@ change that would strand it in the first place.
 
 ## Worked example: `emitSignal` step names
 
-This is the change that motivated this document, and it is a textbook instance of
-rule 5.
+This historical example motivated this document and illustrates rule 5. Plan 65
+retired the ordinal branch and its patch together under ADR 0027; current flows
+always use explicit stable labels. The example explains how to migrate when
+real pre-change journals exist.
 
 **Before.** The `Sink` capability interpreter in
 `shikigami-core/src/Shikigami/Flow/Capability.hs` allocated a fresh `IORef`
@@ -430,17 +432,16 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | `shikigami.approval` | [Approval](../domain/shikigami-approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
-Fresh agent runs use it behind `shikigami-approval-workflow-v1`; legacy approval
-machinery remains for old patch decisions. Agent runs also declare profile and
+All agent runs use this child. Plan 65 removed the unused pre-release approval
+branch and its patch together. Agent runs also declare profile and
 overlay resolution, routing, practice-review evidence/evaluation/attention, and
 practice-review memory transitions. These are persisted contracts, not optional
 additions to the census.
 
 Flow capability families include `recall-<label>`, `remember-<label>`, and
-`emit-signal:<label>`. Legacy sink emissions retain their ordinal scheme. Child
-identity comes from the governed delegation/approval call site. Conversation
-rotation uses static per-turn labels; the legacy branch retains message-id and
-ordinal suffixes. `danwa-reply:<messageId>` identifies a sink intent rather than
+`emit-signal:<label>`. Child identity comes from the governed delegation/approval
+call site. Conversation rotation uses static per-turn labels and has no legacy
+message-id or ordinal journal branch. `danwa-reply:<messageId>` identifies a sink intent rather than
 a workflow journal step.
 
 Keiro writes reserved patch, terminal, generation, sleep, awakeable, and child
@@ -461,33 +462,16 @@ preserve and therefore no legacy branch to model. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
 
-They are marked `post-patch` for a reason worth stating plainly, because it is
-the rule this document previously got wrong. **`keiro-dsl diff` classifies any
-change to a declared workflow body as `BREAKING` unless the entire change sits
-inside a *new* `patch` block — appends included.** It is not enough that a new
-step name is additive at run time and that the differ's own replay verdict says
-`replay-neutral`; the body rule is structural, conservative, and has no waiver
-flag. So `shikigami-flow-memory-steps-v1` guards the four labels, `runMemory`
-reads it once per interpreted flow run, and an instance already in flight keeps
-the un-journaled behavior its journal was written under. Earlier patch-guarded additions to
-`domain/shikigami-agent-run.keiro` include: `resolve-profile` inside
-`shikigami-resolve-profile-v1`, `run-behavior-v2` inside
-`shikigami-behavior-retry-v1`. Outside ADR-0027's explicitly verified
-pre-release reset, budget for a patch id whenever a declared body grows, and
-delete the guard and its `False` branch together once no pre-change instance can
-resume.
+The current baseline has no application patches. **A subsequent change to a
+declared workflow body still requires a new real patch guard**, including pure
+appends, unless the released differ explicitly classifies a supported rotation
+extension as additive. Plan 65's accepted breaking reports apply only to its
+verified unused pre-v1 reset; the gate is unchanged.
 
-Legacy ordinal-derived names remain and are governed by rule 5.
-`approval:<SinkKind>:<ordinal>` counts approvals within one run, so inserting a
-sink into an agent declaration shifts the names of every later approval.
-`next-message:<ordinal>` counted conversation turns; it survives only on the
-`False` branch of `shikigami-conversation-rotation-v1`, because the rotating
-shape holds one turn per generation and so awaits the bare `next-message`. A
-delegated child identity no longer shares that hazard: `delegate` derives a child
-workflow id from the parent workflow id, target agent, and a caller-supplied stable
-key. The declaration-driven supervisor derives its keys from the `delegates` list
-stored in the journaled `lookup-agent` result, so a later manifest edit cannot move
-an in-flight run's children.
+Delegation derives child workflow identity from the parent workflow, target agent
+and caller-supplied stable key. The declaration-driven supervisor derives keys
+from the delegates stored in the journaled `lookup-agent` result, so later
+manifest edits cannot move an in-flight run's children.
 
 
 ## Undeclarable label families
@@ -495,9 +479,9 @@ an in-flight run's children.
 The checked specification cannot hold every name in the table above. A keiro-dsl
 workflow label is a compile-time wire word matching `[A-Za-z0-9][A-Za-z0-9_-]*`,
 so a label that carries a colon or is computed at run time cannot be declared —
-which means `just keiro-diff` cannot gate a change to it. Those families are
-`approval:<SinkKind>:<ordinal>`, `<step>:notify`, `emit-signal:<label>`, and the
-conversation's legacy per-message labels; the census with per-family owners is
+which means `just keiro-diff` cannot gate a change to it. The remaining application family is
+`emit-signal:<label>`; approval now has a dedicated child with static labels and
+conversation turns occupy separate generations. The census with owners is
 `docs/architecture/shikigami-domain-inventory.md`.
 
 **The conversation family is no longer on that list for fresh instances, and how
@@ -510,10 +494,7 @@ spelling of the suffix — it was to remove the reason for the suffix.
 rotates onto a fresh generation after every turn, so a generation holds exactly
 one turn, every label is written at most once, and `record-user`,
 `run-behavior-v2`, `record-assistant-and-reply`, `turn-result`, and
-`next-message` are all plain wire words the specification can hold. That is now
-the largest declared workflow body in the service. The suffixed labels remain as
-the `False` branch of `shikigami-conversation-rotation-v1`, which is why they
-still appear in the table above.
+`next-message` are all plain wire words the specification can hold. Plan 65 retired the suffixed branch and its patch from the unused baseline.
 
 Before reaching for a computed suffix, ask what forces it. If the answer is
 "several of these happen in one generation", rotation may remove the question
@@ -592,3 +573,23 @@ most 100 terminal instances older than 90 days, excluding live workflows and com
 children of live parents. This bounds workflow deduplication: older job redelivery
 requires operator review. Evidence streams, rich query rows and sink delivery receipts
 are separate retention owners and are not collected by this workflow policy.
+
+
+## Plan 65 qualification baseline
+
+The workflow reset is `f1118af`, followed by strict runtime identities in
+`8a70c92` and the generated queue/evidence-prefix reset in `f43b0ca`. The exact
+accepted diagnostics are retained under [plan-65 evidence](evidence/plan-65/).
+Ordinary gates passed on the reconciled catalog (`6f21b6e`), runtime assembly
+(`66ffd29`) and nominal scalar checkpoint (`a083d88`). These later gates do not
+waive or reclassify the earlier intentional breaks.
+
+Generation zero has one explicitly unbound conversation seed. Its complete
+codec accepts the empty agent name only with unresolved identity, zero turns
+and absent messages. Ingress names and carried generations remain strict. This
+preserves the seed's journal bytes without weakening RunJob validation.
+
+A workflow that crashes before its first committed journal entry is not yet a
+resumable instance. The queue owns that retry; the failed-workflow resurrection
+owner applies once a journal exists. The PostgreSQL test first commits ingestion
+before injecting a failed step so it exercises that actual boundary.

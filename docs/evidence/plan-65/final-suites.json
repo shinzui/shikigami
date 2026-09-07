@@ -1,0 +1,86 @@
+[
+  {
+    "suite": "conformance",
+    "exitCode": 0,
+    "checks": 37,
+    "seconds": 0.05
+  },
+  {
+    "suite": "kikan-en-client-tests",
+    "exitCode": 0,
+    "checks": null,
+    "seconds": 1.48
+  },
+  {
+    "suite": "kikan-en-contract-tests",
+    "exitCode": 0,
+    "checks": null,
+    "seconds": 0.4
+  },
+  {
+    "suite": "shikigami-agent-test",
+    "exitCode": 0,
+    "checks": 29,
+    "seconds": 5.07
+  },
+  {
+    "suite": "shikigami-api-test",
+    "exitCode": 0,
+    "checks": 15,
+    "seconds": 1.66
+  },
+  {
+    "suite": "shikigami-client-test",
+    "exitCode": 0,
+    "checks": 3,
+    "seconds": 0.97
+  },
+  {
+    "suite": "shikigami-core-diagrams-test",
+    "exitCode": 0,
+    "checks": 4,
+    "seconds": 3.63
+  },
+  {
+    "suite": "shikigami-core-domain-test",
+    "exitCode": 0,
+    "checks": 13,
+    "seconds": 1.47
+  },
+  {
+    "suite": "shikigami-core-postgres-test",
+    "exitCode": 0,
+    "checks": 197,
+    "seconds": 50.65
+  },
+  {
+    "suite": "shikigami-core-test",
+    "exitCode": 0,
+    "checks": 405,
+    "seconds": 9.21
+  },
+  {
+    "suite": "shikigami-migrations-smoke",
+    "exitCode": 0,
+    "checks": 8,
+    "seconds": 3.32
+  },
+  {
+    "suite": "shikigami-migrations-test",
+    "exitCode": 0,
+    "checks": 5,
+    "seconds": 1.6
+  },
+  {
+    "suite": "shikigami-server-test",
+    "exitCode": 0,
+    "checks": 46,
+    "seconds": 7.19
+  },
+  {
+    "suite": "shikigami-workers-test",
+    "exitCode": 0,
+    "checks": 85,
+    "seconds": 14.39
+  }
+]

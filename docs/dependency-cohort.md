@@ -14,9 +14,8 @@ On 2026-09-07 the preferred-version endpoints for all seven Keiro and three Kiok
 packages still select 0.15.0.0 and 0.5.2.0 respectively. All ten released Cabal
 files match their upstream tag bytes exactly. The refreshed secure index is
 `2026-09-07T12:40:03Z`; `nix develop -c cabal build all --dry-run` succeeds with
-these selections and the existing unrelated constraints. Compilation, edition
-migration and runtime qualification remain in progress; older test counts below
-are historical evidence, not acceptance for this cohort.
+these selections and the existing unrelated constraints. Edition migration, runtime assembly and nominal scalar qualification pass.
+The final Plan 65 acceptance record below supersedes the historical August test counts.
 
 The Danwa plan `mori://shinzui/danwa/plans/13-upgrade-danwa-to-the-released-keiro-0-15-cohort`
 now records five non-migration library builds and three pure suites passing, but the
@@ -45,8 +44,9 @@ Regenerate the resolved-version evidence with:
 nix develop --command cabal build all --dry-run
 ```
 
-All builds and tests must run inside the Nix dev shell; a bare `cabal build all`
-compiles and then fails at link with `ld: library not found for -lrdkafka`.
+Use the Nix development environment for native libraries and PostgreSQL tools.
+An already configured agent environment can invoke Cabal and built test binaries
+directly; an unconfigured shell can fail to link `rdkafka`.
 
 
 ## Upstream projects
@@ -178,9 +178,10 @@ format. Keiro 0.14 admits `keiki >=0.9 && <0.10`, and Kioku 0.5 admits
 the Keiro specification, deterministic scaffold, replay diff, conformance,
 build, and full serial test gates all passed on 2026-08-22.
 
-Every explicitly managed released-cohort selection is at its newest Hackage release as of
-2026-08-29. The latest Kioku 0.5.1.0 release is the cohort bridge: it admits Baikai 0.6,
-Shikumi 0.3.0.3, and `http-client-tls` 0.4 while retaining the selected Keiro and Keiki lines.
+The August matrix was verified on 2026-08-29. Plan 65 rechecked the seven Keiro
+and three Kioku packages on 2026-09-07 and adopted Keiro 0.15.0.0 with Kioku
+0.5.2.0. Kioku retains the Baikai 0.6, Shikumi 0.3.0.3 and `http-client-tls` 0.4
+compatibility introduced by its preceding 0.5.1.0 release.
 
 Five narrow `http-client-tls` exceptions remain while released Hackage metadata catches up:
 `baikai`, `baikai-claude`, `baikai-openai`, `shikumi-tools`, and the third-party `claude`
@@ -258,7 +259,7 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 | Keiro snapshot state-shape hash | `StateCodec` gains `stateShapeHash`; migration `0019-keiro-snapshots-state-shape-hash.sql` adds the column and existing rows take the empty sentinel, invalidating each snapshot exactly once on next hydration. Journals and events are untouched. |
 | Keiro child failure reason | Migration `0020-keiro-workflow-children-failure-reason.sql` adds a nullable `failure_reason`; `markChildFailedTx` takes the reason as a third argument. |
 | Keiro child-workflow boundary | `mori://shinzui/keiro` 0.14 keeps child registration framework-owned: Shikigami uses the public `spawnChild` and `cancelChild` operations rather than transaction-private child-table functions. The delegation ledger reserves capacity before spawn and repairs the reservation deterministically after a replayed spawn, so the application does not need a coupled Keiro/ledger transaction. |
-| Keiro queue envelopes | Scaffolded workqueues gain a versioned `keiroJobCodec` envelope. Shikigami's queues are not scaffolded by `keiro-dsl` and continue to use their own payload codecs, so no in-flight message changes shape in this plan. Recorded as a live constraint for plan 39. |
+| Keiro queue envelopes | Plan 65 moves every run-job producer and the worker to the generated version-1 `{v,t,data}` envelope, policy and provisioning. Literal current bytes and rejection of the retired bare payload are tested; the unused pre-v1 reset has recorded breaking evidence. |
 | PGMQ delivery attempt numbering | `shibuya-pgmq-adapter-0.14.0.0` retains the conversion, present since 0.12, from PGMQ's one-based `read_count` to a zero-based `Message.attempt`. Shikigami must not subtract one again. |
 | Shibuya 0.9 public surface | The 0.9 line retains the public surface adopted at 0.8: `runApp` takes `AppConfig`; handlers receive `Message es msg`; `Ordering` is named `OrderingPolicy`; runner internals live under `Shibuya.Internal.*`. Shikigami uses only the public surface. |
 | Shibuya Kafka adapter 0.9 | `shibuya-kafka-adapter-0.9.0.0` declares `shibuya-core ^>=0.9.0.0` and `kafka-effectful ^>=0.3.0.0`; the stream worker links that exact adapter and the exact Hackage `kafka-effectful-0.3.0.0` release for `activity.v1`. |
@@ -273,21 +274,18 @@ reason a future bump cannot quietly change a persisted byte or configuration.
 
 | What it pins | Where |
 |---|---|
-| Pre-upgrade `RunJob` queue payloads, successful journal step values, `SinkIntent` and `SinkResult` outbox JSON (including the deprecated `Stubbed` outcome), additive compatibility defaults, and PGMQ's zero-based attempt | `shikigami-core/test/Shikigami/WireCompatSpec.hs` |
+| Current generated `RunJob` envelope, rejection of retired bare/incomplete payloads, successful journal values, `SinkIntent`/`SinkResult` JSON and PGMQ's zero-based attempt | `shikigami-core/test/Shikigami/WireCompatSpec.hs` |
 | Agent declarations without delegation fields still load with an empty allow-list and no per-agent budget override, while declared delegation values survive Dhall loading | `shikigami-core/test/Shikigami/AgentLoaderSpec.hs` |
 | A Baikai in-band provider failure is a failure, with its retryability preserved, rather than an empty successful reply | `shikigami-core/test/Shikigami/BehaviorProviderSpec.hs` |
 | A fresh database applies all four migration components and re-applying is a no-op | `shikigami-migrations/test/Migrate.hs` |
 
-The pre-upgrade wire fixtures are **literals**, deliberately: a fixture built by
-calling the current encoder would pass no matter what the encoder did. The
-types have evolved since those bytes were captured. `RunJob` gained
-`routeKind`, `lineage`, and `delegationBudgetId`; `AgentDecl` gained `delegates`
-and `delegationBudget`; `SinkIntent` gained `resolvedRecipient`; and successful
-Kioku step values gained a refusal-capable wrapper. Their encoders omit
-compatibility defaults and their decoders restore those defaults when keys are
-absent, so the specs prove both the unchanged legacy forms and the new
-non-default forms. Keep the legacy literals permanently — a change there is a
-wire-format change and needs a migration story, not a fixture edit.
+Wire fixtures are **literals**, deliberately: encoding a fixture with the current
+encoder would pass even if the encoder changed. Plan 65 preserves unrelated
+sink and journal wire contracts, and explicitly replaces only the verified
+unused RunJob and workflow baseline. RunJob now requires all twelve fields,
+including nullable lineage fields; no bare-envelope fallback or inferred route
+remains. Agent names, run keys, delegation depth and evidence quantities retain
+nominal types internally and unwrap only at their owning external boundaries.
 
 
 ## Resolved evidence
@@ -300,7 +298,7 @@ Build profile: -w ghc-9.12.4 -O1
 ```
 
 The plan selects exactly the pinned and transitive versions in the matrix
-above, including Kioku 0.5.1.0, Shikumi 0.3.0.3, Baikai 0.6.0.0,
+above, including Kioku 0.5.2.0, Shikumi 0.3.0.3, Baikai 0.6.0.0,
 `http-client-tls` 0.4.0, both Keiki packages at 0.9.1.0, and
 `kafka-effectful` 0.3.0.0 from Hackage. The temporary TLS metadata exceptions
 are listed under Current release status; `haxl:time` remains the only unrelated
@@ -325,8 +323,9 @@ sibling Kikan-En package suites also passed.
 
 Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
 an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
-intermittently. The 810-check run above is the latest complete default-RTS
-serial pass.
+intermittently. The 810-check run above is historical August evidence. Plan 65 splits core
+unit, PostgreSQL, domain and diagram suites; each PostgreSQL example clones its
+suite's migrated template through migrations:test-support.
 
 
 ## What this cohort cost in source, and what it left behind
@@ -455,3 +454,42 @@ checksum mismatch.
 
 **A database holding real data is a different exercise** — use the `cohort-migrate` skill,
 which proves the remediation on a restored clone before production is touched.
+
+
+## Plan 65 final qualification — 2026-09-07
+
+`cabal build all --enable-tests -j1 --ghc-options=-fmax-errors=10000` passes
+for every library, executable and test target. The built suites run serially
+from their owning package directories, with `--num-threads=1` for Tasty and
+`+RTS -N2 -RTS` for threaded core/database/server/worker suites. The complete
+result is [final-suites.json](evidence/plan-65/final-suites.json).
+
+| Suite | Passing checks |
+|---|---:|
+| conformance | 37 |
+| kikan-en-client-tests | custom driver; PASS |
+| kikan-en-contract-tests | custom driver; PASS |
+| shikigami-agent-test | 29 |
+| shikigami-api-test | 15 |
+| shikigami-client-test | 3 |
+| shikigami-core-diagrams-test | 4 |
+| shikigami-core-domain-test | 13 |
+| shikigami-core-postgres-test | 197 |
+| shikigami-core-test | 405 |
+| shikigami-migrations-smoke | 8 |
+| shikigami-migrations-test | 5 |
+| shikigami-server-test | 46 |
+| shikigami-workers-test | 85 |
+
+There are 797 Tasty tests, 13 domain assertions and 37 generated conformance
+checks (847 counted checks), plus both custom Kikan-En dependency drivers.
+The three assembled PostgreSQL scenarios are included in those counts.
+The domain report has 56 filled obligations: 50 verified and six unverified
+with passing witnesses. Missing, pending, duplicate, stale and failed sets are
+empty. No fabricated totality or rich-payload replay claim is needed.
+
+Runtime entry points verify migrations read-only before startup, then register
+the validated evidence catalog. The generated run-job codec/policy, bounded
+resume registry, batched timer routing and terminal GC policy execute through
+their production owners. See the [domain inventory](architecture/shikigami-domain-inventory.md)
+and [runtime ADR](adr/0038-runtime-startup-and-maintenance-share-validated-owners.md).

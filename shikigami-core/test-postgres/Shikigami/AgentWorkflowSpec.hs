@@ -20,7 +20,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secondsToNominalDiffTime)
 import Data.UUID qualified as UUID
-import Effectful (Eff)
+import Effectful (Eff, liftIO, runEff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as Decoders
@@ -31,8 +31,10 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
+import Keiro.Outbox qualified as Outbox
+import Keiro.PGMQ qualified as Job
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
-import Keiro.Workflow.Awakeable (AwakeableId (..))
+import Keiro.Workflow.Awakeable (AwakeableId (..), signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (ChildRow (..), ChildStatus (..), lookupChildrenOfParent)
@@ -101,15 +103,19 @@ import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
+import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Workflow.Registry qualified as Registry
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
@@ -1040,6 +1046,22 @@ tests databaseFixture =
                     ["awkid:next-message"]
                     (filter ("awkid:" `Text.isPrefixOf`) (Map.keys keys))
 
+                firstKeys <- conversationStepKeys appEnv (conversationMessageNumbered 1) 0
+                liveKeys <- conversationStepKeys appEnv (conversationMessageNumbered 1) 4
+                let token keys = case Map.lookup "awkid:next-message" keys of
+                      Just value -> case fromJSON value of
+                        Success aid -> pure (aid :: AwakeableId)
+                        Error err -> assertFailure err
+                      Nothing -> assertFailure "published generation token missing"
+                oldToken <- token firstKeys
+                newToken <- token liveKeys
+                assertBool "rotation publishes a fresh opaque token" (oldToken /= newToken)
+                let wake = object ["tag" .= ("NextMessage" :: Text), "contents" .= conversationMessageNumbered 6]
+                oldAccepted <- runAppIO appEnv (signalAwakeable oldToken wake)
+                assertEqual "old token cannot signal the live generation" (Right False) oldAccepted
+                newAccepted <- runAppIO appEnv (signalAwakeable newToken wake)
+                assertEqual "published live token accepts the next input" (Right True) newAccepted
+
                 -- Ten turns in one session, in order, is what proves rotation
                 -- bounded the journal without fragmenting the conversation.
                 turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace conversationSession)
@@ -1049,7 +1071,12 @@ tests databaseFixture =
                       "five turns are recorded as five user/assistant pairs"
                       [(role, index) | index <- [0 .. 9], let role = if even index then "user" else "assistant"]
                       (turnRoleIndex <$> rows)
-                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other)),
+                  other -> assertFailure ("getTurns should return conversation turns, got " <> show (first (const ("store-error" :: String)) other))
+                forM_ [1 :: Int, 2] \_ -> do
+                  resumed <- runAppIO appEnv (resumeWorkflowsOnce (shikigamiWorkflowResumeOptions appEnv (secondsToNominalDiffTime 300)) (Conversation.conversationRegistry env))
+                  either (assertFailure . show) (const (pure ())) resumed
+                nextKeys <- conversationStepKeys appEnv (conversationMessageNumbered 1) 5
+                assertBool "the published live token drives the sixth turn" (Map.member "turn-result" nextKeys),
           -- The lifecycle claim. Before this, a conversation workflow never
           -- ended and its kioku session stayed "running" forever -- a leak, and
           -- a correctness hazard for a resolver that only ever reused running
@@ -1515,13 +1542,14 @@ tests databaseFixture =
         ],
       testGroup
         "Approval"
-        [ testCase "Danwa ask, CLI-shaped resolution, child resume, and sink dispatch form one durable path" do
+        [ testCase "generated job, restart, approval, evidence and delivery converge" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
-              withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+              withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 asks <- newIORef []
+                remote <- newIORef Map.empty
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                testWithApplication (pure (approvalDanwaApplication asks)) \port -> do
+                testWithApplication (pure (\request respond -> if take 2 (pathInfo request) == ["v1", "sources"] then kawaDoorwayApplication remote request respond else approvalDanwaApplication asks request respond)) \port -> do
                   let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
                       danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = "part_agent_test"}
                       kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
@@ -1537,10 +1565,26 @@ tests databaseFixture =
                                 },
                             approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier},
                             danwa = danwaConfig,
-                            http = sinkHttp
+                            http = sinkHttp,
+                            deliveryPool = Just kirokuStore.pool,
+                            kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = "shinzui/shikigami"}
                           }
 
-                  runAgentRunWorkflow deps approvalJob >>= assertEqual "parent parks on approval child" (Right Suspended)
+                  let consume dependencies expected = Job.withJobRuntime connStr Nothing \runtime -> do
+                        _ <- either (assertFailure . show) pure =<< Enqueue.ensureRunQueue runtime.runtimePool
+                        _ <- either (assertFailure . show) pure =<< Enqueue.enqueueRunJob runtime.runtimePool approvalJob
+                        observed <- newIORef (0 :: Int)
+                        outcome <- Job.runJobEff runtime do
+                          Job.ensureJobQueue RunJobs.runJob
+                          Job.runJobOnce 1 RunJobs.runJob \queued -> do
+                            result <- liftIO (runAgentRunWorkflow dependencies queued)
+                            liftIO do
+                              expected result
+                              modifyIORef' observed (+ 1)
+                            pure Job.Done
+                        either (assertFailure . show) pure outcome
+                        assertEqual "one job consumed" 1 =<< readIORef observed
+                  consume deps (assertEqual "parent parks on approval child" (Right Suspended))
                   parentSteps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId approvalJob) 0)
                   assertEqual "fresh parent journals its policy" (Right True) (Map.member "resolve-approval-policy" <$> parentSteps)
                   children <- runAppIO appEnv (lookupChildrenOfParent (runJobWorkflowId approvalJob).unWorkflowId "shikigami.agent-run")
@@ -1560,15 +1604,33 @@ tests databaseFixture =
                   assertEqual "child records the static notify step" (Right True) (Map.member "notify" <$> childSteps)
                   assertEqual "child allocates the static decision awakeable" (Right True) (Map.member "awkid:decision" <$> childSteps)
 
+                  -- Recreate the volatile behavior environment before resuming;
+                  -- journals, queue and published token remain in PostgreSQL.
+                  restartedBehavior <- newBehaviorEnv
+                  let restarted = deps {behaviorEnv = restartedBehavior}
                   resolved <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
                   assertBool "first CLI-shaped signal resolves" resolved
                   resolvedAgain <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
                   assertEqual "repeated signal is idempotently refused" False resolvedAgain
-                  completedCount <- resumeApprovalToCompletion appEnv deps
+                  completedCount <- resumeApprovalToCompletion appEnv restarted
                   assertEqual "resume passes complete child and parent" 2 completedCount
 
                   afterOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
-                  assertEqual "approved sink is dispatched exactly once" (Right 1) (length <$> afterOutbox),
+                  assertEqual "approved sink is dispatched exactly once" (Right 1) (length <$> afterOutbox)
+                  row <- case afterOutbox of
+                    Right [single] -> pure single
+                    other -> assertFailure (show other)
+                  firstPublish <- runEff (publishSinkIntent restarted row)
+                  assertEqual "approved intent reaches doorway" Outbox.PublishSucceeded firstPublish
+                  consume restarted \case
+                    Right (Completed (Right _)) -> pure ()
+                    other -> assertFailure ("redelivery did not replay completion: " <> show other)
+                  assertEqual "redelivered signal remains consumed" False =<< resolveApproval appEnv awakeableId (Approved (object []))
+                  assertEqual "receipt prevents another send" Outbox.PublishSucceeded =<< runEff (publishSinkIntent restarted row)
+                  assertEqual "one remote logical effect" 1 . Map.size =<< readIORef remote
+                  finalOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+                  assertEqual "replayed job emits no second intent" (Right 1) (length <$> finalOutbox)
+                  completeScenarioEvidence connStr (runCorrelationId (runJobWorkflowId approvalJob).unWorkflowId) approvalJob.idempotencyKey,
           testCase "approved answer resumes and dispatches sink once" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
