@@ -5,16 +5,27 @@ import Baikai.Evidence qualified as Baikai
 import Baikai.Options (emptyOptions)
 import Baikai.Options qualified as Options
 import Baikai.Trace qualified as BaikaiTrace
+import Control.Exception qualified as Exception
 import Data.Aeson (Value, eitherDecode)
 import Data.ByteString.Lazy (ByteString)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Effectful (Eff)
+import Effectful.Error.Static qualified as Error
+import Hasql.Transaction qualified as Tx
+import Keiro.Command qualified as Command
+import Keiro.Projection.Catalog.Operations qualified as CatalogOps
+import Keiro.ReadModel.Rebuild qualified as Rebuild
+import Keiro.ReplayAudit qualified as ReplayAudit
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Read qualified as StoreRead
+import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Agent
 import Shikigami.Attestation.Compliance
@@ -33,6 +44,7 @@ import Shikigami.Log.Correlation
   )
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude
+import Shikigami.RunEvidence.Catalog qualified as EvidenceCatalog
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 
@@ -40,7 +52,12 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "run evidence"
-    [ testGroup
+    [ testCase "operator catalog preserves live-only payloads" do
+        let operations = CatalogOps.projectionCatalogOperations EvidenceCatalog.validatedProjectionCatalog
+        case CatalogOps.previewGroupRebuild operations EvidenceCatalog.runEvidenceStoreRebuildGroupId of
+          Left problem -> assertFailure (show problem)
+          Right preview -> assertEqual "no destructive target reset" False preview.destructive,
+      testGroup
         "lifecycle"
         [ testCase "every ordinary transition follows the checked aggregate" do
             profiled <- advancesTo ProfileResolved sampleEvidence
@@ -317,7 +334,57 @@ tests databaseFixture =
         ],
       testGroup
         "durability"
-        [ testCase "events and operator rows survive restarts and replay converges" do
+        [ testCase "SQL failure rolls back lifecycle and both rich payload targets" do
+            withShikigamiFreshDatabase databaseFixture \connectionString ->
+              withEvidenceRuntime connectionString \store -> do
+                profiled <- liftIO . assertPersisted =<< persistEvidenceTransition store sampleEvidence ProfileResolved Nothing
+                running <- liftIO . assertPersisted =<< persistEvidenceTransition store profiled Running Nothing
+                before <- evidenceEventCount
+                runTransaction (Tx.sql "ALTER TABLE shikigami.run_evidence_calls ADD CONSTRAINT injected_failure CHECK (false) NOT VALID")
+                failed <-
+                  Error.catchError
+                    (Right <$> persistEvidenceTransition store (recordCall retryOriginal running) Failed Nothing)
+                    (\_ (problem :: StoreError) -> pure (Left problem))
+                case failed of
+                  Left _ -> pure ()
+                  Right (Left (EvidenceCommandFailed (Command.StoreFailed _))) -> pure ()
+                  Right result -> liftIO (assertFailure ("SQL fault was not reported: " <> show result))
+                after <- evidenceEventCount
+                liftIO (assertEqual "no failed transition event committed" before after)
+                stored <- liftIO (findRunEvidence store parentRunId)
+                case stored of
+                  Just StoredRunEvidence {status, calls} -> liftIO do
+                    assertEqual "run row rolled back" Running status
+                    assertEqual "call rows rolled back" 0 (length calls)
+                  Nothing -> liftIO (assertFailure "existing evidence disappeared"),
+          testCase "catalog fencing blocks writes and queries while preserving evidence" do
+            withShikigamiFreshDatabase databaseFixture \connectionString ->
+              withEvidenceRuntime connectionString \store -> do
+                profiled <- liftIO . assertPersisted =<< persistEvidenceTransition store sampleEvidence ProfileResolved Nothing
+                before <- evidenceEventCount
+                let runId = either (error . Text.unpack) id (Rebuild.mkRebuildRunId "plan65-fence")
+                fenced <-
+                  Rebuild.beginGroupRebuild
+                    EvidenceCatalog.validatedProjectionCatalog
+                    EvidenceCatalog.runEvidenceStoreRebuildGroupId
+                    Rebuild.RebuildRequest
+                      { rebuildRunId = runId,
+                        requestedBy = "plan65-test",
+                        requestReason = "verify live-only evidence fence",
+                        replayFrom = StoreTypes.GlobalPosition 0
+                      }
+                case fenced of
+                  Left problem -> liftIO (assertFailure ("could not fence group: " <> show problem))
+                  Right _ -> pure ()
+                result <- persistEvidenceTransition store profiled Running Nothing
+                liftIO (assertEqual "typed fence refusal" (Left (EvidenceProjectionFenced EvidenceCatalog.runEvidenceStoreRebuildGroupId runId)) result)
+                after <- evidenceEventCount
+                liftIO (assertEqual "fenced transition has no event" before after)
+                queried <- liftIO (Exception.try @Exception.IOException (findRunEvidence store parentRunId))
+                case queried of
+                  Left problem -> liftIO (assertEqual "query is refused by the registered read model" True ("ReadModelNotLive" `Text.isInfixOf` Text.pack (show problem)))
+                  Right _ -> liftIO (assertFailure "a fenced query returned data"),
+          testCase "events and operator rows survive restarts and replay converges" do
             (withShikigamiFreshDatabase databaseFixture) \connectionString -> do
               profiledResult <-
                 withEvidenceRuntime connectionString \store ->
@@ -358,6 +425,9 @@ tests databaseFixture =
 
               stored <- queryStoredEvidence connectionString
               assertStoredClosure stored
+              reports <- withEvidenceRuntime connectionString \_ ->
+                ReplayAudit.auditTargets ReplayAudit.AuditFull ReplayAudit.defaultAuditBudget EvidenceCatalog.auditTargets
+              assertEqual "generated lifecycle replay audit" 0 (ReplayAudit.auditExitCode reports)
 
               replayedResult <-
                 withEvidenceRuntime connectionString \store ->
@@ -401,7 +471,11 @@ withEvidenceRuntime connectionString action =
               tracer,
               metrics = Nothing
             }
-        store = postgresEvidenceStore (pool kirokuStore)
+        store = postgresEvidenceStore kirokuStore
+    registration <- runAppIO appEnv EvidenceCatalog.registerProjectionCatalog
+    case registration of
+      Right (Right _) -> pure ()
+      other -> assertFailure ("catalog registration failed: " <> show other)
     result <- runAppIO appEnv (action store)
     either (assertFailure . show) pure result
 
@@ -417,7 +491,7 @@ queryStoredEvidence connectionString =
 queryStoredEvidenceFor :: Text -> RunCorrelationId -> IO StoredRunEvidence
 queryStoredEvidenceFor connectionString requestedRunId =
   withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
-    found <- findRunEvidence (postgresEvidenceStore (pool kirokuStore)) requestedRunId
+    found <- findRunEvidence (postgresEvidenceStore kirokuStore) requestedRunId
     case found of
       Nothing -> assertFailure "run evidence was absent after restart"
       Just stored -> pure stored
@@ -947,3 +1021,11 @@ childEvidenceJson =
 
 nominalSessionFixture :: NominalId.SessionId
 nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")
+
+evidenceEventCount :: Eff AppEffects Int
+evidenceEventCount =
+  length
+    <$> StoreRead.readStreamForward
+      (StoreTypes.streamNameInCategory (StoreTypes.CategoryName "runEvidence") (runEvidenceIdText sampleAggregateId))
+      (StoreTypes.StreamVersion 0)
+      100

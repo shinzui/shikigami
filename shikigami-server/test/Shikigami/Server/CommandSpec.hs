@@ -162,7 +162,7 @@ tests =
         let rendered = helpTextOf ["--help"]
         mapM_
           (\name -> assertBool (name <> " is not mounted:\n" <> rendered) (name `isInfixOf` rendered))
-          ["wf", "timer", "outbox", "inbox", "pgmq", "projection", "shard", "snapshot", "stream"],
+          ["wf", "timer", "outbox", "inbox", "pgmq", "projection", "shard", "snapshot", "stream", "replay-audit", "rebuild"],
       testCase "a mounted group renders its own help" do
         let rendered = helpTextOf ["wf", "--help"]
         mapM_

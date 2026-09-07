@@ -33,6 +33,7 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.Runtime (registerRuntimeCatalog)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import System.Exit (exitFailure)
@@ -57,6 +58,7 @@ runAgentRun agentArg mActivity workspace config = do
       connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-agent-run" config
       let settings = defaultConnectionSettings connStr
       withStore settings $ \store -> do
+        registerRuntimeCatalog store
         tr <- noopTracer
         let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
         case mActivity of

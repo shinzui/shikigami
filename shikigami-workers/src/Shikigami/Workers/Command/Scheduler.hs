@@ -27,6 +27,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, SchedulerLoop), beat, loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
+import Shikigami.Runtime (registerRuntimeCatalog)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
@@ -46,6 +47,7 @@ runSchedulerCmd config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
   let settings = StoreConnection.defaultConnectionSettings connStr
   StoreConnection.withStore settings \st -> withRunTelemetry "shikigami.scheduler" \tr keiroMetrics _ -> do
+    registerRuntimeCatalog st
     let manifestDirectory = (.agentsDirectory) config
         storePool = StoreConnection.pool st
     report <-

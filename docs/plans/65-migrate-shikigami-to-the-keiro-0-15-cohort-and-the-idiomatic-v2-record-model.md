@@ -113,8 +113,16 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   scheduler and transactional inbox ingestion. Strict Language 5/opaque checks pass.
 - [x] (2026-09-07) The service-owned generated evidence ID uses the full
   `shikigami_run_evidence` prefix. Current evidence fixtures and witnesses use it.
-- [ ] Milestone 5 remaining: guarded live-only evidence catalog, query surface,
-  atomic failure/fence tests, operational hooks and full qualification.
+- [x] (2026-09-07) Generated live-only evidence catalog and read model execute on
+  production write/query paths. SQL failure rolls back append and payload; rebuild
+  fencing refuses writes and queries. Startup registers the catalog, and operator
+  hooks use its non-destructive operations and generated lifecycle audit.
+- [x] (2026-09-07) Catalog integration builds core, agent, server and workers;
+  403 unit, 193 PostgreSQL, 29 agent, 46 server and 81 worker cases pass. The final
+  focused 41-case evidence suite adds non-destructive preview and real lifecycle
+  audit checks. All 37 generated conformance checks and strict Language 5 checks pass.
+- [ ] Milestone 5 remaining: final behavior evidence/report reconciliation and
+  ordinary gate after committing the catalog checkpoint.
 - [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
   prove every generated artifact is used and every remaining exclusion is justified.
 - [ ] Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
@@ -123,6 +131,16 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+Catalog integration (2026-09-07): the released typed ProjectionSet accepts a live
+closure capturing rich evidence. Revalidating the generated catalog with that
+handler preserves its ownership/fingerprint facts and lets the supported catalog
+command boundary enforce atomic fencing. SQL failure is returned as
+`EvidenceCommandFailed (StoreFailed ...)`, not necessarily the outer StoreError effect.
+The generated static handler deliberately throws if invoked without captured evidence.
+The released catalog rebuild runner permits preserve-only/live-only groups: it preserves
+rows and has no rich-payload replay adapter. Its preview is non-destructive; operations
+must never be described as recovering missing evidence.
 
 The queue/identity reset against `8a70c92` reports {'IdPrefixChanged': 1, 'DeclarationAdded': 12, 'WorkflowShapeChanged': 3, 'DerivedIdentityChanged': 1, 'IdDomainContractChanged': 1, 'AggFoldSurfaceChanged': 1}.
 Exact diagnostics and replay impact are retained in
@@ -273,6 +291,12 @@ this revision before establishing the new baseline.
   Date: 2026-09-07.
 
 ## Outcomes & Retrospective
+
+Current checkpoint (2026-09-07): queue and catalog integration are implemented;
+workflow reset and runtime identity commits are reviewed. Catalog writes and queries
+now use generated contracts, with atomic fault/fence tests and lifecycle replay audit.
+Scalar nominal completion, startup/progress qualification and assembled scenario
+acceptance remain. Earlier checkpoint paragraphs below record their historical state.
 
 Implementation checkpoint (2026-09-07): release/record adoption and the published
 PostgreSQL fixture are implemented and validated. The edition commit `cc397af`

@@ -34,6 +34,7 @@ import Shikigami.App.Config (AppConfig, Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Health.Handler (mkHealthChecks)
 import Shikigami.Log qualified as Log
+import Shikigami.Runtime (registerRuntimeCatalog)
 import Shikigami.Server.App (exceptionBoundary, shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
 import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
@@ -98,6 +99,7 @@ runServer config = do
       settings = StoreConnection.defaultConnectionSettings connStr
   withServerTelemetry \telemetry@ServerTelemetry {tracer = serverTracer} ->
     StoreConnection.withStore settings \st -> do
+      registerRuntimeCatalog st
       env <- newServerEnv serverTracer (StoreConnection.pool st) config
       application <- serverApplication telemetry env
       Log.logInfo

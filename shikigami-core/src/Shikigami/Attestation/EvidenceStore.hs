@@ -15,79 +15,51 @@ module Shikigami.Attestation.EvidenceStore
   )
 where
 
-import Data.Aeson (Result (..), Value (..))
+import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32, Int64)
 import Data.Text qualified as Text
-import Effectful (Eff, IOE, (:>))
-import Effectful.Error.Static (Error)
+import Effectful (Eff, IOE, runEff, (:>))
+import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
-import Hasql.Pool (Pool)
-import Hasql.Pool qualified as Pool
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
-import Hasql.Transaction.Sessions qualified as TxSessions
-import Keiro.Command (CommandError (..), defaultRunCommandOptions, runCommandWithSqlEvents)
+import Keiro.Command (CommandError (..), defaultRunCommandOptions)
+import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
+import Keiro.Projection.Catalog qualified as ProjectionCatalog
+import Keiro.ReadModel (runQuery)
+import Keiro.ReadModel.Rebuild (RebuildRunId)
 import Keiro.Stream qualified as Stream
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Connection (KirokuStore)
+import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
-import Shikigami.Attestation.Compliance qualified as Compliance
 import Shikigami.Attestation.Evidence
-import Shikigami.Attestation.Reviewed (NonConformingReason)
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, renderCallCorrelationId, renderRunCorrelationId)
 import Shikigami.Prelude
+import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceCategory, runEvidenceEventStream)
+import Shikigami.RunEvidence.Query
+import Shikigami.RunEvidenceLookup.Generated.ReadModel (runEvidenceLookupReadModel)
 
-newtype EvidenceStore = EvidenceStore {pool :: Pool}
+newtype EvidenceStore = EvidenceStore {store :: KirokuStore}
 
-postgresEvidenceStore :: Pool -> EvidenceStore
+postgresEvidenceStore :: KirokuStore -> EvidenceStore
 postgresEvidenceStore = EvidenceStore
-
-data ComplianceVerdict
-  = VerdictSanctioned
-  | VerdictNotSanctioned
-  | VerdictIncomplete
-  | VerdictFailed
-  deriving stock (Eq, Show, Generic)
-
-data StoredRunEvidence = StoredRunEvidence
-  { runEvidenceId :: !RunEvidenceId,
-    runId :: !Text,
-    status :: !EvidencePhase,
-    verdict :: !(Maybe ComplianceVerdict),
-    reasons :: ![NonConformingReason],
-    binding :: !Value,
-    observations :: !Value,
-    expectedCallCount :: !Int,
-    recordedCallCount :: !Int,
-    calls :: ![StoredCallEvidence]
-  }
-  deriving stock (Eq, Show, Generic)
-
-data StoredCallEvidence = StoredCallEvidence
-  { callId :: !Text,
-    sourceRunId :: !Text,
-    relationship :: !Text,
-    relatedCallId :: !(Maybe Text),
-    resolvedModelId :: !Text,
-    requestedAlias :: !(Maybe Text),
-    baikaiCallId :: !Text,
-    attempt :: !Int64,
-    callStatus :: !Text,
-    evidenceStrength :: !Text,
-    evidence :: !Value
-  }
-  deriving stock (Eq, Show, Generic)
 
 data EvidencePersistenceError
   = InvalidEvidenceTransition !TransitionError
   | EvidenceCommandFailed !CommandError
+  | EvidenceProjectionFenced !ProjectionCatalog.RebuildGroupId !RebuildRunId
+  | EvidenceProjectionUnregistered !ProjectionCatalog.RebuildGroupId
+  | EvidenceProjectionRevisionUnavailable !ProjectionCatalog.RebuildGroupId !ProjectionCatalog.ProjectionRevisionId
+  | EvidenceProjectionBindingInvalid !ProjectionCatalog.RebuildGroupId !ProjectionCatalog.ProjectionRevisionId !Text
+  | EvidenceProjectionCatalogMismatch !ProjectionCatalog.SourceId
   | MissingComplianceRollUp !EvidencePhase
   | VerdictDoesNotMatchPhase !EvidencePhase !Bool
   deriving stock (Eq, Show, Generic)
@@ -151,15 +123,22 @@ persistEvidenceTransition evidenceStore runEvidence@RunEvidence {runEvidenceId =
                   targetStream = Stream.entityStream runEvidenceCategory (runEvidenceIdText aggregateId)
                   projection = runProjection advanced rollUp
                   callProjections = callProjection (renderRunCorrelationId advancedRunId) <$> advancedCalls
+              let (catalog, projectionSet) = Catalog.withLiveEvidence (\_ _ -> persistProjection projection callProjections)
               result <-
-                runCommandWithSqlEvents
+                runCommandWithCatalogProjections
                   defaultRunCommandOptions
                   runEvidenceEventStream
                   targetStream
                   command
-                  (\_ _ -> persistProjection projection callProjections)
+                  catalog
+                  projectionSet
               case result of
-                Right _ -> pure (Right advanced)
+                Right (ProjectionCommandApplied _) -> pure (Right advanced)
+                Right (ProjectionCommandFenced group run) -> pure (Left (EvidenceProjectionFenced group run))
+                Right (ProjectionCommandGroupUnregistered group) -> pure (Left (EvidenceProjectionUnregistered group))
+                Right (ProjectionCommandServingRevisionUnavailable group revision) -> pure (Left (EvidenceProjectionRevisionUnavailable group revision))
+                Right (ProjectionCommandServingBindingInvalid group revision detail) -> pure (Left (EvidenceProjectionBindingInvalid group revision detail))
+                Right (ProjectionCommandCatalogMismatch source) -> pure (Left (EvidenceProjectionCatalogMismatch source))
                 Left CommandRejected -> do
                   stored <- liftIO (findRunEvidence evidenceStore correlationId)
                   pure case stored of
@@ -315,18 +294,6 @@ phaseText = \case
   Incomplete -> "incomplete"
   Failed -> "failed"
 
-parsePhase :: Text -> Either Text EvidencePhase
-parsePhase = \case
-  "requested" -> Right Requested
-  "profile-resolved" -> Right ProfileResolved
-  "running" -> Right Running
-  "evidence-sealed" -> Right EvidenceSealed
-  "attested" -> Right Attested
-  "non-conforming" -> Right NonConforming
-  "incomplete" -> Right Incomplete
-  "failed" -> Right Failed
-  other -> Left ("unknown evidence phase " <> other)
-
 verdictText :: ComplianceVerdict -> Text
 verdictText = \case
   VerdictSanctioned -> "sanctioned"
@@ -334,64 +301,15 @@ verdictText = \case
   VerdictIncomplete -> "incomplete"
   VerdictFailed -> "failed"
 
-parseVerdict :: Text -> Either Text ComplianceVerdict
-parseVerdict = \case
-  "sanctioned" -> Right VerdictSanctioned
-  "not-sanctioned" -> Right VerdictNotSanctioned
-  "incomplete" -> Right VerdictIncomplete
-  "failed" -> Right VerdictFailed
-  other -> Left ("unknown compliance verdict " <> other)
-
 -- | Query the run projection and every accounted call by run correlation id.
 findRunEvidence :: EvidenceStore -> RunCorrelationId -> IO (Maybe StoredRunEvidence)
-findRunEvidence EvidenceStore {pool} requestedRunId = do
-  let renderedRunId = renderRunCorrelationId requestedRunId
-  queryResult <-
-    Pool.use
-      pool
-      ( TxSessions.transaction
-          TxSessions.RepeatableRead
-          TxSessions.Read
-          (findRunTransaction renderedRunId)
-      )
-  stored <- either (ioError . userError . show) pure queryResult
-  case stored of
-    Nothing -> pure Nothing
-    Just (raw, storedCalls) -> Just <$> decodeStoredRun raw storedCalls
-
-findRunTransaction :: Text -> Tx.Transaction (Maybe (RawStoredRun, [StoredCallEvidence]))
-findRunTransaction renderedRunId = do
-  storedRun <- Tx.statement renderedRunId findRunStatement
-  case storedRun of
-    Nothing -> pure Nothing
-    Just raw -> do
-      storedCalls <- Tx.statement renderedRunId findCallsStatement
-      pure (Just (raw, storedCalls))
-
-type RawStoredRun = (Text, Text, Text, Maybe Text, Value, Value, Value, Int32, Int32)
-
-decodeStoredRun :: RawStoredRun -> [StoredCallEvidence] -> IO StoredRunEvidence
-decodeStoredRun (rawAggregateId, runId, statusText, verdictValue, reasonValue, binding, observations, expectedCount, recordedCount) calls = do
-  runEvidenceId <- either (ioError . userError . Text.unpack) pure (parseRunEvidenceId rawAggregateId)
-  status <- either (ioError . userError . Text.unpack) pure (parsePhase statusText)
-  verdict <- either (ioError . userError . Text.unpack) pure (traverse parseVerdict verdictValue)
-  reasons <-
-    case fromJSON reasonValue of
-      Success decoded -> pure decoded
-      Error err -> ioError (userError ("cannot decode run-evidence reasons: " <> err))
-  pure
-    StoredRunEvidence
-      { runEvidenceId,
-        runId,
-        status,
-        verdict,
-        reasons,
-        binding,
-        observations,
-        expectedCallCount = fromIntegral expectedCount,
-        recordedCallCount = fromIntegral recordedCount,
-        calls
-      }
+findRunEvidence EvidenceStore {store} requestedRunId = do
+  result <-
+    runEff . runErrorNoCallStack @StoreError . runStorePool store $
+      runQuery Nothing runEvidenceLookupReadModel (renderRunCorrelationId requestedRunId)
+  queried <- either (ioError . userError . show) pure result
+  stored <- either (ioError . userError . show) pure queried
+  traverse (uncurry decodeStoredRun) stored
 
 upsertRunStatement :: Statement RunProjection Text
 upsertRunStatement =
@@ -464,55 +382,3 @@ upsertCallStatement =
         <> ((\CallProjection {evidence} -> evidence) >$< Encoders.param (Encoders.nonNullable Encoders.jsonb))
     )
     Decoders.noResult
-
-findRunStatement :: Statement Text (Maybe RawStoredRun)
-findRunStatement =
-  preparable
-    """
-    SELECT run_evidence_id, run_id, status, verdict, reasons, binding,
-           observations, expected_call_count, recorded_call_count
-      FROM shikigami.run_evidence
-     WHERE run_id = $1
-    """
-    (Encoders.param (Encoders.nonNullable Encoders.text))
-    ( Decoders.rowMaybe
-        ( (,,,,,,,,)
-            <$> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
-            <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
-            <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
-            <*> Decoders.column (Decoders.nonNullable Decoders.int4)
-            <*> Decoders.column (Decoders.nonNullable Decoders.int4)
-        )
-    )
-
-findCallsStatement :: Statement Text [StoredCallEvidence]
-findCallsStatement =
-  preparable
-    """
-    SELECT call_id, source_run_id, relationship, related_call_id,
-           resolved_model_id, requested_alias, baikai_call_id, attempt,
-           call_status, evidence_strength, evidence
-      FROM shikigami.run_evidence_calls
-     WHERE run_id = $1
-     ORDER BY call_id
-    """
-    (Encoders.param (Encoders.nonNullable Encoders.text))
-    ( Decoders.rowList
-        ( StoredCallEvidence
-            <$> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.int8)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
-        )
-    )

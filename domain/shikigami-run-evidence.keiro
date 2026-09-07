@@ -8,6 +8,56 @@ language keiro-dsl 5
 context shikigami
 layout collocated
 
+# Rich payloads and lifecycle history have one guarded commit boundary.
+target run_evidence_rows {
+  schema = "shikigami"
+  table = "run_evidence"
+  reset = preserve
+}
+
+target run_evidence_calls {
+  schema = "shikigami"
+  table = "run_evidence_calls"
+  reset = preserve
+  depends-on = [ run_evidence_rows ]
+}
+
+rebuild-group run_evidence_store {
+  targets = [ run_evidence_rows run_evidence_calls ]
+  order = [ run_evidence_rows run_evidence_calls ]
+}
+
+projection-owner run_evidence_writer {
+  source = aggregate RunEvidence
+  delivery = inline
+  group = run_evidence_store
+  targets = [ run_evidence_rows run_evidence_calls ]
+  order = 10
+  replay = live-only "Lifecycle events omit the encode-only rich evidence payloads"
+}
+
+readmodel run_evidence_lookup {
+  columns {
+    run_id text required
+    run_evidence_id text required
+    status text required
+    verdict text
+    reasons jsonb required
+    binding jsonb required
+    observations jsonb required
+    expected_call_count int required
+    recorded_call_count int required
+    created_at timestamptz required
+    updated_at timestamptz required
+  }
+  version = 1
+  shape = "fnv1a:38e7ae8f6358cb87"
+  freshness = immediate
+  group = run_evidence_store
+  targets = [ run_evidence_rows run_evidence_calls ]
+  backing = run_evidence_rows
+}
+
 id RunEvidenceId prefix=shikigami_run_evidence
 
 aggregate RunEvidence

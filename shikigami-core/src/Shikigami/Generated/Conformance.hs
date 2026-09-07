@@ -5,6 +5,7 @@ module Shikigami.Generated.Conformance
   ) where
 
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
+import Shikigami.RunEvidenceLookup.Generated.ReadModelHarness qualified as RunEvidenceLookup
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
@@ -13,6 +14,7 @@ runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
   pure (
     [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
+    <> [("readmodel/run_evidence_lookup/" <> fact, passed) | (fact, passed) <- RunEvidenceLookup.readModelFactResults]
   )
 
 serviceConformanceFacts :: [(String, String)]

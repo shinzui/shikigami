@@ -3,8 +3,8 @@
 This census was refreshed on 2026-09-07 for [plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md), starting at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 It describes executed ownership and explicitly identifies pending adoption. A declaration
 counts only when its generated contract is used by production code (ADR 0001).
-The workspace currently contains four Language 5 members: agent-run, approval,
-conversation, and RunEvidence. Later plan milestones add queue and catalog contracts.
+The workspace currently contains five Language 5 members: agent-run, approval,
+conversation, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
 
 ## Workflows and identities
 
@@ -36,20 +36,19 @@ It does not become an aggregate merely because RunEvidence is now an aggregate.
 RunEvidenceId, commands, events, transducer, codecs and behavior obligations.
 `Shikigami.RunEvidence.BehaviorHoles` supplies executable state/command witnesses.
 `shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs` executes
-`runCommandWithSqlEvents` and persists `shikigami.run_evidence` and
-`shikigami.run_evidence_calls` in the same transaction callback. These are real
-application-owned query targets, disproving the former no-aggregate/no-read-model census.
-`RunEvidenceSpec` covers the lifecycle and persistence boundary.
+`runCommandWithCatalogProjections` with a validated live handler capturing rich command
+payloads. Lifecycle append and both SQL target writes share one transaction. The generated
+`run_evidence_lookup` model guards queries through `Keiro.ReadModel.runQuery`.
+`RunEvidenceSpec` proves SQL-failure rollback, typed rebuild fencing, fenced-query refusal,
+restart convergence, and a generated lifecycle replay audit.
 
-Plan 65 assigns the generated catalog and guarded query/write integration to the
-RunEvidence vertical. Both SQL tables belong to one dependency group. Its reset policy
-must preserve and reconcile data and its delivery capability must be live-only:
-lifecycle events do not contain Baikai's rich encode-only evidence. No destructive
-replay, stream repair, or fabricated evidence decoder can recover those payloads.
-Acceptance must force SQL failure and catalog fencing and observe atomic rollback.
-`shikigami-server/src/Shikigami/Server/Command/Runs.hs` owns operator evidence queries;
-`Server/Command/Ops.hs` must expose honest lifecycle audit/catalog hooks using the same
-validated catalog. Current raw SQL queries and empty hooks remain pending adoption.
+Both SQL targets share the generated `run_evidence_store` dependency group. Their reset
+policy is `PreserveAndReconcile`; the owner is `LiveOnly` because lifecycle history lacks
+rich evidence payloads. Catalog rebuild operations preserve existing rows and cannot
+reconstruct missing payloads. There is no destructive reset or rich-evidence replay adapter.
+`Shikigami.RunEvidence.Catalog` is the shared authority for writes, queries, registration
+and the server's catalog/lifecycle-audit hooks. Runtime entry points register it before
+serving requests. The static handler fails closed without captured command evidence.
 No external SQL reader has been identified in the repository.
 
 Kioku owns shared session streams, memory projections and session timer projections.
@@ -59,21 +58,19 @@ not redeclare that upstream aggregate or those targets as its own.
 
 ## Run-job queue
 
-`shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the current RunJob domain value
-and bare JSON codec. `Trigger/Enqueue.hs` is the producer boundary for
-`shikigami_run_jobs`; `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` decodes
-and dispatches it. Producers include CLI, schedule, Kafka inbox, delegation and conversation
-routing. The complete payload includes routing, trigger data, occurrence time, idempotency,
-parentage, depth, lineage and delegation budget, not just the three workflow input facts.
-`WireCompatSpec` currently proves the bare payload and compatibility defaults.
+`shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the complete journal input.
+`domain/shikigami-run-jobs.keiro` owns the twelve-field generated `RunJobMessage`
+envelope and queue policy. `Shikigami.RunJobs` adapts the nominal domain value to
+that envelope and validates identity and route on decoding. `Trigger/Enqueue.hs`
+uses it for direct and transactional producers; the worker uses the same generated
+codec, queue provisioning and retry policy. CLI, schedule, Kafka inbox, delegation
+and conversation routing all select an explicit route.
 
-Language 5 supports this service-owned queue. Plan 65 will add
-`domain/shikigami-run-jobs.keiro`, use generated Queue/QueueCodec/QueuePolicy artifacts
-at both ends, and replace the bare fixture with a complete literal `{v,t,data}` envelope.
-The existing wire shape is preserved during edition migration, then intentionally reset
-in a separate reviewed change. `InferredLegacyRoute` and bare fallback decoding have no
-permanent exemption; every producer must choose its route explicitly before removal.
-Acceptance is an actual generated-envelope enqueue/dequeue/run, not a codec-only test.
+The reviewed unused pre-v1 reset removed bare queue decoding, missing-field defaults,
+and inferred routing. `WireCompatSpec` pins a complete literal envelope and rejects
+the former bare payload. Worker tests exercise actual enqueue and dispatch; scheduler
+and inbox tests decode through the production facade. Language 5 has no separate
+workqueue worker-binding clause: the Haskell worker registration is the executable binding.
 
 ## External intake and sink delivery
 
@@ -105,8 +102,8 @@ telemetry before store callbacks, validated streams/catalog, registry completene
 summaries, quiescent waits and safe terminal retention. Existing wiring is retained when tests
 prove it meets the released contract.
 
-`shikigami-server/src/Shikigami/Server/Command/Ops.hs` currently leaves application hooks
-empty. Its no-aggregate rationale is obsolete. Lifecycle audit and catalog hooks are applicable.
+`shikigami-server/src/Shikigami/Server/Command/Ops.hs` mounts generated lifecycle audit
+and validated catalog operations. Its catalog preview proves no destructive target reset.
 The released ResumeHook effect row lacks the resource-aware Kioku effects required here;
 plan 65 must either supply an honest interpreter or expose bounded resume at the worker-owned
 operational boundary and document the exact unsupported embedded type. Timer mutation stays

@@ -28,6 +28,7 @@ import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude (Text)
+import Shikigami.Runtime (registerRuntimeCatalog)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
@@ -57,6 +58,7 @@ runWorkerCmd config = do
     behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
     let settings = StoreConnection.defaultConnectionSettings connStr
     StoreConnection.withStore settings $ \st -> do
+      registerRuntimeCatalog st
       let manifestDirectory = (.agentsDirectory) config
           storePool = StoreConnection.pool st
       report <-

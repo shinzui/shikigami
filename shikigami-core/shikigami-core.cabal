@@ -97,8 +97,10 @@ library
     Shikigami.Router.Catalog
     Shikigami.Router.Decision
     Shikigami.Router.Declaration
+    Shikigami.RunEvidence.Catalog
     Shikigami.RunEvidence.Conformance
     Shikigami.RunJobs
+    Shikigami.Runtime
     Shikigami.Sink
     Shikigami.Sink.Auth
     Shikigami.Sink.Authorization
@@ -140,7 +142,9 @@ library
     Shikigami.Generated.BehaviorSourceMap
     Shikigami.Generated.Nominals
     Shikigami.Generated.Nominals.Internal
+    Shikigami.Generated.ProjectionCatalog
     Shikigami.Generated.ReplayAudit
+    Shikigami.ProjectionCatalog.ProjectionCatalogHoles
     Shikigami.RunEvidence.BehaviorHoles
     Shikigami.RunEvidence.Generated.BehaviorContract
     Shikigami.RunEvidence.Generated.Codec
@@ -149,6 +153,12 @@ library
     Shikigami.RunEvidence.Generated.Harness
     Shikigami.RunEvidence.Generated.Projection
     Shikigami.RunEvidence.Generated.Transducer
+    Shikigami.RunEvidence.Live
+    Shikigami.RunEvidence.Query
+    Shikigami.RunEvidenceLookup.Generated.ReadModel
+    Shikigami.RunEvidenceLookup.Generated.ReadModelHarness
+    Shikigami.RunEvidenceLookup.Generated.ReadModelTable
+    Shikigami.RunEvidenceLookup.ReadModelHoles
     Shikigami.RunJobs.Generated.Queue
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy

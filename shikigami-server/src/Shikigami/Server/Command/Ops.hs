@@ -24,41 +24,18 @@
 -- lease release, workflow resurrection, outbox maintenance passes, and
 -- stuck-timer triage were all out of scope and all come free.
 --
--- == Why every hook is empty
+-- == Application hooks
 --
--- 'AppHooks' has four fields, and each one gates commands that need a value only
--- the embedding application can supply. All four are 'Nothing' here, for three
--- different reasons.
+-- RunEvidence supplies its generated lifecycle replay-audit targets and the
+-- same validated projection catalog used by live writes and queries. Its rich
+-- payload targets are LiveOnly and PreserveAndReconcile: an audit checks the
+-- lifecycle, and a destructive replay cannot reconstruct their payloads.
 --
--- @replayAudit@ and @projectionCatalog@ are empty because Shikigami has neither.
--- @docs\/architecture\/shikigami-domain-inventory.md@ established that this
--- service has no aggregate, read model, projection, router, or process manager
--- of its own. Populating either would advertise a capability the runtime does
--- not have, which is the mistake
--- @docs\/adr\/0001-declare-only-what-the-runtime-executes.md@ exists to prevent.
---
--- @workflowResume@ is empty because the types do not line up and the verb is not
--- worth the change that would make them. @Keiro.Ops.Workflow.ResumeHook@ wants a
--- @WorkflowRegistry '[Store, Error StoreError, IOE]@; Shikigami's registry is
--- over @Kioku.App.AppEffects@, which is @'[Store, KirokuStoreResource, Error
--- StoreError, Tracing, IOE]@ — a wider row. Narrowing it is a change to how this
--- service builds its registry, and it would buy @wf resume-once@, a single
--- bounded pass that the worker process's resume loop already performs
--- continuously.
---
--- @timerFire@ is empty for the same reason, which is worth stating because the
--- plan that led here expected to populate it. The hook gates exactly one
--- command, @timer drain-once@; the entire timer /triage/ surface —
--- @timer stuck list@, @timer requeue@, @timer cancel@, @timer dead-letter@ —
--- mounts unconditionally
--- (@keiro-ops\/src\/Keiro\/Ops\/Timer.hs:57-96@). So the hook is a convenience
--- over a loop the worker already runs, not a capability, and skipping it also
--- sidesteps a package-boundary problem: @shikigamiTimerFallback@ lives in
--- @shikigami-workers@, which @shikigami-server@ may not import.
---
--- The tree drops an unhooked command from the parser entirely rather than
--- mounting it and failing at run time, so none of these absences shows up as a
--- verb that exists and then refuses.
+-- The embedded ResumeHook requires a registry over
+-- @[Store, Error StoreError, IOE]@. Shikigami needs KirokuStoreResource and
+-- Tracing as well; the worker-owned bounded action retains those effects.
+-- Timer draining likewise stays with the owning worker dispatcher. Those two
+-- embedded hooks remain absent; upstream timer triage stays available.
 --
 -- == How the database URL reaches the tree
 --
@@ -125,29 +102,35 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID.V4
 import Keiro.Ops
-  ( AppHooks,
+  ( AppHooks (..),
     OpsInvocation,
     emptyAppHooks,
     opsCommandTree,
     runOpsInvocation,
   )
+import Keiro.Ops.Embed (OpsAuditConfig (..))
+import Keiro.Projection.Catalog.Operations (projectionCatalogOperations)
 import Options.Applicative (Parser, infoParser)
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Log qualified as Log
+import Shikigami.RunEvidence.Catalog qualified as Evidence
 import System.Environment (getArgs, setEnv)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess), exitWith)
 
--- | Shikigami mounts the whole tree with no application hooks. See the module
--- header for why each of the four is empty.
+-- | Mount only application hooks whose public effects match the runtime.
 shikigamiOpsHooks :: AppHooks
-shikigamiOpsHooks = emptyAppHooks
+shikigamiOpsHooks =
+  emptyAppHooks
+    { replayAudit = Just (OpsAuditConfig Evidence.auditTargets),
+      projectionCatalog = Just (projectionCatalogOperations Evidence.validatedProjectionCatalog)
+    }
 
 -- | The mounted tree's parser, lifted out of the 'ParserInfo' @keiro-ops@
 -- builds so it can be an alternative inside Shikigami's own dispatcher.
 --
 -- This is a pure value: which commands mount depends only on which hooks are
--- present, and all of Shikigami's are statically absent. That is what lets the
+-- present. The generated catalog and audit targets are pure, which lets the
 -- tree be parsed before configuration is resolved, which
 -- 'Shikigami.Server.Command.runAdmin' requires — configuration resolution
 -- happens after parsing and before any action runs.

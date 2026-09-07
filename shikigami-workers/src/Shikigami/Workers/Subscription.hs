@@ -24,6 +24,7 @@ import Shikigami.Health.Worker
     supervisedLoopVerdict,
   )
 import Shikigami.Log qualified as Log
+import Shikigami.Runtime (registerRuntimeCatalog)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
@@ -48,6 +49,7 @@ runConsumeStream config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
+    registerRuntimeCatalog st
     let manifestDirectory = (.agentsDirectory) config
         storePool = pool st
     report <-
@@ -109,6 +111,7 @@ runConsumeEvents config = do
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
   let settings = defaultConnectionSettings connStr
   withStore settings $ \st -> withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
+    registerRuntimeCatalog st
     let manifestDirectory = (.agentsDirectory) config
         storePool = pool st
     report <-
