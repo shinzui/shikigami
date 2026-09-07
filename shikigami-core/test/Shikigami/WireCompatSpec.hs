@@ -1,19 +1,7 @@
--- | Compatibility fixtures for everything Shikigami persists or enqueues.
---
--- The July 2026 dependency cohort changed durable protocols underneath this
--- application: Keiro 0.4 added a snapshot state-shape hash and a versioned queue
--- envelope for scaffolded workqueues, Kioku 0.2 moved onto it, and
--- shibuya-pgmq-adapter 0.12 changed how a delivery attempt is counted. None of
--- those changes is supposed to alter a byte Shikigami writes. This module is the
--- proof, and the reason the literals below are literals: a fixture built by
--- calling the current encoder would pass no matter what the encoder did.
---
--- The literals were captured from the encoders as they stand, and
--- @git diff@ over the modules defining these types is empty between the
--- pre-upgrade commit @fef46f1@ and the upgrade, so they are also what the
--- pre-upgrade build produced. Keep them permanently: they are the record of what
--- is already in production queues and outbox rows. A change here is a wire-format
--- change and needs a migration story, not a fixture edit.
+-- | Literal durable-wire fixtures. The release/record migration preserved the
+-- original bytes. Plan 65 then deliberately established the generated queue
+-- envelope under ADR 0027's unused pre-v1 exception. The old bare queue value
+-- remains a rejection fixture; other protocol fixtures retain their contracts.
 module Shikigami.WireCompatSpec (tests) where
 
 import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON)
@@ -21,7 +9,6 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
-import Data.List qualified as List
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
@@ -32,7 +19,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
-import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity))
+import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream), runJobWorkflowId)
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
@@ -45,6 +32,7 @@ import Shikigami.Capability.Overlay
     mkCapabilityRevision,
     mkResolvedCapabilitySet,
   )
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
@@ -129,64 +117,40 @@ sampleCapabilityResolution =
 -- The run-job queue
 -- ---------------------------------------------------------------------------
 
--- | Keiro 0.4 gives @keiro-dsl@-scaffolded workqueues a versioned
--- @keiroJobCodec@ envelope, and its changelog is explicit that replacing a bare
--- payload codec on an existing queue strands in-flight messages unless the queue
--- is drained first.
---
--- Shikigami's @shikigami_run_jobs@ queue is not scaffolded by @keiro-dsl@. It is
--- sent through PGMQ directly by "Shikigami.Trigger.Enqueue", whose message body
--- is @toJSON job@ — a bare 'RunJob' — and drained by
--- "Shikigami.Agent.RunJob.Worker", which decodes the same bare value. So the
--- envelope change does not reach this queue and no drain gate is required. These
--- cases are what makes that claim checkable rather than asserted: if the queue
--- ever does move to the envelope, they fail.
+-- | Producer and consumer execute this complete generated envelope. The
+-- hand-owned journal retains the domain value; it does not record the envelope.
 queueTests :: TestTree
 queueTests =
   testGroup
-    "shikigami_run_jobs payloads"
-    [ testCase "a pre-upgrade run job decodes to the same value" do
-        decoded <- decodeOrFail @RunJob preUpgradeRunJob
-        decoded @?= sampleRunJob,
-      testCase "the encoder still produces the pre-upgrade bytes" do
-        assertSameJson "run job" preUpgradeRunJob (encode sampleRunJob),
-      testCase "the payload is a bare run job, not a versioned envelope" do
-        -- A keiroJobCodec envelope would wrap the job under a schema-version
-        -- key. Decoding straight to a RunJob is what proves it does not.
+    "shikigami_run_jobs generated envelope"
+    [ testCase "production encoder matches the complete envelope golden" do
+        assertSameJson "run job envelope" currentRunJobEnvelope (encode (RunJobs.encodeRunJob sampleRunJob)),
+      testCase "production decoder accepts the literal envelope" do
+        value <- decodeOrFail @Value currentRunJobEnvelope
+        RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "the old bare payload is rejected" do
         value <- decodeOrFail @Value preUpgradeRunJob
-        assertEqual "the payload is the job itself" (toJSON sampleRunJob) value,
-      -- The route discriminator is additive. A job enqueued or journaled before
-      -- it existed carries no @routeKind@ key, and must keep meaning what it
-      -- meant then: "nobody declared a route, so reproduce the old decision".
-      testCase "a legacy job decodes with the inferred route" do
-        RunJob {routeKind} <- decodeOrFail @RunJob preUpgradeRunJob
-        assertEqual "no routeKind key means the legacy route" InferredLegacyRoute routeKind,
-      testCase "an explicit route round-trips and adds exactly one key" do
-        let explicit = sampleRunJob {routeKind = ConversationWorkflowRoute}
-        encodedValue <- decodeOrFail @Value (LazyByteString.toStrict (encode explicit))
-        legacyValue <- decodeOrFail @Value preUpgradeRunJob
-        case (encodedValue, legacyValue) of
-          (Object explicitObject, Object legacyObject) -> do
-            assertEqual
-              "removing routeKind leaves exactly the pre-upgrade keys"
-              (List.sort (KeyMap.keys legacyObject))
-              (List.sort (KeyMap.keys (KeyMap.delete "routeKind" explicitObject)))
-            assertEqual
-              "the added key is the declared route"
-              (Just (toJSON ConversationWorkflowRoute))
-              (KeyMap.lookup "routeKind" explicitObject)
-          _ -> assertFailure "a run job must encode as a JSON object"
-        decoded <- decodeOrFail @RunJob (LazyByteString.toStrict (encode explicit))
-        assertEqual "an explicit route survives a round trip" explicit decoded
+        case RunJobs.decodeRunJob value of
+          Left _ -> pure ()
+          Right _ -> assertFailure "bare payload accepted",
+      testCase "a route is required at the current domain boundary" do
+        case toJSON sampleRunJob of
+          Object fields -> case Aeson.fromJSON @RunJob (Object (KeyMap.delete "routeKind" fields)) of
+            Aeson.Error _ -> pure ()
+            Aeson.Success _ -> assertFailure "undeclared route accepted"
+          _ -> assertFailure "job must be an object",
+      testCase "the current journal value remains the unwrapped domain value" do
+        decoded <- decodeOrFail @RunJob (LazyByteString.toStrict (encode sampleRunJob))
+        decoded @?= sampleRunJob
     ]
 
 sampleRunJob :: RunJob
 sampleRunJob =
   RunJob
     { agentName = "at-risk-watch",
-      identity = UnresolvedLegacyIdentity,
+      identity = compatibilityIdentity "at-risk-watch",
       triggerKind = TriggeredByStream,
-      routeKind = InferredLegacyRoute,
+      routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,
       idempotencyKey = "at-risk-watch:act_1",
@@ -381,3 +345,6 @@ identityBoundaryTests =
           False -> pure ()
           True -> assertFailure "distinct run keys collided"
     ]
+
+currentRunJobEnvelope :: ByteString
+currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"activityId\":\"act_1\"}},\"t\":\"RunJobMessage\",\"v\":1}"

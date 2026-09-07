@@ -94,7 +94,7 @@ evidenceFailed = EvidenceFailed (EvidenceFailedData fixtureId fixtureRunId)
 
 fixtureId :: RunEvidenceId
 fixtureId =
-  either (error . show) id (parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02q")
+  either (error . show) id (parseRunEvidenceId "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q")
 
 fixtureRunId :: Text
 fixtureRunId = "run-evidence-conformance"

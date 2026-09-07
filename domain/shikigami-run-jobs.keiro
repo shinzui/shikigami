@@ -1,0 +1,31 @@
+language keiro-dsl 5
+context shikigami
+layout collocated
+
+workqueue run_jobs {
+  queue logical = "shikigami_run_jobs"
+  derive physical = "shikigami_run_jobs"
+         dlq = "shikigami_run_jobs_dlq"
+         table = "pgmq.q_shikigami_run_jobs"
+  payload RunJobMessage {
+    agentName -> "agentName" : Text
+    identity -> "identity" : Json
+    triggerKind -> "triggerKind" : Text
+    occurredAt -> "occurredAt" : Time
+    triggerPayload -> "triggerPayload" : Json
+    idempotencyKey -> "idempotencyKey" : Text
+    parentSessionId -> "parentSessionId" : Optional Text
+    parentRunWorkflowId -> "parentRunWorkflowId" : Optional Text
+    delegationDepth -> "delegationDepth" : Optional Int
+    lineage -> "lineage" : List Text
+    delegationBudgetId -> "delegationBudgetId" : Optional Text
+    routeKind -> "routeKind" : Text
+  }
+  retry maxRetries = 5 delay = 60s dlq = on
+  disposition {
+    storeFailure -> retry 60s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

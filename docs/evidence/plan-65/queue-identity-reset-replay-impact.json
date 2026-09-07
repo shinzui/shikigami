@@ -1,0 +1,1 @@
+{"aggregates":{"RunEvidence":{"eventTypes":["CollectionStarted","EvidenceAttested","EvidenceFailed","EvidenceIncomplete","EvidenceNonConforming","EvidenceSealed","ProfileBound"],"includeSnapshotStreams":true}},"verdict":"affected"}

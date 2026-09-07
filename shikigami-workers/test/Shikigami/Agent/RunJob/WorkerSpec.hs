@@ -18,7 +18,7 @@ import Keiro.PGMQ
     JobContext (..),
     JobOutcome (..),
     JobPolling (PollEvery),
-    JobRuntime,
+    JobRuntime (..),
     JobTuning,
     PgmqRuntimeError,
     QueueMetrics (..),
@@ -31,6 +31,7 @@ import Keiro.PGMQ
     jobQueueMetrics,
     mkJobTuning,
     runJobEff,
+    runJobOnce,
     runJobWorkers,
     withJobRuntime,
   )
@@ -49,6 +50,8 @@ import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.RunJobs qualified as RunJobs
+import Shikigami.Trigger.Enqueue qualified as Enqueue
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -57,12 +60,24 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "RunJob"
-    [ testCase "typed codec preserves the producer's bare RunJob JSON" do
+    [ testCase "typed codec uses the generated producer envelope" do
         let payload = sampleJob
-            encoded = Aeson.toJSON payload
+            encoded = RunJobs.encodeRunJob payload
             Job {jobCodec = codec} = runJob
         assertEqual "typed decoder accepts the producer payload" (Right payload) (decodeJob codec encoded)
-        assertEqual "typed encoder keeps the historical wire" encoded (encodeJob codec payload),
+        assertEqual "typed encoder shares the generated wire" encoded (encodeJob codec payload),
+      testCase "the real producer is consumed by the generated job contract" do
+        withShikigamiFreshDatabase databaseFixture \connStr -> do
+          received <- newIORef []
+          runDb connStr \runtime -> do
+            either (assertFailure . show) pure =<< Enqueue.ensureRunQueue runtime.runtimePool
+            _ <- either (assertFailure . show) pure =<< Enqueue.enqueueRunJob runtime.runtimePool sampleJob
+            runJobEff runtime do
+              ensureJobQueue runJob
+              runJobOnce 1 runJob \job -> do
+                liftIO (modifyIORef' received (<> [job]))
+                pure Done
+          assertEqual "one complete domain value crossed the queue" [sampleJob] =<< readIORef received,
       testCase "typed outcome table covers every workflow disposition" do
         assertRetryDefault "store failure" (agentJobOutcome "agent" (Left ()))
         assertDone "completed" (agentJobOutcome "agent" (Right (Completed (Right ()))))
@@ -109,13 +124,6 @@ tests databaseFixture =
         assertRouteError
           "a declared conversation route with an undecodable payload"
           (routeRunJob sampleJob {routeKind = ConversationWorkflowRoute}),
-      testCase "a legacy job with no routeKind reproduces the old decision" do
-        assertConversation
-          "an addressed-looking payload"
-          (routeRunJob sampleJob {routeKind = InferredLegacyRoute, triggerPayload = Aeson.toJSON sampleAddressed})
-        assertAgentRun
-          "anything else"
-          (routeRunJob sampleJob {routeKind = InferredLegacyRoute}),
       testCase "trigger kind does not affect any route" do
         let kinds = [TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation]
         for_ kinds \kind -> do

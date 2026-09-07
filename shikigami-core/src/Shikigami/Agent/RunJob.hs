@@ -36,11 +36,6 @@ data RunRouteKind
     -- as an addressed message; a payload that does not is a producer bug and
     -- dead-letters rather than falling back to the other workflow.
     ConversationWorkflowRoute
-  | -- | No producer sets this. It is what a job enqueued before the
-    -- discriminator existed decodes to, and it is handled by reproducing the
-    -- old duck-typed decision. Delete it once the queue has drained and
-    -- @worker.job.route_inferred@ has stopped appearing.
-    InferredLegacyRoute
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -61,47 +56,42 @@ data RunJob = RunJob
   }
   deriving stock (Eq, Show, Generic)
 
--- | A run job crosses two durable boundaries — the @shikigami_run_jobs@ queue and
--- the workflow journal, where it is the recorded result of the @ingest-job@ step.
--- Per ADR 0011, an additive field must leave the previous bytes untouched when it
--- holds its compatibility default, so 'InferredLegacyRoute' emits no key at all
--- and a queued or journaled job written before the discriminator existed encodes
--- and decodes exactly as it did.
+-- | The current journal value is complete. The queue adds its generated
+-- versioned envelope at the transport boundary, never inside the workflow.
 instance ToJSON RunJob where
-  toJSON RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind} =
+  toJSON job =
     Aeson.object
-      ( [ "agentName" Aeson..= agentName,
-          "triggerKind" Aeson..= triggerKind,
-          "occurredAt" Aeson..= occurredAt,
-          "triggerPayload" Aeson..= triggerPayload,
-          "idempotencyKey" Aeson..= idempotencyKey,
-          "parentSessionId" Aeson..= parentSessionId,
-          "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) parentRunWorkflowId,
-          "delegationDepth" Aeson..= delegationDepth
-        ]
-          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
-          <> ["lineage" Aeson..= lineage | not (null lineage)]
-          <> maybe [] (\budgetId -> ["delegationBudgetId" Aeson..= budgetId]) delegationBudgetId
-          <> ["routeKind" Aeson..= routeKind | routeKind /= InferredLegacyRoute]
-      )
+      [ "agentName" Aeson..= job.agentName,
+        "identity" Aeson..= job.identity,
+        "triggerKind" Aeson..= job.triggerKind,
+        "occurredAt" Aeson..= job.occurredAt,
+        "triggerPayload" Aeson..= job.triggerPayload,
+        "idempotencyKey" Aeson..= job.idempotencyKey,
+        "parentSessionId" Aeson..= job.parentSessionId,
+        "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) job.parentRunWorkflowId,
+        "delegationDepth" Aeson..= job.delegationDepth,
+        "lineage" Aeson..= job.lineage,
+        "delegationBudgetId" Aeson..= job.delegationBudgetId,
+        "routeKind" Aeson..= job.routeKind
+      ]
 
--- | A missing @routeKind@ decodes to 'InferredLegacyRoute', which the worker
--- handles by reproducing the pre-discriminator decision rather than assuming a
--- route nobody declared.
 instance FromJSON RunJob where
   parseJSON = Aeson.withObject "RunJob" \value -> do
     agentName <- value Aeson..: "agentName"
-    identity <- value Aeson..:? "identity" Aeson..!= UnresolvedLegacyIdentity
+    identity <- value Aeson..: "identity"
+    case identity of
+      UnresolvedLegacyIdentity -> fail "run job requires an admitted identity"
+      _ -> pure ()
     triggerKind <- value Aeson..: "triggerKind"
     occurredAt <- value Aeson..: "occurredAt"
     triggerPayload <- value Aeson..: "triggerPayload"
     idempotencyKey <- value Aeson..: "idempotencyKey"
-    parentSessionId <- value Aeson..:? "parentSessionId"
-    parentRunWorkflowId <- value Aeson..:? "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
-    delegationDepth <- value Aeson..:? "delegationDepth"
-    lineage <- value Aeson..:? "lineage" Aeson..!= []
-    delegationBudgetId <- value Aeson..:? "delegationBudgetId"
-    routeKind <- value Aeson..:? "routeKind" Aeson..!= InferredLegacyRoute
+    parentSessionId <- value Aeson..: "parentSessionId"
+    parentRunWorkflowId <- value Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
+    delegationDepth <- value Aeson..: "delegationDepth"
+    lineage <- value Aeson..: "lineage"
+    delegationBudgetId <- value Aeson..: "delegationBudgetId"
+    routeKind <- value Aeson..: "routeKind"
     pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal

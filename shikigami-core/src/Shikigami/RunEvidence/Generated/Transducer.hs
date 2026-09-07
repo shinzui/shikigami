@@ -116,7 +116,7 @@ runEvidenceTransducer =
     _ -> False
 
 runEvidenceFoldFingerprint :: Text
-runEvidenceFoldFingerprint = "366b6f26b0539e26b82cc7d9de58a385"
+runEvidenceFoldFingerprint = "f3498d651a5f18786ed1bb41eb3d4977"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

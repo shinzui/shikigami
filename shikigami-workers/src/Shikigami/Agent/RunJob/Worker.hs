@@ -2,9 +2,7 @@
 
 -- | The typed @shikigami_run_jobs@ consumer.
 --
--- The producer deliberately still writes the historical bare 'RunJob' JSON.
--- 'aesonJobCodec' keeps that wire stable while moving decode failures, retry
--- ceilings, and DLQ routing behind the fleet-standard 'Job' abstraction.
+-- Producer and consumer share the generated versioned queue contract.
 module Shikigami.Agent.RunJob.Worker
   ( runJob,
     handleRunJob,
@@ -35,7 +33,7 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.Void (absurd)
 import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
 import Hasql.Pool qualified
-import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..), aesonJobCodec, defaultRetryPolicy, queueRef)
+import Keiro.PGMQ (Job (..), JobContext (..), JobOutcome (..))
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
@@ -51,20 +49,9 @@ import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
+import Shikigami.RunJobs (runJob)
 import Shikigami.Telemetry.Metrics qualified as Metrics
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envDirectory, envLogger, envMetrics)
-
--- | The queue contract for run jobs. Its codec intentionally preserves the
--- existing unwrapped Aeson payload until a dual-read migration can introduce a
--- versioned envelope.
-runJob :: Job RunJob
-runJob =
-  Job
-    { jobName = "shikigami_run_jobs",
-      jobQueue = queueRef "shikigami_run_jobs",
-      jobCodec = aesonJobCodec,
-      jobPolicy = defaultRetryPolicy
-    }
 
 -- | Process one decoded delivery while renewing its PGMQ visibility lease.
 -- Codec failures never reach this function: @keiro-pgmq@ dead-letters them at
@@ -181,7 +168,6 @@ routeKindText :: RunRouteKind -> Text
 routeKindText = \case
   AgentWorkflowRoute -> "agent_run"
   ConversationWorkflowRoute -> "conversation"
-  InferredLegacyRoute -> "inferred_legacy"
 
 -- | Production heartbeat policy: after ten seconds, extend visibility to thirty
 -- seconds from now, and repeat until work completes.
@@ -219,8 +205,7 @@ data RunRoute
     RouteError !Text
 
 -- | The pure routing decision. Payload decoding validates the declared route; it
--- never chooses one. 'InferredLegacyRoute' is the single exception, and only
--- because it means "enqueued before the discriminator existed".
+-- never chooses one. Every producer declares its intended workflow.
 routeRunJob :: RunJob -> RunRoute
 routeRunJob job = case (.routeKind) job of
   AgentWorkflowRoute -> AgentRunRoute
@@ -228,21 +213,10 @@ routeRunJob job = case (.routeKind) job of
     case Aeson.fromJSON ((.triggerPayload) job) of
       Aeson.Success addressed -> ConversationRoute addressed
       Aeson.Error err -> RouteError (Text.pack err)
-  InferredLegacyRoute ->
-    case Aeson.fromJSON ((.triggerPayload) job) of
-      Aeson.Success addressed -> ConversationRoute addressed
-      Aeson.Error _ -> AgentRunRoute
 
 dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
 dispatchRunJob env job = do
   let route = routeRunJob job
-  when ((.routeKind) job == InferredLegacyRoute) $
-    jobLog
-      env
-      job
-      Log.Warn
-      "worker.job.route_inferred"
-      ["resolved_route" Aeson..= routeText route]
   case route of
     ConversationRoute addressed -> runConversationAgent env job addressed
     AgentRunRoute -> runOneAgent env job

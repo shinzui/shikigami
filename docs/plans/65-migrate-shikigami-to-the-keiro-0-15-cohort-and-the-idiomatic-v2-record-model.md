@@ -106,6 +106,15 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   generation, and full validation, reconciled with Milestone 5.
 - [ ] Milestone 4: establish one current workflow baseline, retire obsolete patch branches,
   and close runtime identity and nominal-type gaps.
+- [x] (2026-09-07) The complete generated RunJobMessage envelope is the runtime
+  producer/consumer codec; queue policy, provisioning and ordering are wired.
+  Removed inferred routing and incomplete RunJob decoding. All 403 unit, 191 core
+  PostgreSQL and 81 worker cases pass, including real producer-to-worker delivery,
+  scheduler and transactional inbox ingestion. Strict Language 5/opaque checks pass.
+- [x] (2026-09-07) The service-owned generated evidence ID uses the full
+  `shikigami_run_evidence` prefix. Current evidence fixtures and witnesses use it.
+- [ ] Milestone 5 remaining: guarded live-only evidence catalog, query surface,
+  atomic failure/fence tests, operational hooks and full qualification.
 - [ ] Milestone 5: declare and execute the run-job queue and applicable read-side contracts;
   prove every generated artifact is used and every remaining exclusion is justified.
 - [ ] Milestone 6: complete startup, resume/timer, telemetry, delivery-failure, and operator
@@ -114,6 +123,26 @@ reviewable commits with explicit before/after fixtures and diff evidence.
   evolution checks, documentation reconciliation, and ADR distillation.
 
 ## Surprises & Discoveries
+
+The queue/identity reset against `8a70c92` reports {'IdPrefixChanged': 1, 'DeclarationAdded': 12, 'WorkflowShapeChanged': 3, 'DerivedIdentityChanged': 1, 'IdDomainContractChanged': 1, 'AggFoldSurfaceChanged': 1}.
+Exact diagnostics and replay impact are retained in
+[queue-identity-reset-diff.json](../evidence/plan-65/queue-identity-reset-diff.json)
+and [queue-identity-reset-replay-impact.json](../evidence/plan-65/queue-identity-reset-replay-impact.json).
+The new queue has no historical generated queue to compare: its old bare payload
+is covered by the literal rejection fixture. Evidence prefix changes are intentional
+under the unused-service exception; they require the current aggregate witnesses
+and PostgreSQL evidence tests, not a fabricated rich-payload upcaster.
+
+The released workqueue grammar has no worker-binding clause; its dispatch grammar
+requires read-model fanout and deduplication sources, which these ingress producers
+do not own. The executable worker binding is `Shikigami.RunJobs.runJob`, used by the
+worker registry and all producers through its codec. No fictitious read-model dispatch
+is declared. The full queue adapter owns its twelve fields. The workflow takes the
+hand-owned domain RunJob directly, replacing its misleading three-field placeholder.
+The two Json boundaries are open trigger payload and validated identity input; the
+complete boundary decoder rejects unresolved identities, missing routes and malformed
+runtime IDs. Strict `--fail-on-opaque` remains enabled and passes.
+
 
 The released differ reports exactly ten `WorkflowPatchRemoved` breaking findings
 for the baseline reset, not `WorkflowBodyChanged`: eight on AgentRun and two on

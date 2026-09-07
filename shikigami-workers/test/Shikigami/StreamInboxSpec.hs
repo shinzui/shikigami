@@ -23,6 +23,7 @@ import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Consumer
   ( DeadLetterId (..),
     DeadLetterRecord (..),
@@ -239,9 +240,7 @@ readRunJobs pool = do
         | Message {body = MessageBody payload} <- Vector.toList messages
         ]
   where
-    decodeJob payload = case Aeson.fromJSON payload of
-      Aeson.Error err -> assertFailure ("invalid RunJob JSON: " <> err)
-      Aeson.Success job -> pure job
+    decodeJob payload = either (assertFailure . ("invalid run envelope: " <>) . show) pure (RunJobs.decodeRunJob payload)
 
 readDeadLetters :: Pool.Pool -> IO [DeadLetterRecord]
 readDeadLetters pool = do

@@ -32,7 +32,7 @@ roundTrips e = parseRunEvidenceEvent (eventType runEvidenceCodec e) (encodeRunEv
 
 sampleRunEvidenceId :: RunEvidenceId
 sampleRunEvidenceId =
-  case parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02q" of
+  case parseRunEvidenceId "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q" of
     Right parsed -> parsed
     Left problem -> error (show problem)
 

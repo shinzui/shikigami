@@ -26,7 +26,7 @@ instance FromJSON RunEvidenceId where
   parseJSON = withText "RunEvidenceId" (either (fail . T.unpack) pure . parseRunEvidenceId)
 
 parseRunEvidenceId :: Text -> Either Text RunEvidenceId
-parseRunEvidenceId input = case validateIdDomainText (typeIdV7Domain "runevidence") input of
+parseRunEvidenceId input = case validateIdDomainText (typeIdV7Domain "shikigami_run_evidence") input of
   Left reason -> Left (T.pack (show reason))
   Right () -> Right (RunEvidenceId input)
 

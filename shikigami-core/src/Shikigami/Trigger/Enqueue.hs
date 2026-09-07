@@ -35,10 +35,11 @@ import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
+import Shikigami.RunJobs (encodeRunJob, queuePhysical)
 
 -- | The IP-7 queue name (shared with the worker).
 runQueueName :: QueueName
-runQueueName = case parseQueueName "shikigami_run_jobs" of
+runQueueName = case parseQueueName queuePhysical of
   Right q -> q
   Left e -> error ("invalid run-queue name: " <> show e)
 
@@ -93,7 +94,7 @@ enqueueRunJobTx job =
   Tx.statement
     SendMessage
       { queueName = runQueueName,
-        messageBody = MessageBody (toJSON job),
+        messageBody = MessageBody (encodeRunJob job),
         delay = Nothing
       }
     PgmqStatements.sendMessage
@@ -114,7 +115,7 @@ enqueueRunJob pool job =
     sendMessage
       SendMessage
         { queueName = runQueueName,
-          messageBody = MessageBody (toJSON job),
+          messageBody = MessageBody (encodeRunJob job),
           delay = Nothing
         }
 

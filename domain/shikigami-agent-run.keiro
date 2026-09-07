@@ -9,13 +9,9 @@ layout collocated
 
 workflow AgentRun
   name "shikigami.agent-run"
-  in RunJob {
-    agentName:Text
-    idempotencyKey:Id
-    occurredAt:Time
-  }
+  in RunJob
   out AgentRunResult
-  id from input.idempotencyKey via idText
+  id from input via runJobWorkflowId
   body
     step ingest-job -> RunJob
     step lookup-agent -> AgentDecl

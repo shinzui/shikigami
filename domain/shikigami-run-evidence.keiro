@@ -8,7 +8,7 @@ language keiro-dsl 5
 context shikigami
 layout collocated
 
-id RunEvidenceId prefix=runevidence
+id RunEvidenceId prefix=shikigami_run_evidence
 
 aggregate RunEvidence
   regs

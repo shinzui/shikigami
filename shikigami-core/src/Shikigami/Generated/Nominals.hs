@@ -22,11 +22,11 @@ instance FieldProjection RunEvidenceIdEqualityProjection where
   type FieldName RunEvidenceIdEqualityProjection = "RunEvidenceId"
   type FieldOwner RunEvidenceIdEqualityProjection = RunEvidenceId
   type FieldResult RunEvidenceIdEqualityProjection = Text
-  fieldShapeId _ = "nominal-equality|name=RunEvidenceId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:runevidence:keiro-dsl/id-domain/typeid-v7/1|owner=generated"
+  fieldShapeId _ = "nominal-equality|name=RunEvidenceId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:shikigami_run_evidence:keiro-dsl/id-domain/typeid-v7/1|owner=generated"
   projectFieldValue _ = runEvidenceIdText
 
 runEvidenceIdIdDomainPattern :: TextPattern
-runEvidenceIdIdDomainPattern = either (error . show) id (idDomainTextPattern (typeIdV7Domain "runevidence"))
+runEvidenceIdIdDomainPattern = either (error . show) id (idDomainTextPattern (typeIdV7Domain "shikigami_run_evidence"))
 
 instance ExactFieldProjection RunEvidenceIdEqualityProjection where
   fieldProjectionDomain _ = textProjectionDomain runEvidenceIdIdDomainPattern

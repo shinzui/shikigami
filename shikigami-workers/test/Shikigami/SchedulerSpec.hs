@@ -25,6 +25,7 @@ import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
@@ -388,11 +389,9 @@ readRunJobs pool = do
   case result of
     Left err -> assertFailure ("readMessage failed: " <> show err)
     Right messages ->
-      pure
-        [ job
-        | Message {body = MessageBody payload} <- Vector.toList messages,
-          Aeson.Success job <- [Aeson.fromJSON payload]
-        ]
+      traverse
+        (either (assertFailure . show) pure . RunJobs.decodeRunJob)
+        [payload | Message {body = MessageBody payload} <- Vector.toList messages]
 
 atMinute :: Integer -> UTCTime
 atMinute minute =

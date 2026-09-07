@@ -26,7 +26,7 @@ where
 import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
-import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueue, jobProcessorWithContext, runJobEff, runJobWorkers)
+import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueueWith, jobProcessorWithContext, runJobEff, runJobWorkers)
 import Kioku.App (AppEnv (..))
 import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, getAppMetrics, waitApp)
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
@@ -35,6 +35,7 @@ import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop), registerReport, supervisedLoopVerdict)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
@@ -84,7 +85,7 @@ runQueueWorker env = do
   result <- runJobEff runtime do
     -- Queue reconciliation owns both the main queue and its policy-enabled DLQ.
     -- The worker does not start unless both are available.
-    ensureJobQueue runJob
+    ensureJobQueueWith RunJobs.queueProvision runJob
     liftIO $
       Log.logInfo
         (envLogger env)
@@ -96,7 +97,7 @@ runQueueWorker env = do
       runJobWorkers
         IgnoreFailures
         100
-        [jobProcessorWithContext defaultJobTuning runJob (handleRunJob env)]
+        [jobProcessorWithContext (RunJobs.jobTuningFor defaultJobTuning) runJob (handleRunJob env)]
     case appResult of
       Left err -> liftIO do
         Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)]

@@ -502,7 +502,7 @@ sampleEvidence =
 
 sampleAggregateId :: RunEvidenceId
 sampleAggregateId =
-  either (error . show) id (parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02q")
+  either (error . show) id (parseRunEvidenceId "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q")
 
 rejectedSampleEvidence :: RunEvidence
 rejectedSampleEvidence =
@@ -516,7 +516,7 @@ rejectedSampleEvidence =
 
 rejectedAggregateId :: RunEvidenceId
 rejectedAggregateId =
-  either (error . show) id (parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02r")
+  either (error . show) id (parseRunEvidenceId "shikigami_run_evidence_01h455vb4pex5vsknk084sn02r")
 
 rejectedRunId :: RunCorrelationId
 rejectedRunId = runCorrelationId "run-evidence-rejected"

@@ -121,7 +121,7 @@ type RunEvidenceRegs =
 
 initialRunEvidenceRegs :: RegFile RunEvidenceRegs
 initialRunEvidenceRegs =
-  RCons (Proxy @"runEvidenceId") (case parseRunEvidenceId "runevidence_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") $
+  RCons (Proxy @"runEvidenceId") (case parseRunEvidenceId "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") $
   RCons (Proxy @"runId") "" RNil
 
 $(deriveAggregateCtorsAll ''RunEvidenceCommand ''RunEvidenceRegs)
