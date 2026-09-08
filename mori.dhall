@@ -66,7 +66,7 @@ in  Schema.Project::{
               , scope = Some Schema.DependencyScope.Regular
               , versionConstraint = Some ">=2.2"
               }
-          , Schema.Dependency.ByName "shinzui/handan"
+          , Schema.Dependency.ByName "shinzui/handan:handan-core"
           , Schema.Dependency.ByName "hasql/hasql:hasql"
           , Schema.Dependency.ByName "hasql/hasql:hasql-pool"
           , Schema.Dependency.ByName "hasql/hasql:hasql-transaction"
@@ -1005,7 +1005,7 @@ in  Schema.Project::{
       , "shinzui/danwa:danwa-api"
       , "shinzui/danwa:danwa-client"
       , "shinzui/en:en-biscuit"
-      , "shinzui/handan"
+      , "shinzui/handan:handan-core"
       , "haskell-works/hw-kafka-client:hw-kafka-client"
       , "shinzui/kafka-effectful:kafka-effectful"
       , "shinzui/keiki:keiki"
@@ -1251,7 +1251,12 @@ in  Schema.Project::{
         , kind = Some Schema.MoriArtifactKind.Package
         , key = Some "en-biscuit"
         }
-      , Schema.MoriRef::{ namespace = "shinzui", name = "handan" }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "handan"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "handan-core"
+        }
       , Schema.MoriRef::{
         , namespace = "haskell-works"
         , name = "hw-kafka-client"
