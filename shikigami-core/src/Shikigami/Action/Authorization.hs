@@ -70,7 +70,7 @@ data ActionAuthorizationDecision = ActionAuthorizationDecision
   deriving stock (Eq, Show)
 
 data ActionAuthorizer = ActionAuthorizer
-  { authorize :: Text -> AgentAction -> IO (Either ActionAuthorizationFailure ActionAuthorizationDecision),
+  { authorize :: !(Text -> AgentAction -> IO (Either ActionAuthorizationFailure ActionAuthorizationDecision)),
     kawaSource :: !Text
   }
 

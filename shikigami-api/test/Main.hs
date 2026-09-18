@@ -64,7 +64,7 @@ packageBoundaryTests =
         declaredName @?= ("boundary-probe" :: Text)
     ]
 
--- ── RFC 7807 problem details ────────────────────────────────────────────────
+-- ── RFC 9457 problem details ────────────────────────────────────────────────
 
 allCodes :: [ProblemCode]
 allCodes = [minBound .. maxBound]

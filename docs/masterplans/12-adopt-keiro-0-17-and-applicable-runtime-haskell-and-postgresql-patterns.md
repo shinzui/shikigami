@@ -53,7 +53,7 @@ The cross-repository decision mori://shinzui/keiro-runtime-patterns/okf/adrs/con
 | EP-2 | Language 6 and nominal contracts | docs/plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md | EP-1 | None | Not Started |
 | EP-3 | Queue, inbox and delivery semantics | docs/plans/68-qualify-keiro-0-17-queue-inbox-and-delivery-semantics.md | EP-1 | EP-2, EP-4 | Not Started |
 | EP-4 | Timer recovery and schema isolation | docs/plans/69-adopt-guarded-timer-recovery-and-schema-isolated-migrations.md | EP-1 | None | Not Started |
-| EP-5 | Haskell, API and CLI patterns | docs/plans/70-apply-haskell-service-api-and-cli-patterns-with-wire-compatibility.md | None | EP-1, EP-2 | Not Started |
+| EP-5 | Haskell, API and CLI patterns | docs/plans/70-apply-haskell-service-api-and-cli-patterns-with-wire-compatibility.md | None | EP-1, EP-2 | Complete |
 | EP-6 | Rollout and coverage qualification | docs/plans/71-qualify-the-keiro-0-17-rollout-and-close-pattern-coverage.md | EP-2, EP-3, EP-4, EP-5 | None | Not Started |
 
 
@@ -83,13 +83,18 @@ Cross-plan ADR candidates are the explicit Language 6 baseline despite Candidate
 - [ ] EP-2: Adopt Language 6 and executable nominal domain contracts.
 - [ ] EP-3: Qualify Keiro 0.17 queue, inbox and delivery semantics.
 - [ ] EP-4: Adopt guarded timer recovery and schema-isolated migrations.
-- [ ] EP-5: Apply Haskell service, API and CLI patterns with wire compatibility.
+- [x] (2026-09-18T18:03:00Z) EP-5: Applied Haskell service, API and CLI patterns with wire compatibility.
 - [ ] EP-6: Qualify the Keiro 0.17 rollout and close pattern coverage.
 
 
 ## Surprises & Discoveries
 
 2026-09-18: EP-1 rechecked Hackage and upstream tags. The newest published Kioku Core remains 0.6.0.0 and requires Keiro below 0.17, so Cabal cannot solve an all-released Keiro 0.17/Kioku cohort. EP-1 remains in progress on this external prerequisite; EP-5 can proceed independently.
+
+2026-09-18: EP-5 completed independently. Its 35 matrix rows are closed, the
+Haskell/API/CLI changes pass package, black-box HTTP, OpenAPI, and workflow
+compatibility checks, and no durable workflow shape changed. The initiative
+remains blocked at EP-1's published Kioku compatibility prerequisite.
 
 
 ## Decision Log

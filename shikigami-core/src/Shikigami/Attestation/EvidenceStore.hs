@@ -19,6 +19,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.Int (Int32, Int64)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, runEff, (:>))

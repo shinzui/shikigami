@@ -34,8 +34,8 @@ Make the seven Shikigami packages build and run their existing behavior against 
 
 
 - [ ] Milestone 1: Resolve release compatibility and pattern ownership.
-  - [x] (2026-09-18T17:27:00Z) Rechecked authoritative package catalogs and tags and captured the isolated solver failure in `docs/evidence/keiro-0.17/release-cohort.md`.
-  - [x] (2026-09-18T17:31:00Z) Inventoried every Mori-registered document in the three corpora and assigned an owning child plan in `docs/architecture/keiro-0.17-pattern-adoption.md`.
+  - [x] (2026-09-18T17:20:00Z) Rechecked authoritative package catalogs and tags and captured the isolated solver failure in `docs/evidence/keiro-0.17/release-cohort.md`.
+  - [x] (2026-09-18T17:22:00Z) Inventoried every Mori-registered document in the three corpora and assigned an owning child plan in `docs/architecture/keiro-0.17-pattern-adoption.md`.
   - [ ] Await a published Kioku cohort whose bounds admit Keiro 0.17, then verify the all-released solve.
 - [ ] Milestone 2: Adopt the supported cohort and mechanical API changes.
 - [ ] Milestone 3: Verify the release boundary.

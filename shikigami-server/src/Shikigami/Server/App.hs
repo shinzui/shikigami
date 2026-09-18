@@ -6,7 +6,7 @@
 -- where an error becomes bytes on the wire.
 --
 -- Servant produces error responses in three ways, and all three are covered here
--- so that a caller never receives a body that is not RFC 7807 problem details:
+-- so that a caller never receives a body that is not RFC 9457 problem details:
 --
 --   1. A handler aborting, which goes through
 --      'Shikigami.Server.Seam.throwProblem'.
@@ -16,8 +16,8 @@
 --   3. A path that exists but not for the requested method. Servant answers 405
 --      with an empty body and offers no formatter hook for it, so
 --      'methodNotAllowedProblem' rewrites that one response in WAI. The rewrite
---      is deliberately narrow: it fires only on status 405 and preserves the
---      @Allow@ header Servant computed.
+--      is deliberately narrow: it fires only on status 405 and preserves any
+--      headers Servant supplied.
 module Shikigami.Server.App
   ( shikigamiApplication,
     shikigamiServer,
@@ -97,9 +97,8 @@ problemErrorFormatters =
 -- | Replace Servant's empty 405 body with problem details.
 --
 -- Narrow on purpose: it inspects only the status, leaves every other response
--- untouched, and keeps the headers Servant produced — notably @Allow@, which
--- tells the caller which methods the path does accept — while replacing the
--- content type and length.
+-- untouched, and keeps any headers Servant produced while replacing the content
+-- type and length.
 methodNotAllowedProblem :: Middleware
 methodNotAllowedProblem app request respond =
   app request \response ->
@@ -135,7 +134,7 @@ exceptionBoundary app request respond =
                 "The server could not complete the request."
             )
 
--- | An RFC 7807 response, built the one way error bodies are ever built.
+-- | An RFC 9457 response, built the one way error bodies are ever built.
 problemResponse :: ProblemCode -> Text -> Response
 problemResponse = problemResponseWith []
 

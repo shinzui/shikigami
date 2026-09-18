@@ -59,6 +59,7 @@ runBehaviorRoleInfo =
       role = RunBehaviorRole,
       parserInfo =
         withConfigOptions
+          "shikigami-run-behavior"
           "Run an agent's behavior once, with no database and no recalled memory"
           ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
@@ -81,6 +82,7 @@ agentRunRoleInfo =
       role = AgentRunRole,
       parserInfo =
         withConfigOptions
+          "shikigami-agent-run"
           "Run an agent with the durable workflow and kioku memory lifecycle"
           ( runAgentRun
               <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")

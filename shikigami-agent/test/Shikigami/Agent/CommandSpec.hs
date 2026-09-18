@@ -28,6 +28,7 @@ import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.App.Config (Role (..))
+import System.Exit (ExitCode (ExitSuccess))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -63,6 +64,8 @@ tests =
         fmap (.role) agentRoles @?= [RunBehaviorRole, AgentRunRole],
       testCase "every one-off executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) agentRoles,
+      testCase "every one-off executable reports its version offline" $
+        mapM_ assertVersion agentRoles,
       testCase "run-behavior keeps its agent and payload options" $
         assertHasAll runBehaviorRoleInfo ["--agent", "--payload", "--workspace"],
       testCase "agent-run keeps its agent and activity options" $
@@ -119,3 +122,12 @@ helpTextOf info =
   case execParserPure defaultPrefs ((.parserInfo) info) ["--help"] of
     Failure failure -> let (message, _) = renderFailure failure ((.binaryName) info) in message
     _ -> ""
+
+assertVersion :: RoleInfo -> IO ()
+assertVersion info =
+  case execParserPure defaultPrefs ((.parserInfo) info) ["--version"] of
+    Failure failure -> do
+      let (message, exitCode) = renderFailure failure ((.binaryName) info)
+      exitCode @?= ExitSuccess
+      assertBool ("version does not name the executable: " <> message) ((.binaryName) info `isInfixOf` message)
+    _ -> assertBool "--version did not exit through optparse-applicative" False

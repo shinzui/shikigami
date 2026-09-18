@@ -27,6 +27,7 @@ import Control.Exception qualified as Exception
 import Control.Monad (forever)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
+import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as Text
 import Data.Time.Clock (NominalDiffTime)

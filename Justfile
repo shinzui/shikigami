@@ -63,6 +63,11 @@ migrate-status:
     DATABASE_URL="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
       cabal run shikigami-migrate -- status
 
+# Run the public HTTP contract against an isolated server and disposable
+# PostgreSQL instance. The runner owns and cleans up every process it starts.
+hurl:
+    bash tests/hurl/run.sh
+
 # Scaffold a new shikigami migration and append it to the manifest.
 #
 # pg-migrate orders migrations by their position in

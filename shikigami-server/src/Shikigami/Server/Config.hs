@@ -63,7 +63,7 @@ defaultServerConfig = serverConfigFrom defaultAppConfig
 -- | The @shikigami-server@ command line: configuration and diagnostics only.
 serverParserInfo :: ParserInfo ConfigOptions
 serverParserInfo =
-  snd <$> withConfigOptions "Serve the public Shikigami HTTP API" (pure ()) serverNamedOptions
+  snd <$> withConfigOptions "shikigami-server" "Serve the public Shikigami HTTP API" (pure ()) serverNamedOptions
 
 -- | @--host@ and @--port@ as command-line configuration sources.
 serverNamedOptions :: Parser [Source]

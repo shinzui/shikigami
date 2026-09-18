@@ -1,4 +1,7 @@
 packages:
+  -- Co-developed public action boundary from mori://shinzui/kikan-en. Replace
+  -- these sibling paths with the exact upstream commit once the M2-M4 commits
+  -- are published; the packages themselves remain the only Kikan dependency.
   shikigami-agent
   shikigami-api
   shikigami-core
@@ -6,9 +9,6 @@ packages:
   shikigami-migrations
   shikigami-server
   shikigami-workers
-  -- Co-developed public action boundary from mori://shinzui/kikan-en. Replace
-  -- these sibling paths with the exact upstream commit once the M2-M4 commits
-  -- are published; the packages themselves remain the only Kikan dependency.
   ../kikan-project/kikan-en/kikan-en-contract
   ../kikan-project/kikan-en/kikan-en-client
 
@@ -18,7 +18,6 @@ packages:
 -- developer run the same checker against domain/shikigami.keiro-workspace
 -- without depending on PATH or on a separate keiro checkout.
 extra-packages: keiro-dsl
-
 -- The conformance runner keiro-dsl generates for the shikigami service. The
 -- glob is named after the service rather than a node, so it stays stable as
 -- workspace members and nodes are added and `cabal test
@@ -26,18 +25,18 @@ extra-packages: keiro-dsl
 -- and its Main.hs are generated; only KeiroConformance.Expectations inside it
 -- is hand-owned.
 optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
-
 with-compiler: ghc-9.12.4
-
 -- The co-developed dependency cohort is selected from published Hackage
 -- releases. docs/dependency-cohort.md holds the release matrix, the upstream
 -- tag commit behind each release, and the compatibility evidence. Only
 -- packages with no Hackage release — or forks we still carry — are pinned by
 -- commit below.
-
 constraints:
   -- durable execution, event model, and agent memory
-    keiki                   ==0.9.1.0
+  -- typed model programs and providers
+  -- worker runtime, queues, and the event store
+  -- process configuration (plan 37) and tracing (plan 28)
+  keiki                   ==0.9.1.0
   , keiki-codec-json        ==0.9.1.0
   , keiro                   ==0.15.0.0
   , keiro-core              ==0.15.0.0
@@ -49,14 +48,10 @@ constraints:
   , kioku-api               ==0.5.2.0
   , kioku-core              ==0.5.2.0
   , kioku-migrations        ==0.5.2.0
-
-  -- typed model programs and providers
   , shikumi                 ==0.3.0.3
   , shikumi-tools           ==0.3.0.3
   , baikai                  ==0.6.0.0
   , baikai-claude           ==0.6.0.0
-
-  -- worker runtime, queues, and the event store
   , kafka-effectful         ==0.3.0.0
   , shibuya-core            ==0.9.0.0
   , shibuya-kafka-adapter   ==0.9.0.0
@@ -68,17 +63,15 @@ constraints:
   , kiroku-store            ==0.8.0.0
   , kiroku-store-migrations ==0.4.0.0
   , pg-migrate              ==1.1.0.0
-
-  -- process configuration (plan 37) and tracing (plan 28)
   , settei                  ==0.2.0.0
   , hs-opentelemetry-api    ==1.0.0.0
   , hs-opentelemetry-sdk    ==1.0.0.0
   , hs-opentelemetry-exporter-in-memory ==1.0.0.0
   , hs-opentelemetry-instrumentation-wai ==1.0.0.0
   , hs-opentelemetry-propagator-w3c ==1.0.0.0
+  , githash                 ==0.1.7.0
 
 -- ── Dependencies with no Hackage release ───────────────────────────────────
-
 -- handan — typed-program runtime used by the behavior runner. Bumped to the
 -- commit that compiles against shikumi 0.3 / shikumi-trace 0.2.
 source-repository-package
@@ -123,7 +116,6 @@ source-repository-package
 -- Schema evolution is pg-migrate throughout: every library in the stack
 -- publishes a MigrationComponent, and this repository composes them. See
 -- docs/dependency-cohort.md.
-
 package blake3
   flags: -avx512 -avx2 -sse41 -sse2
   ghc-options: -optc-DBLAKE3_USE_NEON=0

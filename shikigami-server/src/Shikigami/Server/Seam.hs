@@ -8,7 +8,7 @@
 --
 -- It also owns the one place a domain failure becomes an HTTP response. Every
 -- error the API can return goes through 'problemServerError', so the body is
--- always the RFC 7807 shape defined in "Shikigami.Api.Problem", served as
+-- always the RFC 9457 shape defined in "Shikigami.Api.Problem", served as
 -- @application\/problem+json@. Handlers never construct a @ServerError@
 -- directly and never write an error body of their own.
 module Shikigami.Server.Seam

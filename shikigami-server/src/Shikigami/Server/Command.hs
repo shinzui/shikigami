@@ -38,6 +38,8 @@ module Shikigami.Server.Command
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
 import Options.Applicative
@@ -50,6 +52,7 @@ import Shikigami.App.Config.Load
     runAppConfig,
     usageExitCode,
   )
+import Shikigami.App.Version (versionOption)
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
@@ -84,7 +87,10 @@ type AdminAction = (AppConfig -> IO (), [Source])
 adminInfo :: ParserInfo (Maybe AdminAction, ConfigOptions)
 adminInfo =
   info
-    (((,) <$> optional (subparser (foldMap snd adminSubcommands) <|> opsAction) <*> configOptions) <**> helper)
+    ( ((,) <$> optional (subparser (foldMap snd adminSubcommands) <|> opsAction) <*> configOptions)
+        <**> helper
+        <**> versionOption "shikigami"
+    )
     ( fullDesc
         <> progDesc "shikigami declared-agent runtime: administrative commands"
         <> failureCode usageExitCode
@@ -125,7 +131,7 @@ runAdmin = do
       hPutStrLn stderr "shikigami: no command given; run 'shikigami --help' for the list"
       exitWith (ExitFailure usageExitCode)
     Just (action, sources) -> do
-      config <- runAppConfig AdminRole options {namedSources = (.namedSources) options <> sources}
+      config <- runAppConfig AdminRole (options & #namedSources .~ (.namedSources) options <> sources)
       action config
 
 -- | Every subcommand, paired with its name.

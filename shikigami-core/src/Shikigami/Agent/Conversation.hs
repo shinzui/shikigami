@@ -20,6 +20,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)

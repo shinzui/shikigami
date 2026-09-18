@@ -1,4 +1,4 @@
--- | Every error the server can produce is RFC 7807 problem details.
+-- | Every error the server can produce is RFC 9457 problem details.
 --
 -- Three of the four ways Servant can fail a request are exercised end to end
 -- against a real Warp server, because each one is produced by a different

@@ -33,6 +33,7 @@ import Shikigami.Workers.Command
     workerRoleInfo,
     workerRoles,
   )
+import System.Exit (ExitCode (ExitSuccess))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -80,6 +81,8 @@ tests =
               ],
       testCase "every worker executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) workerRoles,
+      testCase "every worker executable reports its version offline" $
+        mapM_ assertVersion workerRoles,
       testCase "the worker keeps its downstream options" $
         assertHasAll
           workerRoleInfo
@@ -244,3 +247,12 @@ helpTextOf info =
     Failure failure -> let (message, _) = renderFailure failure ((.binaryName) info) in message
     Success _ -> "unexpected success: the parser did not handle --help"
     CompletionInvoked _ -> "unexpected completion invocation"
+
+assertVersion :: RoleInfo -> IO ()
+assertVersion info =
+  case execParserPure defaultPrefs ((.parserInfo) info) ["--version"] of
+    Failure failure -> do
+      let (message, exitCode) = renderFailure failure ((.binaryName) info)
+      exitCode @?= ExitSuccess
+      assertBool ("version does not name the executable: " <> message) ((.binaryName) info `isInfixOf` message)
+    _ -> assertBool "--version did not exit through optparse-applicative" False

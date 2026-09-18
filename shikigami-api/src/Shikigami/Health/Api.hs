@@ -17,7 +17,7 @@
 -- Mounted by 'Shikigami.Api.ShikigamiApi' under the @health@ segment, which
 -- makes the served paths @GET \/health\/live@ and @GET \/health\/ready@.
 --
--- Probe bodies are deliberately exempt from the RFC 7807 problem-details rule in
+-- Probe bodies are deliberately exempt from the RFC 9457 problem-details rule in
 -- "Shikigami.Api.Problem": a 503 from a readiness probe is a status report about
 -- the service, not an error about the request, and monitoring reads it with the
 -- same parser it uses for the 200.

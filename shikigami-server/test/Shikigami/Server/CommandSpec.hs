@@ -49,6 +49,13 @@ tests =
               assertBool (name <> " missing from top-level help:\n" <> rendered) (name `isInfixOf` rendered)
           )
           adminSubcommands,
+      testCase "shikigami reports its version offline" $
+        case execParserPure adminPrefs adminInfo ["--version"] of
+          Failure failure -> do
+            let (message, exitCode) = renderFailure failure "shikigami"
+            exitCode @?= ExitSuccess
+            assertBool ("version does not name the executable: " <> message) ("shikigami" `isInfixOf` message)
+          _ -> assertBool "--version did not exit through optparse-applicative" False,
       testCase "every command renders its own --help" $
         mapM_
           ( \(name, _) -> do

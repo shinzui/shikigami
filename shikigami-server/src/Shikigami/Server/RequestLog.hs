@@ -29,6 +29,7 @@ import OpenTelemetry.Context qualified as Context
 import OpenTelemetry.Instrumentation.Wai (requestContext)
 import OpenTelemetry.Trace.Core qualified as Trace
 import OpenTelemetry.Trace.Id (Base (Base16), spanIdBaseEncodedText, traceIdBaseEncodedText)
+import Servant.Health.Paths (healthRawPaths)
 import System.IO (stderr)
 
 -- | Log included requests to stderr with one write per complete JSON line.
@@ -66,8 +67,7 @@ requestLogMiddlewareWith writeLine include app request respond
 -- | Exclude only the two exact probe paths. Nearby paths remain observable.
 includeProductionRequest :: Request -> Bool
 includeProductionRequest request =
-  rawPathInfo request /= "/health/live"
-    && rawPathInfo request /= "/health/ready"
+  rawPathInfo request `notElem` healthRawPaths
 
 traceFields :: Request -> IO [Pair]
 traceFields request =

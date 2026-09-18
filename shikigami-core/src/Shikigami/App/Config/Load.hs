@@ -93,6 +93,7 @@ import Settei.Optparse
   )
 import Settei.Yaml
 import Shikigami.App.Config
+import Shikigami.App.Version (versionOption)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO qualified as IO
 
@@ -161,6 +162,8 @@ configOptionsWith named =
 -- the reserved usage exit code without repeating the wiring. The action runs
 -- only when no diagnostic was requested.
 withConfigOptions ::
+  -- | Installed program name for @--version@.
+  String ->
   -- | Program description for @--help@.
   String ->
   -- | The binary's own arguments, if any.
@@ -168,9 +171,12 @@ withConfigOptions ::
   -- | The binary's named configuration flags.
   Parser [Source] ->
   ParserInfo (a, ConfigOptions)
-withConfigOptions description own named =
+withConfigOptions binaryName description own named =
   Options.info
-    (((,) <$> own <*> configOptionsWith named) Options.<**> Options.helper)
+    ( ((,) <$> own <*> configOptionsWith named)
+        Options.<**> Options.helper
+        Options.<**> versionOption binaryName
+    )
     ( Options.fullDesc
         <> Options.progDesc description
         <> Options.failureCode usageExitCode

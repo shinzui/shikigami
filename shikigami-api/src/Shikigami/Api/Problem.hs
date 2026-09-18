@@ -3,7 +3,7 @@
 
 -- | The one error body the public HTTP API ever returns.
 --
--- \"RFC 7807 problem details\" is an IETF standard for describing an HTTP error
+-- \"RFC 9457 problem details\" is an IETF standard for describing an HTTP error
 -- as a small JSON object instead of an ad-hoc string. It is served under its own
 -- media type, @application\/problem+json@, so a client can tell a structured
 -- error apart from a successful @application\/json@ payload without inspecting
@@ -24,7 +24,7 @@
 --   * @title@ is a short, human-readable summary that is /stable per code/. It
 --     never varies with the request, so it can be used as a grouping key in
 --     dashboards.
---   * @status@ repeats the HTTP status code in the body, as RFC 7807 requires,
+--   * @status@ repeats the HTTP status code in the body, as RFC 9457 requires,
 --     for clients that lose the response line through a proxy or log pipeline.
 --   * @detail@ is the only per-occurrence text. It must stay free of internal
 --     or security-sensitive information: no stack traces, SQL, file paths,
@@ -60,7 +60,7 @@ import Network.HTTP.Media ((//))
 import Servant.API (Accept (..), MimeRender (..), MimeUnrender (..))
 import Shikigami.Prelude
 
--- | The RFC 7807 body.
+-- | The RFC 9457 body.
 --
 -- The first field is spelled 'problemType' rather than @type@ only because
 -- @type@ is a Haskell keyword; 'problemJsonOptions' maps it back to the @type@

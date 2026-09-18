@@ -11,6 +11,7 @@ import Baikai.Evidence qualified as Baikai
 import Baikai.ThinkingLevel (renderThinkingLevel)
 import Baikai.Usage qualified as Usage
 import Data.Foldable (toList)
+import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as Text
 import Numeric.Natural (Natural)

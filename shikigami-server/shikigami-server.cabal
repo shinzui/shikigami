@@ -1,11 +1,11 @@
 cabal-version: 3.0
-name:          shikigami-server
-version:       0.1.0.0
-synopsis:      Shikigami HTTP server and administrative commands
-build-type:    Simple
+name: shikigami-server
+version: 0.1.0.0
+synopsis: Shikigami HTTP server and administrative commands
+build-type: Simple
 
 common common
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     BlockArguments
     DeriveAnyClass
@@ -17,12 +17,17 @@ common common
     OverloadedStrings
 
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-record-updates
-    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
 
 library
-  import:          common
-  hs-source-dirs:  src
+  import: common
+  hs-source-dirs: src
   exposed-modules:
     Shikigami.Health.Handler
     Shikigami.Server.App
@@ -50,70 +55,80 @@ library
     Shikigami.Trigger.Publish
 
   build-depends:
-    , aeson                                 >=2.2
-    , base                                  >=4.21     && <5
-    , bytestring
-    , case-insensitive
-    , containers                            >=0.6
-    , danwa-api
-    , danwa-client
-    , effectful
-    , filepath
-    , hasql-pool
-    , hs-opentelemetry-api
-    , hs-opentelemetry-exporter-otlp
-    , hs-opentelemetry-instrumentation-wai
-    , hs-opentelemetry-propagator-w3c
-    , hs-opentelemetry-sdk
-    , http-types
-    , hw-kafka-client
-    , kafka-effectful
-    , keiro                                 ==0.15.0.0
-    , keiro-ops                             ==0.15.0.0
-    , kioku-api
-    , kioku-core
-    , kiroku-store
-    , mmzk-typeid
-    , mtl
-    , optparse-applicative                  >=0.18
-    , servant                               >=0.20     && <0.21
-    , servant-health                        >=0.1      && <0.2
-    , servant-server                        >=0.20     && <0.21
-    , settei                                ==0.2.0.0
-    , settei-optparse-applicative           ==0.2.0.0
-    , shikigami-api
-    , shikigami-core
-    , shikigami-migrations
-    , text                                  >=2.1
-    , time                                  >=1.12
-    , unix
-    , uuid                                  >=1.3      && <1.4
-    , wai
-    , warp
+    aeson >=2.2,
+    base >=4.21 && <5,
+    bytestring,
+    case-insensitive,
+    containers >=0.6,
+    danwa-api,
+    danwa-client,
+    effectful,
+    filepath,
+    generic-lens >=2.2,
+    hasql-pool,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-otlp,
+    hs-opentelemetry-instrumentation-wai,
+    hs-opentelemetry-propagator-w3c,
+    hs-opentelemetry-sdk,
+    http-types,
+    hw-kafka-client,
+    kafka-effectful,
+    keiro ==0.15.0.0,
+    keiro-ops ==0.15.0.0,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens >=5.2,
+    mmzk-typeid,
+    mtl,
+    optparse-applicative >=0.18,
+    servant >=0.20 && <0.21,
+    servant-health >=0.1 && <0.2,
+    servant-server >=0.20 && <0.21,
+    settei ==0.2.0.0,
+    settei-optparse-applicative ==0.2.0.0,
+    shikigami-api,
+    shikigami-core,
+    shikigami-migrations,
+    text >=2.1,
+    time >=1.12,
+    unix,
+    uuid >=1.3 && <1.4,
+    wai,
+    warp,
 
 executable shikigami-server
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/server
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , shikigami-server
+    base,
+    shikigami-server,
 
 executable shikigami
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/admin
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-server
+    base,
+    optparse-applicative,
+    shikigami-server,
 
 test-suite shikigami-server-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
   hs-source-dirs: test
   other-modules:
     Shikigami.Server.AgentsSpec
@@ -127,39 +142,43 @@ test-suite shikigami-server-test
 
   -- The probe conformance kit and the WAI round-trip tests run a real Warp
   -- server; Warp's timer manager requires the threaded runtime.
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base
-    , bytestring
-    , containers
-    , hs-opentelemetry-api
-    , hs-opentelemetry-exporter-in-memory
-    , hs-opentelemetry-instrumentation-wai
-    , hs-opentelemetry-propagator-w3c
-    , hs-opentelemetry-sdk
-    , http-client
-    , http-types
-    , keiro
-    , kiroku-store
-    , lens
-    , openapi-hs
-    , optparse-applicative
-    , servant
-    , servant-health
-    , servant-health:testkit
-    , servant-server
-    , settei
-    , settei-env
-    , shikigami-api
-    , shikigami-core
-    , shikigami-migrations:test-support
-    , shikigami-server
-    , tasty
-    , tasty-hunit
-    , text
-    , time
-    , unordered-containers
-    , vector
-    , wai
-    , warp
+    aeson,
+    base,
+    bytestring,
+    containers,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-instrumentation-wai,
+    hs-opentelemetry-propagator-w3c,
+    hs-opentelemetry-sdk,
+    http-client,
+    http-types,
+    keiro,
+    kiroku-store,
+    lens,
+    openapi-hs,
+    optparse-applicative,
+    servant,
+    servant-health,
+    servant-health:testkit,
+    servant-server,
+    settei,
+    settei-env,
+    shikigami-api,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-server,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unordered-containers,
+    vector,
+    wai,
+    warp,

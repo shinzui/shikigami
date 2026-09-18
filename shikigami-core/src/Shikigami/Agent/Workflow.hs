@@ -35,6 +35,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)

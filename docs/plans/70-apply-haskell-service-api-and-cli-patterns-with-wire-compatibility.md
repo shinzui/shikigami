@@ -4,12 +4,19 @@ slug: apply-haskell-service-api-and-cli-patterns-with-wire-compatibility
 title: "Apply Haskell service API and CLI patterns with wire compatibility"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T17:23:14Z
+      mode: "implement"
+      note: "Started the independent Haskell, API, CLI, and configuration adoption stream"
 ---
 
 # Apply Haskell service API and CLI patterns with wire compatibility
@@ -26,13 +33,33 @@ Bring applicable Haskell, HTTP API, command-line, configuration and deployment p
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [x] (2026-09-18T18:03:00Z) Milestone 1: Audited and corrected hand-owned Haskell conventions.
+- [x] (2026-09-18T18:03:00Z) Milestone 2: Closed the applicable HTTP and observability gaps.
+- [x] (2026-09-18T18:03:00Z) Milestone 3: Made CLI and configuration behavior consistent.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet.
+2026-09-18: Strictness annotations are illegal on `newtype` payload fields under
+GHC 9.12; those payloads are already represented by their single field. The
+only lazy data-record field was corrected without changing a codec.
+
+2026-09-18: PostgreSQL 18.6's `libpq.pc` now names `libcurl` in
+`Requires.private`. Adding `curl.dev` to the development shell restored clean
+package configuration; Hurl was added beside it for the black-box suite.
+
+2026-09-18: The public API currently has only the two health GET routes. There
+is no body, capture, query, authentication, collection, or alternate-media
+surface on which to apply the corresponding problem and pagination patterns.
+
+2026-09-18: The pre-existing `packages.default` calls `callCabal2nix` on the
+multi-package repository root, which has no root Cabal file, so `nix build
+.#default` stops before Haskell compilation. The revision fallback was instead
+proved by compiling the actual version module from a Git-free indexed source
+snapshot with an injected `GIT_HASH`; it reported `shikigami v0.1.0.0
+(abcdef1)`. Repairing the repository's complete Nix package graph is separate
+from this presentation-pattern stream.
 
 
 ## Decision Log
@@ -40,11 +67,35 @@ None during implementation yet.
 
 2026-09-18: This work may begin against the existing cohort while release compatibility is unresolved. Preserve established wire formats and generated code ownership. Apply conventions to real surfaces; do not invent clipboard, interactive selectors, pagination or provider-specific subprocess features merely to exercise a pattern.
 
+2026-09-18: Share version rendering in `Shikigami.App.Version` across the
+core-based operational executables. Keep the migration CLI's ADR 0032 boundary
+and the lightweight client package independent rather than adding a core
+dependency only for presentation.
+
+2026-09-18: Use optparse-applicative's built-in Bash, Zsh, and Fish script
+generators. They are already available on every parser run through
+`execParser`, so a second completion-command architecture would duplicate the
+parser authority.
+
+2026-09-18: No new ADR is needed. The implementation preserves the existing
+wire, configuration, migration, and package-boundary decisions.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation, including each pattern's applicability decision and observable improvements.
+All 35 EP-5 rows in the adoption matrix now have a concrete disposition and
+evidence. Hand-owned records use local generic-label instances and lens updates;
+wire and workflow encodings remain unchanged. Request logging consumes
+`Servant.Health.Paths.healthRawPaths`, RFC 9457 terminology is current, and the
+new Hurl runner proves health plus 404/405 problem behavior against a disposable
+database and the real server.
+
+Operational core-based CLIs now expose shared offline version output with a
+Git SHA, and Bash, Zsh, and Fish completion generation was exercised without
+configuration or resource acquisition. The six package test suites, generated
+OpenAPI drift check, live Hurl suite, and Keiro compatibility gate passed. The
+consolidated review is `docs/evidence/keiro-0.17/ep5-haskell-api-cli.md`.
 
 
 ## Context and Orientation

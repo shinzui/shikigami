@@ -95,6 +95,7 @@ workerRoleInfo =
       role = WorkerRole,
       parserInfo =
         withConfigOptions
+          "shikigami-worker"
           "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
           (workerAction)
           ( sourcesOf
@@ -116,6 +117,7 @@ schedulerRoleInfo =
       role = SchedulerRole,
       parserInfo =
         withConfigOptions
+          "shikigami-scheduler"
           "Arm Schedule triggers and drive keiro timer firing"
           (pure runSchedulerCmd)
           (sourcesOf [agentsOption])
@@ -129,6 +131,7 @@ consumeStreamRoleInfo =
       role = StreamConsumerRole,
       parserInfo =
         withConfigOptions
+          "shikigami-consume-stream"
           "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs"
           (pure runConsumeStream)
           streamConsumerSources
@@ -142,6 +145,7 @@ consumeEventsRoleInfo =
       role = EventConsumerRole,
       parserInfo =
         withConfigOptions
+          "shikigami-consume-events"
           "Consume public integration events, match Event triggers, and enqueue run jobs"
           (pure runConsumeEvents)
           ( sourcesOf

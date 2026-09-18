@@ -37,10 +37,12 @@ module Shikigami.Directory
 where
 
 import Control.Concurrent (threadDelay)
+import Control.Lens ((&), (.~))
 import Control.Monad (forever)
 import Data.Aeson (FromJSON (..), withObject, withText, (.:))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
+import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
@@ -110,6 +112,7 @@ data DirectoryState = DirectoryState
   { snapshot :: !(Maybe DirectoryView),
     lastError :: !(Maybe Text)
   }
+  deriving stock (Generic)
 
 -- | Mutable publication point for immutable snapshots.
 --
@@ -231,7 +234,7 @@ refreshDirectory (ConfiguredDirectory _ source stateRef) = do
   atomicModifyIORef' stateRef \state ->
     case candidate of
       Left problem ->
-        (state {lastError = Just problem}, Left problem)
+        (state & #lastError .~ Just problem, Left problem)
       Right newSnapshot ->
         (DirectoryState {snapshot = Just newSnapshot, lastError = Nothing}, Right ())
 
