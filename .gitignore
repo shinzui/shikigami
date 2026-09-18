@@ -26,3 +26,4 @@ build/
 
 # Immutable generated-edition migration backups stay local.
 shikigami-core/src/.keiro-dsl-generated-haskell-migrations/
+.envrc.local

@@ -26,13 +26,21 @@
         pkgs.zlib
         pkgs.just
         pkgs.pkg-config
-        # PostgreSQL 18 specifically, not the nixpkgs default. keiro-migrations
-        # 0.13 embeds a PG 18 schema snapshot and its verifyExpectedSchema
-        # refuses any other major version outright, so on PG 17 every keiro-ops
-        # verb mounted into the `shikigami` binary -- including the read-only
-        # ones -- fails before it runs. See
-        # docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md.
+        # All three postgres entries are load-bearing for anything that builds
+        # postgresql-libpq (hasql, postgresql-simple, persistent-postgresql, ...).
+        # `pkgs.postgresql` is only the `out` output; `lib/pkgconfig/libpq.pc`
+        # lives in `dev`, and that .pc file in turn declares
+        # `Requires.private: libssl libcrypto`, which postgresql.dev does not
+        # propagate. Drop either `.dev` and pkg-config cannot resolve libpq at
+        # all, so postgresql-libpq dies in its configure step.
+        #
+        # This failure hides well: once that unit is in the cabal store a plain
+        # `cabal build` never reconfigures it, so the shell looks fine until
+        # something forces a fresh configure -- `cabal build --enable-profiling`
+        # does exactly that, because the profiling way changes the unit-id hash.
         pkgs.postgresql_18
+        pkgs.postgresql_18.dev
+        pkgs.openssl.dev
         pkgs.jq
         pkgs.process-compose
       ];
