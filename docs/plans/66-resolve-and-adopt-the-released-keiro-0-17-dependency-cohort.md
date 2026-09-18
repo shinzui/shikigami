@@ -4,12 +4,19 @@ slug: resolve-and-adopt-the-released-keiro-0-17-dependency-cohort
 title: "Resolve and adopt the released Keiro 0.17 dependency cohort"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T17:18:36Z
+      mode: "implement"
+      note: "Started release-cohort resolution and linked the inherited intention"
 ---
 
 # Resolve and adopt the released Keiro 0.17 dependency cohort
@@ -26,13 +33,18 @@ Make the seven Shikigami packages build and run their existing behavior against 
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [ ] Milestone 1: Resolve release compatibility and pattern ownership.
+  - [x] (2026-09-18T17:27:00Z) Rechecked authoritative package catalogs and tags and captured the isolated solver failure in `docs/evidence/keiro-0.17/release-cohort.md`.
+  - [x] (2026-09-18T17:31:00Z) Inventoried every Mori-registered document in the three corpora and assigned an owning child plan in `docs/architecture/keiro-0.17-pattern-adoption.md`.
+  - [ ] Await a published Kioku cohort whose bounds admit Keiro 0.17, then verify the all-released solve.
+- [ ] Milestone 2: Adopt the supported cohort and mechanical API changes.
+- [ ] Milestone 3: Verify the release boundary.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet. The verified release prerequisite is recorded below.
+2026-09-18: The external release prerequisite still exists. Hackage has no Kioku release newer than 0.6.0.0, and that release excludes Keiro 0.17. An isolated Cabal solve rejects every published Kioku Core version. Evidence is in `docs/evidence/keiro-0.17/release-cohort.md`.
 
 
 ## Decision Log

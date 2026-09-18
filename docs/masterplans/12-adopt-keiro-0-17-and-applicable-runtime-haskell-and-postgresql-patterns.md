@@ -4,11 +4,18 @@ slug: adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns
 title: "Adopt Keiro 0.17 and applicable runtime Haskell and PostgreSQL patterns"
 kind: master-plan
 created_at: 2026-09-18T16:21:53Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:21:53Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T17:18:35Z
+      mode: "implement"
+      note: "Started EP-1 and linked the initiative intention"
 ---
 
 # Adopt Keiro 0.17 and applicable runtime Haskell and PostgreSQL patterns
@@ -42,7 +49,7 @@ The cross-repository decision mori://shinzui/keiro-runtime-patterns/okf/adrs/con
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Resolve and adopt released cohort | docs/plans/66-resolve-and-adopt-the-released-keiro-0-17-dependency-cohort.md | None | None | Not Started |
+| EP-1 | Resolve and adopt released cohort | docs/plans/66-resolve-and-adopt-the-released-keiro-0-17-dependency-cohort.md | None | None | In Progress |
 | EP-2 | Language 6 and nominal contracts | docs/plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md | EP-1 | None | Not Started |
 | EP-3 | Queue, inbox and delivery semantics | docs/plans/68-qualify-keiro-0-17-queue-inbox-and-delivery-semantics.md | EP-1 | EP-2, EP-4 | Not Started |
 | EP-4 | Timer recovery and schema isolation | docs/plans/69-adopt-guarded-timer-recovery-and-schema-isolated-migrations.md | EP-1 | None | Not Started |
@@ -72,12 +79,17 @@ Cross-plan ADR candidates are the explicit Language 6 baseline despite Candidate
 
 ## Progress
 
-No implementation milestones have started. Populate the aggregate checklist when implementation begins.
+- [ ] EP-1: Resolve and adopt the released Keiro 0.17 dependency cohort (started 2026-09-18T17:18:13Z).
+- [ ] EP-2: Adopt Language 6 and executable nominal domain contracts.
+- [ ] EP-3: Qualify Keiro 0.17 queue, inbox and delivery semantics.
+- [ ] EP-4: Adopt guarded timer recovery and schema-isolated migrations.
+- [ ] EP-5: Apply Haskell service, API and CLI patterns with wire compatibility.
+- [ ] EP-6: Qualify the Keiro 0.17 rollout and close pattern coverage.
 
 
 ## Surprises & Discoveries
 
-None during implementation yet. Verified planning constraints appear in Vision & Scope.
+2026-09-18: EP-1 rechecked Hackage and upstream tags. The newest published Kioku Core remains 0.6.0.0 and requires Keiro below 0.17, so Cabal cannot solve an all-released Keiro 0.17/Kioku cohort. EP-1 remains in progress on this external prerequisite; EP-5 can proceed independently.
 
 
 ## Decision Log
