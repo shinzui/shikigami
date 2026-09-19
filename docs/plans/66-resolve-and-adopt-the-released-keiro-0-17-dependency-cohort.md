@@ -36,9 +36,10 @@ Make the seven Shikigami packages build and run their existing behavior against 
 - [ ] Milestone 1: Resolve release compatibility and pattern ownership.
   - [x] (2026-09-18T17:20:00Z) Rechecked authoritative package catalogs and tags and captured the isolated solver failure in `docs/evidence/keiro-0.17/release-cohort.md`.
   - [x] (2026-09-18T17:22:00Z) Inventoried every Mori-registered document in the three corpora and assigned an owning child plan in `docs/architecture/keiro-0.17-pattern-adoption.md`.
-  - [ ] Await a published Kioku cohort whose bounds admit Keiro 0.17, then verify the all-released solve.
-- [ ] Milestone 2: Adopt the supported cohort and mechanical API changes.
-- [ ] Milestone 3: Verify the release boundary.
+  - [x] (2026-09-19T00:06:28Z) Qualified the clean Kioku 0.7 release commit and recorded the publisher-reported upload.
+  - [ ] Await public Hackage-index visibility for all three Kioku 0.7 packages, then verify the all-released solve.
+- [x] (2026-09-19T00:06:28Z) Milestone 2: Adopted the 0.17/0.7/PGMQ 0.6 cohort and mechanical API changes against the exact Kioku release commit.
+- [ ] Milestone 3: Final public-release boundary verification remains pending Hackage propagation.
 
 
 ## Surprises & Discoveries
@@ -46,17 +47,36 @@ Make the seven Shikigami packages build and run their existing behavior against 
 
 2026-09-18: The external release prerequisite still exists. Hackage has no Kioku release newer than 0.6.0.0, and that release excludes Keiro 0.17. An isolated Cabal solve rejects every published Kioku Core version. Evidence is in `docs/evidence/keiro-0.17/release-cohort.md`.
 
+2026-09-18: The owner reported publishing Kioku 0.7. Clean commit
+`37c3acd2d16e18c49217bc6189ea20b496907e3b` supplies coherent 0.7 packages,
+and Shikigami builds against them. The public Hackage index at
+`2026-09-18T23:13:22Z` still lists only through 0.6 and the 0.7 package page is
+404, so the final no-local-override solve must wait for propagation.
+
+2026-09-18: Kioku 0.7 requires an explicit host-owned AI runtime. Shikigami now
+loads it from the versioned configuration boundary, resolves `QueryEmbedding`,
+uses Kioku's required 1536-dimensional vector contract, and preserves keyword
+fallback when AI is disabled.
+
 
 ## Decision Log
 
 
 2026-09-18: Treat compatible published Kioku bounds as an external prerequisite, rather than introducing a broad allow-newer escape. Prefer a validated compatibility revision/release retaining the current Kioku API if available; do not assume the newer AI API is required to use Keiro 0.17.
 
+2026-09-18: Pin `baikai-effectful` to 0.4.0.1. The later 0.4.0.2 requires
+effectful-core 2.7, which the Keiro/Kioku cohort excludes; 0.4.0.1 is explicitly
+admitted by Kioku 0.7.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation, including the actual selected package versions, source revisions, solver result and unresolved release prerequisites.
+The code now selects Keiro 0.17.0.0, Kioku 0.7.0.0, PGMQ 0.6.1.0,
+shibuya-pgmq-adapter 0.16.0.0, Shikumi 0.4 and Baikai 0.7. Mechanical API
+changes compile across all packages, `RunJobs` supplies generated ordering, and
+Kioku recall uses the new explicit AI runtime. The only remaining EP-1 item is a
+clean Hackage solve after Kioku 0.7 becomes visible in the public secure index.
 
 
 ## Context and Orientation

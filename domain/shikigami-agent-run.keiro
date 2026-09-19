@@ -1,9 +1,4 @@
-# Current pre-v1 agent-run baseline, established by plan 65 and ADR 0027.
-# This is a label inventory across paths, not a control-flow program.
-# Flow emit-signal:<label> entries remain hand-owned because the DSL's wire
-# words cannot contain colons. The run-job queue executes the generated
-# envelope and policy on producers and the consumer.
-language keiro-dsl 5
+language keiro-dsl 6
 context shikigami
 layout collocated
 
@@ -41,7 +36,6 @@ workflow AgentRun
     step record -> RecordedLearning
     step complete -> CompletedSession
     child delegate id input via delegatedWorkflowId -> AgentRunResult
-
 operation RunAgentRun
   run AgentRun
     input RunJob

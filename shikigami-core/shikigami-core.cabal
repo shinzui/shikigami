@@ -207,7 +207,7 @@ library
     keiki,
     keiro,
     keiro-core,
-    keiro-pgmq ^>=0.15.0.0,
+    keiro-pgmq ^>=0.17.0.0,
     kikan-en-client,
     kikan-en-contract,
     kioku-api,

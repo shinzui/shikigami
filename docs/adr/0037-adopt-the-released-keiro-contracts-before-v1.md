@@ -120,3 +120,19 @@ bytes. Its complete decoder allows an empty agent name only with unresolved
 identity, zero turns and absent messages. Ingress and carried-generation names
 remain strict. Treating every internal seed as an ingress value would make
 existing generation-zero journals fail to decode.
+
+## Keiro 0.17 amendment — 2026-09-18
+
+Shikigami now selects the released Keiro 0.17 family and declares Language 6 in
+all five workspace members. These are separate release facts: Keiro 0.17 is a
+published package family, while its own language registry labels Language 6 as
+`Candidate CandidateLanguage`. The gate asserts the exact declared version and
+the truthful candidate metadata rather than presenting the language contract as
+stable.
+
+Language 6 nominal leaves are admitted only for total consumer isomorphisms.
+Current queue fields remain executable mapped boundaries because they are refined
+values, opaque upstream IDs, composite retry identities, or enums whose established
+Aeson spellings differ from DSL wire words. Production decoding still reaches the
+real domain parsers before execution, and negative wire tests pin that admission.
+No workflow step shape, name, result type, queue identity, or JSON envelope changed.

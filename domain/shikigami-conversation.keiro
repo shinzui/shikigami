@@ -1,15 +1,10 @@
-# Current pre-v1 conversation baseline: exactly one turn per generation.
-# Static labels cover every journaled step. The hand-owned danwa-reply:<id>
-# token identifies an outbox row and is not a workflow step.
-language keiro-dsl 5
+language keiro-dsl 6
 context shikigami
 layout collocated
 
 workflow DanwaConversation
   name "shikigami.danwa-conversation"
-  in ConversationStart {
-    agentName:Text
-  }
+  in ConversationStart { agentName:Text }
   out ConversationTurnResult
   id from input via conversationWorkflowId
   body
@@ -20,12 +15,9 @@ workflow DanwaConversation
     step run-behavior-v2 -> BehaviorOutput
     step record-assistant-and-reply -> AssistantTurnAndReply
     step turn-result -> ConversationTurnResult
-    # Ingress and idle expiry race on the same opaque token. The loser is a
-    # no-op. Rotation publishes a new token in the new generation's journal.
     await next-message -> ConversationWake
     step idle-timeout -> SessionId
     continueAsNew ConversationSeed
-
 operation RunDanwaConversation
   run DanwaConversation
     input ConversationStart

@@ -1,25 +1,25 @@
-language keiro-dsl 5
+language keiro-dsl 6
 context shikigami
 layout collocated
 
 workqueue run_jobs {
   queue logical = "shikigami_run_jobs"
   derive physical = "shikigami_run_jobs"
-         dlq = "shikigami_run_jobs_dlq"
-         table = "pgmq.q_shikigami_run_jobs"
+    dlq = "shikigami_run_jobs_dlq"
+    table = "pgmq.q_shikigami_run_jobs"
   payload RunJobMessage {
-    agentName -> "agentName" : Text
-    identity -> "identity" : Json
-    triggerKind -> "triggerKind" : Text
-    occurredAt -> "occurredAt" : Time
-    triggerPayload -> "triggerPayload" : Json
-    idempotencyKey -> "idempotencyKey" : Text
-    parentSessionId -> "parentSessionId" : Optional Text
-    parentRunWorkflowId -> "parentRunWorkflowId" : Optional Text
-    delegationDepth -> "delegationDepth" : Optional Int
-    lineage -> "lineage" : List Text
-    delegationBudgetId -> "delegationBudgetId" : Optional Text
-    routeKind -> "routeKind" : Text
+    agentName -> "agentName" : Text required
+    identity -> "identity" : Json required
+    triggerKind -> "triggerKind" : Text required
+    occurredAt -> "occurredAt" : Time required
+    triggerPayload -> "triggerPayload" : Json required
+    idempotencyKey -> "idempotencyKey" : Text required
+    parentSessionId -> "parentSessionId" : Optional Text required
+    parentRunWorkflowId -> "parentRunWorkflowId" : Optional Text required
+    delegationDepth -> "delegationDepth" : Optional Int required
+    lineage -> "lineage" : List Text required
+    delegationBudgetId -> "delegationBudgetId" : Optional Text required
+    routeKind -> "routeKind" : Text required
   }
   retry maxRetries = 5 delay = 60s dlq = on
   disposition {

@@ -22,6 +22,8 @@ import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Hasql.Pool (Pool)
+import Kioku.AI.Config (AIFeature (QueryEmbedding))
+import Kioku.AI.File (loadAIRuntime)
 import Kioku.Api.Recall qualified as KiokuRecall
 import Kioku.Api.Scope (MemoryScope)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
@@ -114,18 +116,22 @@ renderMemoryRecord (MemoryRecord {memoryId = mid, memoryType = mt, confidence = 
 
 recallPriorLearnings :: AppEnv -> RecallLimit -> MemoryScope -> Text -> IO [MemoryRecord]
 recallPriorLearnings appEnv limit scope' query = do
-  cfg <- Embedding.resolveEmbeddingConfig
-  -- Kioku 0.2 probes the vector path against the dimension count the process is
-  -- configured with, so it can report a configured/declared mismatch instead of
-  -- silently failing every embedding write on the ::vector cast.
+  ai <- loadAIRuntime False Nothing
+  -- Kioku 0.7 makes AI execution an explicit host-owned capability. The shared
+  -- versioned file boundary reads KIOKU_AI_CONFIG and otherwise supplies a
+  -- disabled runtime, in which case hybrid recall truthfully falls back to the
+  -- keyword channel without consulting legacy credential variables.
   capability <-
-    runAppIO appEnv (RecallCapability.detectVectorCapability (Embedding.dimensions cfg)) <&> \case
-      Right cap -> cap
-      Left _ -> RecallCapability.VectorExtensionUnavailable
+    case Embedding.resolveEmbeddingConfig ai QueryEmbedding of
+      Left _ -> pure RecallCapability.VectorExtensionUnavailable
+      Right _embeddingModel ->
+        runAppIO appEnv (RecallCapability.detectVectorCapability 1536) <&> \case
+          Right cap -> cap
+          Left _ -> RecallCapability.VectorExtensionUnavailable
   recalled <-
     runAppIO appEnv $
       Recall.recall
-        (Embedding.toEmbeddingModel cfg)
+        ai
         capability
         shikigamiReadContext
         KiokuRecall.RecallQuery

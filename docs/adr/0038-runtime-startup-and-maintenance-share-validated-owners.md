@@ -75,3 +75,23 @@ consider delayed queue redelivery and operator recovery, not just storage usage.
 - [ADR 0037](0037-adopt-the-released-keiro-contracts-before-v1.md)
 - `mori://shinzui/pg-migrate/packages/pg-migrate`
 - `mori://shinzui/keiro/packages/keiro`
+
+## Keiro 0.17 amendment — 2026-09-18
+
+The shared 100-row timer pass now has an explicit finite application boundary for
+integration and operator testing. Keiro 0.17 performs guarded-claim recovery once
+in that pass before ordinary claims; Shikigami does not add a competing recovery
+sweep. Expired foreground claims return directly to Dead with reason, payload and
+attempt history intact, and opaque replacement tokens fence stale completion.
+
+Migration 0032 requires a coordinated writer cutover because old timer writers do
+not honor claim tokens. `docs/operations/keiro-0.17-rollout.md` therefore stops all
+old workflow/timer writers before the complete migration plan, starts only upgraded
+writers, and keeps foreground Dead-timer resume disabled until an application-owned
+authorization and execution boundary exists. Rollback must first expire and recover
+guarded claims; operators never clear tokens or reset attempts with SQL.
+
+Application migrations are schema-qualified and checked by
+`tools/check-migration-schema-isolation.sh`. The checker reports the one exact
+checksum-immutable historical `SET search_path` file and separately scans the
+vendored PGMQ snapshot; new migration scaffolds never emit session path mutation.

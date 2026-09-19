@@ -38,7 +38,8 @@ runJob =
     { jobName = queuePhysical,
       jobQueue = queueRef queuePhysical,
       jobCodec = runJobCodec,
-      jobPolicy = Policy.retryPolicy
+      jobPolicy = Policy.retryPolicy,
+      jobOrdering = Policy.jobOrdering
     }
 
 runJobCodec :: JobCodec RunJob

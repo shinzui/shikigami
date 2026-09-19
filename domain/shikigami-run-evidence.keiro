@@ -1,32 +1,24 @@
-# The monotonic lifecycle of the evidence collected for one sanctioned run.
-#
-# Rich evidence payloads remain hand-owned because Baikai's
-# ModelCallEvidence is intentionally encode-only. This aggregate owns the
-# lifecycle event stream that decides when those payloads may be bound,
-# collected, sealed, and attested.
-language keiro-dsl 5
+language keiro-dsl 6
 context shikigami
 layout collocated
 
-# Rich payloads and lifecycle history have one guarded commit boundary.
+id RunEvidenceId prefix=shikigami_run_evidence
+
 target run_evidence_rows {
   schema = "shikigami"
   table = "run_evidence"
   reset = preserve
 }
-
 target run_evidence_calls {
   schema = "shikigami"
   table = "run_evidence_calls"
   reset = preserve
   depends-on = [ run_evidence_rows ]
 }
-
 rebuild-group run_evidence_store {
   targets = [ run_evidence_rows run_evidence_calls ]
   order = [ run_evidence_rows run_evidence_calls ]
 }
-
 projection-owner run_evidence_writer {
   source = aggregate RunEvidence
   delivery = inline
@@ -35,7 +27,6 @@ projection-owner run_evidence_writer {
   order = 10
   replay = live-only "Lifecycle events omit the encode-only rich evidence payloads"
 }
-
 readmodel run_evidence_lookup {
   columns {
     run_id text required
@@ -57,62 +48,54 @@ readmodel run_evidence_lookup {
   targets = [ run_evidence_rows run_evidence_calls ]
   backing = run_evidence_rows
 }
-
-id RunEvidenceId prefix=shikigami_run_evidence
-
 aggregate RunEvidence
+
   regs
     runEvidenceId RunEvidenceId = placeholder
     runId Text = ""
   states Requested ProfileResolved Running EvidenceSealed Attested! NonConforming! Incomplete! Failed!
 
-  command BindProfile       { runEvidenceId runId:Text }
-  command StartCollection   { runEvidenceId runId:Text }
-  command SealEvidence      { runEvidenceId runId:Text }
-  command MarkAttested      { runEvidenceId runId:Text }
+  command BindProfile { runEvidenceId runId:Text }
+  command StartCollection { runEvidenceId runId:Text }
+  command SealEvidence { runEvidenceId runId:Text }
+  command MarkAttested { runEvidenceId runId:Text }
   command MarkNonConforming { runEvidenceId runId:Text }
-  command MarkIncomplete    { runEvidenceId runId:Text }
-  command MarkFailed        { runEvidenceId runId:Text }
+  command MarkIncomplete { runEvidenceId runId:Text }
+  command MarkFailed { runEvidenceId runId:Text }
 
-  event ProfileBound          = fields(BindProfile)
-  event CollectionStarted     = fields(StartCollection)
-  event EvidenceSealed        = fields(SealEvidence)
-  event EvidenceAttested      = fields(MarkAttested)
+  event ProfileBound = fields(BindProfile)
+  event CollectionStarted = fields(StartCollection)
+  event EvidenceSealed = fields(SealEvidence)
+  event EvidenceAttested = fields(MarkAttested)
   event EvidenceNonConforming = fields(MarkNonConforming)
-  event EvidenceIncomplete    = fields(MarkIncomplete)
-  event EvidenceFailed        = fields(MarkFailed)
+  event EvidenceIncomplete = fields(MarkIncomplete)
+  event EvidenceFailed = fields(MarkFailed)
 
   Requested -- BindProfile -->
     write runEvidenceId := cmd.runEvidenceId
     write runId := cmd.runId
     emit ProfileBound
     goto ProfileResolved
-
   ProfileResolved -- StartCollection -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit CollectionStarted
     goto Running
-
   Running -- SealEvidence -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit EvidenceSealed
     goto EvidenceSealed
-
   EvidenceSealed -- MarkAttested -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit EvidenceAttested
     goto Attested
-
   Running -- MarkNonConforming -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit EvidenceNonConforming
     goto NonConforming
-
   Running -- MarkIncomplete -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit EvidenceIncomplete
     goto Incomplete
-
   Running -- MarkFailed -->
     guard cmd.runEvidenceId == reg.runEvidenceId && cmd.runId == reg.runId
     emit EvidenceFailed

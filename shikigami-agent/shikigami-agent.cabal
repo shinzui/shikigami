@@ -1,7 +1,7 @@
 cabal-version: 3.0
-name:          shikigami-agent
-version:       0.1.0.0
-synopsis:      One-off agent runs, without the platform
+name: shikigami-agent
+version: 0.1.0.0
+synopsis: One-off agent runs, without the platform
 description:
   The command-line surface for running a declared Shikigami agent once, for
   consumers who are not operating the Kikan platform. Its only Shikigami
@@ -9,10 +9,10 @@ description:
   queueing, or telemetry-export stack the deployed service needs. See
   docs/architecture/packages.md.
 
-build-type:    Simple
+build-type: Simple
 
 common common
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     BlockArguments
     DeriveAnyClass
@@ -24,12 +24,17 @@ common common
     OverloadedStrings
 
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-record-updates
-    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
 
 library
-  import:          common
-  hs-source-dirs:  src
+  import: common
+  hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.Capability.OneOff
     Shikigami.Agent.Capability.Workspace
@@ -38,48 +43,56 @@ library
     Shikigami.Agent.Command.RunBehavior
 
   build-depends:
-    , aeson                 >=2.2
-    , base                  >=4.21    && <5
-    , bytestring
-    , directory
-    , effectful
-    , filepath
-    , keiro
-    , kioku-api
-    , kioku-core
-    , kiroku-store
-    , optparse-applicative  >=0.19    && <0.20
-    , process
-    , regex-tdfa
-    , shikigami-core
-    , shikigami-migrations
-    , shikumi               ==0.3.0.3
-    , shikumi-tools         ==0.3.0.3
-    , text                  >=2.1
-    , time
+    aeson >=2.2,
+    base >=4.21 && <5,
+    bytestring,
+    directory,
+    effectful,
+    filepath,
+    keiro,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    optparse-applicative >=0.19 && <0.20,
+    process,
+    regex-tdfa,
+    shikigami-core,
+    shikigami-migrations,
+    shikumi ==0.4.0.0,
+    shikumi-tools ==0.4.0.0,
+    text >=2.1,
+    time,
 
 executable shikigami-run-behavior
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/run-behavior
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , shikigami-agent
+    base,
+    shikigami-agent,
 
 executable shikigami-agent-run
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/agent-run
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , shikigami-agent
+    base,
+    shikigami-agent,
 
 test-suite shikigami-agent-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.Capability.OneOffSpec
@@ -87,23 +100,23 @@ test-suite shikigami-agent-test
     Shikigami.Agent.CommandSpec
 
   build-depends:
-    , aeson
-    , baikai
-    , base
-    , bytestring
-    , containers
-    , directory
-    , effectful
-    , filepath
-    , generic-lens
-    , lens
-    , optparse-applicative
-    , process
-    , shikigami-agent
-    , shikigami-core
-    , shikumi
-    , shikumi-tools
-    , tasty
-    , tasty-hunit
-    , text
-    , vector
+    aeson,
+    baikai,
+    base,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    filepath,
+    generic-lens,
+    lens,
+    optparse-applicative,
+    process,
+    shikigami-agent,
+    shikigami-core,
+    shikumi,
+    shikumi-tools,
+    tasty,
+    tasty-hunit,
+    text,
+    vector,

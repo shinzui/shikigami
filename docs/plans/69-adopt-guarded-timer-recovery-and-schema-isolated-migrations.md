@@ -4,12 +4,19 @@ slug: adopt-guarded-timer-recovery-and-schema-isolated-migrations
 title: "Adopt guarded timer recovery and schema-isolated migrations"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T00:06:28Z
+      mode: "implement"
+      note: "Added guarded timer recovery, real upgrade, and schema-isolation evidence"
 ---
 
 # Adopt guarded timer recovery and schema-isolated migrations
@@ -26,13 +33,31 @@ Make the database upgrade from Keiro 0.15 to 0.17 repeatable and safe for existi
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [x] (2026-09-19T00:06:28Z) Added the finite serving timer-pass boundary and public-API guarded recovery test.
+- [x] (2026-09-19T00:06:28Z) Added a real exact-byte Keiro 0.15-to-0.17 upgrade fixture with durable seeded data.
+- [x] (2026-09-19T00:06:28Z) Added the schema-isolation gate and corrected new-migration scaffolding.
+- [x] (2026-09-19T00:06:28Z) Wrote the coordinated writer rollout and rollback procedure.
+- [x] (2026-09-19T00:06:28Z) Closed all EP-4 runtime, Kiroku, migration, and PostgreSQL rows.
+- [x] (2026-09-19T00:14:28Z) Proved migration 0032 ignores a colliding hostile schema and preserves the host connection path.
+- [ ] Run the final clean all-Hackage qualification after EP-1 clears.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet.
+2026-09-18: The selected Keiro implementation already calls
+`recoverExpiredTimerResumes` exactly once in the preamble shared by bounded timer
+drains. Adding a second application sweep would duplicate locking and accounting.
+
+2026-09-18: Authoritative 0.15 and 0.17 Keiro migration tarballs differ only by
+0032 and its manifest line. Kioku 0.5.2 and 0.7 migration directories are
+byte-identical, so the upgrade fixture can construct the actual old component from
+the exact first 31 released payloads without vendoring duplicate SQL.
+
+2026-09-18: One immutable application migration predates schema isolation and
+mutates `search_path`. Rewriting it would falsify applied checksums. The gate names
+that exact exception, scans vendored PGMQ separately, and rejects the pattern in all
+new application SQL.
 
 
 ## Decision Log
@@ -40,11 +65,22 @@ None during implementation yet.
 
 2026-09-18: Preserve all applied migration bytes by default. Adopt timer claim recovery at the application's actual shared dispatcher; do not assume using a library helper automatically runs a complete maintenance pass. Foreground resume remains disabled unless application-specific authorization and execution ownership are implemented.
 
+2026-09-18: Roll out migration 0032 stop-the-world across timer/workflow writers.
+Old writers do not honor opaque claim tokens; rollback first disables resume and
+recovers expired claims with the new dispatcher, never SQL token clearing.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation, with fresh/upgrade database evidence, timer ownership tests and the rehearsed rollout procedure.
+Implementation is complete against the selected release sources. The worker test
+proves guarded claim recovery and fencing through the serving pass. The migration
+smoke upgrades real 0.15 ledger bytes, preserves a queued job, workflow, dead timer,
+rich evidence and every prior checksum, ignores a hostile-schema collision, preserves
+the host path, then performs a no-op second apply. The SQL
+gate and rollout procedure are executable repository artifacts. Evidence is in
+`docs/evidence/keiro-0.17/ep4-coverage.md`; final completion waits on EP-1's public
+Hackage solve.
 
 
 ## Context and Orientation

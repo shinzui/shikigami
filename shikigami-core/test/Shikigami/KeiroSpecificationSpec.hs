@@ -68,7 +68,7 @@ tests =
         root <- repositoryRoot
         clauses <- manifestClauses root
         lookup "module" clauses @?= Nothing,
-      testCase "every member declares language 5 and context shikigami" do
+      testCase "every member declares language 6 and context shikigami" do
         root <- repositoryRoot
         members <- domainMembers root
         assertNonEmpty "workspace member" members
@@ -77,12 +77,12 @@ tests =
           pure (member, take 2 significant)
         mapM_
           ( \(member, preamble) ->
-              if preamble == ["language keiro-dsl 5", "context shikigami"]
+              if preamble == ["language keiro-dsl 6", "context shikigami"]
                 then pure ()
                 else
                   assertFailure
                     ( Text.unpack member
-                        <> " must begin with `language keiro-dsl 5` then `context shikigami`; found "
+                        <> " must begin with `language keiro-dsl 6` then `context shikigami`; found "
                         <> show preamble
                     )
           )

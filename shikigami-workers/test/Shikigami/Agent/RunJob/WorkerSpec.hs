@@ -14,14 +14,17 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Effectful (liftIO, runEff)
 import Keiro.PGMQ
-  ( Job (..),
+  ( DlqEntry (..),
+    Job (..),
     JobContext (..),
     JobOutcome (..),
     JobPolling (PollEvery),
     JobRuntime (..),
     JobTuning,
     PgmqRuntimeError,
+    PurgeDlqResult (..),
     QueueMetrics (..),
+    archiveDlqEntries,
     decodeJob,
     encodeJob,
     enqueue,
@@ -30,6 +33,8 @@ import Keiro.PGMQ
     jobProcessorWithContext,
     jobQueueMetrics,
     mkJobTuning,
+    purgeDlq,
+    readDlq,
     runJobEff,
     runJobOnce,
     runJobWorkers,
@@ -236,6 +241,22 @@ tests databaseFixture =
           dlqMetrics <- runDb connStr \runtime -> runJobEff runtime (jobDlqMetrics runJob)
           assertEqual "main queue is empty after dead-lettering" 0 (queueLength mainMetrics)
           assertEqual "DLQ contains the permanent message" 1 (queueLength dlqMetrics),
+      testCase "operator-visible DLQ entries can be retained and safely purged" do
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
+          runDb connStr \runtime ->
+            runJobEff runtime do
+              ensureJobQueue runJob
+              _ <- enqueue runJob sampleJob
+              _ <- runJobOnce 1 runJob (const (pure (Dead "operator qualification")))
+              entries <- readDlq runJob 10
+              case entries of
+                [entry] -> do
+                  liftIO (assertEqual "DLQ retains the original payload" (Right sampleJob) entry.originalPayload)
+                  archived <- archiveDlqEntries runJob [entry.dlqMessageId]
+                  liftIO (assertEqual "the inspected row is archived by exact id" [entry.dlqMessageId] archived)
+                  purged <- purgeDlq runJob
+                  liftIO (assertEqual "no active row remains after archival" (PurgeDlqPurged 0) purged)
+                other -> liftIO (assertFailure ("expected one operator-visible DLQ entry, got " <> show other)),
       -- The routing decision and its outcome mapping are the real ones here; only
       -- the workflow bodies behind them are absent. That is what makes this a
       -- proof that a mis-declared route lands in the operator-visible DLQ rather

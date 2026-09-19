@@ -52,6 +52,8 @@ namespaceCapabilityTools capability tools = do
             description,
             run
           }
+    rename (DynTool logicalName description schema run) =
+      DynTool (overlayToolName capability logicalName) description schema run
 
 -- | Compose overlay tools with a base registry after validating the whole final
 -- name set. The base registry is an input, never a value an overlay may replace.

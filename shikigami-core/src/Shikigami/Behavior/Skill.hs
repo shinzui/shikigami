@@ -40,6 +40,7 @@ import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Input (BehaviorInput (..))
 import Shikumi.Error (ShikumiError (..), isTransient)
+import Shikumi.Error qualified as ShikumiError
 import Shikumi.LLM (runLLM)
 import Shikumi.Tool (ToolRegistry, registryBaikai, registryNames, renderToolError, runToolCall)
 import System.Directory (doesFileExist)
@@ -247,6 +248,7 @@ renderShikumiError =
     SchemaMismatch detail -> "schema mismatch: " <> detail
     ValidationFailure detail -> "validation failure: " <> detail
     ProviderFailure detail -> "provider failure: " <> detail
+    ProviderError detail -> ShikumiError.renderShikumiError (ProviderError detail)
     ContextWindowExceeded detail -> "context window exceeded: " <> detail
     Timeout detail -> "timeout: " <> detail
     BudgetExceeded detail -> "budget exceeded: " <> detail

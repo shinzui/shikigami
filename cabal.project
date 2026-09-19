@@ -38,31 +38,36 @@ constraints:
   -- process configuration (plan 37) and tracing (plan 28)
   keiki                   ==0.9.1.0
   , keiki-codec-json        ==0.9.1.0
-  , keiro                   ==0.15.0.0
-  , keiro-core              ==0.15.0.0
-  , keiro-dsl               ==0.15.0.0
-  , keiro-migrations        ==0.15.0.0
-  , keiro-ops               ==0.15.0.0
-  , keiro-pgmq              ==0.15.0.0
-  , keiro-test-support      ==0.15.0.0
-  , kioku-api               ==0.5.2.0
-  , kioku-core              ==0.5.2.0
-  , kioku-migrations        ==0.5.2.0
-  , shikumi                 ==0.3.0.3
-  , shikumi-tools           ==0.3.0.3
-  , baikai                  ==0.6.0.0
-  , baikai-claude           ==0.6.0.0
+  , keiro                   ==0.17.0.0
+  , keiro-core              ==0.17.0.0
+  , keiro-dsl               ==0.17.0.0
+  , keiro-migrations        ==0.17.0.0
+  , keiro-ops               ==0.17.0.0
+  , keiro-pgmq              ==0.17.0.0
+  , keiro-test-support      ==0.17.0.0
+  , kioku-api               ==0.7.0.0
+  , kioku-core              ==0.7.0.0
+  , kioku-migrations        ==0.7.0.0
+  , shikumi                 ==0.4.0.0
+  , shikumi-tools           ==0.4.0.0
+  , shikumi-trace           ==0.3.0.0
+  , baikai                  ==0.7.0.0
+  , baikai-claude           ==0.7.0.0
+  , baikai-effectful        ==0.4.0.1
+  , baikai-openai           ==0.7.0.0
   , kafka-effectful         ==0.3.0.0
   , shibuya-core            ==0.9.0.0
   , shibuya-kafka-adapter   ==0.9.0.0
-  , shibuya-pgmq-adapter    ==0.14.0.0
+  , shibuya-pgmq-adapter    ==0.16.0.0
   , shibuya-kiroku-adapter  ==0.5.1.1
-  , pgmq-core               ==0.5.0.0
-  , pgmq-hasql              ==0.5.0.0
-  , pgmq-effectful          ==0.5.0.0
+  , pgmq-core               ==0.6.1.0
+  , pgmq-hasql              ==0.6.1.0
+  , pgmq-effectful          ==0.6.1.0
+  , pgmq-config             ==0.6.1.0
   , kiroku-store            ==0.8.0.0
   , kiroku-store-migrations ==0.4.0.0
   , pg-migrate              ==1.1.0.0
+  , pg-migrate-test-support ==1.1.0.0
   , settei                  ==0.2.0.0
   , hs-opentelemetry-api    ==1.0.0.0
   , hs-opentelemetry-sdk    ==1.0.0.0

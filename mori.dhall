@@ -110,7 +110,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.15.0.0"
+              , versionConstraint = Some "^>=0.17.0.0"
               }
           , Schema.Dependency.ByName "shinzui/kikan-en:kikan-en-client"
           , Schema.Dependency.ByName "shinzui/kikan-en:kikan-en-contract"
@@ -518,7 +518,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.15.0.0"
+              , versionConstraint = Some "^>=0.17.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/keiro:keiro-test-support"
@@ -527,7 +527,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.15.0.0"
+              , versionConstraint = Some "^>=0.17.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kioku:kioku-core"
@@ -536,7 +536,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.5.0.0"
+              , versionConstraint = Some "^>=0.7.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kioku:kioku-migrations"
@@ -545,7 +545,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.5.0.0 | ^>=0.5.2.0"
+              , versionConstraint = Some "^>=0.7.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kiroku:kiroku-store"
@@ -673,7 +673,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "==0.15.0.0"
+              , versionConstraint = Some "==0.17.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/keiro:keiro-ops"
@@ -682,7 +682,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "==0.15.0.0"
+              , versionConstraint = Some "==0.17.0.0"
               }
           , Schema.Dependency.ByName "shinzui/kioku:kioku-api"
           , Schema.Dependency.ByName "shinzui/kioku:kioku-core"

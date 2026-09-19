@@ -4,12 +4,19 @@ slug: qualify-the-keiro-0-17-rollout-and-close-pattern-coverage
 title: "Qualify the Keiro 0.17 rollout and close pattern coverage"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T00:14:28Z
+      mode: "implement"
+      note: "Started aggregate qualification and reconciled pattern coverage"
 ---
 
 # Qualify the Keiro 0.17 rollout and close pattern coverage
@@ -26,13 +33,23 @@ Demonstrate that the complete Keiro 0.17 adoption works as one Shikigami system 
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [x] (2026-09-19T00:14:28Z) Reconciled 116 normative corpus rows with no open applicability or owner disposition.
+- [x] (2026-09-19T00:14:28Z) Distilled Language 6, queue, guarded-timer and schema-isolation decisions into ADRs 0037 and 0038.
+- [x] (2026-09-19T00:14:28Z) Added executable upgrade, hostile-schema, timer recovery and selected PGMQ operator evidence.
+- [ ] Run the aggregate build, test, generation, evolution, HTTP and Nix gates from the implementation revision.
+- [ ] Repeat the solve and aggregate gates without `cabal.project.local` after Kioku 0.7 is visible in the public Hackage index.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet.
+2026-09-18: Corpus reconciliation closed 116 rows: 81 applicable, 18
+contextual, 16 not applicable, and one superseded. None remains open.
+
+2026-09-18: The implementation can be exercised against Kioku's exact clean
+0.7 release commit, but the public secure Hackage index has not yet advanced to
+the publisher-reported upload. This prevents the required clean-release proof,
+not the remaining local qualification work.
 
 
 ## Decision Log
@@ -44,7 +61,10 @@ None during implementation yet.
 ## Outcomes & Retrospective
 
 
-To be filled with final versions, validation commands/results, rollout evidence, corpus snapshots, residual risks and ADR distillation.
+Integration qualification is in progress. Child implementation evidence, the
+rollout procedure, ADR amendments, and the closed corpus ledger are present.
+`docs/evidence/keiro-0.17/qualification.md` will record the final command results
+after the public Hackage solve succeeds.
 
 
 ## Context and Orientation

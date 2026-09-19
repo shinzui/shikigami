@@ -235,6 +235,7 @@ callSurface :: Api -> (Text, Text)
 callSurface = \case
   AnthropicMessages -> ("messages", "https")
   OpenAIChatCompletions -> ("chat-completions", "https")
+  OpenAIResponses -> ("responses", "https")
   AnthropicMessagesCli -> ("messages", "cli")
   OpenAICompletionsCli -> ("completions", "cli")
   Custom "stub" -> ("stub", "in-process")

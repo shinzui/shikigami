@@ -836,6 +836,7 @@ highThinking =
       effortText = Nothing,
       budgetTokens = Nothing,
       wireField = Just "thinking",
+      displayText = Nothing,
       adjustments = []
     }
 
@@ -847,6 +848,7 @@ clampedThinking =
       effortText = Just "low",
       budgetTokens = Nothing,
       wireField = Just "thinking",
+      displayText = Nothing,
       adjustments = [Baikai.EffortClamped ThinkingMedium "low"]
     }
 
@@ -939,7 +941,7 @@ twoCallEvidenceJson :: ByteString
 twoCallEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/2.0",
+    "schema_version":"baikai.model-call-evidence/2.5",
     "run_id":"run-evidence-m1",
     "call_id":"baikai-two-1",
     "attempt":1,
@@ -969,7 +971,7 @@ retryEvidenceJson :: ByteString
 retryEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/2.0",
+    "schema_version":"baikai.model-call-evidence/2.5",
     "run_id":"run-evidence-m1",
     "call_id":"baikai-retry-2",
     "attempt":2,
@@ -999,7 +1001,7 @@ childEvidenceJson :: ByteString
 childEvidenceJson =
   """
   {
-    "schema_version":"baikai.model-call-evidence/2.0",
+    "schema_version":"baikai.model-call-evidence/2.5",
     "run_id":"run-evidence-child",
     "call_id":"baikai-child-1",
     "attempt":1,

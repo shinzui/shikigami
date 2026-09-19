@@ -1,13 +1,13 @@
 cabal-version: 3.0
-name:          shikigami-api
-version:       0.1.0.0
+name: shikigami-api
+version: 0.1.0.0
 synopsis:
   Shikigami public HTTP contract (routes, DTOs, problem details)
 
-build-type:    Simple
+build-type: Simple
 
 common common
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     BlockArguments
     DeriveAnyClass
@@ -19,12 +19,17 @@ common common
     OverloadedStrings
 
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-record-updates
-    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
 
 library
-  import:          common
-  hs-source-dirs:  src
+  import: common
+  hs-source-dirs: src
   exposed-modules:
     Shikigami.Api
     Shikigami.Api.OpenApi
@@ -32,48 +37,56 @@ library
     Shikigami.Health.Api
 
   build-depends:
-    , aeson               >=2.2
-    , aeson-pretty        >=0.8
-    , base                >=4.21 && <5
-    , bytestring
-    , http-media          >=0.8
-    , lens                >=5.2
-    , openapi-hs          >=5.0  && <5.1
-    , servant             >=0.20 && <0.21
-    , servant-health      >=0.1  && <0.2
-    , servant-openapi-hs  >=5.1  && <5.2
-    , shikigami-core
-    , text                >=2.1
+    aeson >=2.2,
+    aeson-pretty >=0.8,
+    base >=4.21 && <5,
+    bytestring,
+    http-media >=0.8,
+    lens >=5.2,
+    openapi-hs >=5.0 && <5.1,
+    servant >=0.20 && <0.21,
+    servant-health >=0.1 && <0.2,
+    servant-openapi-hs >=5.1 && <5.2,
+    shikigami-core,
+    text >=2.1,
 
 executable shikigami-openapi
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/openapi
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , bytestring
-    , directory
-    , filepath
-    , shikigami-api
+    base,
+    bytestring,
+    directory,
+    filepath,
+    shikigami-api,
 
 test-suite shikigami-api-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
   hs-source-dirs: test
-  other-modules:  Shikigami.Api.OpenApiSpec
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  other-modules: Shikigami.Api.OpenApiSpec
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base
-    , bytestring
-    , directory
-    , lens
-    , openapi-hs
-    , shikigami-api
-    , shikigami-core
-    , tasty
-    , tasty-hunit
-    , text
-    , time
+    aeson,
+    base,
+    bytestring,
+    directory,
+    lens,
+    openapi-hs,
+    shikigami-api,
+    shikigami-core,
+    tasty,
+    tasty-hunit,
+    text,
+    time,

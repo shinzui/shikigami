@@ -4,12 +4,19 @@ slug: adopt-language-6-and-executable-nominal-domain-contracts
 title: "Adopt Language 6 and executable nominal domain contracts"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T00:06:28Z
+      mode: "implement"
+      note: "Adopted Language 6 and qualified executable boundary validation"
 ---
 
 # Adopt Language 6 and executable nominal domain contracts
@@ -26,13 +33,25 @@ Make every Shikigami workspace member explicitly use Language 6 and let generate
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [x] (2026-09-19T00:06:28Z) Declared and canonically formatted all five members at Language 6.
+- [x] (2026-09-19T00:06:28Z) Regenerated the Keiro 0.17 layer and raised strict check/inspect gates to version 6.
+- [x] (2026-09-19T00:06:28Z) Audited nominal candidates and retained executable mapped validation where no total isomorphism exists.
+- [x] (2026-09-19T00:06:28Z) Updated the domain inventory and closed all EP-2 pattern rows.
+- [ ] Run the final clean all-Hackage qualification after Kioku 0.7 appears in the public index.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet.
+2026-09-18: Keiro 0.17 is released, but its own registry intentionally keeps
+Language 6 as `Candidate CandidateLanguage`; package release status and language
+compatibility maturity are separate facts.
+
+2026-09-18: The apparent nominal candidates are not total isomorphisms.
+AgentName, RunKey and DelegationDepth reject underlying values; SessionId and
+WorkflowId are opaque upstream identities; changing TriggerKind/RunRouteKind to
+DSL wire words would change durable Aeson bytes. Existing production decoding
+already rejects invalid values before execution.
 
 
 ## Decision Log
@@ -40,11 +59,22 @@ None during implementation yet.
 
 2026-09-18: Adopt Language 6 despite its Candidate metadata, as required by the current runtime-patterns policy. Keep idiomatic-v2 generation, existing workflow identities and live-only evidence. Nominal types are not permission to force TypeID validation onto externally owned or composite identifiers.
 
+2026-09-18: Treat the Language 6 move as deploy-safe source provenance. Generated
+runtime semantics remain profile 5 and no workflow step shape changes. Kioku recall's
+new host-owned AI setup changes an action implementation without changing its durable
+step name, result or control shape, so no workflow patch is required.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation, including the exact language findings, codec evidence and remaining upstream gaps.
+Implementation is complete against the exact release sources. All members are
+Language 6, strict gates pass, generated output is deterministic, and existing
+wire tests exercise the real decoder for positive bytes and negative admission.
+No nominal leaf was added because none of the reviewed scalars meets Keiro's total
+isomorphism requirement. Evidence is in
+`docs/evidence/keiro-0.17/ep2-coverage.md`; final completion waits only on EP-1's
+public Hackage solve.
 
 
 ## Context and Orientation

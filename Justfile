@@ -63,6 +63,12 @@ migrate-status:
     DATABASE_URL="host=$PGHOST dbname=$PGDATABASE user=$(id -un)" \
       cabal run shikigami-migrate -- status
 
+# Reject migration SQL whose object ownership depends on the caller's
+# search_path. The checker reports the single checksum-immutable historical
+# exception and separately scans the vendored PGMQ snapshot.
+migration-schema-isolation:
+    bash tools/check-migration-schema-isolation.sh
+
 # Run the public HTTP contract against an isolated server and disposable
 # PostgreSQL instance. The runner owns and cleans up every process it starts.
 hurl:
@@ -106,11 +112,8 @@ new-migration name="":
     -- Created: ${ts} UTC
     -- Write idempotent DDL (CREATE ... IF NOT EXISTS) so re-application is safe.
 
-    -- Kizashi read-model tables live in the kiroku schema: the app queries them
-    -- on the event-store pool, whose search_path is kiroku (kiroku-store
-    -- defaultConnectionSettings: schema="kiroku", extraSearchPath=[]). Pin it so
-    -- unqualified CREATEs land where the app resolves them.
-    SET search_path TO kiroku, pg_catalog;
+    -- Qualify every persistent object with its owning schema. Migration SQL may
+    -- not mutate search_path; run `just migration-schema-isolation` before commit.
     EOF
     printf '%s\n' "$file" >> "${dir}/manifest"
     echo "Created $dest and appended it to ${dir}/manifest"
@@ -129,7 +132,7 @@ new-migration name="":
 # Check the composed workspace with the language floor, every warning denied,
 # and both machine-readable reports.
 #
-# --min-language 5 fails any member whose *effective* version is below 5 with
+# --min-language 6 fails any member whose *effective* version is below 6 with
 # LanguageVersionBelowMinimum. --deny-warnings is the fleet standard
 # (mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-adoption): a keiro-dsl
 # warning is a real finding, and a new one appearing on a toolchain upgrade is
@@ -141,7 +144,7 @@ keiro-check:
     set -euo pipefail
     mkdir -p build
     cabal run -v0 keiro-dsl -- check domain/shikigami.keiro-workspace \
-      --min-language 5 \
+      --min-language 6 \
       --deny-warnings \
       --explain-bindings \
       --report-out build/keiro-check-report.json \
@@ -160,17 +163,17 @@ keiro-inspect:
     report="$(cabal run -v0 keiro-dsl -- inspect domain/shikigami.keiro-workspace --format=json)"
     printf '%s\n' "$report"
     fail() { echo "keiro-inspect: $1" >&2; exit 1; }
-    printf '%s' "$report" | grep -q '"languageSupport":"stable"' \
-      || fail "the effective contract is not stable"
+    printf '%s' "$report" | grep -q '"languageSupport":"candidate"' \
+      || fail "the effective contract is not the expected Language 6 candidate"
     forms="$(printf '%s' "$report" | grep -o '"sourceForm":"[^"]*"' | sort -u)"
     [ "$forms" = '"sourceForm":"declared"' ] \
       || fail "a member does not declare its language version: $forms"
     versions="$(printf '%s' "$report" | grep -o '"effectiveLanguageVersion":[0-9]*' | sort -u)"
-    [ "$versions" = '"effectiveLanguageVersion":5' ] \
-      || fail "a member's effective language version is not 5: $versions"
+    [ "$versions" = '"effectiveLanguageVersion":6' ] \
+      || fail "a member's effective language version is not 6: $versions"
     members="$(printf '%s' "$report" | grep -o '"sourceForm"' | wc -l | tr -d ' ')"
     [ "$members" -ge 1 ] || fail "the workspace reported no members"
-    echo "keiro-inspect: $members member(s), all declared at language 5"
+    echo "keiro-inspect: $members member(s), all declared at language 6 (candidate)"
 
 # Regenerate the generated layer, then prove the regeneration was a no-op.
 #

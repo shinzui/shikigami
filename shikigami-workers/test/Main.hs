@@ -6,6 +6,7 @@ import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
+import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import System.Environment (lookupEnv)
@@ -25,6 +26,7 @@ main = do
               RunJobWorkerSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
+              TimerRecoverySpec.tests databaseFixture,
               TelemetrySpec.tests,
               SupervisionSpec.tests
             ]

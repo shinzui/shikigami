@@ -1,11 +1,11 @@
 cabal-version: 3.0
-name:          shikigami-workers
-version:       0.1.0.0
-synopsis:      Shikigami supervised background loops
-build-type:    Simple
+name: shikigami-workers
+version: 0.1.0.0
+synopsis: Shikigami supervised background loops
+build-type: Simple
 
 common common
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     BlockArguments
     DeriveAnyClass
@@ -17,12 +17,17 @@ common common
     OverloadedStrings
 
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-record-updates
-    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
 
 library
-  import:          common
-  hs-source-dirs:  src
+  import: common
+  hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.RunJob.Worker
     Shikigami.Agent.Workflow.Resume
@@ -43,96 +48,112 @@ library
     Shikigami.Workers.Supervision
 
   build-depends:
-    , aeson                           >=2.2
-    , async
-    , baikai-trace-otel
-    , base                            >=4.21    && <5
-    , bytestring
-    , containers                      >=0.6
-    , directory
-    , effectful
-    , filepath
-    , generic-lens
-    , hasql
-    , hasql-pool
-    , hasql-transaction
-    , hs-opentelemetry-api
-    , hs-opentelemetry-exporter-otlp
-    , hs-opentelemetry-sdk
-    , http-client
-    , http-client-tls
-    , hw-kafka-client
-    , kafka-effectful
-    , keiro
-    , keiro-pgmq
-    , kikan-en-client
-    , kioku-api
-    , kioku-core
-    , kiroku-store
-    , lens                            >=5.2
-    , optparse-applicative            >=0.19    && <0.20
-    , pgmq-hasql
-    , servant                         >=0.20    && <0.21
-    , servant-client                  >=0.20    && <0.21
-    , servant-health                  >=0.1     && <0.2
-    , servant-server                  >=0.20    && <0.21
-    , settei                          ==0.2.0.0
-    , settei-optparse-applicative     ==0.2.0.0
-    , shibuya-core
-    , shibuya-kafka-adapter
-    , shikigami-core
-    , shikigami-migrations
-    , text                            >=2.1
-    , time                            >=1.12
-    , unix
-    , uuid
-    , wai
-    , warp
+    aeson >=2.2,
+    async,
+    baikai-trace-otel,
+    base >=4.21 && <5,
+    bytestring,
+    containers >=0.6,
+    directory,
+    effectful,
+    filepath,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-otlp,
+    hs-opentelemetry-sdk,
+    http-client,
+    http-client-tls,
+    hw-kafka-client,
+    kafka-effectful,
+    keiro,
+    keiro-pgmq,
+    kikan-en-client,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens >=5.2,
+    optparse-applicative >=0.19 && <0.20,
+    pgmq-hasql,
+    servant >=0.20 && <0.21,
+    servant-client >=0.20 && <0.21,
+    servant-health >=0.1 && <0.2,
+    servant-server >=0.20 && <0.21,
+    settei ==0.2.0.0,
+    settei-optparse-applicative ==0.2.0.0,
+    shibuya-core,
+    shibuya-kafka-adapter,
+    shikigami-core,
+    shikigami-migrations,
+    text >=2.1,
+    time >=1.12,
+    unix,
+    uuid,
+    wai,
+    warp,
 
 executable shikigami-worker
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/worker
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
+    base,
+    optparse-applicative,
+    shikigami-workers,
 
 executable shikigami-scheduler
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/scheduler
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
+    base,
+    optparse-applicative,
+    shikigami-workers,
 
 executable shikigami-consume-stream
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/consume-stream
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
+    base,
+    optparse-applicative,
+    shikigami-workers,
 
 executable shikigami-consume-events
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app/consume-events
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , optparse-applicative
-    , shikigami-workers
+    base,
+    optparse-applicative,
+    shikigami-workers,
 
 test-suite shikigami-workers-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.RunJob.WorkerSpec
@@ -140,38 +161,44 @@ test-suite shikigami-workers-test
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
     Shikigami.TelemetrySpec
+    Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
     Shikigami.Workers.SupervisionSpec
 
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base
-    , bytestring
-    , containers
-    , effectful
-    , hasql-pool
-    , hs-opentelemetry-exporter-in-memory
-    , hs-opentelemetry-sdk
-    , keiro
-    , keiro-pgmq
-    , kioku-api
-    , kioku-core
-    , kiroku-store
-    , optparse-applicative
-    , pgmq-hasql
-    , process
-    , servant-health
-    , servant-health:testkit
-    , settei-env
-    , shibuya-core
-    , shikigami-core
-    , shikigami-migrations:test-support
-    , shikigami-workers
-    , tasty
-    , tasty-hunit
-    , text
-    , time
-    , unix
-    , vector
-    , wai
+    aeson,
+    base,
+    bytestring,
+    containers,
+    effectful,
+    hasql-pool,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-sdk,
+    keiro,
+    keiro-pgmq,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    optparse-applicative,
+    pgmq-hasql,
+    process,
+    servant-health,
+    servant-health:testkit,
+    settei-env,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-workers,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unix,
+    uuid,
+    vector,
+    wai,

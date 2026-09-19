@@ -8,6 +8,39 @@ cohort holds together. `cabal.project` encodes the direct selections as a
 labelled as such. A drift between a direct-selection row and the solver is a
 bug in one of them.
 
+## Current Keiro 0.17 target
+
+MasterPlan 12 advances the runtime to this coherent selection:
+
+| Family | Selected release |
+|---|---|
+| `keiro`, `keiro-core`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, `keiro-pgmq`, `keiro-test-support` | `0.17.0.0` |
+| `kioku-api`, `kioku-core`, `kioku-migrations` | `0.7.0.0` |
+| `pgmq-core`, `pgmq-hasql`, `pgmq-effectful`, `pgmq-config` | `0.6.1.0` |
+| `shibuya-pgmq-adapter` | `0.16.0.0` |
+| `shikumi`, `shikumi-tools`, `shikumi-trace` | `0.4.0.0`, `0.4.0.0`, `0.3.0.0` |
+| `baikai`, `baikai-claude`, `baikai-openai`, `baikai-effectful` | `0.7.0.0`, `0.7.0.0`, `0.7.0.0`, `0.4.0.1` |
+
+All seven Keiro releases are on Hackage and their release tags resolve to commit
+`11e0bba4f634ac6fa4526e2814bd5a8177e3f050` in `mori://shinzui/keiro`.
+Kioku's release commit is
+`37c3acd2d16e18c49217bc6189ea20b496907e3b`; its 0.7 Cabal files admit Keiro
+0.17 and move AI execution to an explicit host-owned runtime. Shikigami loads that
+runtime from `KIOKU_AI_CONFIG`; an absent or disabled query-embedding feature makes
+hybrid recall fall back to keyword search.
+
+`baikai-effectful` is deliberately fixed at 0.4.0.1. Version 0.4.0.2 requires
+`effectful-core ^>=2.7`, while the selected Keiro/Kioku releases require a version
+below 2.7. Kioku 0.7 admits 0.4.0.1, so no `allow-newer` is needed.
+
+At the last authoritative refresh (`index-state 2026-09-18T23:13:22Z`), the
+publisher-reported Kioku 0.7 upload had not yet appeared in Hackage's public secure
+index or package pages. Local compatibility, build, Language 6, worker and migration
+tests use the exact clean release commit above. The release gate remains open until
+the public index exposes all three packages and a clean solve succeeds without the
+temporary sibling paths. The older Plan 65 matrix below remains historical evidence
+for the 0.15 baseline used by the real upgrade fixture.
+
 
 Plan 65 adoption starts at `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 On 2026-09-07 the preferred-version endpoints for all seven Keiro and three Kioku

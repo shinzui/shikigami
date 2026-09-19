@@ -263,8 +263,9 @@ isProviderAdapterDependency dependency =
 --
 -- A stanza begins at a line with no leading whitespace whose first word is
 -- @library@, @executable@, @test-suite@, or @benchmark@, and continues until the
--- next such line. Dependency names are the first word of each @, name@ line
--- inside the stanza's @build-depends@ list.
+-- next such line. Accept both the repository's older leading-comma dependency
+-- style and cabal-fmt's trailing-comma style so the configured formatter cannot
+-- silently empty the architecture model.
 parseStanzas :: Text -> [Stanza]
 parseStanzas contents = go (Text.lines contents) Nothing []
   where
@@ -288,6 +289,8 @@ parseStanzas contents = go (Text.lines contents) Nothing []
 
     dependencyName line = case Text.words (Text.strip line) of
       ("," : dependency : _) -> Just dependency
+      (dependency : _)
+        | "," `Text.isSuffixOf` Text.strip line -> Just (Text.dropWhileEnd (== ',') dependency)
       _ -> Nothing
 
 -- ── Locating the repository ─────────────────────────────────────────────────

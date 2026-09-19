@@ -1,10 +1,13 @@
 # Shikigami domain inventory
 
-This census was refreshed on 2026-09-07 for [plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md), starting at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
+This census was refreshed on 2026-09-18 for [plan 67](../plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md), from the plan 65 baseline at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 It describes executed ownership and the reasons other surfaces remain hand-owned. A declaration
 counts only when its generated contract is used by production code (ADR 0001).
-The workspace currently contains five Language 5 members: agent-run, approval,
+The workspace currently contains five explicitly declared Language 6 members: agent-run, approval,
 conversation, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
+Keiro 0.17 is a released package family, while its language registry truthfully
+labels Language 6 as the opt-in `Candidate CandidateLanguage` contract; Language 5
+remains its stable published compatibility contract.
 
 ## Workflows and identities
 
@@ -25,6 +28,18 @@ scalars explicitly and validates them on decode. Conversation seeds keep AgentNa
 delegation context carries nominal lineage and depth. Evidence uses generated
 RunEvidenceId, RunKey and distinct nonnegative duration/concurrency types. Existing
 attestation versions, digests and locators keep their owning nominal types.
+
+Language 6 nominal leaves are intentionally absent from the run-job declaration.
+`AgentName`, `RunKey`, and `DelegationDepth` are refined values whose parsers reject
+members of their underlying Text or integer representation, so they are not total
+consumer nominal isomorphisms. `SessionId` and `WorkflowId` are upstream opaque
+identities, and `RunKey` is a composite retry identity rather than a TypeID-v7 domain.
+`TriggerKind` and `RunRouteKind` keep their established Aeson constructor spellings;
+changing them to the DSL enum wire-word grammar would change durable queue bytes.
+The generated queue decoder feeds the real `RunJob` decoder before execution, and
+`WireCompatSpec` proves rejection of invalid refined IDs, depths, lineage, session and
+workflow IDs, plus unknown enum strings. This is executable boundary validation rather
+than an unchecked opaque root.
 
 `Shikigami.Workflow.Registry` in core composes agent runs, approval children and
 conversations. The worker consumes this exact registry; the approval integration
@@ -75,8 +90,9 @@ and conversation routing all select an explicit route.
 The reviewed unused pre-v1 reset removed bare queue decoding, missing-field defaults,
 and inferred routing. `WireCompatSpec` pins a complete literal envelope and rejects
 the former bare payload. Worker tests exercise actual enqueue and dispatch; scheduler
-and inbox tests decode through the production facade. Language 5 has no separate
-workqueue worker-binding clause: the Haskell worker registration is the executable binding.
+and inbox tests decode through the production facade. The Haskell worker registration
+is the executable binding for this queue; Language 6 did not change its physical name,
+envelope bytes, retry policy or `Unordered` delivery semantics.
 
 ## External intake and sink delivery
 
@@ -102,6 +118,9 @@ allocation in the conversation vertical. These are custom timer rows, not a saga
 RunEvidence does not supply a process that dispatches their commands. The owning
 dispatcher drains up to 100 Keiro sleep or custom timers per pass. Scheduler and
 conversation tests prove wake-up, cancellation, rearming and rotation behavior.
+`TimerRecoverySpec` drives the finite serving pass and proves expired guarded claims
+return directly to Dead, retain payload/reason/attempts, reject ID-only mutation, and
+fence stale completion tokens.
 
 Runtime entry points first verify the complete migration ledger read-only, then
 construct telemetry, acquire the store and register validated streams/catalogs before
@@ -130,7 +149,7 @@ exception cleanup, no-op reapplication and startup ledger refusal.
 ## Evolution and conformance
 
 Run `nix develop -c just keiro-check`, `just keiro-inspect`, and generated conformance
-with the project-pinned tool. Check retains `--min-language 5`, `--deny-warnings`, binding
+with the project-pinned tool. Check requires `--min-language 6`, `--deny-warnings`, binding
 and coverage reports, and `--fail-on-opaque`. Behavior obligations are nonzero and must
 execute; the former zero-obligation claim is obsolete. After committing reviewed generation,
 ordinary scaffold must change no bytes. `just keiro-gate <baseline>` remains strict.

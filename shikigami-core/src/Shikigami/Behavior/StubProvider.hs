@@ -112,7 +112,7 @@ stubEndpoint =
       api = "stub",
       transport = TransportAgentRun,
       endpoint = Nothing,
-      baikaiVersion = "0.6.0.0",
+      baikaiVersion = "0.7.0.0",
       implementationVersion = Just "shikigami-stub-v1"
     }
 
@@ -139,6 +139,7 @@ stubThinking _model opts =
           effortText = Nothing,
           budgetTokens = Nothing,
           wireField = Nothing,
+          displayText = Nothing,
           adjustments = [ThinkingDroppedUnsupportedHost level]
         }
 

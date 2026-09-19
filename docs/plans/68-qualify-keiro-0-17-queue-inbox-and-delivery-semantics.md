@@ -4,12 +4,19 @@ slug: qualify-keiro-0-17-queue-inbox-and-delivery-semantics
 title: "Qualify Keiro 0.17 queue inbox and delivery semantics"
 kind: exec-plan
 created_at: 2026-09-18T16:22:03Z
+intention: intention_01m2trbg5ze1dt6dfz50mxg4bq
 master_plan: "docs/masterplans/12-adopt-keiro-0-17-and-applicable-runtime-haskell-and-postgresql-patterns.md"
 provenance:
   created_by:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-18T16:22:03Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T00:06:28Z
+      mode: "implement"
+      note: "Qualified Keiro 0.17 queue, inbox, DLQ, and sink behavior"
 ---
 
 # Qualify Keiro 0.17 queue inbox and delivery semantics
@@ -26,13 +33,24 @@ Keep agent jobs, integration triggers and sink deliveries reliable on Keiro 0.17
 ## Progress
 
 
-No implementation has started. Populate a timestamped checklist at the first implementation step.
+- [x] (2026-09-19T00:06:28Z) Wired generated `jobOrdering` into the production Job.
+- [x] (2026-09-19T00:06:28Z) Requalified actual queue retry, lease-renewal and DLQ paths.
+- [x] (2026-09-19T00:06:28Z) Requalified transactional inbox fanout, rollback, duplicate and poison dispositions.
+- [x] (2026-09-19T00:06:28Z) Reviewed the released DLQ/operator and HTTP receipt contracts and closed all messaging rows.
+- [x] (2026-09-19T00:14:28Z) Exercised operator-visible DLQ inspection, exact-id archival and guarded purge against the installed PGMQ SQL.
+- [ ] Run the final clean all-Hackage qualification after EP-1 clears.
 
 
 ## Surprises & Discoveries
 
 
-None during implementation yet.
+2026-09-18: The only required Shikigami code change is carrying generated
+`Policy.jobOrdering` into `runJob`. Existing workers already validate tuning and
+exercise the released typed producer/consumer boundary.
+
+2026-09-18: Keiro 0.17's exact-ID DLQ archive, original-header redrive and hidden-row
+purge refusal are owned by the released `keiro-pgmq` API mounted by Shikigami's
+operator tree. Shikigami has no `purgeDlqForce` call.
 
 
 ## Decision Log
@@ -40,11 +58,21 @@ None during implementation yet.
 
 2026-09-18: Keep run_jobs Unordered because no strict per-group business ordering is currently declared. Keep the transactional inbox because one incoming integration event can fan out to several run jobs. New FIFO, delegated and reaction APIs are selected by business semantics, not release novelty.
 
+2026-09-18: Retain the HTTP sink intent/receipt owner. A generated Kafka producer
+would not represent remote HTTP acceptance or its stable deduplication key.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation, with queue, inbox, DLQ and sink recovery evidence.
+Implementation is complete against the selected release sources. The production Job
+enforces its declared `Unordered` policy; worker and inbox suites prove retry,
+renewal, dead-lettering, atomic fanout and poison behavior; and the released operator
+tree retains guarded DLQ retention. The selected server capability inventory records
+the nullable metrics contract and the explicit non-FIFO boundary. No application call requires the new integration
+producer or process-reaction APIs. Evidence is in
+`docs/evidence/keiro-0.17/ep3-coverage.md`; final completion waits on EP-1's public
+Hackage solve.
 
 
 ## Context and Orientation
