@@ -17,6 +17,11 @@ provenance:
       at: 2026-09-19T00:06:28Z
       mode: "implement"
       note: "Adopted Language 6 and qualified executable boundary validation"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage qualification"
 ---
 
 # Adopt Language 6 and executable nominal domain contracts
@@ -37,7 +42,7 @@ Make every Shikigami workspace member explicitly use Language 6 and let generate
 - [x] (2026-09-19T00:06:28Z) Regenerated the Keiro 0.17 layer and raised strict check/inspect gates to version 6.
 - [x] (2026-09-19T00:06:28Z) Audited nominal candidates and retained executable mapped validation where no total isomorphism exists.
 - [x] (2026-09-19T00:06:28Z) Updated the domain inventory and closed all EP-2 pattern rows.
-- [ ] Run the final clean all-Hackage qualification after Kioku 0.7 appears in the public index.
+- [x] (2026-09-19T02:23:08Z) Passed the final clean all-Hackage qualification against published Kioku 0.7.
 
 
 ## Surprises & Discoveries
@@ -68,13 +73,13 @@ step name, result or control shape, so no workflow patch is required.
 ## Outcomes & Retrospective
 
 
-Implementation is complete against the exact release sources. All members are
+Complete. All members are
 Language 6, strict gates pass, generated output is deterministic, and existing
 wire tests exercise the real decoder for positive bytes and negative admission.
 No nominal leaf was added because none of the reviewed scalars meets Keiro's total
 isomorphism requirement. Evidence is in
-`docs/evidence/keiro-0.17/ep2-coverage.md`; final completion waits only on EP-1's
-public Hackage solve.
+`docs/evidence/keiro-0.17/ep2-coverage.md`; the clean Hackage-only build and
+aggregate qualification also pass.
 
 
 ## Context and Orientation

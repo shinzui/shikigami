@@ -17,6 +17,11 @@ provenance:
       at: 2026-09-19T00:14:28Z
       mode: "implement"
       note: "Started aggregate qualification and reconciled pattern coverage"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage aggregate qualification"
 ---
 
 # Qualify the Keiro 0.17 rollout and close pattern coverage
@@ -37,7 +42,7 @@ Demonstrate that the complete Keiro 0.17 adoption works as one Shikigami system 
 - [x] (2026-09-19T00:14:28Z) Distilled Language 6, queue, guarded-timer and schema-isolation decisions into ADRs 0037 and 0038.
 - [x] (2026-09-19T00:14:28Z) Added executable upgrade, hostile-schema, timer recovery and selected PGMQ operator evidence.
 - [x] (2026-09-19T00:31:00Z) Ran the application build/test matrix, strict Keiro generation and evolution gate, OpenAPI drift check, migration policy scan, Hurl smoke, and exported Nix check outputs from implementation revision `2d82fc2`.
-- [ ] Repeat the solve and aggregate gates without `cabal.project.local` after Kioku 0.7 is visible in the public Hackage index.
+- [x] (2026-09-19T02:23:08Z) Repeated the solve and aggregate gates in a clean detached worktree without `cabal.project.local`, using published Kioku 0.7 packages.
 
 
 ## Surprises & Discoveries
@@ -51,6 +56,11 @@ contextual, 16 not applicable, and one superseded. None remains open.
 the publisher-reported upload. This prevents the required clean-release proof,
 not the remaining local qualification work.
 
+2026-09-19: Hackage index-state `2026-09-19T01:06:24Z` made all three Kioku
+0.7.0.0 packages available. The clean checkout downloaded those packages, built
+all components, and passed the application, PostgreSQL, worker, migration,
+generation, evolution, HTTP, OpenAPI, schema-isolation and Nix check gates.
+
 
 ## Decision Log
 
@@ -61,11 +71,11 @@ not the remaining local qualification work.
 ## Outcomes & Retrospective
 
 
-Integration qualification is in progress. Child implementation evidence, the
+Complete. Child implementation evidence, the
 rollout procedure, ADR amendments, the closed corpus ledger, and the local
 aggregate results are recorded in `docs/evidence/keiro-0.17/qualification.md`.
-The remaining acceptance boundary is the clean public-Hackage solve and its
-repeat of the aggregate gates.
+The clean public-Hackage solve repeated the aggregate gates without a local Kioku
+source override.
 
 
 ## Context and Orientation

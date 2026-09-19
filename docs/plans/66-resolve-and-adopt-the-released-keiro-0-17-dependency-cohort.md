@@ -17,6 +17,11 @@ provenance:
       at: 2026-09-18T17:18:36Z
       mode: "implement"
       note: "Started release-cohort resolution and linked the inherited intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage release-boundary qualification"
 ---
 
 # Resolve and adopt the released Keiro 0.17 dependency cohort
@@ -33,13 +38,13 @@ Make the seven Shikigami packages build and run their existing behavior against 
 ## Progress
 
 
-- [ ] Milestone 1: Resolve release compatibility and pattern ownership.
+- [x] (2026-09-19T02:23:08Z) Milestone 1: Resolved release compatibility and pattern ownership.
   - [x] (2026-09-18T17:20:00Z) Rechecked authoritative package catalogs and tags and captured the isolated solver failure in `docs/evidence/keiro-0.17/release-cohort.md`.
   - [x] (2026-09-18T17:22:00Z) Inventoried every Mori-registered document in the three corpora and assigned an owning child plan in `docs/architecture/keiro-0.17-pattern-adoption.md`.
   - [x] (2026-09-19T00:06:28Z) Qualified the clean Kioku 0.7 release commit and recorded the publisher-reported upload.
-  - [ ] Await public Hackage-index visibility for all three Kioku 0.7 packages, then verify the all-released solve.
+  - [x] (2026-09-19T02:23:08Z) Verified all three Kioku 0.7 packages in the public index and completed the all-released solve.
 - [x] (2026-09-19T00:06:28Z) Milestone 2: Adopted the 0.17/0.7/PGMQ 0.6 cohort and mechanical API changes against the exact Kioku release commit.
-- [ ] Milestone 3: Final public-release boundary verification remains pending Hackage propagation.
+- [x] (2026-09-19T02:23:08Z) Milestone 3: Verified the final public-release boundary in a clean detached worktree without `cabal.project.local`.
 
 
 ## Surprises & Discoveries
@@ -49,14 +54,20 @@ Make the seven Shikigami packages build and run their existing behavior against 
 
 2026-09-18: The owner reported publishing Kioku 0.7. Clean commit
 `37c3acd2d16e18c49217bc6189ea20b496907e3b` supplies coherent 0.7 packages,
-and Shikigami builds against them. The public Hackage index at
-`2026-09-18T23:13:22Z` still lists only through 0.6 and the 0.7 package page is
-404, so the final no-local-override solve must wait for propagation.
+and Shikigami builds against them. At public Hackage index-state
+`2026-09-18T23:13:22Z`, the catalog still listed only through 0.6 and the 0.7
+package page was 404, so the final no-local-override solve was deferred until
+the propagation recorded below.
 
 2026-09-18: Kioku 0.7 requires an explicit host-owned AI runtime. Shikigami now
 loads it from the versioned configuration boundary, resolves `QueryEmbedding`,
 uses Kioku's required 1536-dimensional vector contract, and preserves keyword
 fallback when AI is disabled.
+
+2026-09-19: Hackage index-state `2026-09-19T01:06:24Z` exposes all three Kioku
+0.7.0.0 packages. A clean detached worktree downloaded them from Hackage, built
+all application packages, and passed the complete Shikigami test matrix without
+`cabal.project.local` or a Kioku package path.
 
 
 ## Decision Log
@@ -72,17 +83,18 @@ admitted by Kioku 0.7.
 ## Outcomes & Retrospective
 
 
-The code now selects Keiro 0.17.0.0, Kioku 0.7.0.0, PGMQ 0.6.1.0,
+Complete. The code selects Keiro 0.17.0.0, Kioku 0.7.0.0, PGMQ 0.6.1.0,
 shibuya-pgmq-adapter 0.16.0.0, Shikumi 0.4 and Baikai 0.7. Mechanical API
 changes compile across all packages, `RunJobs` supplies generated ordering, and
-Kioku recall uses the new explicit AI runtime. The only remaining EP-1 item is a
-clean Hackage solve after Kioku 0.7 becomes visible in the public secure index.
+Kioku recall uses the new explicit AI runtime. The final clean worktree resolved
+and downloaded Kioku 0.7 exclusively from Hackage and passed every release-boundary
+gate.
 
 
 ## Context and Orientation
 
 
-Work from the repository root. cabal.project pins all seven Keiro packages to 0.15.0.0, PGMQ core/hasql/effectful to 0.5.0.0, shibuya-pgmq-adapter to 0.14.0.0 and Kioku api/core/migrations to 0.5.2.0. Package-level constraints also exist in shikigami-core/shikigami-core.cabal, shikigami-server/shikigami-server.cabal and shikigami-migrations/shikigami-migrations.cabal. cabal.project.local carries unrelated compatibility allowances; inspect and preserve user edits, and prove the final solve without depending on local-only overrides.
+At plan start, cabal.project pinned all seven Keiro packages to 0.15.0.0, PGMQ core/hasql/effectful to 0.5.0.0, shibuya-pgmq-adapter to 0.14.0.0 and Kioku api/core/migrations to 0.5.2.0. Package-level constraints also exist in shikigami-core/shikigami-core.cabal, shikigami-server/shikigami-server.cabal and shikigami-migrations/shikigami-migrations.cabal. The final solve was required to preserve user-local configuration while proving that no local-only override participates.
 
 A cohort is a set of package versions whose constraints can be solved together. On 2026-09-18 Hackage served all seven Keiro 0.17.0.0 descriptions and their upstream tags peeled to 11e0bba4f634ac6fa4526e2814bd5a8177e3f050. The authoritative source owner is mori://shinzui/keiro; CHANGELOG.md and each package's Cabal file are project-relative source locations, artifact-level URIs pending. Runtime packages keep Keiki 0.9, Kiroku 0.8 and Shibuya core 0.9 ranges, but keiro-pgmq requires PGMQ >=0.6 && <0.7 and shibuya-pgmq-adapter ^>=0.16.0.0.
 

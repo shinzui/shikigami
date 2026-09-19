@@ -17,6 +17,11 @@ provenance:
       at: 2026-09-19T00:06:28Z
       mode: "implement"
       note: "Qualified Keiro 0.17 queue, inbox, DLQ, and sink behavior"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage qualification"
 ---
 
 # Qualify Keiro 0.17 queue inbox and delivery semantics
@@ -38,7 +43,7 @@ Keep agent jobs, integration triggers and sink deliveries reliable on Keiro 0.17
 - [x] (2026-09-19T00:06:28Z) Requalified transactional inbox fanout, rollback, duplicate and poison dispositions.
 - [x] (2026-09-19T00:06:28Z) Reviewed the released DLQ/operator and HTTP receipt contracts and closed all messaging rows.
 - [x] (2026-09-19T00:14:28Z) Exercised operator-visible DLQ inspection, exact-id archival and guarded purge against the installed PGMQ SQL.
-- [ ] Run the final clean all-Hackage qualification after EP-1 clears.
+- [x] (2026-09-19T02:23:08Z) Passed the final clean all-Hackage qualification after EP-1 cleared.
 
 
 ## Surprises & Discoveries
@@ -65,14 +70,14 @@ would not represent remote HTTP acceptance or its stable deduplication key.
 ## Outcomes & Retrospective
 
 
-Implementation is complete against the selected release sources. The production Job
+Complete. The production Job
 enforces its declared `Unordered` policy; worker and inbox suites prove retry,
 renewal, dead-lettering, atomic fanout and poison behavior; and the released operator
 tree retains guarded DLQ retention. The selected server capability inventory records
 the nullable metrics contract and the explicit non-FIFO boundary. No application call requires the new integration
 producer or process-reaction APIs. Evidence is in
-`docs/evidence/keiro-0.17/ep3-coverage.md`; final completion waits on EP-1's public
-Hackage solve.
+`docs/evidence/keiro-0.17/ep3-coverage.md`; the same behavior passes in the final
+Hackage-only worker and PostgreSQL suites.
 
 
 ## Context and Orientation

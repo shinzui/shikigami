@@ -17,6 +17,11 @@ provenance:
       at: 2026-09-19T00:06:28Z
       mode: "implement"
       note: "Added guarded timer recovery, real upgrade, and schema-isolation evidence"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage qualification"
 ---
 
 # Adopt guarded timer recovery and schema-isolated migrations
@@ -39,7 +44,7 @@ Make the database upgrade from Keiro 0.15 to 0.17 repeatable and safe for existi
 - [x] (2026-09-19T00:06:28Z) Wrote the coordinated writer rollout and rollback procedure.
 - [x] (2026-09-19T00:06:28Z) Closed all EP-4 runtime, Kiroku, migration, and PostgreSQL rows.
 - [x] (2026-09-19T00:14:28Z) Proved migration 0032 ignores a colliding hostile schema and preserves the host connection path.
-- [ ] Run the final clean all-Hackage qualification after EP-1 clears.
+- [x] (2026-09-19T02:23:08Z) Passed the final clean all-Hackage qualification after EP-1 cleared.
 
 
 ## Surprises & Discoveries
@@ -73,14 +78,14 @@ recovers expired claims with the new dispatcher, never SQL token clearing.
 ## Outcomes & Retrospective
 
 
-Implementation is complete against the selected release sources. The worker test
+Complete. The worker test
 proves guarded claim recovery and fencing through the serving pass. The migration
 smoke upgrades real 0.15 ledger bytes, preserves a queued job, workflow, dead timer,
 rich evidence and every prior checksum, ignores a hostile-schema collision, preserves
 the host path, then performs a no-op second apply. The SQL
 gate and rollout procedure are executable repository artifacts. Evidence is in
-`docs/evidence/keiro-0.17/ep4-coverage.md`; final completion waits on EP-1's public
-Hackage solve.
+`docs/evidence/keiro-0.17/ep4-coverage.md`; the final Hackage-only migration and
+worker suites pass against the published cohort.
 
 
 ## Context and Orientation

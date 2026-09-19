@@ -21,11 +21,16 @@ provenance:
       at: 2026-09-19T00:14:28Z
       mode: "implement"
       note: "Integrated EP-2 through EP-6 implementation and qualification evidence"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T02:23:08Z
+      mode: "implement"
+      note: "Completed the clean all-Hackage qualification and initiative"
 ---
 
 # Adopt Keiro 0.17 and applicable runtime Haskell and PostgreSQL patterns
 
-This MasterPlan is a living document governed by agents/skills/master-plan/MASTERPLAN.md. Update its registry and living sections as implementation proceeds. Creation is planning only; no runtime upgrade or deployment has occurred.
+This MasterPlan is a living document governed by agents/skills/master-plan/MASTERPLAN.md. Update its registry and living sections as implementation proceeds. The repository implementation and qualification are complete; deployment to a live environment was outside this plan.
 
 
 ## Vision & Scope
@@ -34,7 +39,7 @@ Shikigami should build against the released Keiro 0.17 family, execute Language 
 
 The baseline is the completed docs/plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md. The seven application packages already use GHC2024, concise records, idiomatic-v2 generation, a generated run queue, a validated live-only evidence catalog, isolated database fixtures, and shared runtime owners. Preserve these achievements and qualify them on 0.17.
 
-Release research on 2026-09-18 retrieved all seven 0.17.0.0 package descriptions from Hackage. The seven upstream package tags peel to 11e0bba4f634ac6fa4526e2814bd5a8177e3f050 in mori://shinzui/keiro. Its 0.17 queue package requires the 0.6 PGMQ family and shibuya-pgmq-adapter 0.16.0.0. The owner has since published Kioku 0.7 from clean commit 37c3acd2d16e18c49217bc6189ea20b496907e3b; Shikigami builds against that exact release source and its host-owned AI API. The public secure Hackage index still exposes only Kioku 0.6, so EP-1 remains open until an override-free public solve succeeds.
+Release research retrieved all seven Keiro 0.17.0.0 package descriptions from Hackage. The seven upstream package tags peel to 11e0bba4f634ac6fa4526e2814bd5a8177e3f050 in mori://shinzui/keiro. Its 0.17 queue package requires the 0.6 PGMQ family and shibuya-pgmq-adapter 0.16.0.0. Kioku 0.7 was published from clean commit 37c3acd2d16e18c49217bc6189ea20b496907e3b and its public packages admit Keiro 0.17. A clean worktree resolved the complete cohort from Hackage and passed the aggregate qualification without `cabal.project.local`.
 
 Scope includes the source-language move, queue policy and dead-letter contracts, schema isolation, timer claim recovery, applicable nominal types, Haskell conventions, API/CLI/configuration/observability standards, and comprehensive qualification. Adding FIFO ordering, delegated inboxes, process reactions, Kafka-generated publishers for HTTP sinks, partitioned queues, or a new inspection UI merely because the release offers them is outside scope. Reassess their applicability against actual domain invariants and record the result. Applicable gaps must be implemented; non-applicability is not a synonym for expensive.
 
@@ -54,17 +59,17 @@ The cross-repository decision mori://shinzui/keiro-runtime-patterns/okf/adrs/con
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Resolve and adopt released cohort | docs/plans/66-resolve-and-adopt-the-released-keiro-0-17-dependency-cohort.md | None | None | In Progress |
-| EP-2 | Language 6 and nominal contracts | docs/plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md | EP-1 | None | In Progress |
-| EP-3 | Queue, inbox and delivery semantics | docs/plans/68-qualify-keiro-0-17-queue-inbox-and-delivery-semantics.md | EP-1 | EP-2, EP-4 | In Progress |
-| EP-4 | Timer recovery and schema isolation | docs/plans/69-adopt-guarded-timer-recovery-and-schema-isolated-migrations.md | EP-1 | None | In Progress |
+| EP-1 | Resolve and adopt released cohort | docs/plans/66-resolve-and-adopt-the-released-keiro-0-17-dependency-cohort.md | None | None | Complete |
+| EP-2 | Language 6 and nominal contracts | docs/plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md | EP-1 | None | Complete |
+| EP-3 | Queue, inbox and delivery semantics | docs/plans/68-qualify-keiro-0-17-queue-inbox-and-delivery-semantics.md | EP-1 | EP-2, EP-4 | Complete |
+| EP-4 | Timer recovery and schema isolation | docs/plans/69-adopt-guarded-timer-recovery-and-schema-isolated-migrations.md | EP-1 | None | Complete |
 | EP-5 | Haskell, API and CLI patterns | docs/plans/70-apply-haskell-service-api-and-cli-patterns-with-wire-compatibility.md | None | EP-1, EP-2 | Complete |
-| EP-6 | Rollout and coverage qualification | docs/plans/71-qualify-the-keiro-0-17-rollout-and-close-pattern-coverage.md | EP-2, EP-3, EP-4, EP-5 | None | In Progress |
+| EP-6 | Rollout and coverage qualification | docs/plans/71-qualify-the-keiro-0-17-rollout-and-close-pattern-coverage.md | EP-2, EP-3, EP-4, EP-5 | None | Complete |
 
 
 ## Dependency Graph
 
-EP-1 supplies a buildable released cohort, which EP-2 through EP-4 need for generated contracts and 0.17 runtime APIs. Its external Kioku prerequisite does not prevent EP-5's independent Haskell/API review or read-only research for the other plans. EP-2, EP-3 and EP-4 may proceed independently after EP-1 with the integration boundaries below. EP-3 retains Unordered queue behavior, so it does not require a FIFO schema or EP-2's source-language move. EP-6 requires all implementation streams because it tests their combined restart, migration and deployment behavior. The registry transitively includes EP-1 through EP-2/3/4.
+EP-1 supplies the buildable released cohort used by EP-2 through EP-4 for generated contracts and 0.17 runtime APIs. EP-2, EP-3 and EP-4 proceeded independently with the integration boundaries below. EP-3 retains Unordered queue behavior, so it does not require a FIFO schema or EP-2's source-language move. EP-6 integrates all implementation streams because it tests their combined restart, migration and deployment behavior. The registry transitively includes EP-1 through EP-2/3/4.
 
 
 ## Integration Points
@@ -84,22 +89,22 @@ Cross-plan ADR candidates are the explicit Language 6 baseline despite Candidate
 
 ## Progress
 
-- [ ] EP-1: Resolve and adopt the released Keiro 0.17 dependency cohort (started 2026-09-18T17:18:13Z).
-- [ ] EP-2: Adopted Language 6 and qualified executable boundaries; final public-release gate remains.
-- [ ] EP-3: Qualified queue, inbox, DLQ and delivery semantics; final public-release gate remains.
-- [ ] EP-4: Added guarded timer recovery and real schema-isolated upgrade evidence; final public-release gate remains.
+- [x] (2026-09-19T02:23:08Z) EP-1: Resolved and adopted the released Keiro 0.17 and Kioku 0.7 dependency cohort.
+- [x] (2026-09-19T02:23:08Z) EP-2: Adopted Language 6 and qualified executable boundaries.
+- [x] (2026-09-19T02:23:08Z) EP-3: Qualified queue, inbox, DLQ and delivery semantics.
+- [x] (2026-09-19T02:23:08Z) EP-4: Added guarded timer recovery and real schema-isolated upgrade evidence.
 - [x] (2026-09-18T18:03:00Z) EP-5: Applied Haskell service, API and CLI patterns with wire compatibility.
-- [ ] EP-6: Pattern coverage, rollout evidence, and local aggregate gates are complete; the public-release clean-checkout gate remains.
+- [x] (2026-09-19T02:23:08Z) EP-6: Completed pattern coverage, rollout evidence, and the public-release clean-checkout gate.
 
 
 ## Surprises & Discoveries
 
-2026-09-18: EP-1 rechecked Hackage and upstream tags. The newest published Kioku Core remains 0.6.0.0 and requires Keiro below 0.17, so Cabal cannot solve an all-released Keiro 0.17/Kioku cohort. EP-1 remains in progress on this external prerequisite; EP-5 can proceed independently.
+2026-09-18: EP-1 rechecked Hackage and upstream tags. At that index-state, the newest published Kioku Core was 0.6.0.0 and required Keiro below 0.17, so Cabal could not solve an all-released Keiro 0.17/Kioku cohort. EP-1 stayed open on that external prerequisite while EP-5 proceeded independently.
 
 2026-09-18: EP-5 completed independently. Its 35 matrix rows are closed, the
 Haskell/API/CLI changes pass package, black-box HTTP, OpenAPI, and workflow
-compatibility checks, and no durable workflow shape changed. The initiative
-remains blocked at EP-1's published Kioku compatibility prerequisite.
+compatibility checks, and no durable workflow shape changed. At that point the
+initiative was blocked at EP-1's published Kioku compatibility prerequisite.
 
 2026-09-18: EP-2 through EP-4 are implemented against the exact Kioku 0.7
 release source. Language 6 remains intentionally Candidate in the released Keiro
@@ -111,6 +116,11 @@ against the installed SQL.
 2026-09-18: EP-6 reconciled 116 corpus rows with no open applicability or owner
 disposition. Final completion remains gated by aggregate checks and the public
 Hackage solve without the ignored source override.
+
+2026-09-19: Kioku 0.7 appeared in Hackage index-state
+`2026-09-19T01:06:24Z`. A clean detached worktree downloaded all three packages
+from Hackage, built the seven application packages, and passed every aggregate
+gate without `cabal.project.local`. This cleared EP-1 and every dependent plan.
 
 
 ## Decision Log
@@ -126,7 +136,8 @@ Hackage solve without the ignored source override.
 
 ## Outcomes & Retrospective
 
-Implementation and child evidence are integrated. All applicable pattern rows are
+Complete. Implementation and child evidence are integrated. All applicable pattern rows are
 closed, ADRs 0037 and 0038 carry the durable decisions, and the rollout procedure
-records the writer cutover and rollback boundary. Completion still requires the
-aggregate clean-checkout gate after Kioku 0.7 appears in the public Hackage index.
+records the writer cutover and rollback boundary. The clean public-Hackage checkout
+passed the full application, PostgreSQL, migration, generation, evolution, HTTP,
+OpenAPI, schema-isolation and Nix check suite.

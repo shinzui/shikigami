@@ -33,13 +33,11 @@ hybrid recall fall back to keyword search.
 `effectful-core ^>=2.7`, while the selected Keiro/Kioku releases require a version
 below 2.7. Kioku 0.7 admits 0.4.0.1, so no `allow-newer` is needed.
 
-At the last authoritative refresh (`index-state 2026-09-18T23:13:22Z`), the
-publisher-reported Kioku 0.7 upload had not yet appeared in Hackage's public secure
-index or package pages. Local compatibility, build, Language 6, worker and migration
-tests use the exact clean release commit above. The release gate remains open until
-the public index exposes all three packages and a clean solve succeeds without the
-temporary sibling paths. The older Plan 65 matrix below remains historical evidence
-for the 0.15 baseline used by the real upgrade fixture.
+At authoritative index-state `2026-09-19T01:06:24Z`, Hackage exposes all three
+Kioku 0.7.0.0 packages. A detached Shikigami worktree with no
+`cabal.project.local` downloaded them from Hackage, built every application
+component, and passed the aggregate qualification. The older Plan 65 matrix below
+remains historical evidence for the 0.15 baseline used by the real upgrade fixture.
 
 
 Plan 65 adoption starts at `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.

@@ -13,5 +13,5 @@ The final corpus revisions match the planning snapshot:
 | `mori://shinzui/haskell-jitsurei` | `fb6574d971da2bc3ae52bce279828577895ca5f6` | normative files unchanged; unrelated untracked `mori/checklist.dhall` |
 | `mori://shinzui/postgresql-jitsurei` | `76a646c2f265dfe84451b32626c4436b74f56314` | clean |
 
-The final qualification command results are recorded separately in
-`qualification.md` after the public Hackage solve and clean-checkout gate.
+The passing public-Hackage solve and clean-checkout qualification commands are
+recorded separately in `qualification.md`.

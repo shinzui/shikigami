@@ -1,10 +1,10 @@
 # Keiro 0.17 integration qualification
 
-This record separates the implemented Shikigami qualification from the final
-all-released consumer proof. The implementation run uses Kioku's clean 0.7.0.0
-release source at commit `37c3acd2d16e18c49217bc6189ea20b496907e3b`, selected by the
-developer-local and gitignored `cabal.project.local`. No solver relaxation is
-present in the repository.
+This record contains both the implementation qualification and the final
+all-released consumer proof. The final run used detached revision `a7968be` in a
+clean sibling worktree with no `cabal.project.local`. Cabal downloaded
+`kioku-api`, `kioku-core`, and `kioku-migrations` 0.7.0.0 from Hackage; no solver
+relaxation or Kioku package path participated.
 
 ## Implementation-revision results
 
@@ -50,15 +50,21 @@ the complete application build is qualified by Cabal above.
 
 ## Public-release gate
 
-At 2026-09-19T00:27Z, a fresh `cabal update` still reported public index-state
-`2026-09-18T23:13:22Z`. The authoritative index could not resolve any of
-`kioku-api-0.7.0.0`, `kioku-core-0.7.0.0`, or
-`kioku-migrations-0.7.0.0`; the first lookup failed with:
+Pass. On 2026-09-19, `cabal update` advanced the authoritative public index to
+`2026-09-19T01:06:24Z`. Exact `cabal info` lookups resolved all three Kioku
+0.7.0.0 packages and showed the released Keiro 0.17 bounds.
 
-```text
-There is no available version of kioku-api that satisfies ==0.7.0.0
-```
+The clean worktree then passed:
 
-The final qualification must repeat the solve and aggregate gates in a clean
-checkout with no `cabal.project.local` once those releases become visible.
-Until then, EP-1 and the dependent completion gates remain in progress.
+- `nix develop --command cabal build all`, with the build plan marking each
+  Kioku 0.7 library as requiring download and build;
+- the complete application test matrix, including 405 core, 197 PostgreSQL,
+  88 worker, 47 server, 30 agent, 15 API, migration smoke and generated
+  conformance tests;
+- `just keiro-gate cd36433`, whose diff was additive and replay-neutral and
+  whose scaffold reported all 25 generated modules unchanged;
+- OpenAPI byte-drift, migration schema-isolation, and four-request Hurl checks;
+- the exported treefmt and pre-commit Nix checks.
+
+The detached worktree remained free of tracked changes after regeneration. This
+completes the public-release boundary for EP-1 and the dependent plans.
