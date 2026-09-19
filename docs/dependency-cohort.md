@@ -3,10 +3,12 @@
 Shikigami builds against **one** coherent set of co-developed releases. This
 document is the contract: it names each explicitly managed cohort selection,
 the upstream tag and tag commit that produced it, and the evidence that the
-cohort holds together. `cabal.project` encodes the direct selections as a
-`constraints:` block; bound-driven transitive selections in the matrix are
-labelled as such. A drift between a direct-selection row and the solver is a
-bug in one of them.
+cohort holds together. `cabal.project` does not repeat the matrix as exact
+constraints: the cohort is whatever the components' `build-depends` bounds
+select at the project's pinned `index-state`, and advancing that snapshot is how
+the cohort moves. The only exact constraint is `keiro-dsl`, which nothing links
+and so no bound ties to the runtime's Keiro release. A drift between a matrix
+row and the solver's plan is a bug in one of them.
 
 ## Current Keiro 0.17 target
 
@@ -68,6 +70,14 @@ Two rules govern changes:
    not an unbounded solver override. A temporary exception must name only the
    stale package/bound pair, carry compatibility evidence here, and retire as
    soon as corrected release metadata is published.
+
+On 2026-09-19 the 37-row exact `constraints:` block was replaced by
+`index-state: 2026-09-19T01:06:24Z` plus the `keiro-dsl` pin. Against the
+previous plan, only five packages moved, all to patch releases admitted by
+existing bounds: `kafka-effectful` 0.3.1.0, `kiroku-store` 0.8.0.1,
+`shibuya-core` and `shibuya-kafka-adapter` 0.9.0.1, and `shibuya-kiroku-adapter`
+0.5.1.2. `baikai-effectful` still resolves to 0.4.0.1 without a pin, because the
+`effectful-core` bounds exclude 0.4.0.2.
 
 Regenerate the resolved-version evidence with:
 
@@ -152,9 +162,10 @@ published; the current release status is called out immediately below it.
 | `settei` | 0.2.0.0 | 0.2.0.0 | `v0.2.0.0` | `1bf62b0af110b4f42fe2528e9d459e0ccf12d626` |
 | `hs-opentelemetry-api` / `-sdk` | 1.0.0.0 | 1.0.0.0 | Hackage (third party) | — |
 
-Rows labelled transitive are not exact entries in `cabal.project`; they are the
-versions selected through the pinned Kioku, Shikumi, and Baikai packages. Every
-other package named in the first column is an exact `constraints:` selection.
+Rows labelled transitive are the versions selected through the Kioku, Shikumi,
+and Baikai packages. At the time of this matrix every other row was an exact
+`constraints:` selection; that block has since been replaced by an
+`index-state` (see above).
 
 `shikumi-tools 0.3.0.3` is the released model-tool registry consumed by
 `shikigami-core`. Hackage and the upstream `shikumi-tools-0.3.0.3` tag were
@@ -214,12 +225,12 @@ and three Kioku packages on 2026-09-07 and adopted Keiro 0.15.0.0 with Kioku
 0.5.2.0. Kioku retains the Baikai 0.6, Shikumi 0.3.0.3 and `http-client-tls` 0.4
 compatibility introduced by its preceding 0.5.1.0 release.
 
-Five narrow `http-client-tls` exceptions remain while released Hackage metadata catches up:
-`baikai`, `baikai-claude`, `baikai-openai`, `shikumi-tools`, and the third-party `claude`
-package all cap the dependency below 0.4 even though their used API compiles against 0.4.
-Local upstream fixes widen the four co-developed package bounds to `<0.5`; the consuming
-overrides retire after those Hackage revisions or replacement releases are published. The
-pre-existing third-party `haxl:time` exception is unrelated.
+One narrow `http-client-tls` exception remains: the third-party `claude` package caps the
+dependency below 0.4 even though its used API compiles against 0.4. It retires after a Hackage
+revision or replacement release widens the bound. The four co-developed exceptions for
+`baikai`, `baikai-claude`, `baikai-openai`, and `shikumi-tools` were removed on 2026-09-19
+because their released metadata now admits 0.4. The third-party `haxl:time` exception was
+removed at the same time because `haxl` is no longer in the build plan.
 
 The Baikai source fix is required, but not sufficient by itself: without it the solver rejects
 the direct Baikai packages, while `shikumi-tools` and `claude` independently retain the same

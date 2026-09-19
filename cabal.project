@@ -1,7 +1,8 @@
 packages:
-  -- Co-developed public action boundary from mori://shinzui/kikan-en. Replace
-  -- these sibling paths with the exact upstream commit once the M2-M4 commits
-  -- are published; the packages themselves remain the only Kikan dependency.
+  -- The two ../kikan-project paths are the co-developed public action boundary
+  -- from mori://shinzui/kikan-en. Replace them with the exact upstream commit
+  -- once the M2-M4 commits are published; the packages themselves remain the
+  -- only Kikan dependency.
   shikigami-agent
   shikigami-api
   shikigami-core
@@ -26,55 +27,13 @@ extra-packages: keiro-dsl
 -- is hand-owned.
 optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
 with-compiler: ghc-9.12.4
--- The co-developed dependency cohort is selected from published Hackage
--- releases. docs/dependency-cohort.md holds the release matrix, the upstream
--- tag commit behind each release, and the compatibility evidence. Only
--- packages with no Hackage release — or forks we still carry — are pinned by
--- commit below.
-constraints:
-  -- durable execution, event model, and agent memory
-  -- typed model programs and providers
-  -- worker runtime, queues, and the event store
-  -- process configuration (plan 37) and tracing (plan 28)
-  keiki                   ==0.9.1.0
-  , keiki-codec-json        ==0.9.1.0
-  , keiro                   ==0.17.0.0
-  , keiro-core              ==0.17.0.0
-  , keiro-dsl               ==0.17.0.0
-  , keiro-migrations        ==0.17.0.0
-  , keiro-ops               ==0.17.0.0
-  , keiro-pgmq              ==0.17.0.0
-  , keiro-test-support      ==0.17.0.0
-  , kioku-api               ==0.7.0.0
-  , kioku-core              ==0.7.0.0
-  , kioku-migrations        ==0.7.0.0
-  , shikumi                 ==0.4.0.0
-  , shikumi-tools           ==0.4.0.0
-  , shikumi-trace           ==0.3.0.0
-  , baikai                  ==0.7.0.0
-  , baikai-claude           ==0.7.0.0
-  , baikai-effectful        ==0.4.0.1
-  , baikai-openai           ==0.7.0.0
-  , kafka-effectful         ==0.3.0.0
-  , shibuya-core            ==0.9.0.0
-  , shibuya-kafka-adapter   ==0.9.0.0
-  , shibuya-pgmq-adapter    ==0.16.0.0
-  , shibuya-kiroku-adapter  ==0.5.1.1
-  , pgmq-core               ==0.6.1.0
-  , pgmq-hasql              ==0.6.1.0
-  , pgmq-effectful          ==0.6.1.0
-  , pgmq-config             ==0.6.1.0
-  , kiroku-store            ==0.8.0.0
-  , kiroku-store-migrations ==0.4.0.0
-  , pg-migrate              ==1.1.0.0
-  , pg-migrate-test-support ==1.1.0.0
-  , settei                  ==0.2.0.0
-  , hs-opentelemetry-api    ==1.0.0.0
-  , hs-opentelemetry-sdk    ==1.0.0.0
-  , hs-opentelemetry-exporter-in-memory ==1.0.0.0
-  , hs-opentelemetry-instrumentation-wai ==1.0.0.0
-  , hs-opentelemetry-propagator-w3c ==1.0.0.0
-  , githash                 ==0.1.7.0
+-- The co-developed cohort is selected by the components' own build-depends
+-- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
+-- cohort; docs/dependency-cohort.md records the release matrix and evidence.
+index-state: 2026-09-19T01:06:24Z
+-- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
+-- the toolchain and the runtime move in lockstep.
+constraints: keiro-dsl ==0.17.0.0
 
 -- ── Dependencies with no Hackage release ───────────────────────────────────
 -- handan — typed-program runtime used by the behavior runner. Bumped to the
@@ -118,9 +77,7 @@ source-repository-package
   tag: 8c0b3c5a13ce4a310737c0336f2ae167a1597588
   subdir: biscuit
 
--- Schema evolution is pg-migrate throughout: every library in the stack
--- publishes a MigrationComponent, and this repository composes them. See
--- docs/dependency-cohort.md.
+-- blake3 (through shikumi-cache) is built with its portable C implementation.
 package blake3
   flags: -avx512 -avx2 -sse41 -sse2
   ghc-options: -optc-DBLAKE3_USE_NEON=0
@@ -128,15 +85,7 @@ package blake3
 package postgresql-libpq
   flags: +use-pkg-config
 
--- The selected Crypton 1.1 / TLS 2.x cohort requires http-client-tls 0.4.
--- These five released package descriptions still cap it below 0.4 even though
--- the used API is compatible. Local upstream fixes widen the co-developed
--- bounds through <0.5; remove each exception after its Hackage revision or
--- replacement release lands. haxl:time is the older unrelated exception.
-allow-newer:
-  baikai:http-client-tls,
-  baikai-claude:http-client-tls,
-  baikai-openai:http-client-tls,
-  claude:http-client-tls,
-  shikumi-tools:http-client-tls,
-  haxl:time
+-- The third-party claude package still caps http-client-tls below 0.4, which
+-- the selected Crypton 1.1 / TLS 2.x cohort requires; its used API is
+-- compatible. Remove after a Hackage revision or release widens the bound.
+allow-newer: claude:http-client-tls
