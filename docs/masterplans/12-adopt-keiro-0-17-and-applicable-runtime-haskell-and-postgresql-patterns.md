@@ -89,7 +89,7 @@ Cross-plan ADR candidates are the explicit Language 6 baseline despite Candidate
 - [ ] EP-3: Qualified queue, inbox, DLQ and delivery semantics; final public-release gate remains.
 - [ ] EP-4: Added guarded timer recovery and real schema-isolated upgrade evidence; final public-release gate remains.
 - [x] (2026-09-18T18:03:00Z) EP-5: Applied Haskell service, API and CLI patterns with wire compatibility.
-- [ ] EP-6: Pattern coverage and rollout evidence are integrated; aggregate and public-release gates remain.
+- [ ] EP-6: Pattern coverage, rollout evidence, and local aggregate gates are complete; the public-release clean-checkout gate remains.
 
 
 ## Surprises & Discoveries

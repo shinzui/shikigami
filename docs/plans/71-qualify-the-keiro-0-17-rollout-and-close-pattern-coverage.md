@@ -36,7 +36,7 @@ Demonstrate that the complete Keiro 0.17 adoption works as one Shikigami system 
 - [x] (2026-09-19T00:14:28Z) Reconciled 116 normative corpus rows with no open applicability or owner disposition.
 - [x] (2026-09-19T00:14:28Z) Distilled Language 6, queue, guarded-timer and schema-isolation decisions into ADRs 0037 and 0038.
 - [x] (2026-09-19T00:14:28Z) Added executable upgrade, hostile-schema, timer recovery and selected PGMQ operator evidence.
-- [ ] Run the aggregate build, test, generation, evolution, HTTP and Nix gates from the implementation revision.
+- [x] (2026-09-19T00:31:00Z) Ran the application build/test matrix, strict Keiro generation and evolution gate, OpenAPI drift check, migration policy scan, Hurl smoke, and exported Nix check outputs from implementation revision `2d82fc2`.
 - [ ] Repeat the solve and aggregate gates without `cabal.project.local` after Kioku 0.7 is visible in the public Hackage index.
 
 
@@ -62,9 +62,10 @@ not the remaining local qualification work.
 
 
 Integration qualification is in progress. Child implementation evidence, the
-rollout procedure, ADR amendments, and the closed corpus ledger are present.
-`docs/evidence/keiro-0.17/qualification.md` will record the final command results
-after the public Hackage solve succeeds.
+rollout procedure, ADR amendments, the closed corpus ledger, and the local
+aggregate results are recorded in `docs/evidence/keiro-0.17/qualification.md`.
+The remaining acceptance boundary is the clean public-Hackage solve and its
+repeat of the aggregate gates.
 
 
 ## Context and Orientation

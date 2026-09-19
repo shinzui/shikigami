@@ -21,7 +21,7 @@ isolated PostgreSQL 18.6 instance; they were executed rather than skipped.
 | Migration schema-isolation scan | Pass | Application SQL is schema-qualified. The one checksum-immutable historical `search_path` migration remains an explicit exception; vendored PGMQ SQL does not mutate the session path. |
 | HTTP smoke | Pass | Both Hurl files and all four requests passed against an isolated migrated database and local server. |
 | Nix check outputs | Pass | The exported `checks.aarch64-darwin.treefmt` and `checks.aarch64-darwin.pre-commit` derivations built successfully with the complete staged source. |
-| Deterministic scaffold | Pending | Run after the implementation commit; the gate requires an otherwise clean generated tree. |
+| Deterministic scaffold | Pass | The committed implementation regenerated all 25 generated modules and the conformance package as `unchanged`; the generated-tree diff stayed empty. |
 
 The application matrix command intentionally enumerated Shikigami's suites:
 
