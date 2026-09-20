@@ -1,5 +1,12 @@
 # Bundle Update Log
 
+## 2026-09-20
+
+* **Addition**: IR-11 requests governed isolated mutable repository workspaces and bounded coding
+  tools for durable upgrade agents.
+* **Addition**: IR-10 requests a public terminal agent-run status endpoint so Mori can correlate
+  an accepted run with its durable succeeded or failed outcome.
+
 ## 2026-08-17
 
 * **Migration**: Move the bundle to OKF v0.2, adding `generated` provenance to every request
