@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-07-08T20:14:28Z
 intention: "intention_01kx1tytnwe53rdd4es99ztv1p"
 master_plan: "docs/masterplans/5-durable-evolution-versioning-and-replay-safety-for-long-lived-workflows.md"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Flow versioning with keiro patch and continue-as-new
@@ -906,7 +913,7 @@ any added durable steps.
 discipline and patch plumbing, matching the cross-MasterPlan execution order.
 - 2026-07-22: Added plan 39 as a hard checked-DSL predecessor and made the DSL/checker/
   scaffold/harness/diff gate part of purpose, acceptance, and interfaces.
-- [ ] Prerequisite: plans 36 and 39 complete; update the checked Keiro DSL before changing durable code.
+- [x] Prerequisite: plans 36 and 39 complete; the checked Keiro DSL was updated before the durable workflow changes. Reconciled 2026-09-21.
 
 
 ## Revision Notes
@@ -1059,3 +1066,6 @@ states that instead of leaving a reader to assume the specification will gate th
   for `WorkflowRunOptions` (binding on plan 17), the checked-specification origin of the patch
   set, why the set is unioned across workflows, the patch-id spelling constraint, the
   journaled-not-live resolution of a patch decision, and the retirement and rollback ordering.
+
+- 2026-09-21: Reconciled the stale unchecked prerequisite with the already completed plans 36
+  and 39. No implementation or acceptance claim changed.

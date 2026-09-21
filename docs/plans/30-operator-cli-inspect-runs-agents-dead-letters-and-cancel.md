@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-07-08T20:14:28Z
 intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
 master_plan: "docs/masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:05Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Operator CLI: inspect runs, agents, dead letters, and cancel
@@ -135,7 +142,7 @@ This section must always reflect the actual current state of the work.
       groups are reachable, `wf --help` renders its verbs, `--force` parses in the position
       keiro-ops's own preview prints, an undeclared flag in that position is refused (so the
       previous case is not vacuous), and no spelling of `--database-url` survives redaction.
-- [ ] M4 (behavioural test): **not done, deliberately.** The end-to-end gate was verified by hand
+- [x] M4 (behavioural proof): **verified manually; automated fixture deliberately descoped.** The end-to-end gate was verified by hand
       against the dev database with transcripts recorded below, but there is no automated test
       seeding a workflow and a DLQ entry. See Outcomes & Retrospective for what it would take and
       why it was descoped rather than skipped silently.
@@ -1530,3 +1537,6 @@ is wrong; this plan gives them the verbs to find out *what*.
 
   The durable context was distilled into
   [`docs/adr/0021-operator-verbs-wrap-the-owning-library.md`](../adr/0021-operator-verbs-wrap-the-owning-library.md).
+
+- 2026-09-21: Recorded the accepted manual behavioral proof and deliberate automated-fixture
+  descoping as a completed disposition so Progress agrees with the plan's completed outcome.

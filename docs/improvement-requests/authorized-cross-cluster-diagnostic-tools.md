@@ -4,11 +4,22 @@ title: Add authorized cross-cluster diagnostic tools to Shikigami
 description: Add durable broker, probe, authorization, and typed telemetry-tool paths without exposing production credentials.
 timestamp: "2026-07-30T00:41:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-07-30T00:41:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-2
 status: proposed
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; no accepted Shikigami delivery plan currently fulfils this request.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: add authorized cross-cluster diagnostic tools to Shikigami

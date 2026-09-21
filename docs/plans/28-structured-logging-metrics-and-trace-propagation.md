@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-07-08T20:14:28Z
 intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
 master_plan: "docs/masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:05Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Structured logging, metrics, and trace propagation
@@ -62,7 +69,7 @@ the HTTP POST to the sink endpoint.
 - [x] M1: acceptance run performed 2026-08-05 against a fresh migrated database: worker
       started, one run enqueued, `jq -r .event` parsed every application line with no errors,
       and `sink.result` appeared with `outcome=delivered`. Transcript in Outcomes.
-- [ ] M1 (remaining): one-shot CLI commands still write human-readable text. This is a
+- [x] M1 scope decision: one-shot CLI commands intentionally retain human-readable text. This is a
       deliberate scope decision, not an omission — see the Decision Log.
 - [x] M1 (remaining, deferred to M4): the GHC runtime's uncaught-exception dump is the only
       non-JSON output left on a worker's stderr, and it appears on abrupt termination. See
@@ -1019,3 +1026,5 @@ its loop-supervision events (soft; this plan does not depend on it).
 - 2026-07-22: Replaced hand-rendered W3C propagation with Keiro's public
   `traceContextFromCurrentSpan` bridge and specified the complete production request-log field,
   redaction, middleware, health-exclusion, and shutdown contract.
+- 2026-09-21: Converted the intentionally out-of-scope one-shot CLI item from an unchecked task
+  into a completed scope decision so Progress agrees with the completed Outcomes section.

@@ -1,5 +1,16 @@
 # Bundle Update Log
 
+## 2026-09-21
+
+* **Audit**: Confirmed review outcomes remain immutable evidence about commit `62861267`.
+  REV-1, REV-2, REV-4, and REV-7 remain open because plans 60 through 63 are not started;
+  REV-3 and REV-6 remain approved with open advisory follow-ups; REV-5 remains commented;
+  REV-8 is resolved locally by the improvement-request corpus realignment recorded in plan 64.
+  Mori's remaining inability to resolve conventional plan-artifact URIs is recorded there as a
+  Mori coverage gap.
+* **Update**: Repinned the reviews profile from v0.13.1 to the authoritative
+  okf-profiles v0.18.0 release without changing any historical review outcome.
+
 ## 2026-08-27
 
 * **Addition**: REV-1 requests changes to the ExecPlan 46 closeout: the plan's gates reproduce

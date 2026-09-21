@@ -4,11 +4,22 @@ title: Expose addressed agent runs over the public HTTP API
 description: Add an agent-run vertical to ShikigamiApi so an external service can request a run for a named agent across the service boundary, with server-owned idempotency on a caller-supplied key, instead of writing into the shared run-job queue.
 timestamp: "2026-08-07T00:00:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-08-07T00:00:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-8
 status: proposed
 origin: mori://shinzui/mori
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; the public addressed-run API remains unplanned and undelivered.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: expose addressed agent runs over the public HTTP API

@@ -4,20 +4,32 @@ title: Add the architecture-practice review flow
 description: Orchestrate advisory architecture review against revision-pinned practice evidence.
 timestamp: "2026-07-30T00:43:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-07-30T00:43:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-4
-status: proposed
+status: in-progress
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; did not re-review the request's design.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: Add the Architecture-Practice Review Flow
 
 ## Status
 
-**Proposed.** This is the first domain flow requested for the declarative router-agent
-contract. It is advisory: it may record findings and request attention, but it may not block
-a merge or edit a repository.
+**In progress.** Plans 43 through 45 are complete and plan 46 delivered the core workflow, but
+reviews REV-1, REV-2, REV-4, and REV-7 still request correctness, authorization, conformance, and
+operator-documentation work tracked by plans 60 through 63. The live evidence adapter also remains
+blocked on `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
 
 ## Planning Coverage

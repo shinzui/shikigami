@@ -5,10 +5,21 @@ description: Let a declared durable agent resolve an operator-approved repositor
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:codex
-  at: "2026-09-20T20:31:12Z"
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-11
 status: proposed
 origin: mori://shinzui/mori
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; the governed mutable-workspace capability remains unplanned and undelivered.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: provide governed mutable repository workspaces for durable agent runs

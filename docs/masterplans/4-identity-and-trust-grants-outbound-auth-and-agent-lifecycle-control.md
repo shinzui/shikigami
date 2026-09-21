@@ -5,6 +5,13 @@ title: "Identity and Trust: Grants, Outbound Auth, and Agent Lifecycle Control"
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1typzbe9dtqnk49t6d5q5w"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Identity and Trust: Grants, Outbound Auth, and Agent Lifecycle Control
@@ -53,10 +60,10 @@ Boundaries minimize coupling but not to zero: plans 21, 22, and 23 all thread a 
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | cross-MP: plans 36–38 and 47 | None | Not Started |
-| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | cross-MP: plans 19, 36, 37, and 47 | cross-MP: plans 13, 16 (MasterPlan 2) | Not Started |
-| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 30, 33, 36–38, and 47 | EP-1; cross-MP: plan 20 (MasterPlan 3) | Not Started |
-| EP-4 | Key durable agent state by Meibo principal | docs/plans/54-key-durable-agent-state-by-meibo-principal.md | EP-3 | EP-1 | Not Started |
+| EP-1 | Database-backed sink permission grants | docs/plans/21-database-backed-sink-permission-grants.md | cross-MP: plans 36–38 and 47 | None | Complete (2026-08-06) |
+| EP-2 | Outbound authentication for sink clients | docs/plans/22-outbound-authentication-for-sink-clients.md | cross-MP: plans 19, 36, 37, and 47 | cross-MP: plans 13, 16 (MasterPlan 2) | Complete (2026-08-10) |
+| EP-3 | Agent lifecycle control with meibo principals | docs/plans/23-agent-lifecycle-control-with-meibo-principals.md | cross-MP: plans 30, 33, 36–38, and 47 | EP-1; cross-MP: plan 20 (MasterPlan 3) | Complete (2026-08-22) |
+| EP-4 | Key durable agent state by Meibo principal | docs/plans/54-key-durable-agent-state-by-meibo-principal.md | EP-3 | EP-1 | Complete (2026-08-26) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -116,20 +123,20 @@ settings and resolves them at the composition root; raw token values never gain
 
 ## Progress
 
-- [ ] EP-1 M1: `shikigami.sink_grants` pg-migrate change is in the component manifest and complete application plan, applied and seeded with the five compiled-in defaults.
-- [ ] EP-1 M2: `GrantSource` seam; all four gate sites (Workflow.hs:423/493, SinkOutbox.hs:101, Sink.hs:42) read it; worker boots `DbGrants`.
-- [ ] EP-1 M3: `shikigami grants list|grant|revoke` CLI.
-- [ ] EP-1 M4: real-Postgres tests incl. revocation between enqueue and publish; `cabal test all` green.
-- [ ] EP-2 M1: shared manager + timeouts; auth-aware `postJSON`; kawa/kizashi clients rewired.
-- [ ] EP-2 M2: Settei credential-reference config threaded composition root → dispatch; legacy environment names remain explicit bindings; redacted logging.
-- [ ] EP-2 M3: authenticated danwa client path (boot-time `ClientEnv`, token-injecting manager).
-- [ ] EP-2 M4: reference-configured stub-kawa enforcement + header/401/non-renderability tests.
-- [ ] EP-2 M5: shomei `TokenSource` seam documented; static implementation shipped.
-- [ ] EP-3 M1: `Shikigami.Directory` cached view + file stub source + unit tests.
-- [ ] EP-3 M2: pg-migrate-managed `agent_load_state`/`run_skips` changes; persist plan 20's load report; `broken.dhall` visible.
-- [ ] EP-3 M3: lifecycle kill switch at all trigger/drain/sink sites; fail-closed before first valid snapshot, then last-known valid on refresh failure; recorded skips; tests.
-- [ ] EP-3 M4: principal attribution on sessions; `agents list|sync`; `sink_grants.principal_id` backfill.
-- [ ] Initiative: end-to-end demo — pause a granted, authenticated agent; unpause; revoke; re-grant — all without restarts.
+- [x] EP-1 M1: `shikigami.sink_grants` pg-migrate change is in the component manifest and complete application plan, applied and seeded with the five compiled-in defaults.
+- [x] EP-1 M2: `GrantSource` seam; all four gate sites (Workflow.hs:423/493, SinkOutbox.hs:101, Sink.hs:42) read it; worker boots `DbGrants`.
+- [x] EP-1 M3: `shikigami grants list|grant|revoke` CLI.
+- [x] EP-1 M4: real-Postgres tests incl. revocation between enqueue and publish; `cabal test all` green.
+- [x] EP-2 M1: shared manager + timeouts; auth-aware `postJSON`; kawa/kizashi clients rewired.
+- [x] EP-2 M2: Settei credential-reference config threaded composition root → dispatch; legacy environment names remain explicit bindings; redacted logging.
+- [x] EP-2 M3: authenticated danwa client path (boot-time `ClientEnv`, token-injecting manager).
+- [x] EP-2 M4: reference-configured stub-kawa enforcement + header/401/non-renderability tests.
+- [x] EP-2 M5: shomei `TokenSource` seam documented; static implementation shipped.
+- [x] EP-3 M1: `Shikigami.Directory` cached view + file stub source + unit tests.
+- [x] EP-3 M2: pg-migrate-managed `agent_load_state`/`run_skips` changes; persist plan 20's load report; `broken.dhall` visible.
+- [x] EP-3 M3: lifecycle kill switch at all trigger/drain/sink sites; fail-closed before first valid snapshot, then last-known valid on refresh failure; recorded skips; tests.
+- [x] EP-3 M4: principal attribution on sessions; `agents list|sync`; `sink_grants.principal_id` backfill.
+- [x] Initiative: end-to-end demo — pause a granted, authenticated agent; unpause; revoke; re-grant — all without restarts.
 
 
 ## Surprises & Discoveries
@@ -199,10 +206,17 @@ settings and resolves them at the composition root; raw token values never gain
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. Compare against the Vision: runtime-managed grants, authenticated outbound calls, and a working lifecycle kill switch with principal attribution — demonstrated end to end by the final Progress item.)
+Complete. Database-backed grants, authenticated outbound clients, cached lifecycle admission,
+principal attribution, and principal-keyed durable continuity all landed. Plans 23 and 54 use the
+configured directory projection as the stable local boundary, so a live Meibo transport can be
+added as a source without changing the admitted identity model. The end-to-end grant, lifecycle,
+rename, replay, and sink-attribution evidence is retained in the child plans.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled all four child plans with their completed evidence and closed the
+  initiative.
 
 - 2026-07-30: Added the coherent dependency cohort to all children and confirmed that plan
   23's file-backed directory seam remains startable without an additional upstream blocker.

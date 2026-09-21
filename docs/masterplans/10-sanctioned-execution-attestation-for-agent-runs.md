@@ -5,6 +5,13 @@ title: "Sanctioned Execution Attestation for Agent Runs"
 kind: master-plan
 created_at: 2026-08-05T14:51:43Z
 intention: "intention_01kz96h79mezmbnwm67pdjjepr"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Sanctioned Execution Attestation for Agent Runs
@@ -135,10 +142,10 @@ by an offline verifier run against a fixture file with the database stopped.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Sanctioned execution profile and attestation contracts | docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md | None | cross-MP: plan 43 (shared record conventions) | Not Started (startable now) |
-| 2 | Fail-closed profile resolution and run pinning | docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md | EP-1; cross-MP: plans 36 ✅, 37 ✅, 47 ✅, 39 ⏳ | cross-MP: plan 13 ✅ (provider seam) | Not Started (blocked on EP-1, plan 39) |
-| 3 | Run-evidence aggregate and compliance roll-up | docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md | EP-1, EP-2; cross-MP: plans 38 ⏳, 39 ⏳, 28 M1 ⏳; upstream Baikai IR-3 ⏳ | cross-MP: plans 24, 35 | Not Started (blocked on EP-2, plans 38, 39, 28 M1) |
-| 4 | Signed attestation, read API, and UC-8 conformance | docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md | EP-3; cross-MP: plans 22 ⏳, 44 ⏳; upstream Kikan IR-6 ⏳, Baikai IR-3 ⏳ | cross-MP: plans 13 live smoke, 48 | Not Started (blocked on EP-3, plans 22, 44) |
+| 1 | Sanctioned execution profile and attestation contracts | docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md | None | cross-MP: plan 43 (shared record conventions) | Complete (2026-08-19) |
+| 2 | Fail-closed profile resolution and run pinning | docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md | EP-1; cross-MP: plans 36, 37, 47, and 39 complete | cross-MP: plan 13 (provider seam) | Complete (2026-08-19) |
+| 3 | Run-evidence aggregate and compliance roll-up | docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md | EP-1, EP-2; cross-MP: plans 38, 39, and 28 M1 complete; Baikai evidence API released | cross-MP: plans 24, 35 | Complete (2026-08-19) |
+| 4 | Signed attestation, read API, and UC-8 conformance | docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md | EP-3; plans 22 and 44 complete; `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` proposed | cross-MP: plan 13 live smoke, plan 48 | Not Started (blocked on shared attestation contract and live-provider proof) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -310,18 +317,18 @@ them; plan 35 must not break them when it makes delegation declarative.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: Milestone 1 — profile vocabulary: allowed `(provider, API, model, thinking)` tuples, prohibitions, limits, issuer and validity, canonical digest
-- [ ] EP-1: Milestone 2 — `AgentVersionRef` and `AgentArtifactSet` with lineage-ready additive shape and byte-stability tests
-- [ ] EP-1: Milestone 3 — `ReviewedArtifact` over plan 44's revision types, plus the non-conforming reason taxonomy and evidence-strength vocabulary
-- [ ] EP-1: Milestone 4 — the local `AgentRunAttestation` mirror under a schema version, with canonical encoding and a conformance test against kikan's published fixtures
-- [ ] EP-2: Milestone 1 — profile store and resolution to an immutable digest, with fail-closed rejection of unknown, expired, withdrawn, ambiguous, and mutable references
-- [ ] EP-2: Milestone 2 — resolution journaled before behavior execution; in-flight runs stay pinned across replay
-- [ ] EP-2: Milestone 3 — the resolved profile constrains the provider seam: a call outside the pinned tuple set cannot be dispatched
-- [ ] EP-3: Milestone 1 — the run-evidence aggregate and its lifecycle, declared through plan 39's checked specification
-- [ ] EP-3: Milestone 2 — `ModelCallEvidence` collection behind a deterministic seam; stub fixtures pending baikai IR-3
-- [ ] EP-3: Milestone 3 — complete call accounting across retries, fallbacks, and delegated children; sealing only when every relevant child is terminal
-- [ ] EP-3: Milestone 4 — the compliance roll-up: every non-conforming reason enumerated, deterministic steps `not-applicable`, mixed-model runs listing each call
-- [ ] EP-3: Milestone 5 — pg-migrate-managed evidence tables, reconciled read models, queryable state
+- [x] EP-1: Milestone 1 — profile vocabulary: allowed `(provider, API, model, thinking)` tuples, prohibitions, limits, issuer and validity, canonical digest
+- [x] EP-1: Milestone 2 — `AgentVersionRef` and `AgentArtifactSet` with lineage-ready additive shape and byte-stability tests
+- [x] EP-1: Milestone 3 — `ReviewedArtifact` over plan 44's revision types, plus the non-conforming reason taxonomy and evidence-strength vocabulary
+- [x] EP-1: Milestone 4 — the local `AgentRunAttestation` mirror under a schema version, with canonical encoding and a conformance test against kikan's published fixtures
+- [x] EP-2: Milestone 1 — profile store and resolution to an immutable digest, with fail-closed rejection of unknown, expired, withdrawn, ambiguous, and mutable references
+- [x] EP-2: Milestone 2 — resolution journaled before behavior execution; in-flight runs stay pinned across replay
+- [x] EP-2: Milestone 3 — the resolved profile constrains the provider seam: a call outside the pinned tuple set cannot be dispatched
+- [x] EP-3: Milestone 1 — the run-evidence aggregate and its lifecycle, declared through plan 39's checked specification
+- [x] EP-3: Milestone 2 — `ModelCallEvidence` collection behind a deterministic seam; stub fixtures pending baikai IR-3
+- [x] EP-3: Milestone 3 — complete call accounting across retries, fallbacks, and delegated children; sealing only when every relevant child is terminal
+- [x] EP-3: Milestone 4 — the compliance roll-up: every non-conforming reason enumerated, deterministic steps `not-applicable`, mixed-model runs listing each call
+- [x] EP-3: Milestone 5 — pg-migrate-managed evidence tables, reconciled read models, queryable state
 - [ ] EP-4: Milestone 1 — canonical encoding and hashing of the attestation payload, byte-matched against kikan's golden payloads
 - [ ] EP-4: Milestone 2 — signing by a workload identity, with a test proving the key is unreachable from behavior, prompt, tools, and workspace
 - [ ] EP-4: Milestone 3 — key rotation that preserves historical verification
@@ -441,4 +448,14 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+In progress. Plans 49 through 51 delivered the profile contract, fail-closed resolution and run
+pinning, call-evidence aggregate, compliance roll-up, and queryable projections. Plan 52 is the
+remaining child and owns workload signing, historical verification, the bounded read API, offline
+verification, and UC-8 conformance. Its local prerequisites are complete; the shared Kikan
+attestation contract remains proposed and the positive live-provider case needs credentials.
+
+
+## Revision Notes
+
+- 2026-09-21: Reconciled plans 49 through 51 as Complete and narrowed plan 52's blockers to
+  the shared attestation contract and live-provider proof.

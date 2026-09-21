@@ -4,14 +4,32 @@ title: Attest sanctioned model execution for agent runs
 description: Resolve a versioned execution profile before a run, collect every correlated model call, bind the result to the exact reviewed artifact and agent version, and issue a signed tamper-evident run attestation.
 timestamp: "2026-08-02T18:29:04Z"
 generated:
-  by: human:nadeem
-  at: "2026-08-02T18:29:04Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-7
-status: proposed
+status: in-progress
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; did not re-review the request's design.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: attest sanctioned model execution for agent runs
+
+## Status
+
+**In progress.** Plans 49 through 51 delivered the profile, run-pinning, evidence aggregate, and
+compliance roll-up. Plan 52 remains not started and owns signing, historical verification, the
+read API, the offline verifier, and the final UC-8 conformance proof; its shared Kikan attestation
+contract remains proposed.
 
 ## Why
 

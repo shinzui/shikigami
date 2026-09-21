@@ -4,21 +4,34 @@ title: Consult the Meibo directory for agent lifecycle and fleet identity
 description: Gate agent execution on canonical Meibo lifecycle state and fleet identity.
 timestamp: "2026-07-30T00:40:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-07-30T00:40:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-1
-status: proposed
+status: completed
+completedAt: "2026-08-23T01:55:14Z"
+resolution: Completed by the lifecycle directory, admission, skip-audit, and operator work in mori://shinzui/shikigami/plans/23-agent-lifecycle-control-with-meibo-principals.
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; did not re-review the request's design.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: Consult `shinzui/meibo` for agent lifecycle and fleet identity
 
 ## Status
 
-**Proposed.** Design-only request authored from the Kikan C14 ratification (2026-07-07).
-Implementation is gated on `shinzui/meibo` shipping its service and `meibo.v1` topic; the
-seam can be built earlier behind a config/stub, the same pattern used for the shomei and
-kikan-en gates.
+**Completed.** Plan 23 delivered the cached directory projection, lifecycle admission and
+kill-switch behavior, durable skip audit, principal attribution, and operator synchronization on
+2026-08-22. The implementation consumes a configured snapshot source, so a future live Meibo
+transport can replace that source without reopening the request's runtime contract.
 
 
 ## Planning Coverage

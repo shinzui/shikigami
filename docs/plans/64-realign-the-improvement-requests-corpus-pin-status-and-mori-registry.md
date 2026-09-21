@@ -5,6 +5,13 @@ title: "Realign the improvement-requests corpus pin, status, and Mori registry"
 kind: exec-plan
 created_at: 2026-08-27T00:54:32Z
 intention: "intention_01m10bc7hae8trp0ev5mzpvt0d"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:05Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Realign the improvement-requests corpus pin, status, and Mori registry
@@ -16,7 +23,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-Shikigami keeps two OKF bundles: `docs/improvement-requests`, nine requests for changes to
+Shikigami keeps two OKF bundles: `docs/improvement-requests`, now eleven requests for changes to
 this runtime, and `docs/reviews`, the commit-pinned review records adopted on
 2026-08-27. An OKF bundle is a directory of Markdown documents whose frontmatter is checked
 by the `okf` tool against a *profile*, a Dhall description of the required fields pinned
@@ -27,23 +34,37 @@ practice-review flow fulfils (IR-4) still says `proposed`, and that the Mori reg
 for this project reports no bundles and a stale schema, so the `mori://` URIs the review
 records cite do not resolve.
 
-After this plan, both bundles pin okf-profiles v0.13.1 and validate strictly; every
-request's `status` reflects the plans that exist for it; and `mori path
-mori://shinzui/shikigami/plans/46-orchestrate-review-delivery-and-end-to-end-conformance`
-and `mori registry bundles shinzui/shikigami` answer correctly from the registry.
+After this plan, both bundles pin the authoritative okf-profiles v0.18.0 release and validate strictly; every
+request's `status` reflects the plans that exist for it; the project pins the current Mori schema; and
+`mori registry bundles shinzui/shikigami` plus OKF concept URIs answer correctly from the registry.
+Plan URI resolution is also tested and any remaining Mori coverage gap is recorded explicitly.
 
 
 ## Progress
 
-- [ ] M1: repin the improvement-requests profile to v0.13.1 and validate.
-- [ ] M2: audit and update every request's status, with log entries.
-- [ ] M3: refresh the Mori registry entry and verify URI resolution.
-- [ ] M4 (optional, human): human verification entries on authored requests.
+- [x] (2026-09-21T18:03:06Z) M1: repinned both OKF bundles to v0.18.0 and validated them strictly.
+- [x] (2026-09-21T18:03:06Z) M2: audited all eleven requests, updated five lifecycle values, added catalog-metadata review provenance, and logged the result.
+- [x] (2026-09-21T18:03:06Z) M3: pinned the current Mori schema, refreshed the local registry, verified bundle and OKF concept resolution, and recorded the remaining plan-artifact coverage gap.
+- [x] (2026-09-21T18:03:06Z) M4 disposition: human verification remains optional and was not fabricated; the model audit is recorded separately.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The authoritative catalog advanced to v0.18.0 after this plan was written. Releases 0.14
+  through 0.18 do not change the improvement-request or review document rules, but they do change
+  the package semantic hash. The audit therefore pins the current released tag rather than
+  implementing the historical v0.13.1 instruction literally.
+- `mori.dhall` already declared all three OKF bundles, but pinned an old Mori schema. Repinning it
+  to upstream commit `3522f4a51181d73c9c90fc27a7c0838bd29ae95f` and refreshing the registry
+  removed the schema warning and made bundle and concept discovery current.
+- The current Mori registry still does not index repository-local ExecPlans or MasterPlans from
+  their conventional directories. `mori path
+  mori://shinzui/shikigami/plans/46-orchestrate-review-delivery-and-end-to-end-conformance`
+  returns `artifact ... not found` after a successful refresh. Per this plan's M3 recovery rule,
+  this is recorded as a Mori artifact-coverage gap; the intended canonical URI remains in durable
+  references.
+- The bundle grew from nine to eleven requests after this plan was authored. The audit includes
+  IR-10 and IR-11 rather than preserving the stale cardinality.
 
 
 ## Decision Log
@@ -56,6 +77,18 @@ and `mori registry bundles shinzui/shikigami` answer correctly from the registry
   `adopt-improvement-request-contracts` blueprint and is not a finding.
   Date: 2026-08-27.
 
+- Decision: Pin both bundles to v0.18.0, the latest authoritative release verified against the
+  upstream tag, rather than the v0.13.1 target named by the 2026-08-27 draft.
+  Rationale: the newer releases preserve both profiles' document rules, while a roadmap audit
+  should not intentionally leave a known stale catalog pin.
+  Date: 2026-09-21.
+
+- Decision: Preserve each review record's original `outcome` and represent present-day closure in
+  the roadmap and bundle log.
+  Rationale: the reviews profile defines a review as immutable evidence about one subject at one
+  commit; rewriting an old outcome would destroy that evidence.
+  Date: 2026-09-21.
+
 - Decision: Status is set per request from the plan corpus, using `in-progress` for a
   request whose plans have landed but which still names an open external gate, and
   `completed` only when the request's own acceptance is met.
@@ -67,22 +100,30 @@ and `mori registry bundles shinzui/shikigami` answer correctly from the registry
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-09-21. Both OKF bundles now pin okf-profiles v0.18.0. The improvement-request
+corpus records three completed requests (IR-1, IR-3, IR-9), two in progress (IR-4, IR-7), and six
+proposed (IR-2, IR-5, IR-6, IR-8, IR-10, IR-11), with catalog-metadata review provenance on every
+request. Strict validation, index regeneration, log freshness, and trust reporting pass. The local
+Mori registry now uses the current schema, lists the declared OKF bundles, and resolves the IR-4
+concept URI. It does not yet resolve conventional `docs/plans` and `docs/masterplans` artifacts;
+the exact plan-46 failure is recorded above as a Mori coverage gap rather than misreported as
+repository completion evidence.
 
 
 ## Context and Orientation
 
 `docs/improvement-requests/profile.dhall` is a single Dhall import of
-`https://raw.githubusercontent.com/shinzui/okf-profiles/v0.10.0/profiles/coordination/improvement-requests.dhall`
-with a `sha256:` integrity hash. `docs/reviews/profile.dhall` is the same shape at v0.13.1
+`https://raw.githubusercontent.com/shinzui/okf-profiles/v0.18.0/profiles/coordination/improvement-requests.dhall`
+with a `sha256:` integrity hash. `docs/reviews/profile.dhall` is the same shape at v0.18.0
 for the reviews profile. The catalog is checked out at
 `/Users/shinzui/Keikaku/bokuno/okf-profiles` (registered as `mori://shinzui/okf-profiles`);
 its `CHANGELOG.md` records per release what changes for consumers. Repinning means
 replacing the URL and recomputing the hash; the `dhall` executable computes it with
-`dhall hash`. `mori.dhall` at the repository root declares both bundles under `okfBundles`
-with their profile paths; Mori reads it when the project is registered.
+`dhall hash`. `mori.dhall` at the repository root declares both bundles discussed here, plus the
+user-documentation bundle, under `okfBundles` with their profile paths; Mori reads it when the
+project is registered.
 
-The nine requests carry `requestId: IR-N`, `status`, `timestamp`, and `generated` in their
+The eleven requests carry `requestId: IR-N`, `status`, `timestamp`, and `generated` in their
 frontmatter. `docs/improvement-requests/log.md` is the bundle's reserved change log,
 newest section first, with `**Addition**`, `**Update**`, and `**Migration**` bullets;
 `docs/improvement-requests/index.md` is generated by `okf index --write`. The
@@ -111,21 +152,20 @@ use canonical `mori://` URIs is the reason M3 matters. No cross-repository ADR a
 
 ### Milestone 1: Repin the profile
 
-At the end of this milestone the improvement-requests bundle validates strictly against
-okf-profiles v0.13.1.
+At the end of this milestone both bundles validate strictly against okf-profiles v0.18.0.
 
 Compute the hash and rewrite the descriptor:
 
 ```bash
-dhall hash <<< 'https://raw.githubusercontent.com/shinzui/okf-profiles/v0.13.1/profiles/coordination/improvement-requests.dhall'
+dhall hash <<< 'https://raw.githubusercontent.com/shinzui/okf-profiles/v0.18.0/profiles/coordination/improvement-requests.dhall'
 ```
 
 It prints a line `sha256:<64 hex>`. Replace both lines of
-`docs/improvement-requests/profile.dhall` with the v0.13.1 URL and that hash, keeping the
+`docs/improvement-requests/profile.dhall` with the v0.18.0 URL and that hash, keeping the
 two-line layout the reviews descriptor uses and adding the same `--|` comment header
 naming the source `mori://shinzui/okf-profiles/profiles/improvement-requests`. Run the
-strict validation in Concrete Steps; the only expected output is the nine
-`missing profile-recommended field: reviews` advisories that already appear at v0.10.0.
+strict validation in Concrete Steps; the expected result is eleven valid concepts with the
+catalog-metadata review family populated by this audit.
 Add a `**Update**` bullet under a new `## 2026-08-27` section at the top of
 `docs/improvement-requests/log.md` stating the repin and that no request content changed.
 
@@ -135,7 +175,7 @@ Add a `**Update**` bullet under a new `## 2026-08-27` section at the top of
 At the end of this milestone every request's `status` matches the plan corpus and the
 log records each transition.
 
-For each of the nine files, find the plans and master plans that cite its `requestId` or
+For each of the eleven files, find the plans and master plans that cite its `requestId` or
 title (`grep -rn "IR-4\|architecture-practice review" docs/plans docs/masterplans` and
 so on), read their Progress sections, and set `status` accordingly: `in-progress` when at
 least one plan has started and something remains, `completed` when the request's own
@@ -151,7 +191,8 @@ docs/improvement-requests --check-stale` must report nothing.
 
 ### Milestone 3: Registry refresh
 
-At the end of this milestone the registry knows both bundles and resolves plan URIs.
+At the end of this milestone the registry uses the current schema, knows all declared bundles,
+resolves OKF concept URIs, and records the tested plan-URI coverage gap.
 
 Run `mori registry pins` and note the mori-schema commit it reports as current; if the
 project's `mori.dhall` schema import is behind it, run `mori registry upgrade-schema
@@ -167,10 +208,10 @@ mori path mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-4
 mori path mori://shinzui/shikigami/plans/46-orchestrate-review-delivery-and-end-to-end-conformance
 ```
 
-The first must list two bundles and no `[stale]` marker; the second lists
-`improvement-requests` and `reviews`; the third resolves to
-`docs/improvement-requests/add-architecture-practice-review-flow.md`; the fourth resolves
-to the plan file. If `mori path` still cannot resolve plan artifacts after a fresh
+The first must report the current schema without a schema `[stale]` marker; the second lists
+`improvement-requests`, `reviews`, and `user`; the third resolves to
+`docs/improvement-requests/add-architecture-practice-review-flow.md`. The fourth currently fails
+with `artifact ... not found`. If `mori path` cannot resolve plan artifacts after a fresh
 registration, that is a Mori coverage gap rather than a repository defect: record the
 exact error in Surprises & Discoveries and keep the intended URI in the review records,
 as the repository's cross-reference rule prescribes.
@@ -191,7 +232,7 @@ All commands run from `/Users/shinzui/Keikaku/bokuno/shikigami`.
 
 ```bash
 okf --version
-dhall hash <<< 'https://raw.githubusercontent.com/shinzui/okf-profiles/v0.13.1/profiles/coordination/improvement-requests.dhall'
+dhall hash <<< 'https://raw.githubusercontent.com/shinzui/okf-profiles/v0.18.0/profiles/coordination/improvement-requests.dhall'
 okf validate docs/improvement-requests --strict --profile docs/improvement-requests/profile.dhall --profile-enforce --log-enforce
 okf index docs/improvement-requests --write
 okf log docs/improvement-requests --check-stale
@@ -201,10 +242,10 @@ mori register
 mori registry bundles shinzui/shikigami
 ```
 
-Expected: `okf v0.8.0.0` or later; a `sha256:` line; `OK: 9 concepts (okf_version 0.2)`
-preceded only by the nine `reviews` advisories; `Wrote index.md files`; no stale report;
+Expected: `okf v0.8.0.0` or later; a `sha256:` line; `OK: 11 concepts (okf_version 0.2)`;
+`Wrote index.md files`; no stale report;
 a trust table whose `status` column shows the audited values; `OK: 8 concepts` for the
-reviews bundle; and a bundle listing with two rows.
+reviews bundle; and a bundle listing with three rows.
 
 Every commit carries:
 
@@ -216,12 +257,11 @@ Intention: intention_01m10bc7hae8trp0ev5mzpvt0d
 
 ## Validation and Acceptance
 
-The bundle validates strictly at v0.13.1 with no error; `git diff docs/improvement-requests`
-shows only frontmatter status, timestamp, and generated lines, the log, the index, and the
-descriptor changed, and no request body changed except the IR-4 status paragraph; `mori
-registry show shinzui/shikigami --full` reports both bundles; and the four `mori path`
-commands resolve. A reader of `docs/improvement-requests/log.md` can see when and why each
-status moved.
+The bundle validates strictly at v0.18.0 with no error; `git diff docs/improvement-requests`
+shows only the audited metadata, status prose, log, index, and descriptor changes; `mori registry
+show shinzui/shikigami --full` reports the current schema; the bundle listing and IR-4 concept path
+resolve; and any failed plan-artifact resolution is recorded as a Mori coverage gap. A reader of
+`docs/improvement-requests/log.md` can see when and why each status moved.
 
 
 ## Idempotence and Recovery
@@ -242,3 +282,11 @@ No code changes. Tools: `okf` (0.8.0.0 or later), `dhall`, `mori`, `just`. Input
 changelog. The review record this plan answers is
 [REV-8](../reviews/improvement-requests-okf-corpus.md), required items 1 through 3 and both
 follow-ups.
+
+
+## Revision Notes
+
+- 2026-09-21: Implemented the corpus audit against eleven requests, advanced both OKF profile
+  pins to the authoritative v0.18.0 release, preserved historical review outcomes, repinned the
+  current Mori schema, refreshed the local registry, recorded its plan-artifact coverage gap, and
+  added `docs/roadmap.md` as the current disposition ledger.

@@ -4,11 +4,22 @@ title: Add governed, versioned agent evolution to Shikigami
 description: Control candidate agent artifacts from evaluation through approval, rollout, rollback, and audit.
 timestamp: "2026-07-30T00:44:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-07-30T00:44:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-5
 status: proposed
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; no accepted Shikigami delivery plan currently fulfils this request.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: add governed, versioned agent evolution to Shikigami

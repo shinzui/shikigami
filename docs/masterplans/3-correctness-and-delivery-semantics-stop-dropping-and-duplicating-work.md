@@ -5,6 +5,13 @@ title: "Correctness and Delivery Semantics: Stop Dropping and Duplicating Work"
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1tykwvek587vr2gwtcf81j"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Correctness and Delivery Semantics: Stop Dropping and Duplicating Work
@@ -72,10 +79,10 @@ Each plan is independently verifiable: EP-1 by tests that fail a behavior transi
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | F1 | Migrate Shikigami database evolution from Codd to pg-migrate | docs/plans/38-migrate-shikigami-database-evolution-from-codd-to-pg-migrate.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Complete (2026-08-26; M3 cancelled, migration boundary accepted by ADR 0032) |
-| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
-| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Not Started (startable) |
+| 1 | Behavior retry semantics, run timeouts, and visibility heartbeat | docs/plans/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Complete (2026-08-19) |
+| 2 | Atomic stream consumption: offsets, inbox, and enqueue in one boundary | docs/plans/18-atomic-stream-consumption-offsets-inbox-and-enqueue-in-one-boundary.md | cross-MP: plans 36 ✅, 37 ✅, 47 ✅ | None | Complete (2026-08-20) |
 | 3 | Sink delivery truth and downstream idempotency | docs/plans/19-sink-delivery-truth-and-downstream-idempotency.md | cross-MP: plans 16 ✅, 47 ✅, 28 M1 ✅; `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes` ✅ | None | Complete (2026-08-22; Keiro 0.14/Kioku 0.5 cleared the final terminal-rejection gate) |
-| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 ✅, 47 ✅ | None | Not Started (blocked on EP-1, EP-2) |
+| 4 | Explicit trigger routing, scheduler catch-up policy, and loud failures | docs/plans/20-explicit-trigger-routing-scheduler-catch-up-policy-and-loud-failures.md | EP-1, EP-2; cross-MP: plans 37 ✅, 47 ✅ | None | Complete (2026-08-20) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -221,26 +228,26 @@ tombstone remains a record *type* rather than a manifest, and remains out of rea
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
+- [x] EP-1: Milestone 1 — transient/permanent behavior failure taxonomy; transient failures throw instead of journaling
 - [x] F1: Milestones 1, 2, and most of 4 — pg-migrate component, exact-byte manifest, complete four-component plan, `pg-migrate-cli` executable, pg-migrate test support, codd removed from the repository (delivered by plan 47, 2026-07-31)
 - [x] F1: Milestone 3 — **cancelled 2026-08-05.** No database needs its codd history preserved; codd support was removed outright instead
 - [x] F1: Milestone 4 reconciliation (2026-08-26) — ADR 0032 accepts
       `shikigami-migrate`'s dedicated application-owned `DATABASE_URL` boundary; no shared
       `AppConfig` dependency, duplicate declaration, or package restructure remains
-- [ ] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
-- [ ] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
-- [ ] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
-- [ ] EP-2: Milestone 1 — transactional enqueue: inbox transaction and pgmq send commit atomically
-- [ ] EP-2: Milestone 2 — offset commit only after an explicit terminal inbox disposition; transient/store errors do not commit
-- [ ] EP-2: Milestone 3 — supervised serial Kafka loop with reconnect backoff and durable dead-letter/halt poison policy
+- [x] EP-1: Milestone 2 — zero-based adapter attempts, shared retry policy, framework-owned ack classification, and a real dead-letter queue
+- [x] EP-1: Milestone 3 — visibility heartbeat via the shibuya lease during long-running handlers
+- [x] EP-1: Milestone 4 — explicit wall-clock run timeout and configurable approval deadline
+- [x] EP-2: Milestone 1 — transactional enqueue: inbox transaction and pgmq send commit atomically
+- [x] EP-2: Milestone 2 — offset commit only after an explicit terminal inbox disposition; transient/store errors do not commit
+- [x] EP-2: Milestone 3 — supervised serial Kafka loop with reconnect backoff and durable dead-letter/halt poison policy
 - [x] EP-3: Milestone 1 — additive Enqueued/PermanentFailure outcomes and released Keiro PublishRejected; logSinkResult implemented
 - [x] EP-3: Milestone 2 — pg-migrate-managed sink delivery receipts table; publish outcomes and reconciliation state recorded and queryable
 - [x] EP-3: Milestone 3 — retry-safe dispatch: kizashi send-guard and danwa conversation reuse
 - [x] EP-3: Milestone 4 — per-sink outbox keys; head-of-line isolation between a run's sinks
-- [ ] EP-4: Milestone 1 — routing on an explicit RunJob trigger discriminator with typed failure for mismatched/undecodable payloads
-- [ ] EP-4: Milestone 2 — scheduler catch-up policy (skip-missed/coalesce default) and timer-kind dispatch fix
-- [ ] EP-4: Milestone 3 — critical kioku errors propagate to retry/failure; best-effort writes are explicitly classified and logged
-- [ ] EP-4: Milestone 4 — loud agent/cron loading with strict mode; enqueue-path hardening (keys, queue creation, epoch fallback, UUIDv5 bytes)
+- [x] EP-4: Milestone 1 — routing on an explicit RunJob trigger discriminator with typed failure for mismatched/undecodable payloads
+- [x] EP-4: Milestone 2 — scheduler catch-up policy (skip-missed/coalesce default) and timer-kind dispatch fix
+- [x] EP-4: Milestone 3 — critical kioku errors propagate to retry/failure; best-effort writes are explicitly classified and logged
+- [x] EP-4: Milestone 4 — loud agent/cron loading with strict mode; enqueue-path hardening (keys, queue creation, epoch fallback, UUIDv5 bytes)
 
 
 ## Surprises & Discoveries
@@ -433,16 +440,20 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-EP-3 completed on 2026-08-22. Sink journals now stop at `Enqueued`; a Shikigami-owned receipt
+Complete. EP-3 completed on 2026-08-22. Sink journals now stop at `Enqueued`; a Shikigami-owned receipt
 ledger carries actual delivery state and downstream ids; proven delivery and Danwa conversation
 sub-receipts guard retries; independent sinks no longer share one ordering key; and Keiro 0.14's
 terminal rejection contract prevents known permanent failures from exhausting transient retries.
 The workflow gate classified the change replay-neutral, fresh migration apply/re-apply passed,
-and the full repository suite remained green. F1 is complete as of 2026-08-26 under ADR 0032;
-EP-1, EP-2, and EP-4 remain open, so this MasterPlan is not complete.
+and the full repository suite remained green. F1 is complete as of 2026-08-26 under ADR 0032.
+EP-1, EP-2, and EP-4 had already landed by 2026-08-20; the stale registry and aggregate checklist,
+not the implementation, were the remaining gap.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled plans 17, 18, and 20 with their completed progress and outcomes;
+  every child is now recorded Complete.
 
 - 2026-08-26: Marked F1 (plan 38) complete. ADR 0032 accepts the dedicated pg-migrate
   `DATABASE_URL` boundary and cancels the configuration-only package restructure. Updated

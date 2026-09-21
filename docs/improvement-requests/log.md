@@ -1,5 +1,15 @@
 # Bundle Update Log
 
+## 2026-09-21
+
+* **Audit**: Reconciled all eleven lifecycle values against the current ExecPlans,
+  MasterPlans, Git history, and repository tree. IR-1, IR-3, and IR-9 are complete; IR-4
+  and IR-7 are in progress; IR-2, IR-5, IR-6, IR-8, IR-10, and IR-11 remain proposed.
+* **Review**: Added model review provenance for the lifecycle and planning-coverage audit to
+  every request. The review covers catalog metadata, not a fresh review of each design.
+* **Update**: Repinned the improvement-request profile from v0.10.0 to the authoritative
+  okf-profiles v0.18.0 release.
+
 ## 2026-09-20
 
 * **Addition**: IR-11 requests governed isolated mutable repository workspaces and bounded coding

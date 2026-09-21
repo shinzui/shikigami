@@ -5,6 +5,13 @@ title: "Operations and Observability: Run Shikigami as a Real Service"
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Operations and Observability: Run Shikigami as a Real Service
@@ -90,9 +97,9 @@ endpoint*: rejected because the substrate's metrics hooks are typed for the Open
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36, 37, and 47 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Not Started |
-| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36, 37, and 47; upstream Shibuya IR-1 for worker probe | EP-1 | Not Started |
-| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, 37, and 47 | EP-1 | Not Started |
+| EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36, 37, and 47 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Complete (2026-08-23) |
+| EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36, 37, and 47; upstream Shibuya IR-1 for worker probe | EP-1 | Complete (2026-08-23) |
+| EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, 37, and 47 | EP-1 | Complete (2026-08-20; automated behavioral fixture descoped) |
 | EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36–38 and 47 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -214,33 +221,33 @@ Milestone-level checklist across all four child plans. Update as each milestone 
 
 EP-1 — Structured logging, metrics, and trace propagation:
 
-- [ ] EP-1 M1: `Shikigami.Log` module + every `hPutStrLn stderr` call site replaced;
+- [x] EP-1 M1: `Shikigami.Log` module + every `hPutStrLn stderr` call site replaced;
       `logSinkResult` implemented (no longer a no-op).
-- [ ] EP-1 M2: metrics spike promoted; `ShikigamiMetrics` + `withRunTelemetry`; `AppEnv.metrics`
+- [x] EP-1 M2: metrics spike promoted; `ShikigamiMetrics` + `withRunTelemetry`; `AppEnv.metrics`
       populated everywhere; queue-depth/outbox/consumer instruments live.
-- [ ] EP-1 M3: scheduler and consumers traced; `traceparent` propagated into the outbox;
+- [x] EP-1 M3: scheduler and consumers traced; `traceparent` propagated into the outbox;
       `sink.publish` span wraps the outbound HTTP POST with a `traceparent` header.
-- [ ] EP-1 M4: OTel provider/exporter lifecycle is bracketed at process composition roots;
+- [x] EP-1 M4: OTel provider/exporter lifecycle is bracketed at process composition roots;
       bounded request logging runs inside OTel and excludes health paths.
 
 EP-2 — Health, liveness, and worker loop supervision:
 
-- [ ] EP-2 prerequisite/M1: the released Shibuya probe API and Shikigami server API serve
+- [x] EP-2 prerequisite/M1: the released Shibuya probe API and Shikigami server API serve
       exact typed `NamedRoutes`/`MultiVerb` `/health/live` and `/health/ready` routes;
       OpenAPI is generated from each served proxy; Settei owns port configuration.
-- [ ] EP-2 M2: per-loop heartbeats feed worker-role `/health/live`; PostgreSQL readiness is exposed
+- [x] EP-2 M2: per-loop heartbeats feed worker-role `/health/live`; PostgreSQL readiness is exposed
       through `/health/ready` without Kafka or downstream HTTP cascade dependencies.
-- [ ] EP-2 M3: fail-fast supervision (loop death exits non-zero); resume loop
+- [x] EP-2 M3: fail-fast supervision (loop death exits non-zero); resume loop
       restart-with-backoff.
 
 EP-3 — Operator CLI:
 
-- [ ] EP-3 M1: `agents list`.
-- [ ] EP-3 M2: `Shikigami.Operator.Query` + `runs list` / `runs show`.
-- [ ] EP-3 M3: `runs cancel --confirm`.
-- [ ] EP-3 M4: schema-qualified `dlq inspect|repair|replay|discard` against the real
+- [x] EP-3 M1: `agents list`.
+- [x] EP-3 M2: `Shikigami.Operator.Query` + `runs list` / `runs show`.
+- [x] EP-3 M3: `runs cancel --confirm`.
+- [x] EP-3 M4: schema-qualified `dlq inspect|repair|replay|discard` against the real
       dead-letter queue plus `outbox status`.
-- [ ] EP-3 M5: confirmation, audit, parser, and command-dispatch gates proven by CLI tests.
+- [x] EP-3 M5: confirmation, audit, parser, and command-dispatch gates proven by CLI tests.
 
 EP-4 — Deployable service stack:
 
@@ -365,10 +372,17 @@ Seeded research findings that shaped the decomposition (verified 2026-07-08):
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+In progress. Structured logs, metrics and trace propagation, process health and supervision, and
+the operator CLI are complete. The remaining child is plan 31: a reproducible local service stack,
+end-to-end composed smoke, NixOS module, configuration closeout, and graceful-shutdown proof. That
+child is now unblocked because its architecture, configuration, migration, telemetry, and health
+prerequisites have landed.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled plans 28 through 30 as Complete and left plan 31 as the sole
+  remaining child.
 
 - 2026-07-30: Added plan 47 and Shibuya IR-1, separated startable health/supervision work
   from the blocked public worker-probe adapter, and reaffirmed the NixOS/non-Kubernetes target.

@@ -4,20 +4,33 @@ title: Add declarative router agents
 description: Declare specialist expertise and route work through durable, typed delegation.
 timestamp: "2026-07-30T00:42:00Z"
 generated:
-  by: human:nadeem
-  at: "2026-07-30T00:42:00Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-3
-status: proposed
+status: completed
+completedAt: "2026-08-23T20:39:18Z"
+resolution: Completed by mori://shinzui/shikigami/masterplans/8-declarative-router-agents and child plans 40 through 42.
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; did not re-review the request's design.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: Add Declarative Router Agents
 
 ## Status
 
-**Proposed.** This request adds the missing router-agent concept to Shikigami. It builds on
-the durable delegation primitive already shipped and on the pending first-class declared
-delegation work in `docs/plans/35-delegation-as-a-first-class-declared-capability.md`.
+**Completed.** MasterPlan 8 and plans 40 through 42 delivered the declaration vocabulary,
+lifecycle-aware candidate catalog, replay-safe typed routing, and durable delegation on
+2026-08-23.
 
 
 ## Planning Coverage

@@ -5,6 +5,13 @@ title: "Durable Evolution: Versioning and Replay Safety for Long-Lived Workflows
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1tytnwe53rdd4es99ztv1p"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Durable Evolution: Versioning and Replay Safety for Long-Lived Workflows
@@ -119,11 +126,11 @@ consolidation reviewable against it.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| F0 | Upgrade Shikigami to the keiro 0.11 and keiki 0.9 cohort | docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md | cross-MP: plans 36 ✅, 47 ✅ | None | Not Started (blocked: no published `kioku` admits keiro 0.11 / keiki 0.9; kioku is being updated) |
-| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | F0; cross-MP: plans 36 ✅, 47 ✅ | None | Not Started (author against keiro-dsl 0.11 language 4, so F0 first) |
-| 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Not Started |
-| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1; cross-MP: plan 47 | None | Not Started |
-| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1; cross-MP: plan 47; upstream Kioku IR-2 | None | Not Started |
+| F0 | Upgrade Shikigami to the keiro 0.11 and keiki 0.9 cohort | docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md | cross-MP: plans 36 ✅, 47 ✅ | None | Complete (2026-08-18; later superseded by newer cohorts) |
+| F1 | Adopt a checked Keiro DSL specification and evolution gate | docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md | F0; cross-MP: plans 36 ✅, 47 ✅ | None | Complete (2026-08-19) |
+| 1 | Flow versioning with keiro patch and continue-as-new | docs/plans/24-flow-versioning-with-keiro-patch-and-continue-as-new.md | F1 | None | Complete (2026-08-19) |
+| 2 | Replay-safe flow memory capabilities | docs/plans/25-replay-safe-flow-memory-capabilities.md | F1, EP-1; cross-MP: plan 47 | None | Complete (2026-08-20) |
+| 3 | Conversation workflow lifecycle: idle timeout, journal rotation, session completion | docs/plans/26-conversation-workflow-lifecycle-idle-timeout-journal-rotation-session-completion.md | F1, EP-1; cross-MP: plan 47; upstream Kioku IR-2 | None | Complete (2026-08-20) |
 | 4 | Consolidate sink-intent and run-lifecycle machinery | docs/plans/27-consolidate-sink-intent-and-run-lifecycle-machinery.md | F1; cross-MP: plan 47 | EP-1; cross-MP: plan 19 (MasterPlan 3), plan 28 (MasterPlan 6) | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -228,19 +235,19 @@ otherwise an old timer can terminate an active conversation after journal rotati
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: Versioning discipline document `docs/workflow-versioning.md` written, with step-name inventory and AGENTS.md pointer.
-- [ ] EP-1 M2: `Shikigami.Workflow.Versioning` module; all workflow entry points and the resume worker run through shared `WorkflowRunOptions` with `activePatches`.
-- [ ] EP-1 M3: `emitSignal` takes caller-supplied stable labels; in-flight ordinal scheme preserved behind `patch`.
-- [ ] EP-1 M4: Load-time flow registry validation (validate CLI and worker boot reject unknown `Flow{name}`).
-- [ ] EP-1 M5: Deploy-simulation test green: workflow started under old shape resumes under new shape with the patch guard.
-- [ ] EP-2 M1: Failing test demonstrating duplicated flow memory on replay (red).
-- [ ] EP-2 M2: `remember`/`recall` journaled as labeled keiro steps with deterministic memory ids; red test green.
-- [ ] EP-2 M3: `IOE`/`Store` removed from flow-facing `FlowEffects`; `Acknowledgement` capability added.
-- [ ] EP-2 M4: `rememberWith` metadata options (priority, confidence, memoryType, supersedes) delivered.
-- [ ] EP-3 M1: Session-first ingress with indexed session resolution (kioku subjectRef query) and epoch-capable workflow identity.
-- [ ] EP-3 M2: versioned/cancelled idle-timeout timer ends only the intended idle generation and completes the kioku session.
-- [ ] EP-3 M3: Journal rotation via `continueAsNew` every N turns; generation-aware delivery and result loading.
-- [ ] EP-3 M4: Racing-message smoothing (pre-armed next-message awakeable; busy-path is not an error).
+- [x] EP-1 M1: Versioning discipline document `docs/workflow-versioning.md` written, with step-name inventory and AGENTS.md pointer.
+- [x] EP-1 M2: `Shikigami.Workflow.Versioning` module; all workflow entry points and the resume worker run through shared `WorkflowRunOptions` with `activePatches`.
+- [x] EP-1 M3: `emitSignal` takes caller-supplied stable labels; in-flight ordinal scheme preserved behind `patch`.
+- [x] EP-1 M4: Load-time flow registry validation (validate CLI and worker boot reject unknown `Flow{name}`).
+- [x] EP-1 M5: Deploy-simulation test green: workflow started under old shape resumes under new shape with the patch guard.
+- [x] EP-2 M1: Failing test demonstrating duplicated flow memory on replay (red).
+- [x] EP-2 M2: `remember`/`recall` journaled as labeled keiro steps with deterministic memory ids; red test green.
+- [x] EP-2 M3: `IOE`/`Store` removed from flow-facing `FlowEffects`; `Acknowledgement` capability added.
+- [x] EP-2 M4: `rememberWith` metadata options (priority, confidence, memoryType, supersedes) delivered.
+- [x] EP-3 M1: Session-first ingress with indexed session resolution (kioku subjectRef query) and epoch-capable workflow identity.
+- [x] EP-3 M2: versioned/cancelled idle-timeout timer ends only the intended idle generation and completes the kioku session.
+- [x] EP-3 M3: Journal rotation via `continueAsNew` every N turns; generation-aware delivery and result loading.
+- [x] EP-3 M4: Racing-message smoothing (pre-armed next-message awakeable; busy-path is not an error).
 - [x] (2026-08-23) EP-4 M1: `Shikigami.Sink.Intent` shared module extracted; both former copies deleted; golden wire-format round-trip test.
 - [x] (2026-08-23) EP-4 M2: `agent-run` CLI drives the durable workflow; `runAgentWithMemory` retired.
 - [x] (2026-08-23) EP-4 M3: keiki lifecycle conformance test (modelled flow branches accepted by the transducer).
@@ -336,14 +343,19 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-EP-4 (plan 27) completed on 2026-08-23. It delivered one hand-owned sink-intent contract with
+Complete. EP-4 (plan 27) completed on 2026-08-23. It delivered one hand-owned sink-intent contract with
 literal wire fixtures, routed the one-off CLI through the durable agent-run workflow, checked the
 modelled at-risk branch language through Keiki's input acceptor, and preserved the complete checked
 workflow topology. Plans 19 and 28's settled receipt, attribution, and trace semantics moved with
-the shared sink module; `sharedScope` remains explicitly deferred to plan 34.
+the shared sink module. Plans 24 through 26 delivered the versioning discipline, replay-safe
+capabilities, and bounded conversation lifecycle; `sharedScope` remains explicitly deferred to
+plan 34 and is not unfinished work in this initiative.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled the completed cohort foundation, checked DSL gate, and plans 24
+  through 26; every registered child is now Complete.
 
 - 2026-08-23: Marked EP-4 / plan 27 complete with all four milestones and full-suite plus
   `just keiro-gate` acceptance evidence.
@@ -357,5 +369,5 @@ the shared sink module; `sharedScope` remains explicitly deferred to plan 34.
 - 2026-07-22: Added plan 39 as the checked Keiro DSL foundation, made all durable plans
   consume its evolution gate, and corrected plan 26's idle timeout to require stale-
   timer cancellation or generation validation.
-- [ ] F1 M1–M4: durable topology inventory, checked Keiro DSL, scaffold/harness, and CI
+- [x] F1 M1–M4: durable topology inventory, checked Keiro DSL, scaffold/harness, and CI
       drift gate from plan 39 are complete.

@@ -5,6 +5,13 @@ title: "Production Reality: De-stub the Runtime Behavior and Integration Path"
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1tygnxenvarsw91bjsy19r"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Production Reality: De-stub the Runtime Behavior and Integration Path
@@ -110,9 +117,9 @@ with a real model) but is not blocked by it.
 | F1 | Align Shikigami with the six-package deployed-service architecture | docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md | None | None | Complete (2026-07-31) |
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-08-26; migration boundary accepted by ADR 0032) |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
-| F4 | Give one-off agent runs a light package that does not link the platform | docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md | F1 | plan 48 | Not Started |
+| F4 | Give one-off agent runs a light package that does not link the platform | docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md | F1 | plan 48 | Complete (2026-08-19) |
 | 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
-| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Not Started |
+| 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Complete (2026-08-23) |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Complete (2026-07-31) |
 | 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Complete (2026-07-31) |
 
@@ -410,12 +417,12 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` Milestone 5.
       Rechecked 2026-08-26: the credential is still absent. One plan-52 positive-case run
       may supply the transcript and close both records; this does not block plan 46.
-- [ ] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
+- [x] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
-- [ ] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration
+- [x] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration
       test (park → ask captured → approve → one outbox row).
-- [ ] EP-2 M3: `resolve-approval` CLI; token round-trip test.
-- [ ] EP-2 M4: manual three-terminal end-to-end transcript recorded.
+- [x] EP-2 M3: `resolve-approval` CLI; token round-trip test.
+- [x] EP-2 M4: manual three-terminal end-to-end transcript recorded.
 - [x] (2026-07-31) EP-3 M1: `BehaviorInput` threaded into both arms; program arm
       receives payload+prior via `ArgMap`; capture tests, confirmed to fail against the
       code they replace. The record lives in `Shikigami.Behavior.Input` and is
@@ -717,14 +724,18 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Outcomes & Retrospective
 
-The foundation and three implemented feature children are reconciled. Plan 37 is complete
-under ADR 0032's bounded migration exception; plan 13 is implementation-complete with one
-external live proof coordinated with plan 52; plan 15 is complete; and plan 16 is complete
-with its optional live observation explicitly descoped. The MasterPlan remains open for its
-other registered children, but none of plans 16, 37, or 38 is a blocker for plan 46.
+Complete. All four foundation plans and all four feature children are implemented. Plan 13's
+provider path is complete; its credential-dependent live smoke remains intentionally coordinated
+with plan 52 rather than keeping this initiative open. Plan 14 subsequently delivered the full
+approval child workflow and manual Danwa/Kawa exercise. The durable lesson is that the package,
+configuration, and dependency foundations had to land before the feature children could be
+evaluated honestly.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled F4 and EP-2 with their completed child plans and closed the
+  initiative; retained plan 13's external live smoke as plan 52 verification debt.
 
 - 2026-08-26: Reconciled plans 13, 16, 37, and 38. Kept plan 13's live Anthropic proof open
   and coordinated it with plan 52 because no credential is present. Confirmed plan 16

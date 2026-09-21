@@ -5,10 +5,21 @@ description: Publish a typed, idempotent run-status read endpoint so callers tha
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:codex
-  at: "2026-09-20T20:31:12Z"
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-10
 status: proposed
 origin: mori://shinzui/mori
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; the run-status API remains unplanned and depends on IR-8's identifier contract.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: expose terminal agent-run status over the public HTTP API

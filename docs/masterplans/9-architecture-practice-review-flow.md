@@ -5,6 +5,13 @@ title: "Architecture-practice review flow"
 kind: master-plan
 created_at: 2026-07-26T04:38:46Z
 intention: "intention_01kyeb9heqecv8041cmwqwqg3q"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Architecture-practice review flow
@@ -54,10 +61,10 @@ review lineage.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define architecture-practice review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | cross-MP: plan 47 for package implementation | Not Started |
-| 2 | Acquire revision-pinned architecture-practice evidence | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1; cross-MP: plan 47; upstream Kikan IR-5 for live adapter | None | Not Started |
-| 3 | Persist and adjudicate architecture-practice reviews | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1; cross-MP: plans 25 and 47 | None | Not Started |
-| 4 | Orchestrate review delivery and end-to-end conformance | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3; cross-MP: plans 16, 19, 25, 35, 47, and MasterPlan 8; upstream Kikan IR-5 | None | Not Started |
+| 1 | Define architecture-practice review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | cross-MP: plan 47 for package implementation | Complete (2026-08-19) |
+| 2 | Acquire revision-pinned architecture-practice evidence | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1; cross-MP: plan 47; upstream Kikan IR-5 for live adapter | None | Complete (deterministic seam; live adapter still blocked) |
+| 3 | Persist and adjudicate architecture-practice reviews | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1; cross-MP: plans 25 and 47 | None | Complete (2026-08-20) |
+| 4 | Orchestrate review delivery and end-to-end conformance | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3; cross-MP: plans 16, 19, 25, 35, 47, and MasterPlan 8; upstream Kikan IR-5 | None | In Progress (core landed; REV-1/2/4/7 follow-ups open) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -118,18 +125,18 @@ into the specialist child; Mori never names that specialist.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: Define and round-trip the versioned trigger and revision provenance types.
-- [ ] EP-1 M2: Define the five-way verdict, claim evidence, applicability, and resolution types.
-- [ ] EP-1 M3: Add deterministic review ids, validators, fixtures, and public API exports.
-- [ ] EP-2 M1: Add a fail-closed content-plane evidence client seam and pinned-read validation.
-- [ ] EP-2 M2: Collect target, reference, upstream, and prior-adjudication evidence into one bundle.
-- [ ] EP-2 M3: Prove hash/provenance preservation and unresolved behavior for missing evidence.
-- [ ] EP-3 M1: Encode provisional and resolved review memories with deterministic ids and tags.
-- [ ] EP-3 M2: Implement accepted, rejected, narrowed, and superseded transitions.
-- [ ] EP-3 M3: Prove replay idempotency, audit retention, scoped recall, and supersession.
-- [ ] EP-4 M1: Declare the architecture router and OpenTelemetry specialist and register the Flow.
-- [ ] EP-4 M2: Implement the named durable review steps and typed verdict production.
-- [ ] EP-4 M3: Publish Kawa history and coalesced owner attention from the verdict.
+- [x] EP-1 M1: Define and round-trip the versioned trigger and revision provenance types.
+- [x] EP-1 M2: Define the five-way verdict, claim evidence, applicability, and resolution types.
+- [x] EP-1 M3: Add deterministic review ids, validators, fixtures, and public API exports.
+- [x] EP-2 M1: Add a fail-closed content-plane evidence client seam and pinned-read validation.
+- [x] EP-2 M2: Collect target, reference, upstream, and prior-adjudication evidence into one bundle.
+- [x] EP-2 M3: Prove hash/provenance preservation and unresolved behavior for missing evidence.
+- [x] EP-3 M1: Encode provisional and resolved review memories with deterministic ids and tags.
+- [x] EP-3 M2: Implement accepted, rejected, narrowed, and superseded transitions.
+- [x] EP-3 M3: Prove replay idempotency, audit retention, scoped recall, and supersession.
+- [x] EP-4 M1: Declare the architecture router and OpenTelemetry specialist and register the Flow.
+- [x] EP-4 M2: Implement the named durable review steps and typed verdict production.
+- [x] EP-4 M3: Publish Kawa history and coalesced owner attention from the verdict.
 - [ ] EP-4 M4: Prove all five verdicts, explicit resolution, re-review, replay, and read-only safety end to end.
 
 
@@ -192,10 +199,16 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+In progress. Plans 43 through 45 are complete, and plan 46 delivered the core workflow, but the
+2026-08-27 review corpus found correctness, resolver-entitlement, documentation, and conformance
+gaps. Plans 60 through 63 are the required closeout wave. The live evidence adapter remains
+fail-closed pending `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled plans 43 through 45 as Complete and plan 46 as In Progress;
+  recorded the open review-driven closeout wave in plans 60 through 63.
 
 - 2026-07-30: Repointed the live content-plane and conformance blocker from
   the removed nested request to Kikan IR-5 and its stable OKF concept URI.

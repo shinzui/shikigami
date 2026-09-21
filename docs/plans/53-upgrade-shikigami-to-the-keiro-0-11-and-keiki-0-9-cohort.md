@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-08-06T03:49:01Z
 intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
 master_plan: "docs/masterplans/5-durable-evolution-versioning-and-replay-safety-for-long-lived-workflows.md"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:05Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Upgrade Shikigami to the keiro 0.11 and keiki 0.9 cohort
@@ -118,10 +125,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-08-17) M4: `docs/dependency-cohort.md` records the new matrix with tag commits, the
       held-back baikai/shikumi rows and the bound that holds them, the source cost, the
       deprecation debt, and the migration consequence.
-- [ ] M4: plan 39 re-pointed at the keiro-dsl surface. **Now a `keiro-dsl 0.13` question, not
+- [x] M4: plan 39 was subsequently implemented against the released keiro-dsl surface. The historical note was a `keiro-dsl 0.13` question, not
       0.11** — and note this repository does not depend on `keiro-dsl` at all today, so adopting
       it is plan 39's own work.
-- [ ] M4: upstream requests filed. Two of the three are **discharged**: the `keiro 0.12` request
+- [x] M4: upstream disposition recorded. Two of the three were **discharged**: the `keiro 0.12` request
       is obsolete (0.13 is pinned), and the kioku-admitting-`baikai ^>=0.5` request was satisfied
       by `kioku 0.4.1.0` on 2026-08-18 without ever being filed — which also unblocks plans 17,
       48, 51, and 52. One stands: kioku 0.4.0.0's changelog omits the mandatory memory-space and
@@ -958,3 +965,6 @@ future reader should be pointed at.
   and cost one compile error to collect. It is a cleaner argument for the cohort discipline than
   any of the reasoning written in advance of it: the bound was true, waiting was correct, and the
   upstream fix was cheap to consume precisely because nobody had worked around it locally.
+
+- 2026-09-21: Reconciled the two stale M4 checkboxes with the subsequently completed plan 39
+  and the recorded upstream dispositions. The historical cohort outcome remains unchanged.

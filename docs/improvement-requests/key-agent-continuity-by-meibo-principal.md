@@ -7,23 +7,32 @@ description: >-
   through an explicit migration and compatibility boundary.
 timestamp: "2026-08-10T13:20:17Z"
 generated:
-  by: human:nadeem
-  at: "2026-08-10T13:20:17Z"
+  by: process:codex
+  at: "2026-09-21T18:03:06Z"
 requestId: IR-9
-status: proposed
+status: completed
+completedAt: "2026-08-26T18:01:06Z"
+resolution: Completed by mori://shinzui/shikigami/plans/54-key-durable-agent-state-by-meibo-principal with migration, replay, and rename evidence.
 origin: mori://shinzui/kikan
+reviews:
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-21T18:03:06Z"
+    document_timestamp: "2026-09-21T18:03:06Z"
+    scope: catalog-metadata
+    outcome: approved
+    context: Audited lifecycle status and plan coverage against the current plans, master plans, Git history, and repository tree; did not re-review the request's design.
+    provider: openai
+    model: gpt-5.6-sol
+    effort: high
 ---
 
 # Improvement Request: Key Durable Agent Continuity and Outbound Attribution by Meibo Principal
 
 ## Status
 
-**Proposed.** This is a companion to
-`mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-1`. That request and its
-implementation plan establish the Meibo lifecycle cache, declaration-to-principal join, session
-attribution, and grant backfill. They intentionally leave Kioku memory scopes keyed by the
-declaration name. This request closes the continuity gap exposed by
-`mori://shinzui/kikan/okf/use-cases/concepts/UC-11`.
+**Completed.** Plan 54 delivered principal-keyed run identity, Kioku continuity, grant ownership,
+sink attribution, legacy alias migration, replay compatibility, and rename evidence on 2026-08-26.
 
 ## Context
 

@@ -5,6 +5,13 @@ title: "Platform Feature Completion: Egress, Schema, Memory Lifecycle, Delegatio
 kind: master-plan
 created_at: 2026-07-08T20:13:36Z
 intention: "intention_01kx1tyzqcerzv4ysbktgr9sw9"
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T18:24:04Z
+      mode: "update"
+      note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
 ---
 
 # Platform Feature Completion: Egress, Schema, Memory Lifecycle, Delegation
@@ -94,8 +101,8 @@ without the enforcement.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, 37, and 47 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Not Started |
-| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20, 36, and 47 | cross-MP: plan 16 (MasterPlan 2) | Not Started |
+| 1 | Channel egress sink through kanmon | docs/plans/32-channel-egress-sink-through-kanmon.md | cross-MP: plans 19, 22, 36, 37, and 47 | cross-MP: plan 21 (MasterPlan 4), plan 27 (MasterPlan 5) | Complete (2026-08-23) |
+| 2 | Agent schema evolution: identity, memory policy, and enablement | docs/plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md | cross-MP: plans 20, 36, and 47 | cross-MP: plan 16 (MasterPlan 2) | Complete (2026-08-20) |
 | 3 | Memory lifecycle: distillation, retention, and shared scope | docs/plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md | EP-2; cross-MP: plans 36, 37, and 47; upstream Kioku IR-2 for M2/M3 | None | Not Started |
 | 4 | Delegation as a first-class declared capability | docs/plans/35-delegation-as-a-first-class-declared-capability.md | EP-2; cross-MP: plans 24, 36–39, and 47 | None | Complete |
 | 5 | Per-agent MCP server declaration in Agent.dhall | docs/plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md | cross-MP: plans 36, 37, and 47; upstream Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3 for M3–M5 | EP-2 (field pattern); cross-MP: plan 13 (real model makes MCP tools useful) | Not Started |
@@ -250,14 +257,14 @@ runtime milestones begin; transport authentication alone is insufficient.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1 M1: `ChannelEgress` Sink variant in Dhall + Haskell mirror + proof manifest validates.
-- [ ] EP-1 M2: `KanmonConfig` + `KanmonClient` over a header-capable HTTP helper; request-shape unit tests.
-- [ ] EP-1 M3: dispatcher arm + grant gating + Settei config plumbing; permanent-4xx versus transient retry classification.
-- [ ] EP-1 M4: `stub-kanmon` CLI command and the end-to-end outbox-to-egress proof (delivered, deduplicated, denied).
-- [ ] EP-2 M1: `identity`/`memory`/`enabled` fields in `schema/Agent.dhall` with defaults; all existing manifests validate unchanged.
-- [ ] EP-2 M2: Haskell mirror types on `AgentDecl`; loader/decoder proof; `validate` prints the new surface.
-- [ ] EP-2 M3: `enabled` enforced over plan 20's canonical load report; bounded checked conversion for `recallLimit` and all policy Naturals; `recordPolicy` enforced in run paths.
-- [ ] EP-2 M4: docs/user/writing-agents.md updated; proof manifest exercising all three fields.
+- [x] EP-1 M1: `ChannelEgress` Sink variant in Dhall + Haskell mirror + proof manifest validates.
+- [x] EP-1 M2: `KanmonConfig` + `KanmonClient` over a header-capable HTTP helper; request-shape unit tests.
+- [x] EP-1 M3: dispatcher arm + grant gating + Settei config plumbing; permanent-4xx versus transient retry classification.
+- [x] EP-1 M4: `stub-kanmon` CLI command and the end-to-end outbox-to-egress proof (delivered, deduplicated, denied).
+- [x] EP-2 M1: `identity`/`memory`/`enabled` fields in `schema/Agent.dhall` with defaults; all existing manifests validate unchanged.
+- [x] EP-2 M2: Haskell mirror types on `AgentDecl`; loader/decoder proof; `validate` prints the new surface.
+- [x] EP-2 M3: `enabled` enforced over plan 20's canonical load report; bounded checked conversion for `recallLimit` and all policy Naturals; `recordPolicy` enforced in run paths.
+- [x] EP-2 M4: docs/user/writing-agents.md updated; proof manifest exercising all three fields.
 - [ ] EP-3 M1: kioku distill timer worker wired as a Settei-configured, fail-fast supervised worker loop; L1 timers actually fire.
 - [ ] EP-3 M2: recall fallback bounded and recency-ordered by server-side query limits.
 - [ ] EP-3 M3: retention — server-side bounded batches periodically archive old MemoryPattern rows via kioku `archive`.
@@ -410,10 +417,16 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+In progress. Channel egress, additive agent schema policy, and declared delegation are complete.
+Plan 34 still owns memory distillation, bounded recall, retention, and shared scope. Plan 12 still
+owns MCP declaration and runtime support; its local schema/registry seam is startable, while live
+connection and invocation remain gated by the proposed Baikai, Shikumi, and Kikan-En requests.
 
 
 ## Revision Notes
+
+- 2026-09-21: Reconciled plans 32 and 33 as Complete. Plans 34 and 12 remain Not Started;
+  the initiative is 3 of 5 children complete.
 
 - 2026-07-30: Recorded Kikan-En IR-3 as the canonical per-action authorization request for
   EP-5 runtime milestones.

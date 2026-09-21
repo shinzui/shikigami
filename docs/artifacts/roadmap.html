@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Shikigami architecture decisions, portfolio state, and delivery roadmap, audited 2026-09-21.">
+  <title>Shikigami — architecture and delivery roadmap</title>
+  <style>
+    :root {
+      --bg: #f7f8f5;
+      --surface: #ffffff;
+      --surface-2: #f0f3f0;
+      --text: #202821;
+      --muted: #657067;
+      --line: #dce2dd;
+      --green: #176b4b;
+      --green-soft: #e5f2eb;
+      --blue: #24678e;
+      --blue-soft: #e9f1f7;
+      --gold: #8a6114;
+      --gold-soft: #fff3db;
+      --coral: #a33f36;
+      --coral-soft: #faeae8;
+      --violet: #61539b;
+      --violet-soft: #eeebf8;
+      --shadow: 0 4px 18px rgba(32, 40, 33, 0.055);
+      --radius: 14px;
+      --max: 1320px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.62 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: linear-gradient(180deg, #e9f2ec 0, transparent 320px);
+      opacity: 0.75;
+    }
+    a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid #89c5a9; outline-offset: 3px; }
+    code { color: var(--green); font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .shell { position: relative; width: min(var(--max), calc(100% - 38px)); margin: 0 auto; }
+    header { padding: 54px 0 36px; border-bottom: 1px solid var(--line); }
+    .eyebrow, .pill, .tag, .state, .plan-id {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+    .eyebrow { color: var(--green); }
+    h1 {
+      max-width: 1040px;
+      margin: 10px 0 17px;
+      font: 700 clamp(43px, 7vw, 82px) / 0.98 Georgia, "Times New Roman", serif;
+      letter-spacing: -0.045em;
+    }
+    .lede { max-width: 900px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 25px; }
+    .pill { padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); }
+    .pill.good { color: var(--green); }
+    .pill.warn { color: var(--gold); }
+    .pill.stop { color: var(--coral); }
+
+    .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 44px; padding: 34px 0 90px; }
+    nav { position: sticky; top: 28px; align-self: start; }
+    nav a { display: block; padding: 8px 10px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; }
+    nav a:hover { border-color: var(--green); color: var(--text); }
+    main { min-width: 0; }
+    section { padding: 38px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 18px; }
+    h2 { margin: 0 0 10px; font: 700 clamp(29px, 4vw, 45px) / 1.08 Georgia, "Times New Roman", serif; letter-spacing: -0.03em; }
+    h3 { margin: 0 0 8px; font-size: 17px; line-height: 1.3; }
+    .intro { max-width: 860px; margin: 0 0 25px; color: var(--muted); }
+
+    .grid { display: grid; gap: 14px; }
+    .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .metric { margin: 7px 0 10px; color: var(--green); font: 700 38px/1 ui-monospace, monospace; }
+    .muted { color: var(--muted); }
+    .callout { padding: 18px 20px; border-left: 4px solid var(--green); border-radius: 0 var(--radius) var(--radius) 0; background: var(--surface); box-shadow: var(--shadow); }
+    .callout.warn { border-color: var(--gold); }
+    .callout.stop { border-color: var(--coral); }
+
+    .layer-stack { display: grid; gap: 10px; }
+    .layer { display: grid; grid-template-columns: 155px 1fr auto; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .layer b { color: var(--green); }
+    .layer:nth-child(2) b { color: var(--blue); }
+    .layer:nth-child(3) b { color: var(--violet); }
+    .layer:nth-child(4) b { color: var(--gold); }
+    .layer:nth-child(5) b { color: var(--coral); }
+    .owner { color: var(--muted); font-size: 12px; text-align: right; }
+
+    .diagram { margin: 18px 0 22px; padding: 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .diagram svg { display: block; width: 100%; min-width: 850px; height: auto; }
+    .diagram figcaption { margin: 10px 4px 0; color: var(--muted); font-size: 13px; }
+    .svg-node { fill: #fff; stroke: #aeb7af; stroke-width: 1.5; }
+    .svg-node.core { fill: #eaf5ef; stroke: var(--green); }
+    .svg-node.runtime { fill: #edf3fa; stroke: var(--blue); }
+    .svg-node.workflow { fill: #f1eef9; stroke: var(--violet); }
+    .svg-node.external { fill: #fff7e7; stroke: var(--gold); }
+    .svg-node.risk { fill: #fff0ee; stroke: var(--coral); }
+    .svg-title { fill: var(--text); font: 700 14px ui-sans-serif, system-ui, sans-serif; }
+    .svg-sub { fill: var(--muted); font: 12px ui-sans-serif, system-ui, sans-serif; }
+    .svg-small { fill: var(--muted); font: 11px ui-monospace, SFMono-Regular, monospace; }
+    .svg-edge { fill: none; stroke: #7f8981; stroke-width: 1.5; marker-end: url(#arrow); }
+    .svg-edge.control { stroke: var(--blue); }
+    .svg-edge.external { stroke: var(--gold); }
+    .svg-edge.open { stroke: var(--coral); stroke-dasharray: 6 5; }
+    .svg-label { fill: var(--muted); font: 11px ui-sans-serif, system-ui, sans-serif; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 20px; color: var(--muted); font-size: 12px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 11px; height: 11px; border: 1px solid var(--line); border-radius: 3px; }
+    .swatch.core { border-color: var(--green); background: var(--green-soft); }
+    .swatch.runtime { border-color: var(--blue); background: var(--blue-soft); }
+    .swatch.workflow { border-color: var(--violet); background: var(--violet-soft); }
+    .swatch.external { border-color: var(--gold); background: var(--gold-soft); }
+    .swatch.open { border-color: var(--coral); background: var(--coral-soft); }
+
+    table { width: 100%; border-collapse: collapse; border: 1px solid var(--line); background: var(--surface); }
+    th, td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .tag { display: inline-block; margin: 2px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; }
+    .tag.done { color: var(--green); }
+    .tag.progress { color: var(--gold); }
+    .tag.open { color: var(--coral); }
+    .tag.proposed { color: var(--violet); }
+    .tag.external { color: var(--blue); }
+
+    .decision-register { border-top: 1px solid var(--line); }
+    .decision-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 210px; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .decision-row strong { color: var(--green); }
+    .decision-row .decision-state { color: var(--muted); font-size: 13px; }
+    .decision-row .decision-state b { display: block; color: var(--text); }
+
+    .road { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; }
+    .road-num { display: grid; width: 50px; height: 50px; place-items: center; border-radius: 50%; background: var(--green); color: #fff; font: 900 18px ui-monospace, monospace; }
+    .road[data-wave="0"] .road-num { background: var(--coral); }
+    .road[data-wave="1"] .road-num { background: var(--gold); }
+    .road[data-wave="3"] .road-num, .road[data-wave="4"] .road-num { background: var(--blue); }
+    .road-body { padding: 0 0 27px 20px; border-left: 2px solid var(--line); }
+    .road:last-child .road-body { border-left-color: transparent; }
+    .road-body h3 { margin-top: 2px; }
+    .gate { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .gate strong { color: var(--text); }
+
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .filter { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); cursor: pointer; }
+    .filter.active { border-color: var(--green); color: var(--text); }
+    .hidden { display: none !important; }
+    .plan-card { position: relative; padding-top: 50px; }
+    .plan-id { position: absolute; top: 18px; left: 20px; color: var(--green); }
+    .state { position: absolute; top: 15px; right: 16px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+    .plan-card[data-wave="p0"] { border-top: 3px solid var(--coral); }
+    .plan-card[data-wave="p1"] { border-top: 3px solid var(--gold); }
+    .plan-card[data-wave="p2"] { border-top: 3px solid var(--green); }
+    .plan-card[data-wave="p3"], .plan-card[data-wave="p4"] { border-top: 3px solid var(--blue); }
+    .plan-card[data-wave="legacy"] { border-top: 3px solid var(--violet); }
+
+    .dependency { display: grid; grid-template-columns: 170px 150px minmax(0, 1fr); gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .dependency:first-child { border-top: 0; }
+    .dependency .project { color: var(--blue); font-weight: 700; }
+    .dependency .effect { color: var(--coral); font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; }
+
+    .decision-card { border-top: 3px solid var(--green); }
+    .decision-card.stop { border-top-color: var(--coral); }
+    .decision-card.warn { border-top-color: var(--gold); }
+    details { margin-top: 12px; border-top: 1px solid var(--line); }
+    summary { padding: 14px 0; cursor: pointer; font-weight: 750; }
+    .source-list { columns: 2; column-gap: 30px; }
+    .source-list li { margin-bottom: 9px; break-inside: avoid; }
+    .footer { padding: 27px 0 50px; color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; columns: 2; }
+      .four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .decision-row { grid-template-columns: 150px minmax(0, 1fr); }
+      .decision-state { grid-column: 2; }
+    }
+    @media (max-width: 650px) {
+      .shell { width: min(100% - 24px, var(--max)); }
+      header { padding-top: 42px; }
+      .two, .three, .four { grid-template-columns: 1fr; }
+      nav { columns: 1; }
+      .layer, .decision-row, .dependency { grid-template-columns: 1fr; }
+      .owner { text-align: left; }
+      .decision-state { grid-column: auto; }
+      table { display: block; overflow-x: auto; }
+      .source-list { columns: 1; }
+      .diagram { margin-right: -4px; margin-left: -4px; padding: 10px; }
+    }
+    @media print {
+      nav, .filters { display: none; }
+      .layout { display: block; }
+      body { background: #fff; color: #111; }
+      .card, table, .callout, .diagram { box-shadow: none; break-inside: avoid; }
+      a { color: #075d49; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="shell">
+      <div class="eyebrow">Architecture + delivery review · snapshot 2026-09-21</div>
+      <h1>Shikigami: make durable agent execution trustworthy before widening it.</h1>
+      <p class="lede">An engineering decision brief for the declared-agent runtime: durable workflow boundaries, identity and authorization, practice-review correctness, service delivery, run identity, signed evidence, external contracts, and the implementation order that keeps those decisions coherent.</p>
+      <div class="meta">
+        <span class="pill good">60 of 71 ExecPlans complete</span>
+        <span class="pill warn">4 MasterPlans active</span>
+        <span class="pill stop">4 change-requesting reviews open</span>
+        <span class="pill warn">2 improvement requests in progress</span>
+        <span class="pill">6 proposals need decisions</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell layout">
+    <nav aria-label="Contents">
+      <a href="#answer">Roadmap thesis</a>
+      <a href="#north-star">Product contract</a>
+      <a href="#baseline">Current baseline</a>
+      <a href="#architecture">System boundaries</a>
+      <a href="#decisions">Architecture decisions</a>
+      <a href="#safety">Safety sequence</a>
+      <a href="#roadmap">Delivery roadmap</a>
+      <a href="#decision-packets">Decision packets</a>
+      <a href="#dependencies">External dependencies</a>
+      <a href="#masterplans">MasterPlan evidence</a>
+      <a href="#plans">Open ExecPlans</a>
+      <a href="#requests">IR evidence</a>
+      <a href="#reviews">Review evidence</a>
+      <a href="#sources">Source ledger</a>
+    </nav>
+
+    <main>
+      <section id="answer">
+        <h2>Do we have a roadmap?</h2>
+        <div class="callout warn"><strong>Yes—and the next implementable queue is safety work, not feature breadth.</strong> The core durable runtime is mature, but the architecture-practice flow still violates two accepted boundaries: attention reservation can commit without its outbox message, and a verified resolution subject is not yet proven entitled to resolve the review. Plans 60 and 61 close those defects; plans 62 and 63 make the operator and conformance claims true; only then should plan 46 and IR-4 close.</div>
+        <div class="grid four" style="margin-top:16px">
+          <article class="card"><div class="eyebrow">Portfolio</div><div class="metric">8/12</div><h3>MasterPlans complete</h3><p class="muted">Operations, feature completion, practice review, and attestation remain coordinated initiatives.</p></article>
+          <article class="card"><div class="eyebrow">Delivery</div><div class="metric">60/71</div><h3>ExecPlans complete</h3><p class="muted">Three are in progress and eight have not started.</p></article>
+          <article class="card"><div class="eyebrow">Safety</div><div class="metric">4</div><h3>Open review findings</h3><p class="muted">REV-1, REV-2, REV-4, and REV-7 map directly to plans 60–63.</p></article>
+          <article class="card"><div class="eyebrow">Product queue</div><div class="metric">6</div><h3>Unaccepted proposals</h3><p class="muted">IR-2, IR-5, IR-6, IR-8, IR-10, and IR-11 still need sequencing decisions.</p></article>
+        </div>
+      </section>
+
+      <section id="north-star">
+        <h2>The product contract</h2>
+        <p class="intro">Shikigami runs a declared behavior when a trigger fires, but that simple sentence carries a strong architectural promise: the run is durably identifiable, replay-safe, attributable to a principal, authorized at the point of external action, observable through evidence and status, and operable both as a Kikan service and as a lightweight one-off runner.</p>
+        <div class="grid three">
+          <article class="card"><h3>Replay is a product property</h3><p>Workflow code records deterministic decisions. World-facing behavior crosses journaled capability boundaries, and any workflow-body shape change is guarded by an explicit Keiro patch.</p></article>
+          <article class="card"><h3>Authority is checked at action time</h3><p>Recorded Meibo identity keys durable state, but identity alone is not permission. Protected tools and sinks require fresh exact authorization immediately before the external action.</p></article>
+          <article class="card"><h3>Delivery truth has one owner</h3><p>The journal owns enqueue intent; outbox receipts own retries, rejection, and downstream delivery. Semantic coalescing never becomes a second delivery-state machine.</p></article>
+        </div>
+      </section>
+
+      <section id="baseline">
+        <h2>What exists today</h2>
+        <p class="intro">The implementation is not a blank slate. Most durable foundations are shipped; the open roadmap is about closing boundary violations and exposing the runtime coherently.</p>
+        <table>
+          <thead><tr><th>Capability</th><th>Status</th><th>Roadmap meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Agent-run, approval, and Danwa conversation workflows</td><td><span class="tag done">Implemented</span></td><td>Three registered durable workflow families share validated startup and replay rules.</td></tr>
+            <tr><td>Principal-keyed continuity and attribution</td><td><span class="tag done">Implemented</span></td><td>IR-9 and plan 54 are complete; durable state follows recorded Meibo principals.</td></tr>
+            <tr><td>Declarative router agents</td><td><span class="tag done">Implemented</span></td><td>Model output is a proposal validated against journaled catalog authority.</td></tr>
+            <tr><td>Practice-review orchestration</td><td><span class="tag progress">Core landed</span></td><td>Accepted architecture exists, but plans 60–63 must repair safety and closeout evidence.</td></tr>
+            <tr><td>Run evidence and attestation foundation</td><td><span class="tag progress">3 of 4 plans</span></td><td>Evidence lifecycle exists; signing, read API, verifier, and UC-8 proof remain in plan 52.</td></tr>
+            <tr><td>Deployable service stack</td><td><span class="tag open">Not started</span></td><td>Plan 31 is the remaining operations MasterPlan child and the gate for portable harness work.</td></tr>
+            <tr><td>Addressed run command and terminal status API</td><td><span class="tag proposed">Proposed</span></td><td>IR-8 and IR-10 need one run identifier and lifecycle contract before implementation.</td></tr>
+            <tr><td>Memory lifecycle and per-agent MCP</td><td><span class="tag external">Partly blocked</span></td><td>Local schema/seam work can be split from Kioku, Baikai, Shikumi, and Kikan-En dependencies.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="architecture">
+        <h2>Target ownership architecture</h2>
+        <p class="intro">The durable design rule is one owner per fact and one explicit boundary per kind of side effect. The seven-package repository keeps the domain reusable while deployed roles own transport and provider lifetimes.</p>
+        <div class="layer-stack">
+          <div class="layer"><b>Ingress</b><span>HTTP commands, Kafka activity, schedules, Danwa-addressed messages, delegation, and a lightweight one-off CLI.</span><span class="owner">server · workers · agent</span></div>
+          <div class="layer"><b>Public contract</b><span>Servant route types, DTOs, problem details, OpenAPI, and the typed client. The run command/status pair must share one stable identity.</span><span class="owner">api · client</span></div>
+          <div class="layer"><b>Durable domain</b><span>Declared agents, RunJob envelope, agent-run/approval/conversation workflows, Flow capabilities, evidence lifecycle, attention, and sink intent.</span><span class="owner">shikigami-core</span></div>
+          <div class="layer"><b>Runtime adapters</b><span>Queue processors, Kafka subscriptions, scheduler, timers, resume, outbox publication, WAI execution, and telemetry providers.</span><span class="owner">workers · server</span></div>
+          <div class="layer"><b>External authorities</b><span>Keiro owns workflow durability; Kioku owns shared memory; Meibo owns principals; Shomei authenticates; Kikan-En authorizes; Danwa/Kizashi own downstream facts.</span><span class="owner">Kikan portfolio</span></div>
+        </div>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1160 590" role="img">
+            <title>Shikigami runtime ownership and safety boundaries</title>
+            <desc>Ingress routes into a stable RunJob and durable Keiro workflows. Workflows reach memory, models, tools, and sinks through replay-safe capabilities. Exact authorization gates protected external actions. Evidence and delivery receipts provide observable truth. Public addressed-run and terminal-status APIs remain open roadmap work.</desc>
+            <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7f8981"/></marker></defs>
+
+            <rect class="svg-node runtime" x="35" y="55" width="220" height="100" rx="12"/>
+            <text class="svg-title" x="145" y="86" text-anchor="middle">Ingress</text>
+            <text class="svg-sub" x="145" y="109" text-anchor="middle">HTTP · Kafka · cron · Danwa</text>
+            <text class="svg-sub" x="145" y="131" text-anchor="middle">delegation · one-off CLI</text>
+
+            <rect class="svg-node core" x="330" y="55" width="220" height="100" rx="12"/>
+            <text class="svg-title" x="440" y="86" text-anchor="middle">RunJob + explicit route</text>
+            <text class="svg-sub" x="440" y="109" text-anchor="middle">stable journal input</text>
+            <text class="svg-small" x="440" y="132" text-anchor="middle">run key · principal · lineage</text>
+
+            <rect class="svg-node workflow" x="625" y="35" width="245" height="140" rx="12"/>
+            <text class="svg-title" x="747" y="68" text-anchor="middle">Keiro workflow registry</text>
+            <text class="svg-sub" x="747" y="95" text-anchor="middle">agent-run</text>
+            <text class="svg-sub" x="747" y="117" text-anchor="middle">approval child</text>
+            <text class="svg-sub" x="747" y="139" text-anchor="middle">Danwa conversation</text>
+            <text class="svg-small" x="747" y="160" text-anchor="middle">patch-guarded evolution</text>
+
+            <rect class="svg-node risk" x="940" y="55" width="185" height="100" rx="12"/>
+            <text class="svg-title" x="1032" y="86" text-anchor="middle">Public run API</text>
+            <text class="svg-sub" x="1032" y="109" text-anchor="middle">addressed command</text>
+            <text class="svg-sub" x="1032" y="131" text-anchor="middle">terminal status</text>
+
+            <path class="svg-edge control" d="M255 105H329"/>
+            <path class="svg-edge control" d="M550 105H624"/>
+            <path class="svg-edge open" d="M940 105H871"/>
+            <text class="svg-label" x="879" y="92">IR-8 + IR-10</text>
+
+            <rect class="svg-node core" x="300" y="250" width="280" height="145" rx="12"/>
+            <text class="svg-title" x="440" y="283" text-anchor="middle">Replay-safe capabilities</text>
+            <text class="svg-sub" x="440" y="310" text-anchor="middle">memory · routing · review</text>
+            <text class="svg-sub" x="440" y="333" text-anchor="middle">tools · approval · sink intent</text>
+            <text class="svg-small" x="440" y="365" text-anchor="middle">journal result, not arbitrary IO</text>
+
+            <rect class="svg-node runtime" x="650" y="250" width="230" height="145" rx="12"/>
+            <text class="svg-title" x="765" y="283" text-anchor="middle">Fresh authorization gate</text>
+            <text class="svg-sub" x="765" y="310" text-anchor="middle">recorded principal</text>
+            <text class="svg-sub" x="765" y="333" text-anchor="middle">exact action + target</text>
+            <text class="svg-small" x="765" y="365" text-anchor="middle">deny-all when unconfigured</text>
+
+            <rect class="svg-node external" x="950" y="230" width="175" height="185" rx="12"/>
+            <text class="svg-title" x="1037" y="265" text-anchor="middle">External owners</text>
+            <text class="svg-sub" x="1037" y="293" text-anchor="middle">Baikai · Kioku</text>
+            <text class="svg-sub" x="1037" y="316" text-anchor="middle">Meibo · Shomei</text>
+            <text class="svg-sub" x="1037" y="339" text-anchor="middle">Kikan-En</text>
+            <text class="svg-sub" x="1037" y="362" text-anchor="middle">Danwa · Kizashi</text>
+            <text class="svg-small" x="1037" y="391" text-anchor="middle">one fact owner each</text>
+
+            <path class="svg-edge" d="M700 175C650 213 570 229 520 249"/>
+            <path class="svg-edge control" d="M580 322H649"/>
+            <path class="svg-edge external" d="M880 322H949"/>
+
+            <rect class="svg-node core" x="320" y="475" width="240" height="82" rx="12"/>
+            <text class="svg-title" x="440" y="507" text-anchor="middle">Run evidence</text>
+            <text class="svg-sub" x="440" y="532" text-anchor="middle">atomic lifecycle + payloads</text>
+
+            <rect class="svg-node runtime" x="650" y="475" width="230" height="82" rx="12"/>
+            <text class="svg-title" x="765" y="507" text-anchor="middle">Outbox receipts</text>
+            <text class="svg-sub" x="765" y="532" text-anchor="middle">delivery, retry, rejection truth</text>
+
+            <path class="svg-edge" d="M420 395V474"/>
+            <path class="svg-edge" d="M490 395C570 445 650 457 700 474"/>
+          </svg>
+          <figcaption>Solid arrows are implemented ownership paths. The dashed public-run edge is proposed and must be designed with one run identity shared by command acceptance, workflow correlation, and terminal status.</figcaption>
+        </figure>
+        <div class="legend">
+          <span><b class="swatch core" aria-hidden="true">&nbsp;</b> Shikigami domain</span>
+          <span><b class="swatch runtime" aria-hidden="true">&nbsp;</b> process/control boundary</span>
+          <span><b class="swatch workflow" aria-hidden="true">&nbsp;</b> durable workflow owner</span>
+          <span><b class="swatch external" aria-hidden="true">&nbsp;</b> external fact owner</span>
+          <span><b class="swatch open" aria-hidden="true">&nbsp;</b> open architecture</span>
+        </div>
+      </section>
+
+      <section id="decisions">
+        <h2>Key architecture decisions</h2>
+        <p class="intro">These are accepted constraints, not optional implementation ideas. The roadmap prioritizes places where the current implementation or public claims do not yet conform to them.</p>
+        <div class="decision-register">
+          <div class="decision-row"><strong>Durability before IO</strong><span>Workflow bodies remain replay-safe and reach the world only through journaled capabilities. Body-shape changes grow behind declared Keiro patches; defaulted fields preserve old bytes.</span><span class="decision-state"><b>Accepted · implemented baseline</b><a href="../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md">ADR 0012</a> · <a href="../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md">ADR 0013</a></span></div>
+          <div class="decision-row"><strong>Recorded identity is not authority</strong><span>A Meibo principal keys durable state. Every protected provider connection, tool invocation, enqueue, and delivery receives a fresh exact authorization decision; missing production configuration denies all.</span><span class="decision-state"><b>Accepted · broad implementation landed</b><a href="../adr/0033-recorded-agent-principals-key-durable-state.md">ADR 0033</a> · <a href="../adr/0036-external-agent-actions-require-fresh-exact-authorization.md">ADR 0036</a></span></div>
+          <div class="decision-row"><strong>Semantics and delivery are separate</strong><span>Practice-review attention reserves a semantic dispute and atomically creates one outbox identity. Delivery state belongs only to sink receipts; retries repair the same identity.</span><span class="decision-state"><b>Accepted · conformance defect open</b><a href="../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md">ADR 0035</a> · <a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">plan 60</a></span></div>
+          <div class="decision-row"><strong>Resolution arrives as a verified envelope</strong><span>Ingress authenticates the resolver and records a credential-free deterministic receipt for replay. Verification must also prove the subject is entitled to resolve this review.</span><span class="decision-state"><b>Accepted · entitlement gap open</b><a href="../adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md">ADR 0034</a> · <a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">plan 61</a></span></div>
+          <div class="decision-row"><strong>Evidence has one atomic boundary</strong><span>Run-evidence lifecycle and queryable payload writes commit together. The canonical attestation encoding is a versioned wire format; signing and verification must not invent a second representation.</span><span class="decision-state"><b>Accepted · final delivery plan open</b><a href="../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md">ADR 0010</a> · <a href="../adr/0006-the-attestation-payload-encoding-is-a-wire-format.md">ADR 0006</a></span></div>
+          <div class="decision-row"><strong>Service and one-off modes stay distinct</strong><span>The seven-package graph keeps domain code reusable. Server and workers own platform adapters; <code>shikigami-agent</code> remains lightweight and must not inherit Kafka or telemetry-export dependencies.</span><span class="decision-state"><b>Accepted · packaging gate open</b><a href="../architecture/packages.md">Package architecture</a> · <a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">plan 31</a></span></div>
+        </div>
+      </section>
+
+      <section id="safety">
+        <h2>The practice-review safety sequence</h2>
+        <p class="intro">The P0/P1 wave is one architecture chain. Each link owns a different fact; skipping or duplicating a link creates the defects identified by REV-1, REV-2, REV-4, and REV-7.</p>
+        <div class="grid three">
+          <article class="card"><div class="eyebrow">1 · Admission</div><h3>Authenticate and bind the resolver</h3><p>Decode a versioned resolution envelope, authenticate a human or approved artifact, and require the verified subject to match the claimed resolver.</p></article>
+          <article class="card"><div class="eyebrow">2 · Entitlement</div><h3>Prove this subject may resolve</h3><p>Check the exact review/practice boundary. Authentication establishes who acted; entitlement establishes whether that action is allowed.</p></article>
+          <article class="card"><div class="eyebrow">3 · Durable decision</div><h3>Journal a replay-safe receipt</h3><p>Store bounded authority coordinates—not tokens or raw evidence—and replay without repeating the external security operation.</p></article>
+          <article class="card"><div class="eyebrow">4 · Semantic reservation</div><h3>Coalesce equivalent attention</h3><p>Reserve the normalized dispute, link each review, and create the winning outbox message in the same transaction.</p></article>
+          <article class="card"><div class="eyebrow">5 · Delivery</div><h3>Let receipts own transport truth</h3><p>Publish the same deterministic message identity. Transient failure retries; permanent refusal is terminal; neither creates a second semantic signal.</p></article>
+          <article class="card"><div class="eyebrow">6 · Evidence</div><h3>Prove the claimed matrix</h3><p>Conformance fixtures and operator docs must cover authorization, replay, coalescing, recovery, and the production profile path before plan 46 closes.</p></article>
+        </div>
+        <div class="callout stop" style="margin-top:16px"><strong>Current breakpoints:</strong> the <code>JournalAlreadyPresent</code> attention branch can commit without condemning the transaction, and resolution verifies identity without proving resolver entitlement. Plan 60 owns the former; plan 61 owns the latter.</div>
+      </section>
+
+      <section id="roadmap">
+        <h2>Recommended delivery roadmap</h2>
+        <p class="intro">Each wave has an exit gate. A later wave may be designed in parallel, but should not consume the implementation capacity needed to make the previous boundary true.</p>
+        <div class="road" data-wave="0"><div class="road-num">P0</div><div class="road-body"><h3>Close correctness and authorization defects</h3><p>Implement plans <a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">60</a> and <a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">61</a>. Pair attention atomicity with specialist failure hardening, and pair authenticated envelopes with exact resolver entitlement and opaque evidence.</p><p class="gate"><strong>Exit gate:</strong> REV-2 and REV-4 are re-reviewed as resolved; no forbidden external action or orphan reservation survives the conformance suite.</p></div></div>
+        <div class="road" data-wave="1"><div class="road-num">P1</div><div class="road-body"><h3>Make the practice-review feature's claims true</h3><p>Implement plans <a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">62</a> and <a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">63</a>, then revise and close plan 46 and IR-4. Keep the evidence reader fail-closed until Kikan IR-5 ships.</p><p class="gate"><strong>Exit gate:</strong> REV-1 and REV-7 close; profiles can be provisioned and operated from published instructions; every claimed matrix cell is observable.</p></div></div>
+        <div class="road" data-wave="2"><div class="road-num">P2</div><div class="road-body"><h3>Establish the service boundary and run contract</h3><p>Implement <a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">plan 31</a>. Commission one coordinated plan for IR-8 and IR-10 around a stable run identity and lifecycle, then resume <a href="../plans/48-add-a-portable-one-off-repository-agent-harness.md">plan 48</a> without inventing a second workspace contract.</p><p class="gate"><strong>Exit gate:</strong> a caller can start the stack, address one run, correlate acceptance to durable execution, and read a terminal result through the public contract.</p></div></div>
+        <div class="road" data-wave="3"><div class="road-num">P3</div><div class="road-body"><h3>Finish sanctioned execution attestation</h3><p>Ratify the shared Kikan IR-6 envelope contract before implementing <a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">plan 52</a>. Add signing, read API, verifier, and positive live-provider proof without freezing another local wire shape.</p><p class="gate"><strong>Exit gate:</strong> IR-7 completes and UC-8 evidence is signed, retrievable, and independently verifiable against the shared contract.</p></div></div>
+        <div class="road" data-wave="4"><div class="road-num">P4</div><div class="road-body"><h3>Widen capabilities after the boundary is stable</h3><p>Stage <a href="../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md">plan 34</a> and <a href="../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md">plan 12</a> so local schema and seam work is separate from external runtime contracts. Accept, reject, or explicitly defer IR-2, IR-5, and IR-6.</p><p class="gate"><strong>Exit gate:</strong> every slice has an owner, an observable local acceptance case, and a named external contract rather than a hidden blocker.</p></div></div>
+      </section>
+
+      <section id="decision-packets">
+        <h2>Decision packets for the next architecture review</h2>
+        <p class="intro">These decisions turn the priority list into an owned delivery program.</p>
+        <div class="grid two">
+          <article class="card decision-card stop"><h3>1 · Commit the P0 slice</h3><p><strong>Choose:</strong> owners and target window for plans 60 and 61.</p><p><strong>Default:</strong> run them together; both protect the same practice-review trust boundary.</p></article>
+          <article class="card decision-card stop"><h3>2 · Define the IR-4 exit gate</h3><p><strong>Choose:</strong> the review and evidence required to close plan 46.</p><p><strong>Default:</strong> plans 60–63 complete, REV-1/2/4/7 re-reviewed, production path documented and observable.</p></article>
+          <article class="card decision-card"><h3>3 · Standardize run identity</h3><p><strong>Choose:</strong> identifier, acceptance response, workflow correlation, terminal states, and retention shared by IR-8 and IR-10.</p><p><strong>Default:</strong> commission one ExecPlan before IR-11 or more harness work.</p></article>
+          <article class="card decision-card warn"><h3>4 · Ratify the attestation envelope</h3><p><strong>Choose:</strong> owner and timing for Kikan IR-6 coordination.</p><p><strong>Default:</strong> do not freeze a Shikigami-only encoding while a shared contract remains proposed.</p></article>
+          <article class="card decision-card"><h3>5 · Split local and blocked slices</h3><p><strong>Choose:</strong> whether plan 12 and plan 34 are amended or replaced by smaller plans.</p><p><strong>Default:</strong> land schema/seam work independently; keep live MCP, recall, and retention behind their upstream contracts.</p></article>
+          <article class="card decision-card warn"><h3>6 · Triage unplanned proposals</h3><p><strong>Choose:</strong> accept, reject, or sequence IR-2, IR-5, and IR-6.</p><p><strong>Default:</strong> do not leave large proposals competing implicitly with the committed safety and service-boundary queue.</p></article>
+        </div>
+      </section>
+
+      <section id="dependencies">
+        <h2>External contracts that shape the sequence</h2>
+        <p class="intro">External dependencies are not generic blockers. Each owns a specific fact Shikigami should not duplicate locally.</p>
+        <div class="card">
+          <div class="dependency"><span class="project">Kikan IR-5</span><span class="effect">Blocks truthful closeout</span><span>Production evidence-reader contract for the practice-review flow. Until it ships, keep the unresolved path fail-closed and do not claim complete production conformance.</span></div>
+          <div class="dependency"><span class="project">Kikan IR-6</span><span class="effect">Blocks plan 52 wire shape</span><span>Shared sanctioned-execution envelope and verification contract. Shikigami should consume it, not create a private sibling protocol.</span></div>
+          <div class="dependency"><span class="project">Kioku IR-2</span><span class="effect">Blocks memory breadth</span><span>Bounded recall and retention semantics for plan 34. Distillation and shared-scope slices may proceed if kept independent.</span></div>
+          <div class="dependency"><span class="project">Baikai · Shikumi · Kikan-En</span><span class="effect">Blocks live MCP path</span><span>Provider/tool declaration, runtime execution, and authorization contracts for plan 12. Local agent schema and registry seams are separable.</span></div>
+          <div class="dependency"><span class="project">Mori registry</span><span class="effect">Documentation coverage gap</span><span>OKF bundle and concept URIs resolve; conventional <code>docs/plans</code> and <code>docs/masterplans</code> artifacts are not yet indexed. Keep intended canonical URIs in durable references.</span></div>
+        </div>
+      </section>
+
+      <section id="masterplans">
+        <h2>Active MasterPlans</h2>
+        <div class="grid two">
+          <article class="card"><span class="tag progress">3 of 4 children complete</span><h3><a href="../masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md">MP-6 · Operations and observability</a></h3><p>Plan 31 is the remaining deployable-service-stack child and the platform gate for plan 48.</p></article>
+          <article class="card"><span class="tag progress">3 of 5 children complete</span><h3><a href="../masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md">MP-7 · Platform feature completion</a></h3><p>Plans 34 and 12 remain; both should be staged around external contracts.</p></article>
+          <article class="card"><span class="tag open">Safety closeout open</span><h3><a href="../masterplans/9-architecture-practice-review-flow.md">MP-9 · Architecture-practice review flow</a></h3><p>Core implementation landed. Plans 60–63 are the truthful closeout wave.</p></article>
+          <article class="card"><span class="tag progress">3 of 4 children complete</span><h3><a href="../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md">MP-10 · Sanctioned execution attestation</a></h3><p>Plan 52 remains behind the shared envelope contract and live-provider proof.</p></article>
+        </div>
+      </section>
+
+      <section id="plans">
+        <h2>Open ExecPlan evidence</h2>
+        <p class="intro">Eleven plans remain open. Filter by roadmap wave; the cards are evidence for the architecture narrative above, not a substitute for it.</p>
+        <div class="filters" aria-label="Filter open plans">
+          <button class="filter active" type="button" data-filter="all">All</button>
+          <button class="filter" type="button" data-filter="p0">P0</button>
+          <button class="filter" type="button" data-filter="p1">P1</button>
+          <button class="filter" type="button" data-filter="p2">P2</button>
+          <button class="filter" type="button" data-filter="p3">P3</button>
+          <button class="filter" type="button" data-filter="p4">P4</button>
+          <button class="filter" type="button" data-filter="legacy">Legacy closeout</button>
+        </div>
+        <div class="grid three" id="plan-grid">
+          <article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 60</span><span class="state">Not started</span><h3><a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">Attention and specialist boundaries</a></h3><p>Restore atomic semantic reservation/outbox behavior and harden specialist failures.</p></article>
+          <article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 61</span><span class="state">Not started</span><h3><a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">Resolver entitlement</a></h3><p>Prove exact resolver authority and keep submission evidence opaque.</p></article>
+          <article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 62</span><span class="state">Not started</span><h3><a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">Truthful closeout and operator docs</a></h3><p>Make provisioning, operation, and recovery instructions match production behavior.</p></article>
+          <article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 63</span><span class="state">Not started</span><h3><a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">Claimed conformance matrix</a></h3><p>Prove the scenarios already claimed by plan 46.</p></article>
+          <article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 31</span><span class="state">Not started</span><h3><a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">Deployable service stack</a></h3><p>Package the server, workers, storage, queues, and configuration into an operable stack.</p></article>
+          <article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 48</span><span class="state">In progress</span><h3><a href="../plans/48-add-a-portable-one-off-repository-agent-harness.md">Portable repository-agent harness</a></h3><p>Resume after plan 31 and align mutable workspace behavior with IR-11.</p></article>
+          <article class="card plan-card" data-wave="p3"><span class="plan-id">Plan 52</span><span class="state">Not started</span><h3><a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">Signed attestation and UC-8</a></h3><p>Finish signing, read API, verification, and live conformance after Kikan IR-6.</p></article>
+          <article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 34</span><span class="state">Not started</span><h3><a href="../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md">Memory lifecycle</a></h3><p>Split local distillation/shared-scope work from Kioku-dependent recall and retention.</p></article>
+          <article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 12</span><span class="state">Not started</span><h3><a href="../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md">Per-agent MCP servers</a></h3><p>Split declaration and registry seams from blocked live provider execution.</p></article>
+          <article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 46</span><span class="state">In progress</span><h3><a href="../plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md">Review orchestration</a></h3><p>Core landed; close only after plans 60–63 and a fresh evidence review.</p></article>
+          <article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 8</span><span class="state">In progress</span><h3><a href="../plans/8-conversational-agent-loop-bound-to-danwa.md">Danwa conversation loop</a></h3><p>Re-verify two legacy validation items against the current event path or explicitly supersede them.</p></article>
+        </div>
+      </section>
+
+      <section id="requests">
+        <h2>Improvement-request portfolio</h2>
+        <table>
+          <thead><tr><th>Request</th><th>Status</th><th>Architectural meaning</th></tr></thead>
+          <tbody>
+            <tr><td>IR-1 · Meibo lifecycle and fleet identity</td><td><span class="tag done">Completed</span></td><td>Canonical lifecycle/fleet identity is part of admission.</td></tr>
+            <tr><td>IR-2 · Cross-cluster diagnostics</td><td><span class="tag proposed">Proposed</span></td><td>No accepted delivery plan; requires a product decision.</td></tr>
+            <tr><td>IR-3 · Declarative router agents</td><td><span class="tag done">Completed</span></td><td>Routing remains declared authority, not model-owned truth.</td></tr>
+            <tr><td>IR-4 · Architecture-practice review flow</td><td><span class="tag progress">In progress</span></td><td>Close only after plans 60–63 repair and prove the accepted boundaries.</td></tr>
+            <tr><td>IR-5 · Governed agent evolution</td><td><span class="tag proposed">Proposed</span></td><td>No accepted Shikigami plan.</td></tr>
+            <tr><td>IR-6 · A2A interoperability</td><td><span class="tag proposed">Proposed</span></td><td>No accepted Shikigami plan.</td></tr>
+            <tr><td>IR-7 · Sanctioned execution attestation</td><td><span class="tag progress">In progress</span></td><td>Plan 52 and a shared Kikan contract remain.</td></tr>
+            <tr><td>IR-8 · Addressed runs over HTTP</td><td><span class="tag proposed">Proposed</span></td><td>Must share run identity and lifecycle with IR-10.</td></tr>
+            <tr><td>IR-9 · Principal-keyed continuity</td><td><span class="tag done">Completed</span></td><td>Recorded agent principals now key durable state.</td></tr>
+            <tr><td>IR-10 · Terminal run status over HTTP</td><td><span class="tag proposed">Proposed</span></td><td>Must not invent a second run identity.</td></tr>
+            <tr><td>IR-11 · Mutable repository workspaces</td><td><span class="tag proposed">Proposed</span></td><td>Sequence after the public run contract and with plan 48.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="reviews">
+        <h2>Review findings as roadmap gates</h2>
+        <p class="intro">Historical outcomes remain immutable. This disposition shows whether later work has answered each finding.</p>
+        <table>
+          <thead><tr><th>Review</th><th>Outcome</th><th>Current gate</th></tr></thead>
+          <tbody>
+            <tr><td>REV-1 · Plan 46 closeout</td><td>Changes requested</td><td><span class="tag open">Open</span> Plans 62 and 63.</td></tr>
+            <tr><td>REV-2 · Attention reservation</td><td>Changes requested</td><td><span class="tag open">Open</span> Plans 60 and 63.</td></tr>
+            <tr><td>REV-3 · Attention migration</td><td>Approved</td><td><span class="tag done">Approval stands</span> Advisory index work in plan 60.</td></tr>
+            <tr><td>REV-4 · Resolution authorization</td><td>Changes requested</td><td><span class="tag open">Open</span> Plan 61.</td></tr>
+            <tr><td>REV-5 · Specialist Flow</td><td>Commented</td><td><span class="tag proposed">Advisory</span> Plans 60 and 62.</td></tr>
+            <tr><td>REV-6 · Capability ports</td><td>Approved</td><td><span class="tag done">Approval stands</span> Advisory work in plans 60 and 62.</td></tr>
+            <tr><td>REV-7 · User guide</td><td>Changes requested</td><td><span class="tag open">Open</span> Plans 61 and 62.</td></tr>
+            <tr><td>REV-8 · Improvement-request corpus</td><td>Changes requested</td><td><span class="tag done">Resolved locally</span> Mori still lacks conventional plan-artifact URI coverage.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="sources">
+        <h2>Source ledger</h2>
+        <p class="intro">The page is a decision view over repository evidence. Update the underlying records first; regenerate this view when statuses or architecture decisions change.</p>
+        <ul class="source-list">
+          <li><a href="../roadmap.md">Audited roadmap ledger</a></li>
+          <li><a href="../architecture/packages.md">Seven-package architecture</a></li>
+          <li><a href="../architecture/shikigami-domain-inventory.md">Domain inventory</a></li>
+          <li><a href="../workflow-versioning.md">Workflow versioning policy</a></li>
+          <li><a href="../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md">ADR 0012 · patch-guarded workflow evolution</a></li>
+          <li><a href="../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md">ADR 0013 · replay-safe capabilities</a></li>
+          <li><a href="../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md">ADR 0022 · receipt-owned delivery truth</a></li>
+          <li><a href="../adr/0033-recorded-agent-principals-key-durable-state.md">ADR 0033 · principal-keyed durable state</a></li>
+          <li><a href="../adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md">ADR 0034 · verified resolution envelopes</a></li>
+          <li><a href="../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md">ADR 0035 · semantic attention reservation</a></li>
+          <li><a href="../adr/0036-external-agent-actions-require-fresh-exact-authorization.md">ADR 0036 · fresh exact authorization</a></li>
+          <li><a href="../plans/64-realign-the-improvement-requests-corpus-pin-status-and-mori-registry.md">Plan 64 · corpus and registry audit</a></li>
+        </ul>
+        <details>
+          <summary>Status maintenance rule</summary>
+          <p>When an ExecPlan completes, update its parent MasterPlan in the same change. When an improvement request changes lifecycle, update its frontmatter, Status prose, bundle log, and review provenance together. Never rewrite a historical review outcome to describe later work.</p>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <footer class="shell footer">Audited 2026-09-21. Architecture decisions are linked to their authoritative ADRs; delivery status is reconciled in <a href="../roadmap.md">docs/roadmap.md</a>.</footer>
+
+  <script>
+    const buttons = document.querySelectorAll(".filter");
+    const plans = document.querySelectorAll(".plan-card");
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const filter = button.dataset.filter;
+        buttons.forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+        plans.forEach((plan) => plan.classList.toggle("hidden", filter !== "all" && plan.dataset.wave !== filter));
+      });
+    });
+  </script>
+</body>
+</html>
