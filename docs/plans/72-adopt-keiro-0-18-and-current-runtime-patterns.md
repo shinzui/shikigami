@@ -51,8 +51,10 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   dependency constraint and Mori dependency declaration, and proved the Hackage-only solver plan
   selects all seven Keiro packages at 0.18.0.0, `ephemeral-pg` 0.3.1.0, and
   `pg-migrate-test-support` 1.1.0.0 under the one scoped exception.
-- [ ] Milestone 2: regenerate with `keiro-dsl` 0.18, prove the change is a tool-version restamp
-  rather than a durable contract change, and retain only the justified hand-owned holes.
+- [x] (2026-09-21) Milestone 2: regenerated with `keiro-dsl` 0.18 and proved all 28 changed
+  artifacts are one-line provenance restamps. The strict check and Language 6 inspection pass,
+  the compatibility report has no findings, replay impact is neutral, the pattern census records
+  every 0.18 option, and a second scaffold reported every generated artifact unchanged.
 - [ ] Milestone 3: pass database-backed migration fixtures, behavior conformance, the full test
   suite, the black-box server suite, and the strict Keiro evolution gate.
 - [ ] Milestone 4: record the 0.18 pattern delta, cohort and rollout facts, update the relevant
@@ -83,6 +85,10 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   authoritative Hackage revision (`keiro >=0.17.0.0 && <0.19`) and produced the required 0.18
   plan; the local override was restored unchanged. Evidence: `cabal info kioku-core-0.7.0.0`
   reported the widened bound, and both HEAD and pinned release-only dry-runs resolved cleanly.
+- The first 0.18 scaffold changed exactly 28 files, with one removed and one added line in each;
+  every changed line was the generated version banner. A second scaffold reported every generated
+  path unchanged, and the generated diff hash remained
+  `c1cb828c0c35309c5105ca46c43745a1c68234019c190ce63364a7d3e633d4af`.
 
 
 ## Decision Log
