@@ -30,10 +30,10 @@ with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
 -- cohort; docs/dependency-cohort.md records the release matrix and evidence.
-index-state: 2026-09-19T01:06:24Z
+index-state: 2026-09-21T20:25:14Z
 -- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
 -- the toolchain and the runtime move in lockstep.
-constraints: keiro-dsl ==0.17.0.0
+constraints: keiro-dsl ==0.18.0.0
 
 -- ── Dependencies with no Hackage release ───────────────────────────────────
 -- handan — typed-program runtime used by the behavior runner. Bumped to the
@@ -88,4 +88,8 @@ package postgresql-libpq
 -- The third-party claude package still caps http-client-tls below 0.4, which
 -- the selected Crypton 1.1 / TLS 2.x cohort requires; its used API is
 -- compatible. Remove after a Hackage revision or release widens the bound.
-allow-newer: claude:http-client-tls
+-- pg-migrate-test-support 1.1.0.0 still caps ephemeral-pg below 0.3, while
+-- keiro-test-support 0.18 requires the compatible ephemeral-pg 0.3 API.
+allow-newer:
+  claude:http-client-tls,
+  pg-migrate-test-support:ephemeral-pg

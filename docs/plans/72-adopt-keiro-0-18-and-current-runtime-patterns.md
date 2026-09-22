@@ -10,6 +10,12 @@ provenance:
     model: "gpt-5.6-sol"
     harness: "codex-cli"
     at: 2026-09-22T03:15:38Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-22T03:47:42Z
+      mode: "implement"
+      note: "Implemented and qualified the Keiro 0.18 adoption plan"
 ---
 
 # Adopt Keiro 0.18 and current runtime patterns
@@ -41,8 +47,10 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
 - [x] (2026-09-21) Verified the Keiro 0.18.0.0 Hackage releases, upstream release tags, upgrade
   guide, current Shikigami dependency surfaces, generated ledger, relevant ADRs, workflow
   versioning rules, and the 2026-09-21 runtime-patterns revision.
-- [ ] Milestone 1: select the released 0.18 cohort, update every explicit dependency constraint
-  and Mori dependency declaration, and prove the solver selects the intended package set.
+- [x] (2026-09-21) Milestone 1: selected the released 0.18 cohort, updated every explicit
+  dependency constraint and Mori dependency declaration, and proved the Hackage-only solver plan
+  selects all seven Keiro packages at 0.18.0.0, `ephemeral-pg` 0.3.1.0, and
+  `pg-migrate-test-support` 1.1.0.0 under the one scoped exception.
 - [ ] Milestone 2: regenerate with `keiro-dsl` 0.18, prove the change is a tool-version restamp
   rather than a durable contract change, and retain only the justified hand-owned holes.
 - [ ] Milestone 3: pass database-backed migration fixtures, behavior conformance, the full test
@@ -69,6 +77,12 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   the read-model SQL implementation, and executed aggregate behavior witnesses. It lists no
   mapped consumer declaration. The new checked value policies therefore do not remove a current
   opaque codec hole.
+- An ignored `cabal.project.local` points at a co-developed Kioku checkout whose package bounds
+  predate Hackage revision 1 and still say `keiro ^>=0.17.0.0`. The first dry-run therefore
+  reported a false release-cohort conflict. Temporarily setting that override aside exposed the
+  authoritative Hackage revision (`keiro >=0.17.0.0 && <0.19`) and produced the required 0.18
+  plan; the local override was restored unchanged. Evidence: `cabal info kioku-core-0.7.0.0`
+  reported the widened bound, and both HEAD and pinned release-only dry-runs resolved cleanly.
 
 
 ## Decision Log
