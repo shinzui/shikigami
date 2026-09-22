@@ -1,11 +1,13 @@
 # Shikigami domain inventory
 
-This census was refreshed on 2026-09-18 for [plan 67](../plans/67-adopt-language-6-and-executable-nominal-domain-contracts.md), from the plan 65 baseline at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
+This census was refreshed on 2026-09-21 for
+[plan 72](../plans/72-adopt-keiro-0-18-and-current-runtime-patterns.md), from the
+plan 65 baseline at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 It describes executed ownership and the reasons other surfaces remain hand-owned. A declaration
 counts only when its generated contract is used by production code (ADR 0001).
 The workspace currently contains five explicitly declared Language 6 members: agent-run, approval,
 conversation, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
-Keiro 0.17 is a released package family, while its language registry truthfully
+Keiro 0.18 is a released package family, while its language registry truthfully
 labels Language 6 as the opt-in `Candidate CandidateLanguage` contract; Language 5
 remains its stable published compatibility contract.
 
@@ -40,6 +42,14 @@ The generated queue decoder feeds the real `RunJob` decoder before execution, an
 `WireCompatSpec` proves rejection of invalid refined IDs, depths, lineage, session and
 workflow IDs, plus unknown enum strings. This is executable boundary validation rather
 than an unchecked opaque root.
+
+Keiro 0.18 adds checked mappings for bare containers, calendar days, text sets and
+base16 bytes, plus UUIDv5-or-v7 identifier admission. None matches a current declared
+Shikigami surface: the queue adapter already validates richer application values, and
+the specification has no mapped consumer declaration. `RunEvidenceId` remains a
+TypeID-v7 domain through `typeIdV7Domain`; deterministic UUIDv5 workflow and
+deduplication identities are technical identities outside that declared domain. Their
+admission and durable bytes are unchanged by the release upgrade.
 
 `Shikigami.Workflow.Registry` in core composes agent runs, approval children and
 conversations. The worker consumes this exact registry; the approval integration
@@ -148,7 +158,7 @@ exception cleanup, no-op reapplication and startup ledger refusal.
 
 ## Evolution and conformance
 
-Run `nix develop -c just keiro-check`, `just keiro-inspect`, and generated conformance
+Run `nix develop --command just keiro-check`, `just keiro-inspect`, and generated conformance
 with the project-pinned tool. Check requires `--min-language 6`, `--deny-warnings`, binding
 and coverage reports, and `--fail-on-opaque`. Behavior obligations are nonzero and must
 execute; the former zero-obligation claim is obsolete. After committing reviewed generation,

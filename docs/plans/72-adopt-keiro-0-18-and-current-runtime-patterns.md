@@ -58,8 +58,9 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
 - [x] (2026-09-21) Milestone 3: passed the test-enabled full build, the nine-case migration smoke
   fixture on `ephemeral-pg` 0.3.1.0, generated conformance, all Cabal tests, migration schema
   isolation, the strict Keiro gate, and all four disposable Hurl requests.
-- [ ] Milestone 4: record the 0.18 pattern delta, cohort and rollout facts, update the relevant
-  ADR, perform the final ADR-distillation pass, and commit the qualification evidence.
+- [x] (2026-09-21) Milestone 4: recorded the 0.18 pattern delta, cohort and rollout facts,
+  updated ADR 0037, confirmed ADR 0038 needs no amendment, and committed the qualification
+  evidence and final distillation.
 
 
 ## Surprises & Discoveries
@@ -93,7 +94,7 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
 - The complete runtime qualification required no Haskell adaptation. The migration smoke suite
   passed all nine cases on the reconciled fixture, the executed behavior report retained 56 filled
   requirements with 50 verified and six honestly unverified keys, and `cabal test all` completed
-  successfully. The Hurl runner applied the unchanged 0032-entry Keiro migration plan to a fresh
+  successfully. The Hurl runner applied the unchanged Keiro plan through migration 0032 to a fresh
   database and passed both health and RFC 9457 problem-detail files (four requests total).
 
 
@@ -123,18 +124,46 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   Rationale: migration 0032's stop-the-writers procedure remains true for a 0.15-to-0.17 crossing,
   while 0.17-to-0.18 adds no migration and needs no such cutover.
   Date: 2026-09-21.
+- Decision: Permit ordinary binary rollback from a direct 0.18 deployment to the qualified 0.17
+  release until a later change writes a new durable contract.
+  Rationale: this adoption changes only dependency selection and generated provenance; it writes
+  no migration, workflow shape, wire policy, event codec, or identifier admission that 0.17
+  cannot read.
+  Date: 2026-09-21.
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Shikigami now resolves all seven Keiro packages at 0.18.0.0 from Hackage and reproduces its
+generated layer with the matching DSL. The intended durable-contract result held: all 28
+generated changes were provenance-banner restamps, the semantic diff reported no finding, and
+replay impact remained neutral. No Haskell runtime adaptation, workflow patch, queue drain,
+database migration, or identifier-domain change was required.
+
+The full executable qualification passed, including all Cabal tests, generated conformance,
+nine PostgreSQL migration-smoke cases on `ephemeral-pg` 0.3.1.0, migration schema isolation, the
+strict Keiro gate, and four disposable HTTP requests. The release also left the behavior record
+honest: 50 of 56 obligations are verified and the six identity/register equality guards remain
+explicitly unverified rather than being relabeled.
+
+The main operational lesson was to separate release evidence from developer-local overrides.
+The ignored Kioku checkout carried metadata older than Hackage revision 1 and initially hid the
+valid 0.18 solution. Release checks now state that `cabal.project.local` must not participate.
+The only new exception is narrowly scoped to the stale `pg-migrate-test-support` bound and has a
+clear retirement condition.
+
+The final ADR distillation updated ADR 0037 because it owns Keiro release and DSL adoption. ADR
+0038 remains unchanged: runtime registry ownership, migration verification, timer recovery, and
+maintenance bounds did not change. The separate rollout note records the direct 0.17-to-0.18
+binary path and preserves the earlier guarded-timer cutover for older deployments.
 
 
 ## Context and Orientation
 
 Shikigami is a seven-package Haskell service. A dependency **cohort** is the set of released
-package versions that Cabal must solve together. `cabal.project` selects the Hackage snapshot,
-adds the build-time `keiro-dsl` executable as an extra package, and pins that tool to 0.17.0.0.
+package versions that Cabal must solve together. Before this implementation, `cabal.project`
+selected the Hackage snapshot, added the build-time `keiro-dsl` executable as an extra package,
+and pinned that tool to 0.17.0.0.
 Runtime bounds appear in `shikigami-core/shikigami-core.cabal`,
 `shikigami-migrations/shikigami-migrations.cabal`, and
 `shikigami-server/shikigami-server.cabal`; unbounded direct Keiro dependencies in other package
@@ -145,7 +174,7 @@ record of what the solver selected.
 The checked durable specification is `domain/shikigami.keiro-workspace`, composing five
 `domain/*.keiro` members. Every member explicitly declares candidate Language 6. The generated
 Haskell, Cabal fragment, scaffold ledger, and conformance package live under
-`shikigami-core/src/`; their banners currently name `keiro-dsl 0.17.0.0`. `Justfile` defines
+`shikigami-core/src/`; their pre-upgrade banners named `keiro-dsl 0.17.0.0`. `Justfile` defines
 `keiro-check`, `keiro-inspect`, `keiro-scaffold`, `keiro-diff`, and the composed `keiro-gate`.
 The gate denies warnings, refuses opaque-boundary growth, checks deterministic regeneration,
 classifies compatibility across six durable surfaces, emits replay impact, and runs the generated
@@ -446,3 +475,7 @@ specification: `Shikigami.RunJobs.Generated.QueueCodec` owns the schema-version-
 `Shikigami.DanwaConversation.Generated.WorkflowRuntime` own stable workflow facts, and
 `Shikigami.RunEvidence.Conformance` owns the application-facing behavior gate. The expected
 implementation changes their generated provenance, not these interfaces or their durable values.
+
+Plan revision note (2026-09-21): implementation completed the four milestones, recorded the
+release-only solver caveat and executed qualification, and distilled the resulting rollout and
+ADR decisions. The implementation stayed within the original durable-contract scope.

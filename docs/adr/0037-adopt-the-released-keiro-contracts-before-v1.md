@@ -136,3 +136,29 @@ values, opaque upstream IDs, composite retry identities, or enums whose establis
 Aeson spellings differ from DSL wire words. Production decoding still reaches the
 real domain parsers before execution, and negative wire tests pin that admission.
 No workflow step shape, name, result type, queue identity, or JSON envelope changed.
+
+## Keiro 0.18 amendment — 2026-09-21
+
+Shikigami selects all seven released Keiro 0.18.0.0 packages in lockstep. Their
+release tags share commit `b12bbdd7abc8c1a59e7a09891471ef182a4d801a` in
+`mori://shinzui/keiro`. Regeneration with the matching DSL changed 28 generated
+artifacts only by replacing their 0.17 provenance banner with 0.18. The semantic
+compatibility report has no findings and classifies replay impact as neutral.
+
+The release's checked bare-container, day, text-set and base16 mappings do not
+match a current declared consumer surface, so this amendment does not create one.
+`RunEvidenceId` remains a TypeID-v7 domain; UUIDv5 workflow and deduplication values
+remain technical identities outside it. Admitting v5 in that declared domain or
+changing a queue binding requires a separate durable-contract decision and rollout.
+
+`keiro-test-support 0.18.0.0` requires `ephemeral-pg >=0.3.1 && <0.4`, while
+`pg-migrate-test-support 1.1.0.0` still caps it below 0.3. The project carries only
+the scoped `pg-migrate-test-support:ephemeral-pg` relaxation and proves the pair by
+running the nine-case PostgreSQL migration smoke suite. The exception retires when
+released metadata admits 0.3.1.
+
+A direct 0.17-to-0.18 deployment is a lockstep binary rollout. It adds no database
+migration, workflow shape, queue envelope, event codec, or identifier admission, so
+ordinary rollback to the qualified 0.17 binaries remains valid until a later change
+writes a new contract. Deployments starting before 0.17 must first follow the guarded
+timer cutover in `docs/operations/keiro-0.17-rollout.md`.

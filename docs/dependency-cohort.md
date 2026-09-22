@@ -10,36 +10,44 @@ the cohort moves. The only exact constraint is `keiro-dsl`, which nothing links
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
-## Current Keiro 0.17 target
+## Current Keiro 0.18 target
 
-MasterPlan 12 advances the runtime to this coherent selection:
+Plan 72 advances the runtime to this coherent selection:
 
 | Family | Selected release |
 |---|---|
-| `keiro`, `keiro-core`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, `keiro-pgmq`, `keiro-test-support` | `0.17.0.0` |
+| `keiro`, `keiro-core`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, `keiro-pgmq`, `keiro-test-support` | `0.18.0.0` |
 | `kioku-api`, `kioku-core`, `kioku-migrations` | `0.7.0.0` |
 | `pgmq-core`, `pgmq-hasql`, `pgmq-effectful`, `pgmq-config` | `0.6.1.0` |
 | `shibuya-pgmq-adapter` | `0.16.0.0` |
 | `shikumi`, `shikumi-tools`, `shikumi-trace` | `0.4.0.0`, `0.4.0.0`, `0.3.0.0` |
 | `baikai`, `baikai-claude`, `baikai-openai`, `baikai-effectful` | `0.7.0.0`, `0.7.0.0`, `0.7.0.0`, `0.4.0.1` |
+| `kiroku-store`, `kiroku-store-migrations`, `shibuya-kiroku-adapter` | `0.8.0.1`, `0.4.0.0`, `0.5.1.2` |
+| `shibuya-core`, `shibuya-kafka-adapter`, `kafka-effectful` | `0.9.0.3`, `0.9.0.1`, `0.3.1.0` |
+| `ephemeral-pg`, `pg-migrate-test-support` | `0.3.1.0`, `1.1.0.0` |
 
 All seven Keiro releases are on Hackage and their release tags resolve to commit
-`11e0bba4f634ac6fa4526e2814bd5a8177e3f050` in `mori://shinzui/keiro`.
-Kioku's release commit is
-`37c3acd2d16e18c49217bc6189ea20b496907e3b`; its 0.7 Cabal files admit Keiro
-0.17 and move AI execution to an explicit host-owned runtime. Shikigami loads that
-runtime from `KIOKU_AI_CONFIG`; an absent or disabled query-embedding feature makes
-hybrid recall fall back to keyword search.
+`b12bbdd7abc8c1a59e7a09891471ef182a4d801a` in `mori://shinzui/keiro`.
+Kioku 0.7.0.0 Hackage revision 1, published on 2026-09-21, admits
+`keiro >=0.17 && <0.19`; no Kioku source override is part of the release plan.
+Shikigami loads Kioku's host-owned AI runtime from `KIOKU_AI_CONFIG`; an absent or
+disabled query-embedding feature makes hybrid recall fall back to keyword search.
 
 `baikai-effectful` is deliberately fixed at 0.4.0.1. Version 0.4.0.2 requires
 `effectful-core ^>=2.7`, while the selected Keiro/Kioku releases require a version
 below 2.7. Kioku 0.7 admits 0.4.0.1, so no `allow-newer` is needed.
 
-At authoritative index-state `2026-09-19T01:06:24Z`, Hackage exposes all three
-Kioku 0.7.0.0 packages. A detached Shikigami worktree with no
-`cabal.project.local` downloaded them from Hackage, built every application
-component, and passed the aggregate qualification. The older Plan 65 matrix below
-remains historical evidence for the 0.15 baseline used by the real upgrade fixture.
+At authoritative index-state `2026-09-21T20:25:14Z`, Hackage exposes the complete
+selection. Release-only resolution, with the ignored developer-local
+`cabal.project.local` absent, selected every package above and passed the aggregate
+qualification. The older Plan 65 matrix below remains historical evidence for the
+0.15 baseline used by the real upgrade fixture.
+
+Two scoped metadata exceptions remain. `claude:http-client-tls` covers the existing
+third-party stale cap. `pg-migrate-test-support:ephemeral-pg` reconciles
+`keiro-test-support 0.18`'s required `ephemeral-pg >=0.3.1 && <0.4` with
+`pg-migrate-test-support 1.1.0.0`'s stale `<0.3` cap. The 0.18 migration smoke suite
+passes against 0.3.1.0; retire the second exception when released metadata admits it.
 
 
 Plan 65 adoption starts at `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
@@ -71,18 +79,20 @@ Two rules govern changes:
    stale package/bound pair, carry compatibility evidence here, and retire as
    soon as corrected release metadata is published.
 
-On 2026-09-19 the 37-row exact `constraints:` block was replaced by
-`index-state: 2026-09-19T01:06:24Z` plus the `keiro-dsl` pin. Against the
-previous plan, only five packages moved, all to patch releases admitted by
-existing bounds: `kafka-effectful` 0.3.1.0, `kiroku-store` 0.8.0.1,
-`shibuya-core` and `shibuya-kafka-adapter` 0.9.0.1, and `shibuya-kiroku-adapter`
-0.5.1.2. `baikai-effectful` still resolves to 0.4.0.1 without a pin, because the
-`effectful-core` bounds exclude 0.4.0.2.
+On 2026-09-21 the snapshot advanced to `2026-09-21T20:25:14Z` and the
+`keiro-dsl` pin advanced to 0.18.0.0. Compatible patch releases selected by the
+snapshot include `kafka-effectful` 0.3.1.0, `kiroku-store` 0.8.0.1,
+`shibuya-core` 0.9.0.3, `shibuya-kafka-adapter` 0.9.0.1, and
+`shibuya-kiroku-adapter` 0.5.1.2. `baikai-effectful` still resolves to 0.4.0.1
+without a pin because the `effectful-core` bounds exclude 0.4.0.2.
 
 Regenerate the resolved-version evidence with:
 
 ```bash
+# Ensure no developer-local cabal.project.local participates in this release check.
 nix develop --command cabal build all --dry-run
+jq -r '."install-plan"[] | [."pkg-name", ."pkg-version"] | @tsv' \
+  dist-newstyle/cache/plan.json | sort
 ```
 
 Use the Nix development environment for native libraries and PostgreSQL tools.
@@ -120,7 +130,7 @@ referring to them from anywhere durable.
 | `biscuit` | `mori://shinzui/biscuit-haskell` |
 
 
-## Release matrix
+## Historical Plan 65 release matrix
 
 Every row below is resolved from Hackage. "Was" is the version this repository
 pinned before the August 2026 upgrade (the July cohort recorded by plan 47).
@@ -200,15 +210,18 @@ declared as `extra-packages: keiro-dsl` in `cabal.project` rather than as a
 Hackage package as if it were local, which is what lets `cabal run keiro-dsl --
 check ...` resolve to the pinned version from inside this project instead of
 depending on a developer's `PATH` or on a separate keiro checkout. The
-`constraints:` row pins it to the same `0.15.0.0` as the runtime packages,
-because the toolchain and the runtime move in lockstep: `keiro-dsl 0.15.0.0`
-declares `keiro-core ^>=0.15.0.0` and `keiki >=0.9 && <0.10`, both of which this
-cohort already satisfies. Adopted by
+current exact constraint pins it to the same 0.18.0.0 as the runtime packages,
+because the toolchain and runtime move in lockstep. The historical matrix records
+the initial 0.15.0.0 adoption. Adopted by
 `docs/plans/39-adopt-a-checked-keiro-dsl-specification-and-evolution-gate.md`.
 
 ### Current release status
 
-No compatible release line in the released cohort matrix is pending adoption. The unpublished
+Keiro 0.18.0.0 is the current released line selected by Shikigami. Its seven tags
+share commit `b12bbdd7abc8c1a59e7a09891471ef182a4d801a`; the 0.18 qualification
+records banner-only regeneration, replay-neutral compatibility, the PostgreSQL
+fixture, all application tests, and disposable HTTP checks. No compatible Keiro
+release line is pending adoption. The unpublished
 action-authorization dependencies are recorded separately below. Hackage and upstream both
 identify `keiki-0.9.1.0` and `keiki-codec-json-0.9.1.0` as current (tag
 `v0.9.1.0`, commit `15bc83b1eb38d78488862f24bb1d873aa32a919a`, released
@@ -225,9 +238,11 @@ and three Kioku packages on 2026-09-07 and adopted Keiro 0.15.0.0 with Kioku
 0.5.2.0. Kioku retains the Baikai 0.6, Shikumi 0.3.0.3 and `http-client-tls` 0.4
 compatibility introduced by its preceding 0.5.1.0 release.
 
-One narrow `http-client-tls` exception remains: the third-party `claude` package caps the
-dependency below 0.4 even though its used API compiles against 0.4. It retires after a Hackage
-revision or replacement release widens the bound. The four co-developed exceptions for
+Two narrow exceptions remain. The third-party `claude` package caps
+`http-client-tls` below 0.4 even though its used API compiles against 0.4. It retires after a
+Hackage revision or replacement release widens the bound. `pg-migrate-test-support 1.1.0.0`
+caps `ephemeral-pg` below 0.3 while the qualified Keiro fixture requires 0.3.1;
+that exception retires when corrected release metadata is published. The four co-developed exceptions for
 `baikai`, `baikai-claude`, `baikai-openai`, and `shikumi-tools` were removed on 2026-09-19
 because their released metadata now admits 0.4. The third-party `haxl:time` exception was
 removed at the same time because `haxl` is no longer in the build plan.
@@ -295,7 +310,7 @@ Each row states why the cohort member is safe to adopt, and where the proof live
 
 | Concern | Evidence |
 |---|---|
-| Kioku pairs with the released Keiro/Keiki | `kioku-core-0.5.2.0` declares `keiki ^>=0.9.0.0`, `keiro ^>=0.15.0.0`, and `keiro-core ^>=0.15.0.0`; `kioku-migrations-0.5.2.0` declares `keiro-migrations ^>=0.15.0.0`. The solver selects that exact released cohort. |
+| Kioku pairs with the released Keiro/Keiki | Kioku 0.7.0.0 Hackage revision 1 declares `keiro >=0.17 && <0.19` and matching bounds for Keiro Core and migrations. The release-only solver selects Kioku 0.7.0.0 with Keiro 0.18.0.0 and Keiki 0.9.1.0. |
 | Kioku's own codec regression guard | Kioku 0.2.0.0 adds `Kioku.CodecCompatSpec`, which decodes literal pre-upgrade event payloads under the new cohort. |
 | Keiro terminal outbox rejection | Keiro 0.14 adds bounded `PublishRejection` values, `PublishRejected`, terminal `rejected` rows, rejection audit fields, and a `rejected` publisher-summary count. Shikigami constructs code `sink.permanent-failure` through `mkPublishRejection`; it never mutates Keiro-owned tables. |
 | Keiro snapshot state-shape hash | `StateCodec` gains `stateShapeHash`; migration `0019-keiro-snapshots-state-shape-hash.sql` adds the column and existing rows take the empty sentinel, invalidating each snapshot exactly once on next hydration. Journals and events are untouched. |
@@ -339,33 +354,27 @@ $ nix develop --command cabal build all --dry-run
 Build profile: -w ghc-9.12.4 -O1
 ```
 
-The plan selects exactly the pinned and transitive versions in the matrix
-above, including Kioku 0.5.2.0, Shikumi 0.3.0.3, Baikai 0.6.0.0,
-`http-client-tls` 0.4.0, both Keiki packages at 0.9.1.0, and
-`kafka-effectful` 0.3.0.0 from Hackage. The temporary TLS metadata exceptions
-are listed under Current release status; `haxl:time` remains the only unrelated
-exception.
+At index-state `2026-09-21T20:25:14Z`, the release-only plan selects all seven
+Keiro packages at 0.18.0.0, Kioku at 0.7.0.0, `ephemeral-pg` 0.3.1.0,
+`pg-migrate-test-support` 1.1.0.0, Kiroku Store 0.8.0.1, Shibuya Core 0.9.0.3,
+and `shibuya-kiroku-adapter` 0.5.1.2. `cabal.project` contains only the two
+scoped exceptions described above.
 
 ```bash
-$ nix develop --command cabal test all -j1
-keiro-shikigami-conformance PASS   30 checks
-shikigami-agent-test        PASS   29 tests
-shikigami-api-test          PASS   15 tests
-shikigami-client-test       PASS    3 tests
-shikigami-core-test         PASS  599 tests
-shikigami-migrations-smoke  PASS    2 tests
-shikigami-migrations-test   PASS    5 tests
-shikigami-server-test       PASS   46 tests
-shikigami-workers-test      PASS   81 tests
+$ nix develop --command cabal test all --test-show-details=direct
+All test suites passed
+$ nix develop --command cabal test shikigami-migrations:shikigami-migrations-smoke --test-show-details=direct
+9 examples, 0 failures
 ```
 
-810 checks across nine Shikigami suites passed on 2026-08-29 with Kioku 0.5.1.0,
-Shikumi 0.3.0.3, Baikai 0.6.0.0, and `http-client-tls` 0.4.0 selected. The two
-sibling Kikan-En package suites also passed.
+The 0.18 qualification passed on 2026-09-21. Generated conformance filled all 56
+required behavior obligations, verified 50, and retained six expected honest
+unverified identity/register equality guards. The strict Keiro gate was
+replay-neutral, migration isolation passed, and the disposable Hurl suite passed
+four requests. See `docs/evidence/keiro-0.18/qualification.md`.
 
-Run the suites with `-j1`. Under `-j`, the database-backed suites each stand up
-an ephemeral PostgreSQL and contend, which makes `shikigami-core-test` fail
-intermittently. The 810-check run above is historical August evidence. Plan 65 splits core
+Run the suites with `-j1` when local PostgreSQL fixtures contend. The 810-check
+run previously recorded here is historical August evidence. Plan 65 splits core
 unit, PostgreSQL, domain and diagram suites; each PostgreSQL example clones its
 suite's migrated template through migrations:test-support.
 
