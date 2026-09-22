@@ -55,8 +55,9 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   artifacts are one-line provenance restamps. The strict check and Language 6 inspection pass,
   the compatibility report has no findings, replay impact is neutral, the pattern census records
   every 0.18 option, and a second scaffold reported every generated artifact unchanged.
-- [ ] Milestone 3: pass database-backed migration fixtures, behavior conformance, the full test
-  suite, the black-box server suite, and the strict Keiro evolution gate.
+- [x] (2026-09-21) Milestone 3: passed the test-enabled full build, the nine-case migration smoke
+  fixture on `ephemeral-pg` 0.3.1.0, generated conformance, all Cabal tests, migration schema
+  isolation, the strict Keiro gate, and all four disposable Hurl requests.
 - [ ] Milestone 4: record the 0.18 pattern delta, cohort and rollout facts, update the relevant
   ADR, perform the final ADR-distillation pass, and commit the qualification evidence.
 
@@ -89,6 +90,11 @@ latest `keiro-runtime-patterns` guidance will be recorded as durable project evi
   every changed line was the generated version banner. A second scaffold reported every generated
   path unchanged, and the generated diff hash remained
   `c1cb828c0c35309c5105ca46c43745a1c68234019c190ce63364a7d3e633d4af`.
+- The complete runtime qualification required no Haskell adaptation. The migration smoke suite
+  passed all nine cases on the reconciled fixture, the executed behavior report retained 56 filled
+  requirements with 50 verified and six honestly unverified keys, and `cabal test all` completed
+  successfully. The Hurl runner applied the unchanged 0032-entry Keiro migration plan to a fresh
+  database and passed both health and RFC 9457 problem-detail files (four requests total).
 
 
 ## Decision Log
