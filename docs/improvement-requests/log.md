@@ -2,6 +2,8 @@
 
 ## 2026-09-26
 
+* **Addition**: IR-13 proposes optional major-task tracking without Rei and records the current
+  memory, Flow, overlay, replay, and authorization boundaries for further design.
 * **Addition**: IR-12 requests replay-safe Shikumi decision steps within durable Flows and
   governed model selection per step, with pinned policy, replay, and mixed-model evidence.
 
