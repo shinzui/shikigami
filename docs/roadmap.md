@@ -1,11 +1,12 @@
 # Shikigami roadmap
 
-Status date: 2026-09-21.
+Portfolio audit date: 2026-09-21; IR-12 added 2026-09-26.
 
 Architecture and delivery decision view: [HTML roadmap](artifacts/roadmap.html).
 
-This roadmap reconciles `docs/reviews`, `docs/improvement-requests`, `docs/masterplans`, and
-`docs/plans` against their progress records, Git history, and the current repository tree. A plan
+The 2026-09-21 portfolio audit reconciled `docs/reviews`, `docs/improvement-requests`,
+`docs/masterplans`, and `docs/plans` against their progress records, Git history, and the
+repository tree. The snapshot below also includes the newly proposed IR-12. A plan
 is complete only when its own outcomes and evidence support completion. A review outcome remains
 historical evidence about its `reviewedSha`; the disposition below says whether later work has
 answered it.
@@ -16,7 +17,7 @@ answered it.
 | --- | ---: | ---: | ---: |
 | MasterPlans | 8 | 4 | 0 |
 | ExecPlans | 60 | 3 | 8 |
-| Improvement requests | 3 | 2 | 6 |
+| Improvement requests | 3 | 2 | 7 |
 | Change-requesting reviews | 1 resolved | 4 open | — |
 
 The completed MasterPlans are 1 through 5, 8, 11, and 12. The active coordination documents are:
@@ -114,6 +115,7 @@ or sequences them; do not let their size obscure the correctness and service-bou
 | IR-9 — Principal-keyed continuity and attribution | Completed | Plan 54 |
 | IR-10 — Terminal run status over HTTP | Proposed | Depends on IR-8's run identity |
 | IR-11 — Governed mutable repository workspaces | Proposed | Sequence after IR-8/IR-10 and with plan 48 |
+| IR-12 — Shikumi decisions in durable Flows | Proposed | Needs a plan for replay-safe program invocation and per-step model selection |
 
 ## Review disposition
 
