@@ -47,6 +47,7 @@ The deliverables are a repeatable qualification command, an isolated persistent 
 - [x] (2026-10-06 UTC) Run the migration schema-isolation check; application SQL passes, with its documented checksum-immutable historical exception.
 - [x] (2026-10-06 UTC) M1: Implement the isolated committed-project helper, bounded private-evidence driver, and parser tests; reproduce both authoring failures and run fresh build, regression, PostgreSQL migration and workflow checks. Initial failures and successful retries are recorded in the readiness report.
 - [x] (2026-10-06 UTC) M2 preparation: Export the selected 354-package runtime closure, exact secure-index Cabal descriptor bytes, repository hashes, and checksummed Kikan-En source; declare the requested per-role outputs and qualification fixtures. Package discovery and default derivation evaluation now pass.
+- [x] (2026-10-06 UTC) M2 packaging proof: four immutable roles build at `685a410`; installed version/help, schema imports and both reporter skills validate outside the checkout. Correct the at-risk fallback to the existing Flow's `role_relationship_owner` and validate the changed source fixture with the installed CLI; that asset delta is explicitly separate from the full build revision.
 - [ ] M2: Complete the necessary plan-31 packaging slice and install isolated, supervised host roles through the existing host bootstrap plan.
 - [ ] M3: Deliver a real-model service-health report and prove scoped learning and recall.
 - [ ] M4: Prove redelivery, process restart, sink failure, and authorization refusal with bounded fault rehearsals.
@@ -54,6 +55,12 @@ The deliverables are a repeatable qualification command, an isolated persistent 
 
 
 ## Surprises & Discoveries
+
+The at-risk fixture must declare a fallback when using `AreaOwner`; Dhall type
+checking alone does not run `Shikigami.Sink.Validate`. The existing Flow declares
+`role_relationship_owner`, so the fixture uses that same target. Its test recipient
+and corresponding grant must exist; a deployment-wide recipient setting or payload
+does not override that Flow declaration.
 
 The operator confirmed that Kikan-En, Shomei, Kawa, Danwa and Kizashi are not
 running. The required service order is PostgreSQL 18 and the two authorization
@@ -127,7 +134,7 @@ Decision (2026-10-06 UTC): Build the seven packages in one offline Cabal graph f
 ## Outcomes & Retrospective
 
 
-M1 establishes a fresh successful Cabal build and regression/migration/workflow checks for the committed Keiro 0.18 cohort, with native-shell and test-scheduling corrections recorded separately from the failed baseline. Packaging evaluates the requested roles and contains a frozen source closure; its full Nix build is still being qualified. Runtime qualification remains unperformed because authorization/test-service configuration is unavailable. The readiness report records those gates explicitly; neither local workload completion nor production readiness is claimed.
+M1 establishes a fresh successful Cabal build and regression/migration/workflow checks for the committed Keiro 0.18 cohort, with native-shell and test-scheduling corrections recorded separately from the failed baseline. Four immutable Nix roles and installed reporter assets pass at `685a410`. The corrected at-risk recipient is a separately validated source asset delta; select its corrected revision for host deployment. Runtime qualification remains unperformed because authorization/test-service configuration is unavailable. The readiness report records those gates explicitly; neither local workload completion nor production readiness is claimed.
 
 
 ## Context and Orientation

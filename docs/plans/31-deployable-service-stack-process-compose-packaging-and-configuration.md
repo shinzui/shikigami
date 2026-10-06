@@ -57,11 +57,15 @@ asserts the rendered service commands.
       package with named CLI/server/worker/migration outputs sharing a frozen
       seven-package runtime closure; declare installed schema and qualification assets.
       Role discovery and default derivation evaluation pass.
-- [ ] Plan-79 packaging acceptance: finish the immutable build and prove installed
-      binaries and assets outside the checkout. This slice does not complete the
+- [x] (2026-10-06 UTC) Plan-79 packaging build: four immutable roles build at
+      `685a410`; installed CLI/server/worker versions, migration help, Dhall imports
+      and reporter manifests/skills pass outside the checkout. The follow-up at-risk
+      fallback correction passes installed-CLI validation as a source asset delta.
+- [ ] Plan-79 host acceptance: select the corrected fixture revision, build it for
+      deployment and prove configured startup. This slice does not complete the
       process-compose, NixOS or graceful-drain milestones below.
 
-- [ ] Prerequisites: plans 36, 37, and 38 complete; six-package outputs, Settei config, and pg-migrate CLI/manifest/plan are stable.
+- [ ] Prerequisites: plans 36, 37, and 38 complete; the current seven-package graph and per-role outputs, Settei config, and pg-migrate CLI/manifest/plan are stable.
 
 - [ ] M1: Kafka broker (KRaft single-node) added to the dev shell via `flake.module.nix` and to
       `process-compose.yaml`, with an exec readiness probe; broker reachable on 127.0.0.1:9092.
@@ -90,7 +94,10 @@ contains 354 runtime packages. A compatible Kikan-En client/contract commit is
 unpublished, requiring a checked-in, checksummed source archive. Staging all
 dependency sources as local goals otherwise enables unrelated executables;
 packaging disables only components absent from the selected runtime closure.
-The full immutable build and outside-checkout asset proof remain pending.
+The immutable build and installed reporter asset proof pass at `685a410`.
+The subsequent at-risk fallback asset is separately validated by that installed
+CLI; use its corrected source revision for host deployment. Configured host startup
+remains blocked by unavailable trust and integration configuration.
 
 
 ## Decision Log
@@ -135,7 +142,7 @@ The full immutable build and outside-checkout asset proof remain pending.
   (flake.nix:21-24), and sibling kikan services deploy the same way. A NixOS module composes
   with a host's existing Postgres/Kafka services and needs no registry or container runtime.
   A container image remains cheap to add later (`pkgs.dockerTools.buildImage` over the same
-  `packages.default`, nix/haskell.nix:62), and the configuration reference is written so either
+  `packages.shikigami-runtime`), and the configuration reference is written so either
   packaging consumes identical env vars and flags. Container-only packaging was rejected
   because nothing in the target environment runs containers today.
   Date: 2026-07-08
@@ -170,9 +177,11 @@ The full immutable build and outside-checkout asset proof remain pending.
 
 ## Outcomes & Retrospective
 
-The plan-79 packaging slice now evaluates named roles and fixes the invalid root
-default. Compilation and installed-asset acceptance are still pending. No composed
-stack or NixOS deployment completion is claimed; their milestones remain open.
+The plan-79 packaging slice fixes the invalid root default and compiles all named
+roles. Outside-checkout version/help, schema and reporter skill validation pass at
+`685a410`; the corrected at-risk fixture separately passes installed-CLI validation.
+Select that corrected source for host startup when test configuration is available.
+No composed stack or NixOS deployment completion is claimed; their milestones remain open.
 
 
 ## Context and Orientation
@@ -231,12 +240,15 @@ compatibility bindings; command modules do not read environment variables direct
 Everything Kafka-related is a flag, not an env var — which is why the composed stack can pin
 the broker to `127.0.0.1:9092` and match the flag defaults exactly.
 
-On the nix side: `flake.nix` is a flake-parts flake wrapping `github:shinzui/haskell-nix-dev`
-(seihou); `nix/haskell.nix` exposes `packages.default` via `callCabal2nix` at line 62 and the
-dev shells, and declares the extension option `haskellProject.extraDevPackages` (line 8);
-`flake.module.nix.example` is the template for the unmanaged, committed extension file
-`flake.module.nix`, which `flake.nix:41` imports when present. Today there is no
-`flake.module.nix`, no NixOS module, and no container packaging of any kind.
+On the Nix side, `flake.nix` wraps
+`mori://shinzui/haskell-nix-dev/repos/haskell-nix-dev` (Seihou). The managed
+`nix/haskell.nix` owns development shells and the `haskellProject.extraDevPackages`
+extension. The committed, unmanaged `flake.module.nix` now exports the CLI default,
+named deployment roles and the complete `shikigami-runtime` bundle through
+`nix/qualification-package.nix`. The former root `callCabal2nix` declaration was
+removed because the root has no Cabal package. A future NixOS module must use the
+complete runtime bundle as its default package, since the CLI role exposes only
+the CLI executable. No NixOS module or container packaging exists yet.
 
 Two sibling plans matter here. `docs/plans/29-health-liveness-and-worker-loop-supervision.md`
 (EP-2 of this MasterPlan) adds `/health/live` and `/health/ready` HTTP endpoints to the long-running
@@ -653,7 +665,7 @@ The NixOS module's option interface (the names operators and later plans program
 ```nix
 services.shikigami = {
   enable = true;
-  package = <derivation>;            # default: this flake's packages.default
+  package = <derivation>;            # default: this flake's packages.shikigami-runtime
   configSources = [ "/etc/shikigami/config.yaml" ];
   secretDirectories = [ "/run/secrets/shikigami" ];
   environmentFile = "/run/secrets/shikigami.env";  # explicit Settei legacy bindings/secrets; standard OTEL_* remains SDK-owned

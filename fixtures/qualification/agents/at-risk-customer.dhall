@@ -11,7 +11,7 @@ in  A.Agent::{
         , priority = A.Priority.High
         , importance = 80
         , recipientFrom = A.RecipientFrom.AreaOwner
-        , defaultRecipient = None Text
+        , defaultRecipient = Some "role_relationship_owner"
         , intentTemplate = "Qualification customer risk"
         , extraContextTags = [] : List Text
         }

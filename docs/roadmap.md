@@ -34,8 +34,9 @@ The completed MasterPlans are 1 through 5, 8, 11, and 12. The active coordinatio
 ### Local qualification workload — 2026-10-06
 
 [Plan 79](plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md)
-has fresh successful Cabal build, regression, migration and workflow checks; immutable
-packaging remains under validation and the live workload is blocked. The operator
+has fresh successful Cabal build, regression, migration and workflow checks; four
+immutable roles and installed reporter assets pass at `685a410`, and the live workload
+is blocked. Use the corrected at-risk fixture revision for host deployment. The operator
 confirmed that the required integration services are not running. Start PostgreSQL 18,
 Shomei and Kikan-En first, then a test Kawa destination with Anthropic credentials,
 then test Danwa and Kizashi for durable human waits. Configure real trust and grants

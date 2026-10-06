@@ -23,7 +23,10 @@ Logs and generated build products remain outside this repository.
 | Workflow specification | pass | `nix develop --command cabal run -v0 --project-file=PROJECT keiro-dsl -- check domain/shikigami.keiro-workspace --min-language 6 --deny-warnings --explain-bindings --report-out FILE --coverage-report FILE --fail-on-opaque`; `workflow-check.log`, `keiro-check.json`, `keiro-coverage.json` |
 | Project relocation tests | pass | `python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v`; preserves pins and overrides, rejects unsupported relocation |
 | New per-role evaluation | pass | `nix eval --json .#packages.aarch64-darwin --apply builtins.attrNames` lists CLI, server, worker, migrate and optional roles; default derivation evaluation succeeds |
-| Immutable Nix build | pending | `nix build --no-link .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate`; preliminary solve/staging corrections recorded in `nix-build-offline.log` and `nix-build-components.log`; compilation attempt in `nix-build-closure.log` was interrupted to validate final packaging inputs |
+| Immutable Nix build | pass at `685a410` | `nix build --no-link --print-build-logs .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate`; `nix-build-685a410.log` |
+| Installed roles and reporter assets | pass at `685a410` | `nix build --no-link --print-build-logs --file EVIDENCE/installed-check.nix`; `installed-check-685a410.log`: outside-checkout CLI/server/worker version, migration help, all Dhall imports and both reporter manifests/skills validate |
+| Corrected at-risk fixture | pass; source asset delta | `nix run 'git+file:///PATH/TO/shikigami?rev=685a4101a6a1b8d41f15d0745a4873ce96876435#shikigami' -- validate /PATH/TO/shikigami/fixtures/qualification/agents/at-risk-customer.dhall` from `/tmp`; `corrected-at-risk-validate.log` |
+| Host driver without deployment inventory | blocked | `bash tools/qualification/check.sh --phase host --config PATH --artifact-dir PATH`; separate private `20261006T043353Z-host-70902/summary.json` |
 
 `PROJECT` is the exact isolated path recorded in `baseline.json`. The seven runtime
 packages and mutable sibling revisions are recorded there. Migration smoke provisions
@@ -34,6 +37,15 @@ test now blocks on an empty MVar and has an independent 2-second bound. All 405 
 tests passed after that change; runtime timeout code and workflow bodies were unchanged.
 Other suites passed 5 migration composition, 9 migration smoke, 88 worker, 47 server and
 197 PostgreSQL core cases. Generated conformance passed.
+
+The immutable artifact tested is exactly `685a4101a6a1b8d41f15d0745a4873ce96876435`.
+After that build, the at-risk manifest's missing fallback was corrected to
+`role_relationship_owner` and validated using that installed CLI. This is a fixture
+data change, not a runtime code change; the full immutable build was not repeated
+for it. The tested `685a410` bundle must not be used as the final approval fixture.
+Select and build the corrected source revision for the host trial. Preliminary
+packaging failures remain in `nix-build-offline.log` and `nix-build-components.log`;
+the earlier compilation attempt in `nix-build-closure.log` was interrupted.
 
 ## Source and packaging identity
 
@@ -61,9 +73,20 @@ credential-file paths. Kafka, Kubernetes and a coding executor are outside this
 qualification workload. The independent packaging build does not require these
 services to be live.
 
+| Startup order | Required runtime or configuration | Qualification unlocked |
+|---|---|---|
+| 1 | PostgreSQL 18 with dedicated `shikigami_qualification` database; Shomei machine client; Kikan-En `POST /v1/agent-actions/authorize` with trusted En issuer keys, schema hashes and exact action grants | Persistent server/worker deployment and real authorization/refusal |
+| 2 | Test Kawa URL, authorized source segment and destination credentials; Anthropic API access | Real-model reporter, scoped learning/recall and delivery receipt |
+| 3 | Test Danwa URL and agent participant; test Kizashi URL with `role_relationship_owner` recipient; corresponding grants and destination credentials | Durable approval, rejection and timeout trials |
+
+Shikigami runs as distinct supervised server and worker jobs after configuration
+and migration. Its local directory fixture supplies the qualification principals.
+Protected publication requires the full authorization group documented in
+[configuration](../../operations/configuration.md); missing trust must continue to deny.
+
 | Priority | Scope and status | Reproducer / impact | Owner and next acceptance |
 |---|---|---|---|
-| 1 | Local scenario: pending immutable build | Run the four-role Nix build; package evaluation alone does not prove compilation or installed assets | [Plan 31](../../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md): complete offline build and outside-checkout startup/configuration/fixture checks |
+| 1 | Local scenario: compiled package; host startup pending | Four immutable roles and installed reporter assets pass at `685a410`; select the corrected fixture revision before host deployment, then prove configured startup | [Plan 31](../../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md): retain the source-cohort proof and finish installed configuration/startup acceptance with the host owner |
 | 2 | Local scenario: blocked authorization and destinations | No qualification runtime config, test-service endpoints, issuer keys/schema hashes or machine credential paths are declared; protected delivery must deny | `mori://shinzui/dotfiles.nix/plans/4-bootstrap-persistent-shikigami-agents-and-validate-service-migration-learning`: configure exact test trust and destinations, migrate dedicated DB, install distinct launchd jobs and prove restart |
 | 3 | Local scenario: unproven live/report/recovery/waits | No real-model run, recorded recall, live receipt, fault rehearsal or supervised approval trial has occurred | [Plan 79](../../plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md): execute each bounded phase after the first two gates |
 | 4 | Selected production practice review: open known defects | Attention transaction and resolver entitlement acceptance remains open; the reporter catalog does not enable this feature | [Plan 60](../../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md), [plan 61](../../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md): finish their regressions before enabling practice review |
@@ -71,8 +94,11 @@ services to be live.
 | 6 | Later observation/coding/external operations | Supplied snapshots do not prove agent-owned Kubernetes observation or repository mutation | Plans [77](../../plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md), [48](../../plans/48-add-a-portable-one-off-repository-agent-harness.md), [78](../../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md) and their upstream prerequisites, selected only for the next workload |
 
 Area-owner and subject-owner recipient strategies currently return no resolved recipient
-in `Shikigami.Sink.Recipient`. The at-risk Flow therefore needs an explicitly configured
-test fallback recipient. An activity payload alone does not prove directory routing.
+in `Shikigami.Sink.Recipient`. Declaration validation requires a manifest fallback;
+the at-risk qualification manifest and existing Flow use `role_relationship_owner`.
+Create that test recipient and grant its exact action target. Changing only the
+deployment-wide fallback does not change the Flow's declared recipient. An activity
+payload alone does not prove directory routing.
 
 ## Production promotion gates
 
