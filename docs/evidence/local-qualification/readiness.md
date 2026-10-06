@@ -67,7 +67,7 @@ is an explicit unpublished source pin, not evidence of a published upstream rele
 The operator confirmed that none of the integration services are running. Startup
 priority is PostgreSQL 18 plus Shomei and Kikan-En (dedicated database, machine
 client, En issuer public keys/schema hashes and scoped grants), then Kawa plus
-Anthropic credentials (report delivery), then Danwa and Kizashi (human waits and
+a configured real response provider (report delivery), then Danwa and Kizashi (human waits and
 alerts). Supply test URLs, source/participant/recipient identifiers and private
 credential-file paths. Kafka, Kubernetes and a coding executor are outside this
 qualification workload. The independent packaging build does not require these
@@ -76,8 +76,10 @@ services to be live.
 | Startup order | Required runtime or configuration | Qualification unlocked |
 |---|---|---|
 | 1 | PostgreSQL 18 with dedicated `shikigami_qualification` database; Shomei machine client; Kikan-En `POST /v1/agent-actions/authorize` with trusted En issuer keys, schema hashes and exact action grants | Persistent server/worker deployment and real authorization/refusal |
-| 2 | Test Kawa URL, authorized source segment and destination credentials; Anthropic API access | Real-model reporter, scoped learning/recall and delivery receipt |
+| 2 | Test Kawa URL, authorized source segment and destination credentials; Anthropic HTTP API access, or authenticated Codex/Claude CLI after plan 80's response-provider integration | Real-model reporter, scoped learning/recall and delivery receipt |
 | 3 | Test Danwa URL and agent participant; test Kizashi URL with `role_relationship_owner` recipient; corresponding grants and destination credentials | Durable approval, rejection and timeout trials |
+
+[Plan 80](../../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) captures the verified provider integration gap: the shared Baikai builder exists, but current configuration selects only stub or Anthropic HTTP. Anthropic API credentials are required only for that HTTP transport. CLI login becomes an alternative after the response-provider slice is implemented; foreground interactive sessions do not supply a worker response. Neither CLI wiring nor a live CLI call has been qualified yet.
 
 Shikigami runs as distinct supervised server and worker jobs after configuration
 and migration. Its local directory fixture supplies the qualification principals.

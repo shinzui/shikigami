@@ -38,8 +38,11 @@ has fresh successful Cabal build, regression, migration and workflow checks; fou
 immutable roles and installed reporter assets pass at `685a410`, and the live workload
 is blocked. Use the corrected at-risk fixture revision for host deployment. The operator
 confirmed that the required integration services are not running. Start PostgreSQL 18,
-Shomei and Kikan-En first, then a test Kawa destination with Anthropic credentials,
-then test Danwa and Kizashi for durable human waits. Configure real trust and grants
+Shomei and Kikan-En first, then a test Kawa destination with a real response provider,
+then test Danwa and Kizashi for durable human waits. [Plan 80](plans/80-configure-model-providers-and-agent-launches-through-baikai.md)
+extends the existing Baikai builder to selectable HTTP/CLI transports and foreground
+launches. Its response-provider slice enables Codex/Claude CLI login for the reporter;
+Anthropic API credentials are needed only when choosing Anthropic HTTP. Configure real trust and grants
 before protected delivery. Kafka and Kubernetes are not prerequisites for this workload.
 
 The [readiness report](evidence/local-qualification/readiness.md) records observed
