@@ -37,8 +37,10 @@ module Shikigami.BehaviorProviderSpec (tests) where
 
 import Baikai.Api (Api (..))
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
+import Baikai.Compat qualified as Compat
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context (Context, emptyContext, systemUser)
+import Baikai.Context qualified as Context
 import Baikai.Error (BaikaiError, authError, rateLimited)
 import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model, emptyModel)
@@ -48,8 +50,10 @@ import Baikai.Options (Options (..), emptyOptions)
 import Baikai.Provider.Claude.Cli qualified as ClaudeCli
 import Baikai.Provider.OpenAI.Cli qualified as CodexCli
 import Baikai.Provider.Registry (ApiProvider (..), completeRequest)
-import Baikai.Response (Response (..), emptyResponse, errorResponse, responseError)
-import Baikai.ResponseFormat (ResponseFormat (..))
+import Baikai.Response (Response (..), emptyResponse, errorResponse, flattenAssistantBlocks, flattenAssistantText, responseError)
+import Baikai.ResponseFormat (ResponseFormat (..), jsonSchemaFormat)
+import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal))
+import Baikai.Tool (ToolChoice (ToolChoiceNone), mkTool)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar
 import Control.Exception (SomeException, bracket, finally, try)
@@ -84,8 +88,9 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..))
-import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, renderProfileViolation)
+import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
+import Shikigami.Behavior.Run qualified as Behavior
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
 import Shikumi.Tool (mkRegistry)
@@ -219,7 +224,37 @@ profileConstraintTests :: TestTree
 profileConstraintTests =
   testGroup
     "a pinned profile is checked before provider dispatch"
-    [ testCase "the complete provider tuple is accepted exactly" do
+    [ testCase "all HTTP and CLI surfaces keep exact profile tuples" do
+        base <- newBehaviorEnv
+        mapM_
+          ( \(apiTag, expectedApi, expectedEndpoint) -> do
+              let actual = (envWithThinking Profile.ThinkingHigh base) {Behavior.model = cliModel apiTag}
+                  call@(ProviderCall vendor api endpoint model _) = providerCall actual
+                  allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
+                  profileFor permitsCli value =
+                    let template = stubProfile model (Profile.defaultProhibitions {Profile.cliTransportsAllowed = permitsCli})
+                        content = template.profile {Profile.allowedCalls = NonEmpty.singleton value}
+                     in template {profile = content, ref = template.ref {Profile.digest = profileDigest content}}
+              api @?= expectedApi
+              endpoint @?= expectedEndpoint
+              case constrainBehaviorEnv (profileFor True allowed) actual of
+                Right _ -> pure ()
+                Left violation -> assertFailure (show violation)
+              mapM_
+                ( \mismatch -> case constrainBehaviorEnv (profileFor True mismatch) actual of
+                    Left (ForbiddenCall attempted _) -> attempted @?= call
+                    Left other -> assertFailure ("expected exact tuple refusal: " <> show other)
+                    Right _ -> assertFailure "mismatched tuple was admitted"
+                )
+                [allowed {Profile.provider = "other"}, allowed {Profile.api = "other"}, allowed {Profile.endpointClass = "other"}, allowed {Profile.modelId = "other"}, allowed {Profile.thinking = Profile.ThinkingLow}]
+              if endpoint == "cli"
+                then case constrainBehaviorEnv (profileFor False allowed) actual of
+                  Left (CliTransportForbidden attempted _) -> attempted @?= call
+                  _ -> assertFailure "CLI prohibition was bypassed"
+                else pure ()
+          )
+          [(AnthropicMessages, "messages", "https"), (OpenAIChatCompletions, "chat-completions", "https"), (OpenAIResponses, "responses", "https"), (AnthropicMessagesCli, "messages", "cli"), (OpenAICompletionsCli, "completions", "cli")],
+      testCase "the complete provider tuple is accepted exactly" do
         env <- newBehaviorEnv
         let constrained = envWithThinking Profile.ThinkingHigh env
         case constrainBehaviorEnv (stubProfile "stub-v1" Profile.defaultProhibitions) constrained of
@@ -386,10 +421,12 @@ contractTests =
     "released batch contracts and promotion gate"
     [ testCase "Claude JSON response decodes through the public provider" $ withFake "printf '%s\\n' '{\"result\":\"marker\",\"is_error\":false}'\n" \dir exe -> do
         resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe, ClaudeCli.workingDir = Just dir})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
-        responseError resp @?= Nothing,
+        responseError resp @?= Nothing
+        flattenAssistantText (flattenAssistantBlocks resp) @?= "marker",
       testCase "Codex JSONL response decodes through the public provider" $ withFake "printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"marker\"}}'\n" \dir exe -> do
         resp <- (CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe, CodexCli.workingDir = Just dir})).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
-        responseError resp @?= Nothing,
+        responseError resp @?= Nothing
+        flattenAssistantText (flattenAssistantBlocks resp) @?= "marker",
       testCase "malformed Claude output remains a classified failure" $ withFake "printf malformed\n" \_ exe -> do
         resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
         assertBool "malformed response refused" (responseError resp /= Nothing),
@@ -399,7 +436,22 @@ contractTests =
       testCase "released Codex cancellation gap keeps background CLI disabled" $ cancellationGap OpenAICompletionsCli,
       testCase "released Claude cancellation gap keeps background CLI disabled" $ cancellationGap AnthropicMessagesCli,
       testCase "CLI JsonObject refuses before calling a completion" do
-        validateResponseRequest (cliModel OpenAICompletionsCli) (emptyOptions {responseFormat = Just JsonObject}) emptyContext @?= Left UnsupportedFormat
+        validateResponseRequest (cliModel OpenAICompletionsCli) (emptyOptions {responseFormat = Just JsonObject}) emptyContext @?= Left UnsupportedFormat,
+      testCase "Anthropic none cannot silently advertise tools" do
+        let model = emptyModel {Model.api = AnthropicMessages}
+            context = emptyContext {Context.tools = V.singleton (mkTool "inspect" "public tool" (Aeson.object []))}
+        validateResponseRequest model (emptyOptions {toolChoice = Just ToolChoiceNone}) context @?= Left (UnsupportedOption "behavior.options.tool_choice")
+        validateResponseRequest model (emptyOptions {toolChoice = Just ToolChoiceNone}) emptyContext @?= Right (),
+      testCase "Anthropic adaptive minimal cannot be clamped to low" do
+        case [m | m <- allModels, Model.api m == AnthropicMessages, Model.reasoning m, (Model.anthropicMessagesCompatFor m).thinkingStyle == Compat.AnthropicThinkingAdaptive] of
+          model : _ -> validateResponseOptions model (emptyOptions {thinking = Just ThinkingMinimal}) @?= Left (UnsupportedOption "behavior.options.thinking")
+          [] -> assertFailure "adaptive Anthropic catalog is empty",
+      testCase "invalid schema documents and blank names refuse before dispatch" do
+        let model = emptyModel {Model.api = OpenAIResponses}
+        mapM_
+          (\format -> validateResponseOptions model (emptyOptions {responseFormat = Just format}) @?= Left (UnsupportedOption "behavior.options.response_format"))
+          [JsonSchema (jsonSchemaFormat "public" (Aeson.Number 42)), JsonSchema (jsonSchemaFormat "" (Aeson.object []))]
+        validateResponseOptions model (emptyOptions {responseFormat = Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object [])))}) @?= Right ()
     ]
 
 cliModel :: Api -> Model
@@ -476,6 +528,7 @@ httpDispatchTests =
           env <- newBehaviorEnvFor Log.silentLogger selection Nothing
           resp <- completeRequest env.model (systemUser "system" "marker") env.options
           responseError resp @?= Nothing
+          flattenAssistantText (flattenAssistantBlocks resp) @?= "marker"
           (path, body) <- takeMVar seen
           path @?= if apiTag == OpenAIResponses then ["v1", "responses"] else ["v1", "chat", "completions"]
           assertBool "exact configured model sent" (Model.modelId model `Text.isInfixOf` Text.pack (show body))

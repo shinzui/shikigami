@@ -56,7 +56,11 @@ in Baikai's Options renderings. Raw background provider arguments are unavailabl
 The pure admission check rejects unsupported requirements with their public key,
 for example `behavior.options.seed` on Anthropic, stop sequences on Responses,
 or sampling on a model that cannot honor it. Numeric ranges and catalog output
-limits are checked. Required/named tool choice is checked against the actual
+limits are checked. Adaptive Anthropic `minimal` is refused because its renderer
+clamps it to `low`. Anthropic tool choice `none` with advertised tools is refused
+because that renderer omits the choice field while still sending tools. JSON
+Schema names must be nonblank and schema roots must be objects or booleans; full
+provider-specific schema validation remains with the provider. Required/named tool choice is checked against the actual
 request's advertised tools immediately before each call. A Flow's JsonObject
 requirement and a Skill's acquired registry cannot be silently dropped.
 The actual model and thinking preference still pass the exact pinned-profile gate.

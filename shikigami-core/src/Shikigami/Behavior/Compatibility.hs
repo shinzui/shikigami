@@ -17,9 +17,9 @@ import Baikai.Model (Model)
 import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
-import Baikai.ResponseFormat (ResponseFormat (..))
+import Baikai.ResponseFormat (JsonSchemaFormat (name, schema), ResponseFormat (..))
 import Baikai.Speed (Speed (..))
-import Baikai.ThinkingLevel (thinkingTokenBudget)
+import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal), thinkingTokenBudget)
 import Baikai.Tool (ToolChoice (..))
 import Baikai.Tool qualified as Tool
 import Data.Aeson (Value (..))
@@ -57,6 +57,7 @@ validateResponseOptions model options = case Model.api model of
     invalidRange lo hi = maybe False (\v -> isNaN v || isInfinite v || v < lo || v > hi)
     common =
       [ ("headers", any invalidHeader (Map.toList (Options.headers options))),
+        ("response_format", maybe False invalidFormat (Options.responseFormat options)),
         ("max_tokens", maybe False (\cap -> cap == 0 || Model.maxOutputTokens model > 0 && cap > Model.maxOutputTokens model) (Options.maxTokens options)),
         ("timeout_ms", maybe False (\n -> n < 1 || n > 86_400_000) (Options.timeoutMs options)),
         ("temperature", invalidRange 0 2 (Options.temperature options)),
@@ -78,7 +79,7 @@ validateResponseOptions model options = case Model.api model of
           budget = compat.thinkingStyle == Compat.AnthropicThinkingBudget && set (Options.thinking options)
        in penalties
             <> sampling (compat.supportsSamplingParameters)
-            <> [ ("thinking", budget && maybe False (\level -> Model.maxOutputTokens model > 0 && Model.maxOutputTokens model <= thinkingTokenBudget level) (Options.thinking options)),
+            <> [ ("thinking", compat.thinkingStyle == Compat.AnthropicThinkingAdaptive && Options.thinking options == Just ThinkingMinimal || budget && maybe False (\level -> Model.maxOutputTokens model > 0 && Model.maxOutputTokens model <= thinkingTokenBudget level) (Options.thinking options)),
                  ("metadata", not (Map.null (Options.metadata options))),
                  ("cache_retention", wantsLong && not (compat.supportsLongCacheRetention)),
                  ("speed", Options.speed options == Just SpeedFast && not (compat.supportsFastMode)),
@@ -112,6 +113,12 @@ validateResponseOptions model options = case Model.api model of
        in Text.null text || Text.any (\c -> not (isAscii c && (isAlphaNum c || c `elem` ("!#$%&'*+-.^_`|~" :: String)))) text || Text.any (\c -> c == '\r' || c == '\n') value
     invalidMetadata (String value) = Text.length value > 512
     invalidMetadata _ = True
+    invalidFormat JsonObject = False
+    invalidFormat (JsonSchema format) =
+      Text.null (Text.strip format.name) || case format.schema of
+        Object _ -> False
+        Bool _ -> False
+        _ -> True
 
 validateResponseRequest :: Model -> Options -> Context -> Either ResponseCompatibilityError ()
 validateResponseRequest model options context
@@ -120,6 +127,7 @@ validateResponseRequest model options context
   | otherwise = do
       validateResponseOptions model options
       case Options.toolChoice options of
+        Just ToolChoiceNone | Model.api model == AnthropicMessages && not (Vector.null context.tools) -> Left (UnsupportedOption "behavior.options.tool_choice")
         Just ToolChoiceRequired | Vector.null context.tools -> Left (UnsupportedOption "behavior.options.tool_choice")
         Just (ToolChoiceSpecific name) | not (Vector.any ((== name) . Tool.name) context.tools) -> Left (UnsupportedOption "behavior.options.tool_choice")
         _ -> Right ()

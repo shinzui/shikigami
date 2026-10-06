@@ -63,7 +63,7 @@ Every field in public `Baikai.Options.Options` has an owner:
 | Field | Shikigami setting or owner | Support/refusal |
 | --- | --- | --- |
 | apiKey | `credentials.providers.{anthropic,openai}.api_key` | Required only by matching HTTP selection; lowered at builder |
-| thinking | `behavior.options.thinking` | Typed six-level vocabulary; unsupported model/effort refused |
+| thinking | `behavior.options.thinking` | Typed six-level vocabulary; unsupported/clamped model/effort refused |
 | maxTokens | `behavior.options.max_tokens` | Positive; catalog limit retained and checked |
 | temperature | `behavior.options.temperature` | Finite 0–2; unsupported model/thinking combination refused |
 | timeoutMs | `behavior.options.timeout_ms` | Integer 1–86400000; public HTTP whole-call deadline |
@@ -74,8 +74,8 @@ Every field in public `Baikai.Options.Options` has an owner:
 | presencePenalty | `behavior.options.presence_penalty` | Finite −2–2; Chat only |
 | cacheRetention | `behavior.options.cache_retention` | none/short/long; selected model/endpoint must honor it |
 | speed | `behavior.options.speed` | standard/fast; Messages only, fast catalog-gated |
-| responseFormat | `behavior.options.response_format` | Structural Baikai `JsonObject`/`JsonSchema` JSON |
-| toolChoice | `behavior.options.tool_choice` | auto/none/required/function name; actual request must advertise tools |
+| responseFormat | `behavior.options.response_format` | Baikai JSON plus nonblank schema name and object/boolean document root |
+| toolChoice | `behavior.options.tool_choice` | auto/none/required/function name; actual request must advertise tools for required/named; Anthropic none with tools refused |
 | headers | `behavior.options.headers` | HTTP map; entire configuration value redacted |
 | metadata | `behavior.options.metadata` | Responses only; bounded string map; configuration redacted |
 | evidence | Caller-owned | Run identity, evidence strength and strictness are never invented from operator defaults |
