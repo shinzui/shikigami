@@ -1,8 +1,9 @@
 # Baikai execution qualification — 2026-10-06
 
 The HTTP and foreground implementation is qualified independently of batch CLI
-promotion. The exact source revision and immutable package checks are recorded
-below as they finish. No live background reporter or service readiness is claimed.
+promotion. The tested source revision is
+`9ce65b23daed965e62db61d0145cfd5006bcfd81`; immutable and installed checks pass.
+No live background reporter or service readiness is claimed.
 
 ## Released contracts and deterministic checks
 
@@ -40,22 +41,48 @@ confinement still require an owning released Baikai fix.
 
 ## Immutable packaging and workflow gate
 
-At code revision `3280233`, the committed-descriptor full build passes.
+At final code revision `9ce65b2`, the committed-descriptor full build passes.
 `just keiro-gate 9872e2d` passes unchanged, with an isolated-project Cabal wrapper
 that preserves ignored overrides. All five workspace members pass Language 6
 checking, regeneration is a no-op, there are no compatibility findings, replay
 is neutral and all 37 conformance assertions pass. Reports: [diff](keiro-diff.json)
 and [replay impact](keiro-replay-impact.json). Worker 88, server 47 and PostgreSQL
-197 checks were repeated using the final built binaries and pass.
+197 checks were repeated at `3280233` using its built binaries and pass.
 
 The initial `3280233` immutable build is superseded by the endpoint-policy
 correction: pre-dispatch now derives the actual HTTP URL scheme, matching existing
 terminal compliance. The profile matrix tests all three HTTP APIs against an
-HTTPS-only refusal and explicit plaintext admission. The final immutable build
-must use the corrected revision. The first `just keiro-gate` trial passed
-language checking and inspection, but its scaffold recipe treats *any* uncommitted
-handwritten core source as drift. No generated source changed. Repeat after the
-implementation checkpoint, retaining the repository gate unchanged.
+HTTPS-only refusal and explicit plaintext admission. At `9ce65b2`, all 425 core
+and 37 agent checks and the unchanged workflow gate pass again. The final
+immutable build uses this corrected revision and passes. The first
+`just keiro-gate` trial passed language checking and inspection, but its scaffold
+recipe treats *any* uncommitted handwritten core source as drift. No generated
+source changed. Successful repeats after the implementation checkpoints retained
+the repository gate unchanged.
+
+## Installed package proof
+
+At 2026-10-06 16:28 UTC, all five immutable role targets built successfully from
+`9ce65b2`: operator, server, worker, migrate and standalone agent launch. The common
+runtime build phase took 43 minutes 16 seconds. At 16:30 UTC, 11 installed command
+checks pass from a disposable directory outside the checkout, with all three
+API-key variables and all `SHIKIGAMI_*` overrides removed. Nine commands exit 0;
+the missing OpenAI credential and blocked batch selection intentionally exit 4.
+See [exact outputs and command inputs](installed-checks.json).
+
+Checks cover role version/help entry points, both operator-mounted and standalone
+launch commands, the public unattended grammar, pure interactive configuration
+with an absent working directory, matching OpenAI credential refusal, valid typed
+HTTP options, absence of credential echo and the batch lifecycle promotion gate. The pure
+behavior checks use an absent agent file: configuration diagnostics perform no
+manifest loading or provider call. The one-off behavior command belongs to the
+common runtime; the operator role exports the main CLI and launch command.
+
+Initial smoke-harness attempts failed before a provider call: the behavior binary
+was looked up in the wrong role, the log parser selected a derivation stem instead
+of its output, and the required `--agent` parser argument was absent. Correcting
+those harness inputs gives the successful 11-check retry against the unchanged
+built packages. No package implementation change was required.
 
 ## Live coverage
 

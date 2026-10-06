@@ -52,7 +52,8 @@ The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-beha
 - [x] (2026-10-06 14:49 UTC) M4 real attended Codex 0.160.1 terminal opened, returned the public marker with key environment variables absent, and closed with propagated exit 0; no durable/background claim.
 - [x] (2026-10-06 14:40 UTC) M5 HTTP/foreground docs and ADR 0040 written. Isolated full Cabal build, core 425, worker 88, server 47, PostgreSQL 197 and migration smoke checks pass. Frozen export has only intended Baikai upgrades plus agent/KDL additions.
 - [x] (2026-10-06 14:57 UTC) M5 committed-descriptor full build and unchanged keiro gate pass at `3280233` against `9872e2d`: no findings, replay-neutral, no regeneration drift and 37 conformance assertions. Final worker 88, server 47 and PostgreSQL 197 checks pass.
-- [ ] M5 remaining: immutable role build and outside-checkout installed command evidence at the corrected endpoint-policy revision; the `3280233` attempt is superseded.
+- [x] (2026-10-06 15:48 UTC) Final endpoint correction at `9ce65b2`: full committed-descriptor build, core 425, agent 37 and unchanged workflow gate pass. All three HTTP APIs refuse plaintext under HTTPS-only profiles and admit it only with explicit HTTP permission.
+- [x] (2026-10-06 16:30 UTC) M5 all five immutable role targets build at `9ce65b2`; 11 installed checks pass outside the checkout. Exact outputs/inputs are in `docs/evidence/baikai-execution/installed-checks.json`. Superseded builds and corrected smoke-harness attempts are recorded separately.
 - [x] (2026-10-06 15:03 UTC) M4 mounted unattended read-only Codex job returned the public marker and exit 0 under a separate operator ceiling and 60-second deadline. Verified repository flag is `--config`.
 - [ ] M6: authenticated batch reporter remains blocked by the released lifecycle prerequisite. Live HTTP alternatives are untested; no service readiness is claimed.
 
@@ -86,7 +87,9 @@ Decision (2026-10-06 UTC): Preserve the public unattended parser's `agent` group
 ## Outcomes & Retrospective
 
 
-Implementation is in progress. HTTP and foreground integration are independently implemented and under final packaging qualification. Batch responses remain unavailable until the released cancellation/confinement contract is proven; no authenticated Shikigami batch result or service qualification is claimed. A separate real attended Codex session returned the public marker and closed with exit 0; details are in [qualification evidence](../evidence/baikai-execution/qualification.md).
+The independent HTTP and foreground integration is implemented and qualified at `9ce65b2`: full source build, affected regression suites, unchanged journal gate, all five immutable role targets and 11 installed command checks pass. Real attended and operator-ceiling-controlled unattended Codex trials both returned public markers and exit 0 with API-key variables absent. See [qualification evidence](../evidence/baikai-execution/qualification.md).
+
+The overall plan remains open. Both selected released batch adapters fail descendant cancellation probes, so background CLI selection remains a typed refusal. The remaining M1 positive lifecycle/confinement proof, M2 CLI resolver, M3 CLI response dispatch and M6 authenticated reporter require an owning released Baikai fix. Live HTTP alternatives remain untested; no background reporter, memory/delivery or service qualification is claimed. Keeping the three execution surfaces separate made the HTTP and foreground work deliverable without copying the upstream process engine or weakening profile permission.
 
 
 ## Context and Orientation
@@ -226,7 +229,7 @@ nix develop --command cabal test shikigami-core-postgres-test \
 After exporting the actual solved `plan.json` with the existing exporter, verify all role packages:
 
 ```bash
-nix build --no-link .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate
+nix build --no-link .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate .#shikigami-agent-launch
 ```
 
 The following batch response interfaces remain deferred: the selected releases fail cancellation and the current resolver refuses both CLI choices. Execute these future acceptance commands only after an owning released fix, positive cleanup/confinement checks and the remaining CLI resolver/dispatch implementation. Create a private config `/tmp/shikigami-baikai/cli.yaml` and a disposable existing working directory. Replace `EXPLICIT_CLI_MODEL_ID` with an actual model id supported by the login; it is a placeholder, not an application alias:
@@ -330,7 +333,7 @@ Use disposable workspaces for live attended/unattended trials. Preserve changed 
 ## Interfaces and Dependencies
 
 
-The resolved response type in `shikigami-core/src/Shikigami/App/Config.hs` distinguishes stub, three HTTP APIs and two CLI APIs, carries exact Baikai model/options and opaque credentials, and is not a new journal payload. CLI configuration names operator executable/cwd. Preserve `newBehaviorEnvFor` as the common composition boundary and `providerCall` as its actual-dispatch projection. Use direct Haskell record field names and follow the repository's record-pattern guidance.
+The implemented resolved response type in `shikigami-core/src/Shikigami/App/Config.hs` distinguishes stub and three HTTP APIs, carrying exact Baikai model/options and opaque credentials without a new journal payload. The two CLI names are currently refused; their future configuration will name operator executable/cwd after the owning release prerequisite. Preserve `newBehaviorEnvFor` as the common composition boundary and `providerCall` as its actual-dispatch projection. Use direct Haskell record field names and follow the repository's record-pattern guidance.
 
 The typed compatibility check beside `Shikigami.Behavior.Provider` accepts actual selected model/options plus request context/tool requirements and returns a permanent refusal before IO. Each model caller maps that result into its existing failure algebra. A launch-specific resolver/entry point in the agent package needs no database; mounted unattended parsing/running uses public `Baikai.Agent.Cli` records and returns exit/output without a local process engine.
 
@@ -364,3 +367,5 @@ No authorization or delivery service is needed for deterministic tests or foregr
 2026-10-06 15:03 UTC: Qualified the mounted unattended foreground job with a real read-only Codex marker/exit trial. Corrected the runbook repository flag to the released parser's `--config`; this leaves batch reporter acceptance open.
 
 2026-10-06 15:40 UTC: Final review found that the legacy pre-dispatch tuple classified every HTTP tag as HTTPS even though compliance evidence already derives its actual scheme. Corrected the tuple for endpoint overrides and extended the five-surface matrix with plaintext refusal/explicit admission. The earlier immutable build is superseded and must be rerun at this corrected code revision.
+
+2026-10-06 16:30 UTC: Final `9ce65b2` source build, core/agent tests and unchanged journal gate pass; five immutable role targets and 11 outside-checkout installed checks pass. Recorded exact package outputs, corrected harness attempts and independent integration outcomes. The overall plan remains open for the owning released batch lifecycle/confinement fix and deferred CLI reporter milestones.

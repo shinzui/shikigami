@@ -1,0 +1,148 @@
+{
+  "working_directory": "outside-checkout disposable directory",
+  "roles": {
+    "shikigami": "/nix/store/2kycqima61cpkvzzzlarimqnvx7i95hn-shikigami",
+    "shikigami-agent-launch": "/nix/store/6gcn3p2s5nywcjaq914a3maa9sxvk49m-shikigami-agent-launch",
+    "shikigami-migrate": "/nix/store/bmhwxsz0750b8v2a074d8nx9ln6i7m5c-shikigami-migrate",
+    "shikigami-server": "/nix/store/d0ah4l9gpmnivv1fl1w9r5baldlpy91j-shikigami-server",
+    "shikigami-worker": "/nix/store/pmb6p6b80sypa122g56ihpg4s8iyayw3-shikigami-worker",
+    "shikigami-runtime": "/nix/store/4762g9cyfi30x3lfy9sfvrlkdb00wshi-shikigami-runtime-0.1.0.0-9ce65b2"
+  },
+  "checks": [
+    {
+      "role": "shikigami",
+      "executable": "shikigami",
+      "arguments": [
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-server",
+      "executable": "shikigami-server",
+      "arguments": [
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-worker",
+      "executable": "shikigami-worker",
+      "arguments": [
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-migrate",
+      "executable": "shikigami-migrate",
+      "arguments": [
+        "--help"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-agent-launch",
+      "executable": "shikigami-agent-launch",
+      "arguments": [
+        "--help"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami",
+      "executable": "shikigami-agent-launch",
+      "arguments": [
+        "interactive",
+        "--describe-config"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-agent-launch",
+      "executable": "shikigami-agent-launch",
+      "arguments": [
+        "unattended",
+        "agent",
+        "--help"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-agent-launch",
+      "executable": "shikigami-agent-launch",
+      "arguments": [
+        "interactive",
+        "--check-config",
+        "--set",
+        "launch.provider=codex",
+        "--set",
+        "launch.working_directory=/tmp/not-needed-for-pure-check",
+        "--set",
+        "launch.safety.codex_sandbox=read-only",
+        "--set",
+        "launch.safety.codex_approval=on-request"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-runtime",
+      "executable": "shikigami-run-behavior",
+      "arguments": [
+        "--agent",
+        "/tmp/not-needed-for-pure-check.dhall",
+        "--check-config",
+        "--set",
+        "behavior.provider=openai-responses",
+        "--set",
+        "behavior.model=gpt-6.1-sol"
+      ],
+      "exit": 4
+    },
+    {
+      "role": "shikigami-runtime",
+      "executable": "shikigami-run-behavior",
+      "arguments": [
+        "--agent",
+        "/tmp/not-needed-for-pure-check.dhall",
+        "--check-config",
+        "--set",
+        "behavior.provider=openai-responses",
+        "--set",
+        "behavior.model=gpt-6.1-sol",
+        "--set",
+        "credentials.providers.openai.api_key=<redacted fixture>",
+        "--set",
+        "behavior.options.thinking=low",
+        "--set",
+        "behavior.options.timeout_ms=30000"
+      ],
+      "exit": 0
+    },
+    {
+      "role": "shikigami-runtime",
+      "executable": "shikigami-run-behavior",
+      "arguments": [
+        "--agent",
+        "/tmp/not-needed-for-pure-check.dhall",
+        "--check-config",
+        "--set",
+        "behavior.provider=codex-cli"
+      ],
+      "exit": 4
+    }
+  ],
+  "source_revision": "9ce65b23daed965e62db61d0145cfd5006bcfd81",
+  "qualified_at": "2026-10-06T16:30:00Z",
+  "platform": "aarch64-darwin",
+  "build_command": "nix build --no-link --print-build-logs --print-out-paths .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate .#shikigami-agent-launch",
+  "build_phase_seconds": 2596,
+  "removed_environment": [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "CODEX_API_KEY",
+    "SHIKIGAMI_*"
+  ],
+  "fixture_credential_never_echoed": true,
+  "per_command_timeout_seconds": 45
+}
