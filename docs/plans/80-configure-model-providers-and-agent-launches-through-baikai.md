@@ -61,7 +61,7 @@ The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-beha
 ## Surprises & Discoveries
 
 
-Released batch adapters rethrow cancellation but lack an explicit child-group cleanup contract. Bounded fake-process probes confirm that a child remains alive for both selected released adapters; a typed promotion gate refuses CLI responses. background CLI resolution, confinement and M6 must wait for an owning released fix. See [contract inventory](../evidence/baikai-execution/contracts.md).
+Released batch adapters rethrow cancellation but lack an explicit child-group cleanup contract. Bounded fake-process probes confirm that a child remains alive for both selected released adapters; a typed promotion gate refuses CLI responses. background CLI resolution, confinement and M6 must wait for an owning released fix. See [contract inventory](../evidence/baikai-execution/contracts.md). The owning defect report is `mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1`, filed with status `reported` and the bounded two-adapter reproduction. Deadline/output/confinement requirements remain separate from that cancellation defect.
 
 The public unattended parser includes its own `agent` group and does not export the inner parser. The mounted spelling is therefore `unattended agent run|show|list`, preserving Baikai grammar without copying it.
 
@@ -369,3 +369,5 @@ No authorization or delivery service is needed for deterministic tests or foregr
 2026-10-06 15:40 UTC: Final review found that the legacy pre-dispatch tuple classified every HTTP tag as HTTPS even though compliance evidence already derives its actual scheme. Corrected the tuple for endpoint overrides and extended the five-surface matrix with plaintext refusal/explicit admission. The earlier immutable build is superseded and must be rerun at this corrected code revision.
 
 2026-10-06 16:30 UTC: Final `9ce65b2` source build, core/agent tests and unchanged journal gate pass; five immutable role targets and 11 outside-checkout installed checks pass. Recorded exact package outputs, corrected harness attempts and independent integration outcomes. The overall plan remains open for the owning released batch lifecycle/confinement fix and deferred CLI reporter milestones.
+
+2026-10-06 16:40 UTC: Filed the cancellation defect in the owning Baikai bug-report OKF as `mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1`. Reran both bounded negative probes and recorded strict profile/log validation. The report is consumer-observed (`reported`), not an owning-repository confirmation or a fix; remaining CLI milestones stay open.

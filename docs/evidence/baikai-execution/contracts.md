@@ -27,6 +27,11 @@ only the immutable shipped HTTP handlers and its immutable stub handler here.
 
 ## Batch release prerequisite
 
+Owning defect report: `mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1`
+(status `reported`), with the exact bounded reproduction and cancellation fix
+acceptance. Additional deadline/output/confinement requirements below remain
+separate qualification prerequisites.
+
 The released Codex adapter uses `withCreateProcess` without `create_group` or a
 process-group termination strategy. The released Claude adapter uses Cradle.
 Both rethrow asynchronous cancellation through Baikai's `trySync`, but that alone
