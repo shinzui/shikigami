@@ -1,0 +1,9 @@
+{
+  "run_marker": "qualification-degraded",
+  "captured_at": "2026-10-06T00:00:00Z",
+  "text": "service health report: api healthy; cache unavailable qualification-cache-unavailable",
+  "services": [
+    {"name": "api", "status": "healthy", "detail": "supplied fixture: ready"},
+    {"name": "cache", "status": "unavailable", "detail": "qualification-cache-unavailable"}
+  ]
+}

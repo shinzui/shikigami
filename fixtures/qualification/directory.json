@@ -1,0 +1,5 @@
+[
+  {"principal_id":"agent_qualification_reporter","handle":"service-health-reporter","lifecycle":"active"},
+  {"principal_id":"agent_qualification_observer","handle":"service-health-observer","lifecycle":"active"},
+  {"principal_id":"agent_qualification_at_risk","handle":"qualification-at-risk-customer","lifecycle":"active"}
+]

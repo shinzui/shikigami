@@ -1,6 +1,6 @@
 module Shikigami.BehaviorRetrySpec (tests) where
 
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (newEmptyMVar, takeMVar)
 import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
@@ -15,6 +15,7 @@ import Shikigami.Behavior.Error
     classifyRunError,
   )
 import Shikigami.Behavior.Run (newBehaviorEnv, runBehaviorAttempt, runBehaviorAttemptWith, triggerOnly)
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
@@ -51,12 +52,17 @@ tests =
             (triggerOnly Aeson.Null)
         assertEqual "unknown task stays in band" (Left "unknown task: missing-task") result,
       testCase "a timeout and a retryable provider failure escape" do
+        neverCompletes <- newEmptyMVar
         timedOut <-
-          try @TransientBehaviorFailure $
-            runBehaviorAttemptWith
-              (secondsToNominalDiffTime 0.01)
-              (threadDelay 100000 >> pure (Right Aeson.Null))
-        assertBool "timeout throws a transient failure" (either (const True) (const False) timedOut)
+          timeout 2_000_000 $
+            try @TransientBehaviorFailure $
+              runBehaviorAttemptWith
+                (secondsToNominalDiffTime 0.01)
+                (takeMVar neverCompletes)
+        -- A finite sleep can complete before the timeout thread gets CPU under
+        -- load. This action cannot complete on its own; the outer timeout also
+        -- makes a missing behavior timeout fail rather than hanging the suite.
+        assertBool "timeout throws a transient failure" (case timedOut of Just (Left _) -> True; _ -> False)
         retryable <-
           try @TransientBehaviorFailure $
             runBehaviorAttemptWith

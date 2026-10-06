@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-07-08T20:14:28Z
 intention: "intention_01kx1tyx3yehmsq9eyywdcf5c7"
 master_plan: "docs/masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-06T04:07:36Z
+      mode: "implement"
+      note: "Build the seven-package immutable offline qualification graph and export isolated deployment roles under plan 79"
 ---
 
 # Deployable service stack: process-compose, packaging, and configuration
@@ -46,6 +53,14 @@ asserts the rendered service commands.
 
 ## Progress
 
+- [x] (2026-10-06 UTC) Plan-79 packaging preparation: replace the invalid root
+      package with named CLI/server/worker/migration outputs sharing a frozen
+      seven-package runtime closure; declare installed schema and qualification assets.
+      Role discovery and default derivation evaluation pass.
+- [ ] Plan-79 packaging acceptance: finish the immutable build and prove installed
+      binaries and assets outside the checkout. This slice does not complete the
+      process-compose, NixOS or graceful-drain milestones below.
+
 - [ ] Prerequisites: plans 36, 37, and 38 complete; six-package outputs, Settei config, and pg-migrate CLI/manifest/plan are stable.
 
 - [ ] M1: Kafka broker (KRaft single-node) added to the dev shell via `flake.module.nix` and to
@@ -69,10 +84,26 @@ asserts the rendered service commands.
 
 ## Surprises & Discoveries
 
-(None yet.)
+The fresh plan-79 baseline found that the root has no Cabal file and the previous
+default Nix package cannot evaluate. The successful isolated GHC 9.12.4 solve
+contains 354 runtime packages. A compatible Kikan-En client/contract commit is
+unpublished, requiring a checked-in, checksummed source archive. Staging all
+dependency sources as local goals otherwise enables unrelated executables;
+packaging disables only components absent from the selected runtime closure.
+The full immutable build and outside-checkout asset proof remain pending.
 
 
 ## Decision Log
+
+- Decision: Export and build the exact qualified Cabal runtime closure offline,
+  then wrap each deployed role around the resulting executable and installed assets.
+  Rationale: preserve the selected cohort without a mutable sibling dependency or
+  an independent Nixpkgs solve. Correct the root default in the managed base module
+  because merely forcing an override still eagerly evaluates that invalid package.
+  The custom deployment implementation lives in `flake.module.nix` and
+  `nix/qualification-package.nix`. Cold builds are deliberately monolithic.
+  Durable context: [ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md).
+  Date: 2026-10-06
 
 - Decision: Use Apache Kafka in KRaft mode (nixpkgs attribute `apacheKafka`) as the local
   broker rather than a Redpanda server binary.
@@ -139,7 +170,9 @@ asserts the rendered service commands.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The plan-79 packaging slice now evaluates named roles and fixes the invalid root
+default. Compilation and installed-asset acceptance are still pending. No composed
+stack or NixOS deployment completion is claimed; their milestones remain open.
 
 
 ## Context and Orientation
@@ -648,6 +681,9 @@ earlier, but should land after these soft dependencies.
 
 
 ## Revision Notes
+
+- 2026-10-06: Record the plan-79 packaging slice, frozen runtime/component closure,
+  explicit unpublished-source pin and remaining immutable build acceptance.
 
 - 2026-07-22: Made this the operations-closure plan. The configuration reference now
   waits for and documents actual settings from plans 13, 22, 28, 29, and 32 instead of

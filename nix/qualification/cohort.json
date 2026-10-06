@@ -1,0 +1,4929 @@
+{
+  "compiler": "ghc-9.12.4",
+  "packages": {
+    "Diff": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-zX4m09Xr9/LBp1Ja6+JR+8v/7ipjYttjS0viO541TYU=",
+        "metadata_hash": "sha256-OdVfnYblSTm3z0Q/s6OXDZg0EHPf2n1Sz6m8ZWLxOdk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/Diff-1.0.2/Diff-1.0.2.tar.gz"
+      },
+      "version": "1.0.2"
+    },
+    "HUnit": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-sLdTiHH/wFhIb8AHQIhtLzFy+PpoaZNr/oOl4QvXRKs=",
+        "metadata_hash": "sha256-GnkXTor2FhF605RkysneIFypI9plgoJel8EHhv2pM6Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/HUnit-1.6.2.0/HUnit-1.6.2.0.tar.gz"
+      },
+      "version": "1.6.2.0"
+    },
+    "OneTuple": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "base-ge-4-15": true,
+        "base-ge-4-16": true
+      },
+      "source": {
+        "hash": "sha256-ZD0fSOY0gKxtA6jwq1l21mUnybQrH8qB0b83PRAJnGs=",
+        "metadata_hash": "sha256-D1YgkzhQp4uEnAmIy/wiiKsydLiQhL9mgfUUFD0/gio=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/OneTuple-0.4.3/OneTuple-0.4.3.tar.gz"
+      },
+      "version": "0.4.3"
+    },
+    "QuickCheck": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "old-random": false,
+        "templatehaskell": true
+      },
+      "source": {
+        "hash": "sha256-C1Y/puoRZT121X6WYl9KR24Cuf2uupwF0szBDY2oAsA=",
+        "metadata_hash": "sha256-9CEGRxZ/hzGWsBBQrAdKRIIbZofib3kq00dLY4jF+Lc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/QuickCheck-2.16.0.0/QuickCheck-2.16.0.0.tar.gz"
+      },
+      "version": "2.16.0.0"
+    },
+    "StateVar": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Xks52jlWVqWYJ7AoBQiq/ccDNXmLUOXW/VJZYCYlGCU=",
+        "metadata_hash": "sha256-PAIsAEhf4WXjCA1dprPKnJsC9ixd7rxYTRs9EwnOZz4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/StateVar-1.2.2/StateVar-1.2.2.tar.gz"
+      },
+      "version": "1.2.2"
+    },
+    "abstract-deque": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "usecas": false
+      },
+      "source": {
+        "hash": "sha256-CaoQ84GTqCdad5G5Kk86cZKjBIdGN+KjXIl93iXXXKI=",
+        "metadata_hash": "sha256-MIv/kruLZiHtHa5xjoWdoUXI8xuKkFCurKxAqKIcnJA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/abstract-deque-0.3/abstract-deque-0.3.tar.gz"
+      },
+      "version": "0.3"
+    },
+    "adjunctions": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-IUCNm9PHQzG1V86GKB5ZL1ZGbhnSp+PzfkBlIDpmMUU=",
+        "metadata_hash": "sha256-LYJ+3O72/+wMfHZ8/iFnLX2FhqpYVJwTUVziOzUKax0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/adjunctions-4.4.4/adjunctions-4.4.4.tar.gz"
+      },
+      "version": "4.4.4"
+    },
+    "aeson": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "ordered-keymap": true
+      },
+      "source": {
+        "hash": "sha256-6oLWUMC72Id9vxOgO5uq475+1KZfToz+W06stPW+rnU=",
+        "metadata_hash": "sha256-qJ/VS4AjUev1emvkUdslwWfDzLNVg7Sp0rtU19HEPeI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/aeson-2.2.5.1/aeson-2.2.5.1.tar.gz"
+      },
+      "version": "2.2.5.1"
+    },
+    "aeson-casing": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-NyMHVnOj8YigXl2wzShRwknKFuulMsPnbn8fpgzxkjM=",
+        "metadata_hash": "sha256-DNEWMI6R4qEWK35XEl0qn8UDoaa9bvxZN4tRjbCjNzM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/aeson-casing-0.2.0.0/aeson-casing-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "aeson-pretty": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "lib-only": false
+      },
+      "source": {
+        "hash": "sha256-0lzlqo5EfWTc5bch38P5Vjq1NMtDiOlZZFvPA+I7FW4=",
+        "metadata_hash": "sha256-zdrl7LvFTXEvX+NUIXjN5vOAFljwkHozS9JmD0odvjU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/aeson-pretty-0.8.11/aeson-pretty-0.8.11.tar.gz"
+      },
+      "version": "0.8.11"
+    },
+    "alex": {
+      "components": [
+        "exe:alex"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-30gdyWDixZowOV9zNQMf1O+Hc7ikKJSk8jIOAP9HRBg=",
+        "metadata_hash": "sha256-jbHOKuA+3SF8QIIGmA6LP85/ALnUuZ8+PoOzVSXZQHQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/alex-3.5.4.2/alex-3.5.4.2.tar.gz"
+      },
+      "version": "3.5.4.2"
+    },
+    "ansi-terminal": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "example": false
+      },
+      "source": {
+        "hash": "sha256-nPCDzvLiuoikJfEyyKgr+pMetLDDgjKyAX+PzqLiMHM=",
+        "metadata_hash": "sha256-QI2SMuUwTv6tcY+WE41tfrLaYIxhIcXA3GpxqDOxQyA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/ansi-terminal-1.1.5/ansi-terminal-1.1.5.tar.gz"
+      },
+      "version": "1.1.5"
+    },
+    "ansi-terminal-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-n8nOIVfxiJvZmk0iyfHGRYlZC+D3l8Pv5xyPoXoRpok=",
+        "metadata_hash": "sha256-HWBh7OrzWp7SabgRd91MjGBAOkmVJvf2j9/6TseELn8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/ansi-terminal-types-1.1.3/ansi-terminal-types-1.1.3.tar.gz"
+      },
+      "version": "1.1.3"
+    },
+    "appar": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-xM7t3CZSW1jYLEG20+MhQTcaIApnlKrhhbYmbMyBYx8=",
+        "metadata_hash": "sha256-pdUpusu3TVZuTF+Uea8GN+rFlXcF9ttNJnBRdIl5Xeg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/appar-0.1.8/appar-0.1.8.tar.gz"
+      },
+      "version": "0.1.8"
+    },
+    "assoc": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "tagged": false
+      },
+      "source": {
+        "hash": "sha256-IxFJt/7wn13ZWvUSKGFeOyltvQ+q3soFPgZEpLE7D/Y=",
+        "metadata_hash": "sha256-dmsQQO2lJVv88Q4amFnAbQ7WrQ4qyH7ZFbsDVXTRCuQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/assoc-1.1.1/assoc-1.1.1.tar.gz"
+      },
+      "version": "1.1.1"
+    },
+    "async": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "bench": false,
+        "debug-auto-label": false
+      },
+      "source": {
+        "hash": "sha256-FIVxvBiAAxASQdpsSRMdBzJOY6iO0oOoTe8ulpRZlhk=",
+        "metadata_hash": "sha256-RdVYfYo0in4rPwTelj/mM9tJtJzeEMoeb4NL7zuuzuk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/async-2.2.6/async-2.2.6.tar.gz"
+      },
+      "version": "2.2.6"
+    },
+    "atomic-primops": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "debug": false
+      },
+      "source": {
+        "hash": "sha256-wEDOQQklh3YQDdiULW50bkwm+Rg5j7OATnjb5b1z5+o=",
+        "metadata_hash": "sha256-sceEWq8Lm130TR8lIitQxUyefJoyrVzNAFgKKCv+0BQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/atomic-primops-0.8.8/atomic-primops-0.8.8.tar.gz"
+      },
+      "version": "0.8.8"
+    },
+    "atomic-write": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Cgr3E7wiWZmwIYyY5M3LFrBhOg3QZP9AgQt2s9jfKRY=",
+        "metadata_hash": "sha256-GGPJTO+HtM9SsAZP1pYgHrx0eEPXLao94rLOlHpm6Jg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/atomic-write-0.2.1.1/atomic-write-0.2.1.1.tar.gz"
+      },
+      "version": "0.2.1.1"
+    },
+    "attoparsec": {
+      "components": [
+        "lib",
+        "lib:attoparsec-internal"
+      ],
+      "flags": {
+        "developer": false
+      },
+      "source": {
+        "hash": "sha256-PzN/5YYkVl3hJCb2B8I+YMewnIa04638gnyhiMmXnmw=",
+        "metadata_hash": "sha256-NRKdCrF0HwAPGn0vyDlUSRnub7uPLW5/CmKcQfkQNfM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/attoparsec-0.14.4/attoparsec-0.14.4.tar.gz"
+      },
+      "version": "0.14.4"
+    },
+    "attoparsec-aeson": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-/pssI6Fv4f+PQcMplAzMyArKesap6jFPenfPFC2Pnt0=",
+        "metadata_hash": "sha256-CJSPRbiSxXWNLELiL+L71BpPbcOV+wpDwr9Fih8pVzY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/attoparsec-aeson-2.2.2.0/attoparsec-aeson-2.2.2.0.tar.gz"
+      },
+      "version": "2.2.2.0"
+    },
+    "auto-update": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-z+H5SVFJh9KuPfzQxEXYw7tV6VGz+Q2kQ9DPK8M3/n0=",
+        "metadata_hash": "sha256-YFeTv8oKStb5POt94wLlOXIDUaY4DC7fRwF/7iE7KsI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/auto-update-0.2.8/auto-update-0.2.8.tar.gz"
+      },
+      "version": "0.2.8"
+    },
+    "baikai": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GqYHOKJn1hkE8O6N/WtQJPGIYVDE4qfZAfjrXoHu4qk=",
+        "metadata_hash": "sha256-NjsE6Q4Pqnq0Vfl1+LFAOECMPaVQaMIpON7QvsbCZDk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-0.7.0.0/baikai-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "baikai-claude": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Q7SBoJF2i5ie1sOx7d34/HgTpCe2llZhq61OMyMOIfk=",
+        "metadata_hash": "sha256-yWlP/Ts0L5UiwLh7ETZK4C++Ndw0irUQ4zBUtsVsP4g=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-claude-0.7.0.0/baikai-claude-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "baikai-effectful": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-gabZqP/XpjNXHC0paWWVc/bWTLvmN+tyMuwspSUmusQ=",
+        "metadata_hash": "sha256-h65ZCmrRMbGiz/4mKsoKUb4LJQEPo/KUu4mRVcUH4Z0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-effectful-0.4.0.1/baikai-effectful-0.4.0.1.tar.gz"
+      },
+      "version": "0.4.0.1"
+    },
+    "baikai-openai": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-L7UoAQYiY2m2yoKVAu1CM/5M3iwoBxFaNH8Z3KCSwuU=",
+        "metadata_hash": "sha256-WxdF8pd8N+guQ0rPzxnY3cZu7yoAFe7NrzsAZAx+PxU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-openai-0.7.0.0/baikai-openai-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "baikai-trace-otel": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-0awqq4cIyvrBvWCW8W2Z7x7ekuJru5awccElvJzN0LY=",
+        "metadata_hash": "sha256-J70K6wmXFYVOO7DxSR5kpDa4lBHWPB3Iq7iYItsK5JI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-trace-otel-0.4.0.1/baikai-trace-otel-0.4.0.1.tar.gz"
+      },
+      "version": "0.4.0.1"
+    },
+    "base-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-dOZVVB5kXo/Hqt4eahtpc1Yb4LypNpvBYjqjRQGaNek=",
+        "metadata_hash": "sha256-0BB43/Q33VR5QqbxI4nxzIdDKMHWHAt5W5prgi8TPJY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base-compat-0.14.1/base-compat-0.14.1.tar.gz"
+      },
+      "version": "0.14.1"
+    },
+    "base-compat-batteries": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-PSv0LwTNAsj37TRkVOKeGI4ceGXQdcQnfqJRl+U4KOE=",
+        "metadata_hash": "sha256-2lsN5U1eqmMIkLY/rmlCQ7PCpiRki6sYeKfksBFO048=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base-compat-batteries-0.14.1/base-compat-batteries-0.14.1.tar.gz"
+      },
+      "version": "0.14.1"
+    },
+    "base-orphans": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-CMwoOjE1D3vSiypdMa9pPuM38lk9PnIimZty3UlUxys=",
+        "metadata_hash": "sha256-AB8rMJS3obAOn9XcxRmmK4sUehdUv1UPpCYB/4aOK2U=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base-orphans-0.9.4/base-orphans-0.9.4.tar.gz"
+      },
+      "version": "0.9.4"
+    },
+    "base16": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-hjZjZJELeGCWd4F88/mHvxaQ4fdbugS8kaXtmT1hnN4=",
+        "metadata_hash": "sha256-TdNBIoFo8s3gOVTdchde5yagcT4iAPbHtz9M2NIgc3c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base16-1.0/base16-1.0.tar.gz"
+      },
+      "version": "1.0"
+    },
+    "base16-bytestring": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-HVqRFD7w4iFXU2CT7I5Z0iamgiDsiTeNXcruqGRyx4Q=",
+        "metadata_hash": "sha256-ppToj57J/HnwsD8jPT/qWSto9wo0qsLdtbyuy2Vi4v0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base16-bytestring-1.0.2.0/base16-bytestring-1.0.2.0.tar.gz"
+      },
+      "version": "1.0.2.0"
+    },
+    "base64": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-eUIjnxgElF/W0xmpU/JsU7ZFGAds0pQUH9qYPy/xsrY=",
+        "metadata_hash": "sha256-f5LBJo5voZG0Grq1MxMgFkSvdW8/3X6Z7fPIdea6AqQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base64-1.0/base64-1.0.tar.gz"
+      },
+      "version": "1.0"
+    },
+    "base64-bytestring": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+/jtMO3eJx62BTUgIUMdjxsFX5WlavMf4urPa9/cSck=",
+        "metadata_hash": "sha256-RTBcz4kUxm04W1GHIUcse4yFjxmGlFN390+FweDUmAM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/base64-bytestring-1.2.1.0/base64-bytestring-1.2.1.0.tar.gz"
+      },
+      "version": "1.2.1.0"
+    },
+    "basement": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-f7d+JJrvdrpa7TBZ1VaADOArYUWXxIi6AfChZEkUYwA=",
+        "metadata_hash": "sha256-6UWMvmfzlvuBkA7GWFKlgqK3/r0JsXqFre5XbI18wyE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/basement-0.0.16/basement-0.0.16.tar.gz"
+      },
+      "version": "0.0.16"
+    },
+    "bifunctors": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "tagged": true
+      },
+      "source": {
+        "hash": "sha256-rXo1fwIvTHgMUFBA1z8cBqT9aXtKC6thI7vXO1XYEVw=",
+        "metadata_hash": "sha256-WPHWbbce2d1wZI6soaCYayk1Szpptb/XKc4aiWdmRm4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/bifunctors-5.6.3/bifunctors-5.6.3.tar.gz"
+      },
+      "version": "5.6.3"
+    },
+    "binary-parser": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-WdMAfwzF24dd6UaLzQWFCpzok6Ipz+UMSi9Dg8py0ns=",
+        "metadata_hash": "sha256-Fn1sUWHxS1Cz5o/lKVdxSNGWN4qgEEQKF68p/XZTrOQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/binary-parser-0.5.7.7/binary-parser-0.5.7.7.tar.gz"
+      },
+      "version": "0.5.7.7"
+    },
+    "biscuit-haskell": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/biscuit-haskell/8c0b3c5a13ce4a310737c0336f2ae167a1597588",
+        "subdir": "biscuit",
+        "type": "github"
+      },
+      "version": "0.4.0.0"
+    },
+    "bitvec": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "simd": true
+      },
+      "source": {
+        "hash": "sha256-GkLTPONBlz9OTz8OENAHYAVqCsoOKlcYCZS/KsJsTis=",
+        "metadata_hash": "sha256-cO8ovHf1oZUQ5JiPz/8ykwXzEUD+k/CblzUXceWe7wM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/bitvec-1.1.6.0/bitvec-1.1.6.0.tar.gz"
+      },
+      "version": "1.1.6.0"
+    },
+    "blake3": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "avx2": false,
+        "avx512": false,
+        "sse2": false,
+        "sse41": false
+      },
+      "source": {
+        "hash": "sha256-FJZm3KtrNDbyjJBjx9cGDutxPKDB2VEpwPT7JBtvJLo=",
+        "metadata_hash": "sha256-1RSmx+odqSRTEcX5ERNFPxTi36MfHor/NUgctqyrTUY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/blake3-0.3.1/blake3-0.3.1.tar.gz"
+      },
+      "version": "0.3.1"
+    },
+    "blaze-builder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lx02BCisl6+aTlXk8sI2SfbO3Azl1ulNUg5mPzPqURM=",
+        "metadata_hash": "sha256-97yV94qvGDOJwif4dU78qKlRtmvAdS4RsK9si3IyefQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/blaze-builder-0.4.4.1/blaze-builder-0.4.4.1.tar.gz"
+      },
+      "version": "0.4.4.1"
+    },
+    "blaze-html": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ZVQu8592RKPXavyt65dtPjNMaUdRa3MT/LWRZc6hYI8=",
+        "metadata_hash": "sha256-hcQvhPTq0sSIRPvghlBprdO7O7MyLThgfpPVUVpMnFg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/blaze-html-0.9.2.0/blaze-html-0.9.2.0.tar.gz"
+      },
+      "version": "0.9.2.0"
+    },
+    "blaze-markup": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-hgasi0off48bvAdwsnUum2+IzMn73LszqiBXfQ5ZMOg=",
+        "metadata_hash": "sha256-An8hi4HSinwKM7k9RWxOWqktFF6dzuFINPutc6Oa1+Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/blaze-markup-0.8.3.0/blaze-markup-0.8.3.0.tar.gz"
+      },
+      "version": "0.8.3.0"
+    },
+    "boring": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "tagged": true
+      },
+      "source": {
+        "hash": "sha256-qW7cHYp4LKiIBoqbyXFFLcf77QO5Dl4Ncb1zPFaE5i0=",
+        "metadata_hash": "sha256-jVpV+Tay2L5yf4tEBK2RT/k0kbc8e7MJSWVUbfYhAVY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/boring-0.2.2.1/boring-0.2.2.1.tar.gz"
+      },
+      "version": "0.2.2.1"
+    },
+    "bsb-http-chunked": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-FIMJ4j64smHB3jdHEjctYtjI3I7lBMOSgJx+wzwKDnw=",
+        "metadata_hash": "sha256-HM5zccMbHTz6PrFV4q7P/A7CEtHYp+fIo7AO92gYpDs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/bsb-http-chunked-0.0.0.4/bsb-http-chunked-0.0.0.4.tar.gz"
+      },
+      "version": "0.0.0.4"
+    },
+    "byteorder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-vSC7tYaUf5nDikyT2dAmb0n2/FgXZ7UbpWj21dUtKRk=",
+        "metadata_hash": "sha256-qVKBfcviCvA0b7VaKME+leLdvz6Z+bT//cBj8VDxOyA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/byteorder-1.0.4/byteorder-1.0.4.tar.gz"
+      },
+      "version": "1.0.4"
+    },
+    "bytestring-strict-builder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-O5rgCiEGONfTlyJH9xBuUXNTJwgc2hf00MEoOxyi3Qs=",
+        "metadata_hash": "sha256-mKzzBENCgEf5TvMSN2+mlS5yOe/IH383yGhni0GpMhw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/bytestring-strict-builder-0.4.5.8/bytestring-strict-builder-0.4.5.8.tar.gz"
+      },
+      "version": "0.4.5.8"
+    },
+    "bytestring-tree-builder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-j35TLmFzk9+ywoXgMRMXNFuhCPwBSzHGGPQnkEb6Z2g=",
+        "metadata_hash": "sha256-AYlSaJigejUzGV/CiF4RDVOzSbOwS8bfZqUczc1kDXM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/bytestring-tree-builder-0.2.7.13/bytestring-tree-builder-0.2.7.13.tar.gz"
+      },
+      "version": "0.2.7.13"
+    },
+    "c2hs": {
+      "components": [
+        "exe:c2hs"
+      ],
+      "flags": {
+        "base3": true,
+        "regression": false
+      },
+      "source": {
+        "hash": "sha256-OQYyz/xWHDJIOvR0qsUBaKaPD6OCCWVS43dJkjYXiEw=",
+        "metadata_hash": "sha256-evyIEzvSROSo/EgzY6hJvbkeG4WHUI41JLquhOTsMrg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/c2hs-0.28.8/c2hs-0.28.8.tar.gz"
+      },
+      "version": "0.28.8"
+    },
+    "call-stack": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-QwvPijQE9+VTGVc8C4B7E1aUbwyPKJuz2a+yecY2uHs=",
+        "metadata_hash": "sha256-rETSwAkx3CCwF1DajJLsRD62OnIx6FUBiMsqwjhff+s=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/call-stack-0.4.0/call-stack-0.4.0.tar.gz"
+      },
+      "version": "0.4.0"
+    },
+    "case-insensitive": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-KW3BfgxfPfs9gs7YPkycRMM47N50myeLbq5RLx0E5AY=",
+        "metadata_hash": "sha256-nf0xcfx2mM+Nkxcn0686eziRNbWD5Gta2sH50gJv/2E=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/case-insensitive-1.2.1.0/case-insensitive-1.2.1.0.tar.gz"
+      },
+      "version": "1.2.1.0"
+    },
+    "cborg": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "optimize-gmp": true
+      },
+      "source": {
+        "hash": "sha256-F/4HDDj8SYyrSby51iFbd0fVO+35ZQLpvM6crXO5x5c=",
+        "metadata_hash": "sha256-R8BEreGF5ZQz7DAf09hcehuXCcx1La+LY4jJGQqmGKo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cborg-0.2.10.0/cborg-0.2.10.0.tar.gz"
+      },
+      "version": "0.2.10.0"
+    },
+    "cborg-json": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-2wtxQMoEGsUGUsCmhZ6wHNqrvN+B+/YB07Rez2ts3dw=",
+        "metadata_hash": "sha256-oBoWgH+5sIxlbtJWr6anAnikNlSbIDd3Ng7Js1HH8ho=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cborg-json-0.2.6.0/cborg-json-0.2.6.0.tar.gz"
+      },
+      "version": "0.2.6.0"
+    },
+    "cereal": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "bytestring-builder": false
+      },
+      "source": {
+        "hash": "sha256-mZBSIGYbJuW9kRML2XclVJOGCKWx1xckCm6zMRIeD2o=",
+        "metadata_hash": "sha256-h6Inx7UQIX6gWds91Z2WZe3Y8NHT2N45RY43Gh2UAvs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cereal-0.5.8.3/cereal-0.5.8.3.tar.gz"
+      },
+      "version": "0.5.8.3"
+    },
+    "character-ps": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-It5x/eOLI20+kWioMrXh510ftPQChme990eztMjBUpw=",
+        "metadata_hash": "sha256-s47RwHrknnRh5Eyh0Aycok0dywCEJMzZGZFvkv1I2f4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/character-ps-0.1/character-ps-0.1.tar.gz"
+      },
+      "version": "0.1"
+    },
+    "charset": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-HOjG1ESunVaFCZ/hGP2idExKYDdVlQfYIT/2ht/Kci0=",
+        "metadata_hash": "sha256-FAfYDNUYsDKfRbS+uNZ83uHv9n4tVWcIdrGihjXRoa0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/charset-0.3.12/charset-0.3.12.tar.gz"
+      },
+      "version": "0.3.12"
+    },
+    "claude": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Eakrz2Eoj+6DOfPnCTpLquIrXY0pXIkevF4QDWtMFUE=",
+        "metadata_hash": "sha256-qp44d7u885BSZ1OiUReX9YprzXhOaDvIiC1Cye3zeH0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/claude-1.5.0/claude-1.5.0.tar.gz"
+      },
+      "version": "1.5.0"
+    },
+    "clock": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "llvm": false
+      },
+      "source": {
+        "hash": "sha256-aumJiv54il4zTNX61dGKPC6OWfoJqve5V9uzikdn3y4=",
+        "metadata_hash": "sha256-uThlWwDPIEzmmr//lGAhvtER0mCan3qcIuKKGiAukRU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/clock-0.8.4/clock-0.8.4.tar.gz"
+      },
+      "version": "0.8.4"
+    },
+    "colour": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-HzsQVWdavk4zYoAMyb96ubkt/fIaH2yCslJhEnC+loA=",
+        "metadata_hash": "sha256-YT3I1fblG6vlc5inQquNXClk+pi3c/O/bmpyt+h/HG4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/colour-2.3.7/colour-2.3.7.tar.gz"
+      },
+      "version": "2.3.7"
+    },
+    "comonad": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "containers": true,
+        "distributive": true,
+        "indexed-traversable": true
+      },
+      "source": {
+        "hash": "sha256-6XOd8r9ZRJWAYqTqc73jvzXAh5zuCUTt9/Bb6/mT+cE=",
+        "metadata_hash": "sha256-6GBuAQ4wb0EBkCbpSwZ2mTwXUmDR2JCORRiysGpAJys=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/comonad-5.0.10/comonad-5.0.10.tar.gz"
+      },
+      "version": "5.0.10"
+    },
+    "conduit": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-aZAq8D6n5MuYL6g9pCr+Npc7YtClLqFArlNi5ShUuj8=",
+        "metadata_hash": "sha256-TlvjTu/xZkbrfhNHHHrn6NtZo/fMMSXssfwK42Mrqsk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/conduit-1.3.6.1/conduit-1.3.6.1.tar.gz"
+      },
+      "version": "1.3.6.1"
+    },
+    "conduit-extra": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-SR8+jpQI9dEP+NAr9NDtsRgh4lN+fCLtvW1kv5E4giI=",
+        "metadata_hash": "sha256-6TKyYNxQ3SqByZbzcHmLGZeaz9XPp7traFNY5oRmALs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/conduit-extra-1.3.8/conduit-extra-1.3.8.tar.gz"
+      },
+      "version": "1.3.8"
+    },
+    "constraints": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-gIAh4hfDnrSqp2z4Wr9D9OW/Q5YUPYa7InUGjdi7bTk=",
+        "metadata_hash": "sha256-MTSMNf0MyXCx8jnP++RGU8Bs+BFDIn7G6gwBMkUZ4Mc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/constraints-0.14.4/constraints-0.14.4.tar.gz"
+      },
+      "version": "0.14.4"
+    },
+    "contravariant": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "statevar": true
+      },
+      "source": {
+        "hash": "sha256-ZfMmA1TuX9Hyx//FTP+Z0it5TCVPBTc0l5rTeCDm7+M=",
+        "metadata_hash": "sha256-KI8dPm+zrc+fNvKP+hiWc/LxMDgSKW37JSNHitMd2eI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/contravariant-1.5.6/contravariant-1.5.6.tar.gz"
+      },
+      "version": "1.5.6"
+    },
+    "contravariant-extras": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-LzoW04y2d4cE238ULlS+Fp20Ni4DOy1WjBctDG5kKY4=",
+        "metadata_hash": "sha256-jG0cIMeUREGmM3684v0pAeqPtiRrst+TMjA+iRIft8M=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/contravariant-extras-0.3.5.4/contravariant-extras-0.3.5.4.tar.gz"
+      },
+      "version": "0.3.5.4"
+    },
+    "cookie": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Gt3mJybjo7vhR8AlFP4MT18sWi/2OELerBDEUaKm96A=",
+        "metadata_hash": "sha256-kritKV9s4qLHahZ0fWIALCFCGlsAfMm1DN2a4IX/DyY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cookie-0.5.1/cookie-0.5.1.tar.gz"
+      },
+      "version": "0.5.1"
+    },
+    "cradle": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Ovxmoozb+3xENUDJVEsSVR6jWhjdHKwQ3Y9zQ/gt5Uk=",
+        "metadata_hash": "sha256-SRomkLnzLbm5QtalNSwaeqjWHZzRs0s+A8flZq5eLFo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cradle-0.0.0.0/cradle-0.0.0.0.tar.gz"
+      },
+      "version": "0.0.0.0"
+    },
+    "cron": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "lib-werror": false
+      },
+      "source": {
+        "hash": "sha256-I+nThoF7TVlhHIV7OLgEC+oU6Pumdn10FNWTMY85M4c=",
+        "metadata_hash": "sha256-WRaPKdABwHzhm6FvC4q/ToZZ/fkODmMN3Uk+WC1Jn9w=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cron-0.7.2/cron-0.7.2.tar.gz"
+      },
+      "version": "0.7.2"
+    },
+    "cryptohash-md5": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-OwjbCuOd8rROgwU60w11RqTGIAqFLCKiQKfgOuEIDwU=",
+        "metadata_hash": "sha256-LkJYbXO9sUm96Cnje2VG2E5g1/tJyTMgYztxwl9N7lQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cryptohash-md5-0.11.101.0/cryptohash-md5-0.11.101.0.tar.gz"
+      },
+      "version": "0.11.101.0"
+    },
+    "cryptohash-sha1": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-pAQsl60C62jnZld8o1wBlwwz6Wz9dMy03UA+NHaiMkE=",
+        "metadata_hash": "sha256-K98p29iWvKhr8ZjIgvqN8csxhDtx8pB+BZt8ELzgrbM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cryptohash-sha1-0.11.101.0/cryptohash-sha1-0.11.101.0.tar.gz"
+      },
+      "version": "0.11.101.0"
+    },
+    "cryptohash-sha256": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "exe": false,
+        "use-cbits": true
+      },
+      "source": {
+        "hash": "sha256-c6fccWOHGoCDdJUDmgmZZ7EfXE/nChGCd4QvenE8a/Y=",
+        "metadata_hash": "sha256-Dp3izM4mHnpbAn6EL29H9Q6w5gWaDemKVHn3WqgWQQc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cryptohash-sha256-0.11.102.1/cryptohash-sha256-0.11.102.1.tar.gz"
+      },
+      "version": "0.11.102.1"
+    },
+    "cryptohash-sha512": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-YNx/tvmV4yAzbNzRkNwNMPfADa6fgrA8FBHrinw1jcc=",
+        "metadata_hash": "sha256-6A8qa2/wbVqkHajEIbF9a3RAFcDCfic62iKhkpmFs3M=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/cryptohash-sha512-0.11.103.0/cryptohash-sha512-0.11.103.0.tar.gz"
+      },
+      "version": "0.11.103.0"
+    },
+    "crypton": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "check_alignment": false,
+        "integer-gmp": true,
+        "old_toolchain_inliner": false,
+        "support_aesni": true,
+        "support_deepseq": true,
+        "support_pclmuldq": true,
+        "support_rdrand": true,
+        "support_sse": false,
+        "use_target_attributes": true
+      },
+      "source": {
+        "hash": "sha256-vP+EalN0Keqj1kweqIjC37JIBcs62c5sV7GuDzlGI5Q=",
+        "metadata_hash": "sha256-eSBo3hnsPnU2e6UvW7aMKwH3YYL5042fy27M/s6PUig=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-1.1.5/crypton-1.1.5.tar.gz"
+      },
+      "version": "1.1.5"
+    },
+    "crypton-asn1-encoding": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-SYE6DuJT9ijLgQLdaFeQVgm1LkkMc8VU183wy84pJtI=",
+        "metadata_hash": "sha256-RUlKFyOgR6gV0NYgSBwQKNyiik6lzyVUhoaH2pB1OWE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-asn1-encoding-0.10.0/crypton-asn1-encoding-0.10.0.tar.gz"
+      },
+      "version": "0.10.0"
+    },
+    "crypton-asn1-parse": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-NcDyeNj8tyC0rYnCp/JW9/sJi59xoK60k6TDwP53KNk=",
+        "metadata_hash": "sha256-Siz8SYCVfRonnvaRN+5fZlwkfM2LuWKBLVsHHVQ4k/s=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-asn1-parse-0.10.0/crypton-asn1-parse-0.10.0.tar.gz"
+      },
+      "version": "0.10.0"
+    },
+    "crypton-asn1-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Ye/GOHeg0925kqeTg52UJ8FZfglabh9jwE4F/T5OMC0=",
+        "metadata_hash": "sha256-AvPsRzARs9qS979zi+oZyt+IpkcLJabLUEIhbHVJyRI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-asn1-types-0.4.1/crypton-asn1-types-0.4.1.tar.gz"
+      },
+      "version": "0.4.1"
+    },
+    "crypton-connection": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-1oa3hVgX6oxLyN73m3i8JK73JZc+gqiv0QnVKMnFQDQ=",
+        "metadata_hash": "sha256-o3ZKRN6fQ7Hp9ZAAnrvqFAH8ORHjukHOTZuT2fKo0i4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-connection-0.4.6/crypton-connection-0.4.6.tar.gz"
+      },
+      "version": "0.4.6"
+    },
+    "crypton-pem": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-H62rjLp0xqzXSHPwZBW0oqfISxa0NCUhenvrDsWDBUA=",
+        "metadata_hash": "sha256-/X5g2MOi18Q7w8/slebfHw8F7gjX0Di7n5B0oQAcwEY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-pem-0.3.0/crypton-pem-0.3.0.tar.gz"
+      },
+      "version": "0.3.0"
+    },
+    "crypton-socks": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "example": false,
+        "network-3-0-0-0": true
+      },
+      "source": {
+        "hash": "sha256-qDYIflwndBPHnm2Up780a/th6v+y9VVVh1x23+ymnzs=",
+        "metadata_hash": "sha256-Gfj5qMGXOQXsAA6kMbtEVKnEN7gPHl9fg/+EuWTEmIU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-socks-0.6.2/crypton-socks-0.6.2.tar.gz"
+      },
+      "version": "0.6.2"
+    },
+    "crypton-x509": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-VSYCkDOCclYrexRSAC4a0Nm2uS+zHcJfYRX10to8vA4=",
+        "metadata_hash": "sha256-btYEJL0GZGldtjz9ogUhcr9oQrVg37b0hHhEjG857GU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-x509-1.9.1/crypton-x509-1.9.1.tar.gz"
+      },
+      "version": "1.9.1"
+    },
+    "crypton-x509-store": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-3pGTQDwR0fsJAIM4Jka+b2z2jtmE9HXRoOFC9377h2Y=",
+        "metadata_hash": "sha256-l0YWC5k8JMF15WDicFHf5GFsZBMBRxJ3bxKX4sqLuoo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-x509-store-1.9.0/crypton-x509-store-1.9.0.tar.gz"
+      },
+      "version": "1.9.0"
+    },
+    "crypton-x509-system": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ie6Bm3iWOlySX9qtgOLmS+bA/t9PJPwrle3bZJuGzv4=",
+        "metadata_hash": "sha256-zNySv5jXaTxj3GgP9mW2SHoopwEAPb7maVptvTgkQ5I=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-x509-system-1.9.0/crypton-x509-system-1.9.0.tar.gz"
+      },
+      "version": "1.9.0"
+    },
+    "crypton-x509-validation": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-j8uDQBEUx/aU2ExUPo9/ls6mDFQ6MKdwkDdB0zbuzj0=",
+        "metadata_hash": "sha256-f9EjHgzhO+e7uVo0jaWJGRdNNBVyMJ/0Rx45w7P05oo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/crypton-x509-validation-1.9.1/crypton-x509-validation-1.9.1.tar.gz"
+      },
+      "version": "1.9.1"
+    },
+    "danwa-api": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/danwa/301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9",
+        "subdir": "danwa-api",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "danwa-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/danwa/301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9",
+        "subdir": "danwa-client",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "danwa-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/danwa/301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9",
+        "subdir": "danwa-core",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "data-binary-ieee754": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-WZdavtj0yqYC8HgMEKmySTR55v63GtGJuxDDrFZ43wo=",
+        "metadata_hash": "sha256-YKVt1RbjcQ8F15MQzOJaEO0PNho4jfHiTvls5UCQHhw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/data-binary-ieee754-0.4.4/data-binary-ieee754-0.4.4.tar.gz"
+      },
+      "version": "0.4.4"
+    },
+    "data-default": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+n1d5wzO9zgafxfNZJSN4cJLYg3hPhzVXDbCaUmHB5k=",
+        "metadata_hash": "sha256-1KjJ7VdKQzFSYmZsde/hCA45E6ZThE0qn/NgUaYhG+4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/data-default-0.8.0.2/data-default-0.8.0.2.tar.gz"
+      },
+      "version": "0.8.0.2"
+    },
+    "data-default-class": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-CuUwxPsL1sioujmUKczZx1+cdpYEkRcXj0zusr0I1bQ=",
+        "metadata_hash": "sha256-eI3FwL45gcqDrREgbjAKd66KHIubxPljD1Y9N/VAzL0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/data-default-class-0.2.0.0/data-default-class-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "data-fix": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-jfBS0YwEernpIAU2qHmbWvOZfr7Luwkac4S2voQWqzc=",
+        "metadata_hash": "sha256-IANgxJzIHPi4u99Jr9Su4D//0J0zlbCAp+fGX88B0xM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/data-fix-0.3.4/data-fix-0.3.4.tar.gz"
+      },
+      "version": "0.3.4"
+    },
+    "dec": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+xU2lNHH+LJxsgxDlLBfbWbQIR33jDZJ3O2HhWeyfy0=",
+        "metadata_hash": "sha256-utLF8VnugdLC/RHnlX12xPN/OkDJhm92AUsTFXWqNf4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/dec-0.0.6/dec-0.0.6.tar.gz"
+      },
+      "version": "0.0.6"
+    },
+    "dhall": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "cross": false,
+        "network-tests": true,
+        "use-http-client-tls": true,
+        "with-http": true
+      },
+      "source": {
+        "hash": "sha256-y7VhLZxVubP6B6tzty5kRYdab1MoPymXnxZKmzsGegA=",
+        "metadata_hash": "sha256-LM6l87cK7nbngV3X3DqTzadoY1hs6T+3wR3XojbvnR8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/dhall-1.42.3/dhall-1.42.3.tar.gz"
+      },
+      "version": "1.42.3"
+    },
+    "direct-sqlite": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "dbstat": true,
+        "fulltextsearch": true,
+        "haveusleep": true,
+        "json1": true,
+        "mathfunctions": false,
+        "systemlib": false,
+        "urifilenames": true
+      },
+      "source": {
+        "hash": "sha256-XyrOOKepJjY/5ysa2IJ2TWgzO7qIcJwPjwNtJsm00K8=",
+        "metadata_hash": "sha256-b/OWmm6uODyKmrCTq/7n97DtdtqwRcmEoUl7fh1xJ50=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/direct-sqlite-2.3.29/direct-sqlite-2.3.29.tar.gz"
+      },
+      "version": "2.3.29"
+    },
+    "distributive": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "tagged": true
+      },
+      "source": {
+        "hash": "sha256-rusCiiPbn5sHPiSmvXZrebnVjCtAewa/MylsJ+kmS6o=",
+        "metadata_hash": "sha256-nex81NxJMl9VGy8r8gBM/iRUshHliCJlzIeIDUOCsfg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/distributive-0.6.3/distributive-0.6.3.tar.gz"
+      },
+      "version": "0.6.3"
+    },
+    "dlist": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "werror": false
+      },
+      "source": {
+        "hash": "sha256-Fz1jcyi7Fz/MNl8w0p/0qUKSoeDlVYrrPfwR3oFRARU=",
+        "metadata_hash": "sha256-hUcnWUxagWqz0Q8VsbxP7a+eP30e9Reiu5AR8puiYdI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/dlist-1.0/dlist-1.0.tar.gz"
+      },
+      "version": "1.0"
+    },
+    "dotgen": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "devel": false
+      },
+      "source": {
+        "hash": "sha256-2hx499rwRwRlzglf0POz6KTkdE1bWCoPblkKMlItlsk=",
+        "metadata_hash": "sha256-YEWxJD8bcW0M1nGY8M112W259jxcwIJtBeDchV/L+dA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/dotgen-0.4.3/dotgen-0.4.3.tar.gz"
+      },
+      "version": "0.4.3"
+    },
+    "easy-file": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-7g+gkUs7s2YoOKaJ180jonhcy8Kd7zZmZPmUvFJP8rs=",
+        "metadata_hash": "sha256-HJO2vTDKwsytNZ0ePlDXG3f1mXMEB6fzSByMZ6hW+2s=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/easy-file-0.2.5/easy-file-0.2.5.tar.gz"
+      },
+      "version": "0.2.5"
+    },
+    "ech-config": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "devel": false
+      },
+      "source": {
+        "hash": "sha256-sja21+oThcKAt2BR7cfY9tsxyct7Nd9cBvWgvXW0/ro=",
+        "metadata_hash": "sha256-Kz6vSde5S9Sr29wXJUGfEWff/j53GjJPsKVfQ4zRBc0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/ech-config-0.0.1/ech-config-0.0.1.tar.gz"
+      },
+      "version": "0.0.1"
+    },
+    "effectful": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "benchmark-foreign-libraries": false
+      },
+      "source": {
+        "hash": "sha256-WHUs6KpJ/5znEwEScrq7OMn4nLZRNVjaYS+vckuBDs4=",
+        "metadata_hash": "sha256-04XbgrGD2uYIgPzq527AjhpSpPxf7GSNLMdlfgJ1C1c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/effectful-2.6.1.0/effectful-2.6.1.0.tar.gz"
+      },
+      "version": "2.6.1.0"
+    },
+    "effectful-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nGea9mba+wIiBjCk3TicJL626cT9vxugnmYBkz24afI=",
+        "metadata_hash": "sha256-EwU3ZYfBggLPUXN3sivyTrdvu903qvOGPN/V9AHZyxU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/effectful-core-2.6.1.0/effectful-core-2.6.1.0.tar.gz"
+      },
+      "version": "2.6.1.0"
+    },
+    "either": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-bWZpHoSVWpCi0Wn3HPUcg9dsFBY1y42ipg3f/KSASAE=",
+        "metadata_hash": "sha256-86UXzZDeVtfeoVSAJe5TNr+o/7xlONgH6FG2zSPQczk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/either-5.0.3/either-5.0.3.tar.gz"
+      },
+      "version": "5.0.3"
+    },
+    "en-biscuit": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/en/51edaab17473f7b9310f8802ccffd23bac5e4a9e",
+        "subdir": "en-biscuit",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "en-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/en/51edaab17473f7b9310f8802ccffd23bac5e4a9e",
+        "subdir": "en-core",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "entropy": {
+      "components": [
+        "lib",
+        "setup"
+      ],
+      "flags": {
+        "donotgetentropy": false
+      },
+      "source": {
+        "hash": "sha256-9d1aASePgxjZeT7WBxt0LxPONsdFYyi6rkrMgY4tkuo=",
+        "metadata_hash": "sha256-G5sacoK6bXZx5tepvoTMGMQKOkgM72IZJ6jkxm7EeRM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/entropy-0.4.1.11/entropy-0.4.1.11.tar.gz"
+      },
+      "version": "0.4.1.11"
+    },
+    "ephemeral-pg": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lY5HZpi/doCPC+vJydFjMgkeOioGCx1dXKaDbtnRDCo=",
+        "metadata_hash": "sha256-+stSIVZOffv+p3qbHUmHXO2WO1nKQHQL3/5m4Tbo2g0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/ephemeral-pg-0.3.1.0/ephemeral-pg-0.3.1.0.tar.gz"
+      },
+      "version": "0.3.1.0"
+    },
+    "fast-logger": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-KjRNmng8kJGaccbAifmIAJBOZR/e9uLDtXr4MPKva/I=",
+        "metadata_hash": "sha256-PHUuwU/ZRV1GQbvHZSWQ1vd+PSz9pFaJKRTQV1NJ0Ao=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/fast-logger-3.2.7/fast-logger-3.2.7.tar.gz"
+      },
+      "version": "3.2.7"
+    },
+    "file-embed": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-XxhnLv+TY1VVfN0WOQVFEgXX7iJ0LtrDE90nz0Kj9BU=",
+        "metadata_hash": "sha256-LomDJAwfquAgtKzvbTDwKB9eyHwvOHNtwdxUVjVeIqU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/file-embed-0.0.16.0/file-embed-0.0.16.0.tar.gz"
+      },
+      "version": "0.0.16.0"
+    },
+    "filelock": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-JDJIcwOZ44OhDCdsR224xzVZFxbg9vNMphIMs6JV6uc=",
+        "metadata_hash": "sha256-ePGj46+AMDaNEqJFsFdHwKEeArDjyZeL6GuCFLY76gw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/filelock-0.1.1.9/filelock-0.1.1.9.tar.gz"
+      },
+      "version": "0.1.1.9"
+    },
+    "free": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-coZ/fIkXMmN2Vzbo05XpQpHxqupibssdZz1yzpC5T4k=",
+        "metadata_hash": "sha256-OcoBZF98Lwj/1kImiRxRS9ySSofaSPgV+f53wuCsEWQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/free-5.2/free-5.2.tar.gz"
+      },
+      "version": "5.2"
+    },
+    "fusion-plugin-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-bQRTiGsKykarMRuKyAMf0klBfpahtnUkj8oZZWX1n5I=",
+        "metadata_hash": "sha256-DxG7xEWriuPbuz1dLqGYvbGsAgUYt/T3V5A13IkYJDg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/fusion-plugin-types-0.1.0/fusion-plugin-types-0.1.0.tar.gz"
+      },
+      "version": "0.1.0"
+    },
+    "generic-lens": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-wRbhFatFK5mwuyplWvwsffdjHpU4aY2DbgE3pyyBYTU=",
+        "metadata_hash": "sha256-R9XSyBbpkuJ++LPoSvfv1Zvi+1VsFaH+aDLixTt/oHM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/generic-lens-2.3.0.0/generic-lens-2.3.0.0.tar.gz"
+      },
+      "version": "2.3.0.0"
+    },
+    "generic-lens-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-HTEjbQcuQI5Zv6HdiGWSk2Ru44H2OfM7akm85I1SWuA=",
+        "metadata_hash": "sha256-iDfiag7Wt8eHK82r5hC6Mp2IDHqcmbXkvLk0jUZjlzg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/generic-lens-core-2.3.0.0/generic-lens-core-2.3.0.0.tar.gz"
+      },
+      "version": "2.3.0.0"
+    },
+    "generics-sop": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-YWocIXYJdGn5UU522Xn//bwS1Wn0T9Ad6xQ3fHiIeX4=",
+        "metadata_hash": "sha256-yXqju/SjZg6LOWhLkTbyDD4V3A5S55Li2uo08pmeNGc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/generics-sop-0.5.1.4/generics-sop-0.5.1.4.tar.gz"
+      },
+      "version": "0.5.1.4"
+    },
+    "githash": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GtXnwmvZycTkwyMiBmlLFThF/hHyJ+OdIU7vDZXzMNQ=",
+        "metadata_hash": "sha256-y0Ba7QPh2ppep2AeTX7qNzkQSopuR6xJcOB51hYyaDY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/githash-0.1.7.0/githash-0.1.7.0.tar.gz"
+      },
+      "version": "0.1.7.0"
+    },
+    "half": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-9HYElijW/3lyL7BzwB6F8qEbLvODX9w/whph8F0XqwI=",
+        "metadata_hash": "sha256-FnZUE/hMD2OlKMCpP/4o4He7NnLbZ9bbFXh5haW2QUA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/half-0.3.3/half-0.3.3.tar.gz"
+      },
+      "version": "0.3.3"
+    },
+    "handan-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/handan/8e98b0a955f908f70657c04f384b6286e4967422",
+        "subdir": "handan-core",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "happy": {
+      "components": [
+        "exe:happy"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-LpNFyZphvCm1obnVwep5HL6iGUmaTAHtcfM8OvNKXrA=",
+        "metadata_hash": "sha256-s6mE24hNsX1MvjHNnPP03165tiJDE73d1JcS60D7Dfs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/happy-2.2/happy-2.2.tar.gz"
+      },
+      "version": "2.2"
+    },
+    "happy-lib": {
+      "components": [
+        "lib",
+        "lib:backend-glr",
+        "lib:backend-lalr",
+        "lib:frontend",
+        "lib:grammar",
+        "lib:tabular"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-0uBmKxK1IAh4fDgLlKzU9u0KCvBLsNQz7YxKwA8eMAM=",
+        "metadata_hash": "sha256-74Kb9/SJQCdC6l2gk9RUnPn3RaCqDmiUz2e1Jg+QMG4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/happy-lib-2.2/happy-lib-2.2.tar.gz"
+      },
+      "version": "2.2"
+    },
+    "hashable": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "arch-native": false,
+        "random-initial-seed": false
+      },
+      "source": {
+        "hash": "sha256-7Qt8EM6Syf/kVCDa3DjG0520hv82M/8TVnzJ9195sRI=",
+        "metadata_hash": "sha256-FA/Fra0Wb3tSdWfL0m/0gejaSma9/IS+Pd8o2+tm8nU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hashable-1.5.1.0/hashable-1.5.1.0.tar.gz"
+      },
+      "version": "1.5.1.0"
+    },
+    "haskell-lexer": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nXbhUoEGsbMubkZSZOOTgcpLRQtypLUzHn5RJ2QKGkE=",
+        "metadata_hash": "sha256-OTMA4iP3uEwzTYd4BIG87emDkqqL2CvIgtdrVLfRxpk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/haskell-lexer-1.2.1/haskell-lexer-1.2.1.tar.gz"
+      },
+      "version": "1.2.1"
+    },
+    "haskell-src-exts": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-fglwdO+yNRFaevA7FNn5m+jo+CE6CSweZocDh7hsQr0=",
+        "metadata_hash": "sha256-1QVKUGctJBk85c9fbAkWajicF39/fGILuvcvb0p9m2c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/haskell-src-exts-1.24.0/haskell-src-exts-1.24.0.tar.gz"
+      },
+      "version": "1.24.0"
+    },
+    "haskell-src-meta": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-CXPYR1N2wbs3JWxrvAQSB9SaDb6ucqgvWCnmCBlIglk=",
+        "metadata_hash": "sha256-o6ZQU6vTdTAOYka6tKskKbMSMTvgB06Ha21jEpdZFDc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/haskell-src-meta-0.8.16/haskell-src-meta-0.8.16.tar.gz"
+      },
+      "version": "0.8.16"
+    },
+    "hasql": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-a6h0I7d/e2KDYmkQyX5buN1ih8sM8SrmcAefMwcRRUo=",
+        "metadata_hash": "sha256-MvxA3Jh7ovqjkZU/KJ4e+WUvfpY79o2LlIxk1mLVNhs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-1.10.3.7/hasql-1.10.3.7.tar.gz"
+      },
+      "version": "1.10.3.7"
+    },
+    "hasql-notifications": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-S8eoGlgx1qOeZ7qhurXXmgXkREQjo1zpOHmXHQCkb34=",
+        "metadata_hash": "sha256-U6Y02tPUdNPHBRQZrF8zfFpSmK6Uy2zP9avv5/aWrsE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-notifications-0.2.5.0/hasql-notifications-0.2.5.0.tar.gz"
+      },
+      "version": "0.2.5.0"
+    },
+    "hasql-pool": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-bnYP/KSFG+MY0EwIhwUUyBGlDmB9y0qHt581SA/kP+o=",
+        "metadata_hash": "sha256-oj0PByy5+P3sIW0Cbw0XEgBxR0ojG41nmkzfN/36Yjg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-pool-1.4.2.3/hasql-pool-1.4.2.3.tar.gz"
+      },
+      "version": "1.4.2.3"
+    },
+    "hasql-transaction": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-hzxSUnXnKeXpJvEk0FdgBd7WDl159FhrYKdevXi1cH0=",
+        "metadata_hash": "sha256-gfcoE+xf8cIJh8clQcSw1/XFgg9aQtEM43hZt04UT1o=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-transaction-1.2.3.1/hasql-transaction-1.2.3.1.tar.gz"
+      },
+      "version": "1.2.3.1"
+    },
+    "heaps": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-h2OkZjotCzyRJAClR9Zq4RtGqVRAO2dHJyFI6VCqA4I=",
+        "metadata_hash": "sha256-dM5gojuO8ke4vKce6zgonoKzteg7I4NgCyyDimghgGg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/heaps-0.4.1/heaps-0.4.1.tar.gz"
+      },
+      "version": "0.4.1"
+    },
+    "hpke": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GgDgXDRLF/fSsorhlXbCrsNI1xyZVYP4WIJkpZ3If6I=",
+        "metadata_hash": "sha256-+xB2cKCuuRtGJuCx3/Tn7DNC5IkxzJlJONla8aI/ZF0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hpke-0.1.0/hpke-0.1.0.tar.gz"
+      },
+      "version": "0.1.0"
+    },
+    "hs-opentelemetry-api": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-eXwabJMgxde+kpINQ3OY91Z0XgQjUXVruK99CUZiYS0=",
+        "metadata_hash": "sha256-n6+dar9Va32+OTNT6soQiAOVk5At0FuFnjUFregK/Xc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-api-1.0.0.0/hs-opentelemetry-api-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-api-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-bm+Ja0nvXravFabejocEL/1FNrY/dOcFe+qLWKCZAOg=",
+        "metadata_hash": "sha256-KOG2TF8gvz5urXfDtAqt+aWw4H0ZfutGK5h9OR3R9RM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-api-types-1.0.0.0/hs-opentelemetry-api-types-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-exporter-handle": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-R923M8ls5VuyN+L9vMZfApDRiTqNmlVRsnhONEr1SzM=",
+        "metadata_hash": "sha256-k/NsKJ16qmB5WjKzBmHafa8lcVWSLYEenx93IY3OWyY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-exporter-handle-1.0.0.0/hs-opentelemetry-exporter-handle-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-exporter-otlp": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "grpc": false
+      },
+      "source": {
+        "hash": "sha256-aSvT4t4r5GVYmZdXAIXgLofLpbwQ1o3qrB+EjYridGc=",
+        "metadata_hash": "sha256-Xa18W849g/zVYP2ydJrrz6trU1u+5/VPgszcOQ2jJos=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-exporter-otlp-1.0.0.0/hs-opentelemetry-exporter-otlp-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-instrumentation-wai": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-cRK22aTyw+kn/BTjz9VdWZylCBe+B5PRB1/iyooBGOk=",
+        "metadata_hash": "sha256-fcyKkfHS7sprm1V6vJORSkl0NiPYz9A1iOGgIP1CoPg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-instrumentation-wai-1.0.0.0/hs-opentelemetry-instrumentation-wai-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-otlp": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ZVvicEbYBHPqrhUDTyVBz2cBaL9CNsXF1I031WrSNC8=",
+        "metadata_hash": "sha256-Dqgn7d4KZrXIDA0BpiZl1Y28Lv3iNBLtXiu5+3hXHmQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-otlp-1.0.0.0/hs-opentelemetry-otlp-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-propagator-b3": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-zsYm1848K1bqDj9ejgXmnfA6ZW6u9Xos/mN7zkOLYYE=",
+        "metadata_hash": "sha256-m9XQFfHgdHLPAe+x8TDrGAXnWCj59yte1zDd6f0fPKQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-propagator-b3-1.0.0.0/hs-opentelemetry-propagator-b3-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-propagator-datadog": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-si8v4inXar1JsGIlvsEPPSWKR34JeOuXXOCVCx2CEoI=",
+        "metadata_hash": "sha256-k8krZKEc6lUb+f34mc8wy7Tzu3EuPcBAlRfCOA3CvmU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-propagator-datadog-1.0.0.0/hs-opentelemetry-propagator-datadog-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-propagator-jaeger": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-8bC9C/SpZ/g3uAkZ/LV5CgIisnPvCP9NinXgCRdWhCk=",
+        "metadata_hash": "sha256-wwNiWN8KVkRekU8fSR2q6mStN5ejh5JgBYxbvNyngQk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-propagator-jaeger-1.0.0.0/hs-opentelemetry-propagator-jaeger-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-propagator-w3c": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-sJ/q3NLTpBVhpyk3PO+wpCC6SS6eGW95C0bReYqi6GY=",
+        "metadata_hash": "sha256-ZmzVkHkUHqbUP9cynzZK5rXDiJdIdVHJHU2YiR55zM8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-propagator-w3c-1.0.0.0/hs-opentelemetry-propagator-w3c-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-propagator-xray": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-XSLM/nBORAflGKuv9PVkQdzGt0UQ6wK45DZMlzbdT94=",
+        "metadata_hash": "sha256-cMn8vmJV8i2nSbC3DGnxhqDqtZb0fkmcM6OGrFqCqsI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-propagator-xray-1.0.0.0/hs-opentelemetry-propagator-xray-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-sdk": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "tls-metadata": true
+      },
+      "source": {
+        "hash": "sha256-5OUED9I2ZUL+t9AUjAnhplooJIalQrtc66O0H9pdrmE=",
+        "metadata_hash": "sha256-Rh7Z9uDHKOhSFisICQyiUbY0D9h+yEmU9ZazIgPcnYM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-sdk-1.0.0.0/hs-opentelemetry-sdk-1.0.0.0.tar.gz"
+      },
+      "version": "1.0.0.0"
+    },
+    "hs-opentelemetry-semantic-conventions": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ybqGpGqRoxTfV1BsqzFU1f6ufDjuo0X3DotbILcTDvE=",
+        "metadata_hash": "sha256-e7jN0tn6zeRhPBsnGxpXrCGO1HGwWUP2/L84tQmRPSQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hs-opentelemetry-semantic-conventions-1.40.0.0/hs-opentelemetry-semantic-conventions-1.40.0.0.tar.gz"
+      },
+      "version": "1.40.0.0"
+    },
+    "hsc2hs": {
+      "components": [
+        "exe:hsc2hs"
+      ],
+      "flags": {
+        "in-ghc-tree": false
+      },
+      "source": {
+        "hash": "sha256-b04014j+LKcJHuChAwfuinwGChuokPK/+tFqfU1c73Y=",
+        "metadata_hash": "sha256-ObJf2SmwKwGj/ln+x8qLLabw+eKCJ2t6hOY6RwLE1yU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hsc2hs-0.68.10/hsc2hs-0.68.10.tar.gz"
+      },
+      "version": "0.68.10"
+    },
+    "hspec": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-OeTIw7sr4IpMYXR93/A2XGoH78YYWzqAp7iPu2vsl1Y=",
+        "metadata_hash": "sha256-tL/OZ5nINYLmS38Hcc6P9fZyU7yXSsKVaHxx8ZLs91Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hspec-2.11.17/hspec-2.11.17.tar.gz"
+      },
+      "version": "2.11.17"
+    },
+    "hspec-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-hLUXalJcsN+YBwRAIBIggUUXtdUeb9FaUsC8edo7ioU=",
+        "metadata_hash": "sha256-jVDq0MRPk6MiMt0/JxNWfaVeiDSYQYgC3wuebf7XQXI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hspec-core-2.11.17/hspec-core-2.11.17.tar.gz"
+      },
+      "version": "2.11.17"
+    },
+    "hspec-discover": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-NWydjfeN8wMzSL5hfd9AiRSkHdh8ErXteHsEgPrORlI=",
+        "metadata_hash": "sha256-QXIdeqGOvuvlrriCrUOSDMOUV5raZmaVeIYSrM1r3sM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hspec-discover-2.11.17/hspec-discover-2.11.17.tar.gz"
+      },
+      "version": "2.11.17"
+    },
+    "hspec-expectations": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-e43efiMOz9qQyV/YBHiyRKReaGAvs91KdvRxBhm+If8=",
+        "metadata_hash": "sha256-QjfwlKeTEgL/V6xkdVQrCzFLUKcCRVDituuHz7DU/5M=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hspec-expectations-0.8.4/hspec-expectations-0.8.4.tar.gz"
+      },
+      "version": "0.8.4"
+    },
+    "http-api-data": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "use-text-show": false
+      },
+      "source": {
+        "hash": "sha256-2kem1q62qWsGESxa3nFF+2QyMfaASb9oWivMzoWMWo8=",
+        "metadata_hash": "sha256-IXBMW8rrmXWU/dqcc90KGd3METTdQOnColh6W48duok=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-api-data-0.6.3/http-api-data-0.6.3.tar.gz"
+      },
+      "version": "0.6.3"
+    },
+    "http-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "network-uri": true
+      },
+      "source": {
+        "hash": "sha256-oCwb4ILo9IyVmscVCkikBfjUOD4JQmOUgehLIg8prWE=",
+        "metadata_hash": "sha256-HwlQurf+dRNwzk7HNseDbdiminV6CD7n9pCpyXbXIF4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-client-0.7.19/http-client-0.7.19.tar.gz"
+      },
+      "version": "0.7.19"
+    },
+    "http-client-tls": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-YRzxTPBGZXuxeIpNrAlxC0sQTAN9QrGJFIwC5t2Erjw=",
+        "metadata_hash": "sha256-OfxgqGQTSUbHc5U/uWqDbNdps69voDpL/FRxaKFeVB0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-client-tls-0.4.0/http-client-tls-0.4.0.tar.gz"
+      },
+      "version": "0.4.0"
+    },
+    "http-conduit": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "aeson": true
+      },
+      "source": {
+        "hash": "sha256-EwRtFezSMypbgMijSmoba47s786dXFfjQTMSuMEWQa8=",
+        "metadata_hash": "sha256-bFIaLaMXI0Ol9pF77BeQ980/DrJToV6FoUS39zsI3Gk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-conduit-2.3.9.1/http-conduit-2.3.9.1.tar.gz"
+      },
+      "version": "2.3.9.1"
+    },
+    "http-date": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-MvkjrBrZvf6tznxSoDybpiJbpg3BQTfLHN8y6oTM9NM=",
+        "metadata_hash": "sha256-sniwf4gHBeOwsHMgatJpVFSLZm1hZzPJprXVCZP1R9Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-date-0.0.11/http-date-0.0.11.tar.gz"
+      },
+      "version": "0.0.11"
+    },
+    "http-media": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GSCt8xsV0Wf2A3T7/QpTofvngg/X/UWb6s9usA0D8YM=",
+        "metadata_hash": "sha256-6COUilwGM+ztqAJgIABAdptgiwYvMpfQldM6xzVgXuE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-media-0.8.1.1/http-media-0.8.1.1.tar.gz"
+      },
+      "version": "0.8.1.1"
+    },
+    "http-semantics": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-oC3xHfjV6rrQKM5MLR76iJrmjlVtupSw0Tp1AXl0U9s=",
+        "metadata_hash": "sha256-50a9w4NzdpVOeIBJOPJ1aJJ0WKJY12drSD/wDLqHLJs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-semantics-0.4.1/http-semantics-0.4.1.tar.gz"
+      },
+      "version": "0.4.1"
+    },
+    "http-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-togEKstOU/H17+0mBWzx/cOuXca4XPvjIe3/wwecEGw=",
+        "metadata_hash": "sha256-NNuP6pSY0MZegvEk0Rz/uvyhHOqgJOzrysUm6JfHUiU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http-types-0.12.6/http-types-0.12.6.tar.gz"
+      },
+      "version": "0.12.6"
+    },
+    "http2": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "devel": false,
+        "h2spec": false
+      },
+      "source": {
+        "hash": "sha256-cqfFKUU4AC4yS8NMU15NvGhNttZ/1CJlJY/6Flt5Hd4=",
+        "metadata_hash": "sha256-7nQjbDI0cH+2qT+dv8ASQp9LG2xApcaAmhtV83wiTaQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/http2-5.4.4/http2-5.4.4.tar.gz"
+      },
+      "version": "5.4.4"
+    },
+    "hw-kafka-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "examples": false,
+        "it": false
+      },
+      "source": {
+        "hash": "sha256-JCXtQO/EycVPfm6gGw5Mb13rpz6WYtFFmQhuF+6+RzM=",
+        "metadata_hash": "sha256-Nc3WYkjbdbCs+GYVU7SUXrmcOBRyVaDYEGB6MZCjzW4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hw-kafka-client-5.3.0/hw-kafka-client-5.3.0.tar.gz"
+      },
+      "version": "5.3.0"
+    },
+    "hw-kafka-streamly": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-A8Mxkiwop7N4AxMn5wKwOEyZdIEbUz0LSahh49Ijo7E=",
+        "metadata_hash": "sha256-bgsfGtB7/RWYglKmBvuHHQzHGVd3NjEFYwmohKDX9zw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hw-kafka-streamly-0.2.0.0/hw-kafka-streamly-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "indexed-profunctors": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Lmm7KQC7flYu///3vPP3La958BMjLOYDJjpXWVQSw5g=",
+        "metadata_hash": "sha256-yb6sjfBt2gl9nceo1g+eX7bsr1bECTi7MLEy7gnxXIc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/indexed-profunctors-0.1.1.1/indexed-profunctors-0.1.1.1.tar.gz"
+      },
+      "version": "0.1.1.1"
+    },
+    "indexed-traversable": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "base-ge-4-18": true
+      },
+      "source": {
+        "hash": "sha256-ZCNZfTUorGbFS+qrn1QIQpwKKbjLmMRaFkXyVa73/vA=",
+        "metadata_hash": "sha256-8LG1FN/AhSgdC0uTOPwL0MHSXudzBvKhRP/gErCv74w=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/indexed-traversable-0.1.5/indexed-traversable-0.1.5.tar.gz"
+      },
+      "version": "0.1.5"
+    },
+    "indexed-traversable-instances": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-5p1B8jqVRjwuA67gM3Sk9InHL3vyNb4lFJnEzKlBH+w=",
+        "metadata_hash": "sha256-dkYNBcw5M6IZYsd0RADSWUFEwAutwjyPin1d+9Obvm4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/indexed-traversable-instances-0.1.2.1/indexed-traversable-instances-0.1.2.1.tar.gz"
+      },
+      "version": "0.1.2.1"
+    },
+    "integer-conversion": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-wYFkoEgHMxD2NT68ZMkDe1KkuCmZY84F4Ce89g4iFVo=",
+        "metadata_hash": "sha256-Ej0bCIQE8JdlAMaNgQWXiqLjKQjOVQjjKuvSN/BEfJ8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/integer-conversion-0.1.1/integer-conversion-0.1.1.tar.gz"
+      },
+      "version": "0.1.1"
+    },
+    "integer-logarithms": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "check-bounds": false,
+        "integer-gmp": true
+      },
+      "source": {
+        "hash": "sha256-Zt/28fd4/h7GiROf4SXNTmqVZDc0xlHIker6LFBmlFk=",
+        "metadata_hash": "sha256-hwzoCi5wTxebzaEu4QY4mkhBAPrBU0q/1YeqqlGXjms=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/integer-logarithms-1.0.5/integer-logarithms-1.0.5.tar.gz"
+      },
+      "version": "1.0.5"
+    },
+    "invariant": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Ymvex8kl+w8ViW3Md2mSywCl/PmSEVKME+dTXnI5bjo=",
+        "metadata_hash": "sha256-lvbuwxtevQTQncwS56T4abySDacjR7lXiw7L4SYSWDM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/invariant-0.6.5/invariant-0.6.5.tar.gz"
+      },
+      "version": "0.6.5"
+    },
+    "iproute": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GKMxp+Dm+dyJotqVV3sNdr0mkLj4MrcrRtbMm2Z7S6U=",
+        "metadata_hash": "sha256-ge1dWRVGeCXiOBqLL6vXzpuDxCCfSCW9FScLQzz1KGI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/iproute-1.7.15/iproute-1.7.15.tar.gz"
+      },
+      "version": "1.7.15"
+    },
+    "kafka-effectful": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "examples": false
+      },
+      "source": {
+        "hash": "sha256-KsKeFiOKwNUupcg3erKPUPuxKno1wZIqzG+sEp8L9mw=",
+        "metadata_hash": "sha256-WAk0Dvn4b9iKbUHeoqzInfMLzDaOLro/g4JeFtXuvQk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kafka-effectful-0.3.1.0/kafka-effectful-0.3.1.0.tar.gz"
+      },
+      "version": "0.3.1.0"
+    },
+    "kan-extensions": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-922qRKgNQjyEnV+1UuKiCx4vR7Y4yImjTLGlvRqwjSE=",
+        "metadata_hash": "sha256-IcWzY6FUJlFKy6Oszsor8NDWMnL93/1raWAQYJ70+jE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kan-extensions-5.2.8/kan-extensions-5.2.8.tar.gz"
+      },
+      "version": "5.2.8"
+    },
+    "keiki": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-yyuA1tqspxqxp6qM54Am523YqFVwE5vwKm1nbFsCRUs=",
+        "metadata_hash": "sha256-rwV06W1zjJ1h3DeAj7uKUGdM/EdqwqMJOZxngs35oeE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiki-0.9.1.0/keiki-0.9.1.0.tar.gz"
+      },
+      "version": "0.9.1.0"
+    },
+    "keiki-codec-json": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-948l68r165Hf5T4qF15FU6QLfsKrupIvQiVGoJYhUtg=",
+        "metadata_hash": "sha256-PnFDBIuwOsf1BguhCZeTNil/I12BPCyvzOw2KJzSNsM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiki-codec-json-0.9.1.0/keiki-codec-json-0.9.1.0.tar.gz"
+      },
+      "version": "0.9.1.0"
+    },
+    "keiro": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "reaction-hydration-probe": false
+      },
+      "source": {
+        "hash": "sha256-tNxXJyjxGuWKX5kMHf1RbUvbMyMchEGzK+CJHAPrh7A=",
+        "metadata_hash": "sha256-EVX33Clu1psZGt98wSLv9pKTd2BbhziIfJsV5bhDmHU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-0.18.0.0/keiro-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "keiro-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-yQ1uPJ74LrbxWDtts0avAUB2WZwAraIihKxKMGE/NNw=",
+        "metadata_hash": "sha256-h+SPC3/LXIGAAnui/UulS0wj/34Z2KaqAJ6sI0qZWZE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-core-0.18.0.0/keiro-core-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "keiro-migrations": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "legacy-codd-tools": false
+      },
+      "source": {
+        "hash": "sha256-IvwSvQIq6xcpbQ7FjgyzcBCufOGomJ5fZ7lpcCgH8WE=",
+        "metadata_hash": "sha256-r8ehp5HfOd3U7gEG7BaEnNG62WuFfzBFOv2eJIhmBqk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-migrations-0.18.0.0/keiro-migrations-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "keiro-ops": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-G8xEpo/ngPuYRsnOBp+roTOB8ZVu1nG9nsI8pxzAW5o=",
+        "metadata_hash": "sha256-dito2x4oPa/XsHWtP1+TcPPdBvv6upIAzFOq+lP7FtM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-ops-0.18.0.0/keiro-ops-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "keiro-pgmq": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-6kGVGxYPevh99gxxBUFahVSpe9Nzy501g5/wCxVZqdg=",
+        "metadata_hash": "sha256-VWcx+dw5ouuUm+hlIOGb0BsIcvz9S/leyLsxpbFcp9g=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-pgmq-0.18.0.0/keiro-pgmq-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "keiro-test-support": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-BqGNkmj36dglSn7l7LTy7Z98z+sgwEHvaVI3ZUMrBrw=",
+        "metadata_hash": "sha256-E6TsJvqUySc1lkIIXATYWM0iGSnjnSZBiZ8QxPt2OwY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/keiro-test-support-0.18.0.0/keiro-test-support-0.18.0.0.tar.gz"
+      },
+      "version": "0.18.0.0"
+    },
+    "kikan-en-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mw36tpx4LQmEpYTLaYoR7e+JhAExF98CamoDvVJhisE=",
+        "mori_uri": "mori://shinzui/kikan-en/repos/kikan-en",
+        "path": "vendor/kikan-en.tar",
+        "revision": "16704290d527d413568bfa40c983f5c3604c35c8",
+        "sha256": "9b0dfab69c782d0984a584cb698a11edef8984013117df026a6a03bd52618ac1",
+        "subdir": "kikan-en-client",
+        "type": "vendored"
+      },
+      "version": "0.1.0.0"
+    },
+    "kikan-en-contract": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mw36tpx4LQmEpYTLaYoR7e+JhAExF98CamoDvVJhisE=",
+        "mori_uri": "mori://shinzui/kikan-en/repos/kikan-en",
+        "path": "vendor/kikan-en.tar",
+        "revision": "16704290d527d413568bfa40c983f5c3604c35c8",
+        "sha256": "9b0dfab69c782d0984a584cb698a11edef8984013117df026a6a03bd52618ac1",
+        "subdir": "kikan-en-contract",
+        "type": "vendored"
+      },
+      "version": "0.1.0.0"
+    },
+    "kioku-api": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-5vBEdgFv3fyY8bdHz6UEPngs4xALAw2EChu5xzRVXk8=",
+        "metadata_hash": "sha256-n16x7dDGKSyHYZORMlO2ya1eADcfsrAgsTI5HdgfJkQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kioku-api-0.7.0.0/kioku-api-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "kioku-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-LBue2ZppoGWJTNRsSTEqHfNEbenJRV/ISvGYHaPvaQQ=",
+        "metadata_hash": "sha256-C0hRNRIO109iLxLIJM0I2/gRf6vXJqsCRVRtjR7/z28=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kioku-core-0.7.0.0/kioku-core-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "kioku-migrations": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-PttwyaTKunnRthN5CmF2gCsmuWwjiqNCwC3w8e46ReY=",
+        "metadata_hash": "sha256-0W1aPoLoIB1CibB8jeLpmnNu/t/Nab1DR0a3O/RkRkA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kioku-migrations-0.7.0.0/kioku-migrations-0.7.0.0.tar.gz"
+      },
+      "version": "0.7.0.0"
+    },
+    "kiroku-store": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-xWyPqIngf+fwdcMjOXZpVpnkBrGFAguLhvk945adY3M=",
+        "metadata_hash": "sha256-Ez9a7wX8v7I3LWy0q+Q4QdEFysaBD8DMw6rwYBYZEg8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kiroku-store-0.8.0.1/kiroku-store-0.8.0.1.tar.gz"
+      },
+      "version": "0.8.0.1"
+    },
+    "kiroku-store-migrations": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-xbmbuCqvwRlO9PQK30aFlY0lUZefwVLAJfSfqXIWQ3A=",
+        "metadata_hash": "sha256-yPxxGb5QbL3TWeZZIxnw64SnVUQhMLvXB85YHqoUdiI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kiroku-store-migrations-0.4.0.0/kiroku-store-migrations-0.4.0.0.tar.gz"
+      },
+      "version": "0.4.0.0"
+    },
+    "language-c": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "iecfpextension": true,
+        "usebytestrings": true
+      },
+      "source": {
+        "hash": "sha256-8RNe3aSi0mP+2MEsrhZuVH2glSAKAm5l4fXhNMhV9SI=",
+        "metadata_hash": "sha256-REbUqC7PpcJWXnaD1I9y+TyxPLKgnQ7vj7x0nGVTeuM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/language-c-0.10.2/language-c-0.10.2.tar.gz"
+      },
+      "version": "0.10.2"
+    },
+    "lens": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "benchmark-uniplate": false,
+        "dump-splices": false,
+        "inlining": true,
+        "j": false,
+        "test-hunit": true,
+        "test-properties": true,
+        "test-templates": true,
+        "trustworthy": true
+      },
+      "source": {
+        "hash": "sha256-00Xc8f2k1KEnuE1CY4ti94PPUnUL2P0UqxY3UQwQI8I=",
+        "metadata_hash": "sha256-c9GizWPRlxDqUS1Uhpuho5X1m+lGutf2FoFUt8nnkHA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/lens-5.3.6/lens-5.3.6.tar.gz"
+      },
+      "version": "5.3.6"
+    },
+    "lens-family": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GAG0wjNTjL/mfC9ign75Zfb2Cq68Jw3ZsH8Pfz3rJRM=",
+        "metadata_hash": "sha256-42jvaT7T2JTc7Bc1/ilSq4dsSaiCMcfXYonSqdK91m8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/lens-family-2.1.3/lens-family-2.1.3.tar.gz"
+      },
+      "version": "2.1.3"
+    },
+    "lens-family-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mxoxsXlpFUsxGG7MlEwJiDArqLxVgCK+V4FuvrwgG2U=",
+        "metadata_hash": "sha256-NxTD+lelVtb7lYI0+kzehAHgmEWNyQQUFsVNJewYdHM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/lens-family-core-2.1.3/lens-family-core-2.1.3.tar.gz"
+      },
+      "version": "2.1.3"
+    },
+    "libBF": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "system-libbf": false
+      },
+      "source": {
+        "hash": "sha256-+3pA8Vh1TuDHm3OgtFECNS1LkFvtBAZ5nBZufoRCTsk=",
+        "metadata_hash": "sha256-rMrArHGMgNudye8pKBX10U+U6K0og0Uy0sVQW5DSbWs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/libBF-0.6.9/libBF-0.6.9.tar.gz"
+      },
+      "version": "0.6.9"
+    },
+    "libyaml": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "no-unicode": false,
+        "system-libyaml": false
+      },
+      "source": {
+        "hash": "sha256-1il+ybHrtOS1gKQ1fYQNCKb1PhOhDAxT7nS5c7um+hM=",
+        "metadata_hash": "sha256-aKXtgozt859ErRa3onqB71BjDilpYKVJV1R3+Nsokes=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/libyaml-0.1.4/libyaml-0.1.4.tar.gz"
+      },
+      "version": "0.1.4"
+    },
+    "libyaml-clib": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-BFJrxU5fz0ccK9IoVOa1GeFipuPWVOhmzYhiEDxyUUk=",
+        "metadata_hash": "sha256-gKFI9e5QF6ezkBviHA8QORzx9DdP++wMxrs03Wxo73M=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/libyaml-clib-0.2.5/libyaml-clib-0.2.5.tar.gz"
+      },
+      "version": "0.2.5"
+    },
+    "lockfree-queue": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-oPZ3DNy+DE+GuipJivBpM9thXYP/VFehdQ9zP27zme4=",
+        "metadata_hash": "sha256-FW58zBk/xdi0PwZenNMcMXHHnsJYYyg9VGkA2SkwhG0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/lockfree-queue-0.2.4/lockfree-queue-0.2.4.tar.gz"
+      },
+      "version": "0.2.4"
+    },
+    "megaparsec": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "dev": false
+      },
+      "source": {
+        "hash": "sha256-qtwIWMxCLJYIpk2a6VURgF08nKIm93OvgVUP95ClDgA=",
+        "metadata_hash": "sha256-gr6bDL50Qaxbz7jLvLG63HXeCmwZRkX2Wf7mXRH5Al4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/megaparsec-9.7.1/megaparsec-9.7.1.tar.gz"
+      },
+      "version": "9.7.1"
+    },
+    "memory": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "support_bytestring": true,
+        "support_deepseq": true
+      },
+      "source": {
+        "hash": "sha256-/U629jjiS4G05s3Wh3KlMXJvL2dobIlp00B9gveGLj4=",
+        "metadata_hash": "sha256-n03pZzUvgLbxdMmhZvMVOT3egLd9e2fkEmiufewDGfk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/memory-0.18.0/memory-0.18.0.tar.gz"
+      },
+      "version": "0.18.0"
+    },
+    "microlens": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-VnkqYT5PsGNL3t9U3LdzrEuq6L4P7IvYjhu4t6ZJki4=",
+        "metadata_hash": "sha256-EGHtw/qW+oaGkokdbgoOGYopg6PRVKegzkpwjBw/ZS8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/microlens-0.4.14.0/microlens-0.4.14.0.tar.gz"
+      },
+      "version": "0.4.14.0"
+    },
+    "microlens-mtl": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+9eccuHypTPP43bs2tc4B9tDfCo880iL96hSPUN3hI8=",
+        "metadata_hash": "sha256-6XF96S1jdwRM2/Rp4buqXF1WExYO5IkfDQqzim0p3+E=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/microlens-mtl-0.2.1.0/microlens-mtl-0.2.1.0.tar.gz"
+      },
+      "version": "0.2.1.0"
+    },
+    "mime-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-5W5HR3jXLDhwOdNRS1KprzSF9KvjHmIJbzgUha9JSUA=",
+        "metadata_hash": "sha256-Nm+g40mm0IlERmqRSVpJm10iYNeNCZYBhaX8JB7nLF8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mime-types-0.1.2.2/mime-types-0.1.2.2.tar.gz"
+      },
+      "version": "0.1.2.2"
+    },
+    "mlkem": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "use_crypton": true
+      },
+      "source": {
+        "hash": "sha256-u2sk/PM30EgKZMi1FS2X7PKCCHKCTXkqtGqftFrLCCk=",
+        "metadata_hash": "sha256-MCxS18iA79xWfYEuLnSQ3AioXhVdqqnBLRV9mXyFaNI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mlkem-0.2.3.0/mlkem-0.2.3.0.tar.gz"
+      },
+      "version": "0.2.3.0"
+    },
+    "mmorph": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-3W8tKztndlRPxv7+kUybpAFsqRF1U4PsY51u3kF7n68=",
+        "metadata_hash": "sha256-qQyXwkipXvQDOO3vc13ge6Ocd02VnzsHpUiMIettb08=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mmorph-1.2.2/mmorph-1.2.2.tar.gz"
+      },
+      "version": "1.2.2"
+    },
+    "mmzk-typeid": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-PPmPodZE+7+kv/w4Lfs0fdoZPLkfo3aNTjdxZKY9npE=",
+        "metadata_hash": "sha256-111NbB+d7tnpRcSpgUh5+G/XvkOAovWAwUAX1AoIRxk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mmzk-typeid-0.7.1.2/mmzk-typeid-0.7.1.2.tar.gz"
+      },
+      "version": "0.7.1.2"
+    },
+    "monad-control": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-rguuoE2ZN173iBQDZxeZlKcXjUAKjODZAmhGVGdycTw=",
+        "metadata_hash": "sha256-LWVyeYOeGnYMhqafAPDDZHPvaXLUE+wPg6QCSccOCY4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/monad-control-1.0.3.1/monad-control-1.0.3.1.tar.gz"
+      },
+      "version": "1.0.3.1"
+    },
+    "mono-traversable": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Tdk+ozTAFpUAQC8HqjnJjbt7/+Vdxj/fIo2izCLHxc0=",
+        "metadata_hash": "sha256-fmJp6t+kX+hDPgH22s4Tl+s65COTEHFjS+gG6y7XOxc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mono-traversable-1.0.21.0/mono-traversable-1.0.21.0.tar.gz"
+      },
+      "version": "1.0.21.0"
+    },
+    "mtl-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "two-point-one": false,
+        "two-point-two": false
+      },
+      "source": {
+        "hash": "sha256-GVU5j+IRVnT0f1U7LKr5KMaqNCQnGlzRO8GR5Uv+Op4=",
+        "metadata_hash": "sha256-Qlf7VuVpBzSXOq0GABC+xsKFf1waxs+H/DNe07x8hfQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/mtl-compat-0.2.2/mtl-compat-0.2.2.tar.gz"
+      },
+      "version": "0.2.2"
+    },
+    "network": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "devel": false
+      },
+      "source": {
+        "hash": "sha256-o+HYvdWMZ/5L8h8v60G1BBuJJvPVd5+AYUlEt8MHW7U=",
+        "metadata_hash": "sha256-SKDE+R5GD4ksYpt2yUEDNql46bWKqHxniu5Ye0yjdpg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-3.2.9.0/network-3.2.9.0.tar.gz"
+      },
+      "version": "3.2.9.0"
+    },
+    "network-bsd": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-2UlhyhXELHmNGc3lQOwSslzENDX7leaCOZ1sGgICLU4=",
+        "metadata_hash": "sha256-zHhn+Bxus/GSS7sQKXV69uO2ejwiTB+qMpvj6nCtcpw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-bsd-2.8.1.0/network-bsd-2.8.1.0.tar.gz"
+      },
+      "version": "2.8.1.0"
+    },
+    "network-byte-order": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-UpdmgW6eP9uC/hsUf4SZ70gsMNFTMNcgiNghbvZA50E=",
+        "metadata_hash": "sha256-Lok32pG/ul9iSyH6PRJbZ1uOufctWRirPX7eqPCvxQ4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-byte-order-0.1.8/network-byte-order-0.1.8.tar.gz"
+      },
+      "version": "0.1.8"
+    },
+    "network-control": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-BdQNOB5ccr7vsgm36Ch3tFf7yiiA5g7YSbrUgLZ5WxA=",
+        "metadata_hash": "sha256-v+MxjFz2Vz3VhbEm7BGX6uKRqabfF4AGvxnaXIqhTWg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-control-0.1.7/network-control-0.1.7.tar.gz"
+      },
+      "version": "0.1.7"
+    },
+    "network-info": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-my2IMS/IKANR1QAyAMwH3su4ZfhdOqexCUsji9aotAQ=",
+        "metadata_hash": "sha256-J5jC5MwsMhCL1LBe+pIc5vBU68OBxeRlyb10x9U4rxc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-info-0.2.1/network-info-0.2.1.tar.gz"
+      },
+      "version": "0.2.1"
+    },
+    "network-uri": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nBiJcxJuiTJQuIHyDogR3KBsIjwjQCsG96Hy6ZV5cig=",
+        "metadata_hash": "sha256-b/+1c3OWK1ZRotuLCvcyCYs78CmnztdqmFVhXeICZYg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/network-uri-2.6.4.2/network-uri-2.6.4.2.tar.gz"
+      },
+      "version": "2.6.4.2"
+    },
+    "nothunks": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "bytestring": true,
+        "text": true,
+        "vector": true
+      },
+      "source": {
+        "hash": "sha256-BpjBAcCkoHRiBLLeLlPMV+uBScSNvpgxDRaTcCfMq3c=",
+        "metadata_hash": "sha256-SycTNdRdmVNJNZJOxWxeu/ZjASHbjXgFWg1Sjceka6o=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/nothunks-0.3.2/nothunks-0.3.2.tar.gz"
+      },
+      "version": "0.3.2"
+    },
+    "nqe": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-8c03k2XMvWMOgrGv4pmZehMchp8C4C9279WyEQcNXKQ=",
+        "metadata_hash": "sha256-ErDDXW5xlEdtqGylsqdMJJX3lMxZ0zRSL9oi0pxJ/vA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/nqe-0.6.6/nqe-0.6.6.tar.gz"
+      },
+      "version": "0.6.6"
+    },
+    "old-locale": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-26+L9riI+5iEVwUHkpaiPD9A7i9EnfcxL39/HeGNe1A=",
+        "metadata_hash": "sha256-+pmL4sfgDNJqbpB1vqeQyq85Msqj6Ul61pvCA4DdaRE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/old-locale-1.0.0.7/old-locale-1.0.0.7.tar.gz"
+      },
+      "version": "1.0.0.7"
+    },
+    "openai": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ultlYyXmp2VXTFLWkATIRdR3lcA9HFYzxrnUrUgUPYk=",
+        "metadata_hash": "sha256-kHIs+mdjdJz6h8VhdVTgB423kwrBW7liDRMUGY8LgvQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/openai-2.5.4/openai-2.5.4.tar.gz"
+      },
+      "version": "2.5.4"
+    },
+    "openapi-hs": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Mv5Wj0f5ySI+Qmzmk/DkEjfcYQTyff85bTKr+edQaf8=",
+        "metadata_hash": "sha256-tpmg8B1wJSzB5yrQerfu+8fK9+ji+2FW+sPMHnxmUKI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/openapi-hs-5.0.0/openapi-hs-5.0.0.tar.gz"
+      },
+      "version": "5.0.0"
+    },
+    "optparse-applicative": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "process": true
+      },
+      "source": {
+        "hash": "sha256-zxau79ghcwx3OER/p8a3rafKHJzCVADWTvKDKU00WHE=",
+        "metadata_hash": "sha256-TB3L2/JJj3zdiIJuh2QD23+NgZMZYgYOxMOlehhsbMM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/optparse-applicative-0.19.0.0/optparse-applicative-0.19.0.0.tar.gz"
+      },
+      "version": "0.19.0.0"
+    },
+    "parallel": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-R8Ied42Ojr9leqcv0w4YnnH/3bGIZg6dCcqQYtdUF5E=",
+        "metadata_hash": "sha256-ekuC062D449bO+RC7jLJ4XkFupqBM0n6dnB/0Dd+kao=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/parallel-3.3.0.0/parallel-3.3.0.0.tar.gz"
+      },
+      "version": "3.3.0.0"
+    },
+    "parser-combinators": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "dev": false
+      },
+      "source": {
+        "hash": "sha256-nFBsw4+d8PwjqULnOe0fB5n8bFRRXXcN4EQWjs/3QL8=",
+        "metadata_hash": "sha256-sLPrzfqNLg2D/3tv1V33hw0Rgr2Z7oQUXwLL+BeG+Oo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/parser-combinators-1.3.1/parser-combinators-1.3.1.tar.gz"
+      },
+      "version": "1.3.1"
+    },
+    "parsers": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "attoparsec": true,
+        "binary": true,
+        "parsec": true
+      },
+      "source": {
+        "hash": "sha256-3Z5Ti3qecypaQkHW3gHSmK/0uxmpWC6UZO5LpmDGJrw=",
+        "metadata_hash": "sha256-xrUOF+n1SeCYCq0qskYlHPhIt7xI68Y7jpRhvpQuxoc=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/parsers-0.12.12/parsers-0.12.12.tar.gz"
+      },
+      "version": "0.12.12"
+    },
+    "pg-migrate": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-I99NReQf5VSsyFhpw1NJwdwZJQ1U2Wi2AEOqkOE8q9U=",
+        "metadata_hash": "sha256-VEQBXPS7ZrELsdg9JtxBDU9p1SNTDMpK786Claajav0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pg-migrate-1.1.0.0/pg-migrate-1.1.0.0.tar.gz"
+      },
+      "version": "1.1.0.0"
+    },
+    "pg-migrate-cli": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ojphXBmBlt52cAqB/bMKz0AZ3SVk/GX9OoIQnSTzzjQ=",
+        "metadata_hash": "sha256-3u/01uTakp/OTb/GDyh4KCEWoAzRjma2STNScDqJNMQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pg-migrate-cli-1.1.0.0/pg-migrate-cli-1.1.0.0.tar.gz"
+      },
+      "version": "1.1.0.0"
+    },
+    "pg-migrate-embed": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-UU6No4FvAhzjS7WqdYU7BsRqY0SBEYFDyKnUxqmWhog=",
+        "metadata_hash": "sha256-BZEPXB+VIpWKHOhFvdvR4xBbKYSI18EleT7qvWMJcVA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pg-migrate-embed-1.1.0.0/pg-migrate-embed-1.1.0.0.tar.gz"
+      },
+      "version": "1.1.0.0"
+    },
+    "pg-migrate-import-codd": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lQNAcN7/EbDNqBYbc6dLCWay9RnvJL+kdJJHEr4HyO4=",
+        "metadata_hash": "sha256-AqblBUhrKLhQvyQG1OICcRaoTMRqm3Zvw3EaiBUycTE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pg-migrate-import-codd-1.1.0.0/pg-migrate-import-codd-1.1.0.0.tar.gz"
+      },
+      "version": "1.1.0.0"
+    },
+    "pgmq-config": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "effectful": true
+      },
+      "source": {
+        "hash": "sha256-CMkpXOIKchFbMJWjdlVOuTxCWjL7ypOrLwiWYc4m7Fk=",
+        "metadata_hash": "sha256-bKwxFxW1Wzd1SG/eneSBtpgICLkc6l0kG07pV2VlFHU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pgmq-config-0.6.1.0/pgmq-config-0.6.1.0.tar.gz"
+      },
+      "version": "0.6.1.0"
+    },
+    "pgmq-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-w5GGn1e+PTp8GtdWUbGpvUGVgzMPAW4+c/FSqH3KD2k=",
+        "metadata_hash": "sha256-JmZV/Tn3FcwAEZwYmEvp13YRAMhygnPXKcNKleLGZag=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pgmq-core-0.6.1.0/pgmq-core-0.6.1.0.tar.gz"
+      },
+      "version": "0.6.1.0"
+    },
+    "pgmq-effectful": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-iCSg/3ObDQ1u9j8eZjrCcPbkqw28lcizG34mF0TJopE=",
+        "metadata_hash": "sha256-nVNuDcKDgExPMe6vpu4ru4Ks51wApkWQ7+epwoSqSMY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pgmq-effectful-0.6.1.0/pgmq-effectful-0.6.1.0.tar.gz"
+      },
+      "version": "0.6.1.0"
+    },
+    "pgmq-hasql": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-SupfDFXjOR89FMiR0XaVPmW2bTvw41JxQzCdZvHfDwc=",
+        "metadata_hash": "sha256-JTmp9V5/Ek0pi6pCCM4fbojpI+uen8KNbBlmKIUH2I0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pgmq-hasql-0.6.1.0/pgmq-hasql-0.6.1.0.tar.gz"
+      },
+      "version": "0.6.1.0"
+    },
+    "postgresql-binary": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-dzbgkbUYIFJqZBermTLAg//THw0+xbrqHVoHtl2F408=",
+        "metadata_hash": "sha256-h0CNCfOgMoBnxpgEHdzG4TdsrLrT7VtTN3IKzgGc1Bs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/postgresql-binary-0.15.0.1/postgresql-binary-0.15.0.1.tar.gz"
+      },
+      "version": "0.15.0.1"
+    },
+    "postgresql-connection-string": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-LetI1/SDso05+NfSTSrXDmnbUELb0DUVKOT5dqzasRA=",
+        "metadata_hash": "sha256-lC+jLWyD/I+Gcd/nvF+2is2yvJiTxIBpBcpbHHQJE/8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/postgresql-connection-string-0.1.0.6/postgresql-connection-string-0.1.0.6.tar.gz"
+      },
+      "version": "0.1.0.6"
+    },
+    "postgresql-libpq": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "use-pkg-config": true
+      },
+      "source": {
+        "hash": "sha256-A0qxII/muzMAmzx8daBt/qWzBuKJoBP/8uLkUNY+0qM=",
+        "metadata_hash": "sha256-aC0Xx7zliJAtwB3CVTKNjeTGM/mMeDfu2OXxzItEWvU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/postgresql-libpq-0.11.0.0/postgresql-libpq-0.11.0.0.tar.gz"
+      },
+      "version": "0.11.0.0"
+    },
+    "postgresql-libpq-pkgconfig": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+cUK4fSKHv0N9Pq5ir1eQRBK0ePGBsMvc3Bh0C+ewKY=",
+        "metadata_hash": "sha256-nW7djuEFz+cUWxOMj4v1gs3b0TrzbEMCrv+JEAPv3G8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/postgresql-libpq-pkgconfig-0.11/postgresql-libpq-pkgconfig-0.11.tar.gz"
+      },
+      "version": "0.11"
+    },
+    "pretty-simple": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "buildexample": false,
+        "buildexe": true
+      },
+      "source": {
+        "hash": "sha256-OlGqXJh7unnCvHWxSyiyvLp4YvGBYkMYEUdlEr4trh8=",
+        "metadata_hash": "sha256-CVXAC3VAiLvI7rctvj7DHW1oGNAgxTn3IT55GYfn4NA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/pretty-simple-4.1.4.0/pretty-simple-4.1.4.0.tar.gz"
+      },
+      "version": "4.1.4.0"
+    },
+    "prettyprinter": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "buildreadme": false,
+        "text": true
+      },
+      "source": {
+        "hash": "sha256-8E62/YZVEq2Gctoei/zqHDhFCfwvZixBt6w514mHBu4=",
+        "metadata_hash": "sha256-46gC6pOdRlsuN7n6Cdjlu4i1d11tYt0uxsoytjQWZW0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/prettyprinter-1.7.2/prettyprinter-1.7.2.tar.gz"
+      },
+      "version": "1.7.2"
+    },
+    "prettyprinter-ansi-terminal": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "text": true
+      },
+      "source": {
+        "hash": "sha256-kSzTQNXCWDER4urrmqA7h1UcouPdeLv9NGdWufHmyf4=",
+        "metadata_hash": "sha256-UYS6YAKmUN4zB1RzR+q6Gb3JuC62jpQ/QGgYyqIVzk8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/prettyprinter-ansi-terminal-1.1.4/prettyprinter-ansi-terminal-1.1.4.tar.gz"
+      },
+      "version": "1.1.4"
+    },
+    "primitive": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-RLTeQYE8e8Xbilf4fDYSoGm2UIaUYmi6FlCXJS69PXY=",
+        "metadata_hash": "sha256-dWsiLHFbxu9bqB+mnNuqIMXFO+tvFvF0uLrMk6bSOfA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/primitive-0.9.1.0/primitive-0.9.1.0.tar.gz"
+      },
+      "version": "0.9.1.0"
+    },
+    "profunctors": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ucb0JzaNLoEeTEi1kAUhhnJFj9LwCgLL77i+nHUcDvM=",
+        "metadata_hash": "sha256-v9uMi4zUOQ4wIZIZ7a/2rn9ChRb3M48LfDnLFrhLrSw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/profunctors-5.6.3/profunctors-5.6.3.tar.gz"
+      },
+      "version": "5.6.3"
+    },
+    "proto-lens": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-XJgmpLkNB/BkcOBY7z/mPuMSNhS0cFUJ3b8tXlXnFTo=",
+        "metadata_hash": "sha256-ysmzVQ8zDeCjcmAi51vIIADMcdgNzoeZNiCPDtF6O+w=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/proto-lens-0.7.1.7/proto-lens-0.7.1.7.tar.gz"
+      },
+      "version": "0.7.1.7"
+    },
+    "proto-lens-runtime": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-JaFQiohtDF3UDksLRU9Yn5XlGy+ixj43P6YI74LRbDg=",
+        "metadata_hash": "sha256-+y/M71WXt4yyaxyiWPOqMDnrNkfkT6LY/qihRW1q42U=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/proto-lens-runtime-0.7.0.8/proto-lens-runtime-0.7.0.8.tar.gz"
+      },
+      "version": "0.7.0.8"
+    },
+    "protobuf": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-qfv/jZTpepXtjZWbWVjkYzvXnRDfSJdko2wWCpHLKfU=",
+        "metadata_hash": "sha256-2O08cwJ8a351g8apTuGDW+7op1WodbBrv1G8Zn1Tq2k=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/protobuf-0.2.1.3/protobuf-0.2.1.3.tar.gz"
+      },
+      "version": "0.2.1.3"
+    },
+    "psqueues": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ELy+mus8oA1y6G2UDPkbAhuD+QiIU3USDU1R0CQK0HY=",
+        "metadata_hash": "sha256-9uGYdJ1KNE6FLTGvjvhxs6zxv4cHUDXmDQUgBxCJEQI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/psqueues-0.2.8.3/psqueues-0.2.8.3.tar.gz"
+      },
+      "version": "0.2.8.3"
+    },
+    "quickcheck-io": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+3eRGdef4I/01QL7aGmnDJqNX9iuCVn2BcPJN+/ZZCI=",
+        "metadata_hash": "sha256-e/C2j7kIc4JesuXpWMG3YSbc+YTeu5mOgWc+bYN+Cy0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/quickcheck-io-0.2.0/quickcheck-io-0.2.0.tar.gz"
+      },
+      "version": "0.2.0"
+    },
+    "ram": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ckdJYjSd0QG5cMxGvMBseZ9zEdIo57WfGkT4FCcVn3A=",
+        "metadata_hash": "sha256-rhERrhJvHIn1T/bWFtJaeNsNtuHnbiChPRUm3Gr+N+g=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/ram-0.22.1/ram-0.22.1.tar.gz"
+      },
+      "version": "0.22.1"
+    },
+    "random": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-6cgZJqfR5AMo9kX3NZKzHvycYxWJZpp/EwaHucwwUdw=",
+        "metadata_hash": "sha256-EXVBugoXc5ejMz+Uhw94nvBQ3KMbBoihmCSyvEAbiCM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/random-1.2.1.3/random-1.2.1.3.tar.gz"
+      },
+      "version": "1.2.1.3"
+    },
+    "recv": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Sh2ZI2RmGZEdf14WLvAb6I3pgcEi4x5Ncz31bzGemqU=",
+        "metadata_hash": "sha256-xgAgHCvT9qG/FQSSwx+y5dZnaTcL8NT5MiVtB3xnEYg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/recv-0.1.2/recv-0.1.2.tar.gz"
+      },
+      "version": "0.1.2"
+    },
+    "reflection": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "slow": false,
+        "template-haskell": true
+      },
+      "source": {
+        "hash": "sha256-xqfV5BrQ7hoFxmCs9P00sh84Mw7sFl0ka3//s5jln7M=",
+        "metadata_hash": "sha256-6vKNyYhHGKMG7R4MIVoks2xouKo75CVhf2bYhtQ/4eA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/reflection-2.1.9/reflection-2.1.9.tar.gz"
+      },
+      "version": "2.1.9"
+    },
+    "regex-base": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-6Mot7lmMeQ3RwcQ1m90eSV2biB9aofU5wi8N1VY3R78=",
+        "metadata_hash": "sha256-1sDG0RNvUEYgejMRFP9BMOcGQEUglt53Gb8D4/zrfHs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/regex-base-0.94.0.3/regex-base-0.94.0.3.tar.gz"
+      },
+      "version": "0.94.0.3"
+    },
+    "regex-tdfa": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "doctest": true,
+        "force-o2": false
+      },
+      "source": {
+        "hash": "sha256-MxKFk16wKbwEj61QMcjeMbA4uzYcW2y7/EfAEcwu4pU=",
+        "metadata_hash": "sha256-ZqOS+6JWvEjJDUJ6+RgJ63hd3FJv0t7v2TzFg71Bu64=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/regex-tdfa-1.3.2.6/regex-tdfa-1.3.2.6.tar.gz"
+      },
+      "version": "1.3.2.6"
+    },
+    "relay-pagination": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-6E8YziTCx5fgtKWEk4WFlXr8ZRt514uSFho0omtBsLw=",
+        "metadata_hash": "sha256-B5QWDMH/CgE0cop3CoYAg5HwCiJZcR4Uv3AQOoNTjNg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/relay-pagination-0.1.1.0/relay-pagination-0.1.1.0.tar.gz"
+      },
+      "version": "0.1.1.0"
+    },
+    "repline": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lGWuNFHNDeuglrWTa4AQtjLJxHZYNgmSg5LPysY/PhI=",
+        "metadata_hash": "sha256-RSGZZwxBx04rIdbAXrEbQJR8CsfvOl3VGpGik0v4Fck=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/repline-0.4.3.0/repline-0.4.3.0.tar.gz"
+      },
+      "version": "0.4.3.0"
+    },
+    "resourcet": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-7GAXhe5CogHzKtsgW4aFyYPxh1exvTPS6AbVceD5mWs=",
+        "metadata_hash": "sha256-+qdg+yj7XJj75IZ+N1p3VJXKvACSbagfoQLcmRAX0sU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/resourcet-1.3.0/resourcet-1.3.0.tar.gz"
+      },
+      "version": "1.3.0"
+    },
+    "safe": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-LIH+pCu+eexIh3QEPB7FTzDvugWd+aTzaBzoPYUAfwE=",
+        "metadata_hash": "sha256-uSjqFkWHZ4gVWzjOhcfkbRV6G7QdKwX1dwsT1gvGo/c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/safe-0.3.21/safe-0.3.21.tar.gz"
+      },
+      "version": "0.3.21"
+    },
+    "safe-exceptions": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-PFHY1QybYP+L+U+UL9kuO+qeYsWvp3jfyfcHt52kHvY=",
+        "metadata_hash": "sha256-i7cmG9VL1YrPyxVL5qFh+20NMaGFKq3I6SfSrS12UdE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/safe-exceptions-0.1.7.4/safe-exceptions-0.1.7.4.tar.gz"
+      },
+      "version": "0.1.7.4"
+    },
+    "sbv": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "compile_examples": true,
+        "doctest_is_running": false
+      },
+      "source": {
+        "hash": "sha256-AFqUsV7EeDeeIL+hZkmm4P7DmXjwOxVvxXQLn/aH0l0=",
+        "metadata_hash": "sha256-BiYxWKC+2oZTc90UVVa+qtCHClj/enxYHZvvTfmGE24=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/sbv-14.7/sbv-14.7.tar.gz"
+      },
+      "version": "14.7"
+    },
+    "scientific": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "integer-simple": false
+      },
+      "source": {
+        "hash": "sha256-rTeBvhSd/Hk25i65w6143tDpmFtNrhbS9i2bqVfM3P4=",
+        "metadata_hash": "sha256-EbDDvMVy8I3csTv62U34XgMj85kV50yuLXogXGMbTTA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/scientific-0.3.8.1/scientific-0.3.8.1.tar.gz"
+      },
+      "version": "0.3.8.1"
+    },
+    "selective": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-2/tL5xx5VvVOCZw0/+U436qZ7TkRII31goVj2iK2ruM=",
+        "metadata_hash": "sha256-VCq1ckkYmFUrQtYtQ6foxw+5PXFMBsBqTebzMf7offI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/selective-0.7.0.1/selective-0.7.0.1.tar.gz"
+      },
+      "version": "0.7.0.1"
+    },
+    "semialign": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "semigroupoids": true
+      },
+      "source": {
+        "hash": "sha256-D1E4nlevZGBC3OwlEZYGF77ihXIxrCkSKM9O9mIalGQ=",
+        "metadata_hash": "sha256-z228t3xdka+kRFcjtnAsIitMLr1/hxRm5/C9+o7XAHE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/semialign-1.4/semialign-1.4.tar.gz"
+      },
+      "version": "1.4"
+    },
+    "semigroupoids": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "comonad": true,
+        "containers": true,
+        "contravariant": true,
+        "tagged": true,
+        "unordered-containers": true
+      },
+      "source": {
+        "hash": "sha256-5IJY5JVCJF72xY1/QZqD0dGrkbAT2Sw7XIx8BI2qoS4=",
+        "metadata_hash": "sha256-UsWjRv33Q4Bhj2f/eEmJ75B4SY273/CeTY4v7SAgLiw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/semigroupoids-6.0.2/semigroupoids-6.0.2.tar.gz"
+      },
+      "version": "6.0.2"
+    },
+    "semigroups": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-v0xxIkOXw3d+ankUX1ycMdWhPydUg0XlUThGHYc0j/4=",
+        "metadata_hash": "sha256-Aiy8aD5JPZ8+8GMv0iwDpWM0lQ3RUQFxf0o6TXLk05A=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/semigroups-0.20.1/semigroups-0.20.1.tar.gz"
+      },
+      "version": "0.20.1"
+    },
+    "serialise": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "newtime15": true
+      },
+      "source": {
+        "hash": "sha256-Y5SXmf/RBnXvcOpwHB62PmGGKbOy97JfB8WpZuJOd/Q=",
+        "metadata_hash": "sha256-pn+JtVM7EUitRl3H8kuu7S4unn2B0qFH/H+o/xCJyk0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/serialise-0.2.6.1/serialise-0.2.6.1.tar.gz"
+      },
+      "version": "0.2.6.1"
+    },
+    "servant": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-8nPmXI9sxt36IEyNHQvFt+JYzsKIylsqLlf62zG/ZgI=",
+        "metadata_hash": "sha256-T+R+8rKTnAGMsPh/PNjt4K5TZaJ1rTPj3soQkxnUKm8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-0.20.3.0/servant-0.20.3.0.tar.gz"
+      },
+      "version": "0.20.3.0"
+    },
+    "servant-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lme8ShqjymctYyJyEojLySRClYLZ/TGXyLHasl+PtU8=",
+        "metadata_hash": "sha256-wVLDtyMomH8Q3Q4gB8cDQEeH4p0JR8rX0DOiI6UGu9M=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-client-0.20.3.0/servant-client-0.20.3.0.tar.gz"
+      },
+      "version": "0.20.3.0"
+    },
+    "servant-client-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-1lNYDpiEBzhs9gQtpqYX/Sx9Xf9hSbM3MNNDQIbrZu8=",
+        "metadata_hash": "sha256-ZhH3n3RibGhIPjD/n2rNDhT1/tzvcQ2EcsFL5jGM73w=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-client-core-0.20.3.0/servant-client-core-0.20.3.0.tar.gz"
+      },
+      "version": "0.20.3.0"
+    },
+    "servant-health": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-JhXITw0Co+HybGUxhdrmivsrPAwSY0FWJSJKioj+CXI=",
+        "metadata_hash": "sha256-fLzGpDiz8TkvFoRETIBjRjC9wkGetlCxVOdfE5havhs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-health-0.1.0.0/servant-health-0.1.0.0.tar.gz"
+      },
+      "version": "0.1.0.0"
+    },
+    "servant-multipart-api": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-ktXDscy83nq8/262OdfbuDYiJFKpZec+vUC/d15SLr4=",
+        "metadata_hash": "sha256-4NcUvj2psuUOeNeZq6ywMSuH0JFLNBTLx/g42xRsG/Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-multipart-api-0.12.1/servant-multipart-api-0.12.1.tar.gz"
+      },
+      "version": "0.12.1"
+    },
+    "servant-multipart-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-whPcZHN+nMAski6q/npn+Z2aEs6Ojq2a+g1NH5hbWzY=",
+        "metadata_hash": "sha256-6BBXg+fb7xeKONz9BfTRKoIp6siM/kkxnycty1ROc2U=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-multipart-client-0.12.2/servant-multipart-client-0.12.2.tar.gz"
+      },
+      "version": "0.12.2"
+    },
+    "servant-openapi-hs": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-veporrm537tgGjrQKu3RgsHkbCVXbEGzzLQfE82/aiE=",
+        "metadata_hash": "sha256-NZuG27ddQenZy1hjZM53C5cgUcV4ATlczech/1w8q1Q=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-openapi-hs-5.1.0/servant-openapi-hs-5.1.0.tar.gz"
+      },
+      "version": "5.1.0"
+    },
+    "servant-server": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-MFYK9dJZeuNhcR3oMCYX3jv7PgHxAYD/SKMxu+jkmRU=",
+        "metadata_hash": "sha256-7mQj36idFV99aRzs1J/m/wi7jONIUg0jHFnT7FWInpU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/servant-server-0.20.3.0/servant-server-0.20.3.0.tar.gz"
+      },
+      "version": "0.20.3.0"
+    },
+    "settei": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-gQQmftPPwRQRAbrfpCyw4P1T9pavTF7Ek6DdDo3BksY=",
+        "metadata_hash": "sha256-Sb2n2KtCziLfiYB5TnsAx/9zADRRMJEt22IJAGwglP8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/settei-0.2.0.0/settei-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "settei-env": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Q0TEQpuRFHxFt9R3FXmn1PDYaCHkW1/+s+7c28549Hk=",
+        "metadata_hash": "sha256-3LrbrVbjp22Z0R1SeXLyhtT5QOM5W6sjPkQq0Nw+3I8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/settei-env-0.2.0.0/settei-env-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "settei-optparse-applicative": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-qNAYGkMGhMWF7zuJHo6xYWg/kRm9Ucj98uW3p/I9HWM=",
+        "metadata_hash": "sha256-a/15IeZZVdlZ0Iosjf0IvLbHUIjUmASwulCSwGf59Cw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/settei-optparse-applicative-0.2.0.0/settei-optparse-applicative-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "settei-yaml": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-s21yGYaykk41PF7sGvHGA6CFBRUR+C4BPm12NJNFP18=",
+        "metadata_hash": "sha256-TPHv0mcThQkiQ/cZwRB9R8uoPHBDhPd55Y1uHJDOCWw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/settei-yaml-0.2.0.0/settei-yaml-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "shibuya-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-SX42mGMsE+1nTfLIGh2eowkMBatDvE3rC3GM59WF7Kc=",
+        "metadata_hash": "sha256-chzfZLbfesuH7UaXzbyZaIH0ua44UIOU0yE3uRpPhvA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shibuya-core-0.9.0.3/shibuya-core-0.9.0.3.tar.gz"
+      },
+      "version": "0.9.0.3"
+    },
+    "shibuya-kafka-adapter": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GRi64MWRq0e6RdBEpQFw56NAvdsbVidSzRb1VuhjFOY=",
+        "metadata_hash": "sha256-q2vYu2OfWgge0Nj1llG8yvmBBA1+RlJ6RImKSxwQPGU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shibuya-kafka-adapter-0.9.0.1/shibuya-kafka-adapter-0.9.0.1.tar.gz"
+      },
+      "version": "0.9.0.1"
+    },
+    "shibuya-kiroku-adapter": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-59zSVgvsDhlrwmh982BIY1j3XusoWbBgYau3aRSXSUk=",
+        "metadata_hash": "sha256-m3jrc/t4ySNSSPb9tyPMeVVUAHCOR5LEF+p7v4sjTGo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shibuya-kiroku-adapter-0.5.1.2/shibuya-kiroku-adapter-0.5.1.2.tar.gz"
+      },
+      "version": "0.5.1.2"
+    },
+    "shibuya-pgmq-adapter": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-RbZYNk7GG/F4IyZDz5xg7pB7vy6H+gLd60PqqZDLV1g=",
+        "metadata_hash": "sha256-LxZNlMfr8NOZZkuE+nQAgW+IutNmvJHWMkUaUgyOldQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shibuya-pgmq-adapter-0.16.0.0/shibuya-pgmq-adapter-0.16.0.0.tar.gz"
+      },
+      "version": "0.16.0.0"
+    },
+    "shikigami-agent": {
+      "components": [
+        "exe:shikigami-agent-run",
+        "exe:shikigami-run-behavior",
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-agent",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-api": {
+      "components": [
+        "exe:shikigami-openapi",
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-api",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-client": {
+      "components": [
+        "exe:shikigami-client",
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-client",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-core",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-migrations": {
+      "components": [
+        "exe:shikigami-migrate",
+        "lib",
+        "lib:test-support"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-migrations",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-server": {
+      "components": [
+        "exe:shikigami",
+        "exe:shikigami-server",
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-server",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikigami-workers": {
+      "components": [
+        "exe:shikigami-consume-events",
+        "exe:shikigami-consume-stream",
+        "exe:shikigami-scheduler",
+        "exe:shikigami-worker",
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "path": "shikigami-workers",
+        "type": "local"
+      },
+      "version": "0.1.0.0"
+    },
+    "shikumi": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-s5/Dk06otXzAZJETpWOl9MyyR+8FCAHb5649brQtmsU=",
+        "metadata_hash": "sha256-4F42wkw/XK31UR14zK2iZej67aAKXhTQNovTFAa3MN0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-0.4.0.0/shikumi-0.4.0.0.tar.gz"
+      },
+      "version": "0.4.0.0"
+    },
+    "shikumi-cache": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-F07N9upuuH9cm7lyRO70MRN5whCLIWiMEFe7fWSaOAM=",
+        "metadata_hash": "sha256-Bdf3cUy4zddLE3BtLL0n9m7zGUnHywba0MW5sNnJ/dY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-cache-0.2.0.0/shikumi-cache-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "shikumi-eval": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-58y17vL30i40eepGSZmh3AArZDbT1k/tL94BnyXgW8o=",
+        "metadata_hash": "sha256-tIcdpR1SzJ0M3SkrWVpjHDku+8aY8AnT67EeOjriKJA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-eval-0.3.0.0/shikumi-eval-0.3.0.0.tar.gz"
+      },
+      "version": "0.3.0.0"
+    },
+    "shikumi-tools": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Nz1OSU0BRC8ZF87ra+X+HGzHU6nmsWvnqVpM9ljuxdM=",
+        "metadata_hash": "sha256-mK0VxvzH02BJW44T8R8HCAN3FW2T+pyns5O7SoWlAXk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-tools-0.4.0.0/shikumi-tools-0.4.0.0.tar.gz"
+      },
+      "version": "0.4.0.0"
+    },
+    "shikumi-trace": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-iMT//koUddyQ9KcxMG1MuO8OZvBCf2M8M7V8N2Zfe74=",
+        "metadata_hash": "sha256-44VMF6i+DphosQuOZqLCvU4G5i3GoE2ynY4yh5nvfhM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-trace-0.3.0.0/shikumi-trace-0.3.0.0.tar.gz"
+      },
+      "version": "0.3.0.0"
+    },
+    "shikumi-trace-otel": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Fg4nV510RuTbyKo2CbOeXZ8XApzW2JHo9XQA/9MtOHo=",
+        "metadata_hash": "sha256-uEAtipfAyvQw2s+LDdfTexY9NAmAwFSF52dEBAuS9bE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/shikumi-trace-otel-0.1.2.0/shikumi-trace-otel-0.1.2.0.tar.gz"
+      },
+      "version": "0.1.2.0"
+    },
+    "shomei-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/shomei/65551cb120336b53695c0dd30ebe0e473d6efcb2",
+        "subdir": "shomei-client",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "shomei-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/shomei/65551cb120336b53695c0dd30ebe0e473d6efcb2",
+        "subdir": "shomei-core",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "shomei-servant": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/shomei/65551cb120336b53695c0dd30ebe0e473d6efcb2",
+        "subdir": "shomei-servant",
+        "type": "github"
+      },
+      "version": "0.1.0.0"
+    },
+    "simple-sendfile": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "allow-bsd": true,
+        "fallback": false
+      },
+      "source": {
+        "hash": "sha256-nyjQpnrD2VbS3XjrGeqSLAqRkru+7urSDTn1YWNoKKM=",
+        "metadata_hash": "sha256-Ez9Bm5trik24VB84HCC438qWKlnoK6ID5m1r70HPjqQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/simple-sendfile-0.2.32/simple-sendfile-0.2.32.tar.gz"
+      },
+      "version": "0.2.32"
+    },
+    "singleton-bool": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Jhvz0rk7UZp5ASZq9D19RUtlqsSsj7ThE8aN5NsTFHM=",
+        "metadata_hash": "sha256-lJiOFCgfqccHFPuuXjIDH3AIkZwTsGDuFscU7bYoWMA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/singleton-bool-0.1.8/singleton-bool-0.1.8.tar.gz"
+      },
+      "version": "0.1.8"
+    },
+    "some": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "newtype-unsafe": true
+      },
+      "source": {
+        "hash": "sha256-IwSqBZuktvP9B0pLtp/TWvFC35Aq1KoF9540u9ipUbs=",
+        "metadata_hash": "sha256-z5DvqX6ZdhXWhO4Rb+nqCS0XTbeGEI2fGs/ZUX2EgyI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/some-1.1/some-1.1.tar.gz"
+      },
+      "version": "1.1"
+    },
+    "sop-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-h7/9IlS5je2CLUSfzRwz29dNLOlr8156ZxSrxaIpcmU=",
+        "metadata_hash": "sha256-2/M5txzBVaMYyWjm6oHY3vpksVb9JJWTrRFRp9klvxQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/sop-core-0.5.0.2/sop-core-0.5.0.2.tar.gz"
+      },
+      "version": "0.5.0.2"
+    },
+    "split": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GK22D38S0IYBw4LUfCusu9TeS5Iz8JaDiJ0VtktkINY=",
+        "metadata_hash": "sha256-tUvsodRdsPzQcJ+UfGCTIRlK1mCbk2RaESdW47Z+awI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/split-0.2.5.1/split-0.2.5.1.tar.gz"
+      },
+      "version": "0.2.5.1"
+    },
+    "splitmix": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "optimised-mixer": false
+      },
+      "source": {
+        "hash": "sha256-ph1OizD1oWUm19MRcbZ0rnkk0iB/N4Bg0TNjvYeU3ow=",
+        "metadata_hash": "sha256-pVfP9l7tH3Dzo7RoQjzVjnqalWTFzADHahPeZN7JvL0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/splitmix-0.1.3.2/splitmix-0.1.3.2.tar.gz"
+      },
+      "version": "0.1.3.2"
+    },
+    "streaming-commons": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "use-bytestring-builder": false
+      },
+      "source": {
+        "hash": "sha256-M9FsDGCAeVgA2fDkkCA+o+UL1QNOXQd6DdwE0z6k3G4=",
+        "metadata_hash": "sha256-7XmZ/qnpErEhHqk9fiCnmYv0dTFmNwyUBIiFZQ8wO/A=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/streaming-commons-0.2.3.1/streaming-commons-0.2.3.1.tar.gz"
+      },
+      "version": "0.2.3.1"
+    },
+    "streamly": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "debug": false,
+        "fusion-plugin": false,
+        "has-llvm": false,
+        "inspection": false,
+        "internal-dev": false,
+        "internal-use-unliftio": false,
+        "limit-build-mem": false,
+        "opt": true
+      },
+      "source": {
+        "hash": "sha256-IRYqlwVqT5OoYXY6NDmODt6rG4xVZUa4QoBVuqydOlA=",
+        "metadata_hash": "sha256-tVv7sNKgBCpDkt6CMaJ1dckWq53VPduCdOnqImlDCEA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/streamly-0.11.1/streamly-0.11.1.tar.gz"
+      },
+      "version": "0.11.1"
+    },
+    "streamly-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "debug": false,
+        "force-lstat-readdir": false,
+        "has-llvm": false,
+        "internal-dev": false,
+        "internal-use-unliftio": false,
+        "limit-build-mem": false,
+        "opt": true,
+        "use-folds": false,
+        "use-unfolds": false
+      },
+      "source": {
+        "hash": "sha256-YGGRSQavH2wBt6YdyjaGx0SFjLUMS5pjK95uHNh8THE=",
+        "metadata_hash": "sha256-ujSDeMWVAlOQq9Bd9zW5prOOC7LSL8uJ0apZAobTSio=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/streamly-core-0.3.1/streamly-core-0.3.1.tar.gz"
+      },
+      "version": "0.3.1"
+    },
+    "strict": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-d3GSgMKoYxLnSCJ7+nMu6q4OffSNV6zDwuW3sHr+L4s=",
+        "metadata_hash": "sha256-WMNzt8d0jLtKWmyMFQc/maHBCpqbtolKwz9Dpc25AfI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/strict-0.5.1/strict-0.5.1.tar.gz"
+      },
+      "version": "0.5.1"
+    },
+    "strict-mutable-base": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-/+PRJ9hKOTGmcAX0OI3k2PkIyO1X/rPneX1usNE+kP8=",
+        "metadata_hash": "sha256-scA59rF5rttCCpDL4V08Pnj7qqcUbtAnALhMYBjuc08=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/strict-mutable-base-1.1.0.0/strict-mutable-base-1.1.0.0.tar.gz"
+      },
+      "version": "1.1.0.0"
+    },
+    "string-conversions": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-RrzObZzmLFWLdlinXZxqYvclnWsEc9AR2AeCNK1qGZQ=",
+        "metadata_hash": "sha256-mvSdYdHcvIuQtm8bZYCZa3kn90UnPttZFBrWdErvfLw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/string-conversions-0.4.0.1/string-conversions-0.4.0.1.tar.gz"
+      },
+      "version": "0.4.0.1"
+    },
+    "syb": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-3crKmD9noXDAz9vQN6Jod5iA4vm1f5MTXqzLauTF2j8=",
+        "metadata_hash": "sha256-22+G2Bj3cyoss6eoz2MGQqkMn673oTvV2tE2UFd0YFs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/syb-0.7.4/syb-0.7.4.tar.gz"
+      },
+      "version": "0.7.4"
+    },
+    "tagged": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "deepseq": true,
+        "template-haskell": true
+      },
+      "source": {
+        "hash": "sha256-F+95HrTK8xSjtLFYgnoPH0tpXCokrwh18J49jBD1bF0=",
+        "metadata_hash": "sha256-6bl8mOmCeYHWLzfF/r+ea7tnrOySuL1B/Z96zl6zHTI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/tagged-0.8.10/tagged-0.8.10.tar.gz"
+      },
+      "version": "0.8.10"
+    },
+    "tasty": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "unix": true
+      },
+      "source": {
+        "hash": "sha256-x2EgFBvWHEQYs+1e/F/jCUGG1Hz+Ete+VSMgE59Sxsc=",
+        "metadata_hash": "sha256-SfgwfXjH1rGVnURIFShY7+ECyl6bKJvggrm/Ih55gIQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/tasty-1.5.4/tasty-1.5.4.tar.gz"
+      },
+      "version": "1.5.4"
+    },
+    "tasty-golden": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "build-example": false
+      },
+      "source": {
+        "hash": "sha256-jzd/o6IXAMEPiJXgGrn+PbaqFiQp+K5Y/ADy05HXCrw=",
+        "metadata_hash": "sha256-vKe2a9wCONY+ghZJk/aE/XdRyVtnolMwiPZYhA40APo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/tasty-golden-2.3.6/tasty-golden-2.3.6.tar.gz"
+      },
+      "version": "2.3.6"
+    },
+    "template-haskell-compat-v0208": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-T4p9cMi9/OIVCsH91JSKe5If6GrwSjIRTY2zmHV8K+U=",
+        "metadata_hash": "sha256-Jji2tgBP8CtvUJfaai8dI+Ys6GwJnfHtgRoDHJmxxrk=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/template-haskell-compat-v0208-0.1.9.6/template-haskell-compat-v0208-0.1.9.6.tar.gz"
+      },
+      "version": "0.1.9.6"
+    },
+    "temporary": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-jEQpk2lLX/yoI86GSvlb0oQftSZO5RHGHPSMxx2HmJA=",
+        "metadata_hash": "sha256-OmbBNvcA2/QvPFAAypPoCyberVHlQyLIMnKyNsHsjvE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/temporary-1.3/temporary-1.3.tar.gz"
+      },
+      "version": "1.3"
+    },
+    "text-builder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-OeBcbk8+s+K+YSNNbJ0B3m32cBSchSJKBEn5n4Nh7Qk=",
+        "metadata_hash": "sha256-OKDqjHs12oEz1TvQmNryE9g4OeTAblYk3MIbx6/aiMU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/text-builder-1.0.0.5/text-builder-1.0.0.5.tar.gz"
+      },
+      "version": "1.0.0.5"
+    },
+    "text-builder-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-6pX8PbXGMGo7jpldHVQ4QEoZysApWR0gMy1l+r5l1fo=",
+        "metadata_hash": "sha256-2zivXcBqx7DXhWpnh38vSLWnHbABtevwpsi+a5a2T/8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/text-builder-core-0.1.1.3/text-builder-core-0.1.1.3.tar.gz"
+      },
+      "version": "0.1.1.3"
+    },
+    "text-iso8601": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-3bsTrscKL9VMeiW/heOKRn0NVZmYDSH0kls8cG+Pc5g=",
+        "metadata_hash": "sha256-jaW3TWx566ZX7F+P0onxsKrSRjU4koyWxgNcUtA6yas=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/text-iso8601-0.1.1.2/text-iso8601-0.1.1.2.tar.gz"
+      },
+      "version": "0.1.1.2"
+    },
+    "text-manipulate": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mmfv73S/igFmQ24RvFtmjBCpQ8VFT9rDyN42ZmijBrw=",
+        "metadata_hash": "sha256-qisHTQu6IaFeLUtbP/Q53qdfOxFLJUNrdeYV586+nWY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/text-manipulate-0.3.1.0/text-manipulate-0.3.1.0.tar.gz"
+      },
+      "version": "0.3.1.0"
+    },
+    "text-short": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "asserts": false
+      },
+      "source": {
+        "hash": "sha256-g2afQCNUJ0+83HUSZEOvczJnuVXkUfcsDG2Gro2odBY=",
+        "metadata_hash": "sha256-MwsDek90wGnh7P4JCLr4+1JlJu819HkivWeuKz2IaGQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/text-short-0.1.6.1/text-short-0.1.6.1.tar.gz"
+      },
+      "version": "0.1.6.1"
+    },
+    "th-abstraction": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lGZUvNjqLf99AFgGGGGoyJi+mt3yDJLTz6U7Z55zdiI=",
+        "metadata_hash": "sha256-OAgZ1uFGRb9mr5m26j09QwnFI8fQ7jduBngEJiLxwnI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-abstraction-0.7.2.0/th-abstraction-0.7.2.0.tar.gz"
+      },
+      "version": "0.7.2.0"
+    },
+    "th-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nibxIjDTiuVtz5T4wTl5ncO3N280NNNc50hHoKJP1f8=",
+        "metadata_hash": "sha256-RJvgmk4/RupGRXAMAmYkxLbwZvUIGHMmwoTb3qiIS8k=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-compat-0.1.7/th-compat-0.1.7.tar.gz"
+      },
+      "version": "0.1.7"
+    },
+    "th-expand-syns": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-GOGZZzKcifN2z8nsBL14cYVM4McPgDoa8VUyvgDG7w8=",
+        "metadata_hash": "sha256-1xUl+0GuCtJRs2RVveLeeJE/unuhR/UPKwNO6s9XsCY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-expand-syns-0.4.12.0/th-expand-syns-0.4.12.0.tar.gz"
+      },
+      "version": "0.4.12.0"
+    },
+    "th-lift": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-3RV8YmywsPpxraw2kDBa6vzPUDWD/OOHYoshD63GmAY=",
+        "metadata_hash": "sha256-uR2kqr33U9cWvJqDjcvRL6jKU7qjTJyhZHLlr4wmQPY=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-lift-0.8.7/th-lift-0.8.7.tar.gz"
+      },
+      "version": "0.8.7"
+    },
+    "th-lift-instances": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-9TPD+VrdzKRhoMzRqv73XdgBv6ZZnA0RhNVL//th2HA=",
+        "metadata_hash": "sha256-x4hus5dggluIYcaOSLK177Xv+NLLdiAf3Q+wS8vv944=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-lift-instances-0.1.20/th-lift-instances-0.1.20.tar.gz"
+      },
+      "version": "0.1.20"
+    },
+    "th-orphans": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nGf7SEyfHn92HtfeRT9zwIfExGEj2b9BqQOBVqpekGI=",
+        "metadata_hash": "sha256-PYHS2IChpBSjjqZuYqrKxskHyXdrymmC4/gUxO18oso=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-orphans-0.13.17/th-orphans-0.13.17.tar.gz"
+      },
+      "version": "0.13.17"
+    },
+    "th-reify-many": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nSUOYSQvL7iH3tydKMAUGDL/JW5jvrwr9av/gQN75KU=",
+        "metadata_hash": "sha256-GCfc/7DJ8hTpc5BT/ICGgzNuplw3Sf8tYUjbGJy70qQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/th-reify-many-0.1.10/th-reify-many-0.1.10.tar.gz"
+      },
+      "version": "0.1.10"
+    },
+    "these": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-F9bZMzZe2r+AGhaELBQDvdN8xTAPqi/MqYDezasi5N4=",
+        "metadata_hash": "sha256-uhrsmlAusrP5DvJU9CBGijxOW5t+gyTj3ccDUUPJJkA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/these-1.2.1/these-1.2.1.tar.gz"
+      },
+      "version": "1.2.1"
+    },
+    "thread-utils-context": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "debug": false
+      },
+      "source": {
+        "hash": "sha256-vKqqELaXcSfWyS8K5hADtrV3rZdG7hsQVOcgpGhRaKU=",
+        "metadata_hash": "sha256-Fx3UVAgWQbWUBC1BKHTz681tA0VEenplgZJK6vr4wvs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/thread-utils-context-0.4.1.1/thread-utils-context-0.4.1.1.tar.gz"
+      },
+      "version": "0.4.1.1"
+    },
+    "thread-utils-finalizers": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Aytb1O9vlr7qgeHT/GdGYpd3QNs5hjlP5L2WdY4P2Ss=",
+        "metadata_hash": "sha256-JJRLcdnx0BaVpZCLSjtEg4+rhwiDEUoyMzbVN5leCls=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/thread-utils-finalizers-0.1.1.0/thread-utils-finalizers-0.1.1.0.tar.gz"
+      },
+      "version": "0.1.1.0"
+    },
+    "time-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-kPrd7VPPnBWFXuv4CelTavj4XQDjK4L3yLUG0vrffCU=",
+        "metadata_hash": "sha256-DCkeDDyH7giyUXEHtikBsQKgQNyGIDtTvfB6lv9WMuA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/time-compat-1.9.9/time-compat-1.9.9.tar.gz"
+      },
+      "version": "1.9.9"
+    },
+    "time-hourglass": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nHx8dN2lAzFgMoYGyz6HJCAaut+aFAJxxzyJomErnSI=",
+        "metadata_hash": "sha256-7gI1b+JJGexDrhf8AAc5jC/Qu+gigzstepyElTe5BYA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/time-hourglass-0.3.0/time-hourglass-0.3.0.tar.gz"
+      },
+      "version": "0.3.0"
+    },
+    "time-manager": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-d23sHgAKnDBrF0dJV3bCQAWRprUbLNWLg1zXpCntNhk=",
+        "metadata_hash": "sha256-dMFgJshZKALYoc2VEMAiPa0keyqcp5H6AVPSQ7VswJ4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/time-manager-0.3.2/time-manager-0.3.2.tar.gz"
+      },
+      "version": "0.3.2"
+    },
+    "tls": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "devel": false
+      },
+      "source": {
+        "hash": "sha256-8tK6muygOER/tJtf4NegXvMe+XvKjZ4TgluW6RNhtvw=",
+        "metadata_hash": "sha256-SQspIOQmvLREDkTLL5BYelzaqnz1zIn4owIqGagidTQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/tls-2.4.4/tls-2.4.4.tar.gz"
+      },
+      "version": "2.4.4"
+    },
+    "transformers-base": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "orphaninstances": true
+      },
+      "source": {
+        "hash": "sha256-tD3js7nWWNUE6KAwk1ZgLdxTyNrT/bvDNZq8tUObQdg=",
+        "metadata_hash": "sha256-Ccn413/Mw+kDezWF8Gj/YVbPmwSZMtvECCjzeoSbjh0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/transformers-base-0.4.6.1/transformers-base-0.4.6.1.tar.gz"
+      },
+      "version": "0.4.6.1"
+    },
+    "transformers-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "five": false,
+        "five-three": true,
+        "four": false,
+        "generic-deriving": true,
+        "mtl": true,
+        "three": false,
+        "two": false
+      },
+      "source": {
+        "hash": "sha256-tixzBMnzy8lGPQc5qoXLlInyF+oJK51iXUF1FPvMnWo=",
+        "metadata_hash": "sha256-BE+5lV9j7hOPzr7f3L5Ur+dB8tWJKi0L3zqAUr00JkM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/transformers-compat-0.7.2/transformers-compat-0.7.2.tar.gz"
+      },
+      "version": "0.7.2"
+    },
+    "tree-view": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-T1goTaJfY0f5cf9/T7z9xRrLj/xrO/c5OfYOFHGoQ/k=",
+        "metadata_hash": "sha256-oysW/b4krSHLZnnCqSW8x3Fa5cXbCua2M+NeKOL+/Zg=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/tree-view-0.5.1/tree-view-0.5.1.tar.gz"
+      },
+      "version": "0.5.1"
+    },
+    "typed-process": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-lACWYBO1Qd8uVKyNV8OmcPwoveK+h3Z86Y8Tu+KqQ6A=",
+        "metadata_hash": "sha256-JX5PbUV55KP5pyUDOXwlLiDXIvvWUxqM5m+Uf097cvw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/typed-process-0.2.13.0/typed-process-0.2.13.0.tar.gz"
+      },
+      "version": "0.2.13.0"
+    },
+    "unicode-data": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "dev-has-icu": false
+      },
+      "source": {
+        "hash": "sha256-fql7as2mTEbn31tnIaTc+Ku3rkHckqAQtkP/aLbdDws=",
+        "metadata_hash": "sha256-ECcMBlYp3hIoU4e1FAJsXvxJfNBpJmHa84jqpGMnLJs=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unicode-data-0.8.0/unicode-data-0.8.0.tar.gz"
+      },
+      "version": "0.8.0"
+    },
+    "uniplate": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-53fJRihEVVanHxNaQs9y0s+6zLpYScxC+/7IshguOtI=",
+        "metadata_hash": "sha256-yLcVVw0LS6pyUS5ndVLdP5g3KmS/neAA53m9QWL9e+c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/uniplate-1.6.13/uniplate-1.6.13.tar.gz"
+      },
+      "version": "1.6.13"
+    },
+    "unique": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-5Uji5ucPlTObPQxBYxPTmHJ48Fxz2rZdsVY27NfnVK4=",
+        "metadata_hash": "sha256-jjZJwQB6DJo3dXM91fcfDpDdJyiTPbH+rkWwCPqI3DU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unique-0.0.2/unique-0.0.2.tar.gz"
+      },
+      "version": "0.0.2"
+    },
+    "unix-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-P5YRYkoQDHXmctkA5j/noOWVYVo05mBWYu2v8VHkQFQ=",
+        "metadata_hash": "sha256-EXk+qwf8XE4WeuOqioiF3Eqeccs7asYRp6ue4pMhttM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unix-compat-0.7.4.1/unix-compat-0.7.4.1.tar.gz"
+      },
+      "version": "0.7.4.1"
+    },
+    "unix-time": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-FWNgm2YjCfiTn8nGGmcsVWauUzhpmeUPnYXnBROPqF8=",
+        "metadata_hash": "sha256-2czttol/TcVVir7pZaIfbv8W5/groCrLT32yy06SOkE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unix-time-0.5.0/unix-time-0.5.0.tar.gz"
+      },
+      "version": "0.5.0"
+    },
+    "unliftio": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-O/xvjeppZsLAbfg+bT9IG713Ux9YuAScRnOKrZJoM24=",
+        "metadata_hash": "sha256-gT+nVve5WsR0HLrsus3ki+wtL8u7710y/lrQK1TLyq8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unliftio-0.2.25.1/unliftio-0.2.25.1.tar.gz"
+      },
+      "version": "0.2.25.1"
+    },
+    "unliftio-core": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mThMuo1W2dYbheOKMTqT6823i+ZWY2fwkw71gFl/4+M=",
+        "metadata_hash": "sha256-9qJzb4WLU5DZOE3KQ9PqTZbpyhchd5F5HKSVG6boByo=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unliftio-core-0.2.1.0/unliftio-core-0.2.1.0.tar.gz"
+      },
+      "version": "0.2.1.0"
+    },
+    "unordered-containers": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "debug": false
+      },
+      "source": {
+        "hash": "sha256-OyrRUitUbmGWAVMlfR5dI57uxeg9qEfVy02Jalu3+cA=",
+        "metadata_hash": "sha256-xd4fszd+08X0zYUadx0azFw30va+8KSZKVwOiFfaVgU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/unordered-containers-0.2.21/unordered-containers-0.2.21.tar.gz"
+      },
+      "version": "0.2.21"
+    },
+    "utf8-string": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-7kjeradgA3ByjEFWywAkQd53DQEhrjOmgTmp7ZwZsJo=",
+        "metadata_hash": "sha256-eUFikhhv7q8fYOSaxaH/rpvxsSDgQKdL8Ogcp/HTHT8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/utf8-string-1.0.2/utf8-string-1.0.2.tar.gz"
+      },
+      "version": "1.0.2"
+    },
+    "uuid": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-8692HqDTMsv+jRY/FBhCnS3KeLxrTluBz5ZD1YhssRM=",
+        "metadata_hash": "sha256-tUJQ5y8yRjB1NiPt8xaOPAiN7PvF8QswFIBesFQ5Hz0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/uuid-1.3.16.1/uuid-1.3.16.1.tar.gz"
+      },
+      "version": "1.3.16.1"
+    },
+    "uuid-types": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-nwDyeLlxEQS2rMFATZ8NRcEYO0mHz5wHQDvrwFwMMCQ=",
+        "metadata_hash": "sha256-leW8eeNQPJvX5o8MdjlAB0TIJAdKCi4OTHQ4ohyMTU8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/uuid-types-1.0.6.1/uuid-types-1.0.6.1.tar.gz"
+      },
+      "version": "1.0.6.1"
+    },
+    "validation-selective": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-mohOl+amTyysreyNXqfounVi0Mj6mrfNXDQFXq7GSYc=",
+        "metadata_hash": "sha256-qI35wZomUJ/EuAmLLhEDNu/afkvAOJ3Vi88yfhcmAF4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/validation-selective-0.2.0.0/validation-selective-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "vault": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "useghc": true
+      },
+      "source": {
+        "hash": "sha256-juTI5x/rJoQeZn7iPkHXo4D2TBRwPak7Ok6pFk2nkCM=",
+        "metadata_hash": "sha256-74xWvpvbj2V0YTVaqYxlmisRa4vmRHoF/8q4U5kNEL4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/vault-0.3.2.0/vault-0.3.2.0.tar.gz"
+      },
+      "version": "0.3.2.0"
+    },
+    "vector": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "boundschecks": true,
+        "internalchecks": false,
+        "unsafechecks": false,
+        "wall": false
+      },
+      "source": {
+        "hash": "sha256-KPIDx4bL+Kxtw/6jN47DbzQXPVBftKHdYPyEGK2RxCM=",
+        "metadata_hash": "sha256-PsEt5YDuMc6sibMU/QC1BX7UAZjAs9np2vpUwZQeaUI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/vector-0.13.2.0/vector-0.13.2.0.tar.gz"
+      },
+      "version": "0.13.2.0"
+    },
+    "vector-algorithms": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "bench": true,
+        "boundschecks": true,
+        "internalchecks": false,
+        "llvm": false,
+        "unsafechecks": false
+      },
+      "source": {
+        "hash": "sha256-0rZ0Z2gCZw2KaCs1faa2tXQbSjOxkfD/5fKyvEBVjrI=",
+        "metadata_hash": "sha256-s+z+/pg67KIGpFVuc9gpy+bGx2YdZxpHqOUpTArdUy0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/vector-algorithms-0.9.1.0/vector-algorithms-0.9.1.0.tar.gz"
+      },
+      "version": "0.9.1.0"
+    },
+    "vector-builder": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-scozHIeIWx/RaPSrSahZD5o2d5UTr42P2+r4JCZby1E=",
+        "metadata_hash": "sha256-yvUQleq76enaKpDVZWn/7+bKtqLOmwI+pPZL+hmk9V8=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/vector-builder-0.3.8.7/vector-builder-0.3.8.7.tar.gz"
+      },
+      "version": "0.3.8.7"
+    },
+    "vector-stream": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-0PUHM0vepUMaLwf1Jal/KedlIsMiEPXebVorTx1Cv3w=",
+        "metadata_hash": "sha256-SDvm3xPHIWmpF2QFiWZvn+znvqn6E/zUHQUtqzfqKJ4=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/vector-stream-0.1.0.1/vector-stream-0.1.0.1.tar.gz"
+      },
+      "version": "0.1.0.1"
+    },
+    "wai": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-et0Z9TcaGFD414XbJAHtsUTfsnVaexrE0jN+vHce1Go=",
+        "metadata_hash": "sha256-cGKzDlNr7jUCwHzw6KelKwvTNHXmBm5LUDng79YSbGM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/wai-3.2.5/wai-3.2.5.tar.gz"
+      },
+      "version": "3.2.5"
+    },
+    "wai-app-static": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "print": false
+      },
+      "source": {
+        "hash": "sha256-J/smqGsLOEmlnEBGv91Eaiiv7hK46EbDjFHy7GcEBHQ=",
+        "metadata_hash": "sha256-jkFRVSixKLuOy6QvlbRj44zm4bP6FIMBucw3AEBRtDM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/wai-app-static-3.2.1/wai-app-static-3.2.1.tar.gz"
+      },
+      "version": "3.2.1"
+    },
+    "wai-extra": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "build-example": false
+      },
+      "source": {
+        "hash": "sha256-7mN0C43UeLARlviWhgOxvA7gCqVQLRftrleav9DxUPc=",
+        "metadata_hash": "sha256-AXAH4RfdcPno8Dm5SA+2wQNi4P8lN50dx/floZUUh38=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/wai-extra-3.1.18/wai-extra-3.1.18.tar.gz"
+      },
+      "version": "3.1.18"
+    },
+    "wai-logger": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-XPvTB2sflKyjvS3vBrE2s2oi03l08xx3MrhSbr7D4YQ=",
+        "metadata_hash": "sha256-IL4OUgfANbCFI/uWPtVC2FPmTgv8Y51QjKyd39cID0c=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/wai-logger-2.5.0/wai-logger-2.5.0.tar.gz"
+      },
+      "version": "2.5.0"
+    },
+    "warp": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "allow-sendfilefd": true,
+        "include-warp-version": true,
+        "network-bytestring": false,
+        "warp-debug": false,
+        "x509": true
+      },
+      "source": {
+        "hash": "sha256-fdCbny+GjkZH/pYWLwY6mdp5Gg5XR50ep0shDsuLLxc=",
+        "metadata_hash": "sha256-8BhIGXLU/kExEF6IEpxRB2+6TJh7eua6EFrvroMw6K0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/warp-3.4.16/warp-3.4.16.tar.gz"
+      },
+      "version": "3.4.16"
+    },
+    "wherefrom-compat": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-DayhowfzrS2o9hrYj5RxocOviw7M705znBt8Da6fwms=",
+        "metadata_hash": "sha256-zfJr2LSP4ge1ju3p1VPZ+i09nSFPf8e/QJgvP9SUfLQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/wherefrom-compat-0.2.0.0/wherefrom-compat-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
+    "witherable": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-SENMweRlsTy8ATOpDD7A2CfJO3fOlYB/4KOLZfSRjNE=",
+        "metadata_hash": "sha256-pWAEMd9dKX8JjDIsf7wuzoBORK3guyAiqDjeJGBNYnU=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/witherable-0.5/witherable-0.5.tar.gz"
+      },
+      "version": "0.5"
+    },
+    "word8": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-JjCTTHVyi/vzkMHwIGsiVQezVPaNQEewbAGKNoI7XYo=",
+        "metadata_hash": "sha256-5UZNBgCCGhFkZ9SxL+8SsV/wQMNZlQDl8CdCJeeMb68=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/word8-0.1.3/word8-0.1.3.tar.gz"
+      },
+      "version": "0.1.3"
+    },
+    "yaml": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "no-examples": true,
+        "no-exe": true
+      },
+      "source": {
+        "hash": "sha256-7nSSPuWw/vdEE8WKqiDqWbr10p0lamL7R8wnlXDZ3C8=",
+        "metadata_hash": "sha256-bwoYWeD7MGjlDbx/6b+aJoR3QbwkNE414WoDcRoY+I0=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/yaml-0.11.11.2/yaml-0.11.11.2.tar.gz"
+      },
+      "version": "0.11.11.2"
+    },
+    "zlib": {
+      "components": [
+        "lib"
+      ],
+      "flags": {
+        "bundled-c-zlib": false,
+        "non-blocking-ffi": true,
+        "pkg-config": true
+      },
+      "source": {
+        "hash": "sha256-v5WrAe2SS+gArd6hlfulypfsafN4No9v9Ga9wpZmwcE=",
+        "metadata_hash": "sha256-zy+PkbELY1vaosMBD0ClVioG7eJLktgZdY5/G30E+fI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/zlib-0.7.1.1/zlib-0.7.1.1.tar.gz"
+      },
+      "version": "0.7.1.1"
+    }
+  },
+  "repositories": {
+    "shinzui/biscuit-haskell/8c0b3c5a13ce4a310737c0336f2ae167a1597588": {
+      "narHash": "sha256-BtqFq5O48892O2y4M+FyC4npA0mxRo9Zv2jJrWjfCIY=",
+      "owner": "shinzui",
+      "repo": "biscuit-haskell",
+      "rev": "8c0b3c5a13ce4a310737c0336f2ae167a1597588",
+      "type": "github"
+    },
+    "shinzui/danwa/301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9": {
+      "narHash": "sha256-ndNRlaco18W5JLeLIKkHKt4U2dRoC/bV/CdFjViXS4I=",
+      "owner": "shinzui",
+      "repo": "danwa",
+      "rev": "301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9",
+      "type": "github"
+    },
+    "shinzui/en/51edaab17473f7b9310f8802ccffd23bac5e4a9e": {
+      "narHash": "sha256-H0UdO6WbFwN4dmeSc27BVIfls8Rx4vklH58S+XvUlCg=",
+      "owner": "shinzui",
+      "repo": "en",
+      "rev": "51edaab17473f7b9310f8802ccffd23bac5e4a9e",
+      "type": "github"
+    },
+    "shinzui/handan/8e98b0a955f908f70657c04f384b6286e4967422": {
+      "narHash": "sha256-jIiLQS3S347iQM/BNAfpvedSJ3CNVZHXs6EKODi/pw8=",
+      "owner": "shinzui",
+      "repo": "handan",
+      "rev": "8e98b0a955f908f70657c04f384b6286e4967422",
+      "type": "github"
+    },
+    "shinzui/shomei/65551cb120336b53695c0dd30ebe0e473d6efcb2": {
+      "narHash": "sha256-q3RpKuIFuBTJ8FZAT4zPqKU7BWa9w9J0rXzVO32U2/A=",
+      "owner": "shinzui",
+      "repo": "shomei",
+      "rev": "65551cb120336b53695c0dd30ebe0e473d6efcb2",
+      "type": "github"
+    }
+  },
+  "schema_version": 1
+}

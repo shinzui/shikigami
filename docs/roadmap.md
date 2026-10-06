@@ -31,6 +31,22 @@ The completed MasterPlans are 1 through 5, 8, 11, and 12. The active coordinatio
 
 ## Priority order
 
+### Local qualification workload — 2026-10-06
+
+[Plan 79](plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md)
+has fresh successful Cabal build, regression, migration and workflow checks; immutable
+packaging remains under validation and the live workload is blocked. The operator
+confirmed that the required integration services are not running. Start PostgreSQL 18,
+Shomei and Kikan-En first, then a test Kawa destination with Anthropic credentials,
+then test Danwa and Kizashi for durable human waits. Configure real trust and grants
+before protected delivery. Kafka and Kubernetes are not prerequisites for this workload.
+
+The [readiness report](evidence/local-qualification/readiness.md) records observed
+failures, successful retries, remaining scenario gates and separate production gates.
+This workload order does not enable practice review: plans 60/61 remain prerequisites
+for that feature. IR-14 is next only when crash evidence or the selected workload
+requires individual model/tool-turn recovery.
+
 ### P0 — Correctness and authorization defects
 
 Implement [plan 60](plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md)

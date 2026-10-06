@@ -16,6 +16,11 @@ provenance:
       at: 2026-10-06T03:34:11Z
       mode: "other"
       note: "Complete the initial grounded qualification plan and record current-tree audit evidence"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-06T03:54:49Z
+      mode: "implement"
+      note: "Implement isolated baseline tooling and qualify current build before persistent live milestones"
 ---
 
 # Qualify local agent execution and prioritize production readiness
@@ -40,7 +45,8 @@ The deliverables are a repeatable qualification command, an isolated persistent 
 - [x] (2026-10-06 UTC; 2026-10-05 local) Inspect implementation, relevant ADRs, backlog, historical qualification, and the existing host bootstrap plan; create the plan intention.
 - [x] (2026-10-06 UTC) Evaluate current Nix exports and default package; compare normal and isolated Cabal dependency solves. Results and limits are recorded below.
 - [x] (2026-10-06 UTC) Run the migration schema-isolation check; application SQL passes, with its documented checksum-immutable historical exception.
-- [ ] M1: Produce the reproducible baseline and current readiness inventory; run fresh build and automated checks.
+- [x] (2026-10-06 UTC) M1: Implement the isolated committed-project helper, bounded private-evidence driver, and parser tests; reproduce both authoring failures and run fresh build, regression, PostgreSQL migration and workflow checks. Initial failures and successful retries are recorded in the readiness report.
+- [x] (2026-10-06 UTC) M2 preparation: Export the selected 354-package runtime closure, exact secure-index Cabal descriptor bytes, repository hashes, and checksummed Kikan-En source; declare the requested per-role outputs and qualification fixtures. Package discovery and default derivation evaluation now pass.
 - [ ] M2: Complete the necessary plan-31 packaging slice and install isolated, supervised host roles through the existing host bootstrap plan.
 - [ ] M3: Deliver a real-model service-health report and prove scoped learning and recall.
 - [ ] M4: Prove redelivery, process restart, sink failure, and authorization refusal with bounded fault rehearsals.
@@ -48,6 +54,14 @@ The deliverables are a repeatable qualification command, an isolated persistent 
 
 
 ## Surprises & Discoveries
+
+The operator confirmed that Kikan-En, Shomei, Kawa, Danwa and Kizashi are not
+running. The required service order is PostgreSQL 18 and the two authorization
+services, then Kawa plus Anthropic credentials, then Danwa and Kizashi. No live
+phase can satisfy acceptance until its services, exact trust and grants are configured.
+The baseline driver is implemented; its other phase names explicitly return
+`blocked` and remain implementation work, as documented in
+`tools/qualification/README.md`. A fixture or disabled authorization is not a substitute.
 
 
 The authoring audit used Shikigami revision `c2157236b1aa49b27a1f13323e70c973686aa5d1`. The working tree was clean before this plan was created. On 2026-10-06 UTC, package discovery succeeded but package evaluation failed:
@@ -85,6 +99,16 @@ migration-schema-isolation: application SQL is schema-qualified; vendored PGMQ S
 
 This checks SQL ownership conventions, not whether migrations have run successfully on a live database.
 
+Implementation on 2026-10-06 began at `120a09bbe563ff4c9a745b69d3286574876b9be5`. The isolated build first failed with `ld: library not found for -lrdkafka` because the ambient shell did not include the declared native dependency. The same project passed under `nix develop --command cabal build all --enable-tests`. The qualification driver now enters that declared shell for every Cabal case. The ignored local project remains unchanged.
+
+The regression invocation passed migration composition (5 cases), migration smoke (9), worker (88), server (47), PostgreSQL core (197), and generated conformance. One of 405 core cases initially failed: a 100 ms sleep finished before the timeout thread obtained CPU. Replacing the sleep with an empty MVar, with a separate 2-second test bound, makes the timeout assertion independent of which finite timer gets scheduled first. The full core suite then passed. No workflow body changed.
+
+The compatible Kikan-En checkout is clean at `16704290d527d413568bfa40c983f5c3604c35c8`, but its advertised GitHub repository returns 404 for that commit and exposes an older tree without the two required packages. Hackage also returns 404 for the client. `nix/qualification/vendor/kikan-en.tar` preserves the exact reviewed package trees from `git archive`, with the revision, canonical owner and archive checksum in `cohort.json`; the release does not depend on a sibling checkout.
+
+The first offline Nix solver trial revealed that marking all dependency sources local makes Cabal consider unused executables, such as aeson-pretty's cmdargs-dependent executable. The lock now records the actual component closure. After verifying original descriptor hashes, packaging disables only components absent from that closure; it preserves selected library/executable definitions, versions, flags and bounds. The build trial remains the acceptance for this transformation.
+
+No qualification runtime configuration or deployment inventory exists on this host. The existing host secret configuration has provider-key storage, but no declared Shikigami authorization trust group or test destinations. Live phases remain blocked until actual endpoints, trust material and secret paths are supplied; the driver refuses these phases without changing services or contacting a provider.
+
 
 ## Decision Log
 
@@ -97,11 +121,13 @@ Decision (2026-10-06 UTC): Do not require IR-14 before starting. The current Ski
 
 Decision (2026-10-06 UTC): Use a dedicated qualification database, manifest directory, file-backed principal directory, loopback ports, receiver destinations, and supervisor labels. Production grants, queues, service units, and databases are outside this rehearsal. The user asked to create a new intention through `mina ci`; the returned intention is linked in frontmatter.
 
+Decision (2026-10-06 UTC): Build the seven packages in one offline Cabal graph from the successful solve, rather than independently solving through Nixpkgs or advancing the shared channel to Keiro 0.19. Nix pins tarball hashes, exact selected Cabal metadata, Git trees and the unpublished Kikan-En archive. This packaging slice accepts a cold monolithic build cost; future cache decomposition must retain cohort and component identity. Plan 31 retains ownership of deployment exports.
+
 
 ## Outcomes & Retrospective
 
 
-The authoring audit establishes a packaging failure and a local dependency override conflict; the isolated committed dependency solve passes. Runtime qualification remains unperformed. Update this section after each milestone with observed outcomes and remaining gaps. At completion, promote lasting operational lessons into the relevant ADRs and reconcile `docs/roadmap.md` with the readiness report.
+M1 establishes a fresh successful Cabal build and regression/migration/workflow checks for the committed Keiro 0.18 cohort, with native-shell and test-scheduling corrections recorded separately from the failed baseline. Packaging evaluates the requested roles and contains a frozen source closure; its full Nix build is still being qualified. Runtime qualification remains unperformed because authorization/test-service configuration is unavailable. The readiness report records those gates explicitly; neither local workload completion nor production readiness is claimed.
 
 
 ## Context and Orientation
@@ -296,5 +322,11 @@ This plan owns qualification fixtures, scripts, evidence and roadmap reconciliat
 
 ## Revision Notes
 
+- 2026-10-06: Record the operator-confirmed absent services and startup order,
+  reconcile the feature-scoped roadmap, and distinguish baseline tooling from
+  pending live-phase automation. Packaging decisions are retained in ADR 0039.
+
 
 2026-10-06 UTC: Created from a current-tree audit and the existing host bootstrap context, linked to the intention created at the user's request. Seeded the observed packaging and dependency results; all runtime acceptance remains open.
+
+2026-10-06 UTC: Implemented M1 tooling, recorded fresh build/test evidence and corrected a timeout-test scheduling race; began plan 31's frozen offline role packaging slice and added the isolated fixture catalog. Preserved the local override and recorded unavailable authorization/test-service configuration as the live gate.

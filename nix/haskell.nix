@@ -1,5 +1,5 @@
 # Haskell project wiring: dev shells (via the haskell-nix-dev base flake) and the
-# project package (via callCabal2nix). seihou-managed — to add project-specific
+# deployment packages (owned by flake.module.nix). seihou-managed — to add project-specific
 # dev tools without editing this file, set `haskellProject.extraDevPackages` from
 # ./flake.module.nix (see flake.module.nix.example).
 { inputs, lib, flake-parts-lib, ... }:
@@ -70,7 +70,8 @@
       };
     in
     {
-      packages.default = haskellPackages.callCabal2nix "shikigami" inputs.self { };
+      # This workspace has seven packages and no root Cabal file. Deployment
+      # exports are defined by flake.module.nix's frozen multi-package graph.
 
       devShells.default = mkProjectShell "ghc9124";
       devShells."ghc9124" = mkProjectShell "ghc9124";
