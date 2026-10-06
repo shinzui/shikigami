@@ -54,8 +54,11 @@ Concretely:
   is typed and carries the attempted tuple and pinned reference; its rendered
   permanent failure names the profile digest.
 * Baikai API tags are normalized once into the profile vocabulary. Anthropic
-  Messages is `(messages, https)`, OpenAI Chat Completions is
-  `(chat-completions, https)`, CLI variants use endpoint class `cli`, and the
+  Messages is `(messages, https)` and OpenAI Chat Completions is
+  `(chat-completions, https)` at their default HTTPS endpoints. With an explicit
+  endpoint override, HTTP class comes from the actual URL scheme (`http` or
+  `https`), matching terminal compliance evidence; an HTTPS-only profile refuses
+  plaintext before dispatch. CLI variants use endpoint class `cli`, and the
   deterministic stub is `(stub, in-process)`.
 * An absent thinking level is an observable request to use the SDK/provider
   default. It is refused unless `defaultedThinkingAllowed` is explicitly true.

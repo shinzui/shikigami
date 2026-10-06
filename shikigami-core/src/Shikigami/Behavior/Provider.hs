@@ -65,6 +65,7 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
@@ -251,7 +252,10 @@ credentialOptions credential =
 
 providerCall :: BehaviorEnv -> ProviderCall
 providerCall BehaviorEnv {model, options} =
-  let (api, endpointClass) = callSurface (Model.api model)
+  let (api, defaultEndpointClass) = callSurface (Model.api model)
+      endpointClass
+        | defaultEndpointClass == "https", not (Text.null (Model.baseUrl model)) = Text.takeWhile (/= ':') (Model.baseUrl model)
+        | otherwise = defaultEndpointClass
    in ProviderCall
         { provider = Model.provider model,
           api,

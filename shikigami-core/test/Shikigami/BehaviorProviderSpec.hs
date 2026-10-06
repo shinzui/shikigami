@@ -228,7 +228,7 @@ profileConstraintTests =
         base <- newBehaviorEnv
         mapM_
           ( \(apiTag, expectedApi, expectedEndpoint) -> do
-              let actual = (envWithThinking Profile.ThinkingHigh base) {Behavior.model = cliModel apiTag}
+              let actual = (envWithThinking Profile.ThinkingHigh base) {Behavior.model = (cliModel apiTag) {Model.baseUrl = "https://example.invalid/v1"}}
                   call@(ProviderCall vendor api endpoint model _) = providerCall actual
                   allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
                   profileFor permitsCli value =
@@ -251,6 +251,17 @@ profileConstraintTests =
                 then case constrainBehaviorEnv (profileFor False allowed) actual of
                   Left (CliTransportForbidden attempted _) -> attempted @?= call
                   _ -> assertFailure "CLI prohibition was bypassed"
+                else pure ()
+              if expectedEndpoint == "https"
+                then do
+                  let plaintext = actual {Behavior.model = actual.model {Model.baseUrl = "http://127.0.0.1:12345/v1"}}
+                  providerCall plaintext @?= ProviderCall vendor api "http" model (Just Profile.ThinkingHigh)
+                  case constrainBehaviorEnv (profileFor True allowed) plaintext of
+                    Left (ForbiddenCall _ _) -> pure ()
+                    _ -> assertFailure "HTTPS-only profile admitted a plaintext endpoint"
+                  case constrainBehaviorEnv (profileFor True (allowed {Profile.endpointClass = "http"})) plaintext of
+                    Right _ -> pure ()
+                    Left violation -> assertFailure (show violation)
                 else pure ()
           )
           [(AnthropicMessages, "messages", "https"), (OpenAIChatCompletions, "chat-completions", "https"), (OpenAIResponses, "responses", "https"), (AnthropicMessagesCli, "messages", "cli"), (OpenAICompletionsCli, "completions", "cli")],

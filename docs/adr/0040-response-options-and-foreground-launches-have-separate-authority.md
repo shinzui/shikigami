@@ -17,7 +17,8 @@ Settei resolves Shikigami response settings and matching opaque HTTP credentials
 One shared builder dispatches through public Baikai handlers. A pure check names
 unsupported model/options/context requirements immediately before every request;
 no adapter may silently drop a requirement. Exact pinned-profile admission remains
-separate and is derived from the actual model/options. Catalog limits and endpoint
+separate and is derived from the actual model/options, including the configured
+HTTP URL scheme. Plaintext overrides cannot inherit an HTTPS-only tuple. Catalog limits and endpoint
 configuration are not proof of the remote served-model identity.
 
 Foreground launches live in the light agent package and return process exits.

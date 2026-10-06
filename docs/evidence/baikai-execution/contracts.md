@@ -8,7 +8,9 @@ upstream annotated release tags. The selected released packages are
 `mori://shinzui/baikai/packages/baikai-agent` 0.2.0.1.
 The first three tags peel to `7dd44f96e5bba1a0dfa6a693a6c4858d81ab9831`;
 the agent tag peels to `4a9547b00de18b095259e3720e1ede82670787c9`.
-The registry still reports those as its newest normal releases. The Cabal index
+Hackage preferred versions and the upstream tag identities were rechecked at
+2026-10-06 15:25 UTC and still report these selections; no newer vendor fix is
+published. The Cabal index
 cutoff advances to 2026-10-06T14:00:00Z, with every previously frozen Hackage
 runtime version retained by explicit constraints. The solve adds the unattended
 package and its KDL configuration dependencies.

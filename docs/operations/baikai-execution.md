@@ -66,7 +66,10 @@ requirement and a Skill's acquired registry cannot be silently dropped.
 The actual model and thinking preference still pass the exact pinned-profile gate.
 
 `behavior.base_url` overrides the actual endpoint, with no embedded credentials,
-query or fragment. Evidence identity/strictness, prompt/context, trace sink and
+query or fragment. HTTP profile endpoint class follows its actual URL scheme;
+an HTTPS-only profile refuses an `http://` override before dispatch. Flow routing
+and practice review retain their caller-owned JsonObject preference; the
+configured response format supplies the Skill/default request preference. Evidence identity/strictness, prompt/context, trace sink and
 tool registry stay caller-owned. Endpoint/model reporting is a configured fact;
 a returned response is not automatically proof of the served model identity.
 
@@ -124,7 +127,7 @@ printf '%s\n' 'Describe this disposable repository without changing files.' \
 
 `.baikai/agents.kdl` names repository jobs; `~/.config/baikai/agents.kdl` supplies
 operator defaults and the separate permission ceiling. Use Baikai's mounted
-`--user-config`, `--repo-config`, `--set` and evidence options. Repository input
+`--user-config` (operator scope), `--config` (repository scope), `--set` and evidence options. Repository input
 cannot raise that ceiling, and Shikigami adds no exemption. A capturing job may be:
 
 ```kdl
