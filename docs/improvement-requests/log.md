@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-10-06
+
+* **Addition**: IR-14 requests durable recording and recovery of individual model and tool
+  operations, with composable harness policies, pinned configuration, and existing authorization
+  and workflow-evolution boundaries.
+
 ## 2026-09-26
 
 * **Addition**: IR-13 proposes optional major-task tracking without Rei and records the current
