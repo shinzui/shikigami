@@ -41,7 +41,8 @@ confirmed that the required integration services are not running. Start PostgreS
 Shomei and Kikan-En first, then a test Kawa destination with a real response provider,
 then test Danwa and Kizashi for durable human waits. [Plan 80](plans/80-configure-model-providers-and-agent-launches-through-baikai.md)
 extends the existing Baikai builder to selectable HTTP/CLI transports and foreground
-launches. Its response-provider slice enables Codex/Claude CLI login for the reporter;
+launches. HTTP and foreground launch integration are implemented; Codex/Claude batch login
+for the reporter awaits an upstream released descendant-cancellation fix;
 Anthropic API credentials are needed only when choosing Anthropic HTTP. Configure real trust and grants
 before protected delivery. Kafka and Kubernetes are not prerequisites for this workload.
 

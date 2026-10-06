@@ -250,3 +250,7 @@ own the continuous runners, bounded resume command, shared timer dispatcher and 
 terminal GC. The server mounts lifecycle replay audit and preserve-only catalog
 operations; its embedded resume hook remains absent because its effects do not match
 Kioku's resource-aware workflows.
+
+## Foreground Baikai launch boundary (plan 80)
+
+`shikigami-agent` also owns `shikigami-agent-launch`, its interactive resolver and the mounted public Baikai unattended command tree. Direct vendor/agent dependencies remain at that composition leaf. The shared HTTP response builder and pure request compatibility check live in `shikigami-core`; workers and server reuse them. Foreground process results do not replace durable behavior Responses. [ADR 0040](../adr/0040-response-options-and-foreground-launches-have-separate-authority.md) records this boundary.

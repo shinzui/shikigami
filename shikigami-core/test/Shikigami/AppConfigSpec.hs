@@ -25,6 +25,10 @@
 -- by mistake.
 module Shikigami.AppConfigSpec (tests) where
 
+import Baikai.Api (Api (..))
+import Baikai.Model qualified as Model
+import Baikai.Models.Generated (allModels)
+import Baikai.Options qualified as Options
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString
 import Data.List (sort)
@@ -45,6 +49,7 @@ import Settei
     renderSchemaText,
   )
 import Settei.Env (EnvName (..), EnvSnapshot, bindingKey, bindingName, bindingsList, envSnapshot, environmentSource)
+import Settei.Key (parseKey)
 import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
@@ -67,7 +72,8 @@ tests =
       strictnessTests,
       requirementTests,
       diagnosticTests,
-      secrecyTests
+      secrecyTests,
+      responseConfigurationTests
     ]
 
 -- ── The accepted surface ────────────────────────────────────────────────────
@@ -90,11 +96,28 @@ surfaceTests =
                 "authorization.actions.mode",
                 "authorization.actions.shomei.base_url",
                 "authorization.actions.shomei.client_id",
+                "behavior.base_url",
                 "behavior.model",
+                "behavior.options.cache_retention",
+                "behavior.options.frequency_penalty",
+                "behavior.options.headers",
+                "behavior.options.max_tokens",
+                "behavior.options.metadata",
+                "behavior.options.presence_penalty",
+                "behavior.options.response_format",
+                "behavior.options.seed",
+                "behavior.options.speed",
+                "behavior.options.stop_sequences",
+                "behavior.options.temperature",
+                "behavior.options.thinking",
+                "behavior.options.timeout_ms",
+                "behavior.options.tool_choice",
+                "behavior.options.top_p",
                 "behavior.provider",
                 "conversation.idle_timeout_seconds",
                 "credentials.authorization.actions.shomei.client_secret",
                 "credentials.providers.anthropic.api_key",
+                "credentials.providers.openai.api_key",
                 "credentials.sinks.danwa.token",
                 "credentials.sinks.kanmon.token",
                 "credentials.sinks.kawa.token",
@@ -134,6 +157,23 @@ surfaceTests =
         sort boundVariables
           @?= sort
             [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
+              ("OPENAI_API_KEY", "credentials.providers.openai.api_key"),
+              ("SHIKIGAMI_BEHAVIOR_BASE_URL", "behavior.base_url"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING", "behavior.options.thinking"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS", "behavior.options.max_tokens"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_TEMPERATURE", "behavior.options.temperature"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_TIMEOUT_MS", "behavior.options.timeout_ms"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_TOP_P", "behavior.options.top_p"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_STOP_SEQUENCES", "behavior.options.stop_sequences"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_SEED", "behavior.options.seed"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_FREQUENCY_PENALTY", "behavior.options.frequency_penalty"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_PRESENCE_PENALTY", "behavior.options.presence_penalty"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_CACHE_RETENTION", "behavior.options.cache_retention"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_SPEED", "behavior.options.speed"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_RESPONSE_FORMAT", "behavior.options.response_format"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_TOOL_CHOICE", "behavior.options.tool_choice"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_HEADERS", "behavior.options.headers"),
+              ("SHIKIGAMI_BEHAVIOR_OPTIONS_METADATA", "behavior.options.metadata"),
               ("PG_CONNECTION_STRING", "database.connection_string"),
               ("SHIKIGAMI_ACTION_AUTHORIZATION_MODE", "authorization.actions.mode"),
               ("SHIKIGAMI_ACTION_CALLER_ID", "authorization.actions.caller_id"),
@@ -780,3 +820,48 @@ hasConfig = maybe False (const True) . configOf
 
 configOf :: ConfigRun -> Maybe AppConfig
 configOf ConfigRun {resolved} = resolved
+
+responseConfigurationTests :: TestTree
+responseConfigurationTests =
+  testGroup
+    "response configuration admission"
+    [ testCase "OpenAI requires its own matching credential" do
+        let run = configRun [("behavior.provider", "openai"), ("behavior.model", chatModel)] NoDiagnostic
+        run.exitCode @?= 4
+        assertBool "missing OpenAI key named" ("credentials.providers.openai.api_key" `Text.isInfixOf` run.standardError),
+      testCase "CLI promotion refuses without reading a login or requiring an HTTP key" do
+        let run = configRun [("behavior.provider", "codex-cli")] CheckConfig
+        run.exitCode @?= 4
+        assertBool "release prerequisite named" ("cancellation-safe" `Text.isInfixOf` run.standardError),
+      testCase "HTTP options arrive typed at the shared builder boundary" do
+        let run = configRun [("behavior.provider", "openai"), ("behavior.model", chatModel), ("credentials.providers.openai.api_key", "planted-api-secret"), ("behavior.options.timeout_ms", "1234"), ("behavior.options.seed", "42")] NoDiagnostic
+        case run.resolved of
+          Just AppConfig {behaviorProvider = UseHttp _ options _} -> do
+            Options.timeoutMs options @?= Just 1234
+            Options.seed options @?= Just 42
+          _ -> assertFailure (Text.unpack run.standardError),
+      testCase "unsupported Anthropic OpenAI-only option names its key" do
+        let run = configRun [("behavior.provider", "anthropic"), ("credentials.providers.anthropic.api_key", "planted-api-secret"), ("behavior.options.seed", "42")] CheckConfig
+        run.exitCode @?= 4
+        assertBool "unsupported key named" ("behavior.options.seed" `Text.isInfixOf` run.standardError),
+      testCase "headers and keys remain redacted in effective JSON reports" do
+        let run = configRun [("behavior.provider", "anthropic"), ("credentials.providers.anthropic.api_key", "planted-api-secret"), ("behavior.options.headers", "{\"Authorization\":\"planted-header-secret\"}")] ExplainJson
+        run.exitCode @?= 0
+        assertBool "secrets leaked" (not ("planted-api-secret" `Text.isInfixOf` run.standardOutput) && not ("planted-header-secret" `Text.isInfixOf` run.standardOutput)),
+      testCase "invalid deadlines and numeric ranges refuse" do
+        mapM_
+          (\(key, value) -> (configRun [("behavior.provider", "anthropic"), ("credentials.providers.anthropic.api_key", "fake"), (key, value)] CheckConfig).exitCode @?= 4)
+          [("behavior.options.timeout_ms", "0"), ("behavior.options.timeout_ms", "-1"), ("behavior.options.temperature", "3"), ("behavior.options.top_p", "NaN")],
+      testCase "unknown HTTP model refuses instead of substituting an alias" do
+        (configRun [("behavior.provider", "openai"), ("behavior.model", "invented-model"), ("credentials.providers.openai.api_key", "fake")] CheckConfig).exitCode @?= 4
+    ]
+  where
+    chatModel = case [Model.modelId m | m <- allModels, Model.api m == OpenAIChatCompletions, Model.provider m == "openai"] of
+      m : _ -> m
+      [] -> error "released Chat Completions catalog has no OpenAI model"
+    configRun values diagnosticMode =
+      appConfigRun
+        RunBehaviorRole
+        ConfigOptions {configPaths = [], namedSources = [], overrides = [cliOverride (either (error . show) id (parseKey key)) value | (key, value) <- values], diagnosticMode}
+        (Right [])
+        (environmentSource environmentBindings (envSnapshot []))

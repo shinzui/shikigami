@@ -66,6 +66,7 @@ library
     Shikigami.Attestation.Resolve
     Shikigami.Attestation.Reviewed
     Shikigami.Attestation.Strength
+    Shikigami.Behavior.Compatibility
     Shikigami.Behavior.Error
     Shikigami.Behavior.Input
     Shikigami.Behavior.Provider
@@ -180,6 +181,7 @@ library
     aeson >=2.2,
     baikai,
     baikai-claude,
+    baikai-openai,
     base >=4.21 && <5,
     bytestring,
     containers >=0.6,
@@ -279,6 +281,8 @@ test-suite shikigami-core-test
   build-depends:
     aeson,
     baikai,
+    baikai-claude,
+    baikai-openai,
     base,
     bytestring,
     containers,
@@ -306,6 +310,7 @@ test-suite shikigami-core-test
     kiroku-store,
     lens,
     pgmq-hasql,
+    process,
     servant-client,
     settei,
     settei-env,
@@ -360,6 +365,8 @@ test-suite shikigami-core-postgres-test
   build-depends:
     aeson,
     baikai,
+    baikai-claude,
+    baikai-openai,
     base,
     bytestring,
     containers,

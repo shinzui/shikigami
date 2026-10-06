@@ -336,3 +336,7 @@ malfunction.
   conversation workflow inspects one epoch of it.
 - `docs/adr/0021-operator-verbs-wrap-the-owning-library.md` — why the substrate
   verbs are mounted from Keiro rather than written here.
+
+## Foreground model/agent launches
+
+The light agent package supplies `shikigami-agent-launch interactive` for attended sessions and `shikigami-agent-launch unattended agent run|show|list` for mounted Baikai named jobs. Explicit safety and operator ceilings remain mode-specific. These return process results and create no durable run, memory session or sink receipt. See [Baikai execution](baikai-execution.md) for configuration, exit semantics and login ownership.

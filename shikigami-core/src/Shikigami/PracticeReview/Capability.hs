@@ -58,6 +58,7 @@ import Keiro.Workflow (StepName (..), Workflow, step)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.PracticeReview
   ( PracticeAdoptionBinding,
@@ -297,18 +298,21 @@ modelPracticeReviewEvaluator :: BehaviorEnv -> EvidenceBundle -> RecalledPractic
 modelPracticeReviewEvaluator BehaviorEnv {model, options, traceSink} evidence recalled = do
   let context = systemUser practiceReviewSystemPrompt (practiceReviewUserPrompt evidence recalled)
       structuredOptions = options & #responseFormat .~ Just JsonObject
-  response <- case traceSink of
-    Nothing -> completeRequest model context structuredOptions
-    Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
-  case responseError response of
-    Just failure -> pure (Left (boundedEvaluatorDetail (Text.pack (show failure))))
-    Nothing ->
-      let responseText = flattenAssistantText (flattenAssistantBlocks response)
-       in pure
-            ( first
-                (boundedEvaluatorDetail . ("practice-review evaluator returned invalid JSON: " <>) . Text.pack)
-                (Aeson.eitherDecodeStrict' (TextEncoding.encodeUtf8 responseText))
-            )
+  case validateResponseRequest model structuredOptions context of
+    Left refusal -> pure (Left (renderResponseCompatibilityError refusal))
+    Right () -> do
+      response <- case traceSink of
+        Nothing -> completeRequest model context structuredOptions
+        Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
+      case responseError response of
+        Just failure -> pure (Left (boundedEvaluatorDetail (Text.pack (show failure))))
+        Nothing ->
+          let responseText = flattenAssistantText (flattenAssistantBlocks response)
+           in pure
+                ( first
+                    (boundedEvaluatorDetail . ("practice-review evaluator returned invalid JSON: " <>) . Text.pack)
+                    (Aeson.eitherDecodeStrict' (TextEncoding.encodeUtf8 responseText))
+                )
 
 practiceReviewSystemPrompt :: Text
 practiceReviewSystemPrompt =

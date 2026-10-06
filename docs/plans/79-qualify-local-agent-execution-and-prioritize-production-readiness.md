@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-06T03:54:49Z
       mode: "implement"
       note: "Implement isolated baseline tooling and qualify current build before persistent live milestones"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-06T14:42:00Z
+      mode: "implement"
+      note: "Record plan 80 HTTP and foreground implementation with released batch cancellation prerequisite"
 ---
 
 # Qualify local agent execution and prioritize production readiness
@@ -128,7 +133,7 @@ Decision (2026-10-06 UTC): Keep packaging implementation owned by [plan 31](31-d
 
 Decision (2026-10-06 UTC): Do not require IR-14 before starting. The current Skill body can repeat a model call after a crash inside its coarse behavior step. Accept and document that limitation for this short, tool-free workload; require stable logical run and sink identities. A stronger claim about recovering individual model/tool turns is work for IR-14.
 
-Decision (2026-10-06 UTC): A real model is required, but an Anthropic API key is transport-specific. The current builder supports only stub and Anthropic HTTP. [Plan 80](80-configure-model-providers-and-agent-launches-through-baikai.md) owns exposing Baikai response transports and foreground launches; complete its response-provider slice before selecting CLI login for this reporter. An attended session is not a background Skill response. A CLI transcript leaves plan 13's Anthropic HTTP-specific smoke open.
+Decision (2026-10-06 UTC): A real model is required, but an Anthropic API key is transport-specific. The builder now supports stub, Anthropic Messages, OpenAI Chat Completions and OpenAI Responses. [Plan 80](80-configure-model-providers-and-agent-launches-through-baikai.md) owns exposing Baikai response transports and foreground launches; CLI login for this reporter remains refused until an owning released adapter fixes descendant cancellation, then confinement and live qualification pass. An attended session is not a background Skill response. A CLI transcript leaves plan 13's Anthropic HTTP-specific smoke open.
 
 Decision (2026-10-06 UTC): Use a dedicated qualification database, manifest directory, file-backed principal directory, loopback ports, receiver destinations, and supervisor labels. Production grants, queues, service units, and databases are outside this rehearsal. The user asked to create a new intention through `mina ci`; the returned intention is linked in frontmatter.
 
@@ -144,7 +149,7 @@ M1 establishes a fresh successful Cabal build and regression/migration/workflow 
 ## Context and Orientation
 
 
-Shikigami represents an agent in `schema/Agent.dhall`. A manifest selects a trigger, behavior, memory policy, stable principal, and output sinks. A principal is the stable `agent_...` identity that owns memory and grants; the manifest name is its human-readable handle. `agents/proof/heartbeat.dhall` is a deterministic example, not a real-model proof. `shikigami-core/src/Shikigami/Behavior/Skill.hs` runs skill instructions through the selected model provider. `shikigami-core/src/Shikigami/Behavior/Provider.hs` currently selects the stub or Anthropic HTTP implementation. [Plan 80](80-configure-model-providers-and-agent-launches-through-baikai.md) extends that same builder to Baikai's other response transports and separate foreground launches. CLI-aware policy mappings already exist, but CLI providers are not selectable yet. A stub success does not establish a model call.
+Shikigami represents an agent in `schema/Agent.dhall`. A manifest selects a trigger, behavior, memory policy, stable principal, and output sinks. A principal is the stable `agent_...` identity that owns memory and grants; the manifest name is its human-readable handle. `agents/proof/heartbeat.dhall` is a deterministic example, not a real-model proof. `shikigami-core/src/Shikigami/Behavior/Skill.hs` runs skill instructions through the selected model provider. `shikigami-core/src/Shikigami/Behavior/Provider.hs` selects the stub or one of three HTTP APIs. [Plan 80](80-configure-model-providers-and-agent-launches-through-baikai.md) has extended that builder to OpenAI HTTP APIs and added separate foreground launches. CLI-aware policy mappings already exist, but CLI providers are not selectable yet. A stub success does not establish a model call.
 
 `shikigami-core/src/Shikigami/Agent/Workflow.hs` runs an agent as a `shikigami.agent-run` workflow: its journal is the durable record of completed steps in PostgreSQL. Resuming a recorded step returns its stored value. The ordinary Skill loop is inside the coarse `run-behavior-v2` step, so its individual exchanges are not independently recoverable. `shikigami-workers/src/Shikigami/Workers/Config.hs` currently installs `emptyCapabilityRuntime`, so configuring a model tool in a manifest is not proof that a production provider exists. This proof supplies observations in the run payload instead.
 
@@ -326,7 +331,7 @@ The ignored local project and unrelated dotfiles changes remain untouched. Depen
 
 `tools/qualification/snapshot.py` accepts an explicit allowlist of loopback health endpoints and produces capture time, public marker and bounded service status details. It has no agent tooling or mutation interface. `tools/qualification/receiver.py` owns its fixture request log, deduplication state, controlled transport failures and inspection interface. Implement its wire contract from the existing client/stub source, not from a guessed generic HTTP API. The inspection utility uses `Keiro.Workflow.loadStepIndex`, recorded session links, and library-owned Kioku/Shikigami reads as the existing run command does; it does not create a parallel persistence layer. Its exact adopted command and output schema must be recorded when implemented.
 
-Required runtime services are a dedicated PostgreSQL database, a configured real response provider for the explicit live phase (Anthropic HTTP now, or an authenticated CLI after plan 80's response-provider integration), real test action-authorization services for protected external publication, and supported test sink/approval destinations for integration claims. The controlled receiver supports narrower contract and fault evidence. Kafka, Kubernetes, repository mutation executors, task stores and signed attestations are outside this first workload. Preserve the committed Keiro cohort unless independent evidence justifies a separately planned migration.
+Required runtime services are a dedicated PostgreSQL database, a configured real response provider for the explicit live phase (matching Anthropic/OpenAI HTTP access now, or an authenticated CLI after plan 80's released cancellation prerequisite and response qualification), real test action-authorization services for protected external publication, and supported test sink/approval destinations for integration claims. The controlled receiver supports narrower contract and fault evidence. Kafka, Kubernetes, repository mutation executors, task stores and signed attestations are outside this first workload. Preserve the committed Keiro cohort unless independent evidence justifies a separately planned migration.
 
 This plan owns qualification fixtures, scripts, evidence and roadmap reconciliation. Plan 31 owns production packaging changes; the canonical dotfiles bootstrap plan owns host service/configuration changes. If qualification requires an agent/Flow body edit, first follow `docs/workflow-versioning.md`, declare the necessary patch in `domain/`, run `just keiro-gate`, and document the changed replay contract before resuming the proof.
 
@@ -343,3 +348,5 @@ This plan owns qualification fixtures, scripts, evidence and roadmap reconciliat
 2026-10-06 UTC: Implemented M1 tooling, recorded fresh build/test evidence and corrected a timeout-test scheduling race; began plan 31's frozen offline role packaging slice and added the isolated fixture catalog. Preserved the local override and recorded unavailable authorization/test-service configuration as the live gate.
 
 2026-10-06 UTC: Audited the existing shared provider builder and separated the real-model requirement from transport-specific API credentials. Linked plan 80 as the CLI response prerequisite, retained HTTP-specific plan-13 acceptance, and distinguished configured model identity from weaker CLI evidence. No live result or completed milestone was added.
+
+2026-10-06 UTC: Plan 80 implemented the three HTTP API choices and separate foreground launches. Released Claude/Codex batch cancellation probes leave a child alive, so CLI reporter selection remains refused. No live reporter, memory, delivery or restart qualification was added.

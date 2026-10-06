@@ -91,7 +91,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p "$out/bin" "$out/share/shikigami"
     for executable in shikigami shikigami-server shikigami-worker shikigami-migrate \
       shikigami-scheduler shikigami-consume-stream shikigami-consume-events \
-      shikigami-agent-run shikigami-run-behavior shikigami-openapi shikigami-client; do
+      shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client; do
       cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"
     done
     cp -R ${source}/schema "$out/share/shikigami/schema"

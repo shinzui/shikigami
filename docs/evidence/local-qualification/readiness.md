@@ -76,10 +76,10 @@ services to be live.
 | Startup order | Required runtime or configuration | Qualification unlocked |
 |---|---|---|
 | 1 | PostgreSQL 18 with dedicated `shikigami_qualification` database; Shomei machine client; Kikan-En `POST /v1/agent-actions/authorize` with trusted En issuer keys, schema hashes and exact action grants | Persistent server/worker deployment and real authorization/refusal |
-| 2 | Test Kawa URL, authorized source segment and destination credentials; Anthropic HTTP API access, or authenticated Codex/Claude CLI after plan 80's response-provider integration | Real-model reporter, scoped learning/recall and delivery receipt |
+| 2 | Test Kawa URL, authorized source segment and destination credentials; Matching Anthropic/OpenAI HTTP API access; CLI login additionally requires plan 80's upstream cancellation prerequisite | Real-model reporter, scoped learning/recall and delivery receipt |
 | 3 | Test Danwa URL and agent participant; test Kizashi URL with `role_relationship_owner` recipient; corresponding grants and destination credentials | Durable approval, rejection and timeout trials |
 
-[Plan 80](../../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) captures the verified provider integration gap: the shared Baikai builder exists, but current configuration selects only stub or Anthropic HTTP. Anthropic API credentials are required only for that HTTP transport. CLI login becomes an alternative after the response-provider slice is implemented; foreground interactive sessions do not supply a worker response. Neither CLI wiring nor a live CLI call has been qualified yet.
+[Plan 80](../../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) captures the verified provider integration gap: the shared builder now selects stub, Anthropic Messages, OpenAI Chat Completions or OpenAI Responses. Credentials are required only for the matching HTTP vendor. Foreground attended sessions and mounted unattended jobs are separate commands. Bounded adapter probes proved surviving children after cancellation in both released batch adapters; CLI reporter configuration remains refused until an owning Baikai release fixes that gap and confinement/live qualification passes. No live CLI reporter call is claimed.
 
 Shikigami runs as distinct supervised server and worker jobs after configuration
 and migration. Its local directory fixture supplies the qualification principals.

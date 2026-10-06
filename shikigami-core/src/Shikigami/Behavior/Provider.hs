@@ -44,6 +44,10 @@ module Shikigami.Behavior.Provider
     -- * Saying which one is active
     describeProviderSelection,
     providerTag,
+    providerCall,
+    validateProviderSelection,
+    validateResponseRequest,
+    renderResponseCompatibilityError,
   )
 where
 
@@ -53,6 +57,8 @@ import Baikai.Model qualified as Model
 import Baikai.Options (Options, emptyOptions)
 import Baikai.Options qualified as Options
 import Baikai.Provider.Claude.Api qualified as Claude
+import Baikai.Provider.OpenAI.Api qualified as OpenAI
+import Baikai.Provider.OpenAI.Responses qualified as Responses
 import Baikai.ThinkingLevel (ThinkingLevel, renderThinkingLevel)
 import Baikai.Trace (TraceSink)
 import Data.Aeson (FromJSON, ToJSON)
@@ -64,6 +70,7 @@ import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Log qualified as Log
@@ -202,6 +209,28 @@ newBehaviorEnvFor logger selection traceSink = do
             activeOverlays = Set.empty,
             toolTurnLimit = defaultToolTurnLimit
           }
+    UseHttp model options credential -> do
+      case Model.api model of
+        AnthropicMessages -> Claude.register
+        OpenAIChatCompletions -> OpenAI.register
+        OpenAIResponses -> Responses.register
+        _ -> fail "configured HTTP response has a non-HTTP API"
+      pure
+        BehaviorEnv
+          { runtime,
+            model,
+            options = options {Options.apiKey = Just (ApiKeyLiteral (revealSecretText credential))},
+            traceSink,
+            tools = mkRegistry [],
+            activeOverlays = Set.empty,
+            toolTurnLimit = defaultToolTurnLimit
+          }
+
+validateProviderSelection :: ProviderSelection -> Either ResponseCompatibilityError ()
+validateProviderSelection = \case
+  UseStub -> Right ()
+  UseAnthropic model _ -> validateResponseOptions model emptyOptions
+  UseHttp model options _ -> validateResponseOptions model options
 
 -- | Lower a resolved credential into the per-call options baikai dispatches with.
 --
@@ -288,6 +317,10 @@ providerTag :: ProviderSelection -> Text
 providerTag = \case
   UseStub -> "stub"
   UseAnthropic {} -> "anthropic"
+  UseHttp model _ _ -> case Model.api model of
+    OpenAIChatCompletions -> "openai"
+    OpenAIResponses -> "openai-responses"
+    _ -> "anthropic"
 
 -- | Render a selection for an operator.
 --
@@ -299,4 +332,12 @@ describeProviderSelection = \case
   UseStub ->
     "model provider: STUB — no model will be called; set behavior.provider=anthropic to use a real model"
   UseAnthropic model _credential ->
-    "model provider: anthropic model=" <> Model.modelId model <> " credential=present"
+    "model provider: anthropic model=" <> Model.modelId model <> " endpoint=" <> Model.baseUrl model <> " credential=present"
+  selected@(UseHttp model _ _) ->
+    "model provider: "
+      <> providerTag selected
+      <> " model="
+      <> Model.modelId model
+      <> " endpoint="
+      <> Model.baseUrl model
+      <> " credential=present"

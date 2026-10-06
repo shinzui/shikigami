@@ -16,6 +16,11 @@ provenance:
       at: 2026-10-06T14:10:30Z
       mode: "other"
       note: "Ground initial provider and launch integration plan in current Shikigami wiring and verified released Baikai surfaces"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-06T14:14:42Z
+      mode: "implement"
+      note: "Begin released adapter contract verification and implementation"
 ---
 
 # Configure model providers and agent launches through Baikai
@@ -27,7 +32,7 @@ This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Deci
 ## Purpose / Big Picture
 
 
-An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. A background Shikigami reporter can use an already authenticated Codex or Claude CLI without an Anthropic API key. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
+An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. The target background reporter can use an already authenticated Codex or Claude CLI without an HTTP API key after the owning released cancellation/confinement prerequisite passes. The selected releases fail descendant cancellation, so this path remains unavailable; the HTTP and foreground integration is independently implemented. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
 
 The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-behavior-runs.md) installed a shared Baikai builder and typed provider configuration. At authoring revision `f740895`, Shikigami's operator choices remain `stub` and Anthropic HTTP. Baikai has more execution surfaces, and Shikigami's profile code understands their tags, but neither fact exposes them through runtime configuration. Extend that foundation rather than implementing provider integrations again.
 
@@ -37,18 +42,25 @@ The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-beha
 ## Progress
 
 
-- [ ] M1: Verify the released Baikai contracts, batch confinement and cancellation; record the setting inventory and selected dependency cohort.
-- [ ] M2: Extend typed response configuration, conditional credentials, supported options and redacted effective reports.
-- [ ] M3: Wire five real response transports through the shared builder and gate every request and actual profile tuple.
-- [ ] M4: Add foreground interactive launches and mount Baikai's unattended job commands without copying its loader or runner.
-- [ ] M5: Complete regression, workflow compatibility, immutable packaging, operator documentation and ADR distillation.
-- [ ] M6: Prove one authenticated batch CLI response and one attended session; hand the selected transport to plan 79 with accurate live coverage.
+- [x] (2026-10-06 14:40 UTC) M1 released API/version inventory and bounded fake adapter probes complete; both batch adapters leave a child alive after cancellation.
+- [ ] M1 remaining: owning released child-group cleanup/deadline/output fix, positive cancellation probe and installed reporter confinement audit.
+- [x] (2026-10-06 14:40 UTC) M2 independent HTTP typed options, conditional credentials, catalog decoding and redacted reports implemented; core suite 421 checks pass.
+- [ ] M2 remaining: CLI model/config resolution after the release prerequisite.
+- [x] (2026-10-06 14:40 UTC) M3 three HTTP APIs dispatch through the shared builder, with pre-request compatibility and existing actual-tuple profile gates. Local Chat and Responses wire fixtures pass.
+- [ ] M3 remaining: two CLI response handlers and positive confinement/profile-tuple qualification after the release prerequisite.
+- [x] (2026-10-06 14:40 UTC) M4 foreground interactive resolver and public unattended parser mounted. All 37 agent checks pass, including operator-ceiling and exit semantics.
+- [ ] M4 remaining: real attended terminal trial.
+- [x] (2026-10-06 14:40 UTC) M5 HTTP/foreground docs and ADR 0040 written. Isolated full Cabal build, core 421, worker 88, server 47, PostgreSQL 197 and migration smoke checks pass. Frozen export has only intended Baikai upgrades plus agent/KDL additions.
+- [ ] M5 remaining: committed descriptor solve, clean-source keiro gate, immutable role build and installed command evidence.
+- [ ] M6: authenticated batch reporter remains blocked by the released lifecycle prerequisite. Live HTTP alternatives are untested; no service readiness is claimed.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+Released batch adapters rethrow cancellation but lack an explicit child-group cleanup contract. Bounded fake-process probes confirm that a child remains alive for both selected released adapters; a typed promotion gate refuses CLI responses. background CLI resolution, confinement and M6 must wait for an owning released fix. See [contract inventory](../evidence/baikai-execution/contracts.md).
+
+The public unattended parser includes its own `agent` group and does not export the inner parser. The mounted spelling is therefore `unattended agent run|show|list`, preserving Baikai grammar without copying it.
 
 
 ## Decision Log
@@ -65,16 +77,20 @@ Decision (2026-10-06 UTC): Require explicit models and constrained vendor-native
 Decision (2026-10-06 UTC): Inherit plan 79's active intention because this work enables its API-key-free provider path. Correct its earlier unconditional Anthropic key prerequisite during authoring. CLI login does not replace authorization or delivery credentials, and a CLI trial does not close plan 13's specifically Anthropic HTTP smoke acceptance.
 
 
+Decision (2026-10-06 UTC): Keep CLI response selection unavailable while the released process lifecycle cannot establish descendant cleanup. Implement the independent HTTP and foreground paths and retain a typed request gate. Do not copy Baikai supervision into Shikigami.
+
+Decision (2026-10-06 UTC): Preserve the public unattended parser's `agent` group under `unattended`. Its inner parser is not exported, so target examples adopt `unattended agent`.
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation. Creating this plan establishes neither a new selectable provider nor a successful live launch.)
+Implementation is in progress. HTTP and foreground integration are independently implemented and under final packaging qualification. Batch responses remain unavailable until the released cancellation/confinement contract is proven; no authenticated Shikigami batch result or service qualification is claimed.
 
 
 ## Context and Orientation
 
 
-`shikigami-core/src/Shikigami/App/Config.hs` owns typed settings and explicit environment bindings. `ProviderSelection` is currently `UseStub | UseAnthropic Model SecretText`; `behaviorProviderConfig` conditionally requires `credentials.providers.anthropic.api_key`, and `behaviorModelSetting` accepts only generated Anthropic Messages models. Settei resolves files, environment and command overrides, retaining sources and redacting secrets. `shikigami-core/src/Shikigami/App/Config/Load.hs` and `shikigami-core/src/Shikigami/App/Role.hs` implement shared configuration commands. The default stub contacts no provider.
+`shikigami-core/src/Shikigami/App/Config.hs` owns typed settings and explicit environment bindings. At the authoring baseline, `ProviderSelection` was `UseStub | UseAnthropic Model SecretText`; the implementation adds `UseHttp Model Options SecretText`. `behaviorProviderConfig` conditionally requires `credentials.providers.anthropic.api_key`, and `behaviorModelSetting` accepts only generated Anthropic Messages models. Settei resolves files, environment and command overrides, retaining sources and redacting secrets. `shikigami-core/src/Shikigami/App/Config/Load.hs` and `shikigami-core/src/Shikigami/App/Role.hs` implement shared configuration commands. The default stub contacts no provider.
 
 `shikigami-core/src/Shikigami/Behavior/Provider.hs:newBehaviorEnvFor` creates the Shikumi runtime and registers the selected Baikai handler. Its `BehaviorEnv` carries the actual Baikai `Model`, `Options`, tool registry and trace sink. `providerCall` derives policy inputs from those actual values. `callSurface` already maps both CLI tags to endpoint class `cli`, but the builder has no CLI selection branch. A transport is the mechanism used to call a model: HTTP or a local subprocess here.
 
@@ -88,7 +104,7 @@ Public response modules are `Baikai.Provider.Claude.Api`, `Baikai.Provider.Claud
 
 The interactive vocabulary is `Baikai.Interactive.InteractiveLaunchRequest`, with prompt, optional system prompt/model/effort, working directory, extra directories, safety and arguments. Vendor `launchClaudeInteractive` and `launchCodexInteractive` return `Either AgentRenderError InteractiveLaunchResult`. Refusal starts no process; a nonzero result means the process ran and failed. The unattended surface uses `Baikai.Agent.Config` for named jobs, `Baikai.Agent.Cli` for parsing/policy-aware execution, and `Baikai.Agent.Run.runAgentCommand` for bounded execution. Its operator ceiling is the maximum permission set repository jobs may request; repository config cannot raise it. Its runner bounds retained output and terminates the process group on timeout. These guarantees must not be assumed for the separate batch adapters without testing.
 
-`nix/qualification/cohort.json` freezes core/Claude/OpenAI at 0.7.0.0. The public CLI and interactive modules already exist at those tags. `shikigami-core/shikigami-core.cabal` directly declares core and Claude, but not OpenAI; transitive presence is not a direct import dependency. `baikai-agent` is not yet a Shikigami dependency. On 2026-10-06 UTC, Hackage `preferred.json` and upstream tags agreed on normal releases core 0.7.2.0, Claude/OpenAI 0.7.1.0 and agent 0.2.0.1. Current core/vendor tags peel to `7dd44f96e5bba1a0dfa6a693a6c4858d81ab9831`; agent 0.2.0.1 peels to `4a9547b00de18b095259e3720e1ede82670787c9`. Recheck the authoritative registry and upstream before changing pins. A local checkout or later guide alone does not establish compatibility with the frozen cohort.
+The authoring baseline froze core/Claude/OpenAI at 0.7.0.0; the implementation freezes core 0.7.2.0, Claude/OpenAI 0.7.1.0 and agent 0.2.0.1. The public CLI and interactive modules already exist at those tags. `shikigami-core/shikigami-core.cabal` directly declares core and Claude, but not OpenAI; transitive presence is not a direct import dependency. `baikai-agent` is not yet a Shikigami dependency. On 2026-10-06 UTC, Hackage `preferred.json` and upstream tags agreed on normal releases core 0.7.2.0, Claude/OpenAI 0.7.1.0 and agent 0.2.0.1. Current core/vendor tags peel to `7dd44f96e5bba1a0dfa6a693a6c4858d81ab9831`; agent 0.2.0.1 peels to `4a9547b00de18b095259e3720e1ede82670787c9`. Recheck the authoritative registry and upstream before changing pins. A local checkout or later guide alone does not establish compatibility with the frozen cohort.
 
 Relevant architectural context is established. [ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md) keeps foreground commands in the light agent package. [ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md) gates actual dispatch against pinned policy. [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) protects durable identities. [ADR 0021](../adr/0021-operator-verbs-wrap-the-owning-library.md) requires mounting owning-library commands. [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) keeps requested tools distinct from acquired authorized tools. [ADR 0026](../adr/0026-outbound-sink-credentials-stay-opaque-and-http-policy-lives-at-the-process-boundary.md) keeps secrets opaque until request construction and preserves cancellation. [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) requires fresh admission of protected actions. [ADR 0020](../adr/0020-readiness-covers-only-what-restarting-can-fix.md) excludes provider/login availability from readiness. [ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) requires a frozen package/source closure and installed-asset proof.
 
@@ -155,7 +171,7 @@ Update `docs/operations/configuration.md`, `docs/operations/operator-cli.md`, `d
 
 Provider configuration is process-local, not itself journaled. Preserve serialized inputs/results and existing workflow steps. Changing worker configuration can change an unexecuted or retried call; pinned profiles still refuse disallowed tuples. Document draining old work or retaining the prior configured worker during promotion. If any body under `shikigami-core/src/Shikigami/Agent/` or `shikigami-core/src/Shikigami/Flow/` changes, follow `docs/workflow-versioning.md`: classify the change, declare any needed patch in `domain/`, preserve old branches and pass `just keiro-gate`. Do not hide a journal change inside a configuration refactor.
 
-Refresh the isolated committed solve and `nix/qualification/cohort.json` plus exact metadata/vendor archives when dependencies change. A release newer than `cabal.project`'s index cutoff requires a deliberate index-state/cohort update, not an ignored override. Use `tools/qualification/export-cohort.py` as documented in `tools/qualification/README.md`. Update `nix/haskell.nix` assembly to include the launch executable in the operator package. Vendor CLI binaries/login are external host prerequisites. Prove installed commands outside the checkout and no reliance on sibling sources or relative assets.
+Refresh the isolated committed solve and `nix/qualification/cohort.json` plus exact metadata/vendor archives when dependencies change. A release newer than `cabal.project`'s index cutoff requires a deliberate index-state/cohort update, not an ignored override. Use `tools/qualification/export-cohort.py` as documented in `tools/qualification/README.md`. Update `nix/qualification-package.nix` and `flake.module.nix`, the actual immutable executable assembly, to include the launch executable in the operator package. Vendor CLI binaries/login are external host prerequisites. Prove installed commands outside the checkout and no reliance on sibling sources or relative assets.
 
 Run the full affected suites and gates below. Update or create a local ADR for implemented configuration/launch ownership following `docs/adr/README.md`; preserve established secret/profile/library decisions. Acceptance is a successful isolated build, regression and journal compatibility proof, four frozen role builds at the selected revision, and installed launch commands outside the repository. Record failed trials separately from successful retries.
 
@@ -281,9 +297,9 @@ jobs {
 Run from that disposable repository with the installed command:
 
 ```bash
-shikigami-agent-launch unattended show inspect
+shikigami-agent-launch unattended agent show inspect
 printf '%s\n' 'Describe this disposable repository without changing files.' \
-  | shikigami-agent-launch unattended run inspect --prompt-stdin
+  | shikigami-agent-launch unattended agent run inspect --prompt-stdin
 ```
 
 Expected: source/policy report followed by a bounded job honoring the operator ceiling and preserving vendor exit. No Shikigami durable run or sink receipt is created. Execute these live model commands during implementation/qualification, not merely plan authoring.
@@ -336,3 +352,7 @@ No authorization or delivery service is needed for deterministic tests or foregr
 
 
 2026-10-06 UTC: Created after auditing the existing plan-13 builder and released Baikai surfaces. Scoped missing selectable transports/options and foreground integration, retained existing policy owners, and corrected the unconditional API-key prerequisite in plan-79 readiness guidance.
+
+2026-10-06 UTC: Implementation separates deliverable HTTP/foreground integration from the batch release prerequisite; the public unattended grammar retains its `agent` group. Trials and final acceptance remain tracked independently.
+
+2026-10-06 14:40 UTC: Split implemented HTTP/foreground work from remaining CLI acceptance after both released adapters failed descendant cancellation probes. Added actual parser spelling, frozen cohort, pure request guards and ADR 0040; no authenticated batch or service result is claimed.

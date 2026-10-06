@@ -197,6 +197,8 @@ renderAdjustment = \case
   Baikai.ThinkingDroppedBudgetExceeded requested _ _ -> Just (renderThinkingLevel requested, "budget-exceeded")
   Baikai.SamplingDroppedUnsupportedModel _ -> Nothing
   Baikai.SamplingDroppedUnsupportedApi _ -> Nothing
+  Baikai.FastModeDroppedUnsupportedModel -> Nothing
+  Baikai.ThinkingSummaryUnavailable -> Nothing
 
 effectiveThinkingText :: Baikai.ThinkingTranslation -> Text
 effectiveThinkingText Baikai.ThinkingTranslation {Baikai.effortText, Baikai.mode} =

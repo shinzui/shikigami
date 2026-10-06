@@ -4,7 +4,8 @@
 -- server, each worker role, and the administrative commands — resolves them from
 -- the one declaration in this module. Nothing else in this repository may call
 -- @getEnv@ or @lookupEnv@ except the OpenTelemetry SDK, which owns the standard
--- @OTEL_*@ variables, and the dedicated pg-migrate wrapper, whose
+-- @OTEL_*@ variables, the shared loader's environment snapshot for mounted
+-- Baikai commands, and the dedicated pg-migrate wrapper, whose
 -- application-owned @DATABASE_URL@ boundary is recorded in
 -- @docs\/adr\/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md@.
 --
@@ -108,6 +109,7 @@ module Shikigami.App.Config
     behaviorProviderKey,
     behaviorModelKey,
     anthropicApiKeyKey,
+    openaiApiKeyKey,
     actionAuthorizationModeKey,
     actionKikanBaseUrlKey,
     actionShomeiBaseUrlKey,
@@ -129,18 +131,34 @@ module Shikigami.App.Config
     sinksDanwaAgentParticipantKey,
     sinksReiBaseUrlKey,
     declaredKeys,
+    jsonDecoder,
   )
 where
 
-import Baikai.Api (Api (AnthropicMessages))
+import Baikai.Api (Api (..))
+import Baikai.CacheRetention (CacheRetention (..))
 import Baikai.Model (Model, api, modelId, provider)
+import Baikai.Model qualified as Model
 import Baikai.Models.Generated (allModels, anthropic_claude_sonnet_4_6)
+import Baikai.Options qualified as Options
+import Baikai.Speed (Speed (..))
+import Baikai.ThinkingLevel (ThinkingLevel, parseThinkingLevel, renderThinkingLevel)
+import Baikai.Tool (ToolChoice (..))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as AesonKey
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
+import Data.ByteString.Lazy qualified as LBS
+import Data.Char (isSpace)
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TE
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
+import Data.Vector qualified as Vector
 import En.Biscuit.Keys (IssuerKeySet, parseIssuerKeySetText)
 import GHC.Generics (Generic)
 import Kikan.En.Action (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHash)
@@ -268,19 +286,23 @@ data ProviderSelection
     UseStub
   | -- | A real Anthropic Messages model and the credential to call it with.
     UseAnthropic !Model !SecretText
+  | -- | A configured HTTP response, with an opaque matching credential.
+    UseHttp !Model !Options.Options !SecretText
   deriving stock (Generic, Eq)
 
 -- | Which provider was asked for, before the branch's settings are resolved.
 --
 -- Private: it exists only as the scrutinee of the conditional declaration, and
 -- the resolved answer callers care about is 'ProviderSelection'.
-data ProviderChoice = ChooseStub | ChooseAnthropic
+data ProviderChoice = ChooseStub | ChooseAnthropic | ChooseOpenAI | ChooseResponses
   deriving stock (Generic, Eq, Show)
 
 renderProviderChoice :: ProviderChoice -> Text
 renderProviderChoice = \case
   ChooseStub -> "stub"
   ChooseAnthropic -> "anthropic"
+  ChooseOpenAI -> "openai"
+  ChooseResponses -> "openai-responses"
 
 data ActionAuthorizationConfig
   = ActionAuthorizationDisabled
@@ -520,14 +542,136 @@ appConfig =
 -- builds a behavior environment its own way.
 behaviorProviderConfig :: Config ProviderSelection
 behaviorProviderConfig =
-  maybe UseStub (uncurry UseAnthropic)
-    <$> whenEq
-      (withDefault behaviorProviderSetting (constant "stub-provider" "No model is called until an operator asks for one" ChooseStub))
-      ChooseAnthropic
-      ( (,)
-          <$> withDefault behaviorModelSetting (constant "default-model" "The current general-purpose Claude model" anthropic_claude_sonnet_4_6)
-          <*> required anthropicApiKeySetting
-      )
+  choose
+    <$> branch ChooseAnthropic AnthropicMessages "anthropic" anthropicApiKeySetting
+    <*> branch ChooseOpenAI OpenAIChatCompletions "openai" openaiApiKeySetting
+    <*> branch ChooseResponses OpenAIResponses "openai" openaiApiKeySetting
+  where
+    selection = withDefault behaviorProviderSetting (constant "stub-provider" "No model is called until an operator asks for one" ChooseStub)
+    branch choice apiTag vendor credential =
+      whenEq
+        selection
+        choice
+        (assemble <$> modelConfig apiTag vendor <*> optional baseUrlSetting <*> responseOptionsConfig <*> required credential)
+    modelConfig AnthropicMessages _ = withDefault behaviorModelSetting (constant "default-model" "The current general-purpose Claude model" anthropic_claude_sonnet_4_6)
+    modelConfig apiTag vendor = required (httpModelSetting apiTag vendor)
+    assemble model endpoint options credential =
+      let selected = model {Model.baseUrl = fromMaybe (Model.baseUrl model) endpoint}
+       in if Model.api selected == AnthropicMessages && options == Options.emptyOptions
+            then UseAnthropic selected credential
+            else UseHttp selected options credential
+    choose (Just provider) _ _ = provider
+    choose _ (Just provider) _ = provider
+    choose _ _ (Just provider) = provider
+    choose _ _ _ = UseStub
+
+-- All response knobs remain typed and visible to Settei. Capability validation
+-- occurs after resolution, before diagnostics or construction of any runtime.
+responseOptionsConfig :: Config Options.Options
+responseOptionsConfig =
+  assemble
+    <$> optional (option "thinking" "Reasoning effort" thinkingDecoder renderThinkingLevel)
+    <*> optional (option "max_tokens" "Positive output-token cap" positiveIntDecoder (Text.pack . show))
+    <*> optional (option "temperature" "Sampling temperature (0-2)" (rangeDecoder 0 2) (Text.pack . show))
+    <*> optional (option "timeout_ms" "Whole-call deadline in milliseconds (1-86400000)" positiveIntDecoder (Text.pack . show))
+    <*> optional (option "top_p" "Nucleus sampling (0-1)" (rangeDecoder 0 1) (Text.pack . show))
+    <*> optional (option "stop_sequences" "Stop strings, as an array" jsonDecoder renderJson)
+    <*> optional (option "seed" "OpenAI Chat Completions seed" (boundedIntegralDecoder @Int) (Text.pack . show))
+    <*> optional (option "frequency_penalty" "Frequency penalty (-2 to 2)" (rangeDecoder (-2) 2) (Text.pack . show))
+    <*> optional (option "presence_penalty" "Presence penalty (-2 to 2)" (rangeDecoder (-2) 2) (Text.pack . show))
+    <*> optional (option "cache_retention" "Prompt cache retention" (enumDecoder [("none", CacheRetentionNone), ("short", CacheRetentionShort), ("long", CacheRetentionLong)]) (Text.pack . show))
+    <*> optional (option "speed" "Anthropic inference speed" (enumDecoder [("standard", SpeedStandard), ("fast", SpeedFast)]) (Text.pack . show))
+    <*> optional (option "response_format" "Baikai JSON output format object" jsonDecoder renderJson)
+    <*> optional (option "tool_choice" "auto, none, required, or a named function" toolChoiceDecoder renderJson)
+    <*> optional (secretSetting (optionKey "headers") "HTTP header map (always redacted)" jsonDecoder)
+    <*> optional (secretSetting (optionKey "metadata") "Provider metadata object (always redacted)" jsonDecoder)
+  where
+    option suffix description decode render = publicSettingWithRenderer (optionKey suffix) description decode render
+    assemble thinking maxTokens temperature timeoutMs topP stopSequences seed frequencyPenalty presencePenalty cacheRetention speed responseFormat toolChoice headers metadata =
+      Options.emptyOptions
+        { Options.thinking = thinking,
+          Options.maxTokens = fromIntegral <$> maxTokens,
+          Options.temperature = temperature,
+          Options.timeoutMs = timeoutMs,
+          Options.topP = topP,
+          Options.stopSequences = fromMaybe [] stopSequences,
+          Options.seed = seed,
+          Options.frequencyPenalty = frequencyPenalty,
+          Options.presencePenalty = presencePenalty,
+          Options.cacheRetention = cacheRetention,
+          Options.speed = speed,
+          Options.responseFormat = responseFormat,
+          Options.toolChoice = toolChoice,
+          Options.headers = fromMaybe Map.empty headers,
+          Options.metadata = fromMaybe Map.empty metadata
+        }
+
+optionKey :: Text -> Key
+optionKey suffix = stableKey ("behavior.options." <> suffix)
+
+baseUrlSetting :: Setting Text
+baseUrlSetting = publicSettingWithRenderer (stableKey "behavior.base_url") "Explicit HTTP endpoint base URL without credentials or query" endpointDecoder id
+  where
+    endpointDecoder = decoder \key raw -> do
+      value <- runDecoder textDecoder key raw
+      let authority = Text.takeWhile (/= '/') (Text.drop 3 (snd (Text.breakOn "://" value)))
+      if not (Text.null authority)
+        && not (Text.any isSpace value)
+        && ("https://" `Text.isPrefixOf` value || "http://" `Text.isPrefixOf` value)
+        && not (Text.any (`elem` ("@?#\r\n" :: String)) value)
+        then Right value
+        else Left (decodeFailure key "an HTTP(S) base URL without credentials, query or fragment")
+
+thinkingDecoder :: Decoder ThinkingLevel
+thinkingDecoder = decoder \key raw -> do
+  value <- runDecoder textDecoder key raw
+  maybe (Left (decodeFailure key "minimal, low, medium, high, xhigh or max")) Right (parseThinkingLevel value)
+
+positiveIntDecoder :: Decoder Int
+positiveIntDecoder = decoder \key raw -> do
+  value <- runDecoder (boundedIntegralDecoder @Int) key raw
+  if value > 0 && value <= 86_400_000 then Right value else Left (decodeFailure key "an integer between 1 and 86400000")
+
+rangeDecoder :: Double -> Double -> Decoder Double
+rangeDecoder lo hi = decoder \key raw -> do
+  value <- runDecoder doubleDecoder key raw
+  if not (isNaN value || isInfinite value) && value >= lo && value <= hi
+    then Right value
+    else Left (decodeFailure key ("a finite number between " <> Text.pack (show lo) <> " and " <> Text.pack (show hi)))
+
+toolChoiceDecoder :: Decoder ToolChoice
+toolChoiceDecoder = decoder \key raw -> do
+  value <- runDecoder textDecoder key raw
+  case value of
+    "auto" -> Right ToolChoiceAuto
+    "none" -> Right ToolChoiceNone
+    "required" -> Right ToolChoiceRequired
+    _
+      | not (Text.null (Text.strip value)) -> Right (ToolChoiceSpecific value)
+      | otherwise -> Left (decodeFailure key "auto, none, required, or a nonblank function name")
+
+-- Structural YAML and JSON --set values share one decoder; diagnostics never
+-- echo the rejected input or Aeson's parser error (which may include secrets).
+jsonDecoder :: (Aeson.FromJSON a) => Decoder a
+jsonDecoder = decoder \key raw -> do
+  value <- case raw of
+    RawText text -> maybe (failure key) Right (Aeson.decodeStrict (TE.encodeUtf8 text))
+    _ -> Right (rawJson raw)
+  case Aeson.fromJSON value of
+    Aeson.Success decoded -> Right decoded
+    Aeson.Error _ -> failure key
+  where
+    failure key = Left (decodeFailure key "a structurally valid JSON value of the declared type")
+    rawJson = \case
+      RawNull -> Aeson.Null
+      RawText text -> Aeson.String text
+      RawBool value -> Aeson.Bool value
+      RawNumber value -> Aeson.Number (fromRational value)
+      RawArray values -> Aeson.Array (Vector.fromList (map rawJson values))
+      RawObject values -> Aeson.Object (KeyMap.fromList [(AesonKey.fromText k, rawJson v) | (k, v) <- Map.toList values])
+
+renderJson :: (Aeson.ToJSON a) => a -> Text
+renderJson = TE.decodeUtf8 . LBS.toStrict . Aeson.encode
 
 actionAuthorizationConfig :: Config ActionAuthorizationConfig
 actionAuthorizationConfig =
@@ -950,20 +1094,31 @@ behaviorProviderSetting :: Setting ProviderChoice
 behaviorProviderSetting =
   publicSettingWithRenderer
     behaviorProviderKey
-    "Model provider the Skill behavior arm dispatches with: stub calls no model, anthropic calls a real one"
-    (enumDecoder [("stub", ChooseStub), ("anthropic", ChooseAnthropic)])
+    "Response provider: stub, anthropic, openai or openai-responses; batch CLI awaits a cancellation-safe Baikai release"
+    ( decoder \key raw -> do
+        choice <- runDecoder textDecoder key raw
+        if choice `elem` ["claude-cli", "codex-cli"]
+          then Left (decodeFailure key "a cancellation-safe released Baikai batch adapter; CLI response promotion is blocked")
+          else runDecoder (enumDecoder [("stub", ChooseStub), ("anthropic", ChooseAnthropic), ("openai", ChooseOpenAI), ("openai-responses", ChooseResponses)]) key raw
+    )
     renderProviderChoice
 
 -- | Decoded against baikai's catalog, so an unknown id is rejected at
 -- resolution with the accepted ids in the message rather than by Anthropic on
 -- the first job.
 behaviorModelSetting :: Setting Model
-behaviorModelSetting =
+behaviorModelSetting = httpModelSetting AnthropicMessages "anthropic"
+
+httpModelSetting :: Api -> Text -> Setting Model
+httpModelSetting apiTag vendor =
   publicSettingWithRenderer
     behaviorModelKey
-    "Anthropic model the Skill behavior arm dispatches with, by upstream model id"
-    (enumDecoder [(modelId model, model) | model <- anthropicModels])
+    "Exact upstream model from the selected API catalog"
+    (enumDecoder [(modelId model, model) | model <- allModels, api model == apiTag, provider model == vendor])
     modelId
+
+openaiApiKeySetting :: Setting SecretText
+openaiApiKeySetting = secretSetting openaiApiKeyKey "OpenAI API key, required only for OpenAI HTTP" (SecretText <$> textDecoder)
 
 anthropicApiKeySetting :: Setting SecretText
 anthropicApiKeySetting =
@@ -1131,6 +1286,9 @@ behaviorModelKey = stableKey "behavior.model"
 anthropicApiKeyKey :: Key
 anthropicApiKeyKey = stableKey "credentials.providers.anthropic.api_key"
 
+openaiApiKeyKey :: Key
+openaiApiKeyKey = stableKey "credentials.providers.openai.api_key"
+
 kawaTokenKey :: Key
 kawaTokenKey = stableKey "credentials.sinks.kawa.token"
 
@@ -1235,6 +1393,23 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
+          binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_BASE_URL") (stableKey "behavior.base_url"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING") (optionKey "thinking"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS") (optionKey "max_tokens"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TEMPERATURE") (optionKey "temperature"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TIMEOUT_MS") (optionKey "timeout_ms"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOP_P") (optionKey "top_p"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_STOP_SEQUENCES") (optionKey "stop_sequences"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SEED") (optionKey "seed"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_FREQUENCY_PENALTY") (optionKey "frequency_penalty"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_PRESENCE_PENALTY") (optionKey "presence_penalty"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_CACHE_RETENTION") (optionKey "cache_retention"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SPEED") (optionKey "speed"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_RESPONSE_FORMAT") (optionKey "response_format"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOOL_CHOICE") (optionKey "tool_choice"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_HEADERS") (optionKey "headers"),
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_METADATA") (optionKey "metadata"),
           binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
           binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
           binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,

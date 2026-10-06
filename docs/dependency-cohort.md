@@ -6,11 +6,18 @@ the upstream tag and tag commit that produced it, and the evidence that the
 cohort holds together. `cabal.project` does not repeat the matrix as exact
 constraints: the cohort is whatever the components' `build-depends` bounds
 select at the project's pinned `index-state`, and advancing that snapshot is how
-the cohort moves. The only exact constraint is `keiro-dsl`, which nothing links
+the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, which nothing links
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
 ## Current Keiro 0.18 target
+
+Plan 80 advances the index to `2026-10-06T14:00:00Z` for the released Baikai
+HTTP/foreground integration. Explicit constraints retain every previously frozen
+Hackage runtime version except the three Baikai upgrades; the unattended package
+and KDL dependencies are added. The refreshed isolated solve exports 357 runtime
+packages and five immutable repositories. See [the released contract audit](evidence/baikai-execution/contracts.md). Batch response CLI selection remains
+blocked by the released descendant-cancellation gap.
 
 Plan 72 advances the runtime to this coherent selection:
 
@@ -21,7 +28,7 @@ Plan 72 advances the runtime to this coherent selection:
 | `pgmq-core`, `pgmq-hasql`, `pgmq-effectful`, `pgmq-config` | `0.6.1.0` |
 | `shibuya-pgmq-adapter` | `0.16.0.0` |
 | `shikumi`, `shikumi-tools`, `shikumi-trace` | `0.4.0.0`, `0.4.0.0`, `0.3.0.0` |
-| `baikai`, `baikai-claude`, `baikai-openai`, `baikai-effectful` | `0.7.0.0`, `0.7.0.0`, `0.7.0.0`, `0.4.0.1` |
+| `baikai`, `baikai-claude`, `baikai-openai`, `baikai-agent`, `baikai-effectful` | `0.7.2.0`, `0.7.1.0`, `0.7.1.0`, `0.2.0.1`, `0.4.0.1` |
 | `kiroku-store`, `kiroku-store-migrations`, `shibuya-kiroku-adapter` | `0.8.0.1`, `0.4.0.0`, `0.5.1.2` |
 | `shibuya-core`, `shibuya-kafka-adapter`, `kafka-effectful` | `0.9.0.3`, `0.9.0.1`, `0.3.1.0` |
 | `ephemeral-pg`, `pg-migrate-test-support` | `0.3.1.0`, `1.1.0.0` |

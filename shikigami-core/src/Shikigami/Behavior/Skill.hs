@@ -37,6 +37,7 @@ import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
 import Kioku.Api.Types (MemoryRecord (..))
+import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Input (BehaviorInput (..))
 import Shikumi.Error (ShikumiError (..), isTransient)
@@ -146,8 +147,9 @@ runSkillWith model options registry turnLimit dir BehaviorInput {payload, recall
       if null (registryNames registry)
         then do
           -- This is deliberately the original one-completion request path.
-          resp <- complete model ctx options
-          pure (renderResponse resp)
+          case validateResponseRequest model options ctx of
+            Left refusal -> pure (Left (ProviderFailed False (renderResponseCompatibilityError refusal)))
+            Right () -> renderResponse <$> complete model ctx options
         else
           if turnLimit < 1
             then pure (Left (SkillToolTurnLimitExceeded turnLimit))
@@ -170,7 +172,10 @@ runToolPath ::
   IO (Either RunError Value)
 runToolPath complete model options registry turnLimit = go turnLimit
   where
-    go remaining ctx = do
+    go remaining ctx = case validateResponseRequest model options ctx of
+      Left refusal -> pure (Left (ProviderFailed False (renderResponseCompatibilityError refusal)))
+      Right () -> dispatch remaining ctx
+    dispatch remaining ctx = do
       resp <- complete model ctx options
       case responseError resp of
         Just err -> pure (Left (ProviderFailed (isRetryable err) (renderProviderError err)))

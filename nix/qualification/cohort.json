@@ -304,12 +304,25 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-GqYHOKJn1hkE8O6N/WtQJPGIYVDE4qfZAfjrXoHu4qk=",
-        "metadata_hash": "sha256-NjsE6Q4Pqnq0Vfl1+LFAOECMPaVQaMIpON7QvsbCZDk=",
+        "hash": "sha256-6q6p122JDOd1c3nWAX5R8xCN/LcUAMKAsHiZW5yQjlM=",
+        "metadata_hash": "sha256-lZpY3HLiWtfMmCyc1OWmy57RtZ/M8B140MntbSzZmbU=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/baikai-0.7.0.0/baikai-0.7.0.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/baikai-0.7.2.0/baikai-0.7.2.0.tar.gz"
       },
-      "version": "0.7.0.0"
+      "version": "0.7.2.0"
+    },
+    "baikai-agent": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-KUkiRjh4+sfwemIXfSogCjqtYcXzOCaMwnnk3zf6FPg=",
+        "metadata_hash": "sha256-xlqcKb8U0x0C2BjjrgIPU0JYlws8MDr8+SUGmn8teYA=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/baikai-agent-0.2.0.1/baikai-agent-0.2.0.1.tar.gz"
+      },
+      "version": "0.2.0.1"
     },
     "baikai-claude": {
       "components": [
@@ -317,12 +330,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-Q7SBoJF2i5ie1sOx7d34/HgTpCe2llZhq61OMyMOIfk=",
-        "metadata_hash": "sha256-yWlP/Ts0L5UiwLh7ETZK4C++Ndw0irUQ4zBUtsVsP4g=",
+        "hash": "sha256-XLphzfqHtNjt2vOPwOn2njKmUJVdf4p5iKA/Z1BHS+w=",
+        "metadata_hash": "sha256-7S+OYRjwGChFnbVozFBAQVv2qnNrFYucl4Ewp8o1npI=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/baikai-claude-0.7.0.0/baikai-claude-0.7.0.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/baikai-claude-0.7.1.0/baikai-claude-0.7.1.0.tar.gz"
       },
-      "version": "0.7.0.0"
+      "version": "0.7.1.0"
     },
     "baikai-effectful": {
       "components": [
@@ -343,12 +356,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-L7UoAQYiY2m2yoKVAu1CM/5M3iwoBxFaNH8Z3KCSwuU=",
-        "metadata_hash": "sha256-WxdF8pd8N+guQ0rPzxnY3cZu7yoAFe7NrzsAZAx+PxU=",
+        "hash": "sha256-7Jkyd7otGKUm9CREWTAl6hMXAfrLtV0OyK8wmT+r9s8=",
+        "metadata_hash": "sha256-bls21vuyRocSXi/kpe2liLxJKzTLQretgjprMgMuZYU=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/baikai-openai-0.7.0.0/baikai-openai-0.7.0.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/baikai-openai-0.7.1.0/baikai-openai-0.7.1.0.tar.gz"
       },
-      "version": "0.7.0.0"
+      "version": "0.7.1.0"
     },
     "baikai-trace-otel": {
       "components": [
@@ -1089,7 +1102,7 @@
       "flags": {},
       "source": {
         "hash": "sha256-VSYCkDOCclYrexRSAC4a0Nm2uS+zHcJfYRX10to8vA4=",
-        "metadata_hash": "sha256-btYEJL0GZGldtjz9ogUhcr9oQrVg37b0hHhEjG857GU=",
+        "metadata_hash": "sha256-ZJ2CkplAnmVnW7sfgeak8l4leKd6SkuZMUyibmeL0Fo=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/crypton-x509-1.9.1/crypton-x509-1.9.1.tar.gz"
       },
@@ -1102,7 +1115,7 @@
       "flags": {},
       "source": {
         "hash": "sha256-3pGTQDwR0fsJAIM4Jka+b2z2jtmE9HXRoOFC9377h2Y=",
-        "metadata_hash": "sha256-l0YWC5k8JMF15WDicFHf5GFsZBMBRxJ3bxKX4sqLuoo=",
+        "metadata_hash": "sha256-rTiKmbJdjBFyfZb5+TM0Gqug74y/7h3M88GglWhnTMQ=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/crypton-x509-store-1.9.0/crypton-x509-store-1.9.0.tar.gz"
       },
@@ -1128,7 +1141,7 @@
       "flags": {},
       "source": {
         "hash": "sha256-j8uDQBEUx/aU2ExUPo9/ls6mDFQ6MKdwkDdB0zbuzj0=",
-        "metadata_hash": "sha256-f9EjHgzhO+e7uVo0jaWJGRdNNBVyMJ/0Rx45w7P05oo=",
+        "metadata_hash": "sha256-TT0hYXUs3jFPD3C8X0Cv0te/r71yE+R8jhh21ETRzdA=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/crypton-x509-validation-1.9.1/crypton-x509-validation-1.9.1.tar.gz"
       },
@@ -2265,6 +2278,19 @@
         "url": "https://hackage.haskell.org/package/kan-extensions-5.2.8/kan-extensions-5.2.8.tar.gz"
       },
       "version": "5.2.8"
+    },
+    "kdl-hs": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-P/l5ASxxUHMIpw/9ZHl2XhB/gPCmP4WfAoMrDHGBKXs=",
+        "metadata_hash": "sha256-vFcQui7kOfY0XP4u1d0DFxDzoZ4oxu5Qheheac5mRNE=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/kdl-hs-1.1.1/kdl-hs-1.1.1.tar.gz"
+      },
+      "version": "1.1.1"
     },
     "keiki": {
       "components": [
@@ -3637,6 +3663,19 @@
       },
       "version": "0.2.0.0"
     },
+    "settei-kdl": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-+qFE7byRpAXJs0LiCRFgXy+Vp8hVDBtTRFw4K1FIZ2Y=",
+        "metadata_hash": "sha256-FWu+EHwjTw5g5DWHZgljE1bHlWLuquDfb2J+zaiWOmQ=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/settei-kdl-0.2.0.0/settei-kdl-0.2.0.0.tar.gz"
+      },
+      "version": "0.2.0.0"
+    },
     "settei-optparse-applicative": {
       "components": [
         "lib"
@@ -3717,6 +3756,7 @@
     },
     "shikigami-agent": {
       "components": [
+        "exe:shikigami-agent-launch",
         "exe:shikigami-agent-run",
         "exe:shikigami-run-behavior",
         "lib"
@@ -4125,7 +4165,7 @@
       },
       "source": {
         "hash": "sha256-F+95HrTK8xSjtLFYgnoPH0tpXCokrwh18J49jBD1bF0=",
-        "metadata_hash": "sha256-6bl8mOmCeYHWLzfF/r+ea7tnrOySuL1B/Z96zl6zHTI=",
+        "metadata_hash": "sha256-Q12UHJahh/VbJ4A60IrDh/XsifEeYE8818lZwpE23NY=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/tagged-0.8.10/tagged-0.8.10.tar.gz"
       },
@@ -4140,7 +4180,7 @@
       },
       "source": {
         "hash": "sha256-x2EgFBvWHEQYs+1e/F/jCUGG1Hz+Ete+VSMgE59Sxsc=",
-        "metadata_hash": "sha256-SfgwfXjH1rGVnURIFShY7+ECyl6bKJvggrm/Ih55gIQ=",
+        "metadata_hash": "sha256-IGXvOOBhVRx+Opl8Sk6sG2jb8FU8xhd/Acj3mC9M03U=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/tasty-1.5.4/tasty-1.5.4.tar.gz"
       },
@@ -4434,7 +4474,7 @@
       },
       "source": {
         "hash": "sha256-8tK6muygOER/tJtf4NegXvMe+XvKjZ4TgluW6RNhtvw=",
-        "metadata_hash": "sha256-SQspIOQmvLREDkTLL5BYelzaqnz1zIn4owIqGagidTQ=",
+        "metadata_hash": "sha256-NO4puT+3aAj1lZ4WefjSMw+rAIBtFcuoKyqXD+zKKvU=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/tls-2.4.4/tls-2.4.4.tar.gz"
       },
@@ -4881,7 +4921,7 @@
       },
       "source": {
         "hash": "sha256-v5WrAe2SS+gArd6hlfulypfsafN4No9v9Ga9wpZmwcE=",
-        "metadata_hash": "sha256-zy+PkbELY1vaosMBD0ClVioG7eJLktgZdY5/G30E+fI=",
+        "metadata_hash": "sha256-Vti7P5ZWBZ/yS3BdWcxl9vN+Pqkra19bsgK9YHc4u28=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/zlib-0.7.1.1/zlib-0.7.1.1.tar.gz"
       },

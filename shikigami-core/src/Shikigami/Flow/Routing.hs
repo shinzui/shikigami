@@ -44,6 +44,7 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (.
 import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArguments, withSpan')
 import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
+import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
 import Shikigami.Prelude
@@ -229,16 +230,19 @@ modelRouteEvaluator :: BehaviorEnv -> CandidateCatalog -> Value -> IO (Either Ro
 modelRouteEvaluator BehaviorEnv {model, options, traceSink} catalog payload = do
   let context = systemUser routingSystemPrompt (routingUserPrompt catalog payload)
       structuredOptions = options & #responseFormat .~ Just JsonObject
-  response <- case traceSink of
-    Nothing -> completeRequest model context structuredOptions
-    Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
-  case responseError response of
-    Just failure -> pure (Left (RoutingEvaluationFailed (boundedDetail (Text.pack (show failure)))))
-    Nothing ->
-      let responseText = flattenAssistantText (flattenAssistantBlocks response)
-       in case Aeson.eitherDecodeStrict' (Text.encodeUtf8 responseText) of
-            Left detail -> pure (Left (RoutingEvaluationFailed (boundedDetail ("evaluator returned invalid JSON: " <> Text.pack detail))))
-            Right value -> pure (Right value)
+  case validateResponseRequest model structuredOptions context of
+    Left refusal -> pure (Left (RoutingEvaluationFailed (renderResponseCompatibilityError refusal)))
+    Right () -> do
+      response <- case traceSink of
+        Nothing -> completeRequest model context structuredOptions
+        Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
+      case responseError response of
+        Just failure -> pure (Left (RoutingEvaluationFailed (boundedDetail (Text.pack (show failure)))))
+        Nothing ->
+          let responseText = flattenAssistantText (flattenAssistantBlocks response)
+           in case Aeson.eitherDecodeStrict' (Text.encodeUtf8 responseText) of
+                Left detail -> pure (Left (RoutingEvaluationFailed (boundedDetail ("evaluator returned invalid JSON: " <> Text.pack detail))))
+                Right value -> pure (Right value)
 
 routingSystemPrompt :: Text
 routingSystemPrompt =

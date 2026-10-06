@@ -35,15 +35,25 @@
 -- argument, so the responses below are constructed directly.
 module Shikigami.BehaviorProviderSpec (tests) where
 
+import Baikai.Api (Api (..))
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
-import Baikai.Context (Context)
+import Baikai.Context (Context, emptyContext, systemUser)
 import Baikai.Error (BaikaiError, authError, rateLimited)
 import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Model qualified as Model
+import Baikai.Models.Generated (allModels)
 import Baikai.Options (Options (..), emptyOptions)
-import Baikai.Response (Response (..), emptyResponse, errorResponse)
+import Baikai.Provider.Claude.Cli qualified as ClaudeCli
+import Baikai.Provider.OpenAI.Cli qualified as CodexCli
+import Baikai.Provider.Registry (ApiProvider (..), completeRequest)
+import Baikai.Response (Response (..), emptyResponse, errorResponse, responseError)
+import Baikai.ResponseFormat (ResponseFormat (..))
+import Control.Concurrent (forkIO, killThread, threadDelay)
+import Control.Concurrent.MVar
+import Control.Exception (SomeException, bracket, finally, try)
+import Control.Monad (unless, void)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
@@ -52,6 +62,10 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as V
+import Network.HTTP.Types (status200)
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp (testWithApplication)
+import Settei qualified
 import Settei.Env (envSnapshot, environmentSource)
 import Settei.Optparse (CliOverride, DiagnosticMode (NoDiagnostic), cliOverride)
 import Shikigami.App.Config
@@ -62,24 +76,30 @@ import Shikigami.App.Config
     behaviorModelKey,
     behaviorProviderKey,
     environmentBindings,
+    openaiApiKeyKey,
   )
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
 import Shikumi.Tool (mkRegistry)
-import System.Directory (doesFileExist)
+import System.Directory (createDirectory, doesFileExist, executable, getPermissions, getTemporaryDirectory, removeDirectoryRecursive, removeFile, setPermissions)
+import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
+import System.IO (hClose, openTempFile)
+import System.Process (readProcessWithExitCode)
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tests :: TestTree
-tests = testGroup "behavior provider" [credentialTests, profileConstraintTests, failureTests]
+tests = testGroup "behavior provider" [credentialTests, profileConstraintTests, failureTests, contractTests, httpDispatchTests]
 
 -- ── Which credential reaches the model call ─────────────────────────────────
 
@@ -113,7 +133,7 @@ credentialTests =
         selection <- selectionFor []
         case selection of
           UseStub -> pure ()
-          UseAnthropic {} -> assertFailure "an unconfigured process must select the stub"
+          _ -> assertFailure "an unconfigured process must select the stub"
         env <- newBehaviorEnvFor Log.silentLogger selection Nothing
         sent <- capturedOptions env
         apiKey sent @?= Nothing,
@@ -358,3 +378,109 @@ failureResponse = errorResponse emptyModel epoch 0
 
 epoch :: UTCTime
 epoch = UTCTime (fromGregorian 2026 7 15) 43200
+
+-- Real public adapters, disposable fake executables, no vendor credentials.
+contractTests :: TestTree
+contractTests =
+  testGroup
+    "released batch contracts and promotion gate"
+    [ testCase "Claude JSON response decodes through the public provider" $ withFake "printf '%s\\n' '{\"result\":\"marker\",\"is_error\":false}'\n" \dir exe -> do
+        resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe, ClaudeCli.workingDir = Just dir})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
+        responseError resp @?= Nothing,
+      testCase "Codex JSONL response decodes through the public provider" $ withFake "printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"marker\"}}'\n" \dir exe -> do
+        resp <- (CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe, CodexCli.workingDir = Just dir})).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
+        responseError resp @?= Nothing,
+      testCase "malformed Claude output remains a classified failure" $ withFake "printf malformed\n" \_ exe -> do
+        resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
+        assertBool "malformed response refused" (responseError resp /= Nothing),
+      testCase "nonzero Codex exit remains a classified failure" $ withFake "exit 7\n" \_ exe -> do
+        resp <- (CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe})).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
+        assertBool "failed response refused" (responseError resp /= Nothing),
+      testCase "released Codex cancellation gap keeps background CLI disabled" $ cancellationGap OpenAICompletionsCli,
+      testCase "released Claude cancellation gap keeps background CLI disabled" $ cancellationGap AnthropicMessagesCli,
+      testCase "CLI JsonObject refuses before calling a completion" do
+        validateResponseRequest (cliModel OpenAICompletionsCli) (emptyOptions {responseFormat = Just JsonObject}) emptyContext @?= Left UnsupportedFormat
+    ]
+
+cliModel :: Api -> Model
+cliModel apiTag = emptyModel {Model.api = apiTag, Model.provider = if apiTag == AnthropicMessagesCli then "anthropic" else "openai", Model.modelId = "explicit-fake-model"}
+
+withFake :: String -> (FilePath -> FilePath -> IO a) -> IO a
+withFake body run = bracket acquire removeDirectoryRecursive \dir -> do
+  let exe = dir </> "vendor"
+  writeFile exe ("#!/bin/sh\n" <> body)
+  permissions <- getPermissions exe
+  setPermissions exe permissions {executable = True}
+  run dir exe
+  where
+    acquire = do
+      tmp <- getTemporaryDirectory
+      (path, handle) <- openTempFile tmp "shikigami-baikai-test"
+      hClose handle
+      removeFile path
+      createDirectory path
+      pure path
+
+-- A bounded negative proof of the upstream contract. The fixture owns every
+-- PID, cleans up both processes, and times out naturally after five seconds.
+-- Change the assertion and remove the gate only after a released fix passes.
+cancellationGap :: Api -> IO ()
+cancellationGap apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\nwait\n" \dir exe -> do
+  finished <- newEmptyMVar
+  let provider =
+        if apiTag == AnthropicMessagesCli
+          then ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe, ClaudeCli.workingDir = Just dir})
+          else CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe, CodexCli.workingDir = Just dir})
+  worker <- forkIO (void (try @SomeException (provider.complete (cliModel apiTag) emptyContext emptyOptions)) `finally` putMVar finished ())
+  let cleanup = do
+        mapM_
+          ( \file -> do
+              exists <- doesFileExist (dir </> file)
+              if exists then readFile (dir </> file) >>= \pid -> void (readProcessWithExitCode "/bin/kill" ["-TERM", takeWhile (/= '\n') pid] "") else pure ()
+          )
+          ["child", "parent"]
+        void (timeout 6_000_000 (takeMVar finished))
+  flip finally cleanup do
+    ready <- timeout 2_000_000 (waitFor (dir </> "child"))
+    unless (ready == Just ()) (assertFailure "fake process did not start")
+    void (forkIO (killThread worker))
+    threadDelay 200_000
+    pid <- takeWhile (/= '\n') <$> readFile (dir </> "child")
+    (status, _, _) <- readProcessWithExitCode "/bin/kill" ["-0", pid] ""
+    status @?= ExitSuccess
+    validateResponseOptions (cliModel apiTag) emptyOptions @?= Left BatchCancellationReleaseRequired
+  where
+    waitFor path = do
+      exists <- doesFileExist path
+      if exists then pure () else threadDelay 10_000 >> waitFor path
+
+httpDispatchTests :: TestTree
+httpDispatchTests =
+  testGroup
+    "configured HTTP handlers"
+    [ httpCase "openai" OpenAIChatCompletions chatFrames,
+      httpCase "openai-responses" OpenAIResponses responseFrames
+    ]
+  where
+    httpCase choice apiTag frames = testCase (Text.unpack choice <> " reaches its public Baikai handler") do
+      seen <- newEmptyMVar
+      let application request respond = do
+            body <- Wai.strictRequestBody request
+            putMVar seen (Wai.pathInfo request, body)
+            respond (Wai.responseLBS status200 [("Content-Type", "text/event-stream")] frames)
+          catalog = [m | m <- allModels, Model.api m == apiTag, Model.provider m == "openai"]
+      case catalog of
+        [] -> assertFailure "released OpenAI catalog is empty"
+        model : _ -> testWithApplication (pure application) \port -> do
+          selection <- selectionFor [cliOverride behaviorProviderKey choice, cliOverride behaviorModelKey (Model.modelId model), cliOverride openaiApiKeyKey "fake-http-key", cliOverride (stableKeyForTest "behavior.base_url") ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")]
+          env <- newBehaviorEnvFor Log.silentLogger selection Nothing
+          resp <- completeRequest env.model (systemUser "system" "marker") env.options
+          responseError resp @?= Nothing
+          (path, body) <- takeMVar seen
+          path @?= if apiTag == OpenAIResponses then ["v1", "responses"] else ["v1", "chat", "completions"]
+          assertBool "exact configured model sent" (Model.modelId model `Text.isInfixOf` Text.pack (show body))
+    chatFrames = "data: {\"id\":\"fake\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"marker\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"fake\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+    responseFrames = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"fake\",\"output\":[{\"id\":\"msg_fake\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"marker\"}]}]}}\n\n"
+
+stableKeyForTest :: Text -> Settei.Key
+stableKeyForTest = either (error . show) id . Settei.parseKey

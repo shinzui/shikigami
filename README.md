@@ -195,3 +195,5 @@ Shikigami is active Haskell work in the `shinzui/kikan` portfolio. Some adjacent
 services are still proven through stubs or fixtures in this repository; the
 contract shapes are represented here, while live service ownership remains with
 the corresponding Kikan projects.
+
+Model response options and foreground coding-agent launches are described in [Baikai execution](docs/operations/baikai-execution.md). HTTP supports Anthropic, OpenAI Chat Completions and OpenAI Responses; `shikigami-agent-launch` mounts interactive and unattended Baikai surfaces. Background CLI responses await a cancellation-safe released adapter.

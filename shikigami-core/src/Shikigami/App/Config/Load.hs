@@ -61,6 +61,7 @@ module Shikigami.App.Config.Load
     ConfigRun (..),
     appConfigRun,
     readConfigSources,
+    captureEnvironment,
     resolveAppConfig,
 
     -- * Exit codes
@@ -94,6 +95,8 @@ import Settei.Optparse
 import Settei.Yaml
 import Shikigami.App.Config
 import Shikigami.App.Version (versionOption)
+import Shikigami.Behavior.Provider (renderResponseCompatibilityError, validateProviderSelection)
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO qualified as IO
 
@@ -259,6 +262,7 @@ appConfigRun role options fileSources environment =
             warnings = renderWarningsText (warningsOf result)
          in case answerOf result of
               Left problems -> failed resolutionExitCode (renderErrorsText problems <> explainOnFailure options result)
+              Right config | Left refusal <- validateProviderSelection ((.behaviorProvider) config) -> failed resolutionExitCode (renderResponseCompatibilityError refusal)
               Right config -> case missingRequirements role config of
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
                 [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of
@@ -337,3 +341,8 @@ reportOf ResolveResult {report} = report
 
 warningsOf :: ResolveResult a -> [ConfigWarning]
 warningsOf ResolveResult {warnings} = warnings
+
+-- | One process-boundary snapshot for mounted Baikai commands. Its owner
+-- supplies the bindings; no vendor authentication files are read here.
+captureEnvironment :: IO EnvSnapshot
+captureEnvironment = envSnapshot . map (\(name, value) -> (Text.pack name, Text.pack value)) <$> getEnvironment

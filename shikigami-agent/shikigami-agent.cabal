@@ -40,10 +40,15 @@ library
     Shikigami.Agent.Capability.Workspace
     Shikigami.Agent.Command
     Shikigami.Agent.Command.AgentRun
+    Shikigami.Agent.Command.Launch
     Shikigami.Agent.Command.RunBehavior
 
   build-depends:
     aeson >=2.2,
+    baikai,
+    baikai-agent,
+    baikai-claude,
+    baikai-openai,
     base >=4.21 && <5,
     bytestring,
     directory,
@@ -56,6 +61,9 @@ library
     optparse-applicative >=0.19 && <0.20,
     process,
     regex-tdfa,
+    settei,
+    settei-env,
+    settei-optparse-applicative,
     shikigami-core,
     shikigami-migrations,
     shikumi ==0.4.0.0,
@@ -67,6 +75,19 @@ executable shikigami-run-behavior
   import: common
   main-is: Main.hs
   hs-source-dirs: app/run-behavior
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    base,
+    shikigami-agent,
+
+executable shikigami-agent-launch
+  import: common
+  main-is: Main.hs
+  hs-source-dirs: app/agent-launch
   ghc-options:
     -threaded
     -rtsopts
@@ -98,10 +119,12 @@ test-suite shikigami-agent-test
     Shikigami.Agent.Capability.OneOffSpec
     Shikigami.Agent.Capability.WorkspaceSpec
     Shikigami.Agent.CommandSpec
+    Shikigami.Agent.LaunchSpec
 
   build-depends:
     aeson,
     baikai,
+    baikai-agent,
     base,
     bytestring,
     containers,
@@ -112,6 +135,9 @@ test-suite shikigami-agent-test
     lens,
     optparse-applicative,
     process,
+    settei,
+    settei-env,
+    settei-optparse-applicative,
     shikigami-agent,
     shikigami-core,
     shikumi,
