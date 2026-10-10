@@ -2,10 +2,10 @@
 type: Improvement Request
 title: Record durable model and tool turns and compose harness policies
 description: Resume Skill execution from recorded model and tool outcomes and compose context, permission, budget, and termination policies over durable execution state.
-timestamp: "2026-10-06T03:09:13Z"
+timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-10T23:44:58Z"
 requestId: IR-14
 status: proposed
 origin: mori://shinzui/shikigami
@@ -15,14 +15,16 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed.** Improve recovery and policy composition within a model and tool loop while
-preserving Shikigami's declared-agent lifecycle, capability admission, authorization, memory,
-and sink contracts. Storage ownership and the policy authoring API remain design decisions.
-
-No implementation plan currently covers this request. It is the harness-recovery foundation
-for [UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
-The evidence persistence planned in [plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md)
-records typed decision call evidence; it does not recover a Skill's model/tool transcript.
+**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) coordinates this
+request with IR-15 through IR-18 for
+[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
+[plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) owns durable model/tool turns and composed policies;
+[plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) closes the continuing-message recovery integration, and
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualifies the integrated delivery scenario. Shared resource
+accounting and pinned settings come from [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md) and [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md).
+All these plans are not started. The evidence persistence planned in
+[plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md)
+records typed decision-call evidence; it does not recover a Skill's model/tool transcript.
 
 ## Problem
 

@@ -2,6 +2,9 @@
 
 ## 2026-10-10
 
+* **Update**: Link IR-14 through IR-18 to MasterPlan 14 and their owning ExecPlans
+  81–87. Record planned, not-started coverage and preserve separate prerequisite
+  and integration gates.
 * **Addition**: IR-15 requests continuing worker sessions and durable coordination;
   IR-16 requests adaptive orchestration and shared resource limits; IR-17 requests
   governed execution settings for whole agent runs; IR-18 requests recurring objective

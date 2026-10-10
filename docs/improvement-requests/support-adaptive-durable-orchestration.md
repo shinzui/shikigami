@@ -2,9 +2,10 @@
 type: Improvement Request
 title: Support adaptive durable orchestration with shared resource limits
 description: Let a coordinator revise work decomposition, assignments, hierarchy, and concurrency through validated durable decisions while preserving ownership, authority, and shared execution budgets.
+timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-10T23:44:58Z"
 requestId: IR-16
 status: proposed
 origin: mori://shinzui/shikigami
@@ -14,9 +15,14 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan yet.** Owns the adaptive coordinator and end-to-end
-qualification for [UC-1](../use-cases/adaptive-autonomous-delivery.md). Other requests own
-continuing sessions, repository execution, model selection, and recurring mandates.
+**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) decomposes
+this request into shared resource accounting in [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md), adaptive
+coordination and execution capacity in [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md), and integrated delivery
+qualification in [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md). All are not started. This request owns the
+adaptive coordinator and end-to-end qualification for
+[UC-1](../use-cases/adaptive-autonomous-delivery.md); continuing sessions, repository
+execution, model selection and recurring mandates retain their separate owners.
+Existing typed-decision plans and IR-11/IR-13 remain explicit prerequisites.
 
 ## Problem and current coverage
 

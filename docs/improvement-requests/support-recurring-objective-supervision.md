@@ -2,9 +2,10 @@
 type: Improvement Request
 title: Support recurring objective supervision with durable checkpoints
 description: Resume an explicitly authorized ongoing objective from authoritative checkpoints and events, coalesce overlapping wakeups, and enforce cadence, shared limits, expiry, and stop conditions.
+timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-10T23:44:58Z"
 requestId: IR-18
 status: proposed
 origin: mori://shinzui/shikigami
@@ -14,9 +15,12 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan yet.** Supplies the optional ongoing-supervision mode
-of [UC-1](../use-cases/adaptive-autonomous-delivery.md). Finite autonomous delivery does
-not require recurring automation to be enabled.
+**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+explicit recurring mandates, checkpoint wakeups, coalescing and stop semantics to
+[plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md). This is a separate optional phase of
+[UC-1](../use-cases/adaptive-autonomous-delivery.md), following the finite coordinator
+foundations and the IR-13 checkpoint prerequisite. Finite delivery qualification does
+not require recurring automation to be enabled. The plan is not started.
 
 ## Problem and current coverage
 

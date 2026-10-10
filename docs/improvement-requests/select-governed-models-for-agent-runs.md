@@ -2,9 +2,10 @@
 type: Improvement Request
 title: Select governed models and reasoning settings for agent runs
 description: Resolve and pin operator-approved provider, model, and reasoning choices per agent or delegated assignment so coordinators and workers can use different execution settings within shared authority.
+timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-10T23:44:58Z"
 requestId: IR-17
 status: proposed
 origin: mori://shinzui/shikigami
@@ -14,9 +15,14 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan yet.** Supplies role-appropriate execution for
-[UC-1](../use-cases/adaptive-autonomous-delivery.md), without prescribing particular
-models or a permanent coordinator/worker pairing.
+**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+whole-assignment execution selection to [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md), with durable-turn and
+continuing-session integration in [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) and [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
+[plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the real typed-Flow decision-permission regression, and
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualifies distinct permitted settings in integrated delivery.
+The existing plan 73 catalog remains a prerequisite. This supplies role-appropriate
+execution for [UC-1](../use-cases/adaptive-autonomous-delivery.md), without prescribing
+particular models or a permanent coordinator/worker pairing.
 
 ## Problem and existing plan coverage
 

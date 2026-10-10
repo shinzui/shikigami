@@ -2,9 +2,10 @@
 type: Improvement Request
 title: Support continuing worker sessions with durable coordination
 description: Let a coordinator address continuing workers, deliver follow-up assignments, observe progress and completion, and transfer ownership without losing accepted work or duplicating writers.
+timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-10T23:44:58Z"
 requestId: IR-15
 status: proposed
 origin: mori://shinzui/shikigami
@@ -14,9 +15,14 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan yet.** This is the session-coordination requirement of
-[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
-It extends the existing governed child-run machinery rather than replacing it.
+**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+continuing sessions, ordered messages, events and ownership transfer to [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) exercises their integrated delivery behavior. This remains the
+session-coordination requirement of
+[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md)
+and extends existing governed child-run machinery. Full completion retains explicit
+IR-11 workspace-fencing and IR-13 checkpoint integration gates; fixture adapters do not
+satisfy those gates.
 
 ## Problem and current coverage
 
