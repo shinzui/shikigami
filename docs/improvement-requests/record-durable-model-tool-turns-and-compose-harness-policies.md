@@ -5,7 +5,7 @@ description: Resume Skill execution from recorded model and tool outcomes and co
 timestamp: "2026-10-06T03:09:13Z"
 generated:
   by: process:codex
-  at: "2026-10-06T03:09:13Z"
+  at: "2026-10-10T18:29:20Z"
 requestId: IR-14
 status: proposed
 origin: mori://shinzui/shikigami
@@ -18,6 +18,11 @@ origin: mori://shinzui/shikigami
 **Proposed.** Improve recovery and policy composition within a model and tool loop while
 preserving Shikigami's declared-agent lifecycle, capability admission, authorization, memory,
 and sink contracts. Storage ownership and the policy authoring API remain design decisions.
+
+No implementation plan currently covers this request. It is the harness-recovery foundation
+for [UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
+The evidence persistence planned in [plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md)
+records typed decision call evidence; it does not recover a Skill's model/tool transcript.
 
 ## Problem
 
@@ -100,6 +105,13 @@ changing an offered tool list must not bypass authorization or restore an exhaus
    generation rotation, patch guards, and checked declarations. Document a composed-policy
    example and expose bounded turn progress and unresolved operations to operators.
 
+9. Compose continuing-session coordination and shared resource policies over the same
+   durable execution state. Accepted follow-up messages and ownership operations retain
+   their operation identities through retries; compaction and a new assignment do not
+   clear root reservations, unknown usage, pending instructions, or pinned settings.
+   Reconstruct relevant context from accepted history without treating relevance-ranked
+   memory as the authoritative assignment or budget record.
+
 ## Acceptance
 
 1. A fixture Skill executes multiple model and tool turns. Restart after each committed
@@ -129,6 +141,11 @@ changing an offered tool list must not bypass authorization or restore an exhaus
    cancelled, and unresolved work without leaking protected payloads. Old and new
    workflow populations pass the required evolution and conformance gates.
 
+8. A UC-1 worker accepts a follow-up assignment, compacts earlier context, and resumes after
+   a crash. Relevant accepted work, pinned execution settings, pending coordination messages,
+   and shared usage/reservations are retained. A replayed coordination tool does not create
+   another logical assignment, message, or ownership transfer.
+
 ## Scope boundary
 
 This request concerns durable harness execution, not semantic memory recall, a general task
@@ -136,6 +153,15 @@ store, or arbitrary workflow scripting. It does not select an event store, requi
 framework dependency, promise token-by-token stream recovery, or grant new mutation tools.
 Implementation should reuse existing durable infrastructure where its contracts fit and
 keep the Flow capability boundary intact.
+
+For UC-1, harness policies must compose with the root resource ledger owned by
+[IR-16](support-adaptive-durable-orchestration.md), rather than maintaining resettable
+per-worker counters as the sole authority. Follow-up turns and context compaction retain
+that ledger's reservations and unknown usage. Accepted coordination operations use the
+stable identities and reconciliation contract in
+[IR-15](support-continuing-worker-sessions.md), and execution settings come from
+[IR-17](select-governed-models-for-agent-runs.md). This request records and recovers those
+operations; it does not independently define session mailboxes or adaptive scheduling.
 
 ## Related requests
 

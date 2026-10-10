@@ -176,6 +176,9 @@ See [docs/user/cli.md](docs/user/cli.md) for the full command reference.
 
 ## Documentation
 
+- [Use cases](docs/use-cases/index.md) connect intended outcomes to feature coverage,
+  improvement requests, existing plans, and acceptance scenarios. Start with
+  [adaptive autonomous delivery](docs/use-cases/adaptive-autonomous-delivery.md).
 - [User guide](docs/user/README.md) explains the declared-agent model.
 - [Getting started](docs/user/getting-started.md) covers local setup and the
   first validate/run path.

@@ -5,7 +5,7 @@ description: Let compiled Flows invoke registered typed Shikumi programs at name
 timestamp: "2026-09-26T18:23:02Z"
 generated:
   by: process:codex
-  at: "2026-09-26T18:23:02Z"
+  at: "2026-10-10T18:29:20Z"
 requestId: IR-12
 status: proposed
 origin: mori://shinzui/shikigami
@@ -15,9 +15,14 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed.** No accepted ExecPlan covers this request. The completed declarative-router work
-provides one journaled model decision and governed delegation, but does not let a Flow run a
-registered Shikumi program at each decision point or choose a model for each such invocation.
+**Proposed; implementation planned but not started.**
+[MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) decomposes this
+request into [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md),
+[plan 74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md),
+[plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md), and
+[plan 76](../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md). All four
+record that implementation has not started. The completed declarative-router work provides
+one journaled model decision and governed delegation; it does not supply this general capability.
 
 ## Context
 
@@ -91,6 +96,15 @@ This request selects a model per **Flow decision invocation**. It does not requi
 model for each internal node of one Shikumi program, arbitrary model ids in Dhall or payloads,
 or a visual workflow editor. An implementation may add finer-grained Shikumi model routing
 later, provided it preserves the same pinned policy and per-call evidence boundary.
+
+[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md) can use
+this capability for bounded decomposition, reflection, and next-action proposals in a
+compiled coordinator Flow. Its adaptive continuing loop is owned by
+[IR-16](support-adaptive-durable-orchestration.md); the finite example in plans 73–76
+does not deliver that loop. Selecting a provider/model/reasoning configuration for a whole
+worker run is separately owned by [IR-17](select-governed-models-for-agent-runs.md). Reuse
+catalog and policy contracts across these consumers without changing this request's
+per-decision scope or treating unimplemented plans as available APIs.
 
 ## Dependencies
 

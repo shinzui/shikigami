@@ -1494,6 +1494,14 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "use-cases"
+        , path = "docs/use-cases"
+        , profile = Some "docs/use-cases/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some
+            "Shikigami use cases with jobs, feature coverage, improvement requests, and acceptance scenarios"
+        }
+      , Schema.OkfBundle::{
         , name = "capabilities"
         , path = "docs/capabilities"
         , profile = Some "docs/capabilities/profile.dhall"

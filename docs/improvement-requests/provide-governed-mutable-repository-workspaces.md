@@ -5,7 +5,7 @@ description: Let a declared durable agent resolve an operator-approved repositor
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-10T18:29:20Z"
 requestId: IR-11
 status: proposed
 origin: mori://shinzui/mori
@@ -32,6 +32,14 @@ portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2`. The existing one-o
 not installed in the durable worker, whose capability runtime is empty. It therefore cannot bump a
 dependency, repair a build, run validation, or commit a result.
 
+It also supplies repository execution for
+[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
+[Plan 48](../plans/48-add-a-portable-one-off-repository-agent-harness.md) retains
+unimplemented edit, command, sandbox, and executable milestones; its delivered read-only
+slice in [plan 59](../plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md)
+does not implement this durable-run request. No accepted plan yet covers the complete
+durable mutable-workspace path.
+
 ## Context
 
 An addressed Shikigami agent can receive Mori's release and workflow payload, but an instruction
@@ -51,9 +59,11 @@ an operator-owned durable-run provider for repository work that preserves those 
    or repository identity plus an optional immutable starting revision; it never supplies a local
    absolute path. The operator configuration maps that identity to an allowed checkout source or
    worktree strategy and rejects unknown or ambiguous identities.
-2. Allocate one isolated worktree or equivalent sandbox per run, keyed by the stable run id. Two
-   concurrent upgrades of one repository must not share mutable files or Git index state. Resume
-   must find the same workspace, while terminal cleanup must be explicit, bounded, and recoverable.
+2. Allocate one isolated worktree or equivalent sandbox per admitted assignment, with a stable
+   mapping from its run and continuing-session identities. A one-run upgrade can use its run id.
+   Two concurrent assignments for one repository must not share mutable files or Git index state.
+   Resume and authorized follow-up work must find the same workspace; terminal cleanup must be
+   explicit, bounded, and recoverable. Session idleness alone is not permission to delete it.
 3. Add declared capability overlays for the minimum repository operations needed by a coding
    agent: bounded read/search, structured file edits, process execution under an allowlisted and
    timeout-limited validation policy, and Git status/diff/commit operations. Exact names and tool
@@ -71,6 +81,16 @@ an operator-owned durable-run provider for repository work that preserves those 
    not enter workflow journals or logs.
 7. Define recovery for abandoned worktrees and uncertain Git operations. An operator can list and
    clean terminal or orphaned workspaces without deleting an active run's state.
+8. Support explicit ownership transfer and integration for coordinated coding assignments.
+   Fence the former writer before admitting a successor and retain accepted changes and pending
+   operation evidence. Let an authorized integrator combine revision-pinned worker artifacts in
+   a separate workspace, expose conflicts, and rerun validation against the exact integrated
+   source. Passing tests in separate worker trees does not qualify their combination.
+9. Discover and apply repository instructions in each admitted workspace, including dependency
+   lookup and commit/branch conventions. Persist the relevant instruction/configuration identity
+   and report conflicts with parent instructions or operator policy; a child cannot expand
+   filesystem authority through a repository file. Define bounded process cancellation and
+   reconciliation when a validation command survives or has an uncertain result.
 
 ## Acceptance
 
@@ -91,6 +111,12 @@ an operator-owned durable-run provider for repository work that preserves those 
    existing observation-only workspace behavior remains distinct and compatible.
 7. Operator cleanup identifies an orphaned terminal fixture worktree, removes only that worktree,
    and refuses to remove a workspace owned by an active run.
+8. Two UC-1 workers return exact revisions from isolated trees. An integrator combines them,
+   reports any conflict, and runs the fixture's integration checks on the combined revision.
+   The result records the worker bases/artifacts and actual integrated test statuses.
+9. Reassign an existing workspace with a pending write and resume after a restart. The old
+   owner cannot write after the handoff; accepted files and uncertain operations remain visible.
+   A continuing idle worker's workspace is retained, and scoped repository instructions apply.
 
 ## Non-goals
 
@@ -102,8 +128,16 @@ local committed fixture result.
 
 ## Dependencies
 
-- `mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-8` supplies addressed durable
-  runs and caller-owned idempotency.
+- [IR-8](expose-addressed-agent-runs-over-http.md) supplies public addressed runs and caller-owned
+  idempotency for the external Mori scenario. A CLI-addressed or internally delegated UC-1 fixture
+  can use the existing enqueue/delegation path and does not require that HTTP endpoint.
+- [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) supplies durable
+  operation records and recovery within the model/tool loop; an observation descriptor or
+  completed outer behavior step alone cannot protect repeated edits.
+- [IR-15](support-continuing-worker-sessions.md) owns session interactions and ownership transfer;
+  this request enforces the resulting workspace ownership at write boundaries.
+- [UC-1](../use-cases/adaptive-autonomous-delivery.md) supplies the coordinated coding and
+  integrated-result acceptance scenario without replacing Mori's dependency-upgrade scenario.
 - `mori://shinzui/kikan-en` supplies fresh exact action authorization for protected tools.
 - `mori://shinzui/mori/okf/use-cases/concepts/UC-2` supplies the dependency-upgrade behavior and
   end-to-end acceptance scenario.

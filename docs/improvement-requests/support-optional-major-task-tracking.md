@@ -5,7 +5,7 @@ description: Give agents and users an explicit, durable view of progress on mult
 timestamp: "2026-09-26T22:03:32Z"
 generated:
   by: process:codex
-  at: "2026-09-26T22:03:32Z"
+  at: "2026-10-10T18:29:20Z"
 requestId: IR-13
 status: proposed
 origin: mori://shinzui/shikigami
@@ -18,6 +18,11 @@ origin: mori://shinzui/shikigami
 **Proposed for further design.** No task store, provider, API, or implementation plan is selected
 by this request. It records the user need and the current runtime constraints so a later design
 can start from evidence rather than rediscovering them.
+
+[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md) is a
+concrete consumer: its coordinator must recover current owners, assignment dependencies,
+accepted artifacts, and next actions across worker turns and supervision cycles. No
+implementation plan currently supplies this task/checkpoint store.
 
 ## Problem
 
@@ -76,6 +81,16 @@ task. That need should not require a Rei deployment or an intention ID.
    a descriptor's `IdempotentMutation` label alone is not a deduplication mechanism.
 5. Keep Rei an optional integration. A user who has Rei may link or mirror task progress to an
    intention, while a user without Rei receives the same core tracking behavior.
+6. For coordinated work, retain a versioned checkpoint of current assignments and owners,
+   dependencies, accepted artifact/evidence identities, decisions and assumptions, unresolved
+   operations, and next actions. Link it to the authoritative session/mandate/budget records
+   instead of copying their independently mutable state. A resumed coordinator reads current
+   instructions and state before acting; a historical scheduled prompt cannot restore an
+   obsolete assignment graph.
+7. Define conflict/version checks and atomic progress updates sufficient for multiple workers
+   and a coordinator. Preserve accepted work through explicit handoff. Completion records must
+   identify the integrated artifact and acceptance evidence; a child-run success alone cannot
+   complete its parent objective.
 
 ## Questions before planning
 
@@ -103,6 +118,12 @@ task. That need should not require a Rei deployment or an intention ID.
    one agent cannot silently overwrite the other's progress.
 4. An agent without task authority cannot read or mutate protected task state. An authorized user
    can inspect which run produced each recorded update.
+5. Restart a UC-1 coordinator after an ownership change and accepted worker result. Its checkpoint
+   identifies the current owner, result revision, unresolved operations, and next action without
+   depending on semantic recall. A stale concurrent update conflicts rather than resurrecting
+   the old owner or erasing the accepted result.
+6. A completed worker leaves the parent objective open until its integrated acceptance evidence
+   is recorded. A later run can continue the same objective without a Rei deployment.
 
 ## Scope boundary
 
@@ -110,3 +131,10 @@ This request is for continuity and progress on an agent's major task. It does no
 general project-management product, a storage engine, a specific overlay tool set, or an A2A wire
 representation. The proposed lifecycle and implementation scope should be decided after the
 questions above are answered.
+
+[IR-15](support-continuing-worker-sessions.md) owns live session/message semantics,
+[IR-16](support-adaptive-durable-orchestration.md) owns adaptive decisions and shared resource
+accounting, and [IR-18](support-recurring-objective-supervision.md) owns recurring cadence,
+expiry, watermark, and overlap admission. This task record links those authorities; it
+does not become another session runtime, budget ledger, or scheduler. The same checkpoint
+facility must remain usable for an ordinary finite task.

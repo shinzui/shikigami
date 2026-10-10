@@ -1,3 +1,29 @@
+# Validate use-case feature coverage and request metadata. Independent review
+# provenance is added only when a review occurs, so these recipes omit --strict.
+[group("docs")]
+use-cases-validate:
+    okf validate docs/use-cases \
+      --profile docs/use-cases/profile.dhall \
+      --profile-enforce \
+      --log-enforce
+
+[group("docs")]
+use-cases-index:
+    okf index docs/use-cases --write --okf-version 0.2
+    python3 -c 'from pathlib import Path; [p.write_text(p.read_text().rstrip() + "\n") for p in Path("docs/use-cases").rglob("index.md")]'
+
+[group("docs")]
+improvement-requests-validate:
+    okf validate docs/improvement-requests \
+      --profile docs/improvement-requests/profile.dhall \
+      --profile-enforce \
+      --log-enforce
+
+[group("docs")]
+improvement-requests-index:
+    okf index docs/improvement-requests --write --okf-version 0.2
+    python3 -c 'from pathlib import Path; p = Path("docs/improvement-requests/index.md"); p.write_text(p.read_text().rstrip() + "\n")'
+
 # Validate capability claims and the evidence/dependency links the profile cannot check.
 # Independent reviews are recommended; do not invent provenance to satisfy --strict.
 [group("docs")]

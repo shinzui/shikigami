@@ -1,5 +1,19 @@
 # Bundle Update Log
 
+## 2026-10-10
+
+* **Addition**: IR-15 requests continuing worker sessions and durable coordination;
+  IR-16 requests adaptive orchestration and shared resource limits; IR-17 requests
+  governed execution settings for whole agent runs; IR-18 requests recurring objective
+  supervision. All remain proposed and link to UC-1 in the new use-case bundle.
+* **Update**: Extend IR-11 with assignment-scoped workspaces, ownership fencing,
+  instruction discovery, and integrated-artifact validation; IR-13 with authoritative
+  assignment checkpoints and conflict handling; IR-14 with follow-up recovery and
+  shared-budget/coordination composition. Preserve their original consumers and scopes.
+* **Correction**: IR-12 now records existing unimplemented MasterPlan 13 and plans
+  73–76, and distinguishes Flow decision selection from whole-worker model selection.
+  No implementation or independent review is claimed by this change.
+
 ## 2026-10-06
 
 * **Addition**: IR-14 requests durable recording and recovery of individual model and tool
