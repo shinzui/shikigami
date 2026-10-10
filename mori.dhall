@@ -1494,6 +1494,14 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "capabilities"
+        , path = "docs/capabilities"
+        , profile = Some "docs/capabilities/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some
+            "What Shikigami provides today, with stable capability handles, adoption surfaces, evidence, and limits"
+        }
+      , Schema.OkfBundle::{
         , name = "user"
         , path = "docs/user"
         , profile = Some "docs/user/profile.dhall"

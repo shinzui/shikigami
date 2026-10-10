@@ -1,3 +1,18 @@
+# Validate capability claims and the evidence/dependency links the profile cannot check.
+# Independent reviews are recommended; do not invent provenance to satisfy --strict.
+[group("docs")]
+capabilities-validate:
+    okf validate docs/capabilities \
+      --profile docs/capabilities/profile.dhall \
+      --profile-enforce \
+      --log-enforce
+    python3 tools/check-capabilities.py
+
+[group("docs")]
+capabilities-index:
+    okf index docs/capabilities --write --okf-version 0.2
+    python3 -c 'from pathlib import Path; p = Path("docs/capabilities/index.md"); p.write_text(p.read_text().rstrip() + "\n")'
+
 # Validate user documentation against the shared reader-intent profile.
 [group("docs")]
 user-docs-validate:

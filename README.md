@@ -44,6 +44,11 @@ flows working as one inspectable system. Shikigami is one way that mechanism act
 
 ## What It Does
 
+The [capability catalog](docs/capabilities/index.md) documents the current provision
+surface with stable `CAP-N` handles, adoption steps, evidence, and implementation
+limits. Its [maintenance guide](docs/capabilities-maintenance.md) explains the OKF
+profile and validation commands.
+
 - Loads and validates typed Dhall agent declarations from `agents/*.dhall`.
 - Supports schedule, activity-stream, and addressed-event triggers.
 - Runs registered `shikumi` / `handan` programs, `baikai` skills, and
@@ -76,6 +81,7 @@ schema/                Dhall schema for declared agents
 docs/architecture/     Package map, implementation order, domain inventory
 docs/adr/              Architecture decision records
 docs/user/             User guide and CLI reference
+docs/capabilities/     Evidence-backed OKF capability catalog
 docs/plans/            ExecPlans for the runtime build-out
 docs/initial-spec.md   Original architecture spec
 ```
