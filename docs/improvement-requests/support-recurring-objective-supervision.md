@@ -5,9 +5,10 @@ description: Resume an explicitly authorized ongoing objective from authoritativ
 timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T23:44:58Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-18
-status: proposed
+status: accepted
+targetPlan: docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
 explicit recurring mandates, checkpoint wakeups, coalescing and stop semantics to
 [plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md). This is a separate optional phase of
 [UC-1](../use-cases/adaptive-autonomous-delivery.md), following the finite coordinator

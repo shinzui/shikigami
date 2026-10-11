@@ -5,7 +5,7 @@ description: Add durable broker, probe, authorization, and typed telemetry-tool 
 timestamp: "2026-07-30T00:41:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-2
 status: proposed
 origin: mori://shinzui/kikan
@@ -32,6 +32,13 @@ reviews:
 **Contracts:** C5, C11, C13, and the proposed cross-cluster diagnostics contract.
 **Created:** 2026-07-24.
 
+
+## Status
+
+**Proposed; no implementation plan selected for the cross-cluster contract.**
+[Plan 77: Add a read-only k8s.observe capability provider for durable agents](../plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md) is related work for read-only observation from Shikigami's own cluster.
+It explicitly excludes the broker/probe topology, cross-cluster authorization, and
+correlated audit required here, so it does not fulfill this request.
 
 ## Why
 

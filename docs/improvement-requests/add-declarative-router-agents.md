@@ -5,9 +5,10 @@ description: Declare specialist expertise and route work through durable, typed 
 timestamp: "2026-07-30T00:42:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-3
 status: completed
+targetPlan: docs/masterplans/8-declarative-router-agents.md
 completedAt: "2026-08-23T20:39:18Z"
 resolution: Completed by mori://shinzui/shikigami/masterplans/8-declarative-router-agents and child plans 40 through 42.
 origin: mori://shinzui/kikan

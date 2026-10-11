@@ -5,9 +5,10 @@ description: Gate agent execution on canonical Meibo lifecycle state and fleet i
 timestamp: "2026-07-30T00:40:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-1
 status: completed
+targetPlan: docs/plans/23-agent-lifecycle-control-with-meibo-principals.md
 completedAt: "2026-08-23T01:55:14Z"
 resolution: Completed by the lifecycle directory, admission, skip-audit, and operator work in mori://shinzui/shikigami/plans/23-agent-lifecycle-control-with-meibo-principals.
 origin: mori://shinzui/kikan

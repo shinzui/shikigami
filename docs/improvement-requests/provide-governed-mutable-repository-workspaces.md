@@ -5,7 +5,7 @@ description: Let a declared durable agent resolve an operator-approved repositor
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-11
 status: proposed
 origin: mori://shinzui/mori
@@ -39,6 +39,14 @@ unimplemented edit, command, sandbox, and executable milestones; its delivered r
 slice in [plan 59](../plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md)
 does not implement this durable-run request. No accepted plan yet covers the complete
 durable mutable-workspace path.
+
+[MasterPlan 14: Deliver adaptive autonomous objectives with durable workers](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md)
+consumes this request as a separately owned prerequisite. [Plan 84: Coordinate continuing worker sessions and fenced handoffs](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)
+and [Plan 86: Qualify integrated adaptive autonomous delivery](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
+require real workspace fencing and integrated-revision evidence before their joint
+acceptance can pass; they do not implement this workspace provider.
+[Plan 78: Run external operations from durable Flows through idempotent shiki jobs](../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md)
+is related external-executor work, not a selected mutable-workspace implementation.
 
 ## Context
 

@@ -5,7 +5,7 @@ description: Give agents and users an explicit, durable view of progress on mult
 timestamp: "2026-09-26T22:03:32Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-13
 status: proposed
 origin: mori://shinzui/shikigami
@@ -23,6 +23,13 @@ can start from evidence rather than rediscovering them.
 concrete consumer: its coordinator must recover current owners, assignment dependencies,
 accepted artifacts, and next actions across worker turns and supervision cycles. No
 implementation plan currently supplies this task/checkpoint store.
+
+[MasterPlan 14: Deliver adaptive autonomous objectives with durable workers](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md)
+consumes this request as a separately owned prerequisite. [Plan 84: Coordinate continuing worker sessions and fenced handoffs](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md),
+[Plan 85: Adapt durable delivery through validated coordinator decisions](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md), and
+[Plan 87: Supervise recurring objectives from current durable checkpoints](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md)
+require authoritative checkpoint integration, but leave the task/checkpoint store
+owned by this request. Their consumer contracts and fixture adapters do not fulfill it.
 
 ## Problem
 

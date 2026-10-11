@@ -5,9 +5,10 @@ description: Resume Skill execution from recorded model and tool outcomes and co
 timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T23:44:58Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-14
-status: proposed
+status: accepted
+targetPlan: docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) coordinates this
+**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) coordinates this
 request with IR-15 through IR-18 for
 [UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
 [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) owns durable model/tool turns and composed policies;

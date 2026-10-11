@@ -5,7 +5,7 @@ description: Implement authenticated, authorized, durable delegation between ind
 timestamp: "2026-07-30T00:45:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-6
 status: proposed
 origin: mori://shinzui/kikan
@@ -26,7 +26,11 @@ reviews:
 
 ## Status
 
-**Proposed.** Adopt the Agent2Agent (A2A) protocol as Shikigami's standard external
+**Proposed; no implementation plan selected.** Existing durable delegation and
+router plans operate within one Shikigami runtime. They do not implement the authenticated
+cross-runtime A2A protocol and recovery contract requested here.
+
+Adopt the Agent2Agent (A2A) protocol as Shikigami's standard external
 agent-to-agent surface. This request turns Kikan's transport-neutral cross-runtime delegation
 request into an owner-side Shikigami design. It does not claim implementation, and it does not
 make A2A a prerequisite for the smaller broker/probe path in Kikan Use Case 005.
@@ -35,7 +39,6 @@ The implementation baseline is **A2A protocol 1.0**. Pin the initial normative s
 to the upstream `v1.0.1` release, but advertise and negotiate the major/minor wire version
 `1.0`: A2A patch versions do not participate in wire negotiation. Do not silently fall back to
 0.3 semantics.
-
 
 ## Context
 

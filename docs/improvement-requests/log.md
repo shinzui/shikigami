@@ -1,5 +1,29 @@
 # Bundle Update Log
 
+## 2026-10-11
+
+* **Audit**: Reconciled all 18 requests with the current plan corpus, recorded implementation
+  evidence, and repository tree. IR-1, IR-3, and IR-9 remain completed; IR-4 and IR-7 remain
+  in progress; IR-2, IR-5, IR-6, IR-8, IR-10, IR-11, and IR-13 remain proposed without
+  selected implementation plans for their full contracts.
+* **Update**: IR-12 moves from proposed to accepted: MasterPlan 13 and plans 73–76 are
+  selected, with implementation not started.
+* **Update**: IR-14 moves from proposed to accepted: plan 83 owns durable model/tool turns
+  under MasterPlan 14, with implementation not started.
+* **Update**: IR-15 moves from proposed to accepted: plan 84 owns continuing worker sessions
+  under MasterPlan 14, with implementation not started and workspace/checkpoint gates open.
+* **Update**: IR-16 moves from proposed to accepted: MasterPlan 14 and plans 81, 85, and 86
+  own resource accounting, adaptive coordination, and qualification, with implementation not started.
+* **Update**: IR-17 moves from proposed to accepted: plan 82 owns governed run settings
+  under MasterPlan 14, with implementation not started.
+* **Update**: IR-18 moves from proposed to accepted: plan 87 owns recurring supervision
+  under MasterPlan 14, with implementation not started and checkpoint integration still required.
+* **Update**: Add profile-supported `targetPlan` metadata to the 11 requests with selected
+  implementation plans. Add missing plan links for IR-7 and IR-9 and the IR-4 closeout
+  plans 60–63. Identify related or consuming plans for unplanned requests without treating
+  them as full implementation coverage. Refresh `generated.at` on all audited requests;
+  prior review records and completion evidence retain their original timestamps.
+
 ## 2026-10-10
 
 * **Update**: Link IR-14 through IR-18 to MasterPlan 14 and their owning ExecPlans

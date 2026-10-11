@@ -5,9 +5,10 @@ description: Orchestrate advisory architecture review against revision-pinned pr
 timestamp: "2026-07-30T00:43:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-4
 status: in-progress
+targetPlan: docs/masterplans/9-architecture-practice-review-flow.md
 origin: mori://shinzui/kikan
 reviews:
   - kind: model
@@ -43,6 +44,13 @@ and its child ExecPlans:
 - [Plan 44: Acquire revision-pinned architecture-practice evidence](../plans/44-acquire-revision-pinned-architecture-practice-evidence.md)
 - [Plan 45: Persist and adjudicate architecture-practice reviews](../plans/45-persist-and-adjudicate-architecture-practice-reviews.md)
 - [Plan 46: Orchestrate review delivery and end-to-end conformance](../plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md)
+
+The required closeout work is tracked by:
+
+- [Plan 60: Harden practice-review attention reservation and specialist failure boundaries](../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md)
+- [Plan 61: Enforce practice-review resolver entitlement and harden the authorization envelope](../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md)
+- [Plan 62: Make the practice-review closeout and operator documentation true](../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md)
+- [Plan 63: Extend practice-review conformance to the claimed end-to-end matrix](../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md)
 
 
 ## Context

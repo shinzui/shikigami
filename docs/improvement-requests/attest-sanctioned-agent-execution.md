@@ -5,9 +5,10 @@ description: Resolve a versioned execution profile before a run, collect every c
 timestamp: "2026-08-02T18:29:04Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-7
 status: in-progress
+targetPlan: docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md
 origin: mori://shinzui/kikan
 reviews:
   - kind: model
@@ -30,6 +31,16 @@ reviews:
 compliance roll-up. Plan 52 remains not started and owns signing, historical verification, the
 read API, the offline verifier, and the final UC-8 conformance proof; its shared Kikan attestation
 contract remains proposed.
+
+## Planning Coverage
+
+This request is tracked by [MasterPlan 10: Sanctioned Execution Attestation for Agent Runs](../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md)
+and its child ExecPlans:
+
+- [Plan 49: Sanctioned execution profile and attestation contracts](../plans/49-sanctioned-execution-profile-and-attestation-contracts.md)
+- [Plan 50: Fail-closed profile resolution and run pinning](../plans/50-fail-closed-profile-resolution-and-run-pinning.md)
+- [Plan 51: Run-evidence aggregate and compliance roll-up](../plans/51-run-evidence-aggregate-and-compliance-roll-up.md)
+- [Plan 52: Signed attestation, read API, and UC-8 conformance](../plans/52-signed-attestation-read-api-and-uc-8-conformance.md)
 
 ## Why
 

@@ -5,9 +5,10 @@ description: Let compiled Flows invoke registered typed Shikumi programs at name
 timestamp: "2026-09-26T18:23:02Z"
 generated:
   by: process:codex
-  at: "2026-10-10T18:29:20Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-12
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/13-compose-shikumi-decisions-in-durable-flows.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; implementation planned but not started.**
+**Accepted; implementation planned but not started.**
 [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) decomposes this
 request into [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md),
 [plan 74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md),

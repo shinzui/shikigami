@@ -5,7 +5,7 @@ description: Add an agent-run vertical to ShikigamiApi so an external service ca
 timestamp: "2026-08-07T00:00:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-8
 status: proposed
 origin: mori://shinzui/mori
@@ -23,6 +23,15 @@ reviews:
 ---
 
 # Improvement Request: expose addressed agent runs over the public HTTP API
+
+## Status
+
+**Proposed; no implementation plan selected for the public run-start API.**
+[Plan 36](../plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md)
+delivered the shared API, client, and OpenAPI structure; it does not supply this addressed-run
+endpoint. Coordinate implementation with
+[IR-10](expose-agent-run-status-over-http.md) so the returned run identity can be followed
+to a durable terminal outcome.
 
 ## Why
 

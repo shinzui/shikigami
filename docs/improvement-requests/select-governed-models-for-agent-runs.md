@@ -5,9 +5,10 @@ description: Resolve and pin operator-approved provider, model, and reasoning ch
 timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T23:44:58Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-17
-status: proposed
+status: accepted
+targetPlan: docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
 whole-assignment execution selection to [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md), with durable-turn and
 continuing-session integration in [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) and [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
 [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the real typed-Flow decision-permission regression, and

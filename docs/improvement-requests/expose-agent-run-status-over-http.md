@@ -5,7 +5,7 @@ description: Publish a typed, idempotent run-status read endpoint so callers tha
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-10
 status: proposed
 origin: mori://shinzui/mori
@@ -26,12 +26,15 @@ reviews:
 
 ## Status
 
-**Proposed.** This request complements
+**Proposed; no implementation plan selected for the public run-status API.** This request complements
 `mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-8`. IR-8 lets an
 external caller request a run and receive its stable run identifier. This request lets that
 caller follow the identifier to the run's durable outcome. Together they support the agent-driven
 upgrade portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2` without exposing a Shikigami
 database, queue, or workflow-journal schema.
+
+[Plan 30](../plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md)
+delivered operator CLI inspection, rather than the public HTTP resource requested here.
 
 ## Context
 

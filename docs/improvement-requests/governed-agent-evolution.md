@@ -5,7 +5,7 @@ description: Control candidate agent artifacts from evaluation through approval,
 timestamp: "2026-07-30T00:44:00Z"
 generated:
   by: process:codex
-  at: "2026-09-21T18:03:06Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-5
 status: proposed
 origin: mori://shinzui/kikan
@@ -32,6 +32,13 @@ and evaluation reports, Mori resolving source identity, and Kotei executing buil
 **Contracts:** C1, C3, C5, C10, C11, and C13, plus proposed C16 and C17.
 **Created:** 2026-07-26.
 
+
+## Status
+
+**Proposed; no implementation plan selected for governed agent evolution.**
+[Plan 33: Agent schema evolution: identity, memory policy, and enablement](../plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md) delivered declaration identity, memory policy, and enablement.
+Versioned behavior artifacts, optimizer governance, approval, shadow/canary rollout,
+and rollback remain outside that completed plan's scope.
 
 ## Why
 

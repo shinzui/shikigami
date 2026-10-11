@@ -5,9 +5,10 @@ description: Let a coordinator address continuing workers, deliver follow-up ass
 timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-10T23:44:58Z"
+  at: "2026-10-11T03:04:54Z"
 requestId: IR-15
-status: proposed
+status: accepted
+targetPlan: docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
+**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
 continuing sessions, ordered messages, events and ownership transfer to [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
 [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) exercises their integrated delivery behavior. This remains the
 session-coordination requirement of
