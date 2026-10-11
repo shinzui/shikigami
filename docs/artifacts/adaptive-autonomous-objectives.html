@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="A visual guide to Shikigami MasterPlan 14: adaptive autonomous objectives, durable workers, shared limits, recovery, and integrated acceptance.">
+  <title>Shikigami · Adaptive autonomous objectives</title>
+  <style>
+:root{--paper:#faf9f5;--surface:#fff;--ink:#202b35;--muted:#53636d;--line:#d9e0df;--blue:#215f86;--teal:#17796c;--amber:#a96719;--rose:#a54c55;--soft-blue:#edf5f8;--soft-teal:#eaf6f2;--soft-amber:#fff5e8;--soft-rose:#fdf0f1}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--blue);text-underline-offset:3px}a:hover{color:#13445f}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}code{font-size:.88em;background:#edf1f1;padding:.12em .3em;border-radius:4px}pre{margin:.8rem 0 0;padding:1rem 1.15rem;background:#172b39;color:#f4f8f9;overflow:auto;border-radius:9px;font-size:.88rem;line-height:1.55}pre code{padding:0;background:none;color:inherit}h1,h2,h3{line-height:1.17;letter-spacing:-.025em}h1{font-size:clamp(2.25rem,5vw,4rem);margin:.35rem 0 1rem}h2{font-size:clamp(1.65rem,3vw,2.3rem);margin:0 0 .9rem}h3{font-size:1.14rem;margin:0 0 .45rem}p{margin:.55rem 0 1rem}ul,ol{padding-left:1.3rem}li+li{margin-top:.35rem}small,.muted{color:var(--muted)}
+    .shell{max-width:1240px;margin:auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:3rem;padding:0 2rem}.side{position:sticky;top:0;align-self:start;height:100vh;padding:2rem 0;overflow:auto}.brand{font-weight:800;letter-spacing:.02em;font-size:1.18rem}.brand span{color:var(--teal)}.side p{font-size:.78rem;color:var(--muted);margin:.25rem 0 1.3rem}.side nav a{display:block;padding:.36rem .65rem;margin:.1rem 0;border-left:2px solid transparent;text-decoration:none;color:var(--muted);font-size:.86rem}.side nav a:hover,.side nav a:focus{color:var(--blue);border-color:var(--blue);background:var(--soft-blue)}main{min-width:0;padding:3rem 0 6rem}section{scroll-margin-top:1.5rem;margin-top:4.6rem}.hero{margin-top:0;padding:2.2rem 0 1.4rem;border-bottom:1px solid var(--line)}.eyebrow{font-size:.77rem;text-transform:uppercase;letter-spacing:.16em;color:var(--teal);font-weight:800}.lead{font-size:1.2rem;color:#38505d;max-width:760px}.chips{display:flex;gap:.55rem;flex-wrap:wrap;margin:1.4rem 0}.chip{font-size:.78rem;border:1px solid var(--line);border-radius:99px;padding:.23rem .7rem;background:white;color:var(--muted)}.callout{border-left:4px solid var(--teal);padding:.75rem 1rem;background:var(--soft-teal);border-radius:0 8px 8px 0;margin:1.2rem 0}.callout.warning{border-color:var(--amber);background:var(--soft-amber)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.card,.diagram,.table-wrap{border:1px solid var(--line);background:var(--surface);border-radius:12px}.card{padding:1.15rem 1.25rem}.card p:last-child{margin-bottom:0}.diagram{padding:1.1rem;margin:1.4rem 0}.diagram svg{display:block;width:100%;height:auto}.diagram figcaption{font-size:.88rem;color:var(--muted);margin-top:.85rem;border-top:1px solid var(--line);padding-top:.7rem}.legend{display:flex;flex-wrap:wrap;gap:1rem;font-size:.8rem;color:var(--muted);margin:.4rem 0}.key{width:.7rem;height:.7rem;display:inline-block;border-radius:2px;margin-right:.35rem}.table-wrap{overflow-x:auto;margin:1.2rem 0}table{border-collapse:collapse;width:100%;font-size:.89rem}th,td{text-align:left;vertical-align:top;padding:.75rem .9rem;border-bottom:1px solid var(--line)}th{background:#f1f5f4;color:#334b58;font-size:.78rem;text-transform:uppercase;letter-spacing:.07em}tr:last-child td{border-bottom:0}.step{counter-increment:step}.step::before{content:counter(step,decimal-leading-zero);display:inline-block;color:var(--teal);font-weight:800;margin-right:.55rem}.steps{counter-reset:step}.tag{display:inline-block;font-size:.73rem;font-weight:700;padding:.13rem .45rem;border-radius:4px;background:var(--soft-blue);color:var(--blue)}.tag.storage{background:var(--soft-teal);color:var(--teal)}.tag.guard{background:var(--soft-rose);color:var(--rose)}.tag.edge{background:var(--soft-amber);color:var(--amber)}.source-list{columns:2;column-gap:2rem}.source-list li{break-inside:avoid}.foot{border-top:1px solid var(--line);padding-top:1rem;color:var(--muted);font-size:.85rem}.svg-label{font:600 18px system-ui,sans-serif;fill:#20313d}.svg-small{font:14px system-ui,sans-serif;fill:#4d626d}.svg-tiny{font:12px ui-monospace,monospace;fill:#4d626d}.node{fill:#fff;stroke:#bfcfd1;stroke-width:2}.node.blue{fill:#edf5f8;stroke:#70a5be}.node.teal{fill:#eaf6f2;stroke:#65aa9c}.node.amber{fill:#fff5e8;stroke:#d9a65e}.node.rose{fill:#fdf0f1;stroke:#d29aa0}.flow{fill:none;stroke:#436b80;stroke-width:2.4;}.flow.dashed{stroke-dasharray:7 6}.flow.teal{stroke:#288476;}.svg-boundary{fill:none;stroke:#b6c4c8;stroke-width:1.6;stroke-dasharray:7 5}.svg-group{font:700 13px system-ui,sans-serif;letter-spacing:1px;fill:#587079}svg[data-diagram="paths"] .flow{marker-end:url(#arrow-paths)}svg[data-diagram="paths"] .flow.teal{marker-end:url(#arrow-paths-teal)}svg[data-diagram="events"] .flow{marker-end:url(#arrow-events)}svg[data-diagram="events"] .flow.teal{marker-end:url(#arrow-events-teal)}svg[data-diagram="storage"] .flow{marker-end:url(#arrow-storage)}svg[data-diagram="storage"] .flow.teal{marker-end:url(#arrow-storage-teal)}svg[data-diagram="permissions"] .flow{marker-end:url(#arrow-permissions)}svg[data-diagram="permissions"] .flow.teal{marker-end:url(#arrow-permissions-teal)}@media(max-width:850px){.shell{display:block;padding:0 1rem}.side{position:static;height:auto;padding:1rem 0;border-bottom:1px solid var(--line)}.side p{display:none}.side nav{display:flex;overflow:auto;white-space:nowrap}.side nav a{border-left:0;border-bottom:2px solid transparent}main{padding-top:1.5rem}.grid{grid-template-columns:1fr}.source-list{columns:1}}@media print{body{background:#fff}.shell{display:block;max-width:none}.side{display:none}main{padding:0}section{break-inside:avoid;margin-top:2rem}.diagram{break-inside:avoid}a{color:inherit}pre{white-space:pre-wrap}}
+
+    .skip-link{position:absolute;left:1rem;top:-5rem;z-index:10;padding:.65rem 1rem;background:var(--surface);border:2px solid var(--blue);border-radius:8px}.skip-link:focus{top:1rem}
+    a:focus-visible,summary:focus-visible{outline:3px solid var(--teal);outline-offset:4px}
+    .hero h1{font-size:clamp(2.6rem,5.1vw,4.2rem)}
+    .diagram-scroll{overflow-x:auto}.diagram-scroll svg{min-width:760px}
+    .stream{border-top:3px solid var(--blue)}.stream:nth-child(-n+2){border-top-color:var(--teal)}.stream:nth-child(5){border-top-color:var(--rose)}.stream:nth-child(6){border-top-color:var(--amber)}.stream.recurring{border-top-color:var(--teal)}
+    .stream .eyebrow{font-size:.68rem;letter-spacing:.1em;margin-bottom:.65rem}
+    .stream h3,.scope-card h3{font-size:1.25rem}
+    .stream details,.scope-card details{margin:.85rem 0;border-top:1px solid var(--line);padding-top:.65rem}
+    summary{cursor:pointer;color:var(--blue);font-weight:650;font-size:.88rem}details p{font-size:.9rem;color:var(--muted)}
+    .plan-link{display:block;margin-top:1rem;font-size:.87rem}.scope-card{background:var(--soft-amber)}
+    caption{text-align:left;padding:.8rem .9rem;color:var(--muted);font-size:.82rem;background:var(--surface)}
+    .recurrence-list li{padding:.35rem 0}.source-list{font-size:.93rem}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+    @media print{.skip-link{display:none}.diagram-scroll{overflow:visible}.diagram-scroll svg{min-width:0}.side{display:none}details{display:block}.grid{display:block}.card{margin-bottom:1rem;break-inside:avoid}section{break-inside:auto}}
+
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="side" aria-label="Page navigation">
+    <div class="brand">式神 <span>Shikigami</span></div>
+    <p>MasterPlan 14 · plan snapshot<br>10 Oct 2026</p>
+    <nav aria-label="Contents">
+      <a href="#overview">01 · The intended outcome</a>
+      <a href="#loop">02 · The delivery loop</a>
+      <a href="#streams">03 · Seven workstreams</a>
+      <a href="#sequence">04 · Dependencies &amp; gates</a>
+      <a href="#contracts">05 · What survives a restart</a>
+      <a href="#example">06 · A delivery walkthrough</a>
+      <a href="#acceptance">07 · What proves completion</a>
+      <a href="#recurrence">08 · Optional recurrence</a>
+      <a href="#sources">09 · Source trail</a>
+    </nav>
+  </aside>
+  <main id="main">
+    <header class="hero" id="overview">
+      <div class="eyebrow">Masterplan field guide · planned architecture</div>
+      <h1>One objective.<br>Work that can adapt<br>and recover.</h1>
+      <p class="lead">A user admits an outcome, acceptance criteria, authority, and shared limits. Shikigami’s coordinator works directly or assigns continuing workers, changes the organization when evidence warrants it, and closes the objective against verified integrated artifacts.</p>
+      <div class="chips"><span class="chip">5 requests · IR-14–IR-18</span><span class="chip">7 ExecPlans · 81–87</span><span class="chip">4 delivery phases</span><span class="chip">One deployment first</span></div>
+      <div class="callout warning"><strong>Plan snapshot:</strong> all seven children are <strong>Not Started</strong> in the source masterplan. Typed decisions, authoritative checkpoints, and mutable workspaces have separate prerequisite owners. This guide explains the proposed system and its acceptance gates; it does not claim an implemented end-to-end capability.</div>
+      <p class="muted"><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">Read MasterPlan 14 →</a> · <a href="shikigami-engineer-onboarding.html">Current runtime guide →</a></p>
+    </header>
+
+    <section id="loop">
+      <h2>1. The delivery loop</h2>
+      <p>Adaptation is a bounded runtime decision. A compiled Flow reads current state, asks for a typed proposal, validates it, and executes admitted operations. Workers run through the durable Skill harness. The same command implementation serves Flow and model-tool coordination.</p>
+      <figure class="diagram">
+        <div class="diagram-scroll"><svg viewBox="0 0 960 475" role="img" aria-labelledby="loop-title loop-desc">
+          <title id="loop-title">A durable adaptive delivery cycle</title>
+          <desc id="loop-desc">The user's admitted objective feeds authoritative state. A coordinator proposes a change, the runtime validates and records it, and admitted worker operations run. Worker evidence returns to the checkpoint for another bounded cycle. Integrated artifacts and checks lead to a versioned acceptance gate. All cycles share authority, a resource root and a cutoff.</desc>
+          <defs><marker id="loop-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L8 4.5 L1 8" fill="none" stroke="#436b80" stroke-width="1.7"/></marker></defs>
+          <rect x="16" y="18" width="928" height="69" rx="11" class="node teal"/>
+          <text x="39" y="47" class="svg-label">Admitted objective</text><text x="39" y="70" class="svg-small">Outcome · criteria revision · permitted actions · shared limits · cutoff</text>
+          <path d="M128 87 V130" class="flow" marker-end="url(#loop-arrow)"/>
+          <rect x="16" y="130" width="218" height="98" rx="11" class="node teal"/><text x="35" y="163" class="svg-label">Read current state</text><text x="35" y="188" class="svg-small">Checkpoint, owners, events,</text><text x="35" y="208" class="svg-small">accepted work, uncertainty</text>
+          <rect x="266" y="130" width="194" height="98" rx="11" class="node blue"/><text x="284" y="163" class="svg-label">Propose a change</text><text x="284" y="188" class="svg-small">Pinned instructions +</text><text x="284" y="208" class="svg-small">typed model decision</text>
+          <rect x="492" y="130" width="218" height="98" rx="11" class="node rose"/><text x="510" y="163" class="svg-label">Validate &amp; record</text><text x="510" y="188" class="svg-small">Authority, graph, fences,</text><text x="510" y="208" class="svg-small">models, limits, revision</text>
+          <rect x="742" y="130" width="202" height="98" rx="11" class="node blue"/><text x="760" y="163" class="svg-label">Execute admitted work</text><text x="760" y="188" class="svg-small">Direct work or sessions;</text><text x="760" y="208" class="svg-small">durable operations</text>
+          <path d="M234 179 H266 M460 179 H492 M710 179 H742" class="flow" marker-end="url(#loop-arrow)"/>
+          <path d="M843 228 V269 H125 V228" class="flow teal" marker-end="url(#loop-arrow)"/>
+          <text x="480" y="259" text-anchor="middle" class="svg-small">New evidence → reflect → revise assignments, context, models, or concurrency</text>
+          <path d="M843 269 V328" class="flow" marker-end="url(#loop-arrow)"/>
+          <rect x="492" y="328" width="452" height="98" rx="11" class="node amber"/><text x="514" y="359" class="svg-label">Integrate, check, and propose completion</text><text x="514" y="384" class="svg-small">Exact combined artifact + actual checks + user journey</text><text x="514" y="407" class="svg-small">IR-13 accepts against the current criteria revision.</text>
+          <rect x="16" y="328" width="444" height="98" rx="11" class="node teal"/><text x="38" y="359" class="svg-label">One shared execution root throughout</text><text x="38" y="384" class="svg-small">Retries, new workers, handoffs, and recurring cycles</text><text x="38" y="407" class="svg-small">retain authority, consumption, and unresolved effects.</text>
+          <text x="480" y="459" text-anchor="middle" class="svg-small">If blocked or uncertain: preserve useful work and report the exact unresolved scope.</text>
+        </svg></div>
+        <figcaption>Model output remains a proposal until validated and committed. Reflection responds to findings, repeated failure, a changed critical path, or integration evidence. Instructions cannot become executable workflow code or expand authority.</figcaption>
+      </figure>
+      <div class="grid"><div class="card"><h3>Why the runtime needs to change</h3><p>The source plan identifies in-memory intermediate Skill turns, process-wide model defaults, observation-only durable overlays, no installed worker workspace provider, and one concurrent workflow advance. These are the gaps the workstreams must close.</p></div><div class="card"><h3>Why seven separate children?</h3><p>Resource conservation can be proven before a coordinator runs. Turn persistence and policy state need one atomic boundary. Session continuity, recurrence, and integrated qualification each need their own evidence and authority.</p></div></div>
+    </section>
+
+    <section id="streams">
+      <h2>2. Seven workstreams, one contract</h2>
+      <p>EP labels are rows in MasterPlan 14; the linked ExecPlan file IDs are <strong>81–87</strong>. The summaries below describe the planned responsibilities. Expand a card for its central acceptance gate.</p>
+      <div class="grid stream-grid">
+        <article class="card stream"><div class="eyebrow">Phase A · EP-1 / Plan 81</div><h3>Reserve shared resources</h3><p>One root accounts for descendants and actual attempts. Reserve every applicable dimension atomically before dispatch, then settle known or unknown usage.</p><details><summary>What must be proven</summary><p>Two requests race for the final slot: exactly one wins. Retries charge actual attempts; a restart or replacement worker cannot restore consumed or uncertain allowance.</p></details><a class="plan-link" href="../plans/81-enforce-root-resource-reservations-across-durable-work.md">Resource accounting plan →</a></article>
+        <article class="card stream"><div class="eyebrow">Phase A · EP-2 / Plan 82</div><h3>Pin governed model settings</h3><p>Select permitted provider, model, and reasoning settings for an assignment. Reuse plan 73’s catalog and preserve the effective descriptor and binding on resume.</p><details><summary>What must be proven</summary><p>Coordinator and workers use different permitted settings. Forbidden selections fail before dispatch; changed defaults cannot silently alter pending work. Run permissions and decision-slot permissions remain separate.</p></details><a class="plan-link" href="../plans/82-pin-governed-execution-settings-for-agent-assignments.md">Execution selection plan →</a></article>
+        <article class="card stream"><div class="eyebrow">Phase B · EP-3 / Plan 83</div><h3>Recover model and tool turns</h3><p>Persist accepted operations, context, and composed policy state together. Submit long external work, suspend the workflow, and observe the recorded outcome.</p><details><summary>What must be proven</summary><p>Restart in the middle of a multi-turn loop. Reuse committed outcomes, reconcile uncertain effects, fence stale executor claims, and retain protected replay payloads and deduplication records.</p></details><a class="plan-link" href="../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md">Durable harness plan →</a></article>
+        <article class="card stream"><div class="eyebrow">Phase B · EP-4 / Plan 84</div><h3>Continue workers across assignments</h3><p>Stable sessions retain context and accepted work. Ordered messages, events, assignment-to-run mappings, and owner epochs make follow-ups and transfers recoverable.</p><details><summary>What must be proven</summary><p>Redelivery creates no duplicate logical assignment. A normal follow-up queues a new assignment; transfer reconciles pending effects and fences the former writer. Real IR-11 and IR-13 integration gates must pass.</p></details><a class="plan-link" href="../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md">Worker session plan →</a></article>
+        <article class="card stream"><div class="eyebrow">Phase C · EP-5 / Plan 85</div><h3>Adapt through validated decisions</h3><p>A compiled coordinator changes assignments, hierarchy, context, models, or concurrency on evidence. Every operation shares root accounting and measured execution capacity.</p><details><summary>What must be proven</summary><p>An early finding changes the organization. Invalid proposals write nothing. Independent operations overlap usefully, unrelated roots progress fairly, and long decision calls release workflow advances through submit/observe.</p></details><a class="plan-link" href="../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md">Adaptive coordinator plan →</a></article>
+        <article class="card stream"><div class="eyebrow">Phase C · EP-6 / Plan 86</div><h3>Qualify the integrated outcome</h3><p>Run a real coding fixture with separate workstreams, integrate their exact artifacts, and check the combined result and requested user journey.</p><details><summary>What must be proven</summary><p>Exercise real journals, recovery, workspace fences, and provider boundaries. Include at least one bounded live model/coding trial and preserve check evidence, observed resource use, and limitations.</p></details><a class="plan-link" href="../plans/86-qualify-integrated-adaptive-autonomous-delivery.md">Delivery qualification plan →</a></article>
+        <article class="card stream recurring"><div class="eyebrow">Phase D · EP-7 / Plan 87</div><h3>Supervise explicit ongoing mandates</h3><p>Repeat the same bounded coordinator cycle only when recurrence is admitted. Current checkpoints, watermarks, wakeups, expiry, and stop state govern each cycle.</p><details><summary>What must be proven</summary><p>Duplicate wakeups coalesce, no-delta cycles create no duplicate workers, and success keeps an ongoing mandate alive. Cancellation, expiry, or stale timers cannot admit new work.</p></details><a class="plan-link" href="../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md">Recurring supervision plan →</a></article>
+        <div class="card scope-card"><h3>First delivery boundary</h3><p>Finite objectives, one deployment, native admitted capabilities, and supported HTTP model transports.</p><p><strong>Separately owned:</strong> IR-11 workspaces, IR-13 checkpoints, and MasterPlan 13 typed decisions.</p><details><summary>Excluded from this initiative</summary><p>A2A, general public HTTP control, vendor terminal attachment, background CLI workarounds, general deployment remediation, remaining attestation signing, agent-artifact evolution, and a project-management product. Plan 78’s external executor is not selected.</p></details></div>
+      </div>
+    </section>
+
+    <section id="sequence">
+      <h2>3. Sequence and readiness gates</h2>
+      <p>EP-1 can start immediately. EP-2 waits for the shared model catalog. The finite branch ends at EP-6; EP-7 can proceed alongside qualification once EP-5 is complete.</p>
+      <figure class="diagram"><div class="diagram-scroll"><svg viewBox="0 0 960 330" role="img" aria-labelledby="deps-title deps-desc">
+        <title id="deps-title">Child workstream sequencing with a separate recurring branch</title><desc id="deps-desc">The main hard dependency chain is EP-1 to EP-2 to EP-3 to EP-4 to EP-5. EP-5 branches to EP-6 finite qualification and EP-7 recurrence. EP-3 also directly requires EP-1; EP-4 directly requires EP-1 and EP-2. EP-7 has only a soft fixture reuse dependency on EP-6. Separate prerequisite gates are listed below the diagram.</desc>
+        <defs><marker id="deps-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L8 4.5 L1 8" fill="none" stroke="#436b80" stroke-width="1.7"/></marker></defs>
+        <text x="21" y="28" class="svg-group">A · FOUNDATIONS</text><text x="350" y="28" class="svg-group">B · CONTINUITY</text><text x="678" y="28" class="svg-group">C · COORDINATION</text>
+        <rect x="16" y="60" width="148" height="82" rx="11" class="node teal"/><text x="34" y="93" class="svg-label">EP-1</text><text x="34" y="119" class="svg-small">Resources · 81</text>
+        <rect x="180" y="60" width="148" height="82" rx="11" class="node teal"/><text x="198" y="93" class="svg-label">EP-2</text><text x="198" y="119" class="svg-small">Selection · 82</text>
+        <rect x="344" y="60" width="148" height="82" rx="11" class="node blue"/><text x="362" y="93" class="svg-label">EP-3</text><text x="362" y="119" class="svg-small">Turns · 83</text>
+        <rect x="508" y="60" width="148" height="82" rx="11" class="node blue"/><text x="526" y="93" class="svg-label">EP-4</text><text x="526" y="119" class="svg-small">Sessions · 84</text>
+        <rect x="672" y="60" width="148" height="82" rx="11" class="node rose"/><text x="690" y="93" class="svg-label">EP-5</text><text x="690" y="119" class="svg-small">Adaptation · 85</text>
+        <path d="M164 101 H180 M328 101 H344 M492 101 H508 M656 101 H672" class="flow" marker-end="url(#deps-arrow)"/>
+        <path d="M746 142 V177 H492 V209 M746 177 H820 V209" class="flow" marker-end="url(#deps-arrow)"/>
+        <rect x="344" y="209" width="296" height="83" rx="11" class="node amber"/><text x="364" y="242" class="svg-label">EP-6 · Finite qualification</text><text x="364" y="268" class="svg-small">Plan 86 · exact integrated evidence</text>
+        <rect x="672" y="209" width="272" height="83" rx="11" class="node teal"/><text x="691" y="242" class="svg-label">EP-7 · Optional recurrence</text><text x="691" y="268" class="svg-small">Plan 87 · explicit ongoing authority</text>
+        <text x="21" y="201" class="svg-small">Also hard deps:</text><text x="21" y="225" class="svg-small">EP-1 → EP-3</text><text x="21" y="249" class="svg-small">EP-1 + EP-2 → EP-4</text>
+        <text x="480" y="320" text-anchor="middle" class="svg-small">EP-6 → EP-7 is soft fixture reuse only. Recurrence never blocks finite acceptance.</text>
+      </svg></div><figcaption>Arrows show child sequencing. External prerequisites below remain separately owned. A fixture can prove mechanics; it cannot waive a production integration gate.</figcaption></figure>
+      <div class="table-wrap"><table><caption>Prerequisites outside the seven children · readiness recorded at plan creation</caption><thead><tr><th>Owner</th><th>Required contract</th><th>Where it gates progress</th></tr></thead><tbody>
+        <tr><td><a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md">Plan 73</a><br><span class="tag edge">Not Started</span></td><td>One operator alias catalog with immutable model descriptors.</td><td>Before EP-2; no competing registry.</td></tr>
+        <tr><td><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · plans 73–76</a><br><span class="tag edge">Not Started</span></td><td>Governed typed decisions, evidence, and replay-safe Flow composition.</td><td>Plan 76 before EP-5. EP-2 need not wait for plans 74–76 to run a Skill.</td></tr>
+        <tr><td><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · checkpoints</a><br><span class="tag guard">No selected plan</span></td><td>Current objective, revisions, owners, conflict-aware updates, deduplication, and accepted evidence.</td><td>Real integration before EP-4 closes; production wiring for EP-5/EP-7 and qualification in EP-6.</td></tr>
+        <tr><td><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · workspaces</a><br><span class="tag guard">No selected plan</span></td><td>Admitted isolated workspaces, exact artifact identity, process recovery, and owner-epoch write fences.</td><td>Real late-writer/handoff gate with EP-4; delivered provider before EP-6 full qualification. Early contracts allow parallel development.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section id="contracts">
+      <h2>4. What must survive a restart</h2>
+      <p>The design separates identities with different lifetimes. Durable state and explicit receipts preserve facts when workflows resume, workers change, or an external result is uncertain.</p>
+      <div class="table-wrap"><table><thead><tr><th>Durable fact</th><th>Owning boundary</th><th>Recovery rule</th></tr></thead><tbody>
+        <tr><td>Execution root and resource ledger</td><td>EP-1</td><td>All descendants, retries, handoffs, and cycles retain the root. Unknown usage stays conservatively reserved until reconciled.</td></tr>
+        <tr><td>Logical operation and actual attempt</td><td>EP-3 operations + EP-1 accounting</td><td>Replay reuses accepted outcomes. A real retry has a new attempt identity and applicable charge. Uncertain effects need reconciliation.</td></tr>
+        <tr><td>Effective execution descriptor</td><td>EP-2 selection</td><td>A mutable alias or deployment default cannot replace a pending operation’s pinned descriptor or binding.</td></tr>
+        <tr><td>Session, assignment, child/run, owner epoch</td><td>EP-4; workspace fence from IR-11</td><td>Each assignment maps to its own child/run. Follow-ups retain session context. A lease expiry does not prove the old process stopped.</td></tr>
+        <tr><td>Objective and criteria revisions</td><td>IR-13; EP-5 validates proposals</td><td>Read authoritative current state. A conflicting checkpoint requires a new explicit decision. IR-13 alone accepts completion.</td></tr>
+        <tr><td>Transcript, decision evidence, sanctioned evidence</td><td>EP-3, plan 75, existing evidence store</td><td>Correlate distinct records without inventing competing success histories. Live sessions, mandates, handoffs, and uncertain effects protect retention.</td></tr>
+      </tbody></table></div>
+      <div class="grid"><div class="card"><h3>Admission before dispatch</h3><p>Validate current authority, target availability, graph shape, ownership, models, cutoff, and limits. Commit the accepted decision and stable operations before any dispatch. New revocation can stop pending work while preserving the historical decision.</p></div><div class="card"><h3>Compatibility is part of delivery</h3><p>Existing fixed supervisors and old journals retain their behavior. Workflow-body changes use declared patches, compatible codecs, generation rotation, and <code>just keiro-gate</code> under the <a href="../workflow-versioning.md">workflow versioning rules</a>.</p></div></div>
+    </section>
+
+    <section id="example">
+      <h2>5. A finite delivery walkthrough</h2>
+      <p class="muted">Illustrative scenario: the steps explain the planned contracts, rather than a completed runtime trial.</p>
+      <div class="steps grid">
+        <div class="card"><h3 class="step">Admit the outcome</h3><p>A user asks for a repository change and specifies the user journey, allowed edits and checks, model preferences, shared budget, and cutoff. Store the authoritative checkpoint and one root.</p></div>
+        <div class="card"><h3 class="step">Start useful work</h3><p>The coordinator reads instructions and current owners. It can work alone for a small task or admit two independent assignments in isolated workspaces with pinned settings.</p></div>
+        <div class="card"><h3 class="step">Adapt on a finding</h3><p>A worker discovers a shared interface dependency. The coordinator proposes narrower assignments and a follow-up, validates them against the current checkpoint, and records the accepted change.</p></div>
+        <div class="card"><h3 class="step">Recover mid-operation</h3><p>A restart occurs after a tool may have changed a file but before its result was recorded. Resume the same logical operation, reconcile the effect, and preserve accepted turns and held usage.</p></div>
+        <div class="card"><h3 class="step">Transfer safely if needed</h3><p>Reconcile pending effects and advance ownership with workspace fencing. A former owner’s late write is refused; unknown effects block conflicting successor writes.</p></div>
+        <div class="card"><h3 class="step">Check the combined result</h3><p>Integrate exact worker artifacts in a separate workspace. Run actual repository checks and the requested user journey, then submit versioned evidence for checkpoint-owner acceptance.</p></div>
+      </div>
+      <div class="callout"><strong>Honest stopping:</strong> if a required workspace, authority, or check remains unavailable, retain the useful artifacts and name the precise unresolved scope. Finite success closes only after integrated acceptance. Publication, merge, and deployment require their admitted authority.</div>
+    </section>
+
+    <section id="acceptance">
+      <h2>6. What proves completion</h2>
+      <p>Worker-local green checks do not establish the combined result. <code>IntegratedAcceptance</code> binds the objective and criteria revision to exact combined artifacts, actual checks, user-journey evidence, and unresolved limitations.</p>
+      <div class="grid"><div class="card"><h3>Mechanics and fault evidence</h3><ul><li>Last-slot races conserve root resources.</li><li>Restart and message redelivery reuse accepted work.</li><li>Former owners are fenced after handoff.</li><li>Forbidden proposals, models, and actions fail before dispatch.</li><li>Useful overlap and fair progress are measured across runtime processes.</li></ul></div><div class="card"><h3>Full delivery evidence</h3><ul><li>An early finding produces a validated adaptation.</li><li>Exact combined source passes repository checks and the user journey.</li><li>Real journals, providers, workspaces, and recovery are exercised.</li><li>A bounded live model/coding trial supports the claim.</li><li>Resource use, latency, rework, uncertainty, and limitations are retained.</li></ul></div></div>
+      <div class="table-wrap"><table><caption>Request-level acceptance ownership · detailed case matrix remains in MasterPlan 14</caption><thead><tr><th>Request</th><th>Primary workstream</th><th>Integration closure</th></tr></thead><tbody>
+        <tr><td><a href="../improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md">IR-14 · durable turns &amp; policies</a></td><td>EP-3</td><td>Continuing-turn case in EP-4; exercised in EP-6.</td></tr>
+        <tr><td><a href="../improvement-requests/support-continuing-worker-sessions.md">IR-15 · continuing workers</a></td><td>EP-4</td><td>Real IR-11 handoff fixture and IR-13 checkpoint gate.</td></tr>
+        <tr><td><a href="../improvement-requests/support-adaptive-durable-orchestration.md">IR-16 · adaptive orchestration</a></td><td>EP-1 + EP-5</td><td>Exact combined coding result and full evidence in EP-6.</td></tr>
+        <tr><td><a href="../improvement-requests/select-governed-models-for-agent-runs.md">IR-17 · governed run settings</a></td><td>EP-2</td><td>Recovery in EP-3/EP-4; decision permissions and escalation in EP-5/EP-6.</td></tr>
+        <tr><td><a href="../improvement-requests/support-recurring-objective-supervision.md">IR-18 · recurring supervision</a></td><td>EP-7</td><td>All six recurrence cases; UC-1 ongoing-supervision scenario.</td></tr>
+      </tbody></table></div>
+      <div class="callout warning"><strong>Two completion boundaries:</strong> finite delivery can be qualified after EP-6 and its prerequisite gates. The whole initiative closes only after all seven children, external integration gates, the acceptance matrix, workflow conformance evidence, and ADR distillation are complete.</div>
+    </section>
+
+    <section id="recurrence">
+      <h2>7. Continuity does not imply recurrence</h2>
+      <div class="grid"><div class="card"><span class="tag">Continuing session · EP-4</span><h3>Retain a worker’s useful context</h3><p>A session can remain idle and later receive a follow-up assignment. Its stable identity, accepted results, and ownership survive. This continuity grants no permission to schedule future work.</p></div><div class="card"><span class="tag storage">Ongoing mandate · EP-7</span><h3>Admit repeated bounded cycles</h3><p>The user explicitly admits cadence, resource envelope, expiry, and stop controls. Each wake reads current authority and checkpoints, then reuses the coordinator and execution root.</p></div></div>
+      <ol class="recurrence-list"><li><strong>Wake:</strong> worker events are hints; the existing timer dispatcher provides scheduled recovery.</li><li><strong>Reconcile:</strong> coalesce overlap, read current instructions, and process bounded new evidence from the watermark.</li><li><strong>Checkpoint:</strong> record accepted cycle progress and the desired next wake together; repair wake registration after crashes.</li><li><strong>Continue or stop:</strong> successful ongoing cycles can continue. Cancellation or expiry blocks new admission and preserves unresolved in-flight effects. Old timers cannot revive a stopped mandate.</li></ol>
+    </section>
+
+    <section id="sources">
+      <h2>Source trail</h2>
+      <p>This is an explanatory snapshot of <a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a>, created 10 October 2026. The living masterplan and linked ExecPlans remain authoritative for progress, detailed milestones, contracts, and acceptance cases.</p>
+      <ul class="source-list"><li><a href="../use-cases/adaptive-autonomous-delivery.md">UC-1 · adaptive autonomous delivery</a></li><li><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · typed decision prerequisites</a></li><li><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · governed mutable workspaces</a></li><li><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · authoritative checkpoints</a></li><li><a href="../workflow-versioning.md">Durable workflow versioning</a></li><li><a href="shikigami-engineer-onboarding.html">Engineer onboarding map</a></li><li><a href="roadmap.html">Architecture and delivery roadmap</a></li></ul>
+      <p class="foot">Self-contained HTML with inline SVG and native expandable details. Uses the engineer onboarding artifact’s paper, blue, teal, amber, and rose theme. No external scripts, fonts, or hosted assets.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
