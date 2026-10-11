@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="Shikigami architecture decisions, portfolio state, and delivery roadmap, audited 2026-09-21.">
+  <meta name="description" content="Shikigami architecture decisions, portfolio state, and delivery roadmap, refreshed 2026-10-10.">
   <title>Shikigami — architecture and delivery roadmap</title>
   <style>
     :root {
@@ -212,20 +212,35 @@
       .card, table, .callout, .diagram { box-shadow: none; break-inside: avoid; }
       a { color: #075d49; }
     }
+
+    .diagram svg.program-map { min-width: 860px; width: 100%; height: auto; }
+    .map-box { fill: #fff; stroke: #aeb7af; stroke-width: 1.5; }
+    .map-box.planned { fill: #eeebf8; stroke: #61539b; }
+    .map-box.gate { fill: #fff3db; stroke: #8a6114; }
+    .map-box.current { fill: #e5f2eb; stroke: #176b4b; }
+    .map-title { fill: #202821; font: 700 15px system-ui, sans-serif; }
+    .map-line { fill: #53636d; font: 13px system-ui, sans-serif; }
+    .map-edge { fill: none; stroke: #657067; stroke-width: 1.8; }
+    .map-edge.gate { stroke: #8a6114; stroke-dasharray: 6 5; }
+    .map-label { fill: #53636d; font: 12px system-ui, sans-serif; }
+    .diagram-note { color: #53636d; font-size: 13px; }
+    .plan-card .state { position: static; display: inline-block; margin-bottom: 10px; }
+    .plan-card[data-wave="decisions"], .plan-card[data-wave="adaptive"] { border-top: 3px solid #61539b; }
+    .plan-card[data-wave="qualification"] { border-top: 3px solid #24678e; }
   </style>
 </head>
 <body>
   <header>
     <div class="shell">
-      <div class="eyebrow">Architecture + delivery review · snapshot 2026-09-21</div>
-      <h1>Shikigami: make durable agent execution trustworthy before widening it.</h1>
-      <p class="lede">An engineering decision brief for the declared-agent runtime: durable workflow boundaries, identity and authorization, practice-review correctness, service delivery, run identity, signed evidence, external contracts, and the implementation order that keeps those decisions coherent.</p>
+      <div class="eyebrow">Architecture + delivery review · snapshot 2026-10-10</div>
+      <h1>Shikigami: from durable runs to adaptive, recoverable delivery.</h1>
+      <p class="lede">An engineering map of the delivered runtime and the planned portfolio through plan 87 and IR-18: safety closeout, local qualification, typed Flow decisions, recoverable worker sessions, adaptive delivery, and optional recurring supervision.</p>
       <div class="meta">
-        <span class="pill good">60 of 71 ExecPlans complete</span>
-        <span class="pill warn">4 MasterPlans active</span>
+        <span class="pill good">87 ExecPlans · 26 open</span>
+        <span class="pill warn">6 MasterPlans active</span>
         <span class="pill stop">4 change-requesting reviews open</span>
         <span class="pill warn">2 improvement requests in progress</span>
-        <span class="pill">6 proposals need decisions</span>
+        <span class="pill">13 proposed improvement requests</span>
       </div>
     </div>
   </header>
@@ -239,6 +254,11 @@
       <a href="#decisions">Architecture decisions</a>
       <a href="#safety">Safety sequence</a>
       <a href="#roadmap">Delivery roadmap</a>
+      <a href="#typed-decisions">Typed Flow decisions</a>
+      <a href="#adaptive-delivery">Adaptive delivery</a>
+      <a href="#completion">Ownership + completion</a>
+      <a href="#recurrence">Finite work + recurrence</a>
+      <a href="#qualification">Qualification gates</a>
       <a href="#decision-packets">Decision packets</a>
       <a href="#dependencies">External dependencies</a>
       <a href="#masterplans">MasterPlan evidence</a>
@@ -250,14 +270,14 @@
 
     <main>
       <section id="answer">
-        <h2>Do we have a roadmap?</h2>
-        <div class="callout warn"><strong>Yes—and the next implementable queue is safety work, not feature breadth.</strong> The core durable runtime is mature, but the architecture-practice flow still violates two accepted boundaries: attention reservation can commit without its outbox message, and a verified resolution subject is not yet proven entitled to resolve the review. Plans 60 and 61 close those defects; plans 62 and 63 make the operator and conformance claims true; only then should plan 46 and IR-4 close.</div>
-        <div class="grid four" style="margin-top:16px">
-          <article class="card"><div class="eyebrow">Portfolio</div><div class="metric">8/12</div><h3>MasterPlans complete</h3><p class="muted">Operations, feature completion, practice review, and attestation remain coordinated initiatives.</p></article>
-          <article class="card"><div class="eyebrow">Delivery</div><div class="metric">60/71</div><h3>ExecPlans complete</h3><p class="muted">Three are in progress and eight have not started.</p></article>
-          <article class="card"><div class="eyebrow">Safety</div><div class="metric">4</div><h3>Open review findings</h3><p class="muted">REV-1, REV-2, REV-4, and REV-7 map directly to plans 60–63.</p></article>
-          <article class="card"><div class="eyebrow">Product queue</div><div class="metric">6</div><h3>Unaccepted proposals</h3><p class="muted">IR-2, IR-5, IR-6, IR-8, IR-10, and IR-11 still need sequencing decisions.</p></article>
-        </div>
+        <h2>The roadmap now has three horizons</h2>
+<div class="callout"><strong>The latest plans are part of the roadmap even before implementation.</strong> Preserve the durable runtime and close known safety defects; qualify an actual service workload; then deliver typed decisions and adaptive workers through <a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13</a> and <a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a>. The latter initiatives are planned and not started. Their existence does not complete any proposed request.</div>
+<div class="grid four" style="margin-top:16px">
+<article class="card"><div class="eyebrow">Portfolio</div><div class="metric">14</div><h3>MasterPlans</h3><p class="muted">Eight recorded complete; six active or not started, including the two new initiatives.</p></article>
+<article class="card"><div class="eyebrow">Delivery</div><div class="metric">87</div><h3>ExecPlans</h3><p class="muted">26 remain open. Plan 72 adds the completed Keiro 0.18 adoption; plans 73–87 expand the queue.</p></article>
+<article class="card"><div class="eyebrow">Requests</div><div class="metric">18</div><h3>Improvement requests</h3><p class="muted">Three completed, two in progress, thirteen proposed. Planned coverage and lifecycle are separate.</p></article>
+<article class="card"><div class="eyebrow">Safety</div><div class="metric">4</div><h3>Open review findings</h3><p class="muted">REV-1, REV-2, REV-4 and REV-7 still map to plans 60–63. Practice-review enablement retains those gates.</p></article>
+</div>
       </section>
 
       <section id="north-star">
@@ -272,7 +292,7 @@
 
       <section id="baseline">
         <h2>What exists today</h2>
-        <p class="intro">The implementation is not a blank slate. Most durable foundations are shipped; the open roadmap is about closing boundary violations and exposing the runtime coherently.</p>
+        <p class="intro">Durable foundations are implemented, while the new decision and adaptive-worker layers remain planned. Recorded source checks, installed binaries, live service qualification and production readiness each have separate evidence.</p>
         <table>
           <thead><tr><th>Capability</th><th>Status</th><th>Roadmap meaning</th></tr></thead>
           <tbody>
@@ -281,9 +301,13 @@
             <tr><td>Declarative router agents</td><td><span class="tag done">Implemented</span></td><td>Model output is a proposal validated against journaled catalog authority.</td></tr>
             <tr><td>Practice-review orchestration</td><td><span class="tag progress">Core landed</span></td><td>Accepted architecture exists, but plans 60–63 must repair safety and closeout evidence.</td></tr>
             <tr><td>Run evidence and attestation foundation</td><td><span class="tag progress">3 of 4 plans</span></td><td>Evidence lifecycle exists; signing, read API, verifier, and UC-8 proof remain in plan 52.</td></tr>
-            <tr><td>Deployable service stack</td><td><span class="tag open">Not started</span></td><td>Plan 31 is the remaining operations MasterPlan child and the gate for portable harness work.</td></tr>
+            <tr><td>Deployable service stack</td><td><span class="tag progress">Partial packaging</span></td><td>Plan 31 has October packaging preparation and installed-role evidence; process-compose, NixOS and graceful-drain acceptance remain open.</td></tr>
             <tr><td>Addressed run command and terminal status API</td><td><span class="tag proposed">Proposed</span></td><td>IR-8 and IR-10 need one run identifier and lifecycle contract before implementation.</td></tr>
             <tr><td>Memory lifecycle and per-agent MCP</td><td><span class="tag external">Partly blocked</span></td><td>Local schema/seam work can be split from Kioku, Baikai, Shikumi, and Kikan-En dependencies.</td></tr>
+            <tr><td>Keiro 0.18 adoption</td><td><span class="tag done">Implemented</span></td><td><a href="../plans/72-adopt-keiro-0-18-and-current-runtime-patterns.md">plan 72</a> records current runtime-pattern adoption and qualification.</td></tr>
+            <tr><td>HTTP model transports and foreground launches</td><td><span class="tag progress">Partial delivery</span></td><td><a href="../plans/80-configure-model-providers-and-agent-launches-through-baikai.md">plan 80</a> implements HTTP/foreground integration; batch CLI responses remain gated by released descendant cancellation.</td></tr>
+            <tr><td>Typed Flow decisions</td><td><span class="tag proposed">Planned · not started</span></td><td>IR-12, MasterPlan 13 and plans 73–76 provide governed per-decision models and durable evidence.</td></tr>
+            <tr><td>Adaptive workers and recurring objectives</td><td><span class="tag proposed">Planned · not started</span></td><td>IR-14–18, MasterPlan 14 and plans 81–87; real workspace/checkpoint providers remain separate prerequisites.</td></tr>
           </tbody>
         </table>
       </section>
@@ -387,7 +411,7 @@
           <div class="decision-row"><strong>Semantics and delivery are separate</strong><span>Practice-review attention reserves a semantic dispute and atomically creates one outbox identity. Delivery state belongs only to sink receipts; retries repair the same identity.</span><span class="decision-state"><b>Accepted · conformance defect open</b><a href="../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md">ADR 0035</a> · <a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">plan 60</a></span></div>
           <div class="decision-row"><strong>Resolution arrives as a verified envelope</strong><span>Ingress authenticates the resolver and records a credential-free deterministic receipt for replay. Verification must also prove the subject is entitled to resolve this review.</span><span class="decision-state"><b>Accepted · entitlement gap open</b><a href="../adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md">ADR 0034</a> · <a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">plan 61</a></span></div>
           <div class="decision-row"><strong>Evidence has one atomic boundary</strong><span>Run-evidence lifecycle and queryable payload writes commit together. The canonical attestation encoding is a versioned wire format; signing and verification must not invent a second representation.</span><span class="decision-state"><b>Accepted · final delivery plan open</b><a href="../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md">ADR 0010</a> · <a href="../adr/0006-the-attestation-payload-encoding-is-a-wire-format.md">ADR 0006</a></span></div>
-          <div class="decision-row"><strong>Service and one-off modes stay distinct</strong><span>The seven-package graph keeps domain code reusable. Server and workers own platform adapters; <code>shikigami-agent</code> remains lightweight and must not inherit Kafka or telemetry-export dependencies.</span><span class="decision-state"><b>Accepted · packaging gate open</b><a href="../architecture/packages.md">Package architecture</a> · <a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">plan 31</a></span></div>
+          <div class="decision-row"><strong>Service and one-off modes stay distinct</strong><span>The seven-package graph keeps domain code reusable. Server and workers own platform adapters; <code>shikigami-agent</code> remains lightweight and must not inherit Kafka or telemetry-export dependencies.</span><span class="decision-state"><b>Accepted · packaging partially delivered</b><a href="../architecture/packages.md">Package architecture</a> · <a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">plan 31</a></span></div>
         </div>
       </section>
 
@@ -407,94 +431,313 @@
 
       <section id="roadmap">
         <h2>Recommended delivery roadmap</h2>
-        <p class="intro">Each wave has an exit gate. A later wave may be designed in parallel, but should not consume the implementation capacity needed to make the previous boundary true.</p>
+        <p class="intro">The safety sequence remains a feature gate for practice review. October local qualification and the new decision/worker initiatives have separate queues and explicit prerequisites; this page does not impose a new total ordering across them.</p>
         <div class="road" data-wave="0"><div class="road-num">P0</div><div class="road-body"><h3>Close correctness and authorization defects</h3><p>Implement plans <a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">60</a> and <a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">61</a>. Pair attention atomicity with specialist failure hardening, and pair authenticated envelopes with exact resolver entitlement and opaque evidence.</p><p class="gate"><strong>Exit gate:</strong> REV-2 and REV-4 are re-reviewed as resolved; no forbidden external action or orphan reservation survives the conformance suite.</p></div></div>
-        <div class="road" data-wave="1"><div class="road-num">P1</div><div class="road-body"><h3>Make the practice-review feature's claims true</h3><p>Implement plans <a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">62</a> and <a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">63</a>, then revise and close plan 46 and IR-4. Keep the evidence reader fail-closed until Kikan IR-5 ships.</p><p class="gate"><strong>Exit gate:</strong> REV-1 and REV-7 close; profiles can be provisioned and operated from published instructions; every claimed matrix cell is observable.</p></div></div>
+        <div class="road" data-wave="1"><div class="road-num">P1</div><div class="road-body"><h3>Make the practice-review feature's claims true</h3><p>Implement plans <a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">62</a> and <a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">63</a>, then revise and close plan 46 and IR-4. Keep the evidence reader fail-closed until <a href="mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5">Kikan IR-5</a> ships.</p><p class="gate"><strong>Exit gate:</strong> REV-1 and REV-7 close; profiles can be provisioned and operated from published instructions; every claimed matrix cell is observable.</p></div></div>
         <div class="road" data-wave="2"><div class="road-num">P2</div><div class="road-body"><h3>Establish the service boundary and run contract</h3><p>Implement <a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">plan 31</a>. Commission one coordinated plan for IR-8 and IR-10 around a stable run identity and lifecycle, then resume <a href="../plans/48-add-a-portable-one-off-repository-agent-harness.md">plan 48</a> without inventing a second workspace contract.</p><p class="gate"><strong>Exit gate:</strong> a caller can start the stack, address one run, correlate acceptance to durable execution, and read a terminal result through the public contract.</p></div></div>
-        <div class="road" data-wave="3"><div class="road-num">P3</div><div class="road-body"><h3>Finish sanctioned execution attestation</h3><p>Ratify the shared Kikan IR-6 envelope contract before implementing <a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">plan 52</a>. Add signing, read API, verifier, and positive live-provider proof without freezing another local wire shape.</p><p class="gate"><strong>Exit gate:</strong> IR-7 completes and UC-8 evidence is signed, retrievable, and independently verifiable against the shared contract.</p></div></div>
+        <div class="road" data-wave="3"><div class="road-num">P3</div><div class="road-body"><h3>Finish sanctioned execution attestation</h3><p>Ratify the shared <a href="mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6">Kikan IR-6</a> envelope contract before implementing <a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">plan 52</a>. Add signing, read API, verifier, and positive live-provider proof without freezing another local wire shape.</p><p class="gate"><strong>Exit gate:</strong> IR-7 completes and UC-8 evidence is signed, retrievable, and independently verifiable against the shared contract.</p></div></div>
         <div class="road" data-wave="4"><div class="road-num">P4</div><div class="road-body"><h3>Widen capabilities after the boundary is stable</h3><p>Stage <a href="../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md">plan 34</a> and <a href="../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md">plan 12</a> so local schema and seam work is separate from external runtime contracts. Accept, reject, or explicitly defer IR-2, IR-5, and IR-6.</p><p class="gate"><strong>Exit gate:</strong> every slice has an owner, an observable local acceptance case, and a named external contract rather than a hidden blocker.</p></div></div>
+        <div class="road"><div class="road-num">D</div><div class="road-body"><h3>Deliver typed decision programs</h3><p><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13</a> sequences 73 → (74 and 75) → 76 for <a href="../improvement-requests/compose-shikumi-decisions-in-durable-flows.md">IR-12</a>. Plan 73 is also the model-catalog prerequisite for whole-assignment selection.</p><p class="gate"><strong>Exit gate:</strong> typed, governed decisions retain pinned inputs, implementations, actual call evidence and results across restart and configuration changes.</p></div></div>
+        <div class="road"><div class="road-num">A</div><div class="road-body"><h3>Deliver adaptive finite work, then optional recurrence</h3><p><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a> owns plans 81–87 for IR-14–18. Plan 81 can start independently; plan 82 needs 73; session and integration milestones also require IR-11/IR-13. Finite acceptance and recurrence have separate gates.</p><p class="gate"><strong>Exit gate:</strong> recoverable workers produce a verified combined artifact under shared limits; recurring work additionally requires an explicit mandate and independently proven stop semantics.</p></div></div>
+      </section>
+
+      <section id="typed-decisions">
+        <h2>Typed decisions inside durable Flows</h2>
+<p class="intro"><a href="../improvement-requests/compose-shikumi-decisions-in-durable-flows.md">IR-12</a> expands beyond the existing router’s one journaled decision. A compiled Flow will invoke a registered typed program at a named step, choose an admitted model, validate the result, and branch through governed capabilities.</p><figure class="diagram"><svg class="program-map" viewBox="0 0 1080 350" role="img" aria-labelledby="decision-deps-title decision-deps-desc">
+<title id="decision-deps-title">Typed decision delivery dependencies</title><desc id="decision-deps-desc">Plan 73 precedes parallel plans 74 and 75. Plan 76 requires all three. Plan 82 also consumes the plan 73 catalog.</desc>
+<defs><marker id="decision-deps-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#657067"/></marker></defs>
+<path class="map-edge " d="M265 150H310V75H345" marker-end="url(#decision-deps-arrow)"/>
+<path class="map-edge " d="M265 185H310V260H345" marker-end="url(#decision-deps-arrow)"/>
+<path class="map-edge " d="M635 75H700V150H755" marker-end="url(#decision-deps-arrow)"/>
+<path class="map-edge " d="M635 260H700V185H755" marker-end="url(#decision-deps-arrow)"/>
+<a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md" aria-label="73 · Programs + catalog">
+<rect class="map-box planned" x="20" y="115" width="245" height="100" rx="10"/><text class="map-title" x="36" y="144">73 · Programs + catalog</text>
+<text class="map-line" x="36" y="169">Typed contracts and model aliases</text>
+<text class="map-line" x="36" y="189">Also consumed by plan 82</text>
+</a>
+<a href="../plans/74-run-shikumi-decisions-through-governed-provider-calls.md" aria-label="74 · Governed provider runner">
+<rect class="map-box planned" x="345" y="25" width="290" height="100" rx="10"/><text class="map-title" x="361" y="54">74 · Governed provider runner</text>
+<text class="map-line" x="361" y="79">Authorize every real attempt</text>
+<text class="map-line" x="361" y="99">Pinned model and credential binding</text>
+</a>
+<a href="../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md" aria-label="75 · Decision-call evidence">
+<rect class="map-box planned" x="345" y="210" width="290" height="100" rx="10"/><text class="map-title" x="361" y="239">75 · Decision-call evidence</text>
+<text class="map-line" x="361" y="264">Record failures, retries, uncertainty</text>
+<text class="map-line" x="361" y="284">Correlate with sanctioned evidence</text>
+</a>
+<a href="../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md" aria-label="76 · Flow composition">
+<rect class="map-box planned" x="755" y="115" width="300" height="100" rx="10"/><text class="map-title" x="771" y="144">76 · Flow composition</text>
+<text class="map-line" x="771" y="169">Journal validated typed outcomes</text>
+<text class="map-line" x="771" y="189">Qualify IR-12 acceptance</text>
+</a>
+</svg><figcaption>All four children of <a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13</a> are not started. The catalog has one owner: whole-assignment selection in <a href="../plans/82-pin-governed-execution-settings-for-agent-assignments.md">plan 82</a> reuses plan 73, while per-decision selection stays in IR-12.</figcaption></figure><div class="grid two"><article class="card"><h3>Prepare a contract before dispatch</h3><p>The planned registry binds program implementation and schema versions, input digest, validator, exact model tuple, policy and credential reference. Payload data may select only among admitted aliases. Unknown programs, changed bindings and unauthorized choices fail before a provider call.</p></article><article class="card"><h3>Distinguish replay from a new attempt</h3><p>A completed decision replays its journaled result without another call. A crash after a provider acts but before the journal append may require another attempt: the evidence ledger retains both attempts and uncertainty. This is not an exactly-once provider guarantee.</p></article></div>
+      </section>
+
+      <section id="adaptive-delivery">
+        <h2>Adaptive autonomous delivery: the planned chain</h2>
+<p class="intro"><a href="../use-cases/adaptive-autonomous-delivery.md">UC-1</a> is a draft use case for verified outcomes through a recoverable coordinator. <a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a> selects a compiled adaptive Flow for coordination and a durable Skill harness for workers. It preserves existing fixed supervisors.</p><figure class="diagram"><svg class="program-map" viewBox="0 0 1120 730" role="img" aria-labelledby="adaptive-deps-title adaptive-deps-desc">
+<title id="adaptive-deps-title">Adaptive delivery dependency graph</title><desc id="adaptive-deps-desc">Resource and catalog foundations lead to selection, durable operations, sessions and coordination. Workspace and checkpoint gates remain separately owned. Finite qualification and optional recurrence branch after the coordinator.</desc>
+<defs><marker id="adaptive-deps-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#657067"/></marker></defs>
+<path class="map-edge " d="M315 70H350V235H390" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge " d="M540 120V190" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge " d="M685 240H790" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge " d="M940 310V370" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge " d="M790 420H685" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge gate" d="M315 420H390" marker-end="url(#adaptive-deps-arrow)"/>
+
+<path class="map-edge " d="M540 490V580" marker-end="url(#adaptive-deps-arrow)"/>
+<path class="map-edge " d="M600 490V540H940V580" marker-end="url(#adaptive-deps-arrow)"/>
+<text class="map-label" x="675" y="529">separate recurrence phase</text>
+<path class="map-edge gate" d="M165 470V630H390" marker-end="url(#adaptive-deps-arrow)"/>
+<text class="map-label" x="35" y="665">workspace + checkpoint providers</text>
+<a href="../plans/81-enforce-root-resource-reservations-across-durable-work.md" aria-label="81 · Root resource reservations">
+<rect class="map-box planned" x="20" y="20" width="295" height="100" rx="10"/><text class="map-title" x="36" y="49">81 · Root resource reservations</text>
+<text class="map-line" x="36" y="74">One allowance across descendants</text>
+<text class="map-line" x="36" y="94">No hard child dependency</text>
+</a>
+<a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md" aria-label="73 · Shared operator catalog">
+<rect class="map-box planned" x="390" y="20" width="295" height="100" rx="10"/><text class="map-title" x="406" y="49">73 · Shared operator catalog</text>
+<text class="map-line" x="406" y="74">MP-13 prerequisite</text>
+<text class="map-line" x="406" y="94">Not started</text>
+</a>
+<a href="../plans/82-pin-governed-execution-settings-for-agent-assignments.md" aria-label="82 · Assignment selection">
+<rect class="map-box planned" x="390" y="190" width="295" height="100" rx="10"/><text class="map-title" x="406" y="219">82 · Assignment selection</text>
+<text class="map-line" x="406" y="244">Requires 81 and 73</text>
+<text class="map-line" x="406" y="264">Immutable admitted execution tuple</text>
+</a>
+<a href="../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md" aria-label="83 · Recoverable model/tool turns">
+<rect class="map-box planned" x="790" y="190" width="300" height="100" rx="10"/><text class="map-title" x="806" y="219">83 · Recoverable model/tool turns</text>
+<text class="map-line" x="806" y="244">Requires 81 and 82</text>
+<text class="map-line" x="806" y="264">Atomic progress and usage settlement</text>
+</a>
+<a href="../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md" aria-label="84 · Continuing worker sessions">
+<rect class="map-box planned" x="790" y="370" width="300" height="100" rx="10"/><text class="map-title" x="806" y="399">84 · Continuing worker sessions</text>
+<text class="map-line" x="806" y="424">Requires 81, 82 and 83</text>
+<text class="map-line" x="806" y="444">Real checkpoint/fence gate to close</text>
+</a>
+<a href="../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md" aria-label="85 · Adaptive coordinator">
+<rect class="map-box planned" x="390" y="370" width="295" height="100" rx="10"/><text class="map-title" x="406" y="399">85 · Adaptive coordinator</text>
+<text class="map-line" x="406" y="424">Requires 84, 76 and IR-13</text>
+<text class="map-line" x="406" y="444">Validate proposals; govern capacity</text>
+</a>
+<rect class="map-box gate" x="20" y="370" width="295" height="100" rx="10"/><text class="map-title" x="36" y="399">Separate readiness gates</text>
+<text class="map-line" x="36" y="424">76: typed decisions not started</text>
+<text class="map-line" x="36" y="444">IR-11/13: no selected full plans</text>
+<a href="../plans/86-qualify-integrated-adaptive-autonomous-delivery.md" aria-label="86 · Finite integrated delivery">
+<rect class="map-box planned" x="390" y="580" width="295" height="100" rx="10"/><text class="map-title" x="406" y="609">86 · Finite integrated delivery</text>
+<text class="map-line" x="406" y="634">Requires 85 + IR-11 + IR-13</text>
+<text class="map-line" x="406" y="654">Exact combined artifacts and checks</text>
+</a>
+<a href="../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md" aria-label="87 · Optional recurrence">
+<rect class="map-box planned" x="790" y="580" width="300" height="100" rx="10"/><text class="map-title" x="806" y="609">87 · Optional recurrence</text>
+<text class="map-line" x="806" y="634">Requires 85 + IR-13</text>
+<text class="map-line" x="806" y="654">86 is only a soft fixture dependency</text>
+</a>
+</svg><figcaption><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a> contains seven not-started children. Arrows show the main hard-dependency chain; plans 83 and 84 also retain direct foundation dependencies on 81/82. Dashed edges are prerequisite/integration gates, not delivered adapters. Plan 84 may develop against fixtures, but cannot close without real IR-11/IR-13 integration.</figcaption></figure><div class="grid two"><article class="card"><h3>Adaptation remains a validated proposal</h3><p>A model can propose splitting work, narrowing an assignment, requesting a specialist or changing concurrency. Plan 85 checks current objective state, owners, allowed model settings, capabilities and root limits before accepting commands. A proposal cannot create new authority or reset its allowance.</p></article><article class="card"><h3>Mechanics and full integration have different gates</h3><p>Early store, transcript and session tests can use fixtures. Full worker handoff needs a real fenced workspace from <a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11</a> and authoritative checkpoint integration from <a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13</a>. Plan 86 additionally proves useful overlap, exact combined-source validation and a bounded live coding trial. Neither prerequisite request has a selected full implementation plan.</p></article></div>
+      </section>
+
+      <section id="completion">
+        <h2>One owner for each recovery and completion fact</h2>
+<p class="intro">The new initiative coordinates several durable records without making them competing histories. Stable references connect them; atomic transactions or idempotent intent/receipt protocols keep accepted progress aligned.</p><figure class="diagram"><svg class="program-map" viewBox="0 0 1100 420" role="img" aria-labelledby="acceptance-owners-title acceptance-owners-desc">
+<title id="acceptance-owners-title">Planned ownership from objective to accepted result</title><desc id="acceptance-owners-desc">Checkpoint state owns objectives, coordination proposes work, sessions own assignment acceptance, transcripts own operation replay, workspace authority owns effects, and integrated evidence returns to the checkpoint owner.</desc>
+<defs><marker id="acceptance-owners-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#657067"/></marker></defs>
+<path class="map-edge " d="M325 75H390" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="338" y="65">state</text>
+<path class="map-edge " d="M700 75H770" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="714" y="65">admit</text>
+<path class="map-edge " d="M925 125V245" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="933" y="188">execute / recover</text>
+<path class="map-edge " d="M770 295H700" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="717" y="285">effect</text>
+<path class="map-edge " d="M390 295H325" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="338" y="285">artifact</text>
+<path class="map-edge " d="M172 245V125" marker-end="url(#acceptance-owners-arrow)"/>
+<text class="map-label" x="190" y="189">accept current criteria</text>
+<rect class="map-box gate" x="20" y="25" width="305" height="100" rx="10"/><text class="map-title" x="36" y="54">IR-13 · Objective/checkpoint owner</text>
+<text class="map-line" x="36" y="79">Criteria revision, current owners</text>
+<text class="map-line" x="36" y="99">Accepted artifacts and next actions</text>
+<a href="../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md" aria-label="85 · Coordinator + validation">
+<rect class="map-box planned" x="390" y="25" width="310" height="100" rx="10"/><text class="map-title" x="406" y="54">85 · Coordinator + validation</text>
+<text class="map-line" x="406" y="79">Bounded typed proposals</text>
+<text class="map-line" x="406" y="99">Resource and authority admission</text>
+</a>
+<a href="../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md" aria-label="84 · Session / assignment owner">
+<rect class="map-box planned" x="770" y="25" width="310" height="100" rx="10"/><text class="map-title" x="786" y="54">84 · Session / assignment owner</text>
+<text class="map-line" x="786" y="79">Ordered acceptance and owner epoch</text>
+<text class="map-line" x="786" y="99">Distinct child identity per assignment</text>
+</a>
+<a href="../plans/86-qualify-integrated-adaptive-autonomous-delivery.md" aria-label="86 · Integrated acceptance evidence">
+<rect class="map-box planned" x="20" y="245" width="305" height="100" rx="10"/><text class="map-title" x="36" y="274">86 · Integrated acceptance evidence</text>
+<text class="map-line" x="36" y="299">Exact combined revision or digest</text>
+<text class="map-line" x="36" y="319">Actual checks and user journey</text>
+</a>
+<rect class="map-box gate" x="390" y="245" width="310" height="100" rx="10"/><text class="map-title" x="406" y="274">IR-11 · Workspace / effect owner</text>
+<text class="map-line" x="406" y="299">Isolated admitted repository</text>
+<text class="map-line" x="406" y="319">Write fencing and effect reconciliation</text>
+<a href="../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md" aria-label="83 · Operation transcript">
+<rect class="map-box planned" x="770" y="245" width="310" height="100" rx="10"/><text class="map-title" x="786" y="274">83 · Operation transcript</text>
+<text class="map-line" x="786" y="299">Logical operations and real attempts</text>
+<text class="map-line" x="786" y="319">Accepted results, usage, uncertainty</text>
+</a>
+</svg><figcaption>This is planned ownership, not an installed runtime. <a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13</a> remains the completion authority; a model verdict or every worker finishing cannot substitute for integrated acceptance. <a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11</a> and IR-13 have no selected full implementation plans.</figcaption></figure><div class="grid two"><article class="card"><h3>Accepted work survives a handoff</h3><p>A session’s stable worker identity is separate from assignment id, child run id and owner epoch. A successor reads accepted artifacts and reconciles pending effects before gaining write authority. Lease expiry is insufficient evidence that an old process stopped.</p></article><article class="card"><h3>Completion binds to the integrated result</h3><p>Acceptance records the objective and criteria revision, exact combined repository artifact, real command results and user-journey evidence. A green result from an obsolete worker branch does not qualify a newer combined tree. Unresolved conflicts and uncertain effects remain visible.</p></article></div>
+      </section>
+
+      <section id="recurrence">
+        <h2>Finite delivery and recurrence have separate authority</h2>
+<p class="intro">Continuing worker sessions support follow-ups without creating permission to schedule future work. Recurrence adds a distinct admitted mandate over the same coordinator and resource root.</p><figure class="diagram"><svg class="program-map" viewBox="0 0 1100 410" role="img" aria-labelledby="finite-recurring-title finite-recurring-desc">
+<title id="finite-recurring-title">Finite delivery and recurring authority</title><desc id="finite-recurring-desc">Finite delivery ends at accepted completion. Recurrence requires a separate mandate, rereads current checkpoints and admits bounded cycles until stop, revocation or expiry.</desc>
+<defs><marker id="finite-recurring-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#657067"/></marker></defs>
+<path class="map-edge " d="M335 75H425" marker-end="url(#finite-recurring-arrow)"/>
+<path class="map-edge " d="M725 75H810" marker-end="url(#finite-recurring-arrow)"/>
+<path class="map-edge " d="M335 295H425" marker-end="url(#finite-recurring-arrow)"/>
+<text class="map-label" x="351" y="284">wake hint</text>
+<path class="map-edge " d="M725 295H810" marker-end="url(#finite-recurring-arrow)"/>
+<text class="map-label" x="748" y="284">admit</text>
+<path class="map-edge " d="M945 345V382H175V345" marker-end="url(#finite-recurring-arrow)"/>
+<text class="map-label" x="445" y="401">next due only while mandate is active</text>
+<rect class="map-box planned" x="20" y="25" width="315" height="100" rx="10"/><text class="map-title" x="36" y="54">Finite objective</text>
+<text class="map-line" x="36" y="79">Bounded assignment and acceptance</text>
+<text class="map-line" x="36" y="99">No recurring mandate implied</text>
+<a href="../plans/86-qualify-integrated-adaptive-autonomous-delivery.md" aria-label="86 · Integrated result">
+<rect class="map-box planned" x="425" y="25" width="300" height="100" rx="10"/><text class="map-title" x="441" y="54">86 · Integrated result</text>
+<text class="map-line" x="441" y="79">Checks on exact combined artifacts</text>
+<text class="map-line" x="441" y="99">Current criteria accepted</text>
+</a>
+<rect class="map-box planned" x="810" y="25" width="270" height="100" rx="10"/><text class="map-title" x="826" y="54">Finite cycle ends</text>
+<text class="map-line" x="826" y="79">Preserve outcome and limitations</text>
+<text class="map-line" x="826" y="99">No next cycle by default</text>
+<a href="../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md" aria-label="87 · Explicit recurring mandate">
+<rect class="map-box planned" x="20" y="245" width="315" height="100" rx="10"/><text class="map-title" x="36" y="274">87 · Explicit recurring mandate</text>
+<text class="map-line" x="36" y="299">Authority, cadence, cutoff and expiry</text>
+<text class="map-line" x="36" y="319">Stop or revoke denies new work</text>
+</a>
+<rect class="map-box planned" x="425" y="245" width="300" height="100" rx="10"/><text class="map-title" x="441" y="274">Read current checkpoint</text>
+<text class="map-line" x="441" y="299">Coalesce event and timer wakes</text>
+<text class="map-line" x="441" y="319">Recover watermarks and live work</text>
+<rect class="map-box planned" x="810" y="245" width="270" height="100" rx="10"/><text class="map-title" x="826" y="274">Admit bounded cycle</text>
+<text class="map-line" x="826" y="299">Reuse the resource root</text>
+<text class="map-line" x="826" y="319">Reconcile uncertain effects</text>
+</svg><figcaption><a href="../improvement-requests/support-recurring-objective-supervision.md">IR-18</a> and <a href="../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md">plan 87</a> are an optional phase with their own acceptance. Finite qualification in plan 86 does not depend on recurrence. Old timers cannot revive a stopped mandate, and new cycles cannot mint a fresh resource allowance.</figcaption></figure><p>Each recurring wake rereads authoritative checkpoints, instructions, ownership and pending work. Events and timers are hints, coalesced into one eligible cycle. Cancellation, revocation, expiry and absolute cutoff deny new admission while allowing accepted outcomes and uncertain effects to be recorded and reconciled.</p>
+      </section>
+
+      <section id="qualification">
+        <h2>Qualify the actual workload before promotion</h2>
+<p class="intro">Plans 79 and 80 record October source and installed-role checks, but the local service workload remains blocked and production remains unproven. Packaging is now partially delivered in plan 31; a full operable stack is still open.</p><figure class="diagram"><svg class="program-map" viewBox="0 0 1100 205" role="img" aria-labelledby="qualification-gates-title qualification-gates-desc">
+<title id="qualification-gates-title">Readiness proof ladder</title><desc id="qualification-gates-desc">Source checks and installed roles have passed in recorded October evidence, but the live local workload is blocked and production qualification remains unproven.</desc>
+<defs><marker id="qualification-gates-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#657067"/></marker></defs>
+<path class="map-edge " d="M265 85H290" marker-end="url(#qualification-gates-arrow)"/>
+<path class="map-edge " d="M535 85H560" marker-end="url(#qualification-gates-arrow)"/>
+<path class="map-edge " d="M805 85H830" marker-end="url(#qualification-gates-arrow)"/>
+<rect class="map-box current" x="20" y="35" width="245" height="100" rx="10"/><text class="map-title" x="36" y="64">Source / regression checks</text>
+<text class="map-line" x="36" y="89">Recorded passes in October</text>
+<text class="map-line" x="36" y="109">Build, migrations, workflow gates</text>
+<rect class="map-box current" x="290" y="35" width="245" height="100" rx="10"/><text class="map-title" x="306" y="64">Immutable installed roles</text>
+<text class="map-line" x="306" y="89">Recorded packaging passes</text>
+<text class="map-line" x="306" y="109">HTTP / foreground integration</text>
+<a href="../plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md" aria-label="79 · Live local workload">
+<rect class="map-box gate" x="560" y="35" width="245" height="100" rx="10"/><text class="map-title" x="576" y="64">79 · Live local workload</text>
+<text class="map-line" x="576" y="89">Blocked: services and authority</text>
+<text class="map-line" x="576" y="109">Real provider and durable waits</text>
+</a>
+<rect class="map-box gate" x="830" y="35" width="245" height="100" rx="10"/><text class="map-title" x="846" y="64">Production promotion</text>
+<text class="map-line" x="846" y="89">Unproven: named environment</text>
+<text class="map-line" x="846" y="109">Restore, upgrade, rollback and load</text>
+</svg><figcaption>Each box needs its own evidence. Passing source and installed checks does not qualify the live workload or production. See the <a href="../evidence/local-qualification/readiness.md">2026-10-06 readiness report</a> and <a href="../evidence/baikai-execution/qualification.md">Baikai qualification record</a> for exact tested revisions and limits.</figcaption></figure><p>Start the named local workload with PostgreSQL 18, Shomei and Kikan-En, then a real response provider and Kawa; Danwa and Kizashi support durable human waits. Kafka and Kubernetes are not prerequisites for that workload. <a href="../plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md">plan 77</a> separately proposes bounded read-only Kubernetes observations; <a href="../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md">plan 78</a> separately proposes submit/observe external jobs and is not selected as MasterPlan 14’s executor.</p><div class="callout warn"><strong>Execution surfaces are distinct.</strong> Plan 80’s HTTP responses and foreground launches have recorded evidence. Background Codex/Claude CLI responses remain blocked by <a href="mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1">Baikai BUG-1</a> in the selected release. Foreground process success does not prove a restartable worker transcript, a delivered sink, or production readiness.</div>
       </section>
 
       <section id="decision-packets">
         <h2>Decision packets for the next architecture review</h2>
-        <p class="intro">These decisions turn the priority list into an owned delivery program.</p>
+        <p class="intro">The latest plans resolve some architecture choices, while the following ownership and readiness decisions remain open.</p>
         <div class="grid two">
           <article class="card decision-card stop"><h3>1 · Commit the P0 slice</h3><p><strong>Choose:</strong> owners and target window for plans 60 and 61.</p><p><strong>Default:</strong> run them together; both protect the same practice-review trust boundary.</p></article>
           <article class="card decision-card stop"><h3>2 · Define the IR-4 exit gate</h3><p><strong>Choose:</strong> the review and evidence required to close plan 46.</p><p><strong>Default:</strong> plans 60–63 complete, REV-1/2/4/7 re-reviewed, production path documented and observable.</p></article>
           <article class="card decision-card"><h3>3 · Standardize run identity</h3><p><strong>Choose:</strong> identifier, acceptance response, workflow correlation, terminal states, and retention shared by IR-8 and IR-10.</p><p><strong>Default:</strong> commission one ExecPlan before IR-11 or more harness work.</p></article>
-          <article class="card decision-card warn"><h3>4 · Ratify the attestation envelope</h3><p><strong>Choose:</strong> owner and timing for Kikan IR-6 coordination.</p><p><strong>Default:</strong> do not freeze a Shikigami-only encoding while a shared contract remains proposed.</p></article>
+          <article class="card decision-card warn"><h3>4 · Ratify the attestation envelope</h3><p><strong>Choose:</strong> owner and timing for <a href="mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6">Kikan IR-6</a> coordination.</p><p><strong>Default:</strong> do not freeze a Shikigami-only encoding while a shared contract remains proposed.</p></article>
           <article class="card decision-card"><h3>5 · Split local and blocked slices</h3><p><strong>Choose:</strong> whether plan 12 and plan 34 are amended or replaced by smaller plans.</p><p><strong>Default:</strong> land schema/seam work independently; keep live MCP, recall, and retention behind their upstream contracts.</p></article>
           <article class="card decision-card warn"><h3>6 · Triage unplanned proposals</h3><p><strong>Choose:</strong> accept, reject, or sequence IR-2, IR-5, and IR-6.</p><p><strong>Default:</strong> do not leave large proposals competing implicitly with the committed safety and service-boundary queue.</p></article>
-        </div>
+        <article class="card decision-card warn"><h3>7 · Plan the workspace and checkpoint prerequisites</h3><p><strong>Needed:</strong> selected implementation owners and plans for <a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11</a> and <a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13</a>. MasterPlan 14 consumes these contracts but does not deliver their whole requests.</p><p><strong>Gate:</strong> real write fencing, effect reconciliation, current checkpoint reads and conflict-aware updates before full session/adaptive acceptance.</p></article>
+<article class="card decision-card"><h3>8 · Scope the finite release separately</h3><p><strong>Existing plan:</strong> plans 81–86 establish finite delivery; plan 87 adds optional recurrence. Both consume the same ownership/resource contracts.</p><p><strong>Gate:</strong> qualify finite work without treating recurring automation as enabled; report remaining recurrence before closing the whole MasterPlan.</p></article></div>
       </section>
 
       <section id="dependencies">
         <h2>External contracts that shape the sequence</h2>
         <p class="intro">External dependencies are not generic blockers. Each owns a specific fact Shikigami should not duplicate locally.</p>
         <div class="card">
-          <div class="dependency"><span class="project">Kikan IR-5</span><span class="effect">Blocks truthful closeout</span><span>Production evidence-reader contract for the practice-review flow. Until it ships, keep the unresolved path fail-closed and do not claim complete production conformance.</span></div>
-          <div class="dependency"><span class="project">Kikan IR-6</span><span class="effect">Blocks plan 52 wire shape</span><span>Shared sanctioned-execution envelope and verification contract. Shikigami should consume it, not create a private sibling protocol.</span></div>
-          <div class="dependency"><span class="project">Kioku IR-2</span><span class="effect">Blocks memory breadth</span><span>Bounded recall and retention semantics for plan 34. Distillation and shared-scope slices may proceed if kept independent.</span></div>
-          <div class="dependency"><span class="project">Baikai · Shikumi · Kikan-En</span><span class="effect">Blocks live MCP path</span><span>Provider/tool declaration, runtime execution, and authorization contracts for plan 12. Local agent schema and registry seams are separable.</span></div>
-          <div class="dependency"><span class="project">Mori registry</span><span class="effect">Documentation coverage gap</span><span>OKF bundle and concept URIs resolve; conventional <code>docs/plans</code> and <code>docs/masterplans</code> artifacts are not yet indexed. Keep intended canonical URIs in durable references.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5">Kikan IR-5</a></span><span class="effect">Blocks truthful closeout</span><span>Production evidence-reader contract for the practice-review flow. Until it ships, keep the unresolved path fail-closed and do not claim complete production conformance.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6">Kikan IR-6</a></span><span class="effect">Blocks plan 52 wire shape</span><span>Shared sanctioned-execution envelope and verification contract. Shikigami should consume it, not create a private sibling protocol.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2">Kioku IR-2</a></span><span class="effect">Blocks memory breadth</span><span>Bounded recall and retention semantics for plan 34. Distillation and shared-scope slices may proceed if kept independent.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/baikai">Baikai</a> · <a href="mori://shinzui/shikumi">Shikumi</a> · <a href="mori://shinzui/kikan-en">Kikan-En</a></span><span class="effect">Blocks live MCP path</span><span>Provider/tool declaration, runtime execution, and authorization contracts for plan 12. Local agent schema and registry seams are separable.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1">Baikai BUG-1</a></span><span class="effect">Blocks batch CLI responses</span><span>Selected-release descendant cancellation must be repaired and positively qualified before plan 80 enables this background surface.</span></div>
+          <div class="dependency"><span class="project"><a href="mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-4">Kikan-En IR-4</a> · <a href="mori://shinzui/shiki/okf/improvement-requests/concepts/IR-1">Shiki IR-1</a></span><span class="effect">Plan 78 gates</span><span>Exact external-job authorization and repeat-unsafe crash recovery are owning contracts for the generic external executor. This executor is outside MasterPlan 14’s selected path.</span></div>
         </div>
       </section>
 
       <section id="masterplans">
         <h2>Active MasterPlans</h2>
         <div class="grid two">
-          <article class="card"><span class="tag progress">3 of 4 children complete</span><h3><a href="../masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md">MP-6 · Operations and observability</a></h3><p>Plan 31 is the remaining deployable-service-stack child and the platform gate for plan 48.</p></article>
+          <article class="card"><span class="tag progress">3 of 4 children complete</span><h3><a href="../masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md">MP-6 · Operations and observability</a></h3><p>Plan 31 remains open. October packaging preparation is delivered; process-compose, NixOS and graceful-drain proof remain. The parent registry still labels it not started; the child records partial work.</p></article>
           <article class="card"><span class="tag progress">3 of 5 children complete</span><h3><a href="../masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md">MP-7 · Platform feature completion</a></h3><p>Plans 34 and 12 remain; both should be staged around external contracts.</p></article>
           <article class="card"><span class="tag open">Safety closeout open</span><h3><a href="../masterplans/9-architecture-practice-review-flow.md">MP-9 · Architecture-practice review flow</a></h3><p>Core implementation landed. Plans 60–63 are the truthful closeout wave.</p></article>
           <article class="card"><span class="tag progress">3 of 4 children complete</span><h3><a href="../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md">MP-10 · Sanctioned execution attestation</a></h3><p>Plan 52 remains behind the shared envelope contract and live-provider proof.</p></article>
+<article class="card"><span class="tag proposed">0 of 4 children · not started</span><h3><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MP-13 · Typed Shikumi decisions</a></h3><p>Plans 73–76 implement IR-12: program/catalog admission, governed provider calls, durable evidence and replay-safe Flow composition.</p></article>
+<article class="card"><span class="tag proposed">0 of 7 children · not started</span><h3><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MP-14 · Adaptive autonomous delivery</a></h3><p>Plans 81–87 implement IR-14–18 in foundation, worker, finite qualification and optional recurrence phases. IR-11/13 remain separate readiness gates.</p></article>
         </div>
       </section>
 
       <section id="plans">
         <h2>Open ExecPlan evidence</h2>
-        <p class="intro">Eleven plans remain open. Filter by roadmap wave; the cards are evidence for the architecture narrative above, not a substitute for it.</p>
-        <div class="filters" aria-label="Filter open plans">
-          <button class="filter active" type="button" data-filter="all">All</button>
-          <button class="filter" type="button" data-filter="p0">P0</button>
-          <button class="filter" type="button" data-filter="p1">P1</button>
-          <button class="filter" type="button" data-filter="p2">P2</button>
-          <button class="filter" type="button" data-filter="p3">P3</button>
-          <button class="filter" type="button" data-filter="p4">P4</button>
-          <button class="filter" type="button" data-filter="legacy">Legacy closeout</button>
-        </div>
-        <div class="grid three" id="plan-grid">
-          <article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 60</span><span class="state">Not started</span><h3><a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">Attention and specialist boundaries</a></h3><p>Restore atomic semantic reservation/outbox behavior and harden specialist failures.</p></article>
-          <article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 61</span><span class="state">Not started</span><h3><a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">Resolver entitlement</a></h3><p>Prove exact resolver authority and keep submission evidence opaque.</p></article>
-          <article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 62</span><span class="state">Not started</span><h3><a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">Truthful closeout and operator docs</a></h3><p>Make provisioning, operation, and recovery instructions match production behavior.</p></article>
-          <article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 63</span><span class="state">Not started</span><h3><a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">Claimed conformance matrix</a></h3><p>Prove the scenarios already claimed by plan 46.</p></article>
-          <article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 31</span><span class="state">Not started</span><h3><a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">Deployable service stack</a></h3><p>Package the server, workers, storage, queues, and configuration into an operable stack.</p></article>
-          <article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 48</span><span class="state">In progress</span><h3><a href="../plans/48-add-a-portable-one-off-repository-agent-harness.md">Portable repository-agent harness</a></h3><p>Resume after plan 31 and align mutable workspace behavior with IR-11.</p></article>
-          <article class="card plan-card" data-wave="p3"><span class="plan-id">Plan 52</span><span class="state">Not started</span><h3><a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">Signed attestation and UC-8</a></h3><p>Finish signing, read API, verification, and live conformance after Kikan IR-6.</p></article>
-          <article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 34</span><span class="state">Not started</span><h3><a href="../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md">Memory lifecycle</a></h3><p>Split local distillation/shared-scope work from Kioku-dependent recall and retention.</p></article>
-          <article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 12</span><span class="state">Not started</span><h3><a href="../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md">Per-agent MCP servers</a></h3><p>Split declaration and registry seams from blocked live provider execution.</p></article>
-          <article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 46</span><span class="state">In progress</span><h3><a href="../plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md">Review orchestration</a></h3><p>Core landed; close only after plans 60–63 and a fresh evidence review.</p></article>
-          <article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 8</span><span class="state">In progress</span><h3><a href="../plans/8-conversational-agent-loop-bound-to-danwa.md">Danwa conversation loop</a></h3><p>Re-verify two legacy validation items against the current event path or explicitly supersede them.</p></article>
-        </div>
+<p class="intro">26 plans remain open across existing safety/service work and the newly planned initiatives. Filters show delivery tracks, not a claim that every plan is ready to start. Plan 13 is recorded implementation-complete with its historical live-provider smoke still unperformed.</p><div class="filters" aria-label="Filter open plans"><button class="filter active" type="button" data-filter="all" aria-pressed="true">All</button><button class="filter" type="button" data-filter="p0" aria-pressed="false">Safety P0</button><button class="filter" type="button" data-filter="p1" aria-pressed="false">Closeout P1</button><button class="filter" type="button" data-filter="p2" aria-pressed="false">Service P2</button><button class="filter" type="button" data-filter="p3" aria-pressed="false">Attestation P3</button><button class="filter" type="button" data-filter="p4" aria-pressed="false">Breadth P4</button><button class="filter" type="button" data-filter="decisions" aria-pressed="false">Typed decisions</button><button class="filter" type="button" data-filter="adaptive" aria-pressed="false">Adaptive workers</button><button class="filter" type="button" data-filter="qualification" aria-pressed="false">Qualification</button><button class="filter" type="button" data-filter="operations" aria-pressed="false">Operational tools</button><button class="filter" type="button" data-filter="legacy" aria-pressed="false">Legacy closeout</button></div><div class="grid three" id="plan-grid">
+<article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 8</span><span class="state">In progress</span><h3><a href="../plans/8-conversational-agent-loop-bound-to-danwa.md">Danwa conversation loop</a></h3><p>Re-verify two remaining legacy validation items against the current event path.</p></article>
+<article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 12</span><span class="state">Not started</span><h3><a href="../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md">Per-agent MCP servers</a></h3><p>Separate declaration/registry seams from blocked live-provider integration.</p></article>
+<article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 31</span><span class="state">Partial delivery</span><h3><a href="../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md">Deployable service stack</a></h3><p>Installed packaging preparation landed; full stack, NixOS and graceful drain remain open.</p></article>
+<article class="card plan-card" data-wave="p4"><span class="plan-id">Plan 34</span><span class="state">Not started</span><h3><a href="../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md">Memory lifecycle</a></h3><p>Stage distillation/shared scope separately from upstream recall and retention.</p></article>
+<article class="card plan-card" data-wave="legacy"><span class="plan-id">Plan 46</span><span class="state">In progress</span><h3><a href="../plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md">Practice-review orchestration</a></h3><p>Core landed; close only after plans 60–63 and fresh conformance evidence.</p></article>
+<article class="card plan-card" data-wave="p2"><span class="plan-id">Plan 48</span><span class="state">In progress</span><h3><a href="../plans/48-add-a-portable-one-off-repository-agent-harness.md">Portable repository-agent harness</a></h3><p>Read-only slice exists; mutable editing, commands, sandbox and executable remain.</p></article>
+<article class="card plan-card" data-wave="p3"><span class="plan-id">Plan 52</span><span class="state">Not started</span><h3><a href="../plans/52-signed-attestation-read-api-and-uc-8-conformance.md">Signed attestation and UC-8</a></h3><p>Signing/read API/verifier remain behind the shared sanctioned-execution contract.</p></article>
+<article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 60</span><span class="state">Not started</span><h3><a href="../plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md">Attention and specialist boundaries</a></h3><p>Atomic semantic reservation/outbox behavior and specialist failure hardening.</p></article>
+<article class="card plan-card" data-wave="p0"><span class="plan-id">Plan 61</span><span class="state">Not started</span><h3><a href="../plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md">Resolver entitlement</a></h3><p>Prove exact resolver authority and keep credential evidence opaque.</p></article>
+<article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 62</span><span class="state">Not started</span><h3><a href="../plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md">Truthful closeout and operator docs</a></h3><p>Make provisioning, operation and recovery claims match runtime behavior.</p></article>
+<article class="card plan-card" data-wave="p1"><span class="plan-id">Plan 63</span><span class="state">Not started</span><h3><a href="../plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md">Claimed conformance matrix</a></h3><p>Prove every claimed practice-review acceptance scenario.</p></article>
+<article class="card plan-card" data-wave="decisions"><span class="plan-id">Plan 73</span><span class="state">Not started</span><h3><a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md">Typed programs and model catalog</a></h3><p>Independent admission foundation for plans 74/75/76 and assignment selection in 82.</p></article>
+<article class="card plan-card" data-wave="decisions"><span class="plan-id">Plan 74</span><span class="state">Not started</span><h3><a href="../plans/74-run-shikumi-decisions-through-governed-provider-calls.md">Governed decision provider calls</a></h3><p>Requires 73; every actual attempt crosses model policy and evidence callbacks.</p></article>
+<article class="card plan-card" data-wave="decisions"><span class="plan-id">Plan 75</span><span class="state">Not started</span><h3><a href="../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md">Durable decision-call evidence</a></h3><p>Requires 73; records all provider attempts and preserves uncertainty across restart.</p></article>
+<article class="card plan-card" data-wave="decisions"><span class="plan-id">Plan 76</span><span class="state">Not started</span><h3><a href="../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md">Typed decisions in durable Flows</a></h3><p>Requires 73/74/75; journal typed outcomes and qualify IR-12.</p></article>
+<article class="card plan-card" data-wave="operations"><span class="plan-id">Plan 77</span><span class="state">Not started</span><h3><a href="../plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md">Read-only Kubernetes observations</a></h3><p>Bounded namespace-scoped k8s.observe tools with fresh authorization; separate workload.</p></article>
+<article class="card plan-card" data-wave="operations"><span class="plan-id">Plan 78</span><span class="state">Not started</span><h3><a href="../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md">Idempotent external jobs</a></h3><p>Submit/observe child workflows; authorization and executor crash contracts remain gates. Request filing is preparatory work.</p></article>
+<article class="card plan-card" data-wave="qualification"><span class="plan-id">Plan 79</span><span class="state">In progress</span><h3><a href="../plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md">Local agent qualification</a></h3><p>Source and installed checks pass in recorded evidence; live workload blocked, production unproven.</p></article>
+<article class="card plan-card" data-wave="qualification"><span class="plan-id">Plan 80</span><span class="state">In progress</span><h3><a href="../plans/80-configure-model-providers-and-agent-launches-through-baikai.md">Baikai providers and launches</a></h3><p>HTTP and foreground integration landed; batch CLI responses await a released cancellation fix.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 81</span><span class="state">Not started</span><h3><a href="../plans/81-enforce-root-resource-reservations-across-durable-work.md">Root resource reservations</a></h3><p>IR-16 foundation; atomic multidimensional admission and conservative unknown usage.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 82</span><span class="state">Not started</span><h3><a href="../plans/82-pin-governed-execution-settings-for-agent-assignments.md">Pinned assignment execution</a></h3><p>IR-17; requires 81/73, reuses one catalog, pins permitted model/reasoning per assignment.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 83</span><span class="state">Not started</span><h3><a href="../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md">Recoverable model/tool turns</a></h3><p>IR-14; requires 81/82, accepted operation history and composed policy state.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 84</span><span class="state">Not started</span><h3><a href="../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md">Continuing sessions and handoffs</a></h3><p>IR-15; requires 81/82/83, real IR-11/13 integration before completion.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 85</span><span class="state">Not started</span><h3><a href="../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md">Validated adaptive coordination</a></h3><p>IR-16; requires 84/76 and IR-13, governs adaptation and measured execution capacity.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 86</span><span class="state">Not started</span><h3><a href="../plans/86-qualify-integrated-adaptive-autonomous-delivery.md">Integrated finite delivery</a></h3><p>Requires 85 plus real IR-11/13; exact combined artifacts, useful overlap and live coding proof.</p></article>
+<article class="card plan-card" data-wave="adaptive"><span class="plan-id">Plan 87</span><span class="state">Not started</span><h3><a href="../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md">Recurring objective supervision</a></h3><p>IR-18; requires 85/IR-13, optional recurrence; 86 is soft fixture reuse only.</p></article>
+</div>
       </section>
 
       <section id="requests">
-        <h2>Improvement-request portfolio</h2>
-        <table>
-          <thead><tr><th>Request</th><th>Status</th><th>Architectural meaning</th></tr></thead>
-          <tbody>
-            <tr><td>IR-1 · Meibo lifecycle and fleet identity</td><td><span class="tag done">Completed</span></td><td>Canonical lifecycle/fleet identity is part of admission.</td></tr>
-            <tr><td>IR-2 · Cross-cluster diagnostics</td><td><span class="tag proposed">Proposed</span></td><td>No accepted delivery plan; requires a product decision.</td></tr>
-            <tr><td>IR-3 · Declarative router agents</td><td><span class="tag done">Completed</span></td><td>Routing remains declared authority, not model-owned truth.</td></tr>
-            <tr><td>IR-4 · Architecture-practice review flow</td><td><span class="tag progress">In progress</span></td><td>Close only after plans 60–63 repair and prove the accepted boundaries.</td></tr>
-            <tr><td>IR-5 · Governed agent evolution</td><td><span class="tag proposed">Proposed</span></td><td>No accepted Shikigami plan.</td></tr>
-            <tr><td>IR-6 · A2A interoperability</td><td><span class="tag proposed">Proposed</span></td><td>No accepted Shikigami plan.</td></tr>
-            <tr><td>IR-7 · Sanctioned execution attestation</td><td><span class="tag progress">In progress</span></td><td>Plan 52 and a shared Kikan contract remain.</td></tr>
-            <tr><td>IR-8 · Addressed runs over HTTP</td><td><span class="tag proposed">Proposed</span></td><td>Must share run identity and lifecycle with IR-10.</td></tr>
-            <tr><td>IR-9 · Principal-keyed continuity</td><td><span class="tag done">Completed</span></td><td>Recorded agent principals now key durable state.</td></tr>
-            <tr><td>IR-10 · Terminal run status over HTTP</td><td><span class="tag proposed">Proposed</span></td><td>Must not invent a second run identity.</td></tr>
-            <tr><td>IR-11 · Mutable repository workspaces</td><td><span class="tag proposed">Proposed</span></td><td>Sequence after the public run contract and with plan 48.</td></tr>
-          </tbody>
-        </table>
+        <h2>Improvement-request portfolio through IR-18</h2>
+<p class="intro">Request lifecycle comes from each request’s frontmatter. Proposed requests can have complete planning coverage while implementation has not started. Links lead to their acceptance criteria and current Status sections.</p><table><thead><tr><th>Request</th><th>Lifecycle</th><th>Planning coverage and acceptance gates</th></tr></thead><tbody>
+<tr><td><a href="../improvement-requests/consult-meibo-agent-lifecycle.md">IR-1 · Meibo lifecycle and fleet identity</a></td><td><span class="tag done">Completed</span></td><td>Plan 23 supplies canonical lifecycle admission.</td></tr>
+<tr><td><a href="../improvement-requests/authorized-cross-cluster-diagnostic-tools.md">IR-2 · Cross-cluster diagnostics</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected Shikigami delivery plan; plan 77’s same-cluster read-only scope does not complete this request.</td></tr>
+<tr><td><a href="../improvement-requests/add-declarative-router-agents.md">IR-3 · Declarative router agents</a></td><td><span class="tag done">Completed</span></td><td>MasterPlan 8 and plans 40–42 delivered declared routing and governed delegation.</td></tr>
+<tr><td><a href="../improvement-requests/add-architecture-practice-review-flow.md">IR-4 · Architecture-practice review</a></td><td><span class="tag progress">In progress</span></td><td>Plans 43–46 partially delivered; plans 60–63 remain closeout gates.</td></tr>
+<tr><td><a href="../improvement-requests/governed-agent-evolution.md">IR-5 · Governed agent evolution</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected implementation plan.</td></tr>
+<tr><td><a href="../improvement-requests/support-a2a-cross-runtime-agent-interoperability.md">IR-6 · A2A interoperability</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected implementation plan; excluded from MasterPlan 14.</td></tr>
+<tr><td><a href="../improvement-requests/attest-sanctioned-agent-execution.md">IR-7 · Sanctioned execution attestation</a></td><td><span class="tag progress">In progress</span></td><td>Plans 49–51 delivered; plan 52 and the shared contract remain.</td></tr>
+<tr><td><a href="../improvement-requests/expose-addressed-agent-runs-over-http.md">IR-8 · Addressed runs over HTTP</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected plan; coordinate run identity and lifecycle with IR-10.</td></tr>
+<tr><td><a href="../improvement-requests/key-agent-continuity-by-meibo-principal.md">IR-9 · Principal-keyed continuity</a></td><td><span class="tag done">Completed</span></td><td>Plan 54 delivered recorded-principal continuity and attribution.</td></tr>
+<tr><td><a href="../improvement-requests/expose-agent-run-status-over-http.md">IR-10 · Terminal run status over HTTP</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected plan; share IR-8 acceptance/workflow identity.</td></tr>
+<tr><td><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · Mutable repository workspaces</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected full durable implementation plan. Supplies assignment-scoped isolation, instruction discovery, fencing and integrated-artifact evidence for UC-1; plan 48 is partial one-off work.</td></tr>
+<tr><td><a href="../improvement-requests/compose-shikumi-decisions-in-durable-flows.md">IR-12 · Typed Shikumi decisions in Flows</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 13, plans 73–76: planned, not started. Select models per decision; whole-assignment settings belong to IR-17.</td></tr>
+<tr><td><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · Optional major-task tracking</a></td><td><span class="tag proposed">Proposed</span></td><td>No selected store/provider/implementation plan. Supplies authoritative objective and assignment checkpoints, accepted artifacts and conflict-aware updates; separate prerequisite to MasterPlan 14.</td></tr>
+<tr><td><a href="../improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md">IR-14 · Durable model/tool turns and policies</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 14: plan 83 owns recovery/policies; 84 closes follow-up recovery; 86 qualifies integration. Plans 81/82 provide resource and selection foundations. All not started.</td></tr>
+<tr><td><a href="../improvement-requests/support-continuing-worker-sessions.md">IR-15 · Continuing worker sessions</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 14: plan 84 owns ordered messages, assignments, events and fenced handoffs; 86 qualifies integration. Real IR-11/13 gates remain. Not started.</td></tr>
+<tr><td><a href="../improvement-requests/support-adaptive-durable-orchestration.md">IR-16 · Adaptive orchestration and shared limits</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 14: plans 81, 85 and 86 own conservation, validated adaptive control and integrated delivery. Requires IR-12 and separate IR-11/13 providers. Not started.</td></tr>
+<tr><td><a href="../improvement-requests/select-governed-models-for-agent-runs.md">IR-17 · Governed run execution settings</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 14: plan 82 owns whole-assignment selection; 83/84 preserve it; 85/86 prove decision-permission and integrated cases. Requires plan 73’s catalog. Not started.</td></tr>
+<tr><td><a href="../improvement-requests/support-recurring-objective-supervision.md">IR-18 · Recurring objective supervision</a></td><td><span class="tag proposed">Proposed</span></td><td>MasterPlan 14: plan 87 owns explicit recurring mandates, current-checkpoint wakes and stop semantics. Optional phase after coordinator/checkpoint prerequisites. Not started.</td></tr>
+</tbody></table>
       </section>
 
       <section id="reviews">
@@ -510,14 +753,14 @@
             <tr><td>REV-5 · Specialist Flow</td><td>Commented</td><td><span class="tag proposed">Advisory</span> Plans 60 and 62.</td></tr>
             <tr><td>REV-6 · Capability ports</td><td>Approved</td><td><span class="tag done">Approval stands</span> Advisory work in plans 60 and 62.</td></tr>
             <tr><td>REV-7 · User guide</td><td>Changes requested</td><td><span class="tag open">Open</span> Plans 61 and 62.</td></tr>
-            <tr><td>REV-8 · Improvement-request corpus</td><td>Changes requested</td><td><span class="tag done">Resolved locally</span> Mori still lacks conventional plan-artifact URI coverage.</td></tr>
+            <tr><td>REV-8 · Improvement-request corpus</td><td>Changes requested</td><td><span class="tag done">Resolved locally</span> Historical corpus finding answered locally by plan 64; current planning coverage is recorded per request.</td></tr>
           </tbody>
         </table>
       </section>
 
       <section id="sources">
         <h2>Source ledger</h2>
-        <p class="intro">The page is a decision view over repository evidence. Update the underlying records first; regenerate this view when statuses or architecture decisions change.</p>
+        <p class="intro">Refreshed from the current plan and request records on 2026-10-10. The September roadmap ledger supplies historical safety ordering; current child-plan Progress, MasterPlan registries and request Status sections supply newer coverage. No new implementation or independent review is claimed by this artifact refresh.</p>
         <ul class="source-list">
           <li><a href="../roadmap.md">Audited roadmap ledger</a></li>
           <li><a href="../architecture/packages.md">Seven-package architecture</a></li>
@@ -531,6 +774,7 @@
           <li><a href="../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md">ADR 0035 · semantic attention reservation</a></li>
           <li><a href="../adr/0036-external-agent-actions-require-fresh-exact-authorization.md">ADR 0036 · fresh exact authorization</a></li>
           <li><a href="../plans/64-realign-the-improvement-requests-corpus-pin-status-and-mori-registry.md">Plan 64 · corpus and registry audit</a></li>
+<li><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · typed decisions, plans 73–76</a></li><li><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14 · adaptive delivery, plans 81–87</a></li><li><a href="../improvement-requests/index.md">All 18 improvement requests</a></li><li><a href="adaptive-autonomous-objectives.html">Adaptive autonomous objectives · focused visual guide</a></li><li><a href="../improvement-requests/log.md">Request lifecycle and planning update log</a></li><li><a href="../use-cases/adaptive-autonomous-delivery.md">UC-1 · draft adaptive autonomous delivery</a></li><li><a href="../evidence/local-qualification/readiness.md">Local qualification readiness and remaining gates</a></li><li><a href="../operations/baikai-execution.md">Baikai response / foreground execution operations</a></li><li><a href="../evidence/baikai-execution/qualification.md">Baikai installed qualification evidence</a></li><li><a href="../plans/72-adopt-keiro-0-18-and-current-runtime-patterns.md">Plan 72 · current Keiro adoption</a></li><li><a href="../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md">ADR 0039 · immutable deployment closure</a></li><li><a href="../adr/0040-response-options-and-foreground-launches-have-separate-authority.md">ADR 0040 · response and launch authority</a></li>
         </ul>
         <details>
           <summary>Status maintenance rule</summary>
@@ -540,7 +784,7 @@
     </main>
   </div>
 
-  <footer class="shell footer">Audited 2026-09-21. Architecture decisions are linked to their authoritative ADRs; delivery status is reconciled in <a href="../roadmap.md">docs/roadmap.md</a>.</footer>
+  <footer class="shell footer">Portfolio refreshed 2026-10-10 from the linked plans and improvement requests. New initiatives are planned, not delivered; evidence and readiness limits remain attached to their owning records.</footer>
 
   <script>
     const buttons = document.querySelectorAll(".filter");
@@ -548,7 +792,10 @@
     buttons.forEach((button) => {
       button.addEventListener("click", () => {
         const filter = button.dataset.filter;
-        buttons.forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+        buttons.forEach((candidate) => {
+          candidate.classList.toggle("active", candidate === button);
+          candidate.setAttribute("aria-pressed", String(candidate === button));
+        });
         plans.forEach((plan) => plan.classList.toggle("hidden", filter !== "all" && plan.dataset.wave !== filter));
       });
     });
