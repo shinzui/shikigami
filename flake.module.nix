@@ -57,6 +57,21 @@
       # in Requires.private and postgresql-libpq checks during configuration.
       haskellProject.extraDevPackages = [ pkgs.curl.dev pkgs.hurl pkgs.rdkafka ];
 
+      # The managed default assumes a conventional root Cabal package. This
+      # workspace deliberately has several packages instead, so provide a
+      # dependency-free compatibility source. The deployment exports below
+      # remain the authoritative multi-package runtime surface.
+      haskellProject.packageSource = pkgs.writeTextDir "shikigami.cabal" ''
+        cabal-version: 3.0
+        name: shikigami
+        version: 0
+        build-type: Simple
+        library
+          exposed-modules: ShikigamiCompat
+          build-depends: base
+          default-language: GHC2021
+      '';
+
       # Git metadata is unavailable after the flake source is copied into the Nix
       # store. Inject the same seven-character build identity that local Cabal
       # builds obtain from githash's Template Haskell splice.
