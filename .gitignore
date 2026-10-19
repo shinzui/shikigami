@@ -31,3 +31,4 @@ shikigami-core/src/.keiro-dsl-generated-haskell-migrations/
 # Qualification Python tooling.
 __pycache__/
 nix/qualification/metadata/
+.codex/
