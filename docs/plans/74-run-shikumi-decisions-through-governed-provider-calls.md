@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-26T18:34:42Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T20:30:29Z
+      mode: "update"
+      note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
 ---
 
 # Run Shikumi decisions through governed provider calls
@@ -50,6 +56,8 @@ None recorded during implementation.
 
 2026-09-26: Preserve program-owned schemas and prompt rendering while enforcing the final model, credentials, thinking, evidence request and limits. Fill-only defaults are not an authorization gate.
 
+2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: verify pinned effective parameter and derivation identities before pending execution and keep upstream API adaptation inside this runner. Probability-bearing results remain ordinary validated typed outputs; Jev and calibration are outside this plan. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
+
 
 ## Outcomes & Retrospective
 
@@ -79,6 +87,8 @@ Release verification on 2026-09-26 found Shikumi 0.4.0.0 on Hackage/tag `59d38bc
 
 Create `shikigami-core/src/Shikigami/Program/DecisionRunner.hs` with an IO runner taking a typed registered program, `PreparedDecision`, the pinned profile, a process-local model/credential binding, call hooks, and validated input. Verify descriptor equality before executing a pending decision. Run the program using `Handan.Runtime.runProgramWith` and a runtime whose model and `LLMConfig.registry` belong to this invocation. Preserve configured retry, budget and rate-limit policy when deriving the runtime; do not reset them by repeatedly calling default constructors.
 
+Descriptor equality includes EP-1's parameter-state digest/format and local derivation version. Execute the immutable registered state rather than applying current optimizer settings or mutable defaults. A mismatch or unavailable pinned state fails before dispatch; a matching provider request/cache key cannot authorize substitution. Test this with current `Params` fixtures. `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` may later extend parameters, output types and routing, but is not a hard dependency here. Qualify a future adoption inside the adapter without changing the Flow-facing static-slot/model/input contract or weakening actual-option checks for existing transports.
+
 Start with a key-free two-node `Predict` fixture in `shikigami-core/test/Shikigami/DecisionRunnerSpec.hs` and two isolated fake providers. Assert the registered schema actually reaches transport, input affects the typed result, and both nodes use the chosen exact model. A concurrent test runs two invocations with distinct credentials/models and observes no cross-talk. Keep old `runProgramTask` behavior compatible; this change adds a decision runner, not an incidental migration of all existing Handan tasks. Run the core suite at the end of this milestone.
 
 ### Milestone 2: Govern every actual attempt
@@ -96,6 +106,8 @@ Retain the outer behavior attempt timeout and existing limits. Profile forbiddan
 
 
 Decode and domain-validate the typed output before returning a successful `DecisionOutcome`. Failures must not become a successful no-match. Test two calls in one program, a transient failure followed by retry, permanent failure, invalid JSON, schema mismatch, domain rejection, missing evidence, evidence-write failure, cancellation, and an explicit forbidden thinking override. A fake hook counter records expected IDs before dispatch and matches every terminal to its unique attempt. A failure that occurs before transport is represented as a refusal without claiming a provider call occurred.
+
+Return the complete validated `o` through EP-1's durable-result codec, including any registered confidence/probability fields, rather than extracting only a label. Such fields are result data; they never substitute for typed Baikai terminal evidence in `finishCall`. A current-API result fixture with a confidence field must preserve it while a missing provider terminal still fails evidence completeness. No probability schema or derivation algorithm is implemented in this adapter.
 
 Add a bounded runner duration and call-count fixture, and prove limits apply across both nodes. Confirm no prompt, response body, or credential appears in diagnostic text. Add module/test entries to the Cabal file and main test tree. Record the verified stack and the authority rules in an ADR through `agents/skills/exec-plan/ADR.md`. Do not add durable Flow labels in this plan.
 
@@ -126,6 +138,8 @@ Inspect only selected source packages from Mori and the project's build-plan met
 A two-node registered program invoked with alias `investigate` sends the authorized investigation tuple on both calls despite a different process default. Changing payload text to contain a model/credential does not change dispatch. Two concurrent invocations use distinct selected bindings. Every permitted actual call receives a run correlation and unique call correlation before dispatch; the final terminal evidence contains the provider's own identity, not just the requested model copied into an application record.
 
 A profile forbidding the selected model or final thinking level causes no actual call. Invalid output returns a bounded typed failure. Evidence persistence failure prevents a successful decision return, and cancellation remains distinguishable from a provider terminal. Tests exercise the real Handan/Shikumi path with fake provider handlers, not a replacement decision evaluator that would bypass internal calls.
+
+A registration whose parameter or derivation identity differs from `PreparedDecision` produces zero provider calls. Matching state preserves the entire typed result through serialization independently of the model-facing schema. These checks run against current dependency APIs; adoption of [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) remains optional.
 
 
 ## Idempotence and Recovery

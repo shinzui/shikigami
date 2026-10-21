@@ -10,6 +10,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-26T18:34:11Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T20:30:29Z
+      mode: "update"
+      note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
 ---
 
 # Compose Shikumi decisions in durable Flows
@@ -28,6 +34,8 @@ Implement [IR-12](../improvement-requests/compose-shikumi-decisions-in-durable-f
 A Flow is a compiled function interpreted inside the agent-run durable workflow. A journal stores named step results so a restarted worker can resume. A model tuple means provider, API, endpoint class, exact model ID, and thinking setting. The tuple grants no authority by itself: operator catalog membership, the journaled agent declaration, and any pinned sanctioned profile must all permit it. Model output proposes data; Haskell validation and the existing effect capabilities control execution.
 
 Scope includes a typed decision registry, operator model catalog, per-agent model allow-list, an isolated provider runner, durable accounting for every provider attempt, versioned decision journals, workflow declarations and gates, and a tested authoring example. It excludes per-node model selection, arbitrary provider identifiers from payloads, visual editing, IR-7 signing/read-API completion, and changing existing router semantics. Every actual call inside a program remains individually accounted for even though model selection is per invocation.
+
+The Flow-facing contract belongs to Shikigami: a typed static decision slot, an authorized model alias and typed input produce a validated typed result. Shikumi and Handan APIs remain behind the registry and runner adapter; this boundary does not assume their APIs will never change. Probability-backed output types, Jev transport and calibration are optional future integrations, outside this initiative's acceptance criteria.
 
 
 ## Decomposition Strategy
@@ -69,17 +77,23 @@ EP-1 (73) -> EP-2 (74) --+
 
 The completed declarations/catalog/router work in `docs/masterplans/8-declarative-router-agents.md` and the implemented profile and evidence core in `docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md` and `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` are existing prerequisites. The unfinished signing and endpoint work in `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` is not a hard dependency. It remains coordinated by `docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md`. This initiative consumes the evidence core and must not claim an ordinary run has a reviewed-artifact binding it was never given.
 
+`mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` is a coordination dependency, not a hard prerequisite for any child here. It plans probability-bearing results and local decision settings in program `Params`; its cache/trace replay can intentionally derive a different answer from the same provider response after settings change. Our current typed generative example needs none of those unreleased features. Before a future adoption, qualify the required published Shikumi/Baikai interfaces and the Handan adapter, retain the identities and codecs needed by existing runs, and introduce new program/result versions. Neither Jev support nor the calibration optimizer gates this initiative. The intended canonical MasterPlan URI is currently unresolved by Mori; the plan was read in the registered source checkout.
+
 
 ## Integration Points
 
 
 EP-1 owns new modules `shikigami-core/src/Shikigami/Program/Decision.hs` and `shikigami-core/src/Shikigami/Decision/Contract.hs`. They define typed program references, immutable implementation/result-validator identities, serializable decision descriptors, bounded failures, and the begin/finish call callbacks. EP-2 implements the execution side; EP-3 implements storage callbacks; EP-4 composes them. Changing a persisted identity means a new version, never overwriting a registry key.
 
+EP-1 also owns parameter-state identity: a versioned digest of the registered program's complete effective parameter state, including every node's instruction override and demonstrations, plus the version of local result derivation and its effective defaults. Future decision thresholds, cuts and weights must join that identity when supported. The policy snapshot, prepared decision and evidence references carry these identities; the immutable registration retains the matching executable and state. A request/cache key or structural program shape is insufficient because local settings can change an answer without changing either. EP-2 verifies a pending invocation against the full pinned identity; EP-3 stores it without reinterpreting it; EP-4 pins it for every slot before the first invocation. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) records this boundary.
+
 EP-1 owns `shikigami-core/src/Shikigami/Decision/ModelCatalog.hs`, the `decisionModels` agent allow-list, `schema/Agent.dhall`, and the operator catalog configuration in `Shikigami.App.Config`. EP-4 threads the resolved catalog through the worker and one-off agent runtime. EP-2 consumes a resolved selection and rechecks actual provider options. Secrets and provider handlers stay process-local; journals contain immutable descriptor identity and an opaque credential binding only. Missing or changed bindings cannot fall back to process defaults.
 
 EP-2 owns `shikigami-core/src/Shikigami/Program/DecisionRunner.hs` and the refactoring of provider tuple checking in `Shikigami.Behavior.Provider`. An invocation uses a private registry with an authorized wrapper around the selected real handler; the wrapper is below Shikumi retries and captures each actual attempt. No process-global registry mutation changes another run's model or credential. The existing timeout, retry, rate, tool, and profile limits remain effective.
 
 EP-3 owns new `shikigami-core/src/Shikigami/Decision/Evidence.hs`, additive attempt-ledger migrations, and extensions to `Shikigami.Attestation.Evidence`, `Compliance`, and `EvidenceStore`. The ledger records expected calls before dispatch and terminal evidence before a successful decision can be journaled. Full Baikai evidence stays encode-only JSON; restartable compliance uses an explicitly versioned Shikigami fact record derived from typed provider evidence. Both live and restarted roll-ups use one evaluator. EP-4 supplies stable parent run/workflow/generation/decision identities and invokes finalization; it never invents reviewed-artifact metadata.
+
+Probability/confidence data, if present in a future registered output, is validated result data preserved by EP-1's versioned result codec and EP-4's outcome journal. It cannot satisfy EP-3's provider-attempt or compliance-evidence requirements. A completed outcome is decoded with its retained codec, never recomputed from provider evidence under new parameters. EP-4 owns a regression using current APIs that changes local derivation while leaving the provider response unchanged and proves both completed-result reuse and pending-state pinning.
 
 EP-4 owns `shikigami-core/src/Shikigami/Flow/Decision.hs`, `FlowEffects`, workflow wiring, program and flow example registrations, `domain/shikigami-agent-run.keiro`, generated conformance expectations, and authoring documentation. It journals one complete decision-policy snapshot for the Flow and preparation/result steps for each call site. The snapshot binds all declared decision slots, including slots not yet executed, so changing a deployment between decisions cannot reinterpret the pending one. A completed step is read before consulting a live registry; pending steps require the pinned implementation and credential binding to remain available.
 
@@ -89,7 +103,7 @@ Each plan adds only its own module/test entries to `shikigami-core/shikigami-cor
 ## Progress
 
 
-Implementation has not started. At implementation kickoff, add an unchecked item for each milestone of the four child plans and update it at every stopping point.
+All four children are Not Started. Plan 73 is ready first; plans 74 and 75 follow its accepted contracts, then plan 76 integrates them. [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) does not block this scope. Each child owns its milestone checklist; the registry above remains the source of truth for whole-child status.
 
 
 ## Surprises & Discoveries
@@ -110,6 +124,8 @@ None recorded during implementation.
 2026-09-26: Separate durable decisions from actual provider attempts. Keiro steps are at-least-once across the action/append crash window. Completed decision replay makes zero new calls, but a lost append can require a new provider attempt, which must be separately recorded rather than overwritten or called exactly-once.
 
 2026-09-26: Keep IR-7's reviewed-artifact requirements honest. Persist ordinary run decision evidence and reuse its call-compliance evaluator; only an explicitly supplied valid review binding can participate in the existing sanctioned attestation lifecycle.
+
+2026-10-21: Coordinate with `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` without adding a hard dependency. Pin effective parameter state and derivation semantics, preserve committed outcomes independently of upstream cache/trace re-derivation, and keep probability data separate from execution evidence. Revision: clarify the adapter and identity contracts across plans 73–76 so implementation can proceed on current APIs; Jev and calibration remain outside acceptance. See ADR 0041.
 
 
 ## Outcomes & Retrospective

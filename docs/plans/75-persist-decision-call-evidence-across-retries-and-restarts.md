@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-26T18:34:42Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T20:30:29Z
+      mode: "update"
+      note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
 ---
 
 # Persist decision call evidence across retries and restarts
@@ -50,6 +56,8 @@ None recorded during implementation.
 
 2026-09-26: Ordinary runs receive durable decision-call reports without fabricated reviewed-artifact bindings. Existing sanctioned attestation finalization remains available only with its real caller-supplied binding.
 
+2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: retain parameter/derivation identities in invocation bindings and keep judgment probabilities separate from provider-attempt/compliance evidence. Probability data belongs to the validated result envelope, not a substitute terminal record. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
+
 
 ## Outcomes & Retrospective
 
@@ -77,6 +85,8 @@ Migrations are append-only files under `shikigami-migrations/sql-migrations/` wi
 
 Create `shikigami-core/src/Shikigami/Decision/Evidence.hs` and an additive migration for decision invocation and attempt records. Store parent run/workflow/generation, static decision label, prepared-decision identity, immutable program/schema/validator IDs, selected model descriptor, pinned profile reference, and a versioned status. Store each actual provider attempt with a unique call ID, attempt ordinal, effective tuple, expected/terminal state, optional relationship, optional Baikai call ID, and preserved terminal evidence JSON. An idempotent ensure-invocation operation must compare immutable binding bytes on conflict; a mismatch is a refusal. Do not put credentials, prompts, or unvalidated output into these operational rows.
 
+The immutable invocation binding includes EP-1's parameter-state digest/format and local derivation version. Store these references, not the instruction/demonstration payloads; changed state under the same invocation identity is a conflict. Expose the identities in bounded inspection so two equal provider requests with different local program meaning remain distinguishable.
+
 Implement the shared `beginCall` and `finishCall` hooks. Under the run ledger's serialization boundary, `beginCall` checks remaining duration/call/budget limits, allocates a fresh attempt identity, and commits its expectation before returning. An expectation proves admission, not that the network request reached a provider. `finishCall` atomically persists the terminal status, exact provider evidence when present, and normalized compliance facts. Retrying the same finish with identical data converges; different evidence under the same attempt ID is a conflict. Distinct actual retries always remain distinct rows. Enforce accounting across concurrent calls rather than using a mutable per-process ordinal as persistent identity.
 
 Migrate twice against the test fixture and prove the second run changes nothing. Add `DecisionEvidenceSpec` to the PostgreSQL test suite. Simulate a crash after begin but before finish and verify that a fresh connection observes the unresolved expectation. An evidence-write fault must leave no successful terminal marker.
@@ -85,6 +95,8 @@ Migrate twice against the test fixture and prove the second run changes nothing.
 
 
 Define a versioned consumer-owned `CallComplianceFacts` containing exactly the fields the current compliance evaluator needs: requested/effective/observed identities with their evidence quality, thinking and sampling translations, outcome, usage/cost uncertainty, strength, and correlation/relationship data. Derive it once from typed `ModelCallEvidence` at terminal capture. Preserve unknown values as unknown. Keep the exact upstream JSON beside it for inspection; never rebuild a typed provider record from that JSON or infer an observed model from an echoed request model.
+
+`mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` plans probability-bearing decision results. Their probabilities/confidence describe a judgment, not whether an authorized provider attempt occurred. EP-1's result codec and EP-4's outcome journal preserve any such validated result data; this ledger and its compliance evaluator continue to require actual attempt/terminal facts. Do not derive a new decision from those facts during report reload. Use current typed fixtures to prove a confidence-bearing result cannot close an unresolved attempt. No upstream probability type or Jev release is required for this plan.
 
 Refactor `Shikigami.Attestation.Compliance` so both live typed records and persisted facts feed one shared call-policy evaluator. Preserve all existing reason semantics. Add a run decision-evidence report keyed by run identity containing all decision invocations, expected and terminal attempts, pinned profile, completeness status, and the common call/limit assessment. A report without a profile says so; a call-policy pass is not a signed sanctioned attestation.
 
@@ -130,6 +142,8 @@ The PostgreSQL suite obtains isolated databases through `withShikigamiMigratedSu
 Two terminal calls under one decision yield two unique call rows and exact preserved upstream evidence; a second model in a later decision appears separately in the same parent run report. Restarting the process and querying/evaluating that report preserves every ID, outcome and compliance reason. Repeating an identical terminal write yields one row, while a different payload with its ID fails.
 
 An unresolved expected call blocks complete sanctioned accounting. A denied tuple never creates an actual provider terminal. A retried provider call after a lost decision append increases the attempt count and retains the first call. No in-memory cache reset erases spending or turns uncertain usage into zero. The sanctioned fixture needs real fixture artifact/review bindings; the ordinary-run fixture explicitly lacks them and still exposes accurate mixed-model call evidence.
+
+Reloaded invocation reports preserve parameter-state and derivation identities exactly. Reusing an invocation identity with different state fails rather than merging its evidence. Confidence or probability fields in a decision result never turn a missing terminal into complete accounting.
 
 
 ## Idempotence and Recovery

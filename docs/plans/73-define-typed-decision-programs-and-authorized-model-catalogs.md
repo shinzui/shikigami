@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-26T18:34:27Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T20:30:29Z
+      mode: "update"
+      note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
 ---
 
 # Define typed decision programs and authorized model catalogs
@@ -50,6 +56,8 @@ None recorded during implementation.
 
 2026-09-26: Version the implementation, schemas, validator, and model descriptor explicitly. Program shape serialization omits closures and cannot by itself identify the implementation.
 
+2026-10-21: Revision for coordination with Shikumi's probability-backed outputs: include complete effective parameter state and local derivation semantics in immutable program identity, and retain separate model-output and durable-result codecs where their shapes differ. The Flow API remains Shikigami-owned; future upstream output types do not become a prerequisite. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
+
 
 ## Outcomes & Retrospective
 
@@ -68,6 +76,8 @@ To be filled during implementation; distill catalog and typed-program ownership 
 
 Use Mori before reading dependency APIs. `mori://shinzui/shikumi` owns `shikumi/src/Shikumi/Program.hs` and schema APIs; source-file artifact URIs are pending. Research verified the released 0.4.0.0 tag and Hackage on 2026-09-26. Recheck authoritative releases before changing bounds. Follow the project's direct record-field naming convention and `DuplicateRecordFields`.
 
+`mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` plans `Noul`, `Choice`, `Score` and local decision settings in `Params`. It is a coordination dependency only. Current `Params` already contains instruction overrides and demonstrations, and parameter changes can change a program's meaning without changing its structural shape. Future thresholds, cuts and weights may change a derived answer without changing the provider request. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) requires the entire effective state and derivation version to be bound before execution; no unreleased upstream type is needed to implement this contract.
+
 
 ## Plan of Work
 
@@ -77,9 +87,15 @@ Use Mori before reading dependency APIs. `mori://shinzui/shikumi` owns `shikumi/
 
 Create `Shikigami.Program.Decision` and `Shikigami.Decision.Contract`. A typed `DecisionProgramRef i o` identifies a registered program by stable ID, immutable version, implementation digest, input/output schema versions, and validator version. Registration bundles `Program i o`, JSON codecs and pure input/result validators. An existential wrapper allows a finite registry, while typed lookup checks both type witnesses and stored contract identities; never cast an Aeson value without decoding it. Keep the existing Handan task registry intact. Detect duplicate program/version identities at construction.
 
+Add a parameter-state format version, a digest over a canonical encoding of the complete effective program parameter state, and a local derivation version to the immutable descriptor. Include the ordered per-node `Params` values, resolve effective defaults under the recorded version, and bind any additional state used by local result derivation. The implementation identity still covers opaque code and closures that parameter serialization cannot represent. Retain the matching state with its immutable executable registration; snapshots and prepared decisions carry the identities without copying prompts or demonstrations into the attempt ledger. Reject replacement of a program/version by different parameter or derivation state. Changing settings requires a new immutable registration even if the provider request/cache key is unchanged.
+
+The model's response schema and the stored typed result need not have the same JSON shape. Keep the model schema used by Shikumi distinct from the versioned durable-result codec for `o`, and retain that codec independently of the executable registration. Preserve the complete validated result, including probability/confidence fields if a future program uses them; do not reduce a rich result to its selected label. Shikigami owns these contracts and its static-slot interface, while dependency-specific adaptation stays in the registry and runner. This plan adds no Jev adapter, probability type or calibration engine.
+
 Define a finite `DecisionSlot` descriptor with a static label, allowed typed program versions, and allowed model aliases. The workflow integration later supplies actual slots. Define a serializable `DecisionPolicySnapshot` containing the pinned descriptors for all slots, allowed model descriptors, and a policy reference consistent with the separately journaled `ResolvedProfile`. Define `PreparedDecision` with workflow/run/generation/label identity, exact program and schema identities, validated input, selected model descriptor, and the profile reference. Define a versioned `DecisionOutcome` containing either bounded failure or validated JSON result plus preparation/evidence references. None contains secrets, a provider handler, or a Haskell closure.
 
 Failures distinguish unknown program, contract mismatch, invalid input, unknown/forbidden/unavailable model, unavailable pinned implementation, output decode/validation, provider failure, and evidence failure. Bound displayed detail to 512 characters and never include raw prompts or secrets. Unit tests prove round trips, rejection of unknown versions, registry collisions, and incompatible typed lookups. Run the core test command below and observe these cases pass before proceeding.
+
+Use current instruction/demonstration parameters to prove that a state change changes identity despite an unchanged program shape, that a reused program/version with changed state is rejected, and that pinned descriptors round-trip all state/derivation identities. A plain typed result fixture with a confidence field proves the durable codec retains the full result without depending on future Shikumi decision types.
 
 ### Milestone 2: Load operator catalogs and agent permissions
 
@@ -121,6 +137,8 @@ Register new tests as `DecisionContractSpec` and `DecisionModelCatalogSpec` in t
 A registry lookup with the right program/version/input/output witness succeeds; replacing the result contract or looking up an unknown version yields a bounded error. A payload containing a new model ID or a credential cannot add a model to the resolver's output. With aliases `triage` and `investigate` declared by both operator and agent, an unrestricted or two-model profile admits both; a one-model profile admits only its exact tuple. A different thinking setting is independently refused.
 
 Old `AgentDecl` JSON decodes to no decision permission and re-encodes without a new empty-field key. Current Dhall fixtures load with explicit defaults. Neither a serialized policy snapshot nor a rendered refusal contains a test credential marker. No provider test counter changes during admission. The contract tests fail before these types/resolvers exist and pass with the implementation.
+
+All slot descriptors in the policy snapshot and all prepared decisions identify parameter state and derivation semantics as well as code, schemas and validators. Two registrations with the same structure but different effective parameters cannot share immutable identity. The retained durable-result codec preserves all validated output fields and can decode a completed outcome without looking up an executable program.
 
 
 ## Idempotence and Recovery

@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-09-26T18:34:42Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T20:30:29Z
+      mode: "update"
+      note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
 ---
 
 # Compose and verify typed Shikumi decisions in durable Flows
@@ -52,6 +58,8 @@ None recorded during implementation.
 
 2026-09-26: The example uses two finite decisions and the existing governed Delegate/Sink capabilities. It requires no unbounded loop or journal rotation; future looping authors must follow the continueAsNew rules.
 
+2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: pin effective parameters and derivation versions for every slot, and distinguish committed workflow replay from upstream evidence replay that intentionally recomputes answers. Preserve rich validated outputs with retained result codecs while keeping the Flow API independent of optional Jev/probability/calibration features. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
+
 
 ## Outcomes & Retrospective
 
@@ -83,7 +91,11 @@ Create `shikigami-core/src/Shikigami/Flow/Decision.hs`. Expose an abstract typed
 
 Before the new Flow's first decision, journal `decision-policy` containing the complete `DecisionPolicySnapshot` built from the journaled declaration, already resolved profile, compiled slot descriptors and operator model catalog. This captures both triage and investigation slots, including pinned program implementation/schema/validator versions and model option metadata. Secret material is looked up separately through opaque binding identities and never serialized. Later selection can depend on the first journaled result, but cannot expand the snapshot's aliases.
 
+Also capture each slot's parameter-state digest/format and local derivation version from EP-1. Retain the corresponding immutable executable and effective state, including instructions/demonstrations and any local derivation settings. A pending slot must resolve that exact state, even if its provider request would be unchanged by newer settings. These identities join preparation and evidence references; missing pinned state fails before dispatch. The public `decide` interface remains Shikigami-owned and does not expose upstream backend capabilities or calibration controls.
+
 For each invocation, first journal a prepared descriptor with validated input and selected model, then journal a versioned outcome. Journal preparation as `Either DecisionFailure PreparedDecision`, and journal policy resolution as an equivalent bounded success/refusal value, so permanent admission failures replay without fresh catalog reads. Result steps store `DecisionOutcome`; transient transport failures throw before the result append. Preparation makes the exact choice survive a crash during execution; the runner/evidence hooks record actual attempts below it. Read completed result steps before consulting live program implementations or the model catalog. Decode using the recorded schema/validator version's retained pure codec. Never revalidate an old success against a changed current domain policy. A removed implementation may prevent a pending call, but cannot force a completed call to rerun. Unknown historical outcome versions stop with an explicit compatibility error.
+
+Use EP-1's durable-result codec independently of the model-facing response schema, retaining the full validated `o`. A completed outcome must not re-enter Shikumi or re-derive a label/value from stored probabilities under any current settings. `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs` intentionally permits cache/trace replay to produce a new answer after changing local thresholds, cuts or weights; that operation is distinct from replaying a committed workflow decision. Adopting those output types later requires new immutable registrations and compatible versioned result codecs, not a new Flow invocation API. That upstream plan, Jev support and calibration are not prerequisites for this example or its acceptance.
 
 Thread the pinned profile and policy snapshot through the workflow runtime. For a decision-only Flow, remove the erroneous requirement that the unused process-default model be sanctioned; check its actual selected models at dispatch. Preserve default-model checks for flows using the existing Routing or PracticeReview evaluator, using explicit compiled Flow requirements or equivalent capability-specific gates. Do not remove their protection as a side effect. Add regression tests where the default is forbidden but both chosen decision models are permitted, plus tests that existing router calls still reject their forbidden default.
 
@@ -114,11 +126,15 @@ Create `shikigami-core/test-postgres/Shikigami/DecisionWorkflowSpec.hs` and regi
 
 Replay the same workflow ID after changing the default, catalog aliases, provider output and available program implementation. With both results completed, observe identical results/branches and zero new provider calls. Next interrupt after the first result append but before the second preparation, restart with changed catalog/program defaults while retaining the pinned versions, and verify only the pending investigation executes under the original policy. If the pinned implementation or credential binding is removed, verify a bounded unavailable-pinned-decision failure before provider dispatch; no substitution is allowed.
 
+Add a current-API fixture in which two versioned registrations have the same provider request and response but different pure local derivation, producing different branch results. Include a confidence field in the validated result. After the original outcome commits, replay under the newer registration/settings and assert identical original fields/branch with zero new calls and zero local re-derivation. In the between-decisions restart case, retain both versions and verify the pending slot uses its original parameter-state/derivation identity; removing that state must refuse before dispatch. Assert the stored identities and rich result survive the outcome codec. This proves the boundary without introducing unreleased Shikumi types or a calibration engine.
+
 Interrupt after the second preparation and verify selection/input remain fixed. Inject a loss after provider execution but before a result append: allow a repeat attempt and assert evidence retains both actual attempts. Do not assert exactly-once transport in this crash window. Once the result is committed, every replay makes zero additional calls. Inject evidence persistence failure and assert no successful result journal record. Restart the whole collector/store boundary to prove a run-level report is not being reconstructed from surviving IORefs.
 
 Exercise malformed output, domain-invalid output, unknown program and schema, undeclared alias, forbidden thinking, unavailable binding, and a profile allowing only model A. Assert bounded run failures and no subsequent protected effects; the forbidden B selection produces zero B calls. With the two-model profile and proper sanctioned fixture bindings, the shared compliance roll-up accounts for every internal call and reports the expected result. Unresolved attempts or missing terminals cannot pass complete accounting. Verify default-model router behavior, old Flow declarations, children and sinks remain correct.
 
 Write `docs/shikumi-flow-decisions.md` with the compiled example, config/declaration setup, exact commands, recorded evidence expectations, static-label/version rules and crash-window semantics. Update the IR's status/index/log and roadmap only to the status supported by actual completed acceptance, using its bundle contract rather than hand-editing unrelated changes. Distill Decision Logs across all four plans into ADRs and update the master registry only after the full suite and gate succeed.
+
+Explain the distinction between workflow-result replay and deliberate evidence re-derivation, how parameter changes create new program identities, and why result probabilities do not establish provider-call compliance. Qualify any future upstream integration at the adapter boundary rather than promising dependency API stability. Update ADR 0041 with implementation evidence when these constraints are accepted by the tests.
 
 
 ## Concrete Steps
@@ -160,6 +176,8 @@ These are acceptance expectations, not tests performed while drafting the plan.
 IR-12 acceptance 1 is the two-model typed example with a genuine conditional branch and explicit program/step/model journal identities. Acceptance 2 is completed-workflow replay under changed defaults, response and program registry with no new model, child or sink effects. Acceptance 3 is strict result/input/domain rejection and pre-dispatch authorization with bounded outcomes. Acceptance 4 is two-model versus one-model pinned profile tests and all internal program calls in the common run assessment. Acceptance 5 is interruption after the first committed decision and successful resumed completion matching the uninterrupted result. Acceptance 6 is the checked inventory, real patch branches, generated conformance and evolution gate.
 
 Additional cases distinguish pending implementation unavailability from completed replay, and distinguish the provider/append crash window from committed decision replay. Acceptance requires actual database journals and the real runner with deterministic providers; unit fixture success alone is insufficient. Store inspection must show exact parent workflow/generation/static label, program version, selected tuple and every actual attempt. No raw secret marker may appear in journal JSON, diagnostics, reports or telemetry.
+
+Program inspection also identifies effective parameter state and local derivation version. The equal-request/different-local-derivation fixture preserves the committed result and all confidence fields, while the pending-slot case retains its original state or refuses without substitution. No output type from [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs), Jev provider or optimizer is required to satisfy these checks.
 
 
 ## Idempotence and Recovery
