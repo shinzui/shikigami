@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T20:30:29Z
       mode: "update"
       note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:00:35Z
+      mode: "update"
+      note: "Apply review: prerequisite narrowed to plan 73 milestones 1 and 3"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -38,7 +43,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 Make every provider attempt within a Flow decision visible after a worker restart, and make the final run assessment account for all of them. A two-model program, failed attempt, retry, and missing terminal must remain distinguishable. Operators can inspect a decision's parent run, static step, program version and actual model-call records without relying on a process-local trace collector.
 
-Hard dependency: `docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md` defines prepared decision identities and call callbacks. This plan can proceed alongside `docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md` with typed Baikai evidence fixtures. `docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md` connects the ledger to production Flow execution and finalization.
+Hard dependency: milestones 1 and 3 of `docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md`, which define prepared decision identities, durable-result codecs and the call callbacks with their fake evidence. Its catalog milestone is not required here. This plan can proceed alongside `docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md` with typed Baikai evidence fixtures. `docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md` connects the ledger to production Flow execution and finalization.
 
 
 ## Progress
@@ -63,6 +68,8 @@ None recorded during implementation.
 2026-09-26: Ordinary runs receive durable decision-call reports without fabricated reviewed-artifact bindings. Existing sanctioned attestation finalization remains available only with its real caller-supplied binding.
 
 2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: retain parameter/derivation identities in invocation bindings and keep judgment probabilities separate from provider-attempt/compliance evidence. Probability data belongs to the validated result envelope, not a substitute terminal record. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
+
+2026-10-21: Review revision. The prerequisite is narrowed to plan 73's milestones 1 and 3; persistence needs the typed contracts and hooks, not configuration loading.
 
 
 ## Outcomes & Retrospective

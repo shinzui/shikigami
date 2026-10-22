@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T20:30:29Z
       mode: "update"
       note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:00:35Z
+      mode: "update"
+      note: "Apply review: consume plan 73 FlowDef slot inventory instead of redefining it"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -66,6 +71,8 @@ None recorded during implementation.
 
 2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: pin effective parameters and derivation versions for every slot, and distinguish committed workflow replay from upstream evidence replay that intentionally recomputes answers. Preserve rich validated outputs with retained result codecs while keeping the Flow API independent of optional Jev/probability/calibration features. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
 
+2026-10-21: Review revision. The `FlowDef` slot inventory and its validation belong to plan 73; this plan owns the `Decision` effect, interpreter, labels and wiring, and consumes the inventory. The provider wrapper it invokes comes from plan 74 against the pinned Baikai 0.7.2.0.
+
 
 ## Outcomes & Retrospective
 
@@ -93,7 +100,7 @@ The PostgreSQL suites in `shikigami-core/test-postgres/Shikigami/RouterWorkflowS
 ### Milestone 1: Add the capability and pin the complete policy
 
 
-Create `shikigami-core/src/Shikigami/Flow/Decision.hs`. Expose an abstract typed `DecisionStep i o` and `decide` operation whose arguments are a registered static slot, an allowed model alias and typed input. Its return type is the slot's validated result. Flow authors cannot supply a credential, provider handler or raw journal name. Add `Decision` to `FlowEffects` and give `FlowDef` a finite inventory of decision slots; existing flows default to no slots. Registry validation rejects duplicate labels, incompatible slot contracts and undeclared aliases before execution. Interpret all external work inside the capability.
+Create `shikigami-core/src/Shikigami/Flow/Decision.hs`. Expose an abstract typed `DecisionStep i o` and `decide` operation whose arguments are a registered static slot, an allowed model alias and typed input. Its return type is the slot's validated result. Flow authors cannot supply a credential, provider handler or raw journal name. Add `Decision` to `FlowEffects`. `FlowDef` already carries a finite decision-slot inventory from `docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md`, whose load-time validation rejects duplicate labels, incompatible slot contracts and undeclared aliases; read that inventory here to compile slot descriptors and do not redefine it. Interpret all external work inside the capability.
 
 Before the new Flow's first decision, journal `decision-policy` containing the complete `DecisionPolicySnapshot` built from the journaled declaration, already resolved profile, compiled slot descriptors and operator model catalog. This captures both triage and investigation slots, including pinned program implementation/schema/validator versions and model option metadata. Secret material is looked up separately through opaque binding identities and never serialized. Later selection can depend on the first journaled result, but cannot expand the snapshot's aliases.
 
