@@ -4,10 +4,11 @@ title: Expose addressed agent runs over the public HTTP API
 description: Add an agent-run vertical to ShikigamiApi so an external service can request a run for a named agent across the service boundary, with server-owned idempotency on a caller-supplied key, instead of writing into the shared run-job queue.
 timestamp: "2026-08-07T00:00:00Z"
 generated:
-  by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  by: process:claude-code
+  at: "2026-10-22T02:58:26Z"
 requestId: IR-8
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
 reviews:
   - kind: model
@@ -26,12 +27,21 @@ reviews:
 
 ## Status
 
-**Proposed; no implementation plan selected for the public run-start API.**
+**Accepted; implementation planned but not started.**
+[MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md)
+selects
+[plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md)
+for this request: `POST /agents/{agentName}/runs` with a Shikigami-owned acceptance ledger
+written in the same transaction as the queue send, so the same caller key never starts a
+second run. Plan 90 depends on the agent catalog of
+[plan 88](../plans/88-serve-the-declared-agent-catalog-over-http.md) (the typed unknown-agent
+answer) and on the bearer authentication of
+[plan 89](../plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md).
+The returned run identity is followed by
+[IR-10](expose-agent-run-status-over-http.md) through
+[plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md).
 [Plan 36](../plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md)
-delivered the shared API, client, and OpenAPI structure; it does not supply this addressed-run
-endpoint. Coordinate implementation with
-[IR-10](expose-agent-run-status-over-http.md) so the returned run identity can be followed
-to a durable terminal outcome.
+delivered the shared API, client, and OpenAPI structure these plans extend.
 
 ## Why
 

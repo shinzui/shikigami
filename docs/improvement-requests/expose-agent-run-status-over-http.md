@@ -4,10 +4,11 @@ title: Expose terminal agent-run status over the public HTTP API
 description: Publish a typed, idempotent run-status read endpoint so callers that requested an addressed agent run can observe its durable running, succeeded, or failed outcome without reading Shikigami's private workflow or session storage.
 timestamp: "2026-09-20T20:31:12Z"
 generated:
-  by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  by: process:claude-code
+  at: "2026-10-22T02:58:26Z"
 requestId: IR-10
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
 reviews:
   - kind: model
@@ -26,7 +27,15 @@ reviews:
 
 ## Status
 
-**Proposed; no implementation plan selected for the public run-status API.** This request complements
+**Accepted; implementation planned but not started.**
+[MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md)
+selects [plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md) for this
+request: `GET /agents/{agentName}/runs/{runId}` with the closed lifecycle `accepted`,
+`running`, `succeeded`, `failed`, and `cancelled`, derived through the supported keiro and
+kioku operations that `shikigami runs show` already composes, joined to the acceptance ledger
+of [plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md),
+plus a relay-paginated `GET /agents/{agentName}/runs` history. Plan 91 depends on plan 90,
+which supplies the run identifier this request follows. This request complements
 `mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-8`. IR-8 lets an
 external caller request a run and receive its stable run identifier. This request lets that
 caller follow the identifier to the run's durable outcome. Together they support the agent-driven
@@ -34,7 +43,7 @@ upgrade portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2` without exp
 database, queue, or workflow-journal schema.
 
 [Plan 30](../plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md)
-delivered operator CLI inspection, rather than the public HTTP resource requested here.
+delivered operator CLI inspection, whose join plan 91 reuses for the public HTTP resource.
 
 ## Context
 

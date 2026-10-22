@@ -15,6 +15,11 @@
   instead of calling plans 35 and 36 pending. Add the missing prerequisite link to plan 73
   in IR-17 and clarify that its catalog is not implemented. Refresh `generated.at` only on
   these two edited requests; preserve completion timestamps and prior review provenance.
+* **Update**: IR-8 moves from proposed to accepted: plan 90 owns the addressed-run route
+  under MasterPlan 15, after the agent catalog (plan 88) and bearer authentication (plan 89),
+  with implementation not started.
+* **Update**: IR-10 moves from proposed to accepted: plan 91 owns the run-status and history
+  routes under MasterPlan 15, after plan 90, with implementation not started.
 
 ## 2026-10-11
 
