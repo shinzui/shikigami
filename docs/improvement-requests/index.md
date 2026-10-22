@@ -8,6 +8,33 @@ okf_version: "0.2"
 
 # Improvement Request
 
+Status and selected implementation plans, audited on 2026-10-22 UTC (2026-10-21 local) against the current
+plan progress, recorded acceptance evidence, and repository tree. Accepted requests
+have selected plans whose implementation has not started. Proposed requests have no
+selected plan for their full contract; related and consuming plans are linked in the
+individual requests.
+
+| Request | Status | Selected implementation plan |
+| --- | --- | --- |
+| [IR-1](consult-meibo-agent-lifecycle.md) | Completed | [Plan 23](../plans/23-agent-lifecycle-control-with-meibo-principals.md) |
+| [IR-2](authorized-cross-cluster-diagnostic-tools.md) | Proposed | None |
+| [IR-3](add-declarative-router-agents.md) | Completed | [MasterPlan 8](../masterplans/8-declarative-router-agents.md), plans 40–42 |
+| [IR-4](add-architecture-practice-review-flow.md) | In progress | [MasterPlan 9](../masterplans/9-architecture-practice-review-flow.md), plans 43–46 and closeout plans 60–63 |
+| [IR-5](governed-agent-evolution.md) | Proposed | None |
+| [IR-6](support-a2a-cross-runtime-agent-interoperability.md) | Proposed | None |
+| [IR-7](attest-sanctioned-agent-execution.md) | In progress | [MasterPlan 10](../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md), plans 49–52 |
+| [IR-8](expose-addressed-agent-runs-over-http.md) | Proposed | None |
+| [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) |
+| [IR-10](expose-agent-run-status-over-http.md) | Proposed | None |
+| [IR-11](provide-governed-mutable-repository-workspaces.md) | Proposed | None |
+| [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Accepted | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76 |
+| [IR-13](support-optional-major-task-tracking.md) | Proposed | None |
+| [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) | Accepted | [Plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
+| [IR-15](support-continuing-worker-sessions.md) | Accepted | [Plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
+| [IR-16](support-adaptive-durable-orchestration.md) | Accepted | [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md), plans 81, 85, and 86 |
+| [IR-17](select-governed-models-for-agent-runs.md) | Accepted | [Plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
+| [IR-18](support-recurring-objective-supervision.md) | Accepted | [Plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
+
 - [Add the architecture-practice review flow](add-architecture-practice-review-flow.md) - Orchestrate advisory architecture review against revision-pinned practice evidence.
 - [Add declarative router agents](add-declarative-router-agents.md) - Declare specialist expertise and route work through durable, typed delegation.
 - [Attest sanctioned model execution for agent runs](attest-sanctioned-agent-execution.md) - Resolve a versioned execution profile before a run, collect every correlated model call, bind the result to the exact reviewed artifact and agent version, and issue a signed tamper-evident run attestation.

@@ -5,7 +5,7 @@ description: Implement authenticated, authorized, durable delegation between ind
 timestamp: "2026-07-30T00:45:00Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-22T01:23:55Z"
 requestId: IR-6
 status: proposed
 origin: mori://shinzui/kikan
@@ -27,7 +27,9 @@ reviews:
 ## Status
 
 **Proposed; no implementation plan selected.** Existing durable delegation and
-router plans operate within one Shikigami runtime. They do not implement the authenticated
+router work in [plan 35](../plans/35-delegation-as-a-first-class-declared-capability.md)
+and [MasterPlan 8](../masterplans/8-declarative-router-agents.md) is complete and operates
+within one Shikigami runtime. It does not implement the authenticated
 cross-runtime A2A protocol and recovery contract requested here.
 
 Adopt the Agent2Agent (A2A) protocol as Shikigami's standard external
@@ -47,15 +49,14 @@ starts a deterministic Keiro child workflow, pre-journals its `RunJob`, records 
 parent/child lineage, and lets the parent suspend in `awaitDelegated`. That primitive is local:
 the target is an agent name in the same workflow registry and the child has no runtime address.
 
-The pending first-class delegation plan,
-`docs/plans/35-delegation-as-a-first-class-declared-capability.md`, adds a declaration
+The completed [first-class delegation plan](../plans/35-delegation-as-a-first-class-declared-capability.md)
+added a declaration
 allow-list, cycle detection, a durable tree-wide child budget, a Flow capability, and partial
 result handling. Those rules remain the local and remote governance foundation. A2A is not a
 second delegation model; it is the external transport and task lifecycle used when the target
 address names another runtime.
 
-The pending service-boundary plan,
-`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`, fixes
+The completed [service-boundary plan](../plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md) established
 six packages: `shikigami-core`, `shikigami-api`, `shikigami-server`, `shikigami-workers`,
 `shikigami-migrations`, and `shikigami-client`. This request preserves that package set. Do
 not add a seventh `shikigami-a2a` package.

@@ -1,5 +1,21 @@
 # Bundle Update Log
 
+## 2026-10-22
+
+* **Audit**: Rechecked all 18 lifecycle values against the current plans and master plans,
+  recorded acceptance evidence, Git history through `4f472df`, and repository tree. All
+  statuses remain correct: completed IR-1, IR-3, IR-9; in-progress IR-4, IR-7; accepted
+  IR-12 and IR-14 through IR-18; proposed IR-2, IR-5, IR-6, IR-8, IR-10, IR-11, IR-13.
+  The October 21 revisions to MasterPlans 13 and 14 and their child plans change planning
+  contracts, not implementation readiness; all those children remain not started.
+* **Update**: Add a status and selected-plan table to the index. Verify all 11 `targetPlan`
+  paths and their request-body links; requests without selected full-contract plans retain
+  their proposed status and separately identify related or consuming work.
+* **Correction**: IR-6 now links completed delegation and service-boundary prerequisites
+  instead of calling plans 35 and 36 pending. Add the missing prerequisite link to plan 73
+  in IR-17 and clarify that its catalog is not implemented. Refresh `generated.at` only on
+  these two edited requests; preserve completion timestamps and prior review provenance.
+
 ## 2026-10-11
 
 * **Audit**: Reconciled all 18 requests with the current plan corpus, recorded implementation

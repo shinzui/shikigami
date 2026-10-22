@@ -5,7 +5,7 @@ description: Resolve and pin operator-approved provider, model, and reasoning ch
 timestamp: "2026-10-10T23:44:58Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-22T01:23:55Z"
 requestId: IR-17
 status: accepted
 targetPlan: docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md
@@ -21,7 +21,8 @@ whole-assignment execution selection to [plan 82](../plans/82-pin-governed-execu
 continuing-session integration in [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) and [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
 [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the real typed-Flow decision-permission regression, and
 [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualifies distinct permitted settings in integrated delivery.
-The existing plan 73 catalog remains a prerequisite. This supplies role-appropriate
+The catalog in [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md)
+remains an unimplemented prerequisite. This supplies role-appropriate
 execution for [UC-1](../use-cases/adaptive-autonomous-delivery.md), without prescribing
 particular models or a permanent coordinator/worker pairing.
 
