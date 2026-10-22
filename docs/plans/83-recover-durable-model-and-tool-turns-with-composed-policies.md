@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:15Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "comments"
+      note: "Skill/Conversation/Approval symbols verified; ADR 0030 approval child and ADR 0022 receipt split not cited for M2/M3"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      mode: "update"
+      note: "Cite ADR 0030 for the approval child binding and ADR 0022 for the submit/observe receipt split"
 ---
 
 # Recover durable model and tool turns with composed policies
@@ -57,7 +69,7 @@ To be filled during implementation. Do not claim request completion until every 
 
 A replay transcript is the complete accepted sequence needed to reconstruct execution; semantic memory is a relevance-ranked optional input and call evidence is an audit observation. They cannot substitute for each other. `Attestation/Evidence.hs` uses an IORef collector and ordinal correlation, so it cannot be the transcript store. Baikai Response has no supported JSON codec and Context, Options and ModelCallEvidence are encode-only. Define versioned Shikigami records rather than invent upstream decoders. Mori-located dependency source belongs to `mori://shinzui/baikai`; source artifact handles are pending.
 
-[ADR 0010](../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md) requires atomic lifecycle/payload evidence and respects encode-only records. [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) pins provider leases and currently permits only observation overlays durably. [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) keeps fresh action checks; a harness permission is a local admission result, never a reusable external proof. [ADR 0015](../adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md) preserves journal bytes and separates storage failure from domain refusal.
+[ADR 0010](../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md) requires atomic lifecycle/payload evidence and respects encode-only records. [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) pins provider leases and currently permits only observation overlays durably. [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) keeps fresh action checks; a harness permission is a local admission result, never a reusable external proof. [ADR 0015](../adr/0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md) preserves journal bytes and separates storage failure from domain refusal. [ADR 0030](../adr/0030-an-approval-request-is-a-durable-child-workflow.md) makes each approval a dedicated `shikigami.approval` child keyed by a stable `ReviewRequestId` with a journaled run-local policy snapshot; milestone 2's permission binding extends that child rather than adding a second approval path. [ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) separates journaled decisions from delivery receipts; milestone 3's submit/observe executor follows the same split, with the workflow journaling accepted work and the executor's claim and outcome rows owning what actually happened.
 
 The repository is a Cabal multi-package Haskell service. `shikigami-core` owns domain behavior and store adapters; `shikigami-workers` owns queue, resume and timer processes; `shikigami-server` owns operator commands. `shikigami-migrations/sql-migrations/manifest` owns append-only SQL ordering. `shikigami-core/test-postgres/Main.hs` registers tests using `Shikigami.Migrations.TestSupport.withShikigamiMigratedSuite`, which supplies isolated disposable PostgreSQL databases. Register new modules and tests in the owning Cabal file and test entry point; generated files under `Generated/` are regenerated, never hand-edited.
 

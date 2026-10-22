@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:15Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "approved"
+      note: "DelegationBudget, Delegate context and spec paths verified; no hard child deps; acceptance observable"
 ---
 
 # Enforce root resource reservations across durable work

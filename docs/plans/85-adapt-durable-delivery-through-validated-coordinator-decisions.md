@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:15Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "changes-requested"
+      note: "ADR 0041 pinned decision identity not cited for the submit/observe call site; IR-13 stated as hard start dependency while M1 is fixture-first; maxConcurrentAdvances=1 verified"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      mode: "update"
+      note: "Cite ADR 0041 and ADR 0004; IR-13 provider is a completion gate, not a start gate"
 ---
 
 # Adapt durable delivery through validated coordinator decisions
@@ -23,7 +35,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Let a coordinator change its organization when new evidence warrants it: work directly, create bounded workers or local orchestrators, narrow/split/consolidate assignments, request a specialist or move ownership safely. This delivers adaptive control and actual bounded concurrency for [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md). Hard dependencies are `docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md` (and its transitive resource, model and harness dependencies), existing `docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md` (including plans 73–75), and a delivered IR-13 checkpoint adapter. Plan 86 separately qualifies integrated repository delivery. Recurring scheduling is not required.
+Let a coordinator change its organization when new evidence warrants it: work directly, create bounded workers or local orchestrators, narrow/split/consolidate assignments, request a specialist or move ownership safely. This delivers adaptive control and actual bounded concurrency for [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md). Hard dependencies are `docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md` (and its transitive resource, model and harness dependencies) and existing `docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md` (including plans 73–75). A delivered IR-13 checkpoint provider is a completion gate: milestone 1 may prove validation against the fixture adapter defined there, but this child cannot be marked Complete until the production adapter passes its acceptance. Plan 86 separately qualifies integrated repository delivery. Recurring scheduling is not required.
 
 
 ## Progress
@@ -57,7 +69,7 @@ To be filled during implementation. Do not claim request completion until every 
 
 `shikigami-core/src/Shikigami/Workflow/Versioning.hs` currently fixes `maxConcurrentAdvances` to one. Child count therefore does not demonstrate useful simultaneous progress. Plan 83's submit/observe execution driver separates long external work from short workflow advancement. A runtime capacity limit bounds executor occupancy; a root resource limit bounds one objective across all processes. Both must hold.
 
-[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md) pins the permitted target universe; [ADR 0029](../adr/0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md) validates model output before action. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) preserves capability-only IO, and [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) requires measured pool headroom. The existing IR-12 plans are not implemented yet and must not be treated as a working decision engine.
+[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md) pins the permitted target universe; [ADR 0029](../adr/0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md) validates model output before action. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) preserves capability-only IO, and [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) requires measured pool headroom. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) binds every typed decision to an immutable program registration, a versioned digest of its complete parameter state and its derivation version, and requires a committed outcome to be read through its retained codec before any live registration is consulted; milestone 2's submit/observe call site must persist those identities with the prepared work and never recompute a committed result. [ADR 0004](../adr/0004-one-options-value-and-a-checked-patch-set.md) is why milestone 3 changes `maxConcurrentAdvances` only through the single `WorkflowRunOptions` owner in `Workflow/Versioning.hs`. The existing IR-12 plans are not implemented yet and must not be treated as a working decision engine.
 
 The repository is a Cabal multi-package Haskell service. `shikigami-core` owns domain behavior and store adapters; `shikigami-workers` owns queue, resume and timer processes; `shikigami-server` owns operator commands. `shikigami-migrations/sql-migrations/manifest` owns append-only SQL ordering. `shikigami-core/test-postgres/Main.hs` registers tests using `Shikigami.Migrations.TestSupport.withShikigamiMigratedSuite`, which supplies isolated disposable PostgreSQL databases. Register new modules and tests in the owning Cabal file and test entry point; generated files under `Generated/` are regenerated, never hand-edited.
 

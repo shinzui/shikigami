@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:15Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "comments"
+      note: "delegatedWorkflowId generation claim verified; ADR 0022 precedent for result/event rows not cited"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      mode: "update"
+      note: "Cite ADR 0022 as precedent for result/event acknowledgement rows"
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -55,7 +67,7 @@ To be filled during implementation. Do not claim request completion until every 
 
 `shikigami-core/src/Shikigami/Agent/Delegate.hs` supplies governed one-shot spawning and cancellation. `Flow/Delegate.hs` exposes it without Store/IO in Flow bodies. `Agent/Conversation.hs` supplies rotation and epoch precedents, while `Agent/Conversation/SessionIndex.hs` is only a Kioku association cache. An idle continuing worker is not a completed Danwa conversation or a relevance-ranked memory result. Give it a new authoritative session identity linked to principal, parent coordinator, objective, assignment revision, run and memory session, with a stable root resource id across all of them.
 
-[ADR 0018](../adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md) requires a new epoch for a genuinely terminated workflow; [ADR 0023](../adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md) preserves admission before spawn. [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) keys continuity by recorded principal, not a mutable name. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) keeps Flow bodies free of direct external IO.
+[ADR 0018](../adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md) requires a new epoch for a genuinely terminated workflow; [ADR 0023](../adr/0023-delegation-is-governed-at-the-child-spawn-boundary.md) preserves admission before spawn. [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) keys continuity by recorded principal, not a mutable name. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) keeps Flow bodies free of direct external IO. [ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) is the precedent for milestone 1's result-and-event rows: a coordinator's journal records that it accepted or consumed a message, while the session store's acknowledgement and cursor rows own whether delivery happened.
 
 The repository is a Cabal multi-package Haskell service. `shikigami-core` owns domain behavior and store adapters; `shikigami-workers` owns queue, resume and timer processes; `shikigami-server` owns operator commands. `shikigami-migrations/sql-migrations/manifest` owns append-only SQL ordering. `shikigami-core/test-postgres/Main.hs` registers tests using `Shikigami.Migrations.TestSupport.withShikigamiMigratedSuite`, which supplies isolated disposable PostgreSQL databases. Register new modules and tests in the owning Cabal file and test entry point; generated files under `Generated/` are regenerated, never hand-edited.
 

@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:15Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "changes-requested"
+      note: "Missing the plan 73 descriptor field list and reusable providerCall/matchesCall predicate that MasterPlan 13 assigned on 2026-10-21"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      mode: "update"
+      note: "Consume plan 73 public descriptor fields and reusable tuple predicate from MasterPlan 13"
 ---
 
 # Pin governed execution settings for agent assignments
@@ -53,7 +65,7 @@ To be filled during implementation. Do not claim request completion until every 
 ## Context and Orientation
 
 
-`shikigami-core/src/Shikigami/Behavior/Run.hs` stores one process model/options in `BehaviorEnv`. `Behavior/Provider.hs` owns `providerCall`, `constrainBehaviorEnv` and `newBehaviorEnvFor`; `Behavior/Compatibility.hs` checks actual options before dispatch. `schema/Agent.dhall`, `Agent/Decl.hs` and `Agent/Loader.hs` have no whole-run execution alias selection. Plan 73 owns the planned `Decision/ModelCatalog.hs` and operator `behavior.decisionModels`; plan 74 owns decision invocation dispatch. Reuse that catalog and current HTTP builder, with separate permissions for decision slots and whole-run selection. Do not require a typed Shikumi invocation to run a Skill.
+`shikigami-core/src/Shikigami/Behavior/Run.hs` stores one process model/options in `BehaviorEnv`. `Behavior/Provider.hs` owns `providerCall`, `constrainBehaviorEnv` and `newBehaviorEnvFor`; `Behavior/Compatibility.hs` checks actual options before dispatch. `schema/Agent.dhall`, `Agent/Decl.hs` and `Agent/Loader.hs` have no whole-run execution alias selection. Plan 73 owns the planned `Decision/ModelCatalog.hs` and operator `behavior.decisionModels`; plan 74 owns decision invocation dispatch. Reuse that catalog and current HTTP builder, with separate permissions for decision slots and whole-run selection. Do not require a typed Shikumi invocation to run a Skill. On 2026-10-21 MasterPlan 13 fixed two contracts this plan consumes: the public model descriptor carries alias, descriptor version and digest, provider, API, endpoint class, exact model, explicit thinking preference, and an opaque binding identity and version, with HTTP option compatibility staying in `Behavior.Provider` and `Behavior.Compatibility`; and plan 73 refactors `providerCall` and `matchesCall` to run over a descriptor's declared tuple or an actual model/options pair without constructing a `BehaviorEnv`. Call that predicate for whole-run admission and before each dispatch; a gap found here is reported to plan 73 as a contract change, not patched locally.
 
 [ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md) pins the resolved profile; [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md) preserves missing-field defaults. [ADR 0040](../adr/0040-response-options-and-foreground-launches-have-separate-authority.md) shares HTTP compatibility and keeps foreground CLI launches separate. Background CLI support is outside this plan.
 

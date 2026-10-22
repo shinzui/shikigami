@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-10T23:32:16Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      verdict: "comments"
+      note: "Scheduler/Timer symbols and 100-row dispatcher verified; Keiro ADR-7 handle resolves; IR-13 stated as hard dep while acceptance treats it as completion gate"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T01:19:09Z
+      mode: "update"
+      note: "IR-13 provider is a completion gate, not a start gate"
 ---
 
 # Supervise recurring objectives from current durable checkpoints
@@ -23,7 +35,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Maintain an explicitly authorized ongoing objective across bounded cycles without duplicate workers or stale scheduled instructions. Fulfill [IR-18](../improvement-requests/support-recurring-objective-supervision.md). A successful cycle leaves the mandate active; expiry, revocation or cancellation stops new admission while preserving uncertain effects. Hard dependencies are `docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md` and its transitive foundations, plus the IR-13 current-checkpoint adapter. Plan 86 is a soft dependency for reuse of its coding fixture; recurrence can be qualified independently with governed read-only evidence.
+Maintain an explicitly authorized ongoing objective across bounded cycles without duplicate workers or stale scheduled instructions. Fulfill [IR-18](../improvement-requests/support-recurring-objective-supervision.md). A successful cycle leaves the mandate active; expiry, revocation or cancellation stops new admission while preserving uncertain effects. The hard dependency is `docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md` and its transitive foundations. A delivered IR-13 checkpoint provider is a completion gate: the mandate store and wake coalescing can be built against a fixture checkpoint adapter, but this child cannot be marked Complete until real objective checkpoints come from IR-13. Plan 86 is a soft dependency for reuse of its coding fixture; recurrence can be qualified independently with governed read-only evidence.
 
 
 ## Progress
