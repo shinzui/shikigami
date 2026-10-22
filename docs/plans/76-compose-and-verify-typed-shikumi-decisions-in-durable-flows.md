@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-21T20:30:29Z
       mode: "update"
       note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T00:41:18Z
+      verdict: "comments"
+      note: "Patch, label and gate approach matches workflow-versioning and the empty active patch set; FlowDef slot inventory ownership overlaps plan 73 M2; scope is heavy relative to siblings"
 ---
 
 # Compose and verify typed Shikumi decisions in durable Flows

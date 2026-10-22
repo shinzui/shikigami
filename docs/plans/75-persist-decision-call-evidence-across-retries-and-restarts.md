@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-21T20:30:29Z
       mode: "update"
       note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T00:41:18Z
+      verdict: "comments"
+      note: "Evidence, store, migration and PostgreSQL test paths verified; hooks contract consistent with plans 73/74/76; no blocking findings"
 ---
 
 # Persist decision call evidence across retries and restarts

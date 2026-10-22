@@ -16,6 +16,12 @@ provenance:
       at: 2026-10-21T20:30:29Z
       mode: "update"
       note: "Coordinate Shikumi MP-12 without blocking current scope; bind parameter state and derivation, preserve committed results and distinguish probability data from call evidence"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T00:41:18Z
+      verdict: "changes-requested"
+      note: "Dependency context predates plan 80 (UseHttp, Behavior.Compatibility, Baikai 0.7.2.0); Behavior.Provider predicate and FlowDef slot inventory ownership split across EP-1/EP-2/EP-4; MP-14 plan 82 catalog consumer absent from Integration Points"
 ---
 
 # Compose Shikumi decisions in durable Flows
