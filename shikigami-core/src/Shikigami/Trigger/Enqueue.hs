@@ -11,6 +11,7 @@ module Shikigami.Trigger.Enqueue
     enqueueRunJob,
     addressedRunKey,
     enqueueAddressedRunWithKey,
+    addressedRunJob,
     scheduleRunIdempotencyKey,
     enqueueScheduledRun,
   )
@@ -145,22 +146,25 @@ addressedRunKey agent payload =
 enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
 enqueueAddressedRunWithKey pool identity agent route payload key = do
   now <- getCurrentTime
-  enqueueRunJob
-    pool
-    RunJob
-      { agentName = AgentName agent,
-        identity,
-        triggerKind = TriggeredByEvent,
-        routeKind = route,
-        occurredAt = now,
-        triggerPayload = payload,
-        idempotencyKey = RunKey key,
-        parentSessionId = Nothing,
-        parentRunWorkflowId = Nothing,
-        delegationDepth = Nothing,
-        lineage = [AgentName agent],
-        delegationBudgetId = Nothing
-      }
+  enqueueRunJob pool (addressedRunJob now identity agent route payload (RunKey key))
+
+-- | The CLI and HTTP producers share this exact queue payload constructor.
+addressedRunJob :: UTCTime -> AgentIdentity -> Text -> RunRouteKind -> Value -> RunKey -> RunJob
+addressedRunJob now identity agent route payload key =
+  RunJob
+    { agentName = AgentName agent,
+      identity,
+      triggerKind = TriggeredByEvent,
+      routeKind = route,
+      occurredAt = now,
+      triggerPayload = payload,
+      idempotencyKey = key,
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing,
+      lineage = [AgentName agent],
+      delegationBudgetId = Nothing
+    }
 
 -- | Enqueue a schedule-triggered run for a deterministic due minute.
 enqueueScheduledRun :: Pool -> AgentIdentity -> Text -> UTCTime -> IO (Either UsageError MessageId)

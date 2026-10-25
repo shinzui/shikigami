@@ -82,3 +82,6 @@ hurl --test --variable "base_url=$base_url" --variable "token=$token" tests/hurl
 client_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
 "$client_bin" --token "$token" agents show heartbeat --server "$base_url"
 "$client_bin" agents list --server "$base_url" --first 1
+
+"$client_bin" runs request heartbeat --key client-live --server "$base_url"
+"$client_bin" runs request heartbeat --key client-live --server "$base_url"

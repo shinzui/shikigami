@@ -1,6 +1,51 @@
 {
   "components": {
     "schemas": {
+      "AgentRunAccepted": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "agentName",
+          "idempotencyKey",
+          "status",
+          "acceptedAt"
+        ],
+        "type": "object"
+      },
+      "AgentRunRequest": {
+        "properties": {
+          "idempotencyKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "payload"
+        ],
+        "type": "object"
+      },
       "AgentView": {
         "properties": {
           "behavior": {
@@ -343,6 +388,134 @@
               }
             },
             "description": "The lifecycle directory is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/agents/{agentName}/runs": {
+      "post": {
+        "operationId": "postAgentsByAgentNameRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              }
+            },
+            "description": "Run already accepted",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              }
+            },
+            "description": "Run accepted",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or Agent not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Agent not runnable\n\nIdempotency key conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Payload too large"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store or directory unavailable"
           }
         },
         "security": [

@@ -24,7 +24,7 @@ individual requests.
 | [IR-5](governed-agent-evolution.md) | Proposed | None |
 | [IR-6](support-a2a-cross-runtime-agent-interoperability.md) | Proposed | None |
 | [IR-7](attest-sanctioned-agent-execution.md) | In progress | [MasterPlan 10](../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md), plans 49–52 |
-| [IR-8](expose-addressed-agent-runs-over-http.md) | Accepted | [Plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
+| [IR-8](expose-addressed-agent-runs-over-http.md) | Completed | [Plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) |
 | [IR-10](expose-agent-run-status-over-http.md) | Accepted | [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-11](provide-governed-mutable-repository-workspaces.md) | Proposed | None |

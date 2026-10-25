@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.DecisionEvidenceSpec qualified as DecisionEvidenceSpec
 import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
@@ -23,7 +24,8 @@ main = withShikigamiMigratedSuite \databaseFixture ->
   defaultMain
     ( testGroup
         "shikigami postgres"
-        [ AgentWorkflowSpec.tests databaseFixture,
+        [ LedgerSpec.tests databaseFixture,
+          AgentWorkflowSpec.tests databaseFixture,
           DecisionEvidenceSpec.tests databaseFixture,
           DecisionWorkflowSpec.tests databaseFixture,
           DelegationBudgetSpec.tests databaseFixture,

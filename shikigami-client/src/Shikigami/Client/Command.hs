@@ -15,6 +15,8 @@ module Shikigami.Client.Command
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as LBS
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Options.Applicative
@@ -23,6 +25,7 @@ import Relay.Pagination.Servant (forwardPage)
 import Servant.API (parseUrlPiece)
 import Servant.Health (ProbeResult (..), ProbeStatus (..))
 import Shikigami.Agent.Api qualified as Agent
+import Shikigami.AgentRun.Api qualified as Run
 import Shikigami.Client (Credential, agentsClient, callServer, credentialFor, healthClient)
 import Shikigami.Health.Api (HealthApi (..))
 import System.Environment (lookupEnv)
@@ -40,7 +43,8 @@ clientInfo =
 clientSubcommands :: [(String, Mod CommandFields (Maybe Text -> IO ()))]
 clientSubcommands =
   [ ("health", command "health" (fmap const healthInfo)),
-    ("agents", command "agents" agentsInfo)
+    ("agents", command "agents" agentsInfo),
+    ("runs", command "runs" runsInfo)
   ]
 
 healthInfo :: ParserInfo (IO ())
@@ -127,3 +131,23 @@ boolText False = "false"
 
 resolveCredential :: Maybe Text -> IO Credential
 resolveCredential token = credentialFor <$> maybe (fmap (fmap Text.pack) (lookupEnv "SHIKIGAMI_API_TOKEN")) (pure . Just) token
+
+runsInfo :: ParserInfo (Maybe Text -> IO ())
+runsInfo = info (subparser (command "request" (info (requestParser <**> helper) (progDesc "Request an addressed agent run"))) <**> helper) (progDesc "Request and inspect agent runs")
+  where
+    requestParser =
+      ( \url agent key payload token -> do
+          credential <- resolveCredential token
+          name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+          body <- either fail pure (Aeson.eitherDecode (LBS.pack payload))
+          callServer url ((.request) ((.runs) (agentsClient credential) name) (Run.AgentRunRequest key body)) >>= \case
+            Right (Run.RunAccepted (accepted, location)) -> reportRun "accepted" accepted location
+            Right (Run.RunReplayed (accepted, location)) -> reportRun "replayed" accepted location
+            Right result -> hPutStrLn stderr (show result) >> exitFailure
+            Left _ -> hPutStrLn stderr "shikigami-client: run request failed" >> exitFailure
+      )
+        <$> serverOption
+        <*> strArgument (metavar "AGENT")
+        <*> strOption (long "key" <> metavar "KEY")
+        <*> strOption (long "payload" <> metavar "JSON" <> value "{}")
+    reportRun label accepted location = putStrLn (label <> " " <> Text.unpack accepted.runId) >> putStrLn ("Location " <> Text.unpack location)

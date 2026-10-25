@@ -30,6 +30,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.Handler
+    Shikigami.AgentRun.Handler
     Shikigami.Caller.Verifier
     Shikigami.Health.Handler
     Shikigami.Server.App
@@ -138,6 +139,7 @@ test-suite shikigami-server-test
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.HandlerSpec
+    Shikigami.AgentRun.HandlerSpec
     Shikigami.Caller.VerifierSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
@@ -161,6 +163,8 @@ test-suite shikigami-server-test
     bytestring,
     containers,
     generic-lens,
+    hasql,
+    hasql-pool,
     hs-opentelemetry-api,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-instrumentation-wai,
@@ -173,6 +177,7 @@ test-suite shikigami-server-test
     lens,
     openapi-hs,
     optparse-applicative,
+    pgmq-hasql,
     relay-pagination,
     relay-pagination-conformance,
     servant,

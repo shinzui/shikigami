@@ -7,6 +7,7 @@ import Data.List (sort)
 import Data.Text (Text)
 import Shikigami.Agent.ApiSpec qualified as AgentApiSpec
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.AgentRun.ApiSpec qualified as AgentRunApiSpec
 import Shikigami.Api.OpenApiSpec qualified as OpenApiSpec
 import Shikigami.Api.Problem
   ( ProblemCode (..),
@@ -28,6 +29,7 @@ main =
         [ packageBoundaryTests,
           problemTests,
           AgentApiSpec.tests,
+          AgentRunApiSpec.tests,
           OpenApiSpec.tests
         ]
     )

@@ -1,11 +1,14 @@
 module Main (main) where
 
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Network.Wai (Application)
 import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
 import Shikigami.Agent.Catalog (emptyCatalog)
 import Shikigami.Agent.HandlerSpec qualified as HandlerSpec
+import Shikigami.AgentRun.HandlerSpec qualified as RunHandlerSpec
 import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Caller.VerifierSpec qualified as VerifierSpec
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -31,6 +34,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
         [ probeContractTests "health probes" mkTestApplication,
           AgentsSpec.tests databaseFixture,
           HandlerSpec.tests,
+          RunHandlerSpec.tests databaseFixture,
           VerifierSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
@@ -48,6 +52,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
 -- proves the two same-typed routes were not wired to each other's checks.
 mkTestApplication :: ProbeCheck -> ProbeCheck -> IO Application
 mkTestApplication livenessCheck readinessCheck = do
+  pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-  pure (shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger emptyCatalog disabledDirectoryHandle livenessCheck readinessCheck))
+  pure (shikigamiApplication (newServerEnvWith tracer defaultAppConfig pool Log.silentLogger emptyCatalog disabledDirectoryHandle livenessCheck readinessCheck))

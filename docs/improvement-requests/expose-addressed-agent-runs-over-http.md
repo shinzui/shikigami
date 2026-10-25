@@ -5,9 +5,10 @@ description: Add an agent-run vertical to ShikigamiApi so an external service ca
 timestamp: "2026-08-07T00:00:00Z"
 generated:
   by: process:claude-code
-  at: "2026-10-22T02:58:26Z"
+  at: "2026-10-25T23:35:57Z"
 requestId: IR-8
-status: accepted
+status: completed
+completedAt: "2026-10-25T23:36:13Z"
 targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
 reviews:
@@ -27,21 +28,13 @@ reviews:
 
 ## Status
 
-**Accepted; implementation planned but not started.**
-[MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md)
-selects
-[plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md)
-for this request: `POST /agents/{agentName}/runs` with a Shikigami-owned acceptance ledger
-written in the same transaction as the queue send, so the same caller key never starts a
-second run. Plan 90 depends on the agent catalog of
-[plan 88](../plans/88-serve-the-declared-agent-catalog-over-http.md) (the typed unknown-agent
-answer) and on the bearer authentication of
-[plan 89](../plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md).
-The returned run identity is followed by
-[IR-10](expose-agent-run-status-over-http.md) through
-[plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md).
-[Plan 36](../plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md)
-delivered the shared API, client, and OpenAPI structure these plans extend.
+**Completed by [plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md)
+on 2026-10-25 under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md).**
+`POST /agents/{agentName}/runs` accepts authenticated requests with a caller key.
+The acceptance ledger and queue send commit atomically: concurrent duplicates replay
+the same run, while different payloads conflict. The generated OpenAPI contract,
+typed client, database race test and live Hurl requests prove the boundary.
+[IR-10](expose-agent-run-status-over-http.md) adds lifecycle reads through plan 91.
 
 ## Why
 

@@ -5,6 +5,8 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -84,9 +86,10 @@ withCatalog :: Directory.DirectoryHandle -> ((String -> IO (Int, LBS.ByteString)
 withCatalog directory body = do
   declaration <- loadAgent "../agents/heartbeat.dhall" >>= either (assertFailure . show) pure
   let declarations = Map.fromList [(name, declaration & #name .~ name & #enabled .~ (name /= "g")) | name <- ["a", "b", "c", "d", "e", "f", "g"]]
+  pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "catalog-test" Trace.tracerOptions
-      env = newServerEnvWith tracer defaultAppConfig Log.silentLogger (AgentCatalog declarations 0) directory (pure Healthy) (pure Healthy)
+      env = newServerEnvWith tracer defaultAppConfig pool Log.silentLogger (AgentCatalog declarations 0) directory (pure Healthy) (pure Healthy)
   testWithApplication (pure (shikigamiApplication env)) \port -> do
     manager <- Http.newManager Http.defaultManagerSettings
     body \path -> do

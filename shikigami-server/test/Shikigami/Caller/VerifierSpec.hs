@@ -1,6 +1,8 @@
 module Shikigami.Caller.VerifierSpec (tests) where
 
 import Data.Generics.Labels ()
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -43,10 +45,11 @@ tests =
     ]
 
 withAuth settings body = do
+  pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "auth-test" Trace.tracerOptions
       config = defaultAppConfig & #httpAuth .~ settings
-      env = newServerEnvWith tracer config Log.silentLogger emptyCatalog disabledDirectoryHandle (pure Healthy) (pure Healthy)
+      env = newServerEnvWith tracer config pool Log.silentLogger emptyCatalog disabledDirectoryHandle (pure Healthy) (pure Healthy)
   testWithApplication (pure (shikigamiApplication env)) \port -> do
     manager <- Http.newManager Http.defaultManagerSettings
     body \path headers -> do

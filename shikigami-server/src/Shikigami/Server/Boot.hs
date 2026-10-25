@@ -48,6 +48,7 @@ import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParse
 import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
 import Shikigami.Server.Seam (ServerEnv (..))
 import Shikigami.Server.Telemetry (ServerTelemetry (..), boundedTelemetryMiddleware, withServerTelemetry)
+import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import System.Posix.Signals (Handler (CatchOnce), installHandler, keyboardSignal, softwareTermination)
 
 -- | The @shikigami-server@ executable, start to finish.
@@ -69,7 +70,7 @@ runServerMain = do
 newServerEnv :: Tracer -> Pool -> AppConfig -> Log.Logger -> AgentCatalog -> Directory.DirectoryHandle -> IO ServerEnv
 newServerEnv tracer pool config logger catalog directory = do
   (livenessCheck, readinessCheck) <- mkHealthChecks pool
-  pure (newServerEnvWith tracer config logger catalog directory livenessCheck readinessCheck)
+  pure (newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck)
 
 -- | Build the environment with probe checks supplied by the caller.
 --
@@ -78,12 +79,13 @@ newServerEnv tracer pool config logger catalog directory = do
 -- an umbrella record that swapped them would still compile; only a request that
 -- fails one check and not the other catches it, and that requires injecting the
 -- checks from outside.
-newServerEnvWith :: Tracer -> AppConfig -> Log.Logger -> AgentCatalog -> Directory.DirectoryHandle -> ProbeCheck -> ProbeCheck -> ServerEnv
-newServerEnvWith tracer config logger catalog directory livenessCheck readinessCheck =
+newServerEnvWith :: Tracer -> AppConfig -> Pool -> Log.Logger -> AgentCatalog -> Directory.DirectoryHandle -> ProbeCheck -> ProbeCheck -> ServerEnv
+newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck =
   ServerEnv
     { config = serverConfigFrom config,
       appConfig = config,
       tracer,
+      pool,
       logger,
       catalog,
       directory,
@@ -122,6 +124,7 @@ runServer config = do
     let settings = runtimeConnectionSettings logger (Just metrics) connStr
     StoreConnection.withStore settings \st -> do
       registerRuntimeCatalog st
+      ensureRunQueue (StoreConnection.pool st) >>= either (const (ioError (userError "The run-job queue could not be reconciled."))) pure
       env <- newServerEnv serverTracer (StoreConnection.pool st) config logger catalog directoryRuntime.handle
       application <- serverApplication telemetry env
       Log.logInfo

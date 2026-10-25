@@ -22,6 +22,8 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.ByteString.Lazy.Char8 qualified as LBS8
 import Data.List (sort)
 import Data.Text (Text)
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (hContentType, statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -85,9 +87,10 @@ tests =
 request :: LBS8.ByteString -> String -> IO (Int, Maybe LBS8.ByteString, LBS.ByteString)
 request method path =
   do
+    pool <- Pool.acquire (PoolConfig.settings [])
     provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
     let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-        application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger emptyCatalog disabledDirectoryHandle passing passing)
+        application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig pool Log.silentLogger emptyCatalog disabledDirectoryHandle passing passing)
     testWithApplication (pure application) \port -> do
       manager <- Http.newManager Http.defaultManagerSettings
       initial <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)

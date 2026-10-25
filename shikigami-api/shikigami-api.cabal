@@ -32,6 +32,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.Api
+    Shikigami.AgentRun.Api
     Shikigami.Api
     Shikigami.Api.OpenApi
     Shikigami.Api.Problem
@@ -56,6 +57,7 @@ library
     shikigami-core,
     sop-core,
     text >=2.1,
+    time,
 
 executable shikigami-openapi
   import: common
@@ -80,6 +82,7 @@ test-suite shikigami-api-test
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.ApiSpec
+    Shikigami.AgentRun.ApiSpec
     Shikigami.Api.OpenApiSpec
 
   ghc-options:

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: FRIC-6 accepted: The complete keiro gate passes with zero durable-contract findings.
+* **Addition**: FRIC-6 records detour tooling friction with mori://shinzui/shikigami: Keiro scaffold drift check includes hand-owned core edits
 * **Update**: FRIC-5 accepted: Serial execution verified the full suite without exceeding connection capacity.
 * **Update**: FRIC-4 accepted: Catalog validation completed through the existing local override.
 * **Addition**: FRIC-5 records detour tooling friction with mori://shinzui/shikigami: Parallel PostgreSQL suite exhausts ephemeral connection capacity

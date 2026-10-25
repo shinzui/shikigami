@@ -54,6 +54,7 @@ library
     Shikigami.Agent.Workflow
     Shikigami.Agent.Workflow.Input
     Shikigami.Agent.Workflow.Name
+    Shikigami.AgentRun.Ledger
     Shikigami.App.Config
     Shikigami.App.Config.Load
     Shikigami.App.Role
@@ -351,6 +352,7 @@ test-suite shikigami-core-postgres-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+    Shikigami.AgentRun.LedgerSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.DecisionEvidenceSpec
     Shikigami.DecisionWorkflowSpec
@@ -381,6 +383,7 @@ test-suite shikigami-core-postgres-test
 
   build-depends:
     aeson,
+    async,
     baikai,
     baikai-claude,
     baikai-openai,

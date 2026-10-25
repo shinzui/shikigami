@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-22T02:39:24Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T23:28:37Z
+      mode: "implement"
+      note: "Implement atomic acceptance ledger and authenticated run submission"
 ---
 
 # Accept addressed agent runs over HTTP with server-owned idempotency
@@ -49,22 +55,27 @@ once a worker has drained it.
 
 ## Progress
 
-- [ ] M1: The acceptance ledger exists: migration `agent-run-requests` creates
+- [x] M1 (2026-10-25; concurrency and queue payload tests pass): The acceptance ledger exists: migration `agent-run-requests` creates
       `shikigami.agent_run_requests`; `Shikigami.AgentRun.Ledger.acceptRunRequest` sends the run
       job and inserts the row in one transaction; a core test proves one accept, one replay, one
       conflict, and a two-caller race produce exactly one queue message.
-- [ ] M2: `POST /agents/{agentName}/runs` is served and documented with every arm (202, 200,
+- [x] M2 (2026-10-25; typed wire/schema and database-backed HTTP tests pass): `POST /agents/{agentName}/runs` is served and documented with every arm (202, 200,
       404, 409, 409, 413, 503); the regenerated `docs/api/openapi.json` lists
       `postAgentsByAgentNameRuns`; wire tests pin the request and both success bodies; the
       server test drives every arm against a real database.
-- [ ] M3: `shikigami-client runs request` works; `tests/hurl/agent-runs.hurl` proves the
+- [x] M3 (2026-10-25; 21 Hurl requests and live client accept/replay pass): `shikigami-client runs request` works; `tests/hurl/agent-runs.hurl` proves the
       contract against the live server; IR-8 is marked completed and the acceptance-ledger ADR
       exists.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+Hasql `Pool.release` releases connections but deliberately leaves the pool usable;
+it cannot simulate a closed store. The store-error test instead removes the ledger
+inside its disposable database and proves the acceptance transaction returns `Left`
+without retaining a queue send. The installed MultiVerb `WithHeaders` takes three
+type arguments, including its handler return type; success arms use the supported
+`(body, location)` tuple.
 
 
 ## Decision Log
@@ -97,7 +108,16 @@ once a worker has drained it.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. The acceptance ledger commits exactly one ordinary run
+job with the acceptance fact; replay retains its original identifier, timestamp,
+and caller. The twenty-request race, rollback/error and exact queue-body checks
+pass. API, server, client and core unit suites pass; Hurl passes 21 requests and
+the live client prints accepted/replayed with the same UUID. All request arms,
+including unavailable storage and directory, have assembled HTTP tests. The
+migration/schema-isolation checks and full keiro gate pass with no contract
+findings. IR-8 is completed and its bundle validates. ADR 0048 records the ledger
+and identity contract. FRIC-6 is accepted: stage core edits before the scaffold
+no-op check. Validation uses the inherited isolated Cabal project.
 
 
 ## Context and Orientation
@@ -220,7 +240,7 @@ Add `shikigami-core/test/Shikigami/AgentRun/LedgerSpec.hs` against a migrated da
 and the queue holds one message whose body decodes to the job; the same job again is `Replayed`
 and the queue still holds one message; the same key with a different payload is `Conflicting`;
 twenty concurrent accepts of the same job (`Control.Concurrent.Async.replicateConcurrently`)
-yield one `Accepted`, nineteen `Replayed`, and one message; a closed pool yields `Left`.
+yield one `Accepted`, nineteen `Replayed`, and one message; an unavailable ledger in a disposable database yields `Left`.
 
 ### Milestone 2: the route and the handler
 
@@ -342,13 +362,13 @@ nix develop -c cabal run shikigami-client -- --token 0123456789abcdefXYZ \
 Expected:
 
 ```text
-accepted heartbeat:http:demo-1
-replayed heartbeat:http:demo-1
+accepted <the UUIDv5 workflow id>
+replayed <the same UUIDv5 workflow id>
 ```
 
-(The identifier is the key text itself because `heartbeat:http:demo-1` is a valid keiro
-workflow id; a key containing a journal separator yields a UUID instead.) Then, with a worker
-running, `shikigami runs show shikigami.agent-run heartbeat:http:demo-1` shows the run.
+The colon-delimited HTTP run key fails Keiro's workflow-id grammar, so
+`runJobWorkflowId` derives a deterministic UUIDv5. Use the returned `runId` verbatim
+with `shikigami runs show shikigami.agent-run <runId>` after a worker drains it.
 
 
 ## Validation and Acceptance

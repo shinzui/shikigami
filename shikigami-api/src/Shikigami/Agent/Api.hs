@@ -24,6 +24,7 @@ import Servant.API
 import Servant.API.Generic ((:-))
 import Servant.API.MultiVerb
 import Shikigami.Agent.Name (AgentName (..), agentNameText)
+import Shikigami.AgentRun.Api (AgentRunApi)
 import Shikigami.Api.Problem
 import Shikigami.Prelude
 
@@ -98,6 +99,7 @@ instance AsUnion AgentShowResponses AgentShowResult where
 
 data AgentApi mode = AgentApi
   { list :: mode :- RelayPage 50 200 :> MultiVerb 'GET '[JSON] AgentPageResponses AgentPageResult,
+    runs :: mode :- Capture "agentName" AgentName :> "runs" :> NamedRoutes AgentRunApi,
     show :: mode :- Capture "agentName" AgentName :> MultiVerb 'GET '[JSON] AgentShowResponses AgentShowResult
   }
   deriving stock (Generic)

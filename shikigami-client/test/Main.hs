@@ -25,7 +25,7 @@ commandTests =
           _ -> assertBool "token option rejected" False
         assertBool "token option missing" ("--token" `isInfixOf` helpTextOf ["--help"]),
       testCase "the client offers a health command" $
-        fmap fst clientSubcommands @?= ["health", "agents"],
+        fmap fst clientSubcommands @?= ["health", "agents", "runs"],
       testCase "shikigami-client --help lists every command" do
         let rendered = helpTextOf ["--help"]
         assertBool ("no usage line:\n" <> rendered) ("Usage:" `isInfixOf` rendered)

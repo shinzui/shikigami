@@ -15,6 +15,8 @@ import Data.OpenApi.Lens qualified as L
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), fromGregorian)
+import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as PoolConfig
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -39,7 +41,7 @@ tests =
     "dispatch"
     [ testCase "the documented path set is the served path set" do
         let documented = sort (InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths))
-            served = sort (["/agents", "/agents/{agentName}"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
+            served = sort (["/agents", "/agents/{agentName}", "/agents/{agentName}/runs"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
         documented @?= served,
       testCase "every documented path is answered, and an undocumented one is not" do
         let documented = InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths)
@@ -69,10 +71,11 @@ alwaysFailing = pure (Unhealthy "readiness" (UTCTime (fromGregorian 2026 7 31) 0
 -- | Run the assembled application and hand the body a @GET path -> status@ probe.
 withServer :: IO ProbeVerdict -> IO ProbeVerdict -> ((String -> IO Int) -> IO a) -> IO a
 withServer livenessCheck readinessCheck body = do
+  pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   catalog <- catalogFromReport <$> loadAgentsReport "../agents"
   let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-      application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger catalog disabledDirectoryHandle livenessCheck readinessCheck)
+      application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig pool Log.silentLogger catalog disabledDirectoryHandle livenessCheck readinessCheck)
   testWithApplication (pure application) \port -> do
     manager <- Http.newManager Http.defaultManagerSettings
     body \path -> do

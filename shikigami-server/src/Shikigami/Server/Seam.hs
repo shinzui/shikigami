@@ -30,6 +30,7 @@ import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.Reader (MonadReader, ReaderT (..))
 import Data.Aeson (encode)
 import Data.Text qualified as Text
+import Hasql.Pool (Pool)
 import OpenTelemetry.Trace.Core (Tracer)
 import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
@@ -52,6 +53,7 @@ data ServerEnv = ServerEnv
     appConfig :: !AppConfig,
     tracer :: !Tracer,
     liveness :: !ProbeCheck,
+    pool :: !Pool,
     logger :: !Log.Logger,
     catalog :: !AgentCatalog,
     directory :: !DirectoryHandle,
