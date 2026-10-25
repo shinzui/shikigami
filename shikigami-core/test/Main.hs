@@ -28,6 +28,7 @@ import Shikigami.CapabilityOverlaySpec qualified as CapabilityOverlaySpec
 import Shikigami.CapabilityProviderSpec qualified as CapabilityProviderSpec
 import Shikigami.DecisionContractSpec qualified as DecisionContractSpec
 import Shikigami.DecisionModelCatalogSpec qualified as DecisionModelCatalogSpec
+import Shikigami.DecisionRunnerSpec qualified as DecisionRunnerSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -90,6 +91,7 @@ main =
           CapabilityProviderSpec.tests,
           DecisionContractSpec.tests,
           DecisionModelCatalogSpec.tests,
+          DecisionRunnerSpec.tests,
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
           DirectorySpec.tests,

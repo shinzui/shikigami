@@ -108,6 +108,7 @@ library
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Program.Decision
+    Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
     Shikigami.Repository
     Shikigami.Router.Catalog
@@ -258,6 +259,7 @@ test-suite shikigami-core-test
     Shikigami.CapabilityProviderSpec
     Shikigami.DecisionContractSpec
     Shikigami.DecisionModelCatalogSpec
+    Shikigami.DecisionRunnerSpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec

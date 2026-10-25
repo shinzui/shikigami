@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T01:00:35Z
       mode: "update"
       note: "Apply review: Baikai 0.7.2.0 facts and structuredOutput forwarding; consume plan 73 predicate and Behavior.Compatibility; drop stale Mori caveat"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T20:45:46Z
+      mode: "implement"
+      note: "Implement isolated Handan runner with final tuple admission and attempt evidence below retries"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -49,13 +54,17 @@ Hard dependency: `docs/plans/73-define-typed-decision-programs-and-authorized-mo
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-10-25) Milestone 1: Real Handan/Shikumi Predict nodes execute through a private registry with exact pinned state/input/model/credential checks.
+- [x] (2026-10-25) Milestone 2: Final compatibility/profile/evidence admission and begin/finish callbacks cover blocking and streaming calls below retries. Two-node success records two attempts; a single retry records three; concurrent invocations retain their own credentials.
+- [x] (2026-10-25) Milestone 3: Invalid JSON/domain results, missing evidence, callback failure, forbidden thinking/profile tuples, call caps and timeout uncertainty pass. All 453 core tests pass, including 13 runner tests.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+Final evidence configuration adds application correlation metadata, but the existing compatibility contract forbids arbitrary metadata on Anthropic Messages and Chat Completions. Those transports retain run ID/attempt in the evidence request while the finish callback joins the durable token to Baikai's independent call ID; the runner repeats compatibility and evidence preflight on the final options.
+
+Hackage now publishes Baikai through 0.10.0.0. The actual solver build and fake-provider qualification use the existing pinned 0.7.2.0 cohort, with no dependency changes. Handan still has no upstream release tags.
 
 
 ## Decision Log
@@ -75,7 +84,9 @@ None recorded during implementation.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Record the qualified dependency versions and distill the provider ownership decision into local ADRs.
+Completed the invocation-local runner. The core test command using the temporary project from plan 73 passes all 453 tests. Runner acceptance observed two transport calls for a two-node success, three for one internal retry, four isolated requests across concurrent invocations, one terminal for a streaming dispatch, zero requests for denied final tuples, and one unresolved expectation after timeout. Bounded failures preserve full typed results and do not expose provider bodies or callback exception text.
+
+The qualified stack is Shikumi 0.4.0.0, Baikai 0.7.2.0 and Handan `8e98b0a955f908f70657c04f384b6286e4967422`. Hackage and upstream tags were rechecked on 2026-10-25; no upgrade or compatibility workaround is needed. [ADR 0043](../adr/0043-decision-provider-wrappers-own-actual-attempt-boundaries.md) records provider/attempt ownership. No new friction entries were recorded under this child. Durable run-wide limits and outcome reuse remain the responsibilities of plans 75 and 76.
 
 
 ## Context and Orientation
