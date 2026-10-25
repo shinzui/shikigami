@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T01:00:35Z
       mode: "update"
       note: "Apply review: prerequisite narrowed to plan 73 milestones 1 and 3"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T20:54:13Z
+      mode: "implement"
+      note: "Implement durable attempt ledger and restartable common compliance facts"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -49,16 +54,22 @@ Hard dependency: milestones 1 and 3 of `docs/plans/73-define-typed-decision-prog
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-10-25) Milestone 1: Additive ledger commits expectations and exact convergent terminal writes across connections; migration composition (5 tests), smoke/rerun (9 tests), and schema isolation pass.
+- [x] (2026-10-25) Milestone 2: Versioned CallComplianceFacts feed the common live/restarted evaluator; facts-only sanctioned lifecycle finalization preserves exact provider JSON and all existing reason fixtures pass.
+- [x] (2026-10-25) Milestone 3: Crash windows, terminal rollback, unsupported versions, two-model inspection, concurrent admission, run-wide limits and cost uncertainty pass; all 208 PostgreSQL and 453 core tests pass.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The existing provider record is encode-only all the way down to its usage payload. Consumer facts therefore normalize usage quantities and exact rational cost while retaining quality separately; they never decode a ModelCallEvidence. Actual retry/node relationships are not supplied at the provider seam, so the ledger marks their attribution unknown rather than inventing it. A profile constraining that unknown assessment cannot receive a clean pass.
+
+FRIC-2 in `docs/friction-log/` records default Tasty concurrency exceeding the ephemeral PostgreSQL client ceiling. Serial test scheduling passed the complete suite.
 
 
 ## Decision Log
+
+2026-10-25: Put normalized facts in `Attestation.CallFacts`, with one evaluator in `Compliance`. Preserve raw JSON through the existing EvidenceStore catalog when typed calls are unavailable at restart. Bound run reports to 10,000 attempts and detail pages to 200. Allocate the opaque token UUID before the SQL transaction and assign its ordinal under the run lock via the additive shared `withAttemptOrdinal` operation; completion verifies both against the ledger.
 
 
 2026-09-26: Persist expectation before dispatch and terminal evidence before journaling a successful decision. An in-memory collector loses earlier calls when a process crashes between decisions.
@@ -75,7 +86,9 @@ None recorded during implementation.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Distill crash accounting, evidence ownership and restart evaluation into local ADRs.
+Completed durable expectation/terminal accounting and restartable policy evaluation. The core suite passes 453 tests. The PostgreSQL suite passes 208 tests with `--test-options=-j1`; the nine new ledger tests include separate connection lifetimes, two different model decisions, conflicting terminal writes, injected SQL faults, unknown fact versions, concurrent admission and conservative cost handling. Existing run-evidence cases also prove evaluator parity and raw-payload preservation through facts-only finalization.
+
+Migration composition (5 tests), migration smoke/reapplication (9 tests), and `just migration-schema-isolation` pass. Validation uses plan 73's temporary project to preserve the local Kikan checkout and repository dependency declarations. No checked domain or workflow shape changed, so this child adds no workflow labels or patch. [ADR 0044](../adr/0044-decision-attempts-persist-expectations-and-consumer-owned-compliance-facts.md) distills the persistent boundary. FRIC-2 is accepted with serial PostgreSQL scheduling; no friction entries remain logged under this child. Plan 76 still owns production wiring, whole-Flow policy pinning and journal replay acceptance.
 
 
 ## Context and Orientation

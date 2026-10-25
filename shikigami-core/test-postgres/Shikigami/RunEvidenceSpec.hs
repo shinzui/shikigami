@@ -6,7 +6,7 @@ import Baikai.Options (emptyOptions)
 import Baikai.Options qualified as Options
 import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception qualified as Exception
-import Data.Aeson (Value, eitherDecode)
+import Data.Aeson (Value, eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
@@ -29,6 +29,7 @@ import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Attestation.Agent
+import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), callComplianceFacts)
 import Shikigami.Attestation.Compliance
 import Shikigami.Attestation.Compliance qualified as Compliance
 import Shikigami.Attestation.Evidence
@@ -182,7 +183,12 @@ tests databaseFixture =
         ],
       testGroup
         "compliance roll-up"
-        [ testCase "a conforming call is sanctioned" do
+        [ testCase "live and decoded normalized facts use one complete evaluator" do
+            evidence <- runningWith [compliantCall, wrongModelCall]
+            let facts = callComplianceFacts <$> evidence.calls
+                reloaded = either (error . show) id (eitherDecode (encode facts))
+            assertEqual "same policy reasons and IDs" (evaluateCompliance baselineProfile evidence) (evaluateComplianceFacts baselineProfile (evidence & #calls .~ []) reloaded),
+          testCase "a conforming call is sanctioned" do
             evidence <- runningWith [compliantCall]
             assertRollUp True [] baselineProfile evidence,
           testCase "wrong model mutation" do
@@ -390,6 +396,21 @@ tests databaseFixture =
                 case queried of
                   Left problem -> liftIO (assertEqual "query is refused by the registered read model" True ("ReadModelNotLive" `Text.isInfixOf` Text.pack (show problem)))
                   Right _ -> liftIO (assertFailure "a fenced query returned data"),
+          testCase "facts-only finalization preserves rich provider JSON through the existing lifecycle" do
+            withShikigamiFreshDatabase databaseFixture \connectionString -> do
+              running <- withEvidenceRuntime connectionString \store -> do
+                profiled <- liftIO . assertPersisted =<< persistEvidenceTransition store sampleEvidence ProfileResolved Nothing
+                liftIO . assertPersisted =<< persistEvidenceTransition store profiled Running Nothing
+              let expected = expectCall (ExpectedCall parentCall0 RootCall 1) running
+                  facts = callComplianceFacts compliantCall
+                  recovered = [(facts, toJSON compliantCall.evidence)]
+              (_closed, rollUp) <- either (assertFailure . show) pure (finalizeComplianceFacts baselineProfile BehaviorSucceeded [] expected [facts])
+              _ <- withEvidenceRuntime connectionString \store ->
+                persistEvidenceTransitionFacts recovered store expected EvidenceSealed (Just rollUp)
+              stored <- queryStoredEvidence connectionString
+              assertEqual "terminal phase" EvidenceSealed stored.status
+              assertEqual "normalized call count" 1 stored.recordedCallCount
+              assertEqual "exact provider JSON" [toJSON compliantCall.evidence] (map (\call -> call.evidence) stored.calls),
           testCase "events and operator rows survive restarts and replay converges" do
             (withShikigamiFreshDatabase databaseFixture) \connectionString -> do
               profiledResult <-

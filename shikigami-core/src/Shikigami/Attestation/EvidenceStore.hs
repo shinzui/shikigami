@@ -11,6 +11,7 @@ module Shikigami.Attestation.EvidenceStore
     StoredCallEvidence (..),
     EvidencePersistenceError (..),
     persistEvidenceTransition,
+    persistEvidenceTransitionFacts,
     findRunEvidence,
   )
 where
@@ -39,6 +40,7 @@ import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Attestation.CallFacts (CallComplianceFacts (..))
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Evidence
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, renderCallCorrelationId, renderRunCorrelationId)
@@ -76,6 +78,7 @@ data RunProjection = RunProjection
     expectedCallCount :: !Int32,
     recordedCallCount :: !Int32
   }
+  deriving stock (Generic)
 
 data CallProjection = CallProjection
   { runId :: !Text,
@@ -106,7 +109,29 @@ persistEvidenceTransition ::
   EvidencePhase ->
   Maybe ComplianceRollUp ->
   Eff es (Either EvidencePersistenceError RunEvidence)
-persistEvidenceTransition evidenceStore runEvidence@RunEvidence {runEvidenceId = aggregateId, runId = correlationId, phase = currentPhase} target rollUp
+persistEvidenceTransition = persistEvidenceTransitionUsing Nothing
+
+-- | Restarted finalization retains exact stored provider JSON while the common
+-- evaluator consumes normalized facts. No typed provider decoder is involved.
+persistEvidenceTransitionFacts ::
+  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es) =>
+  [(CallComplianceFacts, Value)] ->
+  EvidenceStore ->
+  RunEvidence ->
+  EvidencePhase ->
+  Maybe ComplianceRollUp ->
+  Eff es (Either EvidencePersistenceError RunEvidence)
+persistEvidenceTransitionFacts facts = persistEvidenceTransitionUsing (Just facts)
+
+persistEvidenceTransitionUsing ::
+  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es) =>
+  Maybe [(CallComplianceFacts, Value)] ->
+  EvidenceStore ->
+  RunEvidence ->
+  EvidencePhase ->
+  Maybe ComplianceRollUp ->
+  Eff es (Either EvidencePersistenceError RunEvidence)
+persistEvidenceTransitionUsing recovered evidenceStore runEvidence@RunEvidence {runEvidenceId = aggregateId, runId = correlationId, phase = currentPhase} target rollUp
   | currentPhase == target = pure (Right runEvidence)
   | otherwise =
       case transitionEvidence runEvidence target of
@@ -122,8 +147,13 @@ persistEvidenceTransition evidenceStore runEvidence@RunEvidence {runEvidenceId =
                       id
                       (evidenceTransitionCommand runEvidence target)
                   targetStream = Stream.entityStream runEvidenceCategory (runEvidenceIdText aggregateId)
-                  projection = runProjection advanced rollUp
-                  callProjections = callProjection (renderRunCorrelationId advancedRunId) <$> advancedCalls
+                  originalProjection = runProjection advanced rollUp
+                  projection = case recovered of
+                    Nothing -> originalProjection
+                    Just facts -> originalProjection & #recordedCallCount .~ fromIntegral (length facts)
+                  callProjections = case recovered of
+                    Nothing -> callProjection (renderRunCorrelationId advancedRunId) <$> advancedCalls
+                    Just facts -> [factsProjection (renderRunCorrelationId advancedRunId) fact raw | (fact, raw) <- facts]
               let (catalog, projectionSet) = Catalog.withLiveEvidence (\_ _ -> persistProjection projection callProjections)
               result <-
                 runCommandWithCatalogProjections
@@ -268,6 +298,24 @@ callProjection ownerRunId RecordedCallEvidence {callId, relationship, resolvedMo
           callStatus = jsonString status,
           evidenceStrength = jsonString strength,
           evidence = toJSON terminal
+        }
+
+factsProjection :: Text -> CallComplianceFacts -> Value -> CallProjection
+factsProjection ownerRunId facts raw =
+  let (relationshipText, relatedCallId) = relationshipParts facts.relationship
+   in CallProjection
+        { runId = ownerRunId,
+          callId = renderCallCorrelationId facts.callId,
+          sourceRunId = facts.providerRunId,
+          relationship = relationshipText,
+          relatedCallId,
+          resolvedModelId = facts.resolvedModelId,
+          requestedAlias = facts.requestedAlias,
+          baikaiCallId = facts.providerCallId,
+          attempt = fromIntegral facts.attempt,
+          callStatus = jsonString facts.status,
+          evidenceStrength = jsonString facts.strength,
+          evidence = raw
         }
 
 relationshipParts :: CallRelationship -> (Text, Maybe Text)

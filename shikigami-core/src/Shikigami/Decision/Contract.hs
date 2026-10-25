@@ -20,6 +20,7 @@ module Shikigami.Decision.Contract
     newAttemptToken,
     attemptId,
     attemptOrdinal,
+    withAttemptOrdinal,
     CallTerminal (..),
     MemoryCall (..),
     newMemoryCallHooks,
@@ -227,6 +228,11 @@ attemptId (AttemptToken value _) = value
 
 attemptOrdinal :: AttemptToken -> Natural
 attemptOrdinal (AttemptToken _ ordinal) = ordinal
+
+-- | A durable allocator assigns the ordinal under its serialization lock.
+-- Completion still verifies token ownership and the stored ordinal.
+withAttemptOrdinal :: Natural -> AttemptToken -> AttemptToken
+withAttemptOrdinal ordinal (AttemptToken value _) = AttemptToken value ordinal
 
 data CallTerminal = CallSucceeded | CallFailed | CallUnknown
   deriving stock (Eq, Show, Generic)

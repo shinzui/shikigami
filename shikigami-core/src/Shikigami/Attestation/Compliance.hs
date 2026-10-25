@@ -2,19 +2,20 @@
 module Shikigami.Attestation.Compliance
   ( ComplianceRollUp (..),
     evaluateCompliance,
+    evaluateComplianceFacts,
+    evaluateCallFacts,
     finalizeCompliance,
+    finalizeComplianceFacts,
   )
 where
 
-import Baikai.Cost qualified as Cost
 import Baikai.Evidence qualified as Baikai
 import Baikai.ThinkingLevel (renderThinkingLevel)
-import Baikai.Usage qualified as Usage
 import Data.Foldable (toList)
 import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as Text
-import Numeric.Natural (Natural)
+import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Evidence
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Reviewed
@@ -37,24 +38,39 @@ data ComplianceRollUp = ComplianceRollUp
     accountedCalls :: ![CallCorrelationId]
   }
   deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Judge every call and every completeness obligation without short-circuiting.
 -- 'NotApplicable' annotations remain in the result but do not make it
 -- non-conforming.
 evaluateCompliance :: Profile.SanctionedExecutionProfile -> RunEvidence -> ComplianceRollUp
-evaluateCompliance sanctionedProfile runEvidence@RunEvidence {calls, deterministicSteps} =
-  let allReasons =
-        concatMap (callReasons sanctionedProfile calls) calls
-          <> accountingReasons runEvidence
+evaluateCompliance sanctionedProfile runEvidence =
+  evaluateComplianceFacts sanctionedProfile runEvidence (callComplianceFacts <$> runEvidence.calls)
+
+-- | Static artifact/result/child context still belongs to RunEvidence. The call
+-- evaluator consumes the same facts for a live collector and a restarted store.
+evaluateComplianceFacts :: Profile.SanctionedExecutionProfile -> RunEvidence -> [CallComplianceFacts] -> ComplianceRollUp
+evaluateComplianceFacts sanctionedProfile runEvidence facts =
+  let callReport = evaluateCallFacts sanctionedProfile runEvidence.expectedCalls facts
+      allReasons =
+        callReport.reasons
+          <> childAccountingReasons runEvidence
           <> artifactReasons runEvidence
           <> resultReasons runEvidence
-          <> limitReasons sanctionedProfile runEvidence
-          <> (NotApplicable <$> deterministicSteps)
-   in ComplianceRollUp
-        { sanctioned = all isAnnotation allReasons,
-          reasons = allReasons,
-          accountedCalls = [callId | RecordedCallEvidence {callId} <- calls]
-        }
+          <> limitReasons sanctionedProfile runEvidence facts
+          <> (NotApplicable <$> runEvidence.deterministicSteps)
+   in ComplianceRollUp (all isAnnotation allReasons) allReasons callReport.accountedCalls
+
+evaluateCallFacts :: Profile.SanctionedExecutionProfile -> [ExpectedCall] -> [CallComplianceFacts] -> ComplianceRollUp
+evaluateCallFacts sanctionedProfile expected facts =
+  let ids = map (\fact -> fact.callId) facts
+      missing = [missingReason call | call <- expected, call.callId `notElem` ids]
+      missingReason ExpectedCall {callId, relationship, attempt} = case relationship of
+        RetryOf _ -> MissingRetryEvidence (renderCallCorrelationId callId) (fromIntegral attempt)
+        ContinuationOf _ -> MissingContinuationEvidence (renderCallCorrelationId callId)
+        _ -> MissingCallEvidence (renderCallCorrelationId callId)
+      reasons = concatMap (callReasons sanctionedProfile facts) facts <> missing <> callLimitReasons sanctionedProfile facts
+   in ComplianceRollUp (all isAnnotation reasons) reasons ids
 
 -- | Close child accounting, evaluate every rule, then choose the lifecycle
 -- outcome atomically: sanctioned sets become evidence-sealed; any failure
@@ -76,14 +92,27 @@ finalizeCompliance sanctionedProfile behavior relevantChildren runEvidence = do
       (transitionEvidence closed target)
   pure (finalized, rollUp)
 
+-- | The same lifecycle and artifact/result/child guards when parent calls are
+-- restored as facts. Child records supplied by the closure retain their IDs;
+-- merge by identity so a terminal already folded into the parent is not counted
+-- twice.
+finalizeComplianceFacts :: Profile.SanctionedExecutionProfile -> BehaviorTerminalState -> [RelevantChild] -> RunEvidence -> [CallComplianceFacts] -> Either SealRefusal (RunEvidence, ComplianceRollUp)
+finalizeComplianceFacts profile behavior children evidence facts = do
+  closed <- prepareEvidenceClosure evidence behavior children
+  let combined = foldl' (\seen fact -> if any (\old -> old.callId == fact.callId) seen then seen else seen <> [fact]) facts (callComplianceFacts <$> closed.calls)
+      rollUp = evaluateComplianceFacts profile closed combined
+      target = if rollUp.sanctioned then EvidenceSealed else NonConforming
+  finalized <- either (const (Left (EvidenceNotRunning Running))) Right (transitionEvidence closed target)
+  pure (finalized, rollUp)
+
 isAnnotation :: NonConformingReason -> Bool
 isAnnotation NotApplicable {} = True
 isAnnotation _ = False
 
 callReasons ::
   Profile.SanctionedExecutionProfile ->
-  [RecordedCallEvidence] ->
-  RecordedCallEvidence ->
+  [CallComplianceFacts] ->
+  CallComplianceFacts ->
   [NonConformingReason]
 callReasons
   Profile.SanctionedExecutionProfile
@@ -93,16 +122,15 @@ callReasons
       Profile.requiredCorrelationFields
     }
   allCalls
-  recorded@RecordedCallEvidence
+  recorded@CallComplianceFacts
     { callId,
       resolvedModelId,
-      requestedAlias,
-      evidence = terminal
+      requestedAlias
     } =
     let renderedCallId = renderCallCorrelationId callId
-        endpoint = terminal ^. #endpoint
-        thinking = terminal ^. #thinking
-        strength = terminal ^. #strength
+        endpoint = recorded.endpoint
+        thinking = recorded.thinking
+        strength = recorded.strength
         Baikai.EndpointIdentity {Baikai.provider, Baikai.api, Baikai.transport} = endpoint
         endpointClass = endpointClassOf endpoint
         permitted = toList allowedCalls
@@ -133,7 +161,7 @@ callReasons
         correlationReasons =
           [ MissingCorrelationField renderedCallId required
           | required <- requiredCorrelationFields,
-            not (hasCorrelationField required terminal)
+            not (hasCorrelationField required recorded)
           ]
      in modelReasons
           <> endpointReasons
@@ -216,17 +244,17 @@ renderThinkingMode = \case
 
 relationshipReasons ::
   Profile.Prohibitions ->
-  [RecordedCallEvidence] ->
-  RecordedCallEvidence ->
+  [CallComplianceFacts] ->
+  CallComplianceFacts ->
   [NonConformingReason]
-relationshipReasons prohibitions allCalls RecordedCallEvidence {callId, relationship, resolvedModelId, evidence = terminal} =
+relationshipReasons prohibitions allCalls current@CallComplianceFacts {callId, relationship, resolvedModelId} =
   case relationship of
     FallbackFrom previousCallId ->
       case find ((== previousCallId) . recordedCallId) allCalls of
         Nothing -> []
-        Just RecordedCallEvidence {resolvedModelId = previousModel, evidence = previousTerminal} ->
-          let currentProvider = evidenceProvider terminal
-              previousProvider = evidenceProvider previousTerminal
+        Just previous@CallComplianceFacts {resolvedModelId = previousModel} ->
+          let currentProvider = current.endpoint.provider
+              previousProvider = previous.endpoint.provider
               renderedCallId = renderCallCorrelationId callId
            in [ ProhibitedProviderFallback renderedCallId previousProvider currentProvider
               | previousProvider /= currentProvider,
@@ -238,11 +266,8 @@ relationshipReasons prohibitions allCalls RecordedCallEvidence {callId, relation
                    ]
     _ -> []
 
-recordedCallId :: RecordedCallEvidence -> CallCorrelationId
-recordedCallId RecordedCallEvidence {callId} = callId
-
-evidenceProvider :: Baikai.ModelCallEvidence -> Text
-evidenceProvider terminal = terminal ^. #endpoint . #provider
+recordedCallId :: CallComplianceFacts -> CallCorrelationId
+recordedCallId fact = fact.callId
 
 endpointClassOf :: Baikai.EndpointIdentity -> Text
 endpointClassOf Baikai.EndpointIdentity {Baikai.transport, Baikai.endpoint} =
@@ -257,43 +282,18 @@ renderTransport = \case
   Baikai.TransportSubprocess -> "subprocess"
   Baikai.TransportAgentRun -> "agent_run"
 
-hasCorrelationField :: Text -> Baikai.ModelCallEvidence -> Bool
-hasCorrelationField requested terminal =
-  case normalize requested of
-    "responseid" -> isJust (Baikai.observedValue (terminal ^. #responseId))
-    "providerrequestid" -> isJust (Baikai.observedValue (terminal ^. #providerRequestId))
-    "clientrequestid" -> isJust (terminal ^. #clientRequestId)
-    "callid" -> not (Text.null (baikaiCallId terminal))
-    "runid" -> not (Text.null (baikaiRunId terminal))
-    _ -> False
+hasCorrelationField :: Text -> CallComplianceFacts -> Bool
+hasCorrelationField requested facts =
+  Text.toLower (Text.filter (`notElem` ['-', '_', '.']) requested) `elem` facts.correlationFields
+
+childAccountingReasons :: RunEvidence -> [NonConformingReason]
+childAccountingReasons RunEvidence {expectedChildRunIds, delegatedChildren} = concatMap missingChild expectedChildRunIds
   where
-    normalize = Text.toLower . Text.filter (`notElem` ['-', '_', '.'])
-
-baikaiCallId :: Baikai.ModelCallEvidence -> Text
-baikaiCallId terminal = terminal ^. #callId
-
-baikaiRunId :: Baikai.ModelCallEvidence -> Text
-baikaiRunId terminal = terminal ^. #runId
-
-accountingReasons :: RunEvidence -> [NonConformingReason]
-accountingReasons RunEvidence {expectedCalls, calls, expectedChildRunIds, delegatedChildren} =
-  concatMap missingCall expectedCalls <> concatMap missingChild expectedChildRunIds
-  where
-    presentIds = [callId | RecordedCallEvidence {callId} <- calls]
-    missingCall ExpectedCall {callId, relationship, attempt}
-      | callId `elem` presentIds = []
-      | otherwise =
-          let rendered = renderCallCorrelationId callId
-           in case relationship of
-                RetryOf _ -> [MissingRetryEvidence rendered (fromIntegral attempt)]
-                ContinuationOf _ -> [MissingContinuationEvidence rendered]
-                _ -> [MissingCallEvidence rendered]
-    missingChild expectedRunId =
-      case find ((== expectedRunId) . relevantChildRunId) delegatedChildren of
-        Nothing -> [MissingDelegatedChildEvidence (renderRunCorrelationId expectedRunId)]
-        Just RelevantChild {calls = childCalls}
-          | null childCalls -> [MissingDelegatedChildEvidence (renderRunCorrelationId expectedRunId)]
-          | otherwise -> []
+    missingChild expectedRunId = case find ((== expectedRunId) . relevantChildRunId) delegatedChildren of
+      Nothing -> [MissingDelegatedChildEvidence (renderRunCorrelationId expectedRunId)]
+      Just RelevantChild {calls = childCalls}
+        | null childCalls -> [MissingDelegatedChildEvidence (renderRunCorrelationId expectedRunId)]
+        | otherwise -> []
 
 relevantChildRunId :: RelevantChild -> RunCorrelationId
 relevantChildRunId RelevantChild {childRunId} = childRunId
@@ -309,16 +309,24 @@ resultReasons RunEvidence {resultEvidence} =
       | expected /= actual -> [ReviewResultDigestMismatch expected actual]
     _ -> []
 
-limitReasons :: Profile.SanctionedExecutionProfile -> RunEvidence -> [NonConformingReason]
-limitReasons Profile.SanctionedExecutionProfile {Profile.limits} RunEvidence {calls, delegatedChildren, durationSeconds, peakConcurrency} =
+callLimitReasons :: Profile.SanctionedExecutionProfile -> [CallComplianceFacts] -> [NonConformingReason]
+callLimitReasons Profile.SanctionedExecutionProfile {Profile.limits} calls =
   concat
-    [ exceeded "maxCalls" ((.maxCalls) limits) (length calls),
-      exceeded "maxRetries" ((.maxRetries) limits) (length [() | RecordedCallEvidence {relationship = RetryOf _} <- calls]),
-      exceeded "maxDelegatedChildRuns" ((.maxDelegatedChildRuns) limits) (length delegatedChildren),
-      exceeded "maxTokens" ((.maxTokens) limits) (totalTokens calls),
-      exceededInteger "maxCostMicroUsd" ((.maxCostMicroUsd) limits) (costMicroUsd calls),
-      maybe [] (\(RunDurationSeconds observed) -> exceeded "maxDurationSeconds" ((.maxDurationSeconds) limits) observed) durationSeconds,
-      maybe [] (\(PeakConcurrency observed) -> exceeded "maxConcurrency" ((.maxConcurrency) limits) observed) peakConcurrency
+    [ [UnknownCallUsage (renderCallCorrelationId fact.callId) "retry-relationship" | isJust limits.maxRetries, fact <- calls, not fact.relationshipKnown],
+      exceeded "maxCalls" limits.maxCalls (length calls),
+      exceeded "maxRetries" limits.maxRetries (length [() | CallComplianceFacts {relationship = RetryOf _} <- calls]),
+      exceeded "maxTokens" limits.maxTokens (sum [tokens | CallComplianceFacts {tokens = Just tokens} <- calls]),
+      exceededInteger "maxCostMicroUsd" limits.maxCostMicroUsd (sum [cost | CallComplianceFacts {costMicroUsd = Just cost} <- calls]),
+      [UnknownCallUsage (renderCallCorrelationId fact.callId) "tokens" | isJust limits.maxTokens, fact <- calls, isNothing fact.tokens],
+      [UnknownCallUsage (renderCallCorrelationId fact.callId) "cost" | isJust limits.maxCostMicroUsd, fact <- calls, fact.costUncertain || isNothing fact.costMicroUsd]
+    ]
+
+limitReasons :: Profile.SanctionedExecutionProfile -> RunEvidence -> [CallComplianceFacts] -> [NonConformingReason]
+limitReasons Profile.SanctionedExecutionProfile {Profile.limits} RunEvidence {delegatedChildren, durationSeconds, peakConcurrency} _ =
+  concat
+    [ exceeded "maxDelegatedChildRuns" limits.maxDelegatedChildRuns (length delegatedChildren),
+      maybe [] (\(RunDurationSeconds observed) -> exceeded "maxDurationSeconds" limits.maxDurationSeconds observed) durationSeconds,
+      maybe [] (\(PeakConcurrency observed) -> exceeded "maxConcurrency" limits.maxConcurrency observed) peakConcurrency
     ]
 
 exceeded :: (Integral quantity, Show quantity) => Text -> Maybe Int -> quantity -> [NonConformingReason]
@@ -331,24 +339,6 @@ exceededInteger name limit observed =
   | Just maximumValue <- [limit],
     observed > fromInteger maximumValue
   ]
-
-totalTokens :: [RecordedCallEvidence] -> Natural
-totalTokens = sum . fmap terminalTokens
-
-terminalTokens :: RecordedCallEvidence -> Natural
-terminalTokens RecordedCallEvidence {evidence} =
-  case evidence ^. #usage of
-    Baikai.Observed observed -> Usage.totalTokens observed
-    Baikai.Unobserved -> 0
-
-costMicroUsd :: [RecordedCallEvidence] -> Rational
-costMicroUsd = sum . fmap terminalCostMicroUsd
-
-terminalCostMicroUsd :: RecordedCallEvidence -> Rational
-terminalCostMicroUsd RecordedCallEvidence {evidence} =
-  case evidence ^. #usage of
-    Baikai.Observed observed -> Cost.usd (Usage.cost observed) * 1000000
-    Baikai.Unobserved -> 0
 
 showText :: (Show value) => value -> Text
 showText = Text.pack . show

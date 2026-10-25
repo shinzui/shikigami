@@ -79,7 +79,7 @@ Cross-repository research also read the request-default decision `mori://shinzui
 |---|-------|------|-----------|-----------|--------|
 | 1 | Typed programs and authorized model catalogs | docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md | None | None | Complete |
 | 2 | Governed Shikumi provider execution | docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md | EP-1 | None | Complete |
-| 3 | Durable decision call evidence | docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md | EP-1 M1 and M3 (typed contracts and call hooks) | None | Not Started |
+| 3 | Durable decision call evidence | docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md | EP-1 M1 and M3 (typed contracts and call hooks) | None | Complete |
 | 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | Not Started |
 
 EP numbers above identify registry rows; filenames contain repository-wide plan IDs. Status values are Not Started, In Progress, Complete, and Cancelled.
@@ -117,7 +117,7 @@ EP-1 owns the finite decision-slot inventory on `FlowDef` in `shikigami-core/src
 
 EP-2 owns `shikigami-core/src/Shikigami/Program/DecisionRunner.hs`. An invocation uses a private registry with an authorized wrapper around the selected real handler; the wrapper forwards every `ApiProvider` field of the selected Baikai 0.7.2.0 handler, including `structuredOutput`, sits below Shikumi retries, and captures each actual attempt. Before dispatch the wrapper runs EP-1's tuple predicate and `Shikigami.Behavior.Compatibility` on the final model, options and request. No process-global registry mutation changes another run's model or credential. The existing timeout, retry, rate, tool, and profile limits remain effective.
 
-EP-3 owns new `shikigami-core/src/Shikigami/Decision/Evidence.hs`, additive attempt-ledger migrations, and extensions to `Shikigami.Attestation.Evidence`, `Compliance`, and `EvidenceStore`. The ledger records expected calls before dispatch and terminal evidence before a successful decision can be journaled. Full Baikai evidence stays encode-only JSON; restartable compliance uses an explicitly versioned Shikigami fact record derived from typed provider evidence. Both live and restarted roll-ups use one evaluator. EP-4 supplies stable parent run/workflow/generation/decision identities and invokes finalization; it never invents reviewed-artifact metadata.
+EP-3 owns new `shikigami-core/src/Shikigami/Decision/Evidence.hs`, additive attempt-ledger migrations, and extensions to `Shikigami.Attestation.Evidence`, `Compliance`, and `EvidenceStore`. The shared opaque token permits UUID generation before the transaction and ordinal assignment under the run lock; finish checks both. The ledger records expected calls before dispatch and terminal evidence before a successful decision can be journaled. Full Baikai evidence stays encode-only JSON; restartable compliance uses an explicitly versioned Shikigami fact record derived from typed provider evidence. Both live and restarted roll-ups use one evaluator. EP-4 supplies stable parent run/workflow/generation/decision identities and invokes finalization; it never invents reviewed-artifact metadata.
 
 Probability/confidence data, if present in a future registered output, is validated result data preserved by EP-1's versioned result codec and EP-4's outcome journal. It cannot satisfy EP-3's provider-attempt or compliance-evidence requirements. A completed outcome is decoded with its retained codec, never recomputed from provider evidence under new parameters. EP-4 owns a regression using current APIs that changes local derivation while leaving the provider response unchanged and proves both completed-result reuse and pending-state pinning.
 
@@ -129,7 +129,7 @@ Each plan adds only its own module/test entries to `shikigami-core/shikigami-cor
 ## Progress
 
 
-Plan 73 is Complete: typed admission/contracts and all 440 core tests pass. Plan 74 is Complete with all 453 core tests passing; plans 75–76 remain Not Started. Plan 75 is next in registry order; plan 75's milestone prerequisites are also accepted. Plan 82 under MasterPlan 14 may now consume plan 73's catalog and shared predicate. The governed runner is accepted; the remaining integration gate is durable attempt persistence and patch-safe workflow replay acceptance in plan 76. The Shikumi coordination dependency does not block this scope.
+Plan 73 is Complete: typed admission/contracts and all 440 core tests pass. Plan 74 is Complete with all 453 core tests passing; plan 75 is Complete with 208 PostgreSQL tests passing and plan 76 remains Not Started. Plan 76 is next in registry order; plan 75's milestone prerequisites are also accepted. Plan 82 under MasterPlan 14 may now consume plan 73's catalog and shared predicate. Admission, the governed runner and durable attempt persistence are accepted. The remaining integration gate is production wiring and patch-safe workflow replay acceptance in plan 76. The Shikumi coordination dependency does not block this scope.
 
 
 

@@ -209,6 +209,8 @@ data NonConformingReason
         requiredStrength :: !EvidenceStrength,
         observedStrength :: !EvidenceStrength
       }
+  | -- | A constrained resource lacks enough provider accounting to assess it.
+    UnknownCallUsage {callId :: !Text, resource :: !Text}
   | -- | A ceiling in the profile's limits was exceeded.
     LimitExceeded {limitName :: !Text, limitValue :: !Text, observedValue :: !Text}
   | -- | A step made no model call, and that is correct rather than missing.
