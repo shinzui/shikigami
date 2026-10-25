@@ -31,6 +31,7 @@ library
   import: common
   hs-source-dirs: src
   exposed-modules:
+    Shikigami.Agent.Api
     Shikigami.Api
     Shikigami.Api.OpenApi
     Shikigami.Api.Problem
@@ -41,13 +42,18 @@ library
     aeson-pretty >=0.8,
     base >=4.21 && <5,
     bytestring,
+    http-api-data,
     http-media >=0.8,
     lens >=5.2,
     openapi-hs >=5.0 && <5.1,
+    relay-pagination,
+    relay-pagination-hasql,
+    relay-pagination-servant,
     servant >=0.20 && <0.21,
     servant-health >=0.1 && <0.2,
     servant-openapi-hs >=5.1 && <5.2,
     shikigami-core,
+    sop-core,
     text >=2.1,
 
 executable shikigami-openapi
@@ -71,7 +77,10 @@ test-suite shikigami-api-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   hs-source-dirs: test
-  other-modules: Shikigami.Api.OpenApiSpec
+  other-modules:
+    Shikigami.Agent.ApiSpec
+    Shikigami.Api.OpenApiSpec
+
   ghc-options:
     -threaded
     -rtsopts
@@ -84,6 +93,7 @@ test-suite shikigami-api-test
     directory,
     lens,
     openapi-hs,
+    relay-pagination,
     shikigami-api,
     shikigami-core,
     tasty,

@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-22T02:39:20Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T23:18:05Z
+      mode: "implement"
+      note: "Begin catalog vertical and verify child dependencies"
 ---
 
 # Expose declared agents and agent runs over the public HTTP API
@@ -145,7 +151,7 @@ follow are `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`,
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Serve the declared-agent catalog over HTTP | docs/plans/88-serve-the-declared-agent-catalog-over-http.md | None | None | Not Started |
+| 1 | Serve the declared-agent catalog over HTTP | docs/plans/88-serve-the-declared-agent-catalog-over-http.md | None | None | Complete |
 | 2 | Authenticate public API callers with configured bearer credentials | docs/plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md | None | EP-1 (its final milestone wraps the `agents` mount, which EP-1 creates) | Not Started |
 | 3 | Accept addressed agent runs over HTTP with server-owned idempotency | docs/plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md | EP-1, EP-2 | None | Not Started |
 | 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | Not Started |
@@ -309,17 +315,11 @@ replaces, that health is exempt, and that authentication is not authorization.
 
 ## Progress
 
-Phase 1 has not started. EP-1 and EP-2 are ready to begin in parallel; EP-3 and EP-4 are blocked
-on their hard dependencies.
-
-Cross-plan gates not owned by a single child:
-
-- [ ] `docs/api/openapi.json` describes all five agent and run operations with the bearer
-      security scheme, and `just hurl` passes end to end with authentication enabled.
-- [ ] Mori's real-Shikigami smoke test (`mori://shinzui/mori/plans/281-invoke-shikigami-agents-from-mori-reactions`,
-      milestone 5, and plan 282 milestone 1) agrees with this contract. This gate is external;
-      record its evidence here when mori reports it.
-- [ ] IR-8 and IR-10 are marked completed and the ADR distillation pass has run.
+EP-1 is complete (2026-10-25): typed catalog, bidirectional pagination,
+wire/schema tests, live Hurl and client checks pass. EP-2 is next; run acceptance
+remains gated on authentication. Validation uses the existing isolated Cabal
+project because the default Kikan paths are missing. Core PostgreSQL validation
+passes serially. ADR 0046 records the catalog boundary.
 
 
 ## Surprises & Discoveries

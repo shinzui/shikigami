@@ -31,6 +31,7 @@ where
 
 import Servant.API (NamedRoutes, (:>))
 import Servant.API.Generic ((:-))
+import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Health.Api (HealthApi)
 import Shikigami.Prelude
 
@@ -40,7 +41,8 @@ import Shikigami.Prelude
 -- field, because the next vertical adds a second and a newtype would have to be
 -- rewritten.
 data ShikigamiApi mode = ShikigamiApi
-  { health :: mode :- "health" :> NamedRoutes HealthApi
+  { health :: mode :- "health" :> NamedRoutes HealthApi,
+    agents :: mode :- "agents" :> NamedRoutes AgentApi
   }
   deriving stock (Generic)
 

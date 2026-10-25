@@ -18,8 +18,12 @@ where
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Options.Applicative
+import Relay.Pagination (Connection (..), Edge (..), PageInfo (..), cursorFromText, cursorToText)
+import Relay.Pagination.Servant (forwardPage)
+import Servant.API (parseUrlPiece)
 import Servant.Health (ProbeResult (..), ProbeStatus (..))
-import Shikigami.Client (callServer, healthClient)
+import Shikigami.Agent.Api qualified as Agent
+import Shikigami.Client (agentsClient, callServer, healthClient)
 import Shikigami.Health.Api (HealthApi (..))
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -34,7 +38,8 @@ clientInfo =
 -- | Every subcommand, paired with its name, so a test can cover them all.
 clientSubcommands :: [(String, Mod CommandFields (IO ()))]
 clientSubcommands =
-  [ ("health", command "health" healthInfo)
+  [ ("health", command "health" healthInfo),
+    ("agents", command "agents" agentsInfo)
   ]
 
 healthInfo :: ParserInfo (IO ())
@@ -75,3 +80,44 @@ runHealthCommand serverUrl = do
       Right (ProbeFailed body) -> do
         putStrLn (label <> ": FAILED (" <> Text.unpack (check body) <> ")")
         pure False
+
+serverOption :: Parser Text
+serverOption = strOption (long "server" <> metavar "URL" <> value "http://localhost:8080" <> showDefault)
+
+agentsInfo :: ParserInfo (IO ())
+agentsInfo =
+  info
+    ( subparser
+        ( command "list" (info (listParser <**> helper) (progDesc "List declared agents"))
+            <> command "show" (info (showParser <**> helper) (progDesc "Show a declared agent"))
+        )
+        <**> helper
+    )
+    (progDesc "Inspect declared agents")
+  where
+    listParser =
+      ( \url size cursor -> do
+          boundary <- traverse (either (fail . Text.unpack) pure . cursorFromText) cursor
+          callServer url ((.list) agentsClient (forwardPage size boundary)) >>= \case
+            Right (Agent.AgentPage page) -> do
+              mapM_ (\edge -> let view = edge.node in putStrLn (Text.unpack (Text.unwords [view.name, boolText view.enabled, view.lifecycle, boolText view.runnable]))) page.edges
+              mapM_ (putStrLn . ("endCursor " <>) . Text.unpack . cursorToText) page.pageInfo.endCursor
+            result -> hPutStrLn stderr (show result) >> exitFailure
+      )
+        <$> serverOption
+        <*> option auto (long "first" <> value 50)
+        <*> optional (strOption (long "after" <> metavar "CURSOR"))
+    showParser =
+      ( \url name -> do
+          agentName <- either (fail . Text.unpack) pure (parseUrlPiece name)
+          callServer url ((.show) agentsClient agentName) >>= \case
+            Right (Agent.AgentFound view) ->
+              mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "sinks        " <> Text.intercalate "," view.sinks, "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
+            result -> hPutStrLn stderr (show result) >> exitFailure
+      )
+        <$> serverOption
+        <*> strArgument (metavar "NAME")
+
+boolText :: Bool -> Text
+boolText True = "true"
+boolText False = "false"

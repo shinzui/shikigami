@@ -48,8 +48,8 @@ tests =
                   <> show (LBS.length generated)
                   <> " bytes"
               ),
-      testCase "the document lists exactly the health probe paths" $
-        sort (documentedPaths shikigamiOpenApi) @?= ["/health/live", "/health/ready"],
+      testCase "the document lists every vertical" $
+        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths),
       testCase "every probe route publishes both typed alternatives" $
         mapM_
           ( \(path, operation) -> do
@@ -63,12 +63,12 @@ tests =
                 )
                 statuses
           )
-          (documentedOperations shikigamiOpenApi),
+          (filter (\(path, _) -> path `elem` healthPaths) (documentedOperations shikigamiOpenApi)),
       testCase "every operation has a unique, deterministic id" do
         let ids = mapMaybe (\(_, operation) -> operation ^. L.operationId) (documentedOperations shikigamiOpenApi)
         length ids @?= length (documentedOperations shikigamiOpenApi)
         sort ids @?= sort (dedupe ids)
-        sort ids @?= ["getHealthLive", "getHealthReady"],
+        sort ids @?= ["getAgents", "getAgentsByAgentName", "getHealthLive", "getHealthReady"],
       testCase "operation ids are derived from method and path" do
         operationIdFor "get" "/health/live" @?= ("getHealthLive" :: Text)
         operationIdFor "get" "/agents/{name}" @?= "getAgentsByName"
@@ -125,3 +125,7 @@ readArtifact = go candidates
     go (candidate : rest) = do
       exists <- doesFileExist candidate
       if exists then LBS.readFile candidate else go rest
+
+healthPaths, agentPaths :: [FilePath]
+healthPaths = ["/health/live", "/health/ready"]
+agentPaths = ["/agents", "/agents/{agentName}"]

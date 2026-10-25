@@ -28,8 +28,11 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeVerdict (Healthy))
 import Servant.Server (ServerError (..))
+import Shikigami.Agent.Catalog (emptyCatalog)
 import Shikigami.Api.Problem (ProblemCode (..), ProblemDetails (..), problem)
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Log qualified as Log
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Server.Seam (problemServerError)
@@ -84,7 +87,7 @@ request method path =
   do
     provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
     let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-        application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig passing passing)
+        application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger emptyCatalog disabledDirectoryHandle passing passing)
     testWithApplication (pure application) \port -> do
       manager <- Http.newManager Http.defaultManagerSettings
       initial <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)

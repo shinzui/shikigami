@@ -4,7 +4,11 @@ import Network.Wai (Application)
 import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeCheck)
 import Servant.Health.TestKit (probeContractTests)
+import Shikigami.Agent.Catalog (emptyCatalog)
+import Shikigami.Agent.HandlerSpec qualified as HandlerSpec
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.Server.AgentsSpec qualified as AgentsSpec
 import Shikigami.Server.App (shikigamiApplication)
@@ -25,6 +29,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
           AgentsSpec.tests databaseFixture,
+          HandlerSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
           KawaStubSpec.tests,
@@ -43,4 +48,4 @@ mkTestApplication :: ProbeCheck -> ProbeCheck -> IO Application
 mkTestApplication livenessCheck readinessCheck = do
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-  pure (shikigamiApplication (newServerEnvWith tracer defaultAppConfig livenessCheck readinessCheck))
+  pure (shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger emptyCatalog disabledDirectoryHandle livenessCheck readinessCheck))

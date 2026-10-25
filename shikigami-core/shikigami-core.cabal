@@ -36,6 +36,7 @@ library
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.Notification
     Shikigami.Agent.Approval.Workflow
+    Shikigami.Agent.Catalog
     Shikigami.Agent.Conversation
     Shikigami.Agent.Conversation.SessionIndex
     Shikigami.Agent.Decl

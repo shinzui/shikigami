@@ -20,7 +20,7 @@ commandTests =
   testGroup
     "command line"
     [ testCase "the client offers a health command" $
-        fmap fst clientSubcommands @?= ["health"],
+        fmap fst clientSubcommands @?= ["health", "agents"],
       testCase "shikigami-client --help lists every command" do
         let rendered = helpTextOf ["--help"]
         assertBool ("no usage line:\n" <> rendered) ("Usage:" `isInfixOf` rendered)

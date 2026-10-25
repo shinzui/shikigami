@@ -33,8 +33,11 @@ import Data.Text qualified as Text
 import OpenTelemetry.Trace.Core (Tracer)
 import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
+import Shikigami.Agent.Catalog (AgentCatalog)
 import Shikigami.Api.Problem (ProblemCode, problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig)
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Server.Config (ServerConfig)
 
@@ -49,6 +52,9 @@ data ServerEnv = ServerEnv
     appConfig :: !AppConfig,
     tracer :: !Tracer,
     liveness :: !ProbeCheck,
+    logger :: !Log.Logger,
+    catalog :: !AgentCatalog,
+    directory :: !DirectoryHandle,
     readiness :: !ProbeCheck
   }
 

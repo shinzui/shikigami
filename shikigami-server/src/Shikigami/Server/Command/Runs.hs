@@ -75,6 +75,7 @@ import Keiro.Workflow
     WorkflowName (WorkflowName),
     loadStepIndex,
   )
+
 -- @lookupInstance@ and @statusToText@ are not re-exported by "Keiro.Workflow";
 -- the module that owns instance rows exports both.
 import Keiro.Workflow.Instance (lookupInstance, statusToText)

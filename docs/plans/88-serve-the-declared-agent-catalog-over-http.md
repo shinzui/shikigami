@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-22T02:39:24Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T23:18:05Z
+      mode: "implement"
+      note: "Implement declared-agent catalog, typed routes, client and acceptance"
 ---
 
 # Serve the declared-agent catalog over HTTP
@@ -49,23 +55,31 @@ rely on that, which is why the server-side extension lives here rather than in a
 
 ## Progress
 
-- [ ] M1: The server process loads the declared-agent catalog and starts the lifecycle directory
+- [x] M1 (2026-10-25; build and HTTP tests pass): The server process loads the declared-agent catalog and starts the lifecycle directory
       at boot; `ServerEnv` carries the logger, the catalog, and the directory handle; a server
       start logs `server.catalog.loaded` with the loaded and failed manifest counts; every
       existing server test still passes with the extended environment.
-- [ ] M2: `GET /agents` and `GET /agents/{agentName}` are served and documented: the regenerated
+- [x] M2 (2026-10-25; API wire/schema and live relay conformance pass): `GET /agents` and `GET /agents/{agentName}` are served and documented: the regenerated
       `docs/api/openapi.json` lists both operations; an unknown agent answers a 404 problem with
       code `agent_not_found`; a bad `first` query answers a 400 `application/problem+json`; the
       relay conformance test walks the live route in both directions without skipping or
       duplicating an agent.
-- [ ] M3: `shikigami-client agents list` and `agents show` work against a running server, and
+- [x] M3 (2026-10-25; 11 Hurl requests and live client list/show pass): `shikigami-client agents list` and `agents show` work against a running server, and
       `just hurl` passes with the new `tests/hurl/agents.hurl` against the fixture catalog in
       `tests/hurl/agents/`.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The released pagination combinator permits zero-sized pages. The public API
+requires positive sizes, so the handler rejects zero, while middleware rewrites
+the combinator's negative/invalid-size errors. Both paths have HTTP coverage.
+`DirectoryRuntime.refresher` already contains the interval loop; boot brackets and
+links that action directly instead of introducing a second timer.
+
+Validation uses the existing `.dev/mp13.cabal.project` because the default project
+references missing local Kikan packages (FRIC-4). The full PostgreSQL test suite
+requires serial execution in this environment (FRIC-5).
 
 
 ## Decision Log
@@ -97,7 +111,14 @@ rely on that, which is why the server-side extension lives here rather than in a
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. The server serves and documents the declaration catalog,
+including disabled agents and live lifecycle admission. API, server, client, and
+all core suites pass; the PostgreSQL suite passes with `--num-threads=1` (225 tests).
+The disposable Hurl suite passes 11 requests and runs the typed client list/show
+commands against that server. ADR 0046 records the durable catalog boundary.
+FRIC-4 and FRIC-5 are accepted environment workarounds; neither requires changing
+the HTTP contract. All validation commands use `--project-file=.dev/mp13.cabal.project`;
+Hurl accepts `SHIKIGAMI_CABAL_PROJECT` for the same override.
 
 
 ## Context and Orientation

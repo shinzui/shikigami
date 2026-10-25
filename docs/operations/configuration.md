@@ -495,3 +495,10 @@ by `--describe-config`.
 ## Baikai response and foreground configuration
 
 Response settings now support Anthropic Messages, OpenAI Chat Completions and OpenAI Responses. Matching API credentials are conditional; unsupported options fail before dispatch. Foreground launch settings use a separate `launch.*` resolver. Background CLI response promotion remains blocked on the released cancellation contract. See [the complete execution runbook](baikai-execution.md) and [field/support inventory](../evidence/baikai-execution/contracts.md).
+
+## HTTP agent catalog
+
+The server loads `agents.directory` at boot, honors `agents.strict`, and logs
+`server.catalog.loaded` with loaded and failed counts. It consults the current
+`directory.*` lifecycle snapshot for catalog reads and owns its refresh loop.
+Configuration inspection modes return before manifests or the directory are opened.

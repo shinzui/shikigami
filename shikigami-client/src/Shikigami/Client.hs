@@ -18,6 +18,7 @@ module Shikigami.Client
   ( -- * Endpoints
     shikigamiClient,
     healthClient,
+    agentsClient,
 
     -- * Running a call
     clientEnvFor,
@@ -31,6 +32,7 @@ import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Servant.Client (ClientEnv, ClientError, ClientM, mkClientEnv, parseBaseUrl, runClientM)
 import Servant.Client.Generic (AsClientT, genericClient)
+import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Api (ShikigamiApi (..))
 import Shikigami.Health.Api (HealthApi)
 
@@ -61,3 +63,6 @@ callServer :: Text -> ClientM a -> IO (Either ClientError a)
 callServer url call = do
   env <- clientEnvFor url
   runClientM call env
+
+agentsClient :: AgentApi (AsClientT ClientM)
+agentsClient = (.agents) shikigamiClient

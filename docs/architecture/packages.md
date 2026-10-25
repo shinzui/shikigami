@@ -171,7 +171,7 @@ their role and live in the package that owns that role.
 
 | Executable | Package | What it does |
 |---|---|---|
-| `shikigami-server` | `shikigami-server` | Serves the public HTTP API. Starts no background workers. |
+| `shikigami-server` | `shikigami-server` | Serves the public HTTP API, including the declared-agent catalog, and refreshes its lifecycle directory. Starts no background workers. |
 | `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and test-stub commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`, `danwa-spike`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
 | `shikigami-worker` | `shikigami-workers` | Drains `shikigami_run_jobs`, runs agents, dispatches sinks, publishes the outbox, resumes workflows, fires timers. Opens no application HTTP listener. |
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |

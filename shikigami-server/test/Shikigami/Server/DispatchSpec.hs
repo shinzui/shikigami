@@ -21,8 +21,12 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Trace qualified as Trace
 import Servant.Health (ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.Paths (liveRawPath, readyRawPath)
+import Shikigami.Agent.Catalog (catalogFromReport)
+import Shikigami.Agent.Loader (loadAgentsReport)
 import Shikigami.Api.OpenApi (shikigamiOpenApi)
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
@@ -35,14 +39,14 @@ tests =
     "dispatch"
     [ testCase "the documented path set is the served path set" do
         let documented = sort (InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths))
-            served = sort (fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
+            served = sort (["/agents", "/agents/{agentName}"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
         documented @?= served,
       testCase "every documented path is answered, and an undocumented one is not" do
         let documented = InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths)
         withServer alwaysHealthy alwaysHealthy \get -> do
           mapM_
             ( \path -> do
-                status <- get path
+                status <- get (Text.unpack (Text.replace "{agentName}" "heartbeat" (Text.pack path)))
                 assertBool (path <> " answered " <> show status <> ", expected a served route") (status /= 404)
             )
             documented
@@ -66,8 +70,9 @@ alwaysFailing = pure (Unhealthy "readiness" (UTCTime (fromGregorian 2026 7 31) 0
 withServer :: IO ProbeVerdict -> IO ProbeVerdict -> ((String -> IO Int) -> IO a) -> IO a
 withServer livenessCheck readinessCheck body = do
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
+  catalog <- catalogFromReport <$> loadAgentsReport "../agents"
   let tracer = Trace.makeTracer provider "shikigami-server-test" Trace.tracerOptions
-      application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig livenessCheck readinessCheck)
+      application = shikigamiApplication (newServerEnvWith tracer defaultAppConfig Log.silentLogger catalog disabledDirectoryHandle livenessCheck readinessCheck)
   testWithApplication (pure application) \port -> do
     manager <- Http.newManager Http.defaultManagerSettings
     body \path -> do

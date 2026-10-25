@@ -5,6 +5,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (sort)
 import Data.Text (Text)
+import Shikigami.Agent.ApiSpec qualified as AgentApiSpec
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Api.OpenApiSpec qualified as OpenApiSpec
 import Shikigami.Api.Problem
@@ -26,6 +27,7 @@ main =
         "shikigami-api"
         [ packageBoundaryTests,
           problemTests,
+          AgentApiSpec.tests,
           OpenApiSpec.tests
         ]
     )

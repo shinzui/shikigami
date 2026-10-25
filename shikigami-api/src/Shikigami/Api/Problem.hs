@@ -104,6 +104,7 @@ instance ToSchema ProblemDetails where
 data ProblemCode
   = -- | The route matched no resource.
     NotFound
+  | AgentNotFound
   | -- | The path exists but not for this HTTP method.
     MethodNotAllowed
   | -- | The request body did not parse or failed validation.
@@ -128,6 +129,7 @@ data ProblemCode
 -- | The stable machine-readable identifier. Never change an existing string.
 problemCodeText :: ProblemCode -> Text
 problemCodeText = \case
+  AgentNotFound -> "agent_not_found"
   NotFound -> "not_found"
   MethodNotAllowed -> "method_not_allowed"
   InvalidBody -> "invalid_body"
@@ -141,6 +143,7 @@ problemCodeText = \case
 -- | The stable human-readable summary. Constant per code, never per request.
 problemTitle :: ProblemCode -> Text
 problemTitle = \case
+  AgentNotFound -> "Agent not found"
   NotFound -> "Resource not found"
   MethodNotAllowed -> "Method not allowed"
   InvalidBody -> "Invalid request body"
@@ -154,6 +157,7 @@ problemTitle = \case
 -- | The HTTP status a code is served with.
 problemStatus :: ProblemCode -> Int
 problemStatus = \case
+  AgentNotFound -> 404
   NotFound -> 404
   MethodNotAllowed -> 405
   InvalidBody -> 400
@@ -168,6 +172,7 @@ problemStatus = \case
 -- code so two endpoints can never disagree about the same failure.
 problemRetryable :: ProblemCode -> Bool
 problemRetryable = \case
+  AgentNotFound -> False
   NotFound -> False
   MethodNotAllowed -> False
   InvalidBody -> False

@@ -33,10 +33,14 @@ library
     Shikigami.Client.Command
 
   build-depends:
+    aeson,
     base >=4.21 && <5,
+    bytestring,
     http-client >=0.7,
     http-client-tls >=0.3,
     optparse-applicative >=0.18,
+    relay-pagination,
+    relay-pagination-servant,
     servant >=0.20 && <0.21,
     servant-client >=0.20 && <0.21,
     servant-client-core >=0.20 && <0.21,

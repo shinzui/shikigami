@@ -340,3 +340,8 @@ malfunction.
 ## Foreground model/agent launches
 
 The light agent package supplies `shikigami-agent-launch interactive` for attended sessions and `shikigami-agent-launch unattended agent run|show|list` for mounted Baikai named jobs. Explicit safety and operator ceilings remain mode-specific. These return process results and create no durable run, memory session or sink receipt. See [Baikai execution](baikai-execution.md) for configuration, exit semantics and login ownership.
+
+The public HTTP equivalent of the declared-agent inventory is `GET /agents`
+(with Relay pagination) and `GET /agents/{agentName}`. The typed client exposes
+`shikigami-client agents list` and `shikigami-client agents show NAME`. These read
+the server deployment’s boot-time declarations and its current lifecycle directory.
