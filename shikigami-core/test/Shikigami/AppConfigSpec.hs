@@ -67,7 +67,8 @@ tests :: TestTree
 tests =
   testGroup
     "application configuration"
-    [ surfaceTests,
+    [ httpAuthTests,
+      surfaceTests,
       precedenceTests,
       strictnessTests,
       requirementTests,
@@ -129,6 +130,9 @@ surfaceTests =
                 "directory.mode",
                 "directory.refresh_interval_seconds",
                 "health.port",
+                "http.auth.caller",
+                "http.auth.mode",
+                "http.auth.token",
                 "http.host",
                 "http.port",
                 "http.request_max_bytes",
@@ -198,6 +202,9 @@ surfaceTests =
               ("SHIKIGAMI_DIRECTORY_MODE", "directory.mode"),
               ("SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS", "directory.refresh_interval_seconds"),
               ("SHIKIGAMI_HEALTH_PORT", "health.port"),
+              ("SHIKIGAMI_HTTP_AUTH_MODE", "http.auth.mode"),
+              ("SHIKIGAMI_HTTP_AUTH_CALLER", "http.auth.caller"),
+              ("SHIKIGAMI_API_TOKEN", "http.auth.token"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
               ("SHIKIGAMI_HTTP_PORT", "http.port"),
               ("SHIKIGAMI_HTTP_REQUEST_MAX_BYTES", "http.request_max_bytes"),
@@ -867,3 +874,27 @@ responseConfigurationTests =
         ConfigOptions {configPaths = [], namedSources = [], overrides = [cliOverride (either (error . show) id (parseKey key)) value | (key, value) <- values], diagnosticMode}
         (Right [])
         (environmentSource environmentBindings (envSnapshot []))
+
+httpAuthTests :: TestTree
+httpAuthTests =
+  testGroup
+    "HTTP authentication configuration"
+    [ testCase "bearer mode requires a token" do
+        let result = runWith (optionsWith [] [cliOverride httpAuthModeKey "bearer"]) [] []
+        result.exitCode @?= resolutionExitCode
+        assertBool "missing token key" ("http.auth.token" `Text.isInfixOf` result.standardError),
+      testCase "short tokens fail without exposing their value" do
+        let secret = "short-secret"
+            result = runWith (optionsWith [] [cliOverride httpAuthModeKey "bearer"]) [] [("SHIKIGAMI_API_TOKEN", secret)]
+        result.exitCode @?= resolutionExitCode
+        assertBool "secret absent" (not (secret `Text.isInfixOf` (result.standardError <> result.standardOutput))),
+      testCase "bearer mode resolves and diagnostics redact the token" do
+        let secret = "0123456789abcdefXYZ"
+            options = optionsWith [] [cliOverride httpAuthModeKey "bearer"]
+        config <- resolveOrFail options [] [("SHIKIGAMI_API_TOKEN", secret)]
+        case config.httpAuth of
+          AuthBearer {caller} -> caller @?= "api-caller"
+          _ -> assertFailure "bearer mode missing"
+        let result = runWith ((optionsWith [] [cliOverride httpAuthModeKey "bearer"]) {diagnosticMode = ExplainText}) [] [("SHIKIGAMI_API_TOKEN", secret)]
+        assertBool "secret absent from explanation" (not (secret `Text.isInfixOf` (result.standardError <> result.standardOutput)))
+    ]

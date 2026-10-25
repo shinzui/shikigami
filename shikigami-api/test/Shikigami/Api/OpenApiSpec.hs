@@ -19,6 +19,7 @@ import Data.HashMap.Strict.InsOrd.Compat qualified as InsOrdHashMap
 import Data.List (sort)
 import Data.Maybe (mapMaybe)
 import Data.OpenApi (OpenApi, Operation, PathItem)
+import Data.OpenApi qualified as O
 import Data.OpenApi.Lens qualified as L
 import Data.OpenApi.Schema.Validation (validateToJSON)
 import Data.Time (UTCTime (..), fromGregorian)
@@ -34,7 +35,16 @@ tests :: TestTree
 tests =
   testGroup
     "OpenAPI document"
-    [ testCase "the checked-in artifact is what the generator produces" do
+    [ testCase "bearer security applies to every domain operation and no probe" do
+        shikigamiOpenApi ^. L.components . L.securitySchemes @?= O.SecurityDefinitions (InsOrdHashMap.singleton "bearer" (O.SecurityScheme (O.SecuritySchemeHttp (O.HttpSchemeBearer Nothing)) Nothing))
+        mapM_
+          ( \(path, operation) -> do
+              let protected = path `notElem` healthPaths
+              operation ^. L.security @?= (if protected then [O.SecurityRequirement (InsOrdHashMap.singleton "bearer" [])] else [])
+              InsOrdHashMap.member 401 (operation ^. L.responses . L.responses) @?= protected
+          )
+          (documentedOperations shikigamiOpenApi),
+      testCase "the checked-in artifact is what the generator produces" do
         artifact <- readArtifact
         let generated = renderOpenApi shikigamiOpenApi
         if artifact == generated

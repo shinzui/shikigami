@@ -11,6 +11,7 @@ import Shikigami.Agent.Api
 import Shikigami.Agent.Catalog qualified as Catalog
 import Shikigami.Agent.Decl qualified as Decl
 import Shikigami.Api.Problem
+import Shikigami.Caller.Api (ApiCaller)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Prelude
 import Shikigami.Server.Seam
@@ -18,8 +19,8 @@ import Shikigami.Server.Seam
 agentSort :: SortSpec AgentView
 agentSort = SortSpec (KeyColumn "agents.name" Asc (.name) textKey :| [])
 
-agentServer :: ServerEnv -> AgentApi (AsServerT ServerM)
-agentServer env = AgentApi {list = listAgents, show = showAgent}
+agentServer :: ServerEnv -> ApiCaller -> AgentApi (AsServerT ServerM)
+agentServer env _caller = AgentApi {list = listAgents, show = showAgent}
   where
     showAgent name = case Catalog.lookupAgent env.catalog name of
       Nothing -> pure (AgentMissing (problem AgentNotFound "No declared agent has this name."))

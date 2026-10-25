@@ -19,7 +19,12 @@ commandTests :: TestTree
 commandTests =
   testGroup
     "command line"
-    [ testCase "the client offers a health command" $
+    [ testCase "global token is accepted and help never supplies its default" do
+        case execParserPure defaultPrefs clientInfo ["--token", "test-token-value", "agents", "show", "heartbeat"] of
+          Success _ -> pure ()
+          _ -> assertBool "token option rejected" False
+        assertBool "token option missing" ("--token" `isInfixOf` helpTextOf ["--help"]),
+      testCase "the client offers a health command" $
         fmap fst clientSubcommands @?= ["health", "agents"],
       testCase "shikigami-client --help lists every command" do
         let rendered = helpTextOf ["--help"]

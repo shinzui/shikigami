@@ -53,6 +53,8 @@ import Servant.Server.Generic (AsServerT, genericServeTWithContext)
 import Shikigami.Agent.Handler (agentServer)
 import Shikigami.Api (ShikigamiApi (..))
 import Shikigami.Api.Problem (ProblemCode (..), problem, problemStatus, problemTitle)
+import Shikigami.App.Config (AppConfig (..))
+import Shikigami.Caller.Verifier (newCallerVerifier)
 import Shikigami.Prelude
 import Shikigami.Server.Seam (ServerEnv (..), ServerM, problemServerError, runServerM)
 
@@ -66,7 +68,7 @@ shikigamiApplication env =
   relayPageProblem . methodNotAllowedProblem $
     (genericServeTWithContext (runServerM env) (shikigamiServer env) context)
   where
-    context = problemErrorFormatters :. EmptyContext
+    context = newCallerVerifier env.logger env.appConfig.httpAuth :. problemErrorFormatters :. EmptyContext
 
 -- | Every handler, assembled against the route record.
 --

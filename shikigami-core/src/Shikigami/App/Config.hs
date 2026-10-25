@@ -44,6 +44,10 @@
 module Shikigami.App.Config
   ( -- * The resolved configuration
     AppConfig (..),
+    HttpAuthSettings (..),
+    httpAuthModeKey,
+    httpAuthTokenKey,
+    httpAuthCallerKey,
 
     -- * Value types
     SecretText,
@@ -383,6 +387,7 @@ data AppConfig = AppConfig
     -- | Principal lifecycle directory and its refresh policy. Disabled by
     -- default so existing deployments retain their pre-directory behavior.
     directorySettings :: !DirectorySettings,
+    httpAuth :: !HttpAuthSettings,
     -- | Root-run-wide maximum number of distinct descendant workflows when an
     -- agent declaration does not choose its own limit.
     delegationBudget :: !DelegationBudget,
@@ -497,6 +502,7 @@ appConfig =
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
     <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
     <*> directorySettingsConfig
+    <*> httpAuthConfig
     <*> withDefault delegationBudgetSetting (constant "delegation-budget" "Bound the complete descendant tree of a root run" defaultDelegationBudget)
     <*> withDefault schedulerCatchUpSetting (constant "skip-missed" "Waking late arms the next future tick instead of replaying every missed minute" SkipMissed)
     <*> withDefault kafkaBrokerSetting (constant "kafka-broker" "Use the development shell's local broker" "127.0.0.1:9092")
@@ -1456,6 +1462,9 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_GROUP") kafkaEventsGroupKey,
           binding (EnvName "SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS") kafkaIncludeAgentActorsKey,
           binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
+          binding (EnvName "SHIKIGAMI_HTTP_AUTH_MODE") httpAuthModeKey,
+          binding (EnvName "SHIKIGAMI_HTTP_AUTH_CALLER") httpAuthCallerKey,
+          binding (EnvName "SHIKIGAMI_API_TOKEN") httpAuthTokenKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
           binding (EnvName "SHIKIGAMI_HTTP_REQUEST_MAX_BYTES") httpRequestMaxBytesKey,
@@ -1621,3 +1630,37 @@ missingRequirements role config =
     satisfied key
       | key == databaseConnectionStringKey = maybe False (not . Text.null . revealSecretText) ((.databaseUrl) config)
       | otherwise = True
+
+-- | Inbound authentication; credentials retain SecretText's opaque rendering.
+data HttpAuthSettings = AuthDisabled | AuthBearer {token :: !SecretText, caller :: !Text}
+  deriving stock (Generic, Eq)
+
+httpAuthConfig :: Config HttpAuthSettings
+httpAuthConfig =
+  maybe AuthDisabled (uncurry AuthBearer)
+    <$> whenEq
+      (withDefault httpAuthModeSetting (constant "http-auth-disabled" "Local development requires no credential" False))
+      True
+      ((,) <$> required httpAuthTokenSetting <*> withDefault httpAuthCallerSetting (constant "http-api-caller" "Label the configured API credential" "api-caller"))
+
+httpAuthModeKey, httpAuthTokenKey, httpAuthCallerKey :: Key
+httpAuthModeKey = stableKey "http.auth.mode"
+httpAuthTokenKey = stableKey "http.auth.token"
+httpAuthCallerKey = stableKey "http.auth.caller"
+
+httpAuthModeSetting :: Setting Bool
+httpAuthModeSetting =
+  publicSettingWithRenderer
+    httpAuthModeKey
+    "Inbound API authentication: disabled or bearer"
+    (enumDecoder [("disabled", False), ("bearer", True)])
+    (\enabled -> if enabled then "bearer" else "disabled")
+
+httpAuthCallerSetting :: Setting Text
+httpAuthCallerSetting = publicSettingWithRenderer httpAuthCallerKey "Principal label for the configured API credential" textDecoder id
+
+httpAuthTokenSetting :: Setting SecretText
+httpAuthTokenSetting = secretSetting httpAuthTokenKey "Inbound API bearer token (at least sixteen characters)" $
+  decoder \key raw -> case runDecoder textDecoder key raw of
+    Right value | Text.length value >= 16 -> Right (SecretText value)
+    _ -> Left (decodeFailure key "a bearer token of at least sixteen characters")

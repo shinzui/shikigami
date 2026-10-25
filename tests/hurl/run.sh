@@ -57,9 +57,11 @@ server_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_P
 connection="host=$pg_socket port=$pg_port dbname=shikigami user=$(id -un)"
 DATABASE_URL="$connection" "$migrate_bin" up
 
+token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+export SHIKIGAMI_API_TOKEN="$token"
 http_port="$(free_port)"
 PG_CONNECTION_STRING="$connection" \
-  "$server_bin" --host 127.0.0.1 --port "$http_port" --set agents.directory=tests/hurl/agents >"$server_log" 2>&1 &
+  "$server_bin" --host 127.0.0.1 --port "$http_port" --set agents.directory=tests/hurl/agents --set http.auth.mode=bearer >"$server_log" 2>&1 &
 server_pid=$!
 base_url="http://127.0.0.1:$http_port"
 
@@ -75,8 +77,8 @@ for _ in $(seq 1 100); do
 done
 curl -fsS "$base_url/health/ready" >/dev/null
 
-hurl --test --variable "base_url=$base_url" tests/hurl/*.hurl
+hurl --test --variable "base_url=$base_url" --variable "token=$token" tests/hurl/*.hurl
 
 client_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
-"$client_bin" agents show heartbeat --server "$base_url"
+"$client_bin" --token "$token" agents show heartbeat --server "$base_url"
 "$client_bin" agents list --server "$base_url" --first 1

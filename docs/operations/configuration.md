@@ -502,3 +502,18 @@ The server loads `agents.directory` at boot, honors `agents.strict`, and logs
 `server.catalog.loaded` with loaded and failed counts. It consults the current
 `directory.*` lifecycle snapshot for catalog reads and owns its refresh loop.
 Configuration inspection modes return before manifests or the directory are opened.
+
+## Inbound API authentication
+
+`http.auth.mode` is `disabled` by default or `bearer`. In bearer mode,
+`http.auth.token` is required and must contain at least sixteen characters;
+`SHIKIGAMI_API_TOKEN` supplies it without placing it on the command line.
+`http.auth.caller` defaults to `api-caller` and labels accepted requests. Tokens
+are redacted from configuration diagnostics. Disabled authentication on a
+non-loopback interface emits `server.auth.disabled` at warning level.
+
+Every route under `/agents` requires the configured bearer credential. Health
+probes remain public. The typed client accepts a global `--token TOKEN`, with
+`SHIKIGAMI_API_TOKEN` as its runtime fallback; help never includes that value.
+Authentication identifies a caller; this setting does not define per-agent
+permissions. Credential rotation requires a server restart.

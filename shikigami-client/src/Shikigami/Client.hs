@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 -- | Calling a running Shikigami server, without writing any HTTP by hand.
 --
 -- The functions here are not written; they are /derived/ from
@@ -19,6 +22,8 @@ module Shikigami.Client
     shikigamiClient,
     healthClient,
     agentsClient,
+    Credential,
+    credentialFor,
 
     -- * Running a call
     clientEnvFor,
@@ -31,9 +36,12 @@ import Data.Text qualified as Text
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Servant.Client (ClientEnv, ClientError, ClientM, mkClientEnv, parseBaseUrl, runClientM)
+import Servant.Client.Core (addHeader)
+import Servant.Client.Core.Auth (AuthClientData, AuthenticatedRequest, mkAuthenticatedRequest)
 import Servant.Client.Generic (AsClientT, genericClient)
 import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Api (ShikigamiApi (..))
+import Shikigami.Caller.Api (Authenticated)
 import Shikigami.Health.Api (HealthApi)
 
 -- | Every endpoint, as a record of callable functions.
@@ -64,5 +72,15 @@ callServer url call = do
   env <- clientEnvFor url
   runClientM call env
 
-agentsClient :: AgentApi (AsClientT ClientM)
+agentsClient :: Credential -> AgentApi (AsClientT ClientM)
 agentsClient = (.agents) shikigamiClient
+
+type Credential = AuthenticatedRequest Authenticated
+
+type instance AuthClientData Authenticated = Maybe Text
+
+credentialFor :: Maybe Text -> Credential
+credentialFor token = mkAuthenticatedRequest token \value request ->
+  case value of
+    Nothing -> request
+    Just secret -> addHeader "Authorization" ("Bearer " <> secret) request

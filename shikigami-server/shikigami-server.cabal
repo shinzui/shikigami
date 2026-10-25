@@ -30,6 +30,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.Handler
+    Shikigami.Caller.Verifier
     Shikigami.Health.Handler
     Shikigami.Server.App
     Shikigami.Server.Boot
@@ -137,6 +138,7 @@ test-suite shikigami-server-test
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.HandlerSpec
+    Shikigami.Caller.VerifierSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
@@ -179,6 +181,7 @@ test-suite shikigami-server-test
     servant-server,
     settei,
     settei-env,
+    settei-optparse-applicative,
     shikigami-api,
     shikigami-core,
     shikigami-migrations:test-support,

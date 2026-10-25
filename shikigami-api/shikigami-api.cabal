@@ -35,6 +35,7 @@ library
     Shikigami.Api
     Shikigami.Api.OpenApi
     Shikigami.Api.Problem
+    Shikigami.Caller.Api
     Shikigami.Health.Api
 
   build-depends:

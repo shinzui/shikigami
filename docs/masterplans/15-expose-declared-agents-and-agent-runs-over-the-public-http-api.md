@@ -152,7 +152,7 @@ follow are `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`,
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Serve the declared-agent catalog over HTTP | docs/plans/88-serve-the-declared-agent-catalog-over-http.md | None | None | Complete |
-| 2 | Authenticate public API callers with configured bearer credentials | docs/plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md | None | EP-1 (its final milestone wraps the `agents` mount, which EP-1 creates) | Not Started |
+| 2 | Authenticate public API callers with configured bearer credentials | docs/plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md | None | EP-1 (its final milestone wraps the `agents` mount, which EP-1 creates) | Complete |
 | 3 | Accept addressed agent runs over HTTP with server-owned idempotency | docs/plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md | EP-1, EP-2 | None | Not Started |
 | 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | Not Started |
 
@@ -316,8 +316,9 @@ replaces, that health is exempt, and that authentication is not authorization.
 ## Progress
 
 EP-1 is complete (2026-10-25): typed catalog, bidirectional pagination,
-wire/schema tests, live Hurl and client checks pass. EP-2 is next; run acceptance
-remains gated on authentication. Validation uses the existing isolated Cabal
+wire/schema tests, live Hurl and client checks pass. EP-2 is complete: bearer mode, configuration redaction, uniform 401 responses,
+OpenAPI security and live authenticated client checks pass (15 Hurl requests).
+EP-3 is next; both hard prerequisites are accepted. Validation uses the existing isolated Cabal
 project because the default Kikan paths are missing. Core PostgreSQL validation
 passes serially. ADR 0046 records the catalog boundary.
 

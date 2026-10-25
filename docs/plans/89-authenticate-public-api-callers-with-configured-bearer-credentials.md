@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-22T02:39:24Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T23:22:58Z
+      mode: "implement"
+      note: "Implement bearer authentication at the public vertical mount"
 ---
 
 # Authenticate public API callers with configured bearer credentials
@@ -51,15 +57,15 @@ credential without touching the routes.
 
 ## Progress
 
-- [ ] M1: The `Authenticated` combinator, the `ApiCaller` principal, and the OpenAPI security
+- [x] M1: The `Authenticated` combinator, the `ApiCaller` principal, and the OpenAPI security
       scheme exist in `shikigami-api`; the regenerated `docs/api/openapi.json` carries
       `components.securitySchemes.bearer`, a `bearer` security requirement and a 401 response on
       every operation outside `/health`, and none on the health probes.
-- [ ] M2: `http.auth.mode`, `http.auth.token`, and `http.auth.caller` are declared; the server
+- [x] M2: `http.auth.mode`, `http.auth.token`, and `http.auth.caller` are declared; the server
       refuses to start in bearer mode without a token; the verifier admits a correct token,
       rejects a missing or wrong one with the 401 problem, and in disabled mode admits every
       request as `anonymous`; the request log never contains the header.
-- [ ] M3: `shikigami-client --token` and `SHIKIGAMI_API_TOKEN` work for every non-health
+- [x] M3: `shikigami-client --token` and `SHIKIGAMI_API_TOKEN` work for every non-health
       command; `tests/hurl/run.sh` starts the server in bearer mode and `tests/hurl/auth.hurl`
       proves the 401 and 200 paths; every protected block in the other hurl files carries the
       header; the configuration document describes the three keys.
@@ -98,7 +104,16 @@ credential without touching the routes.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. The protected mount, typed credential client, documented
+bearer security scheme and 401 response are integrated. API, server, client and
+core unit suites pass. Assembled-application tests prove byte-identical missing,
+wrong, malformed and duplicate-header refusals, valid-token admission, disabled
+mode and public health. Existing request-log secret coverage includes Authorization.
+Configuration inspection refuses bearer mode without `http.auth.token` and accepts
+a valid token without opening the database. The Hurl suite passes 15 requests;
+its live client checks prove both `--token` and environment fallback. ADR 0047
+records the verifier boundary and the standalone client's environment exception.
+Validation uses the existing isolated project as recorded in EP-1.
 
 
 ## Context and Orientation

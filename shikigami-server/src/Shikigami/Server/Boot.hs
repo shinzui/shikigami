@@ -36,7 +36,7 @@ import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
 import Shikigami.Agent.Catalog (AgentCatalog (..), catalogFromReport)
 import Shikigami.Agent.Loader (loadAgentsLoud)
-import Shikigami.App.Config (AppConfig (..), Role (ServerRole), revealSecretText)
+import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Health.Handler (mkHealthChecks)
@@ -106,6 +106,10 @@ runServer :: AppConfig -> IO ()
 runServer config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
+  Log.logInfo logger "server.auth.mode" ["mode" Aeson..= (case config.httpAuth of AuthDisabled -> "disabled"; AuthBearer {} -> "bearer" :: Text.Text)]
+  case config.httpAuth of
+    AuthDisabled | config.httpHost `notElem` ["127.0.0.1", "localhost", "::1"] -> Log.logWarn logger "server.auth.disabled" []
+    _ -> pure ()
   verifyShikigamiMigrations connStr
   report <- loadAgentsLoud logger config.agentsDirectory config.agentsStrict (const (pure ()))
   let catalog = catalogFromReport report

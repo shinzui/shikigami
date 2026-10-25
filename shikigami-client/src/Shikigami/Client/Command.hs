@@ -23,8 +23,9 @@ import Relay.Pagination.Servant (forwardPage)
 import Servant.API (parseUrlPiece)
 import Servant.Health (ProbeResult (..), ProbeStatus (..))
 import Shikigami.Agent.Api qualified as Agent
-import Shikigami.Client (agentsClient, callServer, healthClient)
+import Shikigami.Client (Credential, agentsClient, callServer, credentialFor, healthClient)
 import Shikigami.Health.Api (HealthApi (..))
+import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -32,13 +33,13 @@ import System.IO (hPutStrLn, stderr)
 clientInfo :: ParserInfo (IO ())
 clientInfo =
   info
-    (subparser (foldMap snd clientSubcommands) <**> helper)
+    ((\token commandAction -> commandAction token) <$> optional (strOption (long "token" <> metavar "TOKEN")) <*> subparser (foldMap snd clientSubcommands) <**> helper)
     (fullDesc <> progDesc "Call a running shikigami server through the typed client")
 
 -- | Every subcommand, paired with its name, so a test can cover them all.
-clientSubcommands :: [(String, Mod CommandFields (IO ()))]
+clientSubcommands :: [(String, Mod CommandFields (Maybe Text -> IO ()))]
 clientSubcommands =
-  [ ("health", command "health" healthInfo),
+  [ ("health", command "health" (fmap const healthInfo)),
     ("agents", command "agents" agentsInfo)
   ]
 
@@ -84,7 +85,7 @@ runHealthCommand serverUrl = do
 serverOption :: Parser Text
 serverOption = strOption (long "server" <> metavar "URL" <> value "http://localhost:8080" <> showDefault)
 
-agentsInfo :: ParserInfo (IO ())
+agentsInfo :: ParserInfo (Maybe Text -> IO ())
 agentsInfo =
   info
     ( subparser
@@ -96,9 +97,10 @@ agentsInfo =
     (progDesc "Inspect declared agents")
   where
     listParser =
-      ( \url size cursor -> do
+      ( \url size cursor token -> do
+          credential <- resolveCredential token
           boundary <- traverse (either (fail . Text.unpack) pure . cursorFromText) cursor
-          callServer url ((.list) agentsClient (forwardPage size boundary)) >>= \case
+          callServer url ((.list) (agentsClient credential) (forwardPage size boundary)) >>= \case
             Right (Agent.AgentPage page) -> do
               mapM_ (\edge -> let view = edge.node in putStrLn (Text.unpack (Text.unwords [view.name, boolText view.enabled, view.lifecycle, boolText view.runnable]))) page.edges
               mapM_ (putStrLn . ("endCursor " <>) . Text.unpack . cursorToText) page.pageInfo.endCursor
@@ -108,9 +110,10 @@ agentsInfo =
         <*> option auto (long "first" <> value 50)
         <*> optional (strOption (long "after" <> metavar "CURSOR"))
     showParser =
-      ( \url name -> do
+      ( \url name token -> do
+          credential <- resolveCredential token
           agentName <- either (fail . Text.unpack) pure (parseUrlPiece name)
-          callServer url ((.show) agentsClient agentName) >>= \case
+          callServer url ((.show) (agentsClient credential) agentName) >>= \case
             Right (Agent.AgentFound view) ->
               mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "sinks        " <> Text.intercalate "," view.sinks, "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
             result -> hPutStrLn stderr (show result) >> exitFailure
@@ -121,3 +124,6 @@ agentsInfo =
 boolText :: Bool -> Text
 boolText True = "true"
 boolText False = "false"
+
+resolveCredential :: Maybe Text -> IO Credential
+resolveCredential token = credentialFor <$> maybe (fmap (fmap Text.pack) (lookupEnv "SHIKIGAMI_API_TOKEN")) (pure . Just) token

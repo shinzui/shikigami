@@ -32,6 +32,7 @@ where
 import Servant.API (NamedRoutes, (:>))
 import Servant.API.Generic ((:-))
 import Shikigami.Agent.Api (AgentApi)
+import Shikigami.Caller.Api (Authenticated)
 import Shikigami.Health.Api (HealthApi)
 import Shikigami.Prelude
 
@@ -42,7 +43,7 @@ import Shikigami.Prelude
 -- rewritten.
 data ShikigamiApi mode = ShikigamiApi
   { health :: mode :- "health" :> NamedRoutes HealthApi,
-    agents :: mode :- "agents" :> NamedRoutes AgentApi
+    agents :: mode :- Authenticated :> "agents" :> NamedRoutes AgentApi
   }
   deriving stock (Generic)
 

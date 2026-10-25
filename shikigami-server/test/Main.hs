@@ -7,6 +7,7 @@ import Servant.Health.TestKit (probeContractTests)
 import Shikigami.Agent.Catalog (emptyCatalog)
 import Shikigami.Agent.HandlerSpec qualified as HandlerSpec
 import Shikigami.App.Config (defaultAppConfig)
+import Shikigami.Caller.VerifierSpec qualified as VerifierSpec
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
@@ -30,6 +31,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
         [ probeContractTests "health probes" mkTestApplication,
           AgentsSpec.tests databaseFixture,
           HandlerSpec.tests,
+          VerifierSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
           KawaStubSpec.tests,
