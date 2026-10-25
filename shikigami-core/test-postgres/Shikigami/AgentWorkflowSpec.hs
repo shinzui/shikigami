@@ -2461,6 +2461,7 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2534,6 +2535,7 @@ decl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2559,6 +2561,7 @@ missingTaskDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2589,6 +2592,7 @@ profiledDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2613,6 +2617,7 @@ profiledSkillDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2632,6 +2637,7 @@ flowDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 
@@ -2662,6 +2668,7 @@ flowDelegationDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

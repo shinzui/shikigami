@@ -26,6 +26,7 @@ import Data.Text qualified as Text
 import Network.HTTP.Types (hContentType, status200, status404, status503)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
 import Shikigami.Activity qualified as Activity
@@ -224,6 +225,7 @@ agentWith sinks =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

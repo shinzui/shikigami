@@ -322,6 +322,7 @@ scheduledAgent agentName cron =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

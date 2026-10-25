@@ -391,6 +391,7 @@ routerDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Just routerPolicy
     }
 
@@ -432,6 +433,7 @@ specialist specialistName specialistBehavior =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [expertiseEntry],
+      decisionModels = [],
       routing = Nothing
     }
 

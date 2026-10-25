@@ -8,9 +8,9 @@ Status: accepted
 ## Context
 
 [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
-plans typed Shikumi program invocation inside durable Flows. Its implementation
-has not started. This decision specifies the contracts its child plans must
-implement; it does not claim the capability exists today.
+plans typed Shikumi program invocation inside durable Flows. Its admission contracts are implemented by plan 73. This decision also specifies
+the runner and workflow contracts the remaining children must implement; it does
+not claim the durable capability is complete.
 
 `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs`
 plans probability-bearing outputs, local decision settings, Jev support and
@@ -89,3 +89,19 @@ workflow replay. Implementation evidence belongs here when those tests pass.
 - [ADR 0010](0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md)
 - [ADR 0015](0015-a-kioku-write-answers-on-two-layers-and-a-journaled-step-keeps-its-bytes.md)
 - `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs`
+
+## Registration implementation
+
+Plan 73 computes parameter commitments from ordered effective node instructions,
+serializable `Params` demonstrations, and explicit local derivation state. It
+retains that state with the executable. Signature-level typed demonstrations are
+refused at registration: the selected upstream existential `Predict` constraints
+do not supply a JSON encoder for them. Authors put demonstrations in `Params`,
+which provides a complete serializable representation. Opaque `Embed` behavior
+and closures remain covered by the explicit implementation identity.
+
+The executable and result-codec registries are separate. Retiring an executable
+does not require retiring its pure result codec, and decoding through that codec
+does not rerun a current domain validator. Contract tests preserve a result's
+confidence field with an empty executable registry and reject changed state under
+a reused immutable registration key.

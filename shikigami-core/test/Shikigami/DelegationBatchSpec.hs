@@ -123,6 +123,7 @@ routerDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Just routerPolicy
     }
 

@@ -58,6 +58,7 @@ packageBoundaryTests =
                   memory = defaultMemoryPolicy,
                   enabled = True,
                   expertise = [],
+                  decisionModels = [],
                   routing = Nothing
                 }
         let AgentDecl {name = declaredName} = decl

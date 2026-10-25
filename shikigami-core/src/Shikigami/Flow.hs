@@ -26,6 +26,8 @@ import Keiro.Workflow (Workflow)
 import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Delegate (DelegationRequest (..))
+import Shikigami.Decision.Contract (DecisionSlot)
+import Shikigami.Decision.ModelCatalog (slotErrors)
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
@@ -46,6 +48,7 @@ import Shikigami.PracticeReview.Capability
     PracticeReviewEvidence,
   )
 import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
+import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 -- | Everything a flow body may do, and therefore everything it may not.
@@ -103,6 +106,7 @@ data LifecycleDiagram = LifecycleDiagram
 data FlowDef = FlowDef
   { name :: !Text,
     lifecycle :: !LifecycleDiagram,
+    decisionSlots :: ![DecisionSlot],
     run :: forall es. (FlowEffects es) => Value -> Eff es Value
   }
 
@@ -133,11 +137,13 @@ flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
       { name = "at-risk-customer",
+        decisionSlots = [],
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
       },
     FlowDef
       { name = "delegation-proof",
+        decisionSlots = [],
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
@@ -147,6 +153,7 @@ flowRegistry =
       },
     FlowDef
       { name = "architecture-practice-router",
+        decisionSlots = [],
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
@@ -156,6 +163,7 @@ flowRegistry =
       },
     FlowDef
       { name = opentelemetryPracticeReviewFlowName,
+        decisionSlots = [],
         lifecycle =
           LifecycleDiagram
             { mermaid = opentelemetryPracticeReviewMermaid,
@@ -229,7 +237,7 @@ lookupFlow requested =
 -- which means a typo in a manifest cost a failed agent run per trigger instead
 -- of a refused deployment. Mirrors 'Shikigami.Sink.Validate.sinkDeclarationErrors'.
 flowDeclarationErrors :: AgentDecl -> [Text]
-flowDeclarationErrors AgentDecl {behavior} =
+flowDeclarationErrors declaration@AgentDecl {behavior} =
   case behavior of
     Flow {name = flowName}
       | flowName `notElem` registeredFlowNames ->
@@ -238,4 +246,13 @@ flowDeclarationErrors AgentDecl {behavior} =
               <> "; registered flows: "
               <> Text.intercalate ", " registeredFlowNames
           ]
+    Flow {name = flowName} ->
+      case lookupFlow flowName of
+        Nothing -> []
+        Just flow -> slotErrors decisionProgramRegistry declaration flow.decisionSlots
     _ -> []
+
+-- The typed decision registry is finite and validated at construction. The
+-- example integration adds its immutable registrations here.
+decisionProgramRegistry :: Decision.ProgramRegistry
+decisionProgramRegistry = either (error . show) id (Decision.programRegistry [])

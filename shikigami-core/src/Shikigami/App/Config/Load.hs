@@ -80,6 +80,7 @@ import Options.Applicative (Parser, ParserInfo)
 import Options.Applicative qualified as Options
 import Settei
 import Settei.Env
+
 -- Imported explicitly: 'SetteiOptions' has fields with the same names as
 -- 'ConfigOptions', and this module wants its own.
 import Settei.Optparse
@@ -96,6 +97,7 @@ import Settei.Yaml
 import Shikigami.App.Config
 import Shikigami.App.Version (versionOption)
 import Shikigami.Behavior.Provider (renderResponseCompatibilityError, validateProviderSelection)
+import Shikigami.Decision.Contract (renderDecisionFailure)
 import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO qualified as IO
@@ -263,6 +265,7 @@ appConfigRun role options fileSources environment =
          in case answerOf result of
               Left problems -> failed resolutionExitCode (renderErrorsText problems <> explainOnFailure options result)
               Right config | Left refusal <- validateProviderSelection ((.behaviorProvider) config) -> failed resolutionExitCode (renderResponseCompatibilityError refusal)
+              Right config | Left refusal <- config.decisionModelCatalog -> failed resolutionExitCode (renderDecisionFailure refusal)
               Right config -> case missingRequirements role config of
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
                 [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of

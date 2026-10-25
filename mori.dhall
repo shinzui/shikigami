@@ -1494,6 +1494,13 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "friction-log"
+        , path = "docs/friction-log"
+        , profile = Some "docs/friction-log/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some "Friction met while implementing plans, before triage into bugs and requests"
+        }
+      , Schema.OkfBundle::{
         , name = "use-cases"
         , path = "docs/use-cases"
         , profile = Some "docs/use-cases/profile.dhall"

@@ -33,6 +33,8 @@ module Shikigami.Agent.Decl
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Map.Strict (Map)
 import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
@@ -275,6 +277,7 @@ data AgentDecl = AgentDecl
     behavior :: !Behavior,
     sinks :: ![Sink],
     delegates :: ![Text],
+    decisionModels :: ![Text],
     delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
     capabilityOverlays :: ![CapabilityId],
@@ -285,4 +288,16 @@ data AgentDecl = AgentDecl
     routing :: !(Maybe RouterPolicy)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
+  deriving anyclass (FromDhall)
+
+-- Defaulted additions preserve the pre-change journal bytes.
+instance ToJSON AgentDecl where
+  toJSON declaration = case Aeson.genericToJSON Aeson.defaultOptions declaration of
+    Aeson.Object fields | null declaration.decisionModels -> Aeson.Object (KeyMap.delete "decisionModels" fields)
+    value -> value
+
+instance FromJSON AgentDecl where
+  parseJSON = Aeson.withObject "AgentDecl" \fields ->
+    Aeson.genericParseJSON
+      Aeson.defaultOptions
+      (Aeson.Object (if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [Text])) fields))

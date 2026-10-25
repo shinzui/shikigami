@@ -90,6 +90,7 @@ baseRouter =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Just basePolicy
     }
 

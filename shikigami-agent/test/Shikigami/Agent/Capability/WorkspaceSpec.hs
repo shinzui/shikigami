@@ -250,6 +250,7 @@ testDecl capabilityOverlays =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

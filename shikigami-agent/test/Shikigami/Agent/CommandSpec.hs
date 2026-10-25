@@ -96,6 +96,7 @@ testDecl sanctionedProfile =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

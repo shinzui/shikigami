@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-22T01:00:35Z
       mode: "update"
       note: "Apply review: refresh to plan 80 cohort and HTTP provider seam; EP-1 owns Behavior.Provider predicate and FlowDef slot inventory; add MP-14 plan 82 consumer; narrow EP-3 prerequisite to EP-1 M1 and M3"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T20:30:58Z
+      mode: "implement"
+      note: "Begin implementation with plan 73; preserve dependency order and pinned intention"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -72,7 +77,7 @@ Cross-repository research also read the request-default decision `mori://shinzui
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Typed programs and authorized model catalogs | docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md | None | None | Not Started |
+| 1 | Typed programs and authorized model catalogs | docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md | None | None | Complete |
 | 2 | Governed Shikumi provider execution | docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md | EP-1 | None | Not Started |
 | 3 | Durable decision call evidence | docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md | EP-1 M1 and M3 (typed contracts and call hooks) | None | Not Started |
 | 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | Not Started |
@@ -124,13 +129,14 @@ Each plan adds only its own module/test entries to `shikigami-core/shikigami-cor
 ## Progress
 
 
-All four children are Not Started. Plan 73 is ready first; plan 75 may start once plan 73's milestones 1 and 3 are accepted, plan 74 follows plan 73's completion, then plan 76 integrates them. Plan 82 under MasterPlan 14 waits on plan 73 as well. [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) does not block this scope. Each child owns its milestone checklist; the registry above remains the source of truth for whole-child status.
+Plan 73 is Complete: typed admission/contracts and all 440 core tests pass. Plans 74–76 remain Not Started. Plan 74 is next in registry order; plan 75's milestone prerequisites are also accepted. Plan 82 under MasterPlan 14 may now consume plan 73's catalog and shared predicate. The remaining integration gate is the real governed runner, durable attempt store and patch-safe workflow replay acceptance in plan 76. The Shikumi coordination dependency does not block this scope.
+
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+2026-10-25: Admission is independently executable on the selected Shikumi 0.4.0.0/Baikai 0.7.2.0 cohort. `Behavior.Provider.Call` holds the reusable pure predicate to avoid a configuration/runtime import cycle; `Behavior.Provider` re-exports it. Plan 74 consumes this seam. Plan 73 requires demonstrations in serializable `Params` because signature-level existential dictionaries lack JSON encoders; see ADR 0041.
 
 
 ## Decision Log

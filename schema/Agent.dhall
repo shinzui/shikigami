@@ -112,6 +112,7 @@ let Agent =
           , behavior : Behavior
           , sinks : List Sink
           , delegates : List Text
+          , decisionModels : List Text
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
           , capabilityOverlays : List Text
@@ -125,6 +126,7 @@ let Agent =
           { description = ""
           , sinks = [] : List Sink
           , delegates = [] : List Text
+          , decisionModels = [] : List Text
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
           , capabilityOverlays = [] : List Text

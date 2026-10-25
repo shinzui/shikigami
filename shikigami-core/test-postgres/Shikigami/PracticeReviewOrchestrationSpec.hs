@@ -852,6 +852,7 @@ reviewerDecl =
       memory = defaultMemoryPolicy & #recordPolicy .~ Never,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

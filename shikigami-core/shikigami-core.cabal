@@ -70,6 +70,7 @@ library
     Shikigami.Behavior.Error
     Shikigami.Behavior.Input
     Shikigami.Behavior.Provider
+    Shikigami.Behavior.Provider.Call
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
@@ -78,6 +79,8 @@ library
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
     Shikigami.Core
+    Shikigami.Decision.Contract
+    Shikigami.Decision.ModelCatalog
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.Flow
@@ -104,6 +107,7 @@ library
     Shikigami.PracticeReview.Evidence
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
+    Shikigami.Program.Decision
     Shikigami.Program.Registry
     Shikigami.Repository
     Shikigami.Router.Catalog
@@ -252,6 +256,8 @@ test-suite shikigami-core-test
     Shikigami.BehaviorToolSpec
     Shikigami.CapabilityOverlaySpec
     Shikigami.CapabilityProviderSpec
+    Shikigami.DecisionContractSpec
+    Shikigami.DecisionModelCatalogSpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec

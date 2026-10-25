@@ -352,6 +352,7 @@ completedFlow :: FlowDef
 completedFlow =
   FlowDef
     { name = "completed-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = twoStepFlow
     }
@@ -360,6 +361,7 @@ activityFlow :: FlowDef
 activityFlow =
   FlowDef
     { name = "activity-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
@@ -370,6 +372,7 @@ memoryFlow :: FlowDef
 memoryFlow =
   FlowDef
     { name = "memory-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         _ <- remember "note" (object ["summary" .= ("flow durable note" :: Text)])
@@ -386,6 +389,7 @@ recallCountFlow :: FlowDef
 recallCountFlow =
   FlowDef
     { name = "recall-count-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON . length <$> recall "history" (MemoryQuery "prior escalation")
     }
@@ -402,6 +406,7 @@ supersessionFlow :: FlowDef
 supersessionFlow =
   FlowDef
     { name = "supersession-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         first <- remember "first" (object ["summary" .= ("original note" :: Text)])
@@ -423,6 +428,7 @@ sinkFlow :: FlowDef
 sinkFlow =
   FlowDef
     { name = "sink-spike",
+      decisionSlots = [],
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON <$> emitSignal "alert" sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
     }
@@ -744,6 +750,7 @@ flowAgentDecl flowAgent =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      decisionModels = [],
       routing = Nothing
     }
 

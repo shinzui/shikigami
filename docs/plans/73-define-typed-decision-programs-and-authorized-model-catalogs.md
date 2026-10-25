@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T01:00:35Z
       mode: "update"
       note: "Apply review: catalog builds on plan 80 HTTP selection; own tuple predicate refactor and FlowDef slot inventory validation; name plan 82 as descriptor consumer"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T20:30:58Z
+      mode: "implement"
+      note: "Begin typed decision admission and shared execution/evidence contracts"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -49,17 +54,23 @@ This is the admission work for [IR-12](../improvement-requests/compose-shikumi-d
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-10-25) Milestone 1: Typed immutable registry, retained pure result codecs and parameter/derivation identities pass contract tests, including rich-result preservation with no executable available.
+- [x] (2026-10-25) Milestone 2: Operator catalog, Settei loading, declaration compatibility and pure slot/profile admission pass; historical JSON omits empty decision permission.
+- [x] (2026-10-25) Milestone 3: Begin/finish hooks allocate unique opaque tokens and ordinals, retain unresolved expectations, and accept only convergent terminal writes. Typed evidence fixtures and all 440 core tests pass.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The selected Shikumi `Predict` dictionaries cannot JSON-encode signature-level typed demonstrations. Registration refuses those and requires demonstrations in serializable `Params`; effective base instructions and explicit derivation defaults join the retained state commitment.
+
+FRIC-1 in `docs/friction-log/` records the absent local Kikan action packages. Validation used an isolated upstream checkout without altering the registered checkout or dependency declarations.
 
 
 ## Decision Log
 
+
+2026-10-25: Keep the pure tuple projection and profile predicate in `Behavior.Provider.Call`, re-exported by `Behavior.Provider`, so configuration/catalog admission can reuse them without a module cycle through the runtime builder. Signature demonstrations must use `Params` to make their complete state serializable.
 
 2026-09-26: Register typed Shikumi programs separately from arbitrary Handan tasks. A `Task` can run unrestricted IO and returns a generic envelope; a `Program i o` restricts effects and preserves input/output types.
 
@@ -75,7 +86,9 @@ None recorded during implementation.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation; distill catalog and typed-program ownership into local ADRs before completion.
+Completed admission and shared contracts. `nix develop --no-write-lock-file -c cabal test --project-file=.dev/mp13.cabal.project --builddir=dist-newstyle shikigami-core-test --test-show-details=direct` passed all 440 tests on GHC 9.12.4. The temporary project replaces only the two missing Kikan package paths with an isolated checkout of `mori://shinzui/kikan-en` at `16704290d527d413568bfa40c983f5c3604c35c8`; all other pins match `cabal.project`. The temporary file is local validation state, not a repository dependency change.
+
+The baseline command with the unmodified project still requires the local Kikan action packages to be restored. FRIC-1 is accepted with the isolated-checkout workaround. No entries remain logged under this child. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) records parameter/codec implementation, and [ADR 0042](../adr/0042-decision-admission-intersects-operator-agent-and-pinned-profile-authority.md) records catalog and tuple ownership. Provider execution, durable storage and workflow invocation remain owned by plans 74–76.
 
 
 ## Context and Orientation

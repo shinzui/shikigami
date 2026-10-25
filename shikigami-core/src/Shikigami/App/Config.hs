@@ -108,6 +108,7 @@ module Shikigami.App.Config
     practiceReviewAttentionRecipientsKey,
     behaviorProviderKey,
     behaviorModelKey,
+    behaviorDecisionModelsKey,
     anthropicApiKeyKey,
     openaiApiKeyKey,
     actionAuthorizationModeKey,
@@ -147,9 +148,10 @@ import Baikai.Tool (ToolChoice (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Types qualified as AesonTypes
 import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as LBS
-import Data.Char (isSpace)
+import Data.Char (isAlphaNum, isSpace)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
@@ -178,6 +180,9 @@ import Shikigami.Agent.Decl
     delegationBudgetNatural,
     mkDelegationBudget,
   )
+import Shikigami.Behavior.StubProvider (stubModel)
+import Shikigami.Decision.Contract (DecisionFailure, ModelAlias (..))
+import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
@@ -471,6 +476,7 @@ data AppConfig = AppConfig
     -- makes \"a real provider without a credential\" unrepresentable rather
     -- than something every consumer has to re-check.
     behaviorProvider :: !ProviderSelection,
+    decisionModelCatalog :: !(Either DecisionFailure Decision.ModelCatalog),
     actionAuthorization :: !ActionAuthorizationConfig
   }
   deriving stock (Generic, Eq)
@@ -524,6 +530,7 @@ appConfig =
     <*> optional danwaTokenSetting
     <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
+    <*> decisionModelsConfig
     <*> actionAuthorizationConfig
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
@@ -564,6 +571,85 @@ behaviorProviderConfig =
     choose _ (Just provider) _ = provider
     choose _ _ (Just provider) = provider
     choose _ _ _ = UseStub
+
+-- | Finite metadata, decoded with the same generated per-API catalogs as the
+-- response selection. Credentials remain separate secret Settei settings.
+data DecisionModelSpec = DecisionModelSpec
+  { alias :: !Text,
+    version :: !Text,
+    bindingId :: !Text,
+    bindingVersion :: !Text,
+    model :: !Model,
+    options :: !Options.Options
+  }
+  deriving stock (Eq)
+
+instance Aeson.FromJSON DecisionModelSpec where
+  parseJSON = Aeson.withObject "decision model" \o -> do
+    let accepted = ["alias", "version", "bindingId", "bindingVersion", "provider", "model", "thinking", "max_tokens", "timeout_ms"]
+    if any (`notElem` accepted) (KeyMap.keys o) then fail "unknown decision model setting" else pure ()
+    alias <- o Aeson..: "alias"
+    version <- o Aeson..: "version"
+    bindingId <- o Aeson..: "bindingId"
+    bindingVersion <- o Aeson..: "bindingVersion"
+    vendor <- (o Aeson..: "provider" :: AesonTypes.Parser Text)
+    exact <- o Aeson..: "model"
+    preference <- o Aeson..: "thinking"
+    thinking <-
+      if preference == "default"
+        then pure Nothing
+        else maybe (fail "unsupported thinking preference") (pure . Just) (parseThinkingLevel preference)
+    let surface = case vendor of
+          "anthropic" -> Just (AnthropicMessages, "anthropic")
+          "openai" -> Just (OpenAIChatCompletions, "openai")
+          "openai-responses" -> Just (OpenAIResponses, "openai")
+          _ -> Nothing
+        candidates = case surface of
+          Just (apiTag, providerName) -> [m | m <- allModels, api m == apiTag, provider m == providerName]
+          Nothing | vendor == "stub" -> [stubModel {Model.modelId = "stub-triage"}, stubModel {Model.modelId = "stub-investigate"}]
+          _ -> []
+    model <- maybe (fail "unknown exact catalog model") pure (lookup exact [(modelId m, m) | m <- candidates])
+    maxTokens <- o Aeson..:? "max_tokens"
+    timeoutMs <- o Aeson..:? "timeout_ms"
+    let options = Options.emptyOptions {Options.thinking = thinking, Options.maxTokens = maxTokens, Options.timeoutMs = timeoutMs}
+        validWord text = not (Text.null text) && Text.length text <= 128 && Text.all (\c -> isAlphaNum c || c `elem` ("-_." :: String)) text
+    if all validWord [alias, version, bindingId, bindingVersion]
+      then pure DecisionModelSpec {alias, version, bindingId, bindingVersion, model, options}
+      else fail "invalid decision model identity"
+
+decisionModelsConfig :: Config (Either DecisionFailure Decision.ModelCatalog)
+decisionModelsConfig =
+  assemble
+    <$> specs
+    <*> whenConfig (needs AnthropicMessages <$> specs) (required anthropicApiKeySetting)
+    <*> whenConfig (needs OpenAIChatCompletions <$> specs) (required openaiApiKeySetting)
+    <*> whenConfig (needs OpenAIResponses <$> specs) (required openaiApiKeySetting)
+  where
+    -- Redact raw source candidates too: malformed nested input must not expose
+    -- a mistakenly embedded credential in an explain-config failure.
+    specs :: Config [DecisionModelSpec]
+    specs =
+      withDefault
+        (secretSetting behaviorDecisionModelsKey "Finite decision model aliases; credentials use credentials.providers settings" jsonDecoder)
+        (constant "no-decision-models" "No decision authority by default" [])
+    needs apiTag = any (\spec -> Model.api spec.model == apiTag)
+    assemble entries anthropic openai responses = do
+      bindings <- traverse (bind anthropic openai responses) entries
+      Decision.modelCatalog bindings
+    bind anthropic openai responses spec =
+      let key = case Model.api spec.model of
+            AnthropicMessages -> anthropic
+            OpenAIChatCompletions -> openai
+            OpenAIResponses -> responses
+            _ -> Nothing
+       in Decision.modelBinding
+            (ModelAlias spec.alias)
+            spec.version
+            spec.bindingId
+            spec.bindingVersion
+            spec.model
+            spec.options
+            (Decision.opaqueCredential . revealSecretText <$> key)
 
 -- All response knobs remain typed and visible to Settei. Capability validation
 -- occurs after resolution, before diagnostics or construction of any runtime.
@@ -1280,6 +1366,9 @@ sinksReiBaseUrlKey = stableKey "sinks.rei.base_url"
 behaviorProviderKey :: Key
 behaviorProviderKey = stableKey "behavior.provider"
 
+behaviorDecisionModelsKey :: Key
+behaviorDecisionModelsKey = stableKey "behavior.decisionModels"
+
 behaviorModelKey :: Key
 behaviorModelKey = stableKey "behavior.model"
 
@@ -1391,6 +1480,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_KANMON_TOKEN") kanmonTokenKey,
           binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
           binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
