@@ -2,13 +2,15 @@
 type: Improvement Request
 title: Compose Shikumi decisions in durable Flows with per-step model selection
 description: Let compiled Flows invoke registered typed Shikumi programs at named, replay-safe decision steps and select an authorized model for each invocation.
-timestamp: "2026-09-26T18:23:02Z"
+timestamp: "2026-10-25T21:39:50Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-25T21:39:50Z"
 requestId: IR-12
-status: accepted
+status: completed
 targetPlan: docs/masterplans/13-compose-shikumi-decisions-in-durable-flows.md
+completedAt: "2026-10-25T21:39:50Z"
+resolution: Completed by mori://shinzui/shikigami/masterplans/13-compose-shikumi-decisions-in-durable-flows and child plans 73 through 76.
 origin: mori://shinzui/shikigami
 ---
 
@@ -16,14 +18,19 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.**
-[MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) decomposes this
-request into [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md),
-[plan 74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md),
-[plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md), and
-[plan 76](../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md). All four
-record that implementation has not started. The completed declarative-router work provides
-one journaled model decision and governed delegation; it does not supply this general capability.
+**Completed.** [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
+and plans 73–76 deliver typed static decision slots, authorized per-invocation model
+selection, whole-Flow policy pinning, governed actual-attempt dispatch, restartable
+call evidence and retained rich-result replay. The compiled two-model example and
+[authoring guide](../shikumi-flow-decisions.md) are available.
+
+All six acceptance cases pass through actual PostgreSQL workflow journals and
+Handan/Shikumi dispatch. The full package suites pass, including 225 PostgreSQL
+cases. The evolution gate against `436e9f8` classifies the real patch as additive
+and replay-neutral; generated conformance passes. Completed replay makes no new
+calls or duplicate children/sink intents. A lost result append can repeat actual
+transport and retains both attempts. Ordinary reports remain unsigned; reviewed
+artifact bindings are never fabricated. ADRs 0041–0045 preserve these contracts.
 
 ## Context
 

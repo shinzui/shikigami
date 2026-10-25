@@ -89,15 +89,17 @@ the pinned profile must permit defaulted thinking. Catalog JSON can also be
 supplied through `SHIKIGAMI_BEHAVIOR_DECISION_MODELS`. This setting is redacted
 in configuration diagnostics, including malformed nested input.
 
-Use the normal migration/bootstrap setup and load the proof declaration with its
-declared specialists into the worker's agent set. With the same database and
-configuration available to both commands, enqueue a run and process it:
+Save the chosen YAML as `decision-models.yaml`. Use the normal migration/bootstrap
+setup and the same database for both commands. The proof directory contains the
+declaration and its declared specialists; agent loading reads one directory rather
+than recursively discovering manifests. Enqueue a run and process it:
 
 ```bash
-cabal run shikigami -- enqueue-run shikumi-decision-example \
+export SHIKIGAMI_AGENTS_DIRECTORY=agents/proof
+cabal run shikigami -- --config decision-models.yaml enqueue-run shikumi-decision-example \
   --payload '{"request":"Review the architecture practice"}' \
   --key decision-example-1
-cabal run shikigami-worker
+cabal run shikigami-worker -- --config decision-models.yaml
 ```
 
 The enqueue command resolves the agent by name from the configured agent set.

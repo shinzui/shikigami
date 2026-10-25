@@ -141,7 +141,32 @@ tests fixture =
           evidence <- report store "decision-three-calls"
           length evidence.calls @?= 3
           evidence.complete @?= True
-          length evidence.invocations @?= 2,
+          length evidence.invocations @?= 2
+          index <- expectRight =<< runAppIO app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
+          mapM_
+            ( \(label, program, model, count) -> do
+                preparation <- case Map.lookup ("decision-prepare-" <> label) index of
+                  Just value -> case Aeson.fromJSON @(Either DecisionFailure PreparedDecision) value of
+                    Aeson.Success (Right pinned) -> pure pinned
+                    _ -> assertFailure "invalid prepared journal envelope"
+                  Nothing -> assertFailure "missing preparation"
+                preparation.workflowId @?= (runJobWorkflowId request).unWorkflowId
+                preparation.generation @?= 0
+                preparation.label @?= label
+                preparation.program @?= program
+                preparation.model @?= model
+                outcome <- case Map.lookup ("decision-result-" <> label) index of
+                  Just value -> case Aeson.fromJSON @DecisionOutcome value of
+                    Aeson.Success stored -> pure stored
+                    _ -> assertFailure "invalid result journal envelope"
+                  Nothing -> assertFailure "missing outcome"
+                outcome.preparationId @?= preparation.identity
+                outcome.program @?= program
+                length outcome.attempts @?= count
+            )
+            [ ("triage", descriptor (programRef triageProgram), modelDescriptor a, 1),
+              ("investigate", descriptor (programRef investigationProgram), modelDescriptor b, 2)
+            ],
       testCase "ReturnNow makes no investigation call and creates no child" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider ReturnNow returned

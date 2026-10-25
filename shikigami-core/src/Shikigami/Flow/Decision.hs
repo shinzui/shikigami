@@ -22,7 +22,7 @@ where
 
 import Baikai.Provider.Registry (ApiProvider)
 import Control.Monad (unless, when)
-import Data.Aeson (FromJSON, Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
+import Data.Aeson (FromJSON, Result (..), ToJSON, fromJSON, object, toJSON, (.=))
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.List (find)
 import Data.Text (Text)
@@ -111,7 +111,7 @@ investigationCatalog = send InvestigationCatalog
 validateInvestigationRoute :: (Decision :> es) => CandidateCatalog -> RouteDecision -> Eff es RouteDecision
 validateInvestigationRoute catalog decision = send (ValidateInvestigationRoute catalog decision)
 
-runDecisionDisabled :: (IOE :> es) => Eff (Decision : es) a -> Eff es a
+runDecisionDisabled :: Eff (Decision : es) a -> Eff es a
 runDecisionDisabled = interpret (\_ _ -> throwIO (DecisionAbort (decisionFailure InvalidSlot "decision capability is unavailable for this workflow")))
 
 runDecision :: (Workflow :> es, IOE :> es) => DecisionEnv -> Eff (Decision : es) a -> Eff es a
@@ -193,7 +193,7 @@ runDecision env action = do
                 codec <- either (throwIO . DecisionAbort) pure (lookupResultCodec @o env.services.codecs prepared.program)
                 reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
                 report <- either (throwIO . DecisionAbort) pure reportResult
-                let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\report -> report.calls)) report
+                let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report
                 unless
                   (all (\call -> call.terminal /= Nothing) calls)
                   (throwIO (DecisionAbort (decisionFailure EvidenceFailure "decision has an unresolved provider expectation")))

@@ -56,7 +56,7 @@ Hard dependencies are `docs/plans/73-define-typed-decision-programs-and-authoriz
 
 - [x] (2026-10-25) Milestone 1: Typed Decision capability pins all slots and preserves completed outcomes through retained codecs.
 - [x] (2026-10-25) Milestone 2: Registered two-model example and production worker/one-off wiring use governed runner and durable evidence.
-- [ ] Milestone 3: Literal labels and real patch guard pass declaration, generation, conformance and evolution gates.
+- [x] (2026-10-25) Milestone 3: `just keiro-gate 436e9f8` passes check/inspect/scaffold/diff/conformance: zero warnings, additive WorkflowEvolutionGuardAdded, no breaking change, replay-neutral.
 - [x] (2026-10-25) Milestone 4: All 225 PostgreSQL cases pass, including 17 new durable-decision tests covering replay, pending pins, terminal faults, crash accounting and child/sink deduplication.
 
 
@@ -90,7 +90,13 @@ Decision-only Flows require explicit compiled ambient-model requirements; a glob
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Completion includes executable acceptance evidence, authoring documentation, and distillation of durable decisions from all four plans into local ADRs.
+Complete. The compiled example executes one triage call and two investigation calls with distinct authorized models. Seventeen durable-decision tests prove all six IR-12 acceptance cases: rich committed replay with no new calls, one child/sink intent across replay, bounded invalid output and route refusal, mixed-model profile assessment, pinned pending execution, and checked patch evolution. Journal assertions verify workflow/generation/label, program/model descriptors, preparation linkage and every attempt ID. A lost result append retains repeated actual attempts; terminal persistence failure cannot commit a successful outcome.
+
+Validation on GHC 9.12.4: `cabal build all --enable-tests` and `cabal test all --test-options=-j1 --test-show-details=direct` pass through the temporary project, including 453 core unit, 225 PostgreSQL, 37 agent, 88 worker and 47 server tests plus API/client/migration/domain/diagram/conformance suites. The proof declaration type-checks. `just keiro-gate 436e9f8` passes with zero check diagnostics, deterministic scaffolding, one additive guard finding and replay-neutral impact. A temporary Cabal PATH adapter supplies only the project/builddir flags to the unchanged gate recipes; no gate is bypassed. The generated checkpoint is `2c609ec`.
+
+[Authoring documentation](../shikumi-flow-decisions.md) covers operator stub/HTTP catalogs, the proof directory, commands, retained versions, static labels, probabilities and crash semantics. IR-12, its bundle index/log and the roadmap record completion; request and friction profile validation pass. ADR 0041 now records executable acceptance. ADRs 0042–0045 distill authorization, provider attempts, restartable compliance and durable integration across all four plans. No upstream probability/Jev/calibration or signing feature is claimed.
+
+FRIC-3 is accepted with the exact-version HTTPS archive workaround; FRIC-1 and FRIC-2 retain the isolated Kikan project and serial fixture scheduling workarounds. No friction entry remains logged. Local validation files remain outside the committed feature. Pending historical bindings require deliberate retention; completed outcomes require pure codecs. These are supported compatibility contracts, not fallback to a new default.
 
 
 ## Context and Orientation
@@ -172,9 +178,9 @@ Run from the repository root. Capture the old shape before editing workflow decl
 DECISION_FLOW_BASE=$(git rev-parse HEAD)
 cabal build all
 cabal test shikigami-core-test --test-show-details=direct
-cabal test shikigami-core-postgres-test --test-show-details=direct
+cabal test shikigami-core-postgres-test --test-options=-j1 --test-show-details=direct
 just keiro-gate "$DECISION_FLOW_BASE"
-cabal test all --test-show-details=direct
+cabal test all --test-options=-j1 --test-show-details=direct
 ```
 
 Use the repository's configured GHC environment; PostgreSQL tests use the migrated isolated fixture. Gate commands run check, inspect, scaffold, diff and generated conformance. Inspect generated diffs and do not hand-format generated files. For focused iteration name the new Tasty group `durable typed decisions` and run:

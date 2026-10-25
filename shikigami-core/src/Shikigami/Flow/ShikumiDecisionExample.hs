@@ -1,6 +1,6 @@
 module Shikigami.Flow.ShikumiDecisionExample (shikumiDecisionExample, exampleSlots) where
 
-import Data.Aeson (Result (..), Value, eitherDecodeStrict, encode, fromJSON, object, toJSON, (.=))
+import Data.Aeson (Result (..), Value, eitherDecodeStrict, encode, fromJSON, object, (.=))
 import Data.ByteString.Lazy qualified as LBS
 import Data.List.NonEmpty qualified as NE
 import Data.Text.Encoding qualified as TE

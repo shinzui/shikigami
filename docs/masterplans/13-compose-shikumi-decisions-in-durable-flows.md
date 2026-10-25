@@ -80,7 +80,7 @@ Cross-repository research also read the request-default decision `mori://shinzui
 | 1 | Typed programs and authorized model catalogs | docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md | None | None | Complete |
 | 2 | Governed Shikumi provider execution | docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md | EP-1 | None | Complete |
 | 3 | Durable decision call evidence | docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md | EP-1 M1 and M3 (typed contracts and call hooks) | None | Complete |
-| 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | In Progress |
+| 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | Complete |
 
 EP numbers above identify registry rows; filenames contain repository-wide plan IDs. Status values are Not Started, In Progress, Complete, and Cancelled.
 
@@ -132,7 +132,7 @@ The integrated consumer also uses EP-1's additive typed pinned-reference recover
 ## Progress
 
 
-Plans 73–75 are Complete. Plan 76 has implemented production wiring, the typed example, durable policy/preparation/outcomes and patch branches. All package tests pass, including 225 PostgreSQL cases and 453 core unit cases. The remaining gate is committed scaffold determinism and evolution/conformance against `436e9f8`, followed by final documentation acceptance.
+All four child plans are Complete. Production worker and one-off wiring, the typed two-model example and all six IR-12 acceptance cases pass. The complete package build/tests, 225 PostgreSQL cases and workflow gate against `436e9f8` are accepted. Check/inspect have zero diagnostics, scaffolding is deterministic, the decision patch is additive and replay-neutral, and generated conformance passes. No integration gate remains. Plan 82 may consume the shared catalog and tuple predicate; the optional Shikumi probability initiative remains outside this completed scope.
 
 
 
@@ -140,6 +140,9 @@ Plans 73–75 are Complete. Plan 76 has implemented production wiring, the typed
 
 
 2026-10-25: Admission is independently executable on the selected Shikumi 0.4.0.0/Baikai 0.7.2.0 cohort. `Behavior.Provider.Call` holds the reusable pure predicate to avoid a configuration/runtime import cycle; `Behavior.Provider` re-exports it. Plan 74 consumes this seam. Plan 73 requires demonstrations in serializable `Params` because signature-level existential dictionaries lack JSON encoders; see ADR 0041.
+
+
+2026-10-25: End-to-end qualification separates active model authority from retained historical bindings and executable availability from historical pure codecs. The typed pending-reference recovery remains an additive EP-1 API. The decision-only Flow's explicit ambient-model requirement preserves existing router/review checks. ADR 0045 records this integration boundary.
 
 
 ## Decision Log
@@ -165,4 +168,8 @@ Plans 73–75 are Complete. Plan 76 has implemented production wiring, the typed
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Completion requires all six IR-12 acceptance cases and ADR distillation across all four child plans.
+Completed the six IR-12 acceptance cases through the registered two-model example and real Handan/Shikumi, PostgreSQL journals and governed effect boundaries. All packages build and test successfully; key suites include 453 core unit, 225 PostgreSQL, 37 agent, 88 worker and 47 server cases. The real patch, generated artifacts and evolution gate pass against `436e9f8` with no breaking finding and replay-neutral impact. The authoring guide, proof declaration and IR status/index/log/roadmap are updated.
+
+ADR distillation reviewed every child's Decision Log, Surprises and Outcomes. ADR 0041 now carries implementation evidence for complete program-state identity and retained rich results; ADR 0042 owns intersected authority; ADR 0043 owns actual-attempt dispatch; ADR 0044 owns restartable facts and conservative uncertainty; ADR 0045 owns whole-Flow pinning, historical resolution and checked labels. The original four-way decomposition held; integration needed only additive registry/history seams.
+
+Initiative-level environment friction FRIC-1 is accepted with an isolated Kikan source checkout and temporary Cabal project. This preserves the repository's dependency declarations and the registered older checkout. Child-specific fixture concurrency and archive mirror detours are triaged in their owning plans. No friction entry remains logged. Completed replay is call-free; execution before an uncommitted result can repeat and remains fully accounted. Live HTTP model execution, optional probability/calibration adapters and downstream signing/read APIs are outside the validated example's scope.
