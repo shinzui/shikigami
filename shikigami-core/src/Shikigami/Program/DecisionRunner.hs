@@ -40,9 +40,9 @@ import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
-import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Log.Correlation (callCorrelationId)
 import Shikigami.Program.Decision
 import Shikumi.Error qualified as Shikumi
@@ -70,7 +70,7 @@ instance Exception DecisionAbort
 -- | First-class released provider values; constructing an invocation never
 -- mutates Baikai's process-global registry.
 decisionProviders :: [ApiProvider]
-decisionProviders = [stubApiProvider, claudeMessagesProvider, openaiChatProvider, openaiResponsesProvider]
+decisionProviders = [decisionStubProvider, claudeMessagesProvider, openaiChatProvider, openaiResponsesProvider]
 
 runDecisionProgram :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o)
 runDecisionProgram env prepared ref input =

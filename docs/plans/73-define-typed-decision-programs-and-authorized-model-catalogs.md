@@ -83,6 +83,9 @@ FRIC-1 in `docs/friction-log/` records the absent local Kikan action packages. V
 2026-10-21: Review revision after plan 80. The catalog builds on the HTTP provider selection and per-API model catalogs that plan 80 added to `Shikigami.App.Config`, not on an Anthropic-only path. This plan owns the refactor of the `Behavior.Provider` tuple predicate and the `FlowDef` decision-slot inventory with its validation; plans 74 and 76 consume them. Plan 82 is an external consumer of the public model descriptor.
 
 
+2026-10-25: Plan 76 integration adds typed `resolveProgramRef` for pinned pending descriptors, an explicit historical `resultCodec` constructor, and `retainModelBindings` for historical binding resolution without active authority expansion. These remain additive shared-owner APIs.
+
+
 ## Outcomes & Retrospective
 
 

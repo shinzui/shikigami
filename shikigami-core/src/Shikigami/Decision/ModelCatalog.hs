@@ -12,6 +12,7 @@ module Shikigami.Decision.ModelCatalog
     bindingCredential,
     ModelCatalog,
     modelCatalog,
+    retainModelBindings,
     catalogDescriptors,
     resolveModel,
     resolvePolicy,
@@ -112,21 +113,21 @@ bindingOptions binding = binding.options
 bindingCredential :: ModelBinding -> Maybe OpaqueCredential
 bindingCredential binding = binding.credential
 
-newtype ModelCatalog = ModelCatalog [ModelBinding]
+data ModelCatalog = ModelCatalog [ModelBinding] [ModelBinding]
   deriving stock (Eq)
 
 modelCatalog :: [ModelBinding] -> Either DecisionFailure ModelCatalog
 modelCatalog entries
   | length aliases /= length (nub aliases) = Left (decisionFailure UnknownModel "duplicate operator model alias")
-  | otherwise = Right (ModelCatalog entries)
+  | otherwise = Right (ModelCatalog entries [])
   where
     aliases = [binding.descriptor.alias | binding <- entries]
 
 catalogDescriptors :: ModelCatalog -> [ModelDescriptor]
-catalogDescriptors (ModelCatalog entries) = map modelDescriptor entries
+catalogDescriptors (ModelCatalog entries _) = map modelDescriptor entries
 
 resolveModel :: ModelCatalog -> AgentDecl -> Maybe ResolvedProfile -> ModelAlias -> Either DecisionFailure ModelDescriptor
-resolveModel (ModelCatalog entries) declaration profile alias@(ModelAlias value)
+resolveModel (ModelCatalog entries _) declaration profile alias@(ModelAlias value)
   | value `notElem` declaration.decisionModels = Left (decisionFailure ForbiddenModel "agent does not authorize decision model alias")
   | otherwise = case find (\binding -> binding.descriptor.alias == alias) entries of
       Nothing -> Left (decisionFailure UnknownModel "operator model alias is unavailable")
@@ -161,11 +162,11 @@ resolvePolicy programs slots catalog declaration profile = do
     else Right (DecisionPolicySnapshot narrowed resolved ((\p -> p.ref) <$> profile))
 
 pinnedBinding :: ModelCatalog -> ModelDescriptor -> Either DecisionFailure ModelBinding
-pinnedBinding (ModelCatalog entries) wanted =
+pinnedBinding (ModelCatalog active retained) wanted =
   maybe
     (Left (decisionFailure UnavailableModel "pinned model or credential binding is unavailable"))
     Right
-    (find (\binding -> binding.descriptor == wanted) entries)
+    (find (\binding -> binding.descriptor == wanted) (active <> retained))
 
 slotErrors :: ProgramRegistry -> AgentDecl -> [DecisionSlot] -> [Text]
 slotErrors registry declaration slots =
@@ -180,3 +181,17 @@ slotErrors registry declaration slots =
         <> ["decision slot model alias is not declared by agent" | any (\(ModelAlias alias) -> alias `notElem` declaration.decisionModels) slot.models]
     asciiAlphaNum c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
     asciiWord c = asciiAlphaNum c || c == '-' || c == '_'
+
+-- | Retained historical bindings serve pending snapshots without expanding the
+-- active alias catalog or declaration authority. Reusing an immutable alias /
+-- version with different authority is refused even across active/history sets.
+retainModelBindings :: ModelCatalog -> [ModelBinding] -> Either DecisionFailure ModelCatalog
+retainModelBindings (ModelCatalog active retained) historical = do
+  let allEntries = active <> retained <> historical
+      conflicts a b =
+        a.descriptor.alias == b.descriptor.alias
+          && a.descriptor.version == b.descriptor.version
+          && a.descriptor /= b.descriptor
+  if or [conflicts a b | a <- allEntries, b <- allEntries]
+    then Left (decisionFailure ContractMismatch "retained model version has conflicting authority")
+    else Right (ModelCatalog active (retained <> historical))

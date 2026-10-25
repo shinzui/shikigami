@@ -101,6 +101,7 @@ import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDi
 import Shikigami.Directory qualified as Directory
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
@@ -1920,6 +1921,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      decisions = FlowDecision.emptyDecisionServices,
       actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = agentDecls,
@@ -1952,6 +1954,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
   AgentRunDeps
     { appEnv,
       behaviorEnv,
+      decisions = FlowDecision.emptyDecisionServices,
       actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       agents = [decl],

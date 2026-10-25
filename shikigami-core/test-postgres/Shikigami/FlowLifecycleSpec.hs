@@ -57,6 +57,7 @@ import Shikigami.Flow.Capability
     runMemory,
     runSink,
   )
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -96,7 +97,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: shikumi-decision-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
         assertEqual
           "a registered flow is accepted"
@@ -353,6 +354,7 @@ completedFlow =
   FlowDef
     { name = "completed-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = twoStepFlow
     }
@@ -362,6 +364,7 @@ activityFlow =
   FlowDef
     { name = "activity-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
@@ -373,6 +376,7 @@ memoryFlow =
   FlowDef
     { name = "memory-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         _ <- remember "note" (object ["summary" .= ("flow durable note" :: Text)])
@@ -390,6 +394,7 @@ recallCountFlow =
   FlowDef
     { name = "recall-count-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON . length <$> recall "history" (MemoryQuery "prior escalation")
     }
@@ -407,6 +412,7 @@ supersessionFlow =
   FlowDef
     { name = "supersession-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         first <- remember "first" (object ["summary" .= ("original note" :: Text)])
@@ -429,6 +435,7 @@ sinkFlow =
   FlowDef
     { name = "sink-spike",
       decisionSlots = [],
+      requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON <$> emitSignal "alert" sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
     }
@@ -538,6 +545,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         ( runActivity sampleActivity
             . runMemory memoryEnv
             . runSink sinkEnv
+            . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
             . Routing.runRouting
               Routing.RoutingEnv

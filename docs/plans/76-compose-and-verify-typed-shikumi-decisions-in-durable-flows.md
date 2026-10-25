@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T01:00:35Z
       mode: "update"
       note: "Apply review: consume plan 73 FlowDef slot inventory instead of redefining it"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T21:09:10Z
+      mode: "implement"
+      note: "Integrate typed Decision capability, example, durable patch and end-to-end replay acceptance"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -49,13 +54,18 @@ Hard dependencies are `docs/plans/73-define-typed-decision-programs-and-authoriz
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-10-25) Milestone 1: Typed Decision capability pins all slots and preserves completed outcomes through retained codecs.
+- [x] (2026-10-25) Milestone 2: Registered two-model example and production worker/one-off wiring use governed runner and durable evidence.
+- [ ] Milestone 3: Literal labels and real patch guard pass declaration, generation, conformance and evolution gates.
+- [x] (2026-10-25) Milestone 4: All 225 PostgreSQL cases pass, including 17 new durable-decision tests covering replay, pending pins, terminal faults, crash accounting and child/sink deduplication.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The pending-slot lookup must recover a typed reference from the pinned descriptor rather than use the newly compiled default reference. The shared registry now provides that recovery. Historical model bindings are retained separately from active aliases so old runs can continue without expanding new-run authority.
+
+Decision-only Flows require explicit compiled ambient-model requirements; a global removal of the default-model check would weaken existing routers. The example alone opts out. FRIC-3 records the legacy HTTP archive mirror detour; fetching the exact selected archive over HTTPS resolved it. FRIC-1's temporary project and FRIC-2's serial PostgreSQL scheduling remain the validation workarounds.
 
 
 ## Decision Log
@@ -72,6 +82,9 @@ None recorded during implementation.
 2026-10-21: Revision for [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) coordination: pin effective parameters and derivation versions for every slot, and distinguish committed workflow replay from upstream evidence replay that intentionally recomputes answers. Preserve rich validated outputs with retained result codecs while keeping the Flow API independent of optional Jev/probability/calibration features. See [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md).
 
 2026-10-21: Review revision. The `FlowDef` slot inventory and its validation belong to plan 73; this plan owns the `Decision` effect, interpreter, labels and wiring, and consumes the inventory. The provider wrapper it invokes comes from plan 74 against the pinned Baikai 0.7.2.0.
+
+
+2026-10-25: Keep executable, codec and retained-binding resolution separate. Pin every slot before triage and resolve pending references from that snapshot. Completed results consult neither executable nor model binding. Declare the real decision patch and preserve the old interpreter on its false branch. ADR 0045 distills these choices; ADRs 0041–0044 retain admission, runner and evidence ownership.
 
 
 ## Outcomes & Retrospective
@@ -164,13 +177,13 @@ just keiro-gate "$DECISION_FLOW_BASE"
 cabal test all --test-show-details=direct
 ```
 
-Use the repository's configured GHC environment; PostgreSQL tests use the migrated isolated fixture. Gate commands run check, inspect, scaffold, diff and generated conformance. Inspect generated diffs and do not hand-format generated files. For focused iteration name the new Tasty group `Shikumi decision workflow` and run:
+Use the repository's configured GHC environment; PostgreSQL tests use the migrated isolated fixture. Gate commands run check, inspect, scaffold, diff and generated conformance. Inspect generated diffs and do not hand-format generated files. For focused iteration name the new Tasty group `durable typed decisions` and run:
 
 ```bash
-cabal test shikigami-core-postgres-test --test-options='-p "Shikumi decision workflow"' --test-show-details=direct
+cabal test shikigami-core-postgres-test --test-options='-j1 -p "durable typed decisions"' --test-show-details=direct
 ```
 
-Expected evidence, to replace with actual output during implementation:
+Observed acceptance evidence from the migrated PostgreSQL suite:
 
 ```text
 uninterrupted: triage model A; investigation model B twice; all three calls accounted
@@ -180,7 +193,7 @@ forbidden investigation model: zero B calls; bounded failure; no protected effec
 lost result append: additional actual attempt preserved; no false exactly-once claim
 ```
 
-These are acceptance expectations, not tests performed while drafting the plan.
+All cases above passed through actual workflow journals and governed provider dispatch. The full package run also passed all 453 core, 37 agent, 88 worker and 47 server tests. The pre-change evolution reference is `436e9f8`; the gate follows the committed generated-layer checkpoint. Validation uses the isolated temporary project described in FRIC-1.
 
 
 ## Validation and Acceptance

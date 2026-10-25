@@ -63,6 +63,7 @@ import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -540,6 +541,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
             AgentWorkflow.AgentRunDeps
               { AgentWorkflow.appEnv = appEnv,
                 AgentWorkflow.behaviorEnv = behaviorEnv,
+                AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
                 AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.agents = [declaration],

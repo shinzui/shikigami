@@ -8,9 +8,9 @@ Status: accepted
 ## Context
 
 [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
-plans typed Shikumi program invocation inside durable Flows. Its admission contracts are implemented by plan 73. This decision also specifies
-the runner and workflow contracts the remaining children must implement; it does
-not claim the durable capability is complete.
+implements typed Shikumi program invocation inside durable Flows through plans
+73–76. Admission, actual-attempt governance and persistence, and the durable
+capability now share the contracts below.
 
 `mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs`
 plans probability-bearing outputs, local decision settings, Jev support and
@@ -74,12 +74,12 @@ execution evidence would conflate model judgment with transport accounting.
 
 ## Consequences
 
-Plans 73–76 can proceed on current dependencies. They must prove parameter-state
-identity, pending-state retention/refusal and committed-result reuse using
-current-API fixtures. Future upstream adoption needs qualified adapters and new
+Plans 73–76 implement these contracts on the selected dependencies. Current-API
+fixtures prove parameter-state identity, pending-state retention/refusal and
+committed-result reuse. Future upstream adoption needs qualified adapters and new
 program/result versions, with retained codecs for supported historical runs.
 It must preserve the distinction between deliberate evidence re-derivation and
-workflow replay. Implementation evidence belongs here when those tests pass.
+workflow replay.
 
 
 ## References
@@ -105,3 +105,14 @@ does not require retiring its pure result codec, and decoding through that codec
 does not rerun a current domain validator. Contract tests preserve a result's
 confidence field with an empty executable registry and reject changed state under
 a reused immutable registration key.
+
+## Durable integration evidence
+
+The PostgreSQL DecisionWorkflowSpec runs actual Handan/Shikumi in a durable
+agent-run workflow. Versioned registrations with identical provider requests and
+responses but different pure local derivation produce different fresh results.
+An already committed original result retains every field, including confidence,
+after the original executable and model bindings are removed. Between decisions,
+the whole-Flow snapshot selects the original retained derivation; removing that
+state refuses pending execution before dispatch. The result-codec registry alone
+is sufficient to read committed outcomes. [ADR 0045](0045-flow-policy-pins-pending-decisions-and-retains-completed-result-codecs.md) records the workflow integration boundary.

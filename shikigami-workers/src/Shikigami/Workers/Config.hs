@@ -54,6 +54,7 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
@@ -94,6 +95,7 @@ data WorkerEnv = WorkerEnv
     -- than reconstructing a less truthful view from enabled agents.
     agentReport :: !AgentLoadReport,
     behaviorEnv :: !BehaviorEnv,
+    decisions :: !FlowDecision.DecisionServices,
     actionAuthorizer :: !ActionAuthorizer,
     runTimeout :: !NominalDiffTime,
     delegationBudget :: !DelegationBudget,
@@ -199,6 +201,7 @@ agentRunDeps env =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv = (.appEnv) env,
       AgentWorkflow.behaviorEnv = (.behaviorEnv) env,
+      AgentWorkflow.decisions = (.decisions) env,
       AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
       AgentWorkflow.capabilities = emptyCapabilityRuntime,
       AgentWorkflow.agents = (.agents) env,

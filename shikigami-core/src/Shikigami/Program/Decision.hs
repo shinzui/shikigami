@@ -14,12 +14,14 @@ module Shikigami.Program.Decision
     validateResult,
     ResultCodec,
     jsonResultCodec,
+    resultCodec,
     encodeResult,
     decodeResult,
     SomeProgram (..),
     ProgramRegistry,
     programRegistry,
     lookupProgram,
+    resolveProgramRef,
     programDescriptors,
     SomeResultCodec (..),
     ResultCodecRegistry,
@@ -31,6 +33,7 @@ module Shikigami.Program.Decision
 where
 
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
+import Data.Kind (Type)
 import Data.List (find, nub)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -42,7 +45,7 @@ import Shikumi.Signature qualified as Signature
 
 type role DecisionProgramRef nominal nominal
 
-newtype DecisionProgramRef i o = DecisionProgramRef ProgramDescriptor
+newtype DecisionProgramRef (i :: Type) (o :: Type) = DecisionProgramRef ProgramDescriptor
   deriving stock (Eq, Show)
 
 descriptor :: DecisionProgramRef i o -> ProgramDescriptor
@@ -54,6 +57,10 @@ data ResultCodec o = ResultCodec
   { encode :: o -> Value,
     decode :: Value -> Either DecisionFailure o
   }
+
+-- | Retain explicit historical decoders when a current FromJSON instance changes.
+resultCodec :: (o -> Value) -> (Value -> Either DecisionFailure o) -> ResultCodec o
+resultCodec = ResultCodec
 
 jsonResultCodec :: (ToJSON o, FromJSON o) => ResultCodec o
 jsonResultCodec = ResultCodec toJSON \value -> case fromJSON value of
@@ -220,3 +227,11 @@ lookupResultCodec (ResultCodecRegistry entries) wanted =
       | otherwise -> maybe (Left (decisionFailure ContractMismatch "stored decision result type differs")) Right (cast codec)
   where
     matches (SomeResultCodec actual _) = actual.programId == wanted.programId && actual.version == wanted.version
+
+-- | Recover a typed reference to a pinned descriptor after replay. The registry
+-- checks both identity and Haskell witnesses before returning it.
+resolveProgramRef :: (Typeable i, Typeable o) => ProgramRegistry -> ProgramDescriptor -> Either DecisionFailure (DecisionProgramRef i o)
+resolveProgramRef registry pinned = do
+  let ref = DecisionProgramRef pinned
+  _ <- lookupProgram registry ref
+  pure ref

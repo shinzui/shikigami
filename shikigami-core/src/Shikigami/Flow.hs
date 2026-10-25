@@ -31,6 +31,7 @@ import Shikigami.Decision.ModelCatalog (slotErrors)
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
+import Shikigami.Flow.Decision (Decision)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
@@ -41,6 +42,7 @@ import Shikigami.Flow.OpenTelemetryPracticeReview
   )
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.Flow.ShikumiDecisionExample (exampleSlots, shikumiDecisionExample)
 import Shikigami.PracticeReview.Capability
   ( ExecutionContext,
     PracticeReviewAttention,
@@ -49,6 +51,7 @@ import Shikigami.PracticeReview.Capability
   )
 import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
 import Shikigami.Program.Decision qualified as Decision
+import Shikigami.Program.Decision.Examples (examplePrograms)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 -- | Everything a flow body may do, and therefore everything it may not.
@@ -77,6 +80,7 @@ type FlowEffects es =
     Acknowledgement :> es,
     Delegate :> es,
     Routing :> es,
+    Decision :> es,
     ExecutionContext :> es,
     PracticeReviewEvidence :> es,
     PracticeReviewEvaluator :> es,
@@ -107,6 +111,7 @@ data FlowDef = FlowDef
   { name :: !Text,
     lifecycle :: !LifecycleDiagram,
     decisionSlots :: ![DecisionSlot],
+    requiresDefaultModel :: !Bool,
     run :: forall es. (FlowEffects es) => Value -> Eff es Value
   }
 
@@ -136,14 +141,23 @@ atRiskCustomerLifecycleDiagram =
 flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
+      { name = "shikumi-decision-example",
+        decisionSlots = exampleSlots,
+        requiresDefaultModel = False,
+        lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" [],
+        run = shikumiDecisionExample
+      },
+    FlowDef
       { name = "at-risk-customer",
         decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
       },
     FlowDef
       { name = "delegation-proof",
         decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
@@ -154,6 +168,7 @@ flowRegistry =
     FlowDef
       { name = "architecture-practice-router",
         decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
@@ -164,6 +179,7 @@ flowRegistry =
     FlowDef
       { name = opentelemetryPracticeReviewFlowName,
         decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle =
           LifecycleDiagram
             { mermaid = opentelemetryPracticeReviewMermaid,
@@ -255,4 +271,4 @@ flowDeclarationErrors declaration@AgentDecl {behavior} =
 -- The typed decision registry is finite and validated at construction. The
 -- example integration adds its immutable registrations here.
 decisionProgramRegistry :: Decision.ProgramRegistry
-decisionProgramRegistry = either (error . show) id (Decision.programRegistry [])
+decisionProgramRegistry = examplePrograms

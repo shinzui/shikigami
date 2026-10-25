@@ -18,6 +18,14 @@ workflow AgentRun
     step run-behavior-v2 -> BehaviorOutput
     step classify -> RiskVerdict
     child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
+    patch shikigami-flow-decisions-v1 {
+      step decision-policy -> DecisionPolicyResolution
+      step decision-prepare-triage -> PreparedDecisionResolution
+      step decision-result-triage -> DecisionOutcome
+      step decision-catalog-investigate -> CandidateCatalog
+      step decision-prepare-investigate -> PreparedDecisionResolution
+      step decision-result-investigate -> DecisionOutcome
+    }
     step route-catalog-architecture-practice -> CandidateCatalog
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings

@@ -80,7 +80,7 @@ Cross-repository research also read the request-default decision `mori://shinzui
 | 1 | Typed programs and authorized model catalogs | docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md | None | None | Complete |
 | 2 | Governed Shikumi provider execution | docs/plans/74-run-shikumi-decisions-through-governed-provider-calls.md | EP-1 | None | Complete |
 | 3 | Durable decision call evidence | docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md | EP-1 M1 and M3 (typed contracts and call hooks) | None | Complete |
-| 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | Not Started |
+| 4 | Durable Flow composition and acceptance | docs/plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md | EP-1, EP-2, EP-3 | None | In Progress |
 
 EP numbers above identify registry rows; filenames contain repository-wide plan IDs. Status values are Not Started, In Progress, Complete, and Cancelled.
 
@@ -126,10 +126,13 @@ EP-4 owns `shikigami-core/src/Shikigami/Flow/Decision.hs`, `FlowEffects`, workfl
 Each plan adds only its own module/test entries to `shikigami-core/shikigami-core.cabal` and test entry points. EP-1 is the owner of shared contract changes. EP-4 is the integration owner of all cross-plan amendments and the sole owner of workflow labels. Relevant durable decisions must be distilled into local ADRs during implementation, especially whole-Flow pinning, model authorization, private provider registries, crash accounting, and encode-only evidence recovery.
 
 
+The integrated consumer also uses EP-1's additive typed pinned-reference recovery, explicit historical result-codec constructor and retained-binding lookup. Active aliases and retained binding versions have separate authority; EP-4 owns their replay qualification.
+
+
 ## Progress
 
 
-Plan 73 is Complete: typed admission/contracts and all 440 core tests pass. Plan 74 is Complete with all 453 core tests passing; plan 75 is Complete with 208 PostgreSQL tests passing and plan 76 remains Not Started. Plan 76 is next in registry order; plan 75's milestone prerequisites are also accepted. Plan 82 under MasterPlan 14 may now consume plan 73's catalog and shared predicate. Admission, the governed runner and durable attempt persistence are accepted. The remaining integration gate is production wiring and patch-safe workflow replay acceptance in plan 76. The Shikumi coordination dependency does not block this scope.
+Plans 73–75 are Complete. Plan 76 has implemented production wiring, the typed example, durable policy/preparation/outcomes and patch branches. All package tests pass, including 225 PostgreSQL cases and 453 core unit cases. The remaining gate is committed scaffold determinism and evolution/conformance against `436e9f8`, followed by final documentation acceptance.
 
 
 

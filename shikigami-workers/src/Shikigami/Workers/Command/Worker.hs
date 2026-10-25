@@ -28,6 +28,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -164,6 +165,7 @@ runWorkerCmdWith resumeBudget config = do
                 agents,
                 agentReport = report,
                 behaviorEnv = behEnv,
+                decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
                 actionAuthorizer,
                 runTimeout = (.runTimeout) config,
                 delegationBudget = (.delegationBudget) config,

@@ -32,6 +32,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -132,6 +133,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
         AgentWorkflow.AgentRunDeps
           { AgentWorkflow.appEnv = appEnv,
             AgentWorkflow.behaviorEnv = behEnv,
+            AgentWorkflow.decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
             AgentWorkflow.actionAuthorizer = denyAllActionAuthorizer,
             AgentWorkflow.capabilities = capabilities,
             AgentWorkflow.agents = [decl],

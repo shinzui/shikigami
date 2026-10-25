@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: FRIC-3 accepted: The HTTPS archive cache fill bypassed the 403 without changing package selection.
+* **Addition**: FRIC-3 records detour environment friction with https://hackage.haskell.org/package/hw-kafka-streamly-0.2.0.0: Legacy Cabal package mirror rejects a required source archive
 * **Update**: FRIC-2 accepted: Serial test scheduling passed all 208 PostgreSQL cases without changing the fixture server or application pools.
 * **Addition**: FRIC-2 records detour tooling friction with mori://shinzui/shikigami: Default PostgreSQL test parallelism exhausts fixture connections
 * **Update**: FRIC-1 accepted: The upstream packages are available; use an isolated source checkout to validate without mutating the older local dependency checkout.

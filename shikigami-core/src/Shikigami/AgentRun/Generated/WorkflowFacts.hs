@@ -20,9 +20,9 @@ workflowFacts =
     { name = "shikigami.agent-run"
     , idVia = "runJobWorkflowId"
     , idField = "input"
-    , body = ["step:ingest-job", "step:lookup-agent", "step:resolve-profile", "step:resolve-capability-overlays", "step:resolve-approval-policy", "step:open-session", "step:recall", "step:run-behavior-v2", "step:classify", "child:approval", "step:route-catalog-architecture-practice", "step:route-decision-architecture-practice", "step:recall-risk-history", "step:remember-acknowledged", "step:remember-declined", "step:remember-escalated", "step:practice-review-remember-provisional", "step:practice-review-resolve", "step:practice-review-recall", "step:practice-review-chain", "step:practice-review-evidence", "step:practice-review-evaluate", "step:practice-review-attention", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
+    , body = ["step:ingest-job", "step:lookup-agent", "step:resolve-profile", "step:resolve-capability-overlays", "step:resolve-approval-policy", "step:open-session", "step:recall", "step:run-behavior-v2", "step:classify", "child:approval", "patch:shikigami-flow-decisions-v1(step:decision-policy,step:decision-prepare-triage,step:decision-result-triage,step:decision-catalog-investigate,step:decision-prepare-investigate,step:decision-result-investigate)", "step:route-catalog-architecture-practice", "step:route-decision-architecture-practice", "step:recall-risk-history", "step:remember-acknowledged", "step:remember-declined", "step:remember-escalated", "step:practice-review-remember-provisional", "step:practice-review-resolve", "step:practice-review-recall", "step:practice-review-chain", "step:practice-review-evidence", "step:practice-review-evaluate", "step:practice-review-attention", "step:dispatch-sinks", "step:fail-session", "step:record", "step:complete", "child:delegate"]
     , awaitLabels = []
-    , patchIds = []
+    , patchIds = ["shikigami-flow-decisions-v1"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.

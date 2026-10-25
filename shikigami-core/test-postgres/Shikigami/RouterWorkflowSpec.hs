@@ -1,4 +1,4 @@
-module Shikigami.RouterWorkflowSpec (tests) where
+module Shikigami.RouterWorkflowSpec (tests, routerDeps, routerJob, routerDecl, successSpecialist, catalog, runSuccessfulChild) where
 
 import Control.Exception (bracket, try)
 import Control.Monad (filterM, void)
@@ -50,6 +50,7 @@ import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -328,6 +329,7 @@ routerDeps appEnv behaviorEnv routing agents =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
+      AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
       AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.agents,

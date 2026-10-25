@@ -83,16 +83,19 @@ library
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
     Shikigami.Decision.ModelCatalog
+    Shikigami.Decision.StubProvider
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
+    Shikigami.Flow.Decision
     Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
+    Shikigami.Flow.ShikumiDecisionExample
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Id.Name
@@ -110,6 +113,7 @@ library
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Program.Decision
+    Shikigami.Program.Decision.Examples
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
     Shikigami.Repository
@@ -348,6 +352,7 @@ test-suite shikigami-core-postgres-test
   other-modules:
     Shikigami.AgentWorkflowSpec
     Shikigami.DecisionEvidenceSpec
+    Shikigami.DecisionWorkflowSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectoryStoreSpec
     Shikigami.Fixture.KawaStub

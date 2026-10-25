@@ -53,6 +53,7 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.OpenTelemetryPracticeReview (opentelemetryPracticeReviewFlow)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -617,6 +618,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
   AgentWorkflow.AgentRunDeps
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
+      AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
       AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.agents = [reviewerDecl],

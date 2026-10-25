@@ -462,7 +462,31 @@ preserve and therefore no legacy branch to model. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
 
-The current baseline has no application patches. **A subsequent change to a
+The active application patch is `shikigami-flow-decisions-v1`. Its real runtime
+guard enables the finite typed Decision capability; an old patch snapshot keeps
+the disabled interpreter and makes no `decision-policy` lookup. Existing flows
+have no decision slots and add no decision steps. The checked segment declares:
+
+| Label | Persisted contract |
+| --- | --- |
+| `decision-policy` | Bounded refusal or `DecisionPolicySnapshot`, format 1, for all slots |
+| `decision-prepare-triage` | Bounded refusal or `PreparedDecision`, including immutable program/model/input bindings |
+| `decision-result-triage` | `DecisionOutcome`, format 1, containing rich result or bounded refusal |
+| `decision-catalog-investigate` | Existing versioned `CandidateCatalog` |
+| `decision-prepare-investigate` | Same prepared envelope for the second slot |
+| `decision-result-investigate` | Same versioned outcome envelope for the second slot |
+
+Each slot is one-use within a generation. Completed results use retained pure
+codecs without executable/model lookup or current domain revalidation. Pending
+results require the exact pinned executable, parameter/derivation state and
+credential binding. Keep historical codecs independently of retired executables;
+unknown versions fail explicitly. Changes to local derivation require a new
+immutable program identity even when provider requests remain identical. See
+[the authoring guide](shikumi-flow-decisions.md) and [ADR 0045](adr/0045-flow-policy-pins-pending-decisions-and-retains-completed-result-codecs.md).
+
+Do not roll back across this patch introduction. Preserve both branches until
+no pre-change instance can resume, then retire the guard and declaration
+together. **A subsequent change to a
 declared workflow body still requires a new real patch guard**, including pure
 appends, unless the released differ explicitly classifies a supported rotation
 extension as additive. Plan 65's accepted breaking reports apply only to its
