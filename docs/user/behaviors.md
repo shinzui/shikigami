@@ -112,6 +112,12 @@ Names a compiled Haskell flow in the flow registry. A Flow runs inside the agent
 workflow, so it can journal internal steps, emit replay-safe sink intents, park for an
 acknowledgement, resume after an answer or deadline, and render its lifecycle as Mermaid.
 
+Flows can also invoke typed Shikumi decisions with separately admitted model
+aliases, journal full validated results, and retain every actual provider attempt.
+The registered `shikumi-decision-example` Flow demonstrates triage followed by
+investigation and optional governed specialist delegation. See
+[Typed decisions in Flows](typed-decisions.md) for configuration and replay limits.
+
 Use this path when the behavior is not just "compute one JSON value" but a durable process.
 The `at-risk-customer` flow classifies a ticket, raises an alert for high risk, waits for
 acknowledgement, and escalates on timeout. See **[Flows](./flows.md)**.
@@ -136,3 +142,4 @@ quickest way to iterate on what an agent produces.
 | a typed pipeline you want to evaluate/optimize | `ShikumiProgram` |
 | natural-language instructions, optionally with tools | `Skill` |
 | a durable process that must wait or resume | `Flow` |
+| typed decisions that branch into governed actions and survive restart | `Flow` with the `Decision` capability |

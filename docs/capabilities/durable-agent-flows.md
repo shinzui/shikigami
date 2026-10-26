@@ -32,6 +32,10 @@ evidence:
 
 A durable run journals lifecycle work under its run identity and resumes through the shared workflow registry. A compiled Flow can checkpoint pure results and use replay-safe memory, sink, acknowledgement, delegation, and routing interpreters. Each registered flow carries a lifecycle diagram that the administrative command renders.
 
+The effect surface also includes [governed typed decisions](typed-flow-decisions.md),
+with finite slot inventories, pinned program/model state, retained result codecs,
+and durable actual-attempt evidence.
+
 ## Adopt
 
 Declare `Behavior.Flow` with a name in the build registry, following [Flows](../user/flows.md). Operate the migrated database and workflow worker. Flow body changes must follow [workflow versioning](../workflow-versioning.md).

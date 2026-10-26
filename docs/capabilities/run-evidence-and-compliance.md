@@ -34,6 +34,12 @@ Library consumers can collect model trace evidence with run/attempt/retry correl
 
 ## Adopt
 
+Typed Flow decisions additionally maintain their own durable actual-attempt
+ledger and versioned compliance facts. Its library query API and uncertainty
+limits are described in [CAP-21](typed-flow-decisions.md). This shares the
+compliance evaluator while retaining a separate accounting owner; ordinary
+decision reports remain unsigned.
+
 Embed the evidence collector and compliance functions in an evidence-enabled runtime. Register the shared evidence catalog and use its store/query interfaces after applying migrations. The PostgreSQL suite includes multi-call, retry, child, rollback, and restart scenarios.
 
 Builds on [CAP-13: Sanctioned execution profile pinning](sanctioned-execution-profiles.md).

@@ -129,6 +129,12 @@ $ cabal run shikigami -- enqueue-run my-agent --payload '{"ticketId":"T-42"}'
 The worker drains the queue and runs the named agent with that payload. Manual enqueueing is
 useful for local smoke tests and command-style integrations that do not use a broker.
 
+Remote callers can use `POST /agents/{agentName}/runs` or `shikigami-client runs
+request` with an agent-scoped idempotency key. This path addresses any enabled,
+lifecycle-admitted declaration directly, regardless of its normal trigger. It
+atomically records acceptance and queues the job; the worker executes later.
+See the [HTTP API guide](http-api.md) for authentication and status polling.
+
 ## Choosing a trigger
 
 | If the agent should run… | Use |

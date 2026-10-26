@@ -1,8 +1,8 @@
 # Capability coverage census
 
-This census was checked on 2026-10-10 against the Cabal manifests, public module
+This census was checked on 2026-10-25 against the Cabal manifests, public module
 exports, executable entry points, administrative parser, implementation, tests,
-and current user/operations documentation. It maps **seven packages, 163 exposed
+and current user/operations documentation. It maps **seven packages, 183 exposed
 modules, twelve executables, and eleven repository-owned administrative command
 families** to the capability catalog or an explicit supporting-surface exclusion.
 
@@ -17,11 +17,11 @@ mapped provisions and are not independently importable consumer interfaces.
 | Package | Exposed modules | Executables |
 | --- | ---: | ---: |
 | [shikigami-agent](../shikigami-agent/shikigami-agent.cabal) | 6 | 3 |
-| [shikigami-api](../shikigami-api/shikigami-api.cabal) | 4 | 1 |
+| [shikigami-api](../shikigami-api/shikigami-api.cabal) | 7 | 1 |
 | [shikigami-client](../shikigami-client/shikigami-client.cabal) | 2 | 1 |
-| [shikigami-core](../shikigami-core/shikigami-core.cabal) | 108 | 0 |
+| [shikigami-core](../shikigami-core/shikigami-core.cabal) | 122 | 0 |
 | [shikigami-migrations](../shikigami-migrations/shikigami-migrations.cabal) | 2 | 1 |
-| [shikigami-server](../shikigami-server/shikigami-server.cabal) | 24 | 2 |
+| [shikigami-server](../shikigami-server/shikigami-server.cabal) | 27 | 2 |
 | [shikigami-workers](../shikigami-workers/shikigami-workers.cabal) | 17 | 4 |
 
 The migration count includes its public `test-support` sublibrary. Counts come
@@ -42,12 +42,16 @@ mechanism remain grouped under that provision.
 | shikigami-agent | `Agent.Command.Launch` | 1 | [CAP-18](capabilities/foreground-agent-launches.md) |
 | shikigami-agent | `Agent.Command.RunBehavior` | 1 | [CAP-3](capabilities/program-and-skill-execution.md) |
 | shikigami-api | `Api` | 3 | [CAP-16](capabilities/http-health-contract.md) |
+| shikigami-api | `Agent.Api` | 1 | [CAP-22](capabilities/declared-agent-http-catalog.md) |
+| shikigami-api | `AgentRun.Api` | 1 | [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
+| shikigami-api | `Caller.Api` | 1 | [CAP-23](capabilities/http-caller-authentication.md) |
 | shikigami-api | `Health` | 1 | [CAP-16](capabilities/http-health-contract.md) |
-| shikigami-client | `Client` | 2 | [CAP-16](capabilities/http-health-contract.md) |
+| shikigami-client | `Client` | 2 | [CAP-16](capabilities/http-health-contract.md), [CAP-22](capabilities/declared-agent-http-catalog.md), [CAP-23](capabilities/http-caller-authentication.md), [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 | shikigami-core | `Action` | 1 | [CAP-7](capabilities/exact-action-authorization.md) |
 | shikigami-core | `Activity` | 1 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-core | `Agent.Approval` | 3 | [CAP-10](capabilities/durable-human-approval.md) |
 | shikigami-core | `Agent.Conversation` | 2 | [CAP-11](capabilities/addressed-conversations.md) |
+| shikigami-core | `Agent.Catalog` | 1 | [CAP-22](capabilities/declared-agent-http-catalog.md) |
 | shikigami-core | `Agent.Decl` | 1 | [CAP-1](capabilities/typed-agent-declarations.md) |
 | shikigami-core | `Agent.Delegate` | 3 | [CAP-8](capabilities/governed-routing-and-delegation.md) |
 | shikigami-core | `Agent.Loader` | 1 | [CAP-1](capabilities/typed-agent-declarations.md) |
@@ -59,17 +63,23 @@ mechanism remain grouped under that provision.
 | shikigami-core | `Agent.RunJob` | 1 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-core | `Agent.Skill` | 1 | [CAP-3](capabilities/program-and-skill-execution.md) |
 | shikigami-core | `Agent.Workflow` | 3 | [CAP-4](capabilities/durable-agent-flows.md) |
+| shikigami-core | `AgentRun.Ledger` | 1 | [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
+| shikigami-core | `AgentRun.Status` | 1 | [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 | shikigami-core | `App` | 4 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | shikigami-core | `Attestation` | 7 | [CAP-14](capabilities/run-evidence-and-compliance.md) |
+| shikigami-core | `Attestation.CallFacts` | 1 | [CAP-21](capabilities/typed-flow-decisions.md), [CAP-14](capabilities/run-evidence-and-compliance.md) |
 | shikigami-core | `Attestation.Profile` | 1 | [CAP-13](capabilities/sanctioned-execution-profiles.md) |
 | shikigami-core | `Attestation.Resolve` | 1 | [CAP-13](capabilities/sanctioned-execution-profiles.md) |
 | shikigami-core | `Behavior` | 7 | [CAP-3](capabilities/program-and-skill-execution.md) |
+| shikigami-core | `Behavior.Provider.Call` | 1 | [CAP-21](capabilities/typed-flow-decisions.md), [CAP-13](capabilities/sanctioned-execution-profiles.md) |
 | shikigami-core | `Capability` | 4 | [CAP-12](capabilities/revision-pinned-tool-overlays.md) |
 | shikigami-core | `Core` | 1 | Support only: placeholder/version or common name/prelude helpers. |
+| shikigami-core | `Decision` | 4 | [CAP-21](capabilities/typed-flow-decisions.md) |
 | shikigami-core | `Directory` | 2 | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
-| shikigami-core | `Flow` | 3 | [CAP-4](capabilities/durable-agent-flows.md) |
+| shikigami-core | `Flow` | 4 | [CAP-4](capabilities/durable-agent-flows.md) |
 | shikigami-core | `Flow.Acknowledgement` | 1 | [CAP-10](capabilities/durable-human-approval.md) |
 | shikigami-core | `Flow.Capability` | 1 | [CAP-4](capabilities/durable-agent-flows.md), [CAP-5](capabilities/agent-memory-and-sessions.md), [CAP-9](capabilities/authorized-sink-outbox.md) |
+| shikigami-core | `Flow.Decision` | 1 | [CAP-21](capabilities/typed-flow-decisions.md) |
 | shikigami-core | `Flow.Delegate` | 1 | [CAP-8](capabilities/governed-routing-and-delegation.md) |
 | shikigami-core | `Flow.OpenTelemetryPracticeReview` | 1 | [CAP-15](capabilities/advisory-practice-review.md) |
 | shikigami-core | `Flow.Routing` | 1 | [CAP-8](capabilities/governed-routing-and-delegation.md) |
@@ -82,6 +92,8 @@ mechanism remain grouped under that provision.
 | shikigami-core | `PracticeReview` | 6 | [CAP-15](capabilities/advisory-practice-review.md) |
 | shikigami-core | `Prelude` | 1 | Support only: placeholder/version or common name/prelude helpers. |
 | shikigami-core | `Program` | 1 | [CAP-3](capabilities/program-and-skill-execution.md) |
+| shikigami-core | `Program.Decision` | 2 | [CAP-21](capabilities/typed-flow-decisions.md) |
+| shikigami-core | `Program.DecisionRunner` | 1 | [CAP-21](capabilities/typed-flow-decisions.md) |
 | shikigami-core | `Repository` | 1 | [CAP-15](capabilities/advisory-practice-review.md) |
 | shikigami-core | `Router` | 3 | [CAP-8](capabilities/governed-routing-and-delegation.md) |
 | shikigami-core | `RunEvidence` | 2 | [CAP-14](capabilities/run-evidence-and-compliance.md) |
@@ -94,6 +106,9 @@ mechanism remain grouped under that provision.
 | shikigami-core | `Trigger` | 3 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-core | `Workflow` | 2 | [CAP-4](capabilities/durable-agent-flows.md) |
 | shikigami-migrations | `Migrations` | 2 | [CAP-19](capabilities/database-migrations-and-bootstrap.md) |
+| shikigami-server | `Agent.Handler` | 1 | [CAP-22](capabilities/declared-agent-http-catalog.md) |
+| shikigami-server | `AgentRun.Handler` | 1 | [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
+| shikigami-server | `Caller.Verifier` | 1 | [CAP-23](capabilities/http-caller-authentication.md) |
 | shikigami-server | `Health` | 1 | [CAP-16](capabilities/http-health-contract.md) |
 | shikigami-server | `Server` | 6 | [CAP-16](capabilities/http-health-contract.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | shikigami-server | `Server.Command` | 1 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
@@ -127,9 +142,9 @@ mechanism remain grouped under that provision.
 | `shikigami-agent-launch` | shikigami-agent | [CAP-18](capabilities/foreground-agent-launches.md) |
 | `shikigami-agent-run` | shikigami-agent | [CAP-4](capabilities/durable-agent-flows.md), [CAP-5](capabilities/agent-memory-and-sessions.md) |
 | `shikigami-openapi` | shikigami-api | [CAP-16](capabilities/http-health-contract.md) |
-| `shikigami-client` | shikigami-client | [CAP-16](capabilities/http-health-contract.md) |
+| `shikigami-client` | shikigami-client | [CAP-16](capabilities/http-health-contract.md), [CAP-22](capabilities/declared-agent-http-catalog.md), [CAP-23](capabilities/http-caller-authentication.md), [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 | `shikigami-migrate` | shikigami-migrations | [CAP-19](capabilities/database-migrations-and-bootstrap.md) |
-| `shikigami-server` | shikigami-server | [CAP-16](capabilities/http-health-contract.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
+| `shikigami-server` | shikigami-server | [CAP-16](capabilities/http-health-contract.md), [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-22](capabilities/declared-agent-http-catalog.md), [CAP-23](capabilities/http-caller-authentication.md), [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 | `shikigami` | shikigami-server | [CAP-1](capabilities/typed-agent-declarations.md), [CAP-2](capabilities/durable-trigger-intake.md), [CAP-4](capabilities/durable-agent-flows.md), [CAP-6](capabilities/principal-lifecycle-and-continuity.md), [CAP-9](capabilities/authorized-sink-outbox.md), [CAP-10](capabilities/durable-human-approval.md), [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-20](capabilities/local-integration-fixtures.md) |
 | `shikigami-worker` | shikigami-workers | [CAP-4](capabilities/durable-agent-flows.md), [CAP-9](capabilities/authorized-sink-outbox.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | `shikigami-scheduler` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
@@ -156,14 +171,14 @@ its commands belong to
 | `danwa-spike` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `grants` | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
-| `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
+| `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 
 ## Exclusions and bounds
 
 - `Shikigami.Core` is a version placeholder; `Prelude` and `Id.Name` are supporting utilities. They are exported, but do not warrant independent provision records.
 - Generated workflow facts, queue codecs, projection ownership, and conformance reports support CAP-2, CAP-4, and CAP-14. They are not additional business capabilities.
 - The at-risk-customer, delegation-proof, and architecture-review router flows are registered implementations/examples within CAP-4, CAP-8, and CAP-15. Proof researchers are fixed-output programs within CAP-3.
-- Schema-only deterministic execution, shared memory recall, mutable repository workspaces, live Kubernetes diagnostics, cross-runtime A2A, public agent-run/status HTTP routes, and signed/served attestations remain unavailable. Their declarations or plans are not provision records.
+- Schema-only deterministic execution, shared memory recall, mutable repository workspaces, live Kubernetes diagnostics, cross-runtime A2A, and signed/served attestations remain unavailable. Their declarations or plans are not provision records.
 - The production practice-review content reader remains unavailable. CAP-15 claims its implemented orchestration and unresolved path, with complete-evidence branches evidenced only through fixtures.
 - Foreground and named-job launches belong to CAP-18; they do not imply working background CLI response providers.
 - Build recipes, dependency qualification tooling, plans, schemas, migrations, and tests are supporting artifacts unless exposed through an independently usable provision such as CAP-19 or CAP-20.
@@ -181,3 +196,12 @@ or declaration arm, reconcile the surface with this table and its owning record.
 Inspect the implementation and evidence before widening the claim. Profile, link,
 and graph validation check consistency; they do not automatically discover omitted
 features or prove the semantics of a claim.
+
+## October 25 additions
+
+The 2026-10-25 refresh adds CAP-21 through CAP-25 and twenty exposed modules: typed
+decision programs, model admission, attempt evidence, Flow composition, HTTP catalog,
+authentication, atomic acceptance, and derived run lifecycle. The twelve binaries
+and eleven administrative command families are unchanged; the typed client now
+also exposes `agents list/show` and `runs request/show/list/wait`. HTTP discovery and
+run routes are implemented and no longer appear in the unavailable-surface list.

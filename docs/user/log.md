@@ -1,5 +1,20 @@
 # Bundle Update Log
 
+## 2026-10-25
+
+* **Addition**: DOC-14 explains authenticated HTTP discovery, atomic idempotent run
+  acceptance, lifecycle polling, HTTP acceptance history, and DLQ evidence retention.
+  DOC-15 provides a two-model typed-decision smoke path with replay and evidence limits.
+* **Correction**: Add `decisionModels` to declaration guidance, update all FlowDef
+  examples with slot/default-model fields, and document remote client commands,
+  wait exit codes, direct HTTP intake, and navigation to the new guides.
+* **Validation scope**: Compare claims and examples with current schemas, parsers,
+  handlers, workflow code, and existing acceptance tests. Runtime suites were not
+  rerun for these documentation-only changes.
+* **Checks**: Strict user-profile validation passes for all 15 pages. Local links
+  and anchors pass across the user, capability, and HTML artifact directories;
+  regenerated navigation includes both new guides.
+
 ## 2026-09-07
 
 * **Bootstrap**: convert the 13 existing user-guide pages (DOC-1 through DOC-13)

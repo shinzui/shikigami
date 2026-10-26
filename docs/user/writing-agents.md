@@ -51,6 +51,7 @@ let Agent =
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
           , capabilityOverlays : List Text
+          , decisionModels : List Text
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
@@ -64,6 +65,7 @@ let Agent =
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
           , capabilityOverlays = [] : List Text
+          , decisionModels = [] : List Text
           , identity = None Identity
           , memory =
               { scope = MemoryScope.AgentScope
@@ -88,6 +90,7 @@ let Agent =
 | `delegationBudget` | `Optional Natural` | Optional root-run-wide child budget | platform default |
 | `sanctionedProfile` | `Optional ProfileRequirement` | Execution profile the run must resolve and satisfy | `None` |
 | `capabilityOverlays` | `List Text` | Additive model-tool capabilities requested by this agent | `[]` |
+| `decisionModels` | `List Text` | Operator model aliases this agent permits typed Flow decisions to use | `[]` |
 | `identity` | `Optional Identity` | Stable meibo principal whose authority the agent will use | `None` |
 | `memory` | `MemoryPolicy` | Recall scope, recall bound, and automatic recording policy | agent scope, 10 results, record on success |
 | `enabled` | `Bool` | Whether long-running worker roles load the agent | `True` |
@@ -126,6 +129,20 @@ and workflow identity use that recorded identity, so verified agents retain
 continuity across renames. `shikigami agents sync --alias LEGACY_NAME=agent_...` associates
 legacy name-scoped memory with a verified principal without rewriting old rows;
 see the [operator CLI](../operations/operator-cli.md).
+
+## Decision model aliases
+
+A Flow using typed decisions declares a finite alias allow-list:
+
+```dhall
+, decisionModels = [ "triage", "investigate" ]
+```
+
+These names refer to the operator's `behavior.decisionModels` catalog. They do
+not contain model IDs or credentials and cannot grant a model absent from that
+catalog. The Flow's declared slots and any sanctioned profile further restrict
+selection. Empty defaults preserve manifests that do not use decisions. See
+[Typed decisions in Flows](typed-decisions.md) for a runnable example.
 
 ## Memory policy
 

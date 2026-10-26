@@ -45,6 +45,7 @@ Use `Flow` when the behavior needs a lifecycle:
 | Emit a sink before the run is complete | Flow can enqueue replay-safe sink intents mid-run. |
 | Avoid repeating work after a crash | Flow journals named steps and replays recorded results. |
 | Show or validate the lifecycle | Flow carries a keiki-rendered Mermaid state diagram. |
+| Branch on a typed model result | The Decision capability pins admitted program/model state and replays validated results. |
 
 Do not use Flow just to choose a recipient, tweak a prompt, or add a sink. Those are Dhall
 declaration concerns. Flow is for behavior that has state over time.
@@ -68,7 +69,7 @@ myFlow payload = do
 ```
 
 `FlowEffects` is defined in `Shikigami.Flow`. It includes `Workflow`, `Memory`,
-`Sink`, `Activity`, `Acknowledgement`, `Delegate`, `Routing`, and the practice-review
+`Sink`, `Activity`, `Acknowledgement`, `Delegate`, `Routing`, `Decision`, and the practice-review
 capabilities. It exposes neither `IOE` nor `Store`: external effects go through
 capability interpreters, which own their journal and authorization boundaries.
 A named `step` in a flow body can checkpoint a pure result.
@@ -168,11 +169,15 @@ flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
       { name = "at-risk-customer",
+        decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
       },
     FlowDef
       { name = "owner-reminder",
+        decisionSlots = [],
+        requiresDefaultModel = True,
         lifecycle =
           LifecycleDiagram
             { mermaid =
@@ -258,6 +263,8 @@ flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
       { name = "my-flow"
+      , decisionSlots = []
+      , requiresDefaultModel = True
       , lifecycle = myLifecycleDiagram
       , run = myFlow
       }
@@ -267,6 +274,15 @@ flowRegistry =
 The registry is a plain list. `FlowRuntime` supplies the approval environment and
 acknowledgement deadline to the interpreter; flow bodies do not close over those
 deployment values. Extend the existing registry instead of replacing its entries.
+
+Every `FlowDef` declares `decisionSlots` and `requiresDefaultModel`. The examples
+above keep the existing default-model admission check and have no decision slots.
+A decision-only Flow can set `requiresDefaultModel = False`; its finite slot
+inventory instead admits all selected model bindings before the first decision.
+Flows using Routing or PracticeReview keep the default-model check. See
+[Typed decisions in Flows](typed-decisions.md) and the
+[registration guide](../shikumi-flow-decisions.md) for static labels, program
+registration, retained codecs, and patch requirements.
 
 Then declare the agent in Dhall:
 

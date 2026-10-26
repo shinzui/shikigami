@@ -33,7 +33,7 @@
 <div class="shell">
   <aside class="side" aria-label="Page navigation">
     <div class="brand">式神 <span>Shikigami</span></div>
-    <p>MasterPlan 14 · plan snapshot<br>10 Oct 2026</p>
+    <p>MasterPlan 14 · plan snapshot<br>25 Oct 2026</p>
     <nav aria-label="Contents">
       <a href="#overview">01 · The intended outcome</a>
       <a href="#loop">02 · The delivery loop</a>
@@ -52,7 +52,7 @@
       <h1>One objective.<br>Work that can adapt<br>and recover.</h1>
       <p class="lead">A user admits an outcome, acceptance criteria, authority, and shared limits. Shikigami’s coordinator works directly or assigns continuing workers, changes the organization when evidence warrants it, and closes the objective against verified integrated artifacts.</p>
       <div class="chips"><span class="chip">5 requests · IR-14–IR-18</span><span class="chip">7 ExecPlans · 81–87</span><span class="chip">4 delivery phases</span><span class="chip">One deployment first</span></div>
-      <div class="callout warning"><strong>Plan snapshot:</strong> all seven children are <strong>Not Started</strong> in the source masterplan. Typed decisions, authoritative checkpoints, and mutable workspaces have separate prerequisite owners. This guide explains the proposed system and its acceptance gates; it does not claim an implemented end-to-end capability.</div>
+      <div class="callout warning"><strong>Plan snapshot:</strong> all seven children are <strong>Not Started</strong> in the source masterplan. Typed decisions are delivered by MasterPlan 13. Authoritative checkpoints and mutable workspaces remain separately owned prerequisites. This guide explains the proposed system and its acceptance gates; it does not claim an implemented end-to-end capability.</div>
       <p class="muted"><a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">Read MasterPlan 14 →</a> · <a href="shikigami-engineer-onboarding.html">Current runtime guide →</a></p>
     </header>
 
@@ -101,7 +101,7 @@
 
     <section id="sequence">
       <h2>3. Sequence and readiness gates</h2>
-      <p>EP-1 can start immediately. EP-2 waits for the shared model catalog. The finite branch ends at EP-6; EP-7 can proceed alongside qualification once EP-5 is complete.</p>
+      <p>EP-1 can start immediately. EP-2 can reuse the delivered shared model catalog once EP-1 is ready. The finite branch ends at EP-6; EP-7 can proceed alongside qualification once EP-5 is complete.</p>
       <figure class="diagram"><div class="diagram-scroll"><svg viewBox="0 0 960 330" role="img" aria-labelledby="deps-title deps-desc">
         <title id="deps-title">Child workstream sequencing with a separate recurring branch</title><desc id="deps-desc">The main hard dependency chain is EP-1 to EP-2 to EP-3 to EP-4 to EP-5. EP-5 branches to EP-6 finite qualification and EP-7 recurrence. EP-3 also directly requires EP-1; EP-4 directly requires EP-1 and EP-2. EP-7 has only a soft fixture reuse dependency on EP-6. Separate prerequisite gates are listed below the diagram.</desc>
         <defs><marker id="deps-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L8 4.5 L1 8" fill="none" stroke="#436b80" stroke-width="1.7"/></marker></defs>
@@ -118,9 +118,9 @@
         <text x="21" y="201" class="svg-small">Also hard deps:</text><text x="21" y="225" class="svg-small">EP-1 → EP-3</text><text x="21" y="249" class="svg-small">EP-1 + EP-2 → EP-4</text>
         <text x="480" y="320" text-anchor="middle" class="svg-small">EP-6 → EP-7 is soft fixture reuse only. Recurrence never blocks finite acceptance.</text>
       </svg></div><figcaption>Arrows show child sequencing. External prerequisites below remain separately owned. A fixture can prove mechanics; it cannot waive a production integration gate.</figcaption></figure>
-      <div class="table-wrap"><table><caption>Prerequisites outside the seven children · readiness recorded at plan creation</caption><thead><tr><th>Owner</th><th>Required contract</th><th>Where it gates progress</th></tr></thead><tbody>
-        <tr><td><a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md">Plan 73</a><br><span class="tag edge">Not Started</span></td><td>One operator alias catalog with immutable model descriptors.</td><td>Before EP-2; no competing registry.</td></tr>
-        <tr><td><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · plans 73–76</a><br><span class="tag edge">Not Started</span></td><td>Governed typed decisions, evidence, and replay-safe Flow composition.</td><td>Plan 76 before EP-5. EP-2 need not wait for plans 74–76 to run a Skill.</td></tr>
+      <div class="table-wrap"><table><caption>Prerequisites outside the seven children · refreshed 25 October 2026</caption><thead><tr><th>Owner</th><th>Required contract</th><th>Where it gates progress</th></tr></thead><tbody>
+        <tr><td><a href="../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md">Plan 73</a><br><span class="tag storage">Complete · 25 Oct</span></td><td>One operator alias catalog with immutable model descriptors.</td><td>Before EP-2; no competing registry.</td></tr>
+        <tr><td><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · plans 73–76</a><br><span class="tag storage">Complete · 25 Oct</span></td><td>Governed typed decisions, evidence, and replay-safe Flow composition.</td><td>Plan 76 is delivered for EP-5. Whole-assignment Skill selection in EP-2 remains unimplemented.</td></tr>
         <tr><td><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · checkpoints</a><br><span class="tag guard">No selected plan</span></td><td>Current objective, revisions, owners, conflict-aware updates, deduplication, and accepted evidence.</td><td>Real integration before EP-4 closes; production wiring for EP-5/EP-7 and qualification in EP-6.</td></tr>
         <tr><td><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · workspaces</a><br><span class="tag guard">No selected plan</span></td><td>Admitted isolated workspaces, exact artifact identity, process recovery, and owner-epoch write fences.</td><td>Real late-writer/handoff gate with EP-4; delivered provider before EP-6 full qualification. Early contracts allow parallel development.</td></tr>
       </tbody></table></div>
@@ -176,8 +176,8 @@
 
     <section id="sources">
       <h2>Source trail</h2>
-      <p>This is an explanatory snapshot of <a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a>, created 10 October 2026. The living masterplan and linked ExecPlans remain authoritative for progress, detailed milestones, contracts, and acceptance cases.</p>
-      <ul class="source-list"><li><a href="../use-cases/adaptive-autonomous-delivery.md">UC-1 · adaptive autonomous delivery</a></li><li><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · typed decision prerequisites</a></li><li><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · governed mutable workspaces</a></li><li><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · authoritative checkpoints</a></li><li><a href="../workflow-versioning.md">Durable workflow versioning</a></li><li><a href="shikigami-engineer-onboarding.html">Engineer onboarding map</a></li><li><a href="roadmap.html">Architecture and delivery roadmap</a></li></ul>
+      <p>This is an explanatory snapshot of <a href="../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md">MasterPlan 14</a>, created 10 October 2026 and refreshed 25 October 2026. MasterPlan 13 is complete; all seven MasterPlan 14 children remain not started. The separately delivered public agent/run API does not implement adaptive workers. The living masterplan and linked ExecPlans remain authoritative for progress, detailed milestones, contracts, and acceptance cases.</p>
+      <ul class="source-list"><li><a href="../use-cases/adaptive-autonomous-delivery.md">UC-1 · adaptive autonomous delivery</a></li><li><a href="../masterplans/13-compose-shikumi-decisions-in-durable-flows.md">MasterPlan 13 · typed decision prerequisites</a></li><li><a href="../improvement-requests/provide-governed-mutable-repository-workspaces.md">IR-11 · governed mutable workspaces</a></li><li><a href="../improvement-requests/support-optional-major-task-tracking.md">IR-13 · authoritative checkpoints</a></li><li><a href="../user/typed-decisions.md">Delivered typed decisions</a></li><li><a href="../user/http-api.md">Delivered public agent/run API</a></li><li><a href="../workflow-versioning.md">Durable workflow versioning</a></li><li><a href="shikigami-engineer-onboarding.html">Engineer onboarding map</a></li><li><a href="roadmap.html">Architecture and delivery roadmap</a></li></ul>
       <p class="foot">Self-contained HTML with inline SVG and native expandable details. Uses the engineer onboarding artifact’s paper, blue, teal, amber, and rose theme. No external scripts, fonts, or hosted assets.</p>
     </section>
   </main>

@@ -1,5 +1,21 @@
 # Bundle Update Log
 
+## 2026-10-25
+
+* **Addition**: CAP-21 documents governed typed Flow decisions, immutable model
+  and program pins, retained results, and durable actual-attempt/compliance facts.
+  CAP-22 through CAP-25 cover HTTP discovery, caller authentication, idempotent
+  run acceptance, and lifecycle/history with pre-workflow DLQ reconciliation.
+* **Correction**: Remove the health-only HTTP limitation and connect declaration,
+  Flow, synchronous behavior, profile, and evidence records to the new provisions.
+  Refresh the public-module census against current Cabal exports.
+* **Evidence**: Inspect current source, handler/ledger/decision tests, HTTP fixtures,
+  and completed MasterPlans 13/15. Runtime suites were not rerun for this
+  documentation change; no independent review provenance is asserted.
+* **Validation**: Regenerate both bundle indexes; validate 25 capability records
+  and 15 user pages. Check 86 evidence links, 25 mirrored requirements, 578 local
+  documentation links, HTML/SVG targets, and all 183 public module mappings.
+
 ## 2026-10-10
 
 * **Adoption**: Bootstrap OKF 0.2 with the shared

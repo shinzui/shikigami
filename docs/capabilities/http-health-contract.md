@@ -22,7 +22,7 @@ evidence:
     proves: "Worker probe contract, heartbeat staleness, and configured dependency readiness behavior."
   - kind: module
     resource: "shikigami-api/src/Shikigami/Api.hs"
-    proves: "The complete public route tree currently contains only the health vertical."
+    proves: "The shared public route tree mounts health separately from the authenticated agents vertical."
   - kind: test
     resource: "shikigami-server/test/Shikigami/Server/DispatchSpec.hs"
     proves: "Documented paths equal served paths and the two probes use their intended checks."
@@ -48,13 +48,13 @@ Start `shikigami-server` with its resolved configuration, call the probe routes,
 
 - [Client/Command.hs](../../shikigami-client/src/Shikigami/Client/Command.hs): client health checks and exit behavior.
 - [WorkerSpec.hs](../../shikigami-workers/test/Shikigami/Health/WorkerSpec.hs): worker health contract.
-- [Api.hs](../../shikigami-api/src/Shikigami/Api.hs): The complete public route tree currently contains only the health vertical.
+- [Api.hs](../../shikigami-api/src/Shikigami/Api.hs): Health is mounted separately from the authenticated agents vertical.
 - [DispatchSpec.hs](../../shikigami-server/test/Shikigami/Server/DispatchSpec.hs): Documented paths equal served paths and the two probes use their intended checks.
 - [OpenApiSpec.hs](../../shikigami-api/test/Shikigami/Api/OpenApiSpec.hs): Generated OpenAPI contract behavior.
 - [health.hurl](../../tests/hurl/health.hurl): Executable HTTP probe assertions.
 
 ## Limits
 
-Health is the only public HTTP vertical currently served. Agent listing, run enqueue/status, grants, approval resolution, and attestations are not public HTTP endpoints. Probe 503 bodies are status reports and intentionally differ from application problem responses.
+Health probes are public even when [HTTP caller authentication](http-caller-authentication.md) protects the agents mount. The API also serves the [declared-agent catalog](declared-agent-http-catalog.md), [run acceptance](idempotent-http-agent-runs.md), and [run lifecycle/history](http-agent-run-lifecycle.md). Grants, approval resolution, and attestations remain outside the public HTTP surface. Probe 503 bodies are status reports and intentionally differ from application problem responses.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

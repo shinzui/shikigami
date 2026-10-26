@@ -95,6 +95,36 @@ arguments or configuration options. `shikigami-client` has a separate parser:
 `shikigami-client health [--server URL]` queries both probes (default server
 `http://localhost:8080`) and does not accept the shared configuration flags.
 
+## `shikigami-client` — remote agents and runs
+
+The client also provides these HTTP commands. Each accepts `--server URL` with
+the same localhost default:
+
+```text
+shikigami-client [--token TOKEN] agents list [--first N] [--after CURSOR]
+shikigami-client [--token TOKEN] agents show NAME
+shikigami-client [--token TOKEN] runs request AGENT --key KEY [--payload JSON]
+shikigami-client [--token TOKEN] runs show AGENT RUN_ID
+shikigami-client [--token TOKEN] runs list AGENT [--first N] [--after CURSOR]
+shikigami-client [--token TOKEN] runs wait AGENT RUN_ID [--timeout SECONDS] [--interval SECONDS]
+```
+
+The global token falls back to `SHIKIGAMI_API_TOKEN`. List sizes default to 50;
+the API maximum is 200. Request payload defaults to `{}`. First acceptance prints
+`accepted RUN_ID`; matching request replay prints `replayed RUN_ID`, followed by
+the same resource Location. Neither response is a terminal result.
+
+Wait defaults to a 600-second timeout and a 5-second interval. Exit codes are 0
+for success, 1 for failure/cancellation, 2 for timeout, and 3 for a transport or
+problem response. History lists HTTP acceptance receipts; use `runs show` for
+lifecycle. The [HTTP API guide](http-api.md) covers setup, authentication,
+idempotency, state meanings, and dead-letter retention.
+
+For local database inspection, `shikigami runs show shikigami.agent-run RUN_ID
+--json` includes the same derived lifecycle alongside workflow and session
+objects. It also works for HTTP acceptances before a workflow exists, with those
+objects null. See the [operator runbook](../operations/operator-cli.md).
+
 ---
 
 ## `shikigami validate`

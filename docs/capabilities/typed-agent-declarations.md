@@ -28,6 +28,10 @@ evidence:
 
 A consumer declares an agent in Dhall and loads it through the same schema and loader used by runtime entry points. Directory loading preserves failed-manifest diagnostics, supports strict startup, and selects enabled declarations. The loader retains policy fields rather than discarding them during JSON conversion.
 
+`decisionModels` defaults to an empty list and names the operator aliases the
+agent permits for [typed Flow decisions](typed-flow-decisions.md). The HTTP catalog
+retains disabled declarations for inspection without admitting their execution.
+
 ## Adopt
 
 Start with [Writing Agents](../user/writing-agents.md), then run `shikigami validate agents/heartbeat.dhall`. Select a behavior the build actually registers.

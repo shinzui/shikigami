@@ -32,6 +32,11 @@ evidence:
 
 A declaration can require a sanctioned execution profile. Resolution checks stored content against its digest and lifecycle before opening the run session. The resolved policy is journaled and applied to behavior and Flow provider calls; replay uses the originally recorded content rather than mutable live policy.
 
+For [typed Flow decisions](typed-flow-decisions.md), the pinned profile restricts
+the operator catalog and agent alias grants across the complete slot inventory.
+Decision-only Flows can omit the unused process-default model check; Routing and
+PracticeReview Flows retain it. Every actual decision call checks the final tuple.
+
 ## Adopt
 
 Provision an immutable active profile in the migrated profile store and declare its identity/version requirement. Configure a provider and options that satisfy the exact policy tuple.

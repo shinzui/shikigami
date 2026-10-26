@@ -133,6 +133,8 @@ of starting blank each time. See **[Memory & Sessions](./memory.md)** for detail
 ## Next steps
 
 - **[Writing Agents](./writing-agents.md)** — author your own `.dhall` declaration.
+- **[HTTP API — agents and runs](./http-api.md)** — discover agents, submit work, and wait for its durable result.
+- **[Typed decisions in Flows](./typed-decisions.md)** — run governed triage and investigation with two model aliases.
 - **[The Living Loop](./living-loop.md)** — run the worker and watch an agent's output
   trigger a second agent.
 - **[CLI Reference](./cli.md)** — every subcommand and flag.

@@ -50,6 +50,6 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 ## Limits
 
-Stream triggers observe `activity.v1`; they do not subscribe to arbitrary service topics. Agent actors are excluded by default unless explicitly enabled. Kafka intake requires a broker and PostgreSQL. The public HTTP API does not enqueue addressed runs.
+Stream triggers observe `activity.v1`; they do not subscribe to arbitrary service topics. Agent actors are excluded by default unless explicitly enabled. Kafka intake requires a broker and PostgreSQL. The separate [HTTP run acceptance capability](idempotent-http-agent-runs.md) atomically records addressed requests and queues them without a broker.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
