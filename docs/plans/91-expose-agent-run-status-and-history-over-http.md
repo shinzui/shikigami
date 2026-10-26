@@ -78,8 +78,16 @@ suite reproduction `external gate: automatic retry exhaustion bypasses the recei
 hook` consumes five leases, then proves handler calls = 0, DLQ length = 1 and public
 lifecycle = Accepted. This is FRIC-7. Hackage and upstream tags confirm 0.21.0.0 is
 the latest release; its Job API also has no disposition callback. M1 and full IR-10
-acceptance remain open pending a supported owner-level terminal callback in a
-compatible release. The no-private-SQL and no-DLQ-status-read boundaries remain.
+acceptance remain open because the chosen hook cannot observe this outcome.
+Follow-up inspection corrects the callback-only conclusion: existing `readDlq`
+can support later reconciliation, but leases visible rows for 30 seconds and
+cannot read archived or deleted evidence. Reliability requires retaining evidence
+until a receipt is persisted and coordinating redrive/purge. Non-destructive
+PGMQ live/archive inspection APIs exist locally but are Unreleased, absent from
+the pinned 0.6.1.0 and latest released 0.6.1.1. A supported durable lookup or a
+retention-aware reconciler is an alternative to a new callback. Adopting a
+reconciler would revise the plan's no-DLQ-status-read design decision; private SQL
+remains excluded. See ADR 0049 for the source evidence.
 
 Real successful/permanently failed agent workflows are checked in the existing
 core workflow fixtures. Worker tests cover the reader, actual drain refusal,
@@ -137,9 +145,10 @@ records the durable classification and ownership boundary.
 M1 remains open because automatic retry exhaustion bypasses the requested hook,
 leaving the required pre-workflow terminal-closure case unfulfilled. M3's client and
 Hurl portions are accepted; IR-10 stays in-progress until that gate closes. FRIC-7
-tracks the blocker under IR-10. Resume by adopting a released compatible owning
-API that exposes terminal disposition for both continuous and bounded consumers,
-wire it to the ledger, and change the reproduction's expected lifecycle to Failed.
+tracks the blocker under IR-10. Resume by choosing a supported source for the
+missing disposition: a durable owner read, a retention-aware reconciliation
+process, or a callback covering both continuous and bounded consumers. Wire the
+result to the ledger and change the reproduction's expected lifecycle to Failed.
 Do not mark the MasterPlan complete merely because the normal execution path passes.
 
 

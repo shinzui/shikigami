@@ -46,9 +46,27 @@ implemented, but MasterPlan 15 remains open for automatic queue exhaustion.
 Keiro 0.18 automatically dead-letters exhausted messages before the handler, so
 that outcome cannot reach this hook. A real drain reproduction proves zero handler
 calls, one DLQ entry, and an accepted public lifecycle. The latest released 0.21
-API also lacks a terminal callback. A supported owner-level disposition callback
-covering both continuous and bounded consumers is required before claiming complete
-closure; a cohort change must use a released compatible version.
+API also lacks a terminal callback. This establishes a limitation of the chosen
+hook, not a requirement that the owner add a callback. A supported durable lookup
+or a reconciler can also supply the missing fact; a cohort change must use a
+released compatible version.
+
+Follow-up inspection on 2026-10-25 confirms that released `readDlq` exposes the
+original payload, original message id and reason, so later reconciliation is
+possible. It leases visible rows for 30 seconds, however, and does not read archived
+rows. Redrive deletes its source row; purge also removes evidence. A reliable
+reconciler therefore needs a retention/coordination policy and must persist a
+receipt before evidence is removed. Absence from a DLQ read proves no outcome.
+The existing workflow lookup and journal reads remain authoritative once a
+workflow exists, but cannot describe a job rejected before workflow creation.
+
+The local PGMQ source adds non-destructive `peekMessages`,
+`peekArchivedMessages`, `lookupMessage` and `lookupArchivedMessage`. Its changelog
+marks them Unreleased; Hackage and upstream tags still identify 0.6.1.1 as the
+latest release. They are absent from both that release and the pinned 0.6.1.0.
+Those APIs could support reconciliation after release, subject to retention and
+moving-view paging constraints. The earlier callback-only prerequisite was too
+strong; choosing that reconciliation design would revise the DLQ exclusion above.
 
 ## References
 
@@ -59,3 +77,6 @@ closure; a cohort change must use a released compatible version.
 [FRIC-7](../friction-log/7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md).
 The owning implementation is `mori://shinzui/keiro`, project-relative
 `keiro-pgmq/src/Keiro/PGMQ/Job.hs` (artifact-level URI pending).
+Inspection evidence: `mori://shinzui/keiro`, project-relative
+`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`, and `mori://shinzui/pgmq-hs`,
+project-relative `pgmq-hasql/CHANGELOG.md` (artifact-level URIs pending).

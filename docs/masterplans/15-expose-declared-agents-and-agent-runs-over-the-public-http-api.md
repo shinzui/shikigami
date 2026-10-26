@@ -180,10 +180,14 @@ EP-4 depends hard on EP-3. It extends the `AgentRunApi` record EP-3 creates, rea
 table and module EP-3 owns, looks runs up by the identifier EP-3 defines, and extends the hurl
 file EP-3 adds.
 
-EP-4 additionally requires a released compatible terminal-disposition callback
-from the queue owner for its automatic-exhaustion acceptance gate. The current
-0.18 and latest released 0.21 Job interfaces cannot supply it; FRIC-7 records the
-reproduction. This external prerequisite leaves the child In Progress.
+EP-4 additionally needs a reliable source for pre-workflow terminal dispositions.
+The current hook cannot observe automatic exhaustion; FRIC-7 records the
+reproduction. A callback is one option, not a required API shape. A supported
+durable read or retention-aware reconciliation can also supply the fact. The
+existing readDlq leases visible rows and omits archived/deleted evidence;
+non-destructive PGMQ live/archive reads are still unreleased. Choosing a
+reconciliation design would revise this plan's DLQ exclusion. The child remains
+In Progress while that case is unfulfilled.
 
 The resulting order is three phases: Phase 1 runs EP-1 and EP-2 together; Phase 2 runs EP-3;
 Phase 3 runs EP-4. No milestone interleaving across children is needed.
@@ -334,8 +338,8 @@ The remaining integration gate is automatic retry exhaustion before workflow
 creation. Released Keiro dead-letters before invoking the domain handler; the
 prescribed receipt hook cannot observe that disposition. The reproduction proves
 zero handler calls, one DLQ entry, and Accepted status. EP-4 M1 and full IR-10
-acceptance remain open pending a supported terminal-disposition callback in a
-compatible owner release. FRIC-7 and ADR 0049 record the evidence and next step.
+acceptance remain open until a reliable disposition source is integrated.
+FRIC-7 and ADR 0049 record the evidence and the callback/reconciliation options.
 The normal-path checks do not waive this criterion.
 
 Validation uses the existing isolated `.dev/mp13.cabal.project` for the missing
@@ -346,10 +350,13 @@ implemented catalog, authentication, acceptance and status boundaries.
 ## Surprises & Discoveries
 
 The planned worker hook covers explicit Dead outcomes only. Automatic retry
-exhaustion bypasses the domain handler in Keiro 0.18 and remains unobservable in
-the latest released 0.21 Job API. This is an external acceptance prerequisite for
-EP-4, not a reason to infer status from private queue tables. FRIC-7 carries the
-real drain reproduction; IR-10 remains in-progress.
+exhaustion bypasses the domain handler in Keiro 0.18; the latest released 0.21
+Job API likewise has no callback. This does not rule out later inspection:
+readDlq exposes the outcome while its row is visible and retained. A reliable
+reconciler needs evidence retention and coordination with redrive/purge; the
+non-destructive PGMQ inspection additions are not released yet. The previous
+callback-only prerequisite was too strong. FRIC-7 carries the real drain
+reproduction; IR-10 remains in-progress. ADR 0049 records the API investigation.
 
 Keiro owner reads require the existing KirokuStore handle; EP-4 captures it in a
 server reader seam instead of implementing an interpreter over a raw pool.
@@ -437,9 +444,10 @@ Three child plans are complete and committed; EP-4's public read surface and nor
 execution path are implemented and tested. The final terminal-closure gate remains
 open, so the initiative is not complete. Durable context is recorded in ADRs
 0046–0049. FRIC-4, FRIC-5 and FRIC-6 are accepted validation workarounds; FRIC-7
-is tracked by IR-10 as the external prerequisite. Resume at EP-4 with a released
-compatible owner callback rather than weakening the acceptance or inspecting DLQ
-state as a status source.
+is tracked by IR-10. Resume at EP-4 by selecting a reliable owner-supported
+disposition source. A durable lookup or retention-aware reconciliation is an
+alternative to a callback; the latter option requires revising the existing DLQ
+design exclusion. Keep the terminal-closure acceptance unchanged.
 
 Coordination revision 2026-10-25: EP-4 retains its acceptance but now records the
 reproduced owner-level terminal-disposition prerequisite and store-reader seam.
