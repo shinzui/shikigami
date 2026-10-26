@@ -98,6 +98,15 @@ live_request="$("$client_bin" runs request heartbeat --key client-live --server 
 live_run_id="$(printf '%s\n' "$live_request" | awk 'NR == 1 { print $2 }')"
 "$client_bin" runs show heartbeat "$live_run_id" --server "$base_url"
 "$client_bin" runs list heartbeat --first 1 --server "$base_url"
+operator_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
+PG_CONNECTION_STRING="$connection" "$operator_bin" runs show shikigami.agent-run "$live_run_id" --json >"$work_dir/operator-accepted.json"
+python3 - "$work_dir/operator-accepted.json" <<'PY_ACCEPTED'
+import json, sys
+with open(sys.argv[1]) as stream:
+    value = json.load(stream)
+assert value["lifecycle"]["status"] == "accepted", value
+assert value["workflow"] is None, value
+PY_ACCEPTED
 wait_status=0
 "$client_bin" runs wait heartbeat "$live_run_id" --timeout 0 --server "$base_url" || wait_status=$?
 [ "$wait_status" -eq 2 ]

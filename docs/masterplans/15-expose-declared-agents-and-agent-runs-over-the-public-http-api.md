@@ -101,7 +101,8 @@ The fourth child exposes status and history (`GET /agents/{agentName}/runs/{runI
 `GET /agents/{agentName}/runs`), which is IR-10. It composes the ledger with the owning-library
 reads that `shikigami runs show` already performs and with the existing lifecycle-refusal
 evidence, and it closes the one gap in which a run could otherwise stay `accepted` forever by
-having the worker record a dead-letter disposition on the ledger.
+recording explicit worker dispositions and reconciling retained pre-workflow dead letters
+through the released PGMQ API into the ledger.
 
 The principles were: group by caller-visible behaviour; give every shared artifact exactly one
 owning plan (see Integration Points); let the two plans that can start immediately run in
@@ -111,9 +112,9 @@ Alternatives considered and rejected. One ExecPlan for IR-8 and IR-10 alone woul
 agent lookup, the authentication boundary, and the ledger as side effects of a single plan with
 no independent acceptance, and would not give mori the catalog read it needs. A separate
 "extend the server runtime" plan was rejected as an infrastructure plan with nothing a user can
-see. Answering status by reading the run-job queue or its dead-letter queue was rejected: queue
-reads are not a supported status model, keiro-pgmq's `readDlq` hides every row it inspects for
-thirty seconds, and the receipts model of
+see. Using live queue membership as the status model was rejected. The implemented
+reconciliation is narrower: copy positive dead-letter evidence into a durable receipt through
+a point-filtered, zero-timeout PGMQ read (ADR 0050). The receipts model of
 [ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md) already
 shows how Shikigami owns truth beyond a library boundary. Deferring authentication was rejected
 for the reason given above.
@@ -154,7 +155,7 @@ follow are `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`,
 | 1 | Serve the declared-agent catalog over HTTP | docs/plans/88-serve-the-declared-agent-catalog-over-http.md | None | None | Complete |
 | 2 | Authenticate public API callers with configured bearer credentials | docs/plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md | None | EP-1 (its final milestone wraps the `agents` mount, which EP-1 creates) | Complete |
 | 3 | Accept addressed agent runs over HTTP with server-owned idempotency | docs/plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md | EP-1, EP-2 | None | Complete |
-| 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | In Progress |
+| 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -180,14 +181,10 @@ EP-4 depends hard on EP-3. It extends the `AgentRunApi` record EP-3 creates, rea
 table and module EP-3 owns, looks runs up by the identifier EP-3 defines, and extends the hurl
 file EP-3 adds.
 
-EP-4 additionally needs a reliable source for pre-workflow terminal dispositions.
-The current hook cannot observe automatic exhaustion; FRIC-7 records the
-reproduction. A callback is one option, not a required API shape. A supported
-durable read or retention-aware reconciliation can also supply the fact. The
-existing readDlq leases visible rows and omits archived/deleted evidence;
-non-destructive PGMQ live/archive reads are still unreleased. Choosing a
-reconciliation design would revise this plan's DLQ exclusion. The child remains
-In Progress while that case is unfulfilled.
+EP-4 closes pre-workflow terminal dispositions using the released PGMQ read API,
+filtered by the original queue id, and commits the receipt in the same transaction.
+No new dependency release or callback is required. ADR 0050 supersedes the earlier
+DLQ exclusion; operators retain evidence until reconciliation is verified.
 
 The resulting order is three phases: Phase 1 runs EP-1 and EP-2 together; Phase 2 runs EP-3;
 Phase 3 runs EP-4. No milestone interleaving across children is needed.
@@ -296,10 +293,13 @@ Phase 3 runs EP-4. No milestone interleaving across children is needed.
     `http.auth.caller`. EP-1 adds no key but documents that the server role now reads
     `agents.directory`, `agents.strict`, and the `directory.*` keys at boot.
 
-14. **The worker dead-letter hook** (EP-4). One additive, best-effort call in
+14. **Dead-letter receipts and reconciliation** (EP-4). One additive, best-effort call in
     `shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` (`handleRunJob`) after the outcome
     is known, never inside a workflow body. `docs/workflow-versioning.md` is unaffected; EP-4
-    runs `just keiro-gate` to prove it.
+    runs `just keiro-gate` to prove it. The core status reader also reconciles retained
+    pre-workflow DLQ evidence into the ledger using the released PGMQ statement in
+    the receipt transaction. `ensureRunQueue` provisions the DLQ for server-only
+    acceptance. ADR 0050 and the operator runbook define retention before cleanup.
 
 15. **Early producer/consumer checks.** Before building the run listing, EP-1 proves that the
     relay-pagination combinator's own pre-handler 400 (`RelayPageError` JSON) reaches the caller
@@ -326,25 +326,21 @@ replaces, that health is exempt, and that authentication is not authorization.
 
 ## Progress
 
-EP-1, EP-2 and EP-3 are Complete. EP-4 is In Progress: status/history routes,
-wire/schema tests, bidirectional history conformance, client show/list/wait and
-operator JSON are implemented. The live suite passes 26 Hurl requests, then boots
-a real worker and verifies accepted-to-succeeded execution and the operator join.
-Core PostgreSQL validation passes serially; all worker tests pass. The frozen
-source closure now includes the four added adapters/snippet dependencies (361
-runtime packages); previous package versions and repository pins are unchanged.
+All four children are Complete. Catalog, bearer authentication, idempotent
+submission, lifecycle/history reads and typed client commands are implemented.
+Automatic exhaustion before workflow creation is reconciled through the released
+PGMQ read API, with a durable receipt that survives later DLQ cleanup. No
+upstream callback, dependency upgrade or workflow body change is required.
 
-The remaining integration gate is automatic retry exhaustion before workflow
-creation. Released Keiro dead-letters before invoking the domain handler; the
-prescribed receipt hook cannot observe that disposition. The reproduction proves
-zero handler calls, one DLQ entry, and Accepted status. EP-4 M1 and full IR-10
-acceptance remain open until a reliable disposition source is integrated.
-FRIC-7 and ADR 0049 record the evidence and the callback/reconciliation options.
-The normal-path checks do not waive this criterion.
+Closeout validation covers all package tests, the workflow gate, 26 Hurl requests
+and real worker success/permanent failure, client exit codes, pre-workflow operator
+JSON, automatic exhaustion over HTTP, temporary operator leases, unrelated entries,
+and reconciliation rollback/retry. IR-8 and IR-10 are completed. The frozen source
+closure remains 361 runtime packages with previous versions and pins unchanged.
 
-Validation uses the existing isolated `.dev/mp13.cabal.project` for the missing
-Kikan paths and serial core PostgreSQL execution. ADRs 0046–0049 distill the
-implemented catalog, authentication, acceptance and status boundaries.
+Validation uses `.dev/mp13.cabal.project` for the missing sibling Kikan paths and
+serial PostgreSQL tests. ADRs 0046–0050 record the durable boundaries. DLQ evidence
+must be retained until its receipt is verified, as documented in the operator runbook.
 
 
 ## Surprises & Discoveries
@@ -356,7 +352,10 @@ readDlq exposes the outcome while its row is visible and retained. A reliable
 reconciler needs evidence retention and coordination with redrive/purge; the
 non-destructive PGMQ inspection additions are not released yet. The previous
 callback-only prerequisite was too strong. FRIC-7 carries the real drain
-reproduction; IR-10 remains in-progress. ADR 0049 records the API investigation.
+reproduction. The released PGMQ read supports a JSON containment filter and a zero-second
+visibility timeout. Matching positive evidence and its receipt now commit in one
+transaction; absence stays non-terminal. IR-10 is completed. ADR 0050 records the
+final reconciliation and retention contract.
 
 Keiro owner reads require the existing KirokuStore handle; EP-4 captures it in a
 server reader seam instead of implementing an interpreter over a raw pool.
@@ -420,6 +419,15 @@ workflow journal separators. The public ID contract itself is unchanged.
   the status read O(1) and off keiro-pgmq's hidden-row semantics.
   Date: 2026-10-22
 
+- Decision: Supplement the explicit worker hook with on-demand reconciliation through the
+  released PGMQ API, superseding the earlier DLQ-read exclusion.
+  Rationale: automatic exhaustion bypasses the handler. Filter by the original queue id,
+  read at most one entry with zero visibility delay, and commit the first durable failure
+  receipt in the same transaction. Retain evidence until that receipt is verified; never
+  infer failure from absence. No callback or upstream release is needed. ADR 0050 owns
+  this operating contract, including inspection leases and cleanup.
+  Date: 2026-10-26
+
 - Decision: Cancellation, conversation-route runs, streaming, callbacks, and live status in the
   run list are excluded.
   Rationale: cancellation needs an authorization model; conversation turns keep their declared
@@ -440,14 +448,12 @@ workflow journal separators. The public ID contract itself is unchanged.
 
 ## Outcomes & Retrospective
 
-Three child plans are complete and committed; EP-4's public read surface and normal
-execution path are implemented and tested. The final terminal-closure gate remains
-open, so the initiative is not complete. Durable context is recorded in ADRs
-0046–0049. FRIC-4, FRIC-5 and FRIC-6 are accepted validation workarounds; FRIC-7
-is tracked by IR-10. Resume at EP-4 by selecting a reliable owner-supported
-disposition source. A durable lookup or retention-aware reconciliation is an
-alternative to a callback; the latter option requires revising the existing DLQ
-design exclusion. Keep the terminal-closure acceptance unchanged.
+All four child plans are complete. The declared-agent catalog and addressed-run
+HTTP resource are authenticated, documented, served and exercised through real
+workers and the typed client. Automatic retry exhaustion now produces a durable
+failed/dead_lettered status through existing released APIs. The acceptance gate
+was retained and verified; the callback-only prerequisite was removed.
 
-Coordination revision 2026-10-25: EP-4 retains its acceptance but now records the
-reproduced owner-level terminal-disposition prerequisite and store-reader seam.
+ADRs 0046–0050 hold the durable decisions. FRIC-4, FRIC-5 and FRIC-6 remain accepted
+validation workarounds. FRIC-7 is resolved by targeted transactional reconciliation,
+with the DLQ evidence-retention condition explicit in the operator runbook.

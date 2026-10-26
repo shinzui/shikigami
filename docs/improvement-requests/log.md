@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-26
+* **Completion**: Plan 91 and MasterPlan 15 complete: lifecycle/history HTTP and typed client, shared operator JSON, and automatic pre-workflow exhaustion reconciled transactionally through the released PGMQ API. Receipts survive DLQ cleanup; the runbook requires retention until reconciliation. All 930 package tests and the workflow gate pass.
+
 ## 2026-10-25
 * **Progress**: IR-10 now has implemented and verified HTTP status/history, client commands and live worker success. Automatic retry exhaustion bypasses the domain receipt hook in released Keiro; plan 91 and MasterPlan 15 remain open for that reproduced terminal-closure gate (FRIC-7).
 * **Completion**: IR-8 completed by plan 90 under MasterPlan 15: authenticated addressed runs with an atomic acceptance ledger, stable workflow IDs, replay/conflict handling, and verified concurrent deduplication.

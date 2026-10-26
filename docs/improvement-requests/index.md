@@ -26,7 +26,7 @@ individual requests.
 | [IR-7](attest-sanctioned-agent-execution.md) | In progress | [MasterPlan 10](../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md), plans 49–52 |
 | [IR-8](expose-addressed-agent-runs-over-http.md) | Completed | [Plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) |
-| [IR-10](expose-agent-run-status-over-http.md) | In progress | [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
+| [IR-10](expose-agent-run-status-over-http.md) | Completed | [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-11](provide-governed-mutable-repository-workspaces.md) | Proposed | None |
 | [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Completed | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76 |
 | [IR-13](support-optional-major-task-tracking.md) | Proposed | None |

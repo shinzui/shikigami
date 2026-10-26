@@ -52,7 +52,7 @@ terminal and exits 0 on `succeeded`.
 
 ## Progress
 
-- [ ] M1: `Shikigami.AgentRun.Status.deriveRunStatus` classifies a run from the ledger, keiro,
+- [x] M1 (2026-10-26): `Shikigami.AgentRun.Status.deriveRunStatus` classifies a run from the ledger, keiro,
       kioku, and the run-skip evidence; the ledger gains a dead-letter disposition written by the
       worker; a worker-suite test produces every lifecycle value on real runs and a store outage
       yields an error rather than `failed`; `shikigami runs show --json` reports `lifecycle`.
@@ -60,7 +60,7 @@ terminal and exits 0 on `succeeded`.
       and documented; the regenerated `docs/api/openapi.json` lists
       `getAgentsByAgentNameRunsByRunId` and `getAgentsByAgentNameRuns`; wire tests pin every
       lifecycle value and optional field; the relay conformance walk passes on the list route.
-- [ ] M3: `shikigami-client runs show`, `runs list`, and `runs wait` work; the hurl suite covers
+- [x] M3 (2026-10-26): `shikigami-client runs show`, `runs list`, and `runs wait` work; the hurl suite covers
       the accepted, unknown, cross-agent, and list cases; IR-10 is marked completed and the
       status-composition ADR exists.
 
@@ -72,22 +72,16 @@ The owning workflow/session reads require a `KirokuStore`, not only its pool.
 a `readRunStatus` closure over its existing store, and tests inject the same seam.
 This preserves library ownership without opening another store per HTTP request.
 
-The prescribed Dead-outcome hook cannot close automatic retry exhaustion.
-Keiro performs that disposition before calling the domain handler. The worker
-suite reproduction `external gate: automatic retry exhaustion bypasses the receipt
-hook` consumes five leases, then proves handler calls = 0, DLQ length = 1 and public
-lifecycle = Accepted. This is FRIC-7. Hackage and upstream tags confirm 0.21.0.0 is
-the latest release; its Job API also has no disposition callback. M1 and full IR-10
-acceptance remain open because the chosen hook cannot observe this outcome.
-Follow-up inspection corrects the callback-only conclusion: existing `readDlq`
-can support later reconciliation, but leases visible rows for 30 seconds and
-cannot read archived or deleted evidence. Reliability requires retaining evidence
-until a receipt is persisted and coordinating redrive/purge. Non-destructive
-PGMQ live/archive inspection APIs exist locally but are Unreleased, absent from
-the pinned 0.6.1.0 and latest released 0.6.1.1. A supported durable lookup or a
-retention-aware reconciler is an alternative to a new callback. Adopting a
-reconciler would revise the plan's no-DLQ-status-read design decision; private SQL
-remains excluded. See ADR 0049 for the source evidence.
+The prescribed Dead-outcome hook cannot observe automatic retry exhaustion:
+Keiro dead-letters before invoking it. FRIC-7's reproduction proved this gap. The
+callback-only conclusion was too strong. The released PGMQ read API accepts a
+JSON containment filter and zero visibility delay, so status now reconciles a
+matching original queue id and commits its terminal receipt in one transaction.
+The reproduction reports Failed/DeadLettered with zero handler calls and proves
+that later archive/purge cannot erase the result. Operator leases delay positive
+observation until expiry; malformed evidence and failed writes roll back and stay
+unavailable. ADR 0050 supersedes the earlier no-DLQ-read design exclusion. The
+runbook requires retaining evidence until its receipt is verified.
 
 Real successful/permanently failed agent workflows are checked in the existing
 core workflow fixtures. Worker tests cover the reader, actual drain refusal,
@@ -129,27 +123,30 @@ external sinks so success needs no other service.
   ledger row.
   Date: 2026-10-22
 
+- Decision: Reconcile retained pre-workflow dead letters on status lookup using
+  PGMQ's released original-id containment filter and zero visibility delay.
+  Rationale: this closes automatic exhaustion without a new callback. The receipt
+  and queue read commit atomically; failed writes roll back. Cleanup follows
+  receipt verification. This supersedes the worker-hook-only closure and the
+  no-DLQ-read exclusion. See ADR 0050.
+  Date: 2026-10-26
+
 
 ## Outcomes & Retrospective
 
-The HTTP status/history contract and client commands are implemented and tested.
-The live suite passes 26 Hurl requests, then observes acceptance and success through
-a real server/worker and verifies the operator JSON lifecycle. Success, permanent failure, timeout and problem
-exit codes are exercised. The complete core PostgreSQL suite passes serially,
-including real successful and permanent-failure agent workflow status assertions;
-the worker suite has 94 tests, including six status-composition cases. The frozen
-packaging closure is refreshed to 361 runtime packages with no previous version
-or repository-pin changes; its seven tooling tests pass. ADR 0049
-records the durable classification and ownership boundary.
+All three milestones are complete. The HTTP status/history contract, client
+commands and shared operator JSON are implemented and tested. The automatic
+exhaustion gate passes through the real queue consumer and the HTTP route without
+an upstream callback. Targeted reconciliation preserves unrelated entries,
+handles temporary inspection leases, rolls back malformed evidence or failed
+receipt writes, and survives later archive/purge through its persisted receipt.
 
-M1 remains open because automatic retry exhaustion bypasses the requested hook,
-leaving the required pre-workflow terminal-closure case unfulfilled. M3's client and
-Hurl portions are accepted; IR-10 stays in-progress until that gate closes. FRIC-7
-tracks the blocker under IR-10. Resume by choosing a supported source for the
-missing disposition: a durable owner read, a retention-aware reconciliation
-process, or a callback covering both continuous and bounded consumers. Wire the
-result to the ledger and change the reproduction's expected lifecycle to Failed.
-Do not mark the MasterPlan complete merely because the normal execution path passes.
+The worker suite contains 98 tests and the server suite 61. All package tests,
+the workflow gate, and the live Hurl/client/worker checks pass at closeout.
+The live runner also checks operator JSON before a workflow exists. IR-10 is
+completed; FRIC-7 is resolved. ADRs 0049–0050 record classification, owner API
+composition and the retention contract. The 361-package frozen cohort and all
+previous versions/repository pins remain unchanged.
 
 
 ## Context and Orientation
@@ -262,6 +259,16 @@ In the worker, after `handleRunJob` has decided its `JobOutcome` and before retu
 authority and the ledger is advisory. Add a `WorkerSpec` case: a job whose ledger row exists and
 whose workflow fails permanently leaves the row `dead_lettered` with the reason; a job with no
 ledger row leaves nothing.
+
+For accepted requests with no workflow, refusal or terminal receipt, call
+`refreshRunDisposition :: Pool -> RunRequestRow -> IO (Either Text RunRequestRow)`.
+Use PGMQ's exported read statement in a write transaction, filtering the documented
+Keiro DLQ envelope by original_message_id equal to queue_message_id, with batch one
+and visibility delay zero. Persist the bounded dead_letter_reason and first
+observation timestamp in the same transaction. A missing or leased entry supplies
+no failure evidence; malformed evidence or a failed write rolls back and returns
+unavailable. Provision both run queue and DLQ before accepting server-only runs.
+No private tables, new workflow steps or dependency upgrades are involved.
 
 Change `Shikigami.Server.Command.Runs` so `runs show --json` adds a `lifecycle` object
 (`status`, optional `failure`) computed by `classifyRun` over the facts it already gathers plus
@@ -409,12 +416,16 @@ the route and the wire test pins the lifecycle values (M2).
 
 ## Idempotence and Recovery
 
-Every read is side-effect free and may be repeated. The disposition migration is additive with
-a default, so existing rows need no backfill. The worker's disposition write is idempotent (an
-update to the same value) and its failure never changes the queue outcome; if a row is found
-`accepted` after its message was dead-lettered before this plan was deployed, the operator reads
-the dead-letter queue with the mounted `pgmq dlq read` verb, and the hook covers every job
-from then on. If the OpenAPI drift test fails, regenerate and commit the artifact.
+Status reads may reconcile a positive dead-letter fact into an idempotent receipt.
+The matching DLQ read count increases; its zero visibility delay leaves it available
+for operators, and unrelated rows are untouched. The queue read and receipt write
+commit together and roll back together. Repeated reads reuse the terminal receipt,
+including after archive/purge. A temporary operator lease can delay reconciliation.
+Retain evidence until the receipt is verified before archive, redrive or purge;
+those operator commands do not enforce retention themselves. Never infer failure
+from absence. The completion timestamp is first observation of the queue failure.
+The disposition migration remains additive; workflow bodies and dependency pins
+are unchanged. Regenerate OpenAPI only when its typed contract changes.
 
 
 ## Interfaces and Dependencies
@@ -425,8 +436,8 @@ supplies the ledger table and module, the run identity, the `AgentRunApi` record
 module, the pool in `ServerEnv`, and the hurl file this plan extends. Through it, the catalog
 and authentication plans are also complete.
 
-This plan owns `Shikigami.AgentRun.Status`, the disposition columns and `recordDeadLetter` and
-`listRunRequests` on `Shikigami.AgentRun.Ledger`, the `show` and `list` fields of
+This plan owns `Shikigami.AgentRun.Status`, the disposition columns, `recordDeadLetter`, `refreshRunDisposition`,
+`lookupRunRequestById` and `listRunRequests` on `Shikigami.AgentRun.Ledger`, the `show` and `list` fields of
 `AgentRunApi` with `AgentRunStatus`, `RunFailureView`, and `RunRequestView`, the `RunNotFound`
 problem code, the worker's disposition hook, the `lifecycle` key of `runs show --json`, and the
 `runs show`, `runs list`, and `runs wait` client commands. No later plan in the MasterPlan
@@ -437,5 +448,6 @@ Libraries whose choice matters: `keiro` 0.18 (`lookupInstance`, `loadStepIndex`,
 `relay-pagination-hasql` (`paginate`, `SortSpec`, `timestamptzKey`, `textKey`), and `hasql`.
 Verify the released versions against `cabal.project` and the registry before changing a bound.
 
-Revision 2026-10-25: adopted the real store-handle API and documented the reproduced
-automatic-disposition prerequisite. Acceptance is retained; M1 and IR-10 remain open.
+Revision 2026-10-26: closed automatic exhaustion with targeted transactional
+reconciliation through the released API. All milestones and IR-10 are complete;
+ADR 0050 records evidence retention, observation semantics and cleanup limits.

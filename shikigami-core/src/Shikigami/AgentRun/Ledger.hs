@@ -6,16 +6,21 @@ module Shikigami.AgentRun.Ledger
     payloadFingerprint,
     acceptRunRequest,
     lookupRunRequest,
+    lookupRunRequestById,
     recordDeadLetter,
+    refreshRunDisposition,
     listRunRequests,
     RunListError (..),
   )
 where
 
-import Data.Aeson (Value, encode)
+import Data.Aeson (Value, encode, object, withObject, (.:))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
+import Data.Foldable (toList)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
@@ -31,8 +36,10 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Tx
+import Keiro.PGMQ qualified as Job
 import Keiro.Workflow.Types (WorkflowId (..))
-import Pgmq (MessageId (..))
+import Pgmq (Message (..), MessageBody (..), MessageId (..), ReadMessage (..))
+import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Relay.Pagination (Connection, CursorError, PageRequest)
 import Relay.Pagination.Hasql qualified as Relay
 import Shikigami.Agent.Name (AgentName, agentNameText)
@@ -40,6 +47,7 @@ import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Prelude
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
 
 httpRunKey :: AgentName -> Text -> RunKey
@@ -96,6 +104,19 @@ acceptRunRequest pool job caller = do
 lookupRunRequest :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunRequestRow))
 lookupRunRequest pool agent runId = safeUse pool (Session.statement (agentNameText agent, runId) lookupIdStatement)
 
+-- | The operator knows the workflow UUID before a journal can name its agent.
+-- Refuse ambiguous ids rather than selecting an arbitrary agent's request.
+lookupRunRequestById :: Pool -> Text -> IO (Either Text (Maybe RunRequestRow))
+lookupRunRequestById pool runId = do
+  rows <- safeUse pool (Session.statement runId statement)
+  pure $ case rows of
+    Left err -> Left err
+    Right [] -> Right Nothing
+    Right [row] -> Right (Just row)
+    Right _ -> Left "The run identifier is ambiguous."
+  where
+    statement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE run_id=$1 LIMIT 2") (E.param (E.nonNullable E.text)) (D.rowList rowDecoder)
+
 safeUse :: Pool -> Session.Session a -> IO (Either Text a)
 safeUse pool action = first (const "The run acceptance store is unavailable.") <$> Pool.use pool action
 
@@ -149,6 +170,47 @@ recordDeadLetter pool key detail =
         "UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=$2, disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING true"
         keyEncoder
         (fmap (fromMaybe False) (D.rowMaybe (D.column (D.nonNullable D.bool))))
+
+-- | Reconcile a pre-workflow request from the released PGMQ read API. The
+-- documented Keiro DLQ envelope carries the original queue id and reason.
+-- Filter by that id, never lease unrelated entries. A zero-second
+-- visibility timeout keeps the entry available to operators; PGMQ still bumps
+-- its DLQ read count. The read and receipt commit together, and failure rolls
+-- both back. A leased/absent row supplies no negative evidence.
+--
+-- Retain DLQ evidence until this receipt is recorded. Later archive/redrive/purge
+-- cannot erase the ledger's fact. No workflow journal or private table is read.
+refreshRunDisposition :: Pool -> RunRequestRow -> IO (Either Text RunRequestRow)
+refreshRunDisposition pool request
+  | request.disposition /= "accepted" = pure (Right request)
+  | otherwise = do
+      result <- safeUse pool (Tx.transaction Tx.ReadCommitted Tx.Write reconcile)
+      pure (either Left id result)
+  where
+    reconcile = do
+      entries <-
+        Tx.statement
+          ReadMessage
+            { queueName = RunJobs.runJob.jobQueue.dlqName,
+              delay = 0,
+              batchSize = Just 1,
+              conditional = Just (object ["original_message_id" Aeson..= request.queueMessageId])
+            }
+          PgmqStatements.readMessage
+      case toList entries of
+        [] -> pure (Right request)
+        entry : _ -> case parseEither (withObject "Keiro DLQ envelope" (.: "dead_letter_reason")) (unMessageBody entry.body) of
+          Left _ -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
+          Right reason -> do
+            updated <- Tx.statement (request.runKey, boundedBehaviorDetail reason) receiptStatement
+            case updated of
+              Nothing -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
+              Just row -> pure (Right row)
+    receiptStatement =
+      preparable
+        ("UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=COALESCE(disposition_detail,$2), disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING " <> columns)
+        keyEncoder
+        (D.rowMaybe rowDecoder)
 
 data RunListError = InvalidRunCursor !CursorError | RunListUnavailable !Text
   deriving stock (Eq, Show)

@@ -353,6 +353,20 @@ index is `GET /agents/{agentName}/runs`. The typed client provides `runs show`,
 operator CLI adds the same derived lifecycle alongside its existing workflow and
 session objects. Supply the returned workflow UUID verbatim.
 
-Automatic queue exhaustion is an open acceptance gate in MasterPlan 15: Keiro can
-dead-letter before invoking the domain handler, bypassing its receipt hook. Such a
-pre-workflow run can remain accepted. See [ADR 0049](../adr/0049-public-run-status-composes-owner-reads-and-admission-receipts.md).
+For an HTTP-accepted run without a workflow, status reads reconcile a matching
+dead-letter entry by its original queue message id and persist a terminal receipt.
+This covers automatic exhaustion before the domain handler runs. The matching
+entry stays available for operators; its DLQ read count increases. An entry leased
+by `pgmq dlq read` can delay reconciliation until that 30-second lease expires.
+
+Retain DLQ entries until their HTTP runs have been reconciled. Before archive,
+redrive or purge, run `shikigami-client runs show AGENT RUN_ID` or
+`shikigami runs show shikigami.agent-run RUN_ID --json` for each corresponding
+accepted run and verify `failed` with `dead_lettered`. If the read is unavailable
+or still accepted, keep the evidence and retry after any inspection lease expires.
+The operator JSON command works before a workflow exists, with null workflow and
+session objects. Once recorded, the receipt survives archive, purge and restart;
+redrive may later create a workflow whose lifecycle takes precedence. Destructive
+DLQ commands do not enforce this retention policy, and cleanup before
+reconciliation can erase the only evidence. See
+[ADR 0050](../adr/0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md).

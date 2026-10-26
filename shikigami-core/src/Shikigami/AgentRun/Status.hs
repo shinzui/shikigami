@@ -31,7 +31,7 @@ import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.AgentRun.Ledger (RunRequestRow (..), lookupRunRequest)
+import Shikigami.AgentRun.Ledger (RunRequestRow (..), lookupRunRequest, refreshRunDisposition)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Directory.Store (RunSkip (..), lookupDrainSkip)
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -96,9 +96,14 @@ gatherRunFacts store agent runId = do
         Right (Right (Just facts)) -> do
           let key = (.runKey) <$> facts.request <|> (runKeyText . (.idempotencyKey) <$> recordedJob facts.steps)
           skipped <- maybe (pure (Right Nothing)) (lookupDrainSkip store.pool (agentNameText agent)) key
-          pure $ case skipped of
-            Left _ -> Left unavailable
-            Right skip -> Right (Just (RunFacts facts.request facts.instance_ facts.steps facts.session skip))
+          -- Only requests with no workflow/refusal need queue reconciliation.
+          -- Existing terminal receipts avoid touching the queue on repeated reads.
+          refreshed <- case (facts.instance_, skipped, facts.request) of
+            (Nothing, Right Nothing, Just row) -> fmap Just <$> refreshRunDisposition store.pool row
+            _ -> pure (Right facts.request)
+          pure $ case (skipped, refreshed) of
+            (Right skip, Right accepted') -> Right (Just (RunFacts accepted' facts.instance_ facts.steps facts.session skip))
+            _ -> Left unavailable
   where
     unavailable = "The run status store is unavailable."
     sessionLink steps = case Map.lookup "open-session" steps of

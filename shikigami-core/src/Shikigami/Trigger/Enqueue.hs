@@ -28,6 +28,7 @@ import Data.UUID.V5 qualified as UUID.V5
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction qualified as Tx
+import Keiro.PGMQ qualified as Job
 import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQueue, parseQueueName, sendMessage)
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
@@ -38,7 +39,7 @@ import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
-import Shikigami.RunJobs (encodeRunJob, queuePhysical)
+import Shikigami.RunJobs (encodeRunJob, queuePhysical, runJob)
 
 -- | The IP-7 queue name (shared with the worker).
 runQueueName :: QueueName
@@ -105,7 +106,9 @@ enqueueRunJobTx job =
 -- | Reconcile the run-job queue before accepting trigger deliveries.
 -- PGMQ queue creation is idempotent.
 ensureRunQueue :: Pool -> IO (Either UsageError ())
-ensureRunQueue pool = Pool.use pool (createQueue runQueueName)
+ensureRunQueue pool = Pool.use pool do
+  createQueue runQueueName
+  createQueue runJob.jobQueue.dlqName
 
 -- | Enqueue a run job.
 --

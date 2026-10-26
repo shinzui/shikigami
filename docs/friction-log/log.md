@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-26
+* **Update**: FRIC-7 resolved: Resolved the handler-hook gap using existing released APIs; no owner callback or release is required. ADR 0050 records the retention condition.
+
 ## 2026-10-25
 * **Update**: FRIC-7 promoted: IR-10 and plan 91 retain the automatic-disposition acceptance gate as an explicit owner-release prerequisite.
 * **Addition**: FRIC-7 records blocked interface friction with mori://shinzui/keiro: Automatic PGMQ exhaustion bypasses the domain disposition hook

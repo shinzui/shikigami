@@ -2,7 +2,7 @@
 
 Date: 2026-10-25
 
-Status: accepted
+Status: accepted; DLQ exclusion superseded by [ADR 0050](0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md)
 
 ## Context
 

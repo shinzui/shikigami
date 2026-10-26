@@ -78,6 +78,7 @@ import Keiro.Workflow
   )
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.Status qualified as Status
 
 -- @lookupInstance@ and @statusToText@ are not re-exported by "Keiro.Workflow";
@@ -86,7 +87,7 @@ import Keiro.Workflow.Instance (lookupInstance, statusToText)
 import Kioku.Id (SessionId, idText, parseId)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
-import Kiroku.Store.Connection (KirokuStore, defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Workflow (StepResult (StepProduced, StepRefused))
@@ -127,8 +128,18 @@ runRunsShow wfName wfId asJson config = do
     gathered <- gather store wfName wfId
     case gathered of
       Left storeError -> die ("store error: " <> Text.pack (show storeError))
-      Right Nothing ->
-        die ("no workflow instance named " <> wfName <> " with id " <> wfId)
+      Right Nothing
+        | asJson && wfName == "shikigami.agent-run" -> do
+            accepted <- Ledger.lookupRunRequestById store.pool wfId
+            case accepted of
+              Left _ -> die "run lifecycle store is unavailable"
+              Right Nothing -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)
+              Right (Just request) -> do
+                result <- Status.deriveRunStatus store (AgentName request.agentName) wfId
+                case result of
+                  Left _ -> die "run lifecycle store is unavailable"
+                  Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (object ["workflow" .= Aeson.Null, "session" .= Aeson.Null])))
+        | otherwise -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)
       Right (Just (row, link))
         | asJson -> do
             -- The journal is authoritative for the agent name, including failures before session open.

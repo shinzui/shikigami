@@ -8,6 +8,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
+import Keiro.PGMQ qualified as Job
 import Keiro.Workflow (WorkflowId (..), runWorkflow)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreIO)
@@ -21,8 +22,10 @@ import Relay.Pagination.Conformance (checkConformance, conformancePassed, defaul
 import Servant.Health (ProbeVerdict (Healthy))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.AgentRun.Api
+import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.Status (deriveRunStatus)
 import Shikigami.Api.Problem (ProblemDetails (..))
 import Shikigami.App.Config (defaultAppConfig)
@@ -30,6 +33,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport
 import Shikigami.Prelude
+import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
@@ -40,7 +44,26 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "agent-run HTTP"
-    [ testCase "HTTP completion without a successful complete step is failed" $
+    [ testCase "HTTP reconciles automatic pre-workflow exhaustion and retains failure after purge" $
+        withRunServerStore fixture Directory.disabledDirectoryHandle \store request -> do
+          response <- request "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" Aeson..= ("exhaustion" :: Text), "payload" Aeson..= Aeson.object []])
+          accepted <- decodeBody response
+          forM_ ([1 .. 5] :: [Int]) \_ -> void (right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage runQueueName 0 (Just 1) Nothing)))
+          let runtime = Job.JobRuntime store.pool Nothing
+          _ <- right =<< Job.runJobEff runtime (Job.runJobOnce 1 RunJobs.runJob (\_ -> liftIO (assertFailure "exhausted job reached handler")))
+          result <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
+          statusCode (Http.responseStatus result) @?= 200
+          view <- right (Aeson.eitherDecode (Http.responseBody result) :: Either String AgentRunStatus)
+          view.status @?= "failed"
+          fmap (.kind) view.failure @?= Just "dead_lettered"
+          fmap (.reason) view.failure @?= Just "max_retries_exceeded"
+          _ <- right =<< Job.runJobEff runtime (Job.purgeDlq RunJobs.runJob)
+          repeated <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
+          Http.responseBody repeated @?= Http.responseBody result
+          Ledger.lookupRunRequest store.pool (AgentName "heartbeat") accepted.runId >>= \case
+            Right (Just row) -> row.disposition @?= "dead_lettered"
+            _ -> assertFailure "terminal receipt was not persisted",
+      testCase "HTTP completion without a successful complete step is failed" $
         withRunServerStore fixture Directory.disabledDirectoryHandle \store request -> do
           response <- request "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" Aeson..= ("terminal" :: Text), "payload" Aeson..= Aeson.object []])
           accepted <- decodeBody response

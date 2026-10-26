@@ -5,9 +5,11 @@ description: Publish a typed, idempotent run-status read endpoint so callers tha
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:claude-code
-  at: "2026-10-25T23:55:55Z"
+  at: "2026-10-26T02:23:58Z"
 requestId: IR-10
-status: in-progress
+status: completed
+completedAt: "2026-10-26T02:23:58Z"
+resolution: "Plan 91 under MasterPlan 15 serves the typed lifecycle/history API and client. Real worker, PostgreSQL and HTTP tests verify success, permanent failure, cancellation, refusal and automatic pre-workflow dead-letter reconciliation; durable receipts survive later cleanup under the documented retention policy."
 targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
 reviews:
@@ -27,20 +29,23 @@ reviews:
 
 ## Status
 
-**In progress.** [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md)
-implements authenticated lifecycle and paginated history reads, typed client
-show/list/wait commands, and shared operator JSON classification. The live server
-and worker prove accepted-to-succeeded execution; workflow tests cover permanent
-failure, cancellation, and refusal.
+**Completed by [plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md)
+on 2026-10-26 under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md).**
+Authenticated lifecycle and paginated history reads, typed client show/list/wait,
+shared operator JSON and generated OpenAPI are implemented and verified. Real
+worker execution covers success and permanent failure; workflow tests cover
+cancellation and refusal.
 
-Full acceptance remains blocked by automatic queue exhaustion before workflow
-creation. Keiro can dead-letter an exhausted message before invoking the domain
-handler, so the prescribed receipt hook does not run and the public lifecycle can
-remain accepted. The real drain reproduction proves zero handler calls, one DLQ
-entry, and accepted status. A released compatible Keiro terminal-disposition API
-covering bounded and continuous consumers is required. See
-[FRIC-7](../friction-log/7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md)
-and [ADR 0049](../adr/0049-public-run-status-composes-owner-reads-and-admission-receipts.md).
+Automatic retry exhaustion before workflow creation is closed through the
+released PGMQ read API: status lookup filters by the original accepted queue id
+and commits a bounded failure receipt in the same transaction. The real consumer
+and HTTP tests prove failed/dead_lettered with zero handler calls and stable
+status after archive/purge. Tests cover temporary operator leases, unrelated
+entries, malformed evidence, and write rollback/retry. No new callback, dependency
+release or workflow-body change is needed. Retain DLQ evidence until its receipt
+is verified before cleanup; the operator runbook documents that condition.
+See [ADR 0050](../adr/0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md)
+and resolved [FRIC-7](../friction-log/7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md).
 
 ## Context
 

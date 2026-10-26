@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-25T23:53:31Z"
 frictionId: FRIC-7
-status: "promoted"
+status: "resolved"
 impact: blocked
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,10 @@ amended:
   - by: "codex-cli/gpt-6.1-sol"
     at: "2026-10-25T23:55:55Z"
     change: "IR-10 and plan 91 retain the automatic-disposition acceptance gate as an explicit owner-release prerequisite."
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-10-26T02:23:28Z"
+    change: "Resolved the handler-hook gap using existing released APIs; no owner callback or release is required. ADR 0050 records the retention condition."
+resolution: "Status lookup now reconciles retained pre-workflow dead letters through the released PGMQ containment-filtered read and commits the receipt atomically. Automatic exhaustion, temporary leases, rollback/retry, and persistence after archive/purge are verified; cleanup follows receipt verification."
 ---
 # Automatic PGMQ exhaustion bypasses the domain disposition hook
 

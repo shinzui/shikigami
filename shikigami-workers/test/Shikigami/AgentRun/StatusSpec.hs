@@ -2,14 +2,16 @@ module Shikigami.AgentRun.StatusSpec (tests) where
 
 import Control.Exception qualified as Exception
 import Data.Aeson qualified as Aeson
+import Data.Foldable (toList)
 import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef)
-import Effectful (Eff, IOE, liftIO, (:>))
+import Data.Int (Int64)
+import Effectful (Eff, IOE, (:>))
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Keiro.PGMQ (JobOutcome (..))
 import Keiro.PGMQ qualified as Job
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), loadStepIndex, runWorkflow, step)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), runWorkflow, step)
 import Keiro.Workflow.Instance (WorkflowStatus (..), cancelWorkflow, lookupInstance)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreIO)
@@ -26,7 +28,7 @@ import Shikigami.AgentRun.Status
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport
-import Shikigami.Prelude
+import Shikigami.Prelude hiding (repeated, view)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue
 import Test.Tasty
@@ -36,11 +38,9 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "run status composition"
-    [ testCase "external gate: automatic retry exhaustion bypasses the receipt hook" $
+    [ testCase "automatic retry exhaustion is reconciled without a receipt callback" $
         withFixture fixture \store job connection -> do
           -- Five expired leases consume the generated retry budget without a workflow.
-          -- Replace the accepted assertion with Failed once a supported owning-library
-          -- disposition callback is released and wired into both worker/drain paths.
           forM_ ([1 .. 5] :: [Int]) \_ -> do
             _ <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage runQueueName 0 (Just 1) Nothing))
             pure ()
@@ -59,7 +59,63 @@ tests fixture =
           metrics <- Job.withJobRuntime connection Nothing \runtime -> right =<< Job.runJobEff runtime (Job.jobDlqMetrics RunJobs.runJob)
           metrics.queueLength @?= 1
           view <- getStatus store job
-          view.lifecycle @?= Accepted,
+          view.lifecycle @?= Failed
+          fmap (.kind) view.failure @?= Just DeadLettered
+          fmap (.reason) view.failure @?= Just "max_retries_exceeded"
+          assertBool "reconciled failure has a completion time" (isJust view.completedAt)
+          -- Retention after observation: removing the original queue evidence must
+          -- not undo the committed receipt or change its completion timestamp.
+          _ <- Job.withJobRuntime connection Nothing \runtime -> right =<< Job.runJobEff runtime (Job.archiveDlq RunJobs.runJob 100)
+          _ <- Job.withJobRuntime connection Nothing \runtime -> right =<< Job.runJobEff runtime (Job.purgeDlq RunJobs.runJob)
+          repeated <- getStatus store job
+          repeated @?= view,
+      testCase "reconciliation targets the original queue id and leaves unrelated dead letters available" $
+        withFixture fixture \store job _connection -> do
+          accepted <- acceptedRequest store job
+          other <- sendDeadLetter store (accepted.queueMessageId + 1) (Aeson.String "other failure")
+          _ <- sendDeadLetter store accepted.queueMessageId (Aeson.String "matching failure")
+          view <- getStatus store job
+          fmap (.reason) view.failure @?= Just "matching failure"
+          visible <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage RunJobs.runJob.jobQueue.dlqName 0 (Just 10) Nothing))
+          length visible @?= 2
+          assertBool "unrelated entry was never read" (any (\entry -> entry.messageId == other && entry.readCount == 1) visible),
+      testCase "an operator lease is temporary absence and is reconciled after expiry" $
+        withFixture fixture \store job _connection -> do
+          accepted <- acceptedRequest store job
+          messageId <- sendDeadLetter store accepted.queueMessageId (Aeson.String "retained failure")
+          _ <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage RunJobs.runJob.jobQueue.dlqName 30 (Just 1) Nothing))
+          hidden <- getStatus store job
+          hidden.lifecycle @?= Accepted
+          _ <- right =<< Pool.use store.pool (Pgmq.changeVisibilityTimeout (Pgmq.VisibilityTimeoutQuery RunJobs.runJob.jobQueue.dlqName messageId 0))
+          visible <- getStatus store job
+          visible.lifecycle @?= Failed,
+      testCase "malformed evidence is unavailable and its queue read is rolled back" $
+        withFixture fixture \store job _connection -> do
+          accepted <- acceptedRequest store job
+          messageId <- sendDeadLetter store accepted.queueMessageId (Aeson.Number 7)
+          deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId >>= \case
+            Left _ -> pure ()
+            result -> assertFailure ("malformed evidence was a lifecycle: " <> show result)
+          unchanged <- acceptedRequest store job
+          unchanged.disposition @?= "accepted"
+          messages <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage RunJobs.runJob.jobQueue.dlqName 0 (Just 1) Nothing))
+          case toList messages of
+            [entry] -> do
+              entry.messageId @?= messageId
+              entry.readCount @?= 1
+            _ -> assertFailure "malformed evidence was lost",
+      testCase "a receipt write failure rolls back the queue read and can be retried" $
+        withFixture fixture \store job _connection -> do
+          accepted <- acceptedRequest store job
+          _ <- sendDeadLetter store accepted.queueMessageId (Aeson.String "retryable receipt failure")
+          _ <- right =<< Pool.use store.pool (Session.script "ALTER TABLE shikigami.agent_run_requests ADD CONSTRAINT simulate_receipt_failure CHECK (disposition <> 'dead_lettered')")
+          deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId >>= \case
+            Left _ -> pure ()
+            _ -> assertFailure "failed receipt write was reported as a lifecycle"
+          _ <- right =<< Pool.use store.pool (Session.script "ALTER TABLE shikigami.agent_run_requests DROP CONSTRAINT simulate_receipt_failure")
+          recovered <- getStatus store job
+          recovered.lifecycle @?= Failed
+          fmap (.reason) recovered.failure @?= Just "retryable receipt failure",
       testCase "accepted, running and cancellation follow durable workflow facts" $
         withFixture fixture \store job _connection -> do
           view <- getStatus store job
@@ -140,3 +196,14 @@ withFixture fixture body = withShikigamiFreshDatabase fixture \connection -> wit
 
 right :: (Show e) => Either e a -> IO a
 right = either (assertFailure . show) pure
+
+acceptedRequest :: KirokuStore -> RunJob -> IO Ledger.RunRequestRow
+acceptedRequest store job = do
+  row <- right =<< Ledger.lookupRunRequest store.pool job.agentName (runJobWorkflowId job).unWorkflowId
+  maybe (assertFailure "missing accepted request") pure row
+
+sendDeadLetter :: KirokuStore -> Int64 -> Aeson.Value -> IO Pgmq.MessageId
+sendDeadLetter store originalId reason =
+  right =<< Pool.use store.pool (Pgmq.sendMessage (Pgmq.SendMessage RunJobs.runJob.jobQueue.dlqName (Pgmq.MessageBody body) Nothing))
+  where
+    body = Aeson.object ["original_message_id" Aeson..= originalId, "original_message" Aeson..= Aeson.Null, "dead_letter_reason" Aeson..= reason]
