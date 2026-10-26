@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: FRIC-7 promoted: IR-10 and plan 91 retain the automatic-disposition acceptance gate as an explicit owner-release prerequisite.
+* **Addition**: FRIC-7 records blocked interface friction with mori://shinzui/keiro: Automatic PGMQ exhaustion bypasses the domain disposition hook
 * **Update**: FRIC-6 accepted: The complete keiro gate passes with zero durable-contract findings.
 * **Addition**: FRIC-6 records detour tooling friction with mori://shinzui/shikigami: Keiro scaffold drift check includes hand-owned core edits
 * **Update**: FRIC-5 accepted: Serial execution verified the full suite without exceeding connection capacity.

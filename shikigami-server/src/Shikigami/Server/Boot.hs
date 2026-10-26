@@ -20,7 +20,9 @@ module Shikigami.Server.Boot
 where
 
 import Control.Concurrent.Async (link, withAsync)
+import Control.Lens ((&), (.~))
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.String (fromString)
 import Data.Text qualified as Text
@@ -36,6 +38,7 @@ import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
 import Shikigami.Agent.Catalog (AgentCatalog (..), catalogFromReport)
 import Shikigami.Agent.Loader (loadAgentsLoud)
+import Shikigami.AgentRun.Status (deriveRunStatus)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Directory qualified as Directory
@@ -67,10 +70,11 @@ runServerMain = do
 -- The pool is passed in rather than opened here because it has a lifetime:
 -- 'runServer' brackets it around the whole serving loop, so it is closed on
 -- shutdown instead of being leaked by whoever happened to build the environment.
-newServerEnv :: Tracer -> Pool -> AppConfig -> Log.Logger -> AgentCatalog -> Directory.DirectoryHandle -> IO ServerEnv
-newServerEnv tracer pool config logger catalog directory = do
+newServerEnv :: Tracer -> StoreConnection.KirokuStore -> AppConfig -> Log.Logger -> AgentCatalog -> Directory.DirectoryHandle -> IO ServerEnv
+newServerEnv tracer store config logger catalog directory = do
+  let pool = StoreConnection.pool store
   (livenessCheck, readinessCheck) <- mkHealthChecks pool
-  pure (newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck)
+  pure (newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck & #readRunStatus .~ deriveRunStatus store)
 
 -- | Build the environment with probe checks supplied by the caller.
 --
@@ -86,6 +90,7 @@ newServerEnvWith tracer config pool logger catalog directory livenessCheck readi
       appConfig = config,
       tracer,
       pool,
+      readRunStatus = \_ _ -> pure (Left "No status store was supplied to this test environment."),
       logger,
       catalog,
       directory,
@@ -125,7 +130,7 @@ runServer config = do
     StoreConnection.withStore settings \st -> do
       registerRuntimeCatalog st
       ensureRunQueue (StoreConnection.pool st) >>= either (const (ioError (userError "The run-job queue could not be reconciled."))) pure
-      env <- newServerEnv serverTracer (StoreConnection.pool st) config logger catalog directoryRuntime.handle
+      env <- newServerEnv serverTracer st config logger catalog directoryRuntime.handle
       application <- serverApplication telemetry env
       Log.logInfo
         logger

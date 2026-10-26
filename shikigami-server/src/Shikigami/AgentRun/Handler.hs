@@ -7,6 +7,7 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Network.HTTP.Types.URI (encodePathSegments)
+import Relay.Pagination (PageRequest (..))
 import Servant.Server.Generic (AsServerT)
 import Shikigami.Agent.Catalog qualified as Catalog
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
@@ -14,6 +15,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.AgentRun.Api
 import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.AgentRun.Status qualified as Status
 import Shikigami.Api.Problem
 import Shikigami.Caller.Api
 import Shikigami.Directory qualified as Directory
@@ -23,8 +25,27 @@ import Shikigami.Server.Seam
 import Shikigami.Trigger.Enqueue (addressedRunJob)
 
 agentRunServer :: ServerEnv -> ApiCaller -> AgentName -> AgentRunApi (AsServerT ServerM)
-agentRunServer env caller agent = AgentRunApi {request = requestRun}
+agentRunServer env caller agent = AgentRunApi {request = requestRun, show = showRun, list = listRuns}
   where
+    showRun runId
+      | isNothing (Catalog.lookupAgent env.catalog agent) = pure (RunShowAgentMissing missingAgent)
+      | not (validRunKey runId) = pure (RunMissing missingRun)
+      | otherwise =
+          liftIO (env.readRunStatus agent runId) >>= \case
+            Left _ -> pure (RunShowUnavailable unavailable)
+            Right Nothing -> pure (RunMissing missingRun)
+            Right (Just view) -> pure (RunFound (statusView view))
+    listRuns page
+      | isNothing (Catalog.lookupAgent env.catalog agent) = pure (RunListAgentMissing missingAgent)
+      | page.pageSize == 0 = pure (RunPageInvalid invalidPage)
+      | otherwise =
+          liftIO (Ledger.listRunRequests env.pool agent page) >>= \case
+            Left (Ledger.InvalidRunCursor _) -> pure (RunPageInvalid invalidPage)
+            Left (Ledger.RunListUnavailable _) -> pure (RunListUnavailable unavailable)
+            Right connection -> pure (RunPage (fmap requestView connection))
+    missingAgent = problem AgentNotFound "No declared agent has this name."
+    missingRun = problem RunNotFound "No run for this agent has this identifier."
+    invalidPage = problem InvalidUrl "Use a positive page size and a cursor issued by this route."
     requestRun body = case Catalog.lookupAgent env.catalog agent of
       Nothing -> pure (RunAgentMissing (problem AgentNotFound "No declared agent has this name."))
       Just decl | not decl.enabled -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
@@ -49,3 +70,20 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun}
     logOutcome event row = Log.logInfo env.logger event ["agent" Aeson..= row.agentName, "run_id" Aeson..= row.runId, "caller" Aeson..= caller.callerId]
     accepted row = AgentRunAccepted row.runId row.agentName row.idempotencyKey "accepted" row.acceptedAt
     location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", row.agentName, "runs", row.runId]
+
+statusView :: Status.RunStatusView -> AgentRunStatus
+statusView view =
+  AgentRunStatus
+    view.runId
+    view.agentName
+    (Status.lifecycleText view.lifecycle)
+    view.trigger
+    view.acceptedAt
+    view.startedAt
+    view.completedAt
+    view.sessionId
+    view.summary
+    (fmap (\failure -> RunFailureView (Status.failureKindText failure.kind) failure.reason) view.failure)
+
+requestView :: Ledger.RunRequestRow -> RunRequestView
+requestView row = RunRequestView row.runId row.idempotencyKey row.acceptedAt row.requestedBy row.disposition

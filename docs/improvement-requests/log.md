@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Progress**: IR-10 now has implemented and verified HTTP status/history, client commands and live worker success. Automatic retry exhaustion bypasses the domain receipt hook in released Keiro; plan 91 and MasterPlan 15 remain open for that reproduced terminal-closure gate (FRIC-7).
 * **Completion**: IR-8 completed by plan 90 under MasterPlan 15: authenticated addressed runs with an atomic acceptance ledger, stable workflow IDs, replay/conflict handling, and verified concurrent deduplication.
 * **Completion**: IR-12 completed by MasterPlan 13 and plans 73–76: governed typed two-model decisions, retained rich-result replay, durable actual-attempt evidence, production wiring and authoring documentation. All package tests and the additive replay-neutral workflow gate against 436e9f8 pass.
 

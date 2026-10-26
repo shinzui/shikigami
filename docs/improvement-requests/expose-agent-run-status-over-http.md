@@ -5,9 +5,9 @@ description: Publish a typed, idempotent run-status read endpoint so callers tha
 timestamp: "2026-09-20T20:31:12Z"
 generated:
   by: process:claude-code
-  at: "2026-10-22T02:58:26Z"
+  at: "2026-10-25T23:55:55Z"
 requestId: IR-10
-status: accepted
+status: in-progress
 targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
 reviews:
@@ -27,23 +27,20 @@ reviews:
 
 ## Status
 
-**Accepted; implementation planned but not started.**
-[MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md)
-selects [plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md) for this
-request: `GET /agents/{agentName}/runs/{runId}` with the closed lifecycle `accepted`,
-`running`, `succeeded`, `failed`, and `cancelled`, derived through the supported keiro and
-kioku operations that `shikigami runs show` already composes, joined to the acceptance ledger
-of [plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md),
-plus a relay-paginated `GET /agents/{agentName}/runs` history. Plan 91 depends on plan 90,
-which supplies the run identifier this request follows. This request complements
-`mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-8`. IR-8 lets an
-external caller request a run and receive its stable run identifier. This request lets that
-caller follow the identifier to the run's durable outcome. Together they support the agent-driven
-upgrade portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2` without exposing a Shikigami
-database, queue, or workflow-journal schema.
+**In progress.** [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md)
+implements authenticated lifecycle and paginated history reads, typed client
+show/list/wait commands, and shared operator JSON classification. The live server
+and worker prove accepted-to-succeeded execution; workflow tests cover permanent
+failure, cancellation, and refusal.
 
-[Plan 30](../plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md)
-delivered operator CLI inspection, whose join plan 91 reuses for the public HTTP resource.
+Full acceptance remains blocked by automatic queue exhaustion before workflow
+creation. Keiro can dead-letter an exhausted message before invoking the domain
+handler, so the prescribed receipt hook does not run and the public lifecycle can
+remain accepted. The real drain reproduction proves zero handler calls, one DLQ
+entry, and accepted status. A released compatible Keiro terminal-disposition API
+covering bounded and continuous consumers is required. See
+[FRIC-7](../friction-log/7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md)
+and [ADR 0049](../adr/0049-public-run-status-composes-owner-reads-and-admission-receipts.md).
 
 ## Context
 

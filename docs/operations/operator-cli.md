@@ -345,3 +345,14 @@ The public HTTP equivalent of the declared-agent inventory is `GET /agents`
 (with Relay pagination) and `GET /agents/{agentName}`. The typed client exposes
 `shikigami-client agents list` and `shikigami-client agents show NAME`. These read
 the server deployment’s boot-time declarations and its current lifecycle directory.
+
+The HTTP run resource is `GET /agents/{agentName}/runs/{runId}`; the acceptance
+index is `GET /agents/{agentName}/runs`. The typed client provides `runs show`,
+`runs list`, and `runs wait`. Wait exits 0 on success, 1 on failure/cancellation,
+2 on timeout, and 3 on a transport or problem response. `runs show --json` in the
+operator CLI adds the same derived lifecycle alongside its existing workflow and
+session objects. Supply the returned workflow UUID verbatim.
+
+Automatic queue exhaustion is an open acceptance gate in MasterPlan 15: Keiro can
+dead-letter before invoking the domain handler, bypassing its receipt hook. Such a
+pre-workflow run can remain accepted. See [ADR 0049](../adr/0049-public-run-status-composes-owner-reads-and-admission-receipts.md).

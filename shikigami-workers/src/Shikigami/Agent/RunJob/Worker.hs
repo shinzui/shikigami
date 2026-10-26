@@ -6,6 +6,7 @@
 module Shikigami.Agent.RunJob.Worker
   ( runJob,
     handleRunJob,
+    recordRunJobOutcome,
     DrainAdmission (..),
     admitRunJob,
     admitRunJobWith,
@@ -46,6 +47,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), meiboPrincipal, principalT
 import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.AgentRun.Ledger (recordDeadLetter)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store qualified as DirectoryStore
@@ -60,7 +62,22 @@ import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, 
 -- Codec failures never reach this function: @keiro-pgmq@ dead-letters them at
 -- the typed boundary.
 handleRunJob :: (IOE :> es) => WorkerEnv -> JobContext es -> RunJob -> Eff es JobOutcome
-handleRunJob env context job =
+handleRunJob env context job = do
+  outcome <- handleRunJobBody env context job
+  liftIO (recordRunJobOutcome (envLogger env) env.pool job outcome)
+  pure outcome
+
+-- | Persist only decoded jobs' explicit terminal dispositions, outside the journal.
+recordRunJobOutcome :: Log.Logger -> Hasql.Pool.Pool -> RunJob -> JobOutcome -> IO ()
+recordRunJobOutcome logger pool job = \case
+  Dead reason ->
+    recordDeadLetter pool job.idempotencyKey reason >>= \case
+      Left _ -> Log.logError logger "worker.job.disposition_failed" ["run_id" Aeson..= (runJobWorkflowId job).unWorkflowId]
+      Right _ -> pure ()
+  _ -> pure ()
+
+handleRunJobBody :: (IOE :> es) => WorkerEnv -> JobContext es -> RunJob -> Eff es JobOutcome
+handleRunJobBody env context job =
   withVisibilityHeartbeat context do
     liftIO (admitRunJob env job) >>= \case
       DrainSkipped runSkip -> do

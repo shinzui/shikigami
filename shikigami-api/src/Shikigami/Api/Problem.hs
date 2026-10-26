@@ -105,6 +105,7 @@ data ProblemCode
   = -- | The route matched no resource.
     NotFound
   | AgentNotFound
+  | RunNotFound
   | AgentNotRunnable
   | IdempotencyKeyConflict
   | PayloadTooLarge
@@ -132,6 +133,7 @@ data ProblemCode
 -- | The stable machine-readable identifier. Never change an existing string.
 problemCodeText :: ProblemCode -> Text
 problemCodeText = \case
+  RunNotFound -> "run_not_found"
   AgentNotRunnable -> "agent_not_runnable"
   IdempotencyKeyConflict -> "idempotency_key_conflict"
   PayloadTooLarge -> "payload_too_large"
@@ -149,6 +151,7 @@ problemCodeText = \case
 -- | The stable human-readable summary. Constant per code, never per request.
 problemTitle :: ProblemCode -> Text
 problemTitle = \case
+  RunNotFound -> "Run not found"
   AgentNotRunnable -> "Agent not runnable"
   IdempotencyKeyConflict -> "Idempotency key conflict"
   PayloadTooLarge -> "Payload too large"
@@ -166,6 +169,7 @@ problemTitle = \case
 -- | The HTTP status a code is served with.
 problemStatus :: ProblemCode -> Int
 problemStatus = \case
+  RunNotFound -> 404
   AgentNotRunnable -> 409
   IdempotencyKeyConflict -> 409
   PayloadTooLarge -> 413
@@ -184,6 +188,7 @@ problemStatus = \case
 -- code so two endpoints can never disagree about the same failure.
 problemRetryable :: ProblemCode -> Bool
 problemRetryable = \case
+  RunNotFound -> False
   AgentNotRunnable -> False
   IdempotencyKeyConflict -> False
   PayloadTooLarge -> False

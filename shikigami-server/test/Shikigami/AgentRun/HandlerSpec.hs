@@ -8,16 +8,22 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
+import Keiro.Workflow (WorkflowId (..), runWorkflow)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Effect (runStoreIO)
 import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Trace qualified as Trace
 import Pgmq qualified
+import Relay.Pagination (Connection (..), Direction (..), PageRequest (..), cursorToText)
+import Relay.Pagination.Conformance (checkConformance, conformancePassed, defaultConformanceConfig, renderConformanceReport)
 import Servant.Health (ProbeVerdict (Healthy))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.AgentRun.Api
+import Shikigami.AgentRun.Status (deriveRunStatus)
 import Shikigami.Api.Problem (ProblemDetails (..))
 import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Directory qualified as Directory
@@ -34,7 +40,45 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "agent-run HTTP"
-    [ testCase "accept and replay return one resource and one message; conflict is typed" $
+    [ testCase "HTTP completion without a successful complete step is failed" $
+        withRunServerStore fixture Directory.disabledDirectoryHandle \store request -> do
+          response <- request "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" Aeson..= ("terminal" :: Text), "payload" Aeson..= Aeson.object []])
+          accepted <- decodeBody response
+          _ <- right =<< runStoreIO store (runWorkflow agentRunWorkflowName (WorkflowId accepted.runId) (pure ()))
+          result <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
+          statusCode (Http.responseStatus result) @?= 200
+          view <- right (Aeson.eitherDecode (Http.responseBody result) :: Either String AgentRunStatus)
+          view.status @?= "failed"
+          fmap (.kind) view.failure @?= Just "behavior_failed",
+      testCase "accepted status, cross-agent guard and run history paginate without gaps" $
+        withRunServer fixture Directory.disabledDirectoryHandle \_ request -> do
+          let payload key = Aeson.object ["idempotencyKey" Aeson..= key, "payload" Aeson..= Aeson.object []]
+          accepted <- forM ([1 .. 7] :: [Int]) \index -> do
+            response <- request "POST" "/agents/heartbeat/runs" (payload ("history-" <> Text.pack (show index)))
+            decodeBody response
+          let latest = last accepted
+          response <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack latest.runId) Aeson.Null
+          statusCode (Http.responseStatus response) @?= 200
+          view <- right (Aeson.eitherDecode (Http.responseBody response) :: Either String AgentRunStatus)
+          view.status @?= "accepted"
+          view.acceptedAt @?= Just latest.acceptedAt
+          view.failure @?= Nothing
+          request "GET" ("/agents/disabled-heartbeat/runs/" <> Text.unpack latest.runId) Aeson.Null >>= assertProblem 404 "run_not_found"
+          request "GET" "/agents/heartbeat/runs/no-such-run" Aeson.Null >>= assertProblem 404 "run_not_found"
+          request "GET" "/agents/absent/runs" Aeson.Null >>= assertProblem 404 "agent_not_found"
+          request "GET" "/agents/absent/runs/any-run" Aeson.Null >>= assertProblem 404 "agent_not_found"
+          request "GET" "/agents/heartbeat/runs?first=0" Aeson.Null >>= assertProblem 400 "invalid_url"
+          request "GET" "/agents/heartbeat/runs?after=e30" Aeson.Null >>= assertProblem 400 "invalid_url"
+          let fetch page = do
+                let size = show page.pageSize
+                    suffix = maybe "" (("&" <>) . ((if page.direction == Forward then "after=" else "before=") <>) . Text.unpack . cursorToText) page.cursor
+                    query = (if page.direction == Forward then "?first=" else "?last=") <> size <> suffix
+                response <- request "GET" ("/agents/heartbeat/runs" <> query) Aeson.Null
+                connection <- right (Aeson.eitherDecode (Http.responseBody response) :: Either String (Connection RunRequestView))
+                pure (fmap (.runId) connection)
+          report <- checkConformance (defaultConformanceConfig 3) id fetch (fmap (.runId) (reverse accepted))
+          assertBool (Text.unpack (renderConformanceReport report)) (conformancePassed report),
+      testCase "accept and replay return one resource and one message; conflict is typed" $
         withRunServer fixture Directory.disabledDirectoryHandle \pool post -> do
           let body = Aeson.object ["idempotencyKey" Aeson..= ("http-1" :: Text), "payload" Aeson..= Aeson.object []]
           first <- post "POST" "/agents/heartbeat/runs" body
@@ -86,16 +130,19 @@ right :: (Show e) => Either e a -> IO a
 right = either (assertFailure . show) pure
 
 withRunServer :: DatabaseFixture -> Directory.DirectoryHandle -> (Pool.Pool -> (String -> String -> Aeson.Value -> IO (Http.Response LBS.ByteString)) -> IO a) -> IO a
-withRunServer fixture directory body =
+withRunServer fixture directory body = withRunServerStore fixture directory (\store -> body store.pool)
+
+withRunServerStore :: DatabaseFixture -> Directory.DirectoryHandle -> (KirokuStore -> (String -> String -> Aeson.Value -> IO (Http.Response LBS.ByteString)) -> IO a) -> IO a
+withRunServerStore fixture directory body =
   withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
     _ <- right =<< ensureRunQueue store.pool
     declaration <- loadAgent "../agents/heartbeat.dhall" >>= right
     let catalog = AgentCatalog (Map.fromList [("heartbeat", declaration), ("disabled-heartbeat", declaration & #name .~ "disabled-heartbeat" & #enabled .~ False)]) 0
     provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
     let tracer = Trace.makeTracer provider "run-test" Trace.tracerOptions
-        env = newServerEnvWith tracer defaultAppConfig store.pool Log.silentLogger catalog directory (pure Healthy) (pure Healthy)
+        env = newServerEnvWith tracer defaultAppConfig store.pool Log.silentLogger catalog directory (pure Healthy) (pure Healthy) & #readRunStatus .~ deriveRunStatus store
     testWithApplication (pure (shikigamiApplication env)) \port -> do
       manager <- Http.newManager Http.defaultManagerSettings
-      body store.pool \method path value -> do
+      body store \method path value -> do
         request <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
         Http.httpLbs request {Http.method = Text.encodeUtf8 (Text.pack method), Http.requestHeaders = [("Content-Type", "application/json")], Http.requestBody = Http.RequestBodyLBS (Aeson.encode value)} manager

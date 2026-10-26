@@ -6,6 +6,13 @@ module Shikigami.AgentRun.Api
     RunRequestResponses,
     RunRequestResult (..),
     validRunKey,
+    AgentRunStatus (..),
+    RunFailureView (..),
+    RunRequestView (..),
+    RunShowResponses,
+    RunShowResult (..),
+    RunListResponses,
+    RunListResult (..),
   )
 where
 
@@ -16,6 +23,9 @@ import Data.OpenApi (ToSchema (..), fromAesonOptions, genericDeclareNamedSchema)
 import Data.OpenApi qualified as O
 import Data.SOP (I (..), NS (..))
 import Data.Text qualified as Text
+import Relay.Pagination (Connection)
+import Relay.Pagination.Servant (RelayPage)
+import Relay.Pagination.Servant.OpenApi ()
 import Servant.API
 import Servant.API.MultiVerb
 import Shikigami.Api.Problem
@@ -107,6 +117,96 @@ instance AsUnion RunRequestResponses RunRequestResult where
     S (S (S (S (S (S (S impossible)))))) -> case impossible of {}
 
 data AgentRunApi mode = AgentRunApi
-  { request :: mode :- ReqBody '[JSON] AgentRunRequest :> MultiVerb 'POST '[JSON] RunRequestResponses RunRequestResult
+  { show :: mode :- Capture "runId" Text :> MultiVerb 'GET '[JSON] RunShowResponses RunShowResult,
+    list :: mode :- RelayPage 50 200 :> MultiVerb 'GET '[JSON] RunListResponses RunListResult,
+    request :: mode :- ReqBody '[JSON] AgentRunRequest :> MultiVerb 'POST '[JSON] RunRequestResponses RunRequestResult
   }
   deriving stock (Generic)
+
+data AgentRunStatus = AgentRunStatus
+  { runId :: !Text,
+    agentName :: !Text,
+    status :: !Text,
+    trigger :: !(Maybe Text),
+    acceptedAt :: !(Maybe UTCTime),
+    startedAt :: !(Maybe UTCTime),
+    completedAt :: !(Maybe UTCTime),
+    sessionId :: !(Maybe Text),
+    summary :: !(Maybe Text),
+    failure :: !(Maybe RunFailureView)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data RunFailureView = RunFailureView {kind :: !Text, reason :: !Text}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data RunRequestView = RunRequestView
+  { runId :: !Text,
+    idempotencyKey :: !Text,
+    acceptedAt :: !UTCTime,
+    requestedBy :: !Text,
+    disposition :: !Text
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance ToSchema RunRequestView where
+  declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema AgentRunStatus where
+  declareNamedSchema proxy = do
+    O.NamedSchema name schema <- genericDeclareNamedSchema (fromAesonOptions defaultOptions) proxy
+    pure (O.NamedSchema name (schema & O.properties . ix "status" . O._Inline . O.enum_ ?~ fmap Aeson.String ["accepted", "running", "succeeded", "failed", "cancelled"]))
+
+instance ToSchema RunFailureView where
+  declareNamedSchema proxy = do
+    O.NamedSchema name schema <- genericDeclareNamedSchema (fromAesonOptions defaultOptions) proxy
+    pure (O.NamedSchema name (schema & O.properties . ix "kind" . O._Inline . O.enum_ ?~ fmap Aeson.String ["refused", "dead_lettered", "behavior_failed", "workflow_failed"]))
+
+type RunShowResponses =
+  '[ Respond 200 "The run lifecycle" (AgentRunStatus),
+     RespondAs ProblemJSON 404 "Agent not found" ProblemDetails,
+     RespondAs ProblemJSON 404 "Run not found" ProblemDetails,
+     RespondAs ProblemJSON 503 "Store unavailable" ProblemDetails
+   ]
+
+data RunShowResult = RunFound !(AgentRunStatus) | RunShowAgentMissing !(ProblemDetails) | RunMissing !(ProblemDetails) | RunShowUnavailable !(ProblemDetails)
+  deriving stock (Eq, Show)
+
+instance AsUnion RunShowResponses RunShowResult where
+  toUnion = \case
+    RunFound body -> Z (I body)
+    RunShowAgentMissing body -> S (Z (I body))
+    RunMissing body -> S (S (Z (I body)))
+    RunShowUnavailable body -> S (S (S (Z (I body))))
+  fromUnion = \case
+    Z (I body) -> RunFound body
+    S (Z (I body)) -> RunShowAgentMissing body
+    S (S (Z (I body))) -> RunMissing body
+    S (S (S (Z (I body)))) -> RunShowUnavailable body
+    S (S (S (S (impossible)))) -> case impossible of {}
+
+type RunListResponses =
+  '[ Respond 200 "A page of accepted run requests" (Connection RunRequestView),
+     RespondAs ProblemJSON 400 "Invalid pagination cursor or size" ProblemDetails,
+     RespondAs ProblemJSON 404 "Agent not found" ProblemDetails,
+     RespondAs ProblemJSON 503 "Store unavailable" ProblemDetails
+   ]
+
+data RunListResult = RunPage !(Connection RunRequestView) | RunPageInvalid !(ProblemDetails) | RunListAgentMissing !(ProblemDetails) | RunListUnavailable !(ProblemDetails)
+  deriving stock (Eq, Show)
+
+instance AsUnion RunListResponses RunListResult where
+  toUnion = \case
+    RunPage body -> Z (I body)
+    RunPageInvalid body -> S (Z (I body))
+    RunListAgentMissing body -> S (S (Z (I body)))
+    RunListUnavailable body -> S (S (S (Z (I body))))
+  fromUnion = \case
+    Z (I body) -> RunPage body
+    S (Z (I body)) -> RunPageInvalid body
+    S (S (Z (I body))) -> RunListAgentMissing body
+    S (S (S (Z (I body)))) -> RunListUnavailable body
+    S (S (S (S (impossible)))) -> case impossible of {}

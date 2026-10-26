@@ -154,7 +154,7 @@ follow are `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`,
 | 1 | Serve the declared-agent catalog over HTTP | docs/plans/88-serve-the-declared-agent-catalog-over-http.md | None | None | Complete |
 | 2 | Authenticate public API callers with configured bearer credentials | docs/plans/89-authenticate-public-api-callers-with-configured-bearer-credentials.md | None | EP-1 (its final milestone wraps the `agents` mount, which EP-1 creates) | Complete |
 | 3 | Accept addressed agent runs over HTTP with server-owned idempotency | docs/plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md | EP-1, EP-2 | None | Complete |
-| 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | Not Started |
+| 4 | Expose agent-run status and history over HTTP | docs/plans/91-expose-agent-run-status-and-history-over-http.md | EP-3 | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -179,6 +179,11 @@ lookup.
 EP-4 depends hard on EP-3. It extends the `AgentRunApi` record EP-3 creates, reads the ledger
 table and module EP-3 owns, looks runs up by the identifier EP-3 defines, and extends the hurl
 file EP-3 adds.
+
+EP-4 additionally requires a released compatible terminal-disposition callback
+from the queue owner for its automatic-exhaustion acceptance gate. The current
+0.18 and latest released 0.21 Job interfaces cannot supply it; FRIC-7 records the
+reproduction. This external prerequisite leaves the child In Progress.
 
 The resulting order is three phases: Phase 1 runs EP-1 and EP-2 together; Phase 2 runs EP-3;
 Phase 3 runs EP-4. No milestone interleaving across children is needed.
@@ -219,7 +224,9 @@ Phase 3 runs EP-4. No milestone interleaving across children is needed.
    AgentCatalog`, and `directory :: DirectoryHandle`, and makes boot load manifests and start the
    directory. EP-3 adds `pool :: Hasql.Pool.Pool` and makes boot reconcile the run-job queue with
    `Shikigami.Trigger.Enqueue.ensureRunQueue`. EP-2 adds no field; its `AuthHandler` is a
-   Servant context entry built in `shikigami-server/src/Shikigami/Server/App.hs`. The test
+   Servant context entry built in `shikigami-server/src/Shikigami/Server/App.hs`. EP-4 adds
+   `readRunStatus`, a closure over the boot-owned KirokuStore for exported workflow
+   and session reads. The test
    constructor `newServerEnvWith` grows with each plan, and each plan updates every call site in
    `shikigami-server/test/`.
 
@@ -315,20 +322,39 @@ replaces, that health is exempt, and that authentication is not authorization.
 
 ## Progress
 
-EP-1 is complete (2026-10-25): typed catalog, bidirectional pagination,
-wire/schema tests, live Hurl and client checks pass. EP-2 is complete: bearer mode, configuration redaction, uniform 401 responses,
-OpenAPI security and live authenticated client checks pass (15 Hurl requests).
-EP-3 is complete: atomic acceptance, the twenty-caller race, every HTTP problem
-arm, 21 Hurl requests and live client retries pass. IR-8 is completed. EP-4 is
-next; its whole-child prerequisite is accepted. The durable-contract gate reports
-no findings. Validation uses the existing isolated Cabal
-project because the default Kikan paths are missing. Core PostgreSQL validation
-passes serially. ADR 0046 records the catalog boundary.
+EP-1, EP-2 and EP-3 are Complete. EP-4 is In Progress: status/history routes,
+wire/schema tests, bidirectional history conformance, client show/list/wait and
+operator JSON are implemented. The live suite passes 26 Hurl requests, then boots
+a real worker and verifies accepted-to-succeeded execution and the operator join.
+Core PostgreSQL validation passes serially; all worker tests pass. The frozen
+source closure now includes the four added adapters/snippet dependencies (361
+runtime packages); previous package versions and repository pins are unchanged.
+
+The remaining integration gate is automatic retry exhaustion before workflow
+creation. Released Keiro dead-letters before invoking the domain handler; the
+prescribed receipt hook cannot observe that disposition. The reproduction proves
+zero handler calls, one DLQ entry, and Accepted status. EP-4 M1 and full IR-10
+acceptance remain open pending a supported terminal-disposition callback in a
+compatible owner release. FRIC-7 and ADR 0049 record the evidence and next step.
+The normal-path checks do not waive this criterion.
+
+Validation uses the existing isolated `.dev/mp13.cabal.project` for the missing
+Kikan paths and serial core PostgreSQL execution. ADRs 0046–0049 distill the
+implemented catalog, authentication, acceptance and status boundaries.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The planned worker hook covers explicit Dead outcomes only. Automatic retry
+exhaustion bypasses the domain handler in Keiro 0.18 and remains unobservable in
+the latest released 0.21 Job API. This is an external acceptance prerequisite for
+EP-4, not a reason to infer status from private queue tables. FRIC-7 carries the
+real drain reproduction; IR-10 remains in-progress.
+
+Keiro owner reads require the existing KirokuStore handle; EP-4 captures it in a
+server reader seam instead of implementing an interpreter over a raw pool.
+HTTP run keys always take runJobWorkflowId's UUIDv5 fallback because colons are
+workflow journal separators. The public ID contract itself is unchanged.
 
 
 ## Decision Log
@@ -407,4 +433,13 @@ passes serially. ADR 0046 records the catalog boundary.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Three child plans are complete and committed; EP-4's public read surface and normal
+execution path are implemented and tested. The final terminal-closure gate remains
+open, so the initiative is not complete. Durable context is recorded in ADRs
+0046–0049. FRIC-4, FRIC-5 and FRIC-6 are accepted validation workarounds; FRIC-7
+is tracked by IR-10 as the external prerequisite. Resume at EP-4 with a released
+compatible owner callback rather than weakening the acceptance or inspecting DLQ
+state as a status source.
+
+Coordination revision 2026-10-25: EP-4 retains its acceptance but now records the
+reproduced owner-level terminal-disposition prerequisite and store-reader seam.

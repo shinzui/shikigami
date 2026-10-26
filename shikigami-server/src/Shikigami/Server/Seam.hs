@@ -35,6 +35,8 @@ import OpenTelemetry.Trace.Core (Tracer)
 import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
 import Shikigami.Agent.Catalog (AgentCatalog)
+import Shikigami.Agent.Name (AgentName)
+import Shikigami.AgentRun.Status (RunStatusView)
 import Shikigami.Api.Problem (ProblemCode, problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.Directory (DirectoryHandle)
@@ -54,11 +56,13 @@ data ServerEnv = ServerEnv
     tracer :: !Tracer,
     liveness :: !ProbeCheck,
     pool :: !Pool,
+    readRunStatus :: !(AgentName -> Text -> IO (Either Text (Maybe RunStatusView))),
     logger :: !Log.Logger,
     catalog :: !AgentCatalog,
     directory :: !DirectoryHandle,
     readiness :: !ProbeCheck
   }
+  deriving stock (Generic)
 
 -- | The monad every handler is written in.
 newtype ServerM a = ServerM (ReaderT ServerEnv Handler a)

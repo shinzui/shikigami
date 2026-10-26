@@ -157,6 +157,7 @@ test-suite shikigami-workers-test
   hs-source-dirs: test
   other-modules:
     Shikigami.Agent.RunJob.WorkerSpec
+    Shikigami.AgentRun.StatusSpec
     Shikigami.Health.WorkerSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
@@ -176,6 +177,8 @@ test-suite shikigami-workers-test
     bytestring,
     containers,
     effectful,
+    generic-lens,
+    hasql,
     hasql-pool,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-sdk,
@@ -184,6 +187,7 @@ test-suite shikigami-workers-test
     kioku-api,
     kioku-core,
     kiroku-store,
+    lens,
     optparse-applicative,
     pgmq-hasql,
     process,

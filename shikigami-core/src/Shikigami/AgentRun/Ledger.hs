@@ -6,6 +6,9 @@ module Shikigami.AgentRun.Ledger
     payloadFingerprint,
     acceptRunRequest,
     lookupRunRequest,
+    recordDeadLetter,
+    listRunRequests,
+    RunListError (..),
   )
 where
 
@@ -20,6 +23,7 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
 import Hasql.Decoders qualified as D
+import Hasql.DynamicStatements.Snippet qualified as Snippet
 import Hasql.Encoders qualified as E
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
@@ -29,9 +33,12 @@ import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Pgmq (MessageId (..))
+import Relay.Pagination (Connection, CursorError, PageRequest)
+import Relay.Pagination.Hasql qualified as Relay
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
+import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
 
@@ -50,7 +57,10 @@ data RunRequestRow = RunRequestRow
     payloadFingerprint :: !Text,
     requestedBy :: !Text,
     queueMessageId :: !Int64,
-    acceptedAt :: !UTCTime
+    acceptedAt :: !UTCTime,
+    disposition :: !Text,
+    dispositionDetail :: !(Maybe Text),
+    dispositionAt :: !(Maybe UTCTime)
   }
   deriving stock (Generic, Eq, Show)
 
@@ -77,7 +87,7 @@ acceptRunRequest pool job caller = do
     fingerprint = payloadFingerprint job.triggerPayload
     accept = do
       MessageId message <- enqueueRunJobTx job
-      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId (runKeyText job.idempotencyKey) fingerprint caller message job.occurredAt
+      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId (runKeyText job.idempotencyKey) fingerprint caller message job.occurredAt "accepted" Nothing Nothing
       inserted <- Tx.statement row insertStatement
       case inserted of
         Just acceptedAt -> pure (Just (row & #acceptedAt .~ acceptedAt))
@@ -90,7 +100,7 @@ safeUse :: Pool -> Session.Session a -> IO (Either Text a)
 safeUse pool action = first (const "The run acceptance store is unavailable.") <$> Pool.use pool action
 
 columns :: Text
-columns = "agent_name, idempotency_key, run_id, run_key, payload_fingerprint, requested_by, queue_message_id, accepted_at"
+columns = "agent_name, idempotency_key, run_id, run_key, payload_fingerprint, requested_by, queue_message_id, accepted_at, disposition, disposition_detail, disposition_at"
 
 rowDecoder :: D.Row RunRequestRow
 rowDecoder =
@@ -103,6 +113,9 @@ rowDecoder =
     <*> text
     <*> D.column (D.nonNullable D.int8)
     <*> D.column (D.nonNullable D.timestamptz)
+    <*> text
+    <*> D.column (D.nullable D.text)
+    <*> D.column (D.nullable D.timestamptz)
   where
     text = D.column (D.nonNullable D.text)
 
@@ -126,3 +139,30 @@ insertStatement =
         <> ((.queueMessageId) >$< E.param (E.nonNullable E.int8))
     )
     (D.rowMaybe (D.column (D.nonNullable D.timestamptz)))
+
+-- | Idempotent best-effort receipt for a decoded job's terminal queue outcome.
+recordDeadLetter :: Pool -> RunKey -> Text -> IO (Either Text Bool)
+recordDeadLetter pool key detail =
+  safeUse pool $
+    Session.statement (runKeyText key, boundedBehaviorDetail detail) $
+      preparable
+        "UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=$2, disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING true"
+        keyEncoder
+        (fmap (fromMaybe False) (D.rowMaybe (D.column (D.nonNullable D.bool))))
+
+data RunListError = InvalidRunCursor !CursorError | RunListUnavailable !Text
+  deriving stock (Eq, Show)
+
+listRunRequests :: Pool -> AgentName -> PageRequest -> IO (Either RunListError (Connection RunRequestRow))
+listRunRequests pool agent request = case Relay.paginate runSort request base rowDecoder of
+  Left err -> pure (Left (InvalidRunCursor err))
+  Right statement -> first RunListUnavailable <$> safeUse pool (Session.statement () statement)
+  where
+    base =
+      Snippet.sql ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name = ")
+        <> Snippet.encoderAndParam (E.nonNullable E.text) (agentNameText agent)
+    runSort =
+      Relay.SortSpec
+        ( Relay.KeyColumn "accepted_at" Relay.Desc (.acceptedAt) Relay.timestamptzKey
+            :| [Relay.KeyColumn "run_id" Relay.Asc (.runId) Relay.textKey]
+        )

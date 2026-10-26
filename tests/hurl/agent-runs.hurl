@@ -50,3 +50,39 @@ HTTP 400
 [Asserts]
 header "Content-Type" == "application/problem+json"
 jsonpath "$.code" == "invalid_body"
+
+GET {{base_url}}/agents/heartbeat/runs/{{run_id}}
+Authorization: Bearer {{token}}
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.status" == "accepted"
+jsonpath "$.acceptedAt" exists
+jsonpath "$.sessionId" == null
+jsonpath "$.failure" == null
+
+GET {{base_url}}/agents/heartbeat/runs/no-such-run
+Authorization: Bearer {{token}}
+HTTP 404
+[Asserts]
+header "Content-Type" == "application/problem+json"
+jsonpath "$.code" == "run_not_found"
+
+GET {{base_url}}/agents/disabled-heartbeat/runs/{{run_id}}
+Authorization: Bearer {{token}}
+HTTP 404
+[Asserts]
+jsonpath "$.code" == "run_not_found"
+
+GET {{base_url}}/agents/heartbeat/runs?first=10
+Authorization: Bearer {{token}}
+HTTP 200
+[Asserts]
+jsonpath "$.edges[0].node.runId" == "{{run_id}}"
+
+GET {{base_url}}/agents/heartbeat/runs?first=0
+Authorization: Bearer {{token}}
+HTTP 400
+[Asserts]
+header "Content-Type" == "application/problem+json"
+jsonpath "$.code" == "invalid_url"

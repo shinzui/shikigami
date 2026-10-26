@@ -60,6 +60,7 @@ where
 import Control.Applicative ((<|>))
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -75,6 +76,9 @@ import Keiro.Workflow
     WorkflowName (WorkflowName),
     loadStepIndex,
   )
+import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.AgentRun.Status qualified as Status
 
 -- @lookupInstance@ and @statusToText@ are not re-exported by "Keiro.Workflow";
 -- the module that owns instance rows exports both.
@@ -126,7 +130,21 @@ runRunsShow wfName wfId asJson config = do
       Right Nothing ->
         die ("no workflow instance named " <> wfName <> " with id " <> wfId)
       Right (Just (row, link))
-        | asJson -> LazyChar8.putStrLn (Aeson.encode (runJson row link))
+        | asJson -> do
+            -- The journal is authoritative for the agent name, including failures before session open.
+            steps <- runStoreIO store (loadStepIndex (WorkflowName wfName) (WorkflowId wfId) (fromIntegral row.generation))
+            let agent = case steps of
+                  Right index ->
+                    Map.lookup "ingest-job" index >>= \value -> case Aeson.fromJSON value of
+                      Aeson.Success (job :: RunJob) -> Just job.agentName
+                      _ -> Nothing
+                  _ -> Nothing
+            finalLifecycle <- case agent of
+              Just name | wfName == "shikigami.agent-run" -> Status.deriveRunStatus store name wfId
+              _ -> pure (Right Nothing)
+            case finalLifecycle of
+              Left _ -> die "run lifecycle store is unavailable"
+              Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (runJson row link)))
         | otherwise -> TextIO.putStr (renderRun row link)
   where
     die message = do
@@ -285,3 +303,10 @@ orDash = \case
 
 stamp :: UTCTime -> Text
 stamp = Text.pack . iso8601Show
+
+withLifecycle :: Maybe Status.RunStatusView -> Value -> Value
+withLifecycle status (Aeson.Object fields) = Aeson.Object (KeyMap.insert "lifecycle" (maybe Aeson.Null render status) fields)
+  where
+    render view = object ["status" .= Status.lifecycleText view.lifecycle, "failure" .= fmap renderFailure view.failure]
+    renderFailure failure = object ["kind" .= Status.failureKindText failure.kind, "reason" .= failure.reason]
+withLifecycle _ value = value

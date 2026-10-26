@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
+import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
@@ -24,6 +25,7 @@ main = do
             [ CommandSpec.tests,
               HealthWorkerSpec.tests,
               RunJobWorkerSpec.tests databaseFixture,
+              StatusSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,

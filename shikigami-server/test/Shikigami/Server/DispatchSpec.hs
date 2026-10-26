@@ -41,14 +41,14 @@ tests =
     "dispatch"
     [ testCase "the documented path set is the served path set" do
         let documented = sort (InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths))
-            served = sort (["/agents", "/agents/{agentName}", "/agents/{agentName}/runs"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
+            served = sort (["/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/agents/{agentName}/runs/{runId}"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
         documented @?= served,
       testCase "every documented path is answered, and an undocumented one is not" do
         let documented = InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths)
         withServer alwaysHealthy alwaysHealthy \get -> do
           mapM_
             ( \path -> do
-                status <- get (Text.unpack (Text.replace "{agentName}" "heartbeat" (Text.pack path)))
+                status <- get (Text.unpack (Text.replace "{runId}" "dispatch-run" (Text.replace "{agentName}" "heartbeat" (Text.pack path))))
                 assertBool (path <> " answered " <> show status <> ", expected a served route") (status /= 404)
             )
             documented

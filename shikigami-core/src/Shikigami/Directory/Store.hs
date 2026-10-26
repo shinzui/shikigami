@@ -11,6 +11,7 @@ module Shikigami.Directory.Store
     recordRunSkip,
     recordRunSkipTx,
     listRunSkips,
+    lookupDrainSkip,
   )
 where
 
@@ -236,3 +237,13 @@ parseSkipStage = \case
 
 renderUsage :: Either Pool.UsageError a -> Either Text a
 renderUsage = first (Text.pack . show)
+
+-- | Indexed lookup of the drain refusal for one accepted run.
+lookupDrainSkip :: Pool -> Text -> Text -> IO (Either Text (Maybe RunSkip))
+lookupDrainSkip pool agent key = renderUsage <$> Pool.use pool (Session.statement (agent, key) statement)
+  where
+    statement =
+      preparable
+        "SELECT agent_name,principal_id,stage,detail,reason,idempotency_key FROM shikigami.run_skips WHERE agent_name=$1 AND stage='drain' AND idempotency_key=$2"
+        ((fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text)))
+        (Decoders.rowMaybe runSkipRow)

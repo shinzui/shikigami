@@ -15,7 +15,7 @@ import Data.List (elemIndex, find)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -74,6 +74,7 @@ import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPri
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.AgentRun.Status qualified as RunStatus
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
@@ -132,7 +133,7 @@ tests databaseFixture =
     "AgentWorkflow"
     [ testCase "the current baseline journals v2 and capability resolution without patch activation" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
-          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
@@ -155,6 +156,15 @@ tests databaseFixture =
 
             freshOutcome <- runAgentRunWorkflow deps freshJob
             assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
+            status <- RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob).unWorkflowId
+            case status of
+              Right (Just view) -> do
+                assertEqual "real successful run lifecycle" RunStatus.Succeeded view.lifecycle
+                assertBool "success exposes its session" (isJust view.sessionId)
+                assertBool "success exposes its summary" (isJust view.summary)
+                assertBool "success exposes completion time" (isJust view.completedAt)
+                assertEqual "repeated status reads are stable" (Right (Just view)) =<< RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob).unWorkflowId
+              other -> assertFailure ("successful status missing: " <> show other)
             freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId freshJob) 0)
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
             assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
@@ -320,7 +330,7 @@ tests databaseFixture =
             assertEqual "successful retry appended the v2 value" (Right True) (Map.member "run-behavior-v2" <$> afterSuccess),
       testCase "permanent v2 failure is journaled once and replayed" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
-          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+          withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
             attempts <- newIORef (0 :: Int)
@@ -339,7 +349,13 @@ tests databaseFixture =
                   _ -> False
             assertBool ("first attempt is permanent: " <> show firstAttempt) (isPermanent firstAttempt)
             assertBool ("replay keeps the permanent value: " <> show replayed) (isPermanent replayed)
-            assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts,
+            assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts
+            status <- RunStatus.deriveRunStatus kirokuStore permanentFailureJob.agentName (runJobWorkflowId permanentFailureJob).unWorkflowId
+            case status of
+              Right (Just view) -> do
+                assertEqual "completed failure is not success" RunStatus.Failed view.lifecycle
+                assertEqual "failure kind" (Just RunStatus.BehaviorFailed) ((.kind) <$> view.failure)
+              other -> assertFailure ("permanent failure status missing: " <> show other),
       -- Before this, every kioku result on the agent-run path was discarded with
       -- @_ <-@ or @void@, so a run whose session kioku refused to open still
       -- reported Completed (Right ...) — a successful run with no durable record

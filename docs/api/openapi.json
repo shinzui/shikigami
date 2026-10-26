@@ -46,6 +46,53 @@
         ],
         "type": "object"
       },
+      "AgentRunStatus": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "completedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/RunFailureView"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "agentName",
+          "status"
+        ],
+        "type": "object"
+      },
       "AgentView": {
         "properties": {
           "behavior": {
@@ -116,6 +163,24 @@
         ],
         "type": "object"
       },
+      "Connection_RunRequestView": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge_RunRequestView"
+            },
+            "type": "array"
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "pageInfo"
+        ],
+        "type": "object"
+      },
       "Cursor": {
         "description": "opaque pagination cursor",
         "format": "base64url",
@@ -128,6 +193,21 @@
           },
           "node": {
             "$ref": "#/components/schemas/AgentView"
+          }
+        },
+        "required": [
+          "node",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "Edge_RunRequestView": {
+        "properties": {
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "node": {
+            "$ref": "#/components/schemas/RunRequestView"
           }
         },
         "required": [
@@ -205,6 +285,54 @@
           "detail",
           "code",
           "retryable"
+        ],
+        "type": "object"
+      },
+      "RunFailureView": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "refused",
+              "dead_lettered",
+              "behavior_failed",
+              "workflow_failed"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RunRequestView": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "disposition": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "idempotencyKey",
+          "acceptedAt",
+          "requestedBy",
+          "disposition"
         ],
         "type": "object"
       },
@@ -398,6 +526,124 @@
       }
     },
     "/agents/{agentName}/runs": {
+      "get": {
+        "operationId": "getAgentsByAgentNameRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..200). Defaults to 50 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..200). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RunRequestView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RunRequestView"
+                }
+              }
+            },
+            "description": "A page of accepted run requests"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid pagination cursor or size"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or Agent not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
       "post": {
         "operationId": "postAgentsByAgentNameRuns",
         "parameters": [
@@ -516,6 +762,81 @@
               }
             },
             "description": "Store or directory unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/agents/{agentName}/runs/{runId}": {
+      "get": {
+        "operationId": "getAgentsByAgentNameRunsByRunId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunStatus"
+                }
+              }
+            },
+            "description": "The run lifecycle"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or `runId` or Agent not found\n\nRun not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store unavailable"
           }
         },
         "security": [

@@ -15,10 +15,13 @@ module Shikigami.Client.Command
   )
 where
 
+import Control.Concurrent (threadDelay)
 import Data.Aeson qualified as Aeson
-import Data.ByteString.Lazy.Char8 qualified as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
+import GHC.Clock (getMonotonicTimeNSec)
 import Options.Applicative
 import Relay.Pagination (Connection (..), Edge (..), PageInfo (..), cursorFromText, cursorToText)
 import Relay.Pagination.Servant (forwardPage)
@@ -29,7 +32,7 @@ import Shikigami.AgentRun.Api qualified as Run
 import Shikigami.Client (Credential, agentsClient, callServer, credentialFor, healthClient)
 import Shikigami.Health.Api (HealthApi (..))
 import System.Environment (lookupEnv)
-import System.Exit (exitFailure)
+import System.Exit (ExitCode (ExitFailure), exitFailure, exitWith)
 import System.IO (hPutStrLn, stderr)
 
 -- | The whole @shikigami-client@ command line.
@@ -108,7 +111,8 @@ agentsInfo =
             Right (Agent.AgentPage page) -> do
               mapM_ (\edge -> let view = edge.node in putStrLn (Text.unpack (Text.unwords [view.name, boolText view.enabled, view.lifecycle, boolText view.runnable]))) page.edges
               mapM_ (putStrLn . ("endCursor " <>) . Text.unpack . cursorToText) page.pageInfo.endCursor
-            result -> hPutStrLn stderr (show result) >> exitFailure
+            Right result -> hPutStrLn stderr (show result) >> exitFailure
+            Left _ -> hPutStrLn stderr "shikigami-client: request failed" >> exitFailure
       )
         <$> serverOption
         <*> option auto (long "first" <> value 50)
@@ -120,7 +124,8 @@ agentsInfo =
           callServer url ((.show) (agentsClient credential) agentName) >>= \case
             Right (Agent.AgentFound view) ->
               mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "sinks        " <> Text.intercalate "," view.sinks, "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
-            result -> hPutStrLn stderr (show result) >> exitFailure
+            Right result -> hPutStrLn stderr (show result) >> exitFailure
+            Left _ -> hPutStrLn stderr "shikigami-client: request failed" >> exitFailure
       )
         <$> serverOption
         <*> strArgument (metavar "NAME")
@@ -133,13 +138,23 @@ resolveCredential :: Maybe Text -> IO Credential
 resolveCredential token = credentialFor <$> maybe (fmap (fmap Text.pack) (lookupEnv "SHIKIGAMI_API_TOKEN")) (pure . Just) token
 
 runsInfo :: ParserInfo (Maybe Text -> IO ())
-runsInfo = info (subparser (command "request" (info (requestParser <**> helper) (progDesc "Request an addressed agent run"))) <**> helper) (progDesc "Request and inspect agent runs")
+runsInfo =
+  info
+    ( subparser
+        ( command "request" (info (requestParser <**> helper) (progDesc "Request an addressed agent run"))
+            <> command "show" (info (showParser <**> helper) (progDesc "Read one run lifecycle"))
+            <> command "list" (info (listParser <**> helper) (progDesc "List accepted run requests"))
+            <> command "wait" (info (waitParser <**> helper) (progDesc "Wait for a terminal run lifecycle"))
+        )
+        <**> helper
+    )
+    (progDesc "Request and inspect agent runs")
   where
     requestParser =
       ( \url agent key payload token -> do
           credential <- resolveCredential token
           name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
-          body <- either fail pure (Aeson.eitherDecode (LBS.pack payload))
+          body <- either fail pure (Aeson.eitherDecode (LBS.fromStrict (TextEncoding.encodeUtf8 (Text.pack payload))))
           callServer url ((.request) ((.runs) (agentsClient credential) name) (Run.AgentRunRequest key body)) >>= \case
             Right (Run.RunAccepted (accepted, location)) -> reportRun "accepted" accepted location
             Right (Run.RunReplayed (accepted, location)) -> reportRun "replayed" accepted location
@@ -150,4 +165,76 @@ runsInfo = info (subparser (command "request" (info (requestParser <**> helper) 
         <*> strArgument (metavar "AGENT")
         <*> strOption (long "key" <> metavar "KEY")
         <*> strOption (long "payload" <> metavar "JSON" <> value "{}")
+    showParser =
+      ( \url agent runId token -> do
+          credential <- resolveCredential token
+          name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+          callServer url ((.show) ((.runs) (agentsClient credential) name) runId) >>= \case
+            Right (Run.RunFound view) -> printStatus view
+            Right result -> hPutStrLn stderr (show result) >> exitFailure
+            Left _ -> hPutStrLn stderr "shikigami-client: run status request failed" >> exitFailure
+      )
+        <$> serverOption
+        <*> strArgument (metavar "AGENT")
+        <*> strArgument (metavar "RUN_ID")
+    listParser =
+      ( \url agent size after token -> do
+          credential <- resolveCredential token
+          name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+          cursor <- traverse (either (fail . Text.unpack) pure . cursorFromText) after
+          callServer url ((.list) ((.runs) (agentsClient credential) name) (forwardPage size cursor)) >>= \case
+            Right (Run.RunPage page) -> do
+              mapM_ (\edge -> putStrLn (Text.unpack (Text.unwords [edge.node.runId, edge.node.idempotencyKey, edge.node.disposition]))) page.edges
+              mapM_ (putStrLn . ("endCursor " <>) . Text.unpack . cursorToText) page.pageInfo.endCursor
+            Right result -> hPutStrLn stderr (show result) >> exitFailure
+            Left _ -> hPutStrLn stderr "shikigami-client: run list request failed" >> exitFailure
+      )
+        <$> serverOption
+        <*> strArgument (metavar "AGENT")
+        <*> option auto (long "first" <> value 50)
+        <*> optional (strOption (long "after" <> metavar "CURSOR"))
+    waitParser =
+      ( \url agent runId timeout interval token -> do
+          whenInvalid (timeout < 0 || interval <= 0) "Timeout must be nonnegative and interval positive."
+          credential <- resolveCredential token
+          name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+          started <- getMonotonicTimeNSec
+          let deadline = toInteger started + toInteger timeout * 1000000000
+              poll previous = do
+                result <- callServer url ((.show) ((.runs) (agentsClient credential) name) runId)
+                case result of
+                  Right (Run.RunFound view) -> do
+                    if Just view.status /= previous then putStrLn (Text.unpack view.status) else pure ()
+                    case view.status of
+                      "succeeded" -> pure ()
+                      "failed" -> exitWith (ExitFailure 1)
+                      "cancelled" -> exitWith (ExitFailure 1)
+                      _ -> do
+                        now <- getMonotonicTimeNSec
+                        if toInteger now >= deadline
+                          then exitWith (ExitFailure 2)
+                          else do
+                            threadDelay (fromInteger (min (toInteger interval * 1000000) ((deadline - toInteger now) `div` 1000)))
+                            poll (Just view.status)
+                  _ -> hPutStrLn stderr "shikigami-client: run status request failed" >> exitWith (ExitFailure 3)
+          poll Nothing
+      )
+        <$> serverOption
+        <*> strArgument (metavar "AGENT")
+        <*> strArgument (metavar "RUN_ID")
+        <*> option auto (long "timeout" <> value (600 :: Int))
+        <*> option auto (long "interval" <> value (5 :: Int))
     reportRun label accepted location = putStrLn (label <> " " <> Text.unpack accepted.runId) >> putStrLn ("Location " <> Text.unpack location)
+
+printStatus :: Run.AgentRunStatus -> IO ()
+printStatus view =
+  mapM_
+    (putStrLn . Text.unpack)
+    ( ["runId        " <> view.runId, "agent        " <> view.agentName, "status       " <> view.status]
+        <> maybe [] (\session -> ["session      " <> session]) view.sessionId
+        <> maybe [] (\summary -> ["summary      " <> summary]) view.summary
+        <> maybe [] (\failure -> ["failure      " <> failure.kind <> ": " <> failure.reason]) view.failure
+    )
+
+whenInvalid :: Bool -> String -> IO ()
+whenInvalid condition message = if condition then hPutStrLn stderr message >> exitFailure else pure ()

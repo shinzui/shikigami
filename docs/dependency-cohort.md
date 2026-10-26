@@ -557,3 +557,14 @@ regeneration, no compatibility findings, replay-neutral impact and all 37
 conformance checks. The [final gate report](evidence/plan-65/final-gate-diff.json)
 records this exact source/acceptance baseline. A separate deliberately incompatible
 fixture still fails the differ with `WorkflowBodyChanged`.
+
+## Public agent API source-closure extension — 2026-10-25
+
+MasterPlan 15 adds the released Relay Servant/Hasql adapters and their Hasql
+snippet dependencies. The isolated Cabal solve exports 361 runtime packages and
+five immutable repositories to `nix/qualification/cohort.json`, with exact metadata
+in the companion archive. The four added runtime packages are
+`relay-pagination-servant` 0.1.1.0, `relay-pagination-hasql` 0.1.1.0,
+`hasql-dynamic-statements` 0.5.1.1, and `hasql-implicits` 0.2.0.3. Existing package
+versions and immutable repository selections are unchanged. This refresh does not
+claim a cold Nix rebuild or close the separate automatic-disposition owner API gate.

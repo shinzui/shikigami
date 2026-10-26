@@ -1695,6 +1695,32 @@
       },
       "version": "1.10.3.7"
     },
+    "hasql-dynamic-statements": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-Wjs16d5OrlWALuzwQPt6tvnDEAwHj3kuFaAX8psbLZ8=",
+        "metadata_hash": "sha256-+3JnrtvpNkgiT97nsNcqhykcjgtjHXXDRhZxOAe7aks=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-dynamic-statements-0.5.1.1/hasql-dynamic-statements-0.5.1.1.tar.gz"
+      },
+      "version": "0.5.1.1"
+    },
+    "hasql-implicits": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-pxUvpEqre3eXwmDDwRNKe4X0VRTAuq9Tjh8+EEVIoC8=",
+        "metadata_hash": "sha256-+eXBrXhp1vXjqNnmA5cs5UuHv9eTJW0aY3L+ylO2tuw=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/hasql-implicits-0.2.0.3/hasql-implicits-0.2.0.3.tar.gz"
+      },
+      "version": "0.2.0.3"
+    },
     "hasql-notifications": {
       "components": [
         "lib"
@@ -3372,6 +3398,32 @@
         "metadata_hash": "sha256-B5QWDMH/CgE0cop3CoYAg5HwCiJZcR4Uv3AQOoNTjNg=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/relay-pagination-0.1.1.0/relay-pagination-0.1.1.0.tar.gz"
+      },
+      "version": "0.1.1.0"
+    },
+    "relay-pagination-hasql": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-dJcsed+b7JlTQYi661mDKKjTxCBEW/r0ZbXeDU8AEBI=",
+        "metadata_hash": "sha256-3ieSpUEqZBDkV3DWRj2k6cqjFo3GC2THCOE+lYcKJkI=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/relay-pagination-hasql-0.1.1.0/relay-pagination-hasql-0.1.1.0.tar.gz"
+      },
+      "version": "0.1.1.0"
+    },
+    "relay-pagination-servant": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "hash": "sha256-rSmjVlM+yq779oC5HCiU+71cOWgGu+zh/A5Cj+VXz10=",
+        "metadata_hash": "sha256-aZhm8p8Jys/Mos6WRP+mPQYY/YDpLxqd3Nl3GHE0+uM=",
+        "type": "hackage",
+        "url": "https://hackage.haskell.org/package/relay-pagination-servant-0.1.1.0/relay-pagination-servant-0.1.1.0.tar.gz"
       },
       "version": "0.1.1.0"
     },

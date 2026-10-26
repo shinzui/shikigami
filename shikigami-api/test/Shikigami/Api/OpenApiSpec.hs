@@ -78,7 +78,7 @@ tests =
         let ids = mapMaybe (\(_, operation) -> operation ^. L.operationId) (documentedOperations shikigamiOpenApi)
         length ids @?= length (documentedOperations shikigamiOpenApi)
         sort ids @?= sort (dedupe ids)
-        sort ids @?= ["getAgents", "getAgentsByAgentName", "getHealthLive", "getHealthReady", "postAgentsByAgentNameRuns"],
+        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "postAgentsByAgentNameRuns"],
       testCase "operation ids are derived from method and path" do
         operationIdFor "get" "/health/live" @?= ("getHealthLive" :: Text)
         operationIdFor "get" "/agents/{name}" @?= "getAgentsByName"
@@ -138,4 +138,4 @@ readArtifact = go candidates
 
 healthPaths, agentPaths :: [FilePath]
 healthPaths = ["/health/live", "/health/ready"]
-agentPaths = ["/agents", "/agents/{agentName}", "/agents/{agentName}/runs"]
+agentPaths = ["/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/agents/{agentName}/runs/{runId}"]

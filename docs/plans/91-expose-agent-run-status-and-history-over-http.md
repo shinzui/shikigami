@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-22T02:39:24Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T23:37:09Z
+      mode: "implement"
+      note: "Compose run lifecycle and acceptance history through owning library reads"
 ---
 
 # Expose agent-run status and history over HTTP
@@ -50,7 +56,7 @@ terminal and exits 0 on `succeeded`.
       kioku, and the run-skip evidence; the ledger gains a dead-letter disposition written by the
       worker; a worker-suite test produces every lifecycle value on real runs and a store outage
       yields an error rather than `failed`; `shikigami runs show --json` reports `lifecycle`.
-- [ ] M2: `GET /agents/{agentName}/runs/{runId}` and `GET /agents/{agentName}/runs` are served
+- [x] M2 (2026-10-25; HTTP, schema/wire pins and bidirectional history conformance pass): `GET /agents/{agentName}/runs/{runId}` and `GET /agents/{agentName}/runs` are served
       and documented; the regenerated `docs/api/openapi.json` lists
       `getAgentsByAgentNameRunsByRunId` and `getAgentsByAgentNameRuns`; wire tests pin every
       lifecycle value and optional field; the relay conformance walk passes on the list route.
@@ -61,7 +67,25 @@ terminal and exits 0 on `succeeded`.
 
 ## Surprises & Discoveries
 
-(None yet.)
+The owning workflow/session reads require a `KirokuStore`, not only its pool.
+`gatherRunFacts` and `deriveRunStatus` therefore take that handle; the server owns
+a `readRunStatus` closure over its existing store, and tests inject the same seam.
+This preserves library ownership without opening another store per HTTP request.
+
+The prescribed Dead-outcome hook cannot close automatic retry exhaustion.
+Keiro performs that disposition before calling the domain handler. The worker
+suite reproduction `external gate: automatic retry exhaustion bypasses the receipt
+hook` consumes five leases, then proves handler calls = 0, DLQ length = 1 and public
+lifecycle = Accepted. This is FRIC-7. Hackage and upstream tags confirm 0.21.0.0 is
+the latest release; its Job API also has no disposition callback. M1 and full IR-10
+acceptance remain open pending a supported owner-level terminal callback in a
+compatible release. The no-private-SQL and no-DLQ-status-read boundaries remain.
+
+Real successful/permanently failed agent workflows are checked in the existing
+core workflow fixtures. Worker tests cover the reader, actual drain refusal,
+explicit terminal receipt and the automatic-DLQ reproduction. The live Hurl runner
+now boots a real worker after proving acceptance; its heartbeat fixture has no
+external sinks so success needs no other service.
 
 
 ## Decision Log
@@ -100,7 +124,23 @@ terminal and exits 0 on `succeeded`.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The HTTP status/history contract and client commands are implemented and tested.
+The live suite passes 26 Hurl requests, then observes acceptance and success through
+a real server/worker and verifies the operator JSON lifecycle. Success, permanent failure, timeout and problem
+exit codes are exercised. The complete core PostgreSQL suite passes serially,
+including real successful and permanent-failure agent workflow status assertions;
+the worker suite has 94 tests, including six status-composition cases. The frozen
+packaging closure is refreshed to 361 runtime packages with no previous version
+or repository-pin changes; its seven tooling tests pass. ADR 0049
+records the durable classification and ownership boundary.
+
+M1 remains open because automatic retry exhaustion bypasses the requested hook,
+leaving the required pre-workflow terminal-closure case unfulfilled. M3's client and
+Hurl portions are accepted; IR-10 stays in-progress until that gate closes. FRIC-7
+tracks the blocker under IR-10. Resume by adopting a released compatible owning
+API that exposes terminal disposition for both continuous and bounded consumers,
+wire it to the ledger, and change the reproduction's expected lifecycle to Failed.
+Do not mark the MasterPlan complete merely because the normal execution path passes.
 
 
 ## Context and Orientation
@@ -178,9 +218,9 @@ data RunFacts = RunFacts   -- everything gathered, before classification
   { request :: !(Maybe RunRequestRow), instance_ :: !(Maybe WorkflowInstanceRow),
     steps :: !(Map Text Value), session :: !(Maybe SessionRow), skip :: !(Maybe RunSkip) }
 
-gatherRunFacts :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunFacts))
+gatherRunFacts :: KirokuStore -> AgentName -> Text -> IO (Either Text (Maybe RunFacts))
 classifyRun :: AgentName -> Text -> RunFacts -> RunStatusView
-deriveRunStatus :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunStatusView))
+deriveRunStatus :: KirokuStore -> AgentName -> Text -> IO (Either Text (Maybe RunStatusView))
 ```
 
 `gatherRunFacts` reads the ledger row by `(agent, runId)`, then keiro's instance for
@@ -227,7 +267,7 @@ summary; a declaration whose behavior fails permanently classifies as `failed` w
 `refused`; a dead-lettered job without an instance classifies as `failed` with kind
 `dead_lettered`; `Keiro.Workflow.Instance.cancelWorkflow` on a running instance classifies as
 `cancelled`; an instance whose `ingest-job` names another agent is unknown under this agent;
-a closed pool yields `Left`.
+an unavailable store yields `Left`.
 
 ### Milestone 2: the two routes
 
@@ -387,3 +427,6 @@ Libraries whose choice matters: `keiro` 0.18 (`lookupInstance`, `loadStepIndex`,
 `cancelWorkflow`, the status constructors), `kioku-core` (`getById`, `SessionRow`),
 `relay-pagination-hasql` (`paginate`, `SortSpec`, `timestamptzKey`, `textKey`), and `hasql`.
 Verify the released versions against `cabal.project` and the registry before changing a bound.
+
+Revision 2026-10-25: adopted the real store-handle API and documented the reproduced
+automatic-disposition prerequisite. Acceptance is retained; M1 and IR-10 remain open.

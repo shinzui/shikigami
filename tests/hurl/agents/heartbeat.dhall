@@ -9,5 +9,5 @@ in  A.Agent::{
           , enabledBy = None Text
           }
     , trigger = A.Trigger.Schedule { cron = "* * * * *" }
-    , sinks = [ A.Sink.KawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]
+    , sinks = [] : List A.Sink
     }
