@@ -32,3 +32,4 @@ shikigami-core/src/.keiro-dsl-generated-haskell-migrations/
 __pycache__/
 nix/qualification/metadata/
 .codex/
+.dev/
