@@ -16,6 +16,7 @@ import Baikai.Options (Options)
 import Baikai.Options qualified as Options
 import Data.Aeson qualified as Aeson
 import Data.List (find, nub)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
@@ -114,6 +115,7 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
   forM_ profile \resolved -> case validateProfileCall resolved (providerCallFor (bindingModel binding) (bindingOptions binding)) of
     Left _ -> Left ExecutionProfileConflict
     Right () -> Right ()
+  unless (publicExecutionOptions (bindingOptions binding)) (Left ExecutionOptionsIncompatible)
   when (isJust (profile >>= (\p -> p.profile.limits.maxCostMicroUsd))) (Left ExecutionResourceBoundUnsupported)
   pure
     ExecutionSelection
@@ -134,6 +136,7 @@ selectionBinding catalog fallback profile selection = do
     ProcessDefault | modelDescriptor fallback == selection.descriptor -> Right fallback
     ProcessDefault -> Left PinnedBindingUnavailable
     DeclaredAlias -> either (const (Left PinnedBindingUnavailable)) Right (pinnedBinding catalog selection.descriptor)
+  unless (publicExecutionOptions (bindingOptions binding)) (Left PinnedBindingUnavailable)
   unless (toJSON (effectiveBindingOptions profile binding) == selection.effectiveOptions) (Left PinnedBindingUnavailable)
   forM_ profile \resolved -> case validateProfileCall resolved (providerCallFor (bindingModel binding) (bindingOptions binding)) of
     Left _ -> Left ExecutionProfileConflict
@@ -151,3 +154,9 @@ effectiveBindingOptions profile binding =
   let base = bindingOptions binding
       caps = catMaybes [Options.maxTokens base, fromIntegral . max 0 <$> (profile >>= (\p -> p.profile.limits.maxTokens))]
    in base {Options.maxTokens = case caps of [] -> Nothing; xs -> Just (minimum xs)}
+
+-- These settings are explicitly secret in the operator configuration. A
+-- durable selection must not serialize them into its snapshot or journal.
+-- API credentials use the separate opaque binding; no redaction changes replay.
+publicExecutionOptions :: Options -> Bool
+publicExecutionOptions options = Map.null (Options.headers options) && Map.null (Options.metadata options)

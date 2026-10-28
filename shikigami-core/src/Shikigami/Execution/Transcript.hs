@@ -9,13 +9,19 @@ import Baikai.Error qualified as Error
 import Baikai.Message qualified as Message
 import Baikai.Response qualified as Response
 import Baikai.StopReason (StopReason (..))
+import Baikai.Tool qualified as BaikaiTool
 import Baikai.Usage (zeroUsage)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
-import Data.List (nub)
+import Data.List (nub, sort)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID
 import Data.Vector qualified as Vector
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Approval (ReviewRequestId)
 import Shikigami.Agent.Name (AgentName)
@@ -28,7 +34,9 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Selection (ExecutionSelection (..))
+import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding (Options)
+import Shikumi.Tool.Output qualified as Tool
 
 newtype ExecutionId = ExecutionId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
@@ -36,6 +44,11 @@ newtype ExecutionId = ExecutionId {value :: Text}
 
 executionIdFor :: Text -> ExecutionId
 executionIdFor assignment = ExecutionId ("execution:" <> versionedDigest "shikigami.execution/1" (toJSON assignment))
+
+-- Technical journal identity is independent of resource keys, whose digest
+-- prefixes contain separators reserved by Keiro's stream naming protocol.
+executionWorkflowId :: ExecutionId -> WorkflowId
+executionWorkflowId execution = WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.execution:" <> execution.value))))
 
 operationIdFor :: ExecutionId -> Integer -> OperationId
 operationIdFor execution cursor = OperationId ("operation:" <> versionedDigest "shikigami.execution-operation/1" (toJSON (execution, cursor)))
@@ -141,10 +154,18 @@ data ToolBinding = ToolBinding
   { name :: !Text,
     revision :: !Text,
     schemaDigest :: !Text,
-    recovery :: !RecoveryClass
+    recovery :: !RecoveryClass,
+    invoiceCost :: !ToolInvoiceCost
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON ToolBinding where
+  toJSON binding = case Aeson.genericToJSON Aeson.defaultOptions binding of
+    Aeson.Object fields | binding.invoiceCost == UnreportedInvoiceCost -> Aeson.Object (KeyMap.delete "invoiceCost" fields)
+    value -> value
+
+instance FromJSON ToolBinding where
+  parseJSON = Aeson.withObject "ToolBinding" \fields -> Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "invoiceCost" fields then fields else KeyMap.insert "invoiceCost" (toJSON UnreportedInvoiceCost) fields))
 
 data ToolOperationInput = ToolOperationInput
   { response :: !PayloadRef,
@@ -205,7 +226,13 @@ instance FromJSON ExecutionSnapshot where
     snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields))
     unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == ((.ref) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     unless (maybe True (\resolved -> resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile) snapshot.sanctionedProfile) (fail "execution profile content differs from its immutable reference")
+    case snapshot.selection.effectiveOptions of
+      Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")
+      _ -> fail "execution snapshot options are unsupported"
     unless (length snapshot.toolBindings <= 128 && length (nub (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings)) == length snapshot.toolBindings && all validBinding snapshot.toolBindings) (fail "invalid immutable tool bindings")
+    unless (null snapshot.toolBindings) $ case Aeson.fromJSON snapshot.offeredTools of
+      Aeson.Success tools -> unless (sort (map (\(tool :: BaikaiTool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings) && all (\(tool :: BaikaiTool.Tool) -> any (\(binding :: ToolBinding) -> binding.name == tool.name && binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (fail "execution tool bindings differ from the frozen menu")
+      Aeson.Error _ -> fail "execution tool menu is unsupported"
     pure snapshot
     where
       validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [binding.name, binding.revision, binding.schemaDigest]
@@ -234,14 +261,19 @@ data ExecutionState = ExecutionState
     activeOperation :: !(Maybe OperationId),
     result :: !(Maybe PayloadRef),
     repairs :: !Int,
-    modelTurns :: !Int
+    modelTurns :: !Int,
+    wake :: !(Maybe PayloadRef)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON ExecutionState where
+  toJSON state = case Aeson.genericToJSON Aeson.defaultOptions state of
+    Aeson.Object fields | isNothing state.wake -> Aeson.Object (KeyMap.delete "wake" fields)
+    value -> value
 
 instance FromJSON ExecutionState where
-  parseJSON value = do
-    state <- Aeson.genericParseJSON Aeson.defaultOptions value
+  parseJSON = Aeson.withObject "ExecutionState" \fields -> do
+    state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "wake" fields then fields else KeyMap.insert "wake" Aeson.Null fields))
     unless (state.format == 1 && state.revision >= 0 && state.cursor >= 0 && state.cursor <= 10000) (fail "unsupported execution state version or cursor")
     pure state
 
@@ -286,9 +318,41 @@ instance FromJSON Operation where
     unless (operation.format == 1 && operation.position >= 0 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
     pure operation
 
+data ReplayToolResult = ReplayToolResult
+  { format :: !Int,
+    blocks :: ![ReplayBlock],
+    failed :: !Bool,
+    structuredContent :: !(Maybe Aeson.Value),
+    extensionBlocks :: ![Aeson.Value]
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON)
+
+instance Show ReplayToolResult where show _ = "ReplayToolResult <protected>"
+
+instance FromJSON ReplayToolResult where
+  parseJSON value = do
+    result <- Aeson.genericParseJSON Aeson.defaultOptions value
+    unless (result.format == 1 && length result.blocks <= 256 && length result.extensionBlocks <= 128 && all valid result.blocks) (fail "unsupported tool observation")
+    pure result
+    where
+      valid (TextBlock _) = True; valid ImageBlock {} = True; valid _ = False
+
+captureToolOutput :: Tool.ToolOutput -> ReplayToolResult
+captureToolOutput output = ReplayToolResult 1 (map capture (Vector.toList output.result.content)) output.result.isError output.structuredContent output.extensionBlocks
+  where
+    capture (Content.ToolResultText text) = TextBlock text.text
+    capture (Content.ToolResultImage image) = ImageBlock image
+
+observationBlocks :: ReplayToolResult -> [ReplayBlock]
+observationBlocks result = result.blocks <> maybe [] (\value -> [TextBlock ("Structured JSON: " <> render value)]) result.structuredContent <> map (TextBlock . ("Extension JSON: " <>) . render) result.extensionBlocks
+  where
+    render = Text.decodeUtf8 . Lazy.toStrict . Aeson.encode
+
 data OperationOutcome
   = ModelReturned !ReplayAssistant !(Maybe Aeson.Value)
   | ToolReturned ![ReplayBlock] !Bool
+  | RichToolReturned !ReplayToolResult
   | OperationDenied !Text
   | OperationUnresolved !Text
   | TerminalResult !Aeson.Value
@@ -303,6 +367,9 @@ data ExecutionError
   | ExecutionRevisionConflict
   | ExecutionNotActive
   | OperationMissing
+  | AttemptMissing
+  | AttemptConflict
+  | AttemptClaimLost
   | OperationConflict
   | UnresolvedOperation
   | UnsupportedReplay

@@ -41,6 +41,8 @@ data RunRouteKind
     -- as an addressed message; a payload that does not is a producer bug and
     -- dead-letters rather than falling back to the other workflow.
     ConversationWorkflowRoute
+  | -- | Execute an already accepted operation/attempt; the payload grants no authority.
+    ExecutionOperationRoute
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

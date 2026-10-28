@@ -10,6 +10,7 @@ import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.List (isInfixOf)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -77,6 +78,13 @@ tests =
             local = mustRight (modelCatalog [selected])
             result = mustRight (resolveExecutionSelection "assignment-test" local (Right fallback) (Just (ExecutionPolicy "worker-a" ["worker-a"])) Nothing Nothing Nothing Nothing fixedTime)
         assertBool "no credential in JSON" (not ("PLANTED_EXECUTION_SECRET" `isInfixOf` Lazy.unpack (Aeson.encode result))),
+      testCase "secret header and metadata options never enter durable selection bytes" do
+        mapM_
+          ( \options -> do
+              let selected = mustRight (defaultBinding stubModel options)
+              resolveExecutionSelection "private-options" (mustRight (modelCatalog [])) (Right selected) Nothing Nothing Nothing Nothing Nothing fixedTime @?= Left ExecutionOptionsIncompatible
+          )
+          [emptyOptions & #headers .~ Map.singleton "Authorization" "PLANTED_HEADER_SECRET", emptyOptions & #metadata .~ Map.singleton "authorizationProof" "PLANTED_PROOF_SECRET"],
       testCase "profile tuple conflicts and unenforceable cost ceilings refuse admission" do
         let resolve profile = resolveExecutionSelection "profile-assignment" catalog (Right fallback) (Just permission) Nothing Nothing (Just profile) Nothing fixedTime
         resolve (profileFor "other-model" Profile.unlimitedProfileLimits) @?= Left ExecutionProfileConflict

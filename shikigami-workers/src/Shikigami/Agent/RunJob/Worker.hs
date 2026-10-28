@@ -35,7 +35,7 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.Void (absurd)
 import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStrategy (ConcUnlift), runEff, withEffToIO, (:>))
 import Hasql.Pool qualified
-import Keiro.PGMQ (JobContext (..), JobOutcome (..))
+import Keiro.PGMQ (JobContext (..), JobOutcome (..), RetryDelay (..))
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
@@ -51,6 +51,8 @@ import Shikigami.AgentRun.Ledger (recordDeadLetter)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store qualified as DirectoryStore
+import Shikigami.Execution.Attempt qualified as Execution
+import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
@@ -70,7 +72,8 @@ handleRunJob env context job = do
 
 -- | Persist only decoded jobs' explicit terminal dispositions, outside the journal.
 recordRunJobOutcome :: Log.Logger -> Hasql.Pool.Pool -> RunJob -> JobOutcome -> IO ()
-recordRunJobOutcome logger pool job = \case
+recordRunJobOutcome _ _ RunJob {routeKind = ExecutionOperationRoute} _ = pure ()
+recordRunJobOutcome logger pool job outcome = case outcome of
   Dead reason ->
     recordDeadLetter pool job.idempotencyKey reason >>= \case
       Left _ -> Log.logError logger "worker.job.disposition_failed" ["run_id" Aeson..= (runJobWorkflowId job).unWorkflowId]
@@ -78,51 +81,52 @@ recordRunJobOutcome logger pool job = \case
   _ -> pure ()
 
 handleRunJobBody :: (IOE :> es) => WorkerEnv -> JobContext es -> RunJob -> Eff es JobOutcome
-handleRunJobBody env context job =
-  withVisibilityHeartbeat context do
-    liftIO (admitRunJob env job) >>= \case
-      DrainSkipped runSkip -> do
-        liftIO $
-          jobLog
-            env
-            job
-            Log.Info
-            "worker.job.lifecycle_skipped"
-            [ "principal_id" Aeson..= (.principalId) runSkip,
-              "route" Aeson..= (.detail) runSkip,
-              "reason" Aeson..= (.reason) runSkip
-            ]
-        pure Done
-      DrainAuditFailed problem -> do
-        liftIO $
-          jobLog
-            env
-            job
-            Log.Error
-            "worker.job.lifecycle_skip_failed"
-            [ "error" Aeson..= problem,
-              "reason" Aeson..= ("skip_audit_failed" :: Text)
-            ]
-        pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
-      DrainAllowed admittedJob -> do
-        liftIO (runMetric Metrics.recordRunStarted env admittedJob)
-        attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env admittedJob))
-        case attemptResult of
-          Left failure@(TransientBehaviorFailure {detail}) -> do
-            liftIO do
-              runMetric Metrics.recordRunFailed env admittedJob
-              runMetric Metrics.recordRunRetried env admittedJob
-            liftIO $
-              jobLog
-                env
-                admittedJob
-                Log.Error
-                "worker.job.retried"
-                [ "error" Aeson..= detail,
-                  "reason" Aeson..= ("transient_behavior_failure" :: Text)
-                ]
-            pure (transientBehaviorJobOutcome failure)
-          Right outcome -> pure outcome
+handleRunJobBody env context job
+  | job.routeKind == ExecutionOperationRoute = withVisibilityHeartbeat context (liftIO (dispatchRunJob env job))
+  | otherwise = withVisibilityHeartbeat context do
+      liftIO (admitRunJob env job) >>= \case
+        DrainSkipped runSkip -> do
+          liftIO $
+            jobLog
+              env
+              job
+              Log.Info
+              "worker.job.lifecycle_skipped"
+              [ "principal_id" Aeson..= (.principalId) runSkip,
+                "route" Aeson..= (.detail) runSkip,
+                "reason" Aeson..= (.reason) runSkip
+              ]
+          pure Done
+        DrainAuditFailed problem -> do
+          liftIO $
+            jobLog
+              env
+              job
+              Log.Error
+              "worker.job.lifecycle_skip_failed"
+              [ "error" Aeson..= problem,
+                "reason" Aeson..= ("skip_audit_failed" :: Text)
+              ]
+          pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
+        DrainAllowed admittedJob -> do
+          liftIO (runMetric Metrics.recordRunStarted env admittedJob)
+          attemptResult <- liftIO (Exception.try @TransientBehaviorFailure (dispatchRunJob env admittedJob))
+          case attemptResult of
+            Left failure@(TransientBehaviorFailure {detail}) -> do
+              liftIO do
+                runMetric Metrics.recordRunFailed env admittedJob
+                runMetric Metrics.recordRunRetried env admittedJob
+              liftIO $
+                jobLog
+                  env
+                  admittedJob
+                  Log.Error
+                  "worker.job.retried"
+                  [ "error" Aeson..= detail,
+                    "reason" Aeson..= ("transient_behavior_failure" :: Text)
+                  ]
+              pure (transientBehaviorJobOutcome failure)
+            Right outcome -> pure outcome
 
 data DrainAdmission
   = DrainAllowed !RunJob
@@ -189,6 +193,7 @@ routeKindText :: RunRouteKind -> Text
 routeKindText = \case
   AgentWorkflowRoute -> "agent_run"
   ConversationWorkflowRoute -> "conversation"
+  ExecutionOperationRoute -> "execution_operation"
 
 -- | Production heartbeat policy: after ten seconds, extend visibility to thirty
 -- seconds from now, and repeat until work completes.
@@ -220,6 +225,7 @@ nominalMicroseconds duration =
 data RunRoute
   = ConversationRoute !AddressedMessage
   | AgentRunRoute
+  | ExecutionRoute !Execution.JobReference
   | -- | The producer declared a conversation but its payload is not an
     -- addressed message. That is a producer bug, and running the other workflow
     -- instead would hide it.
@@ -230,6 +236,9 @@ data RunRoute
 routeRunJob :: RunJob -> RunRoute
 routeRunJob job = case (.routeKind) job of
   AgentWorkflowRoute -> AgentRunRoute
+  ExecutionOperationRoute -> case Aeson.fromJSON job.triggerPayload of
+    Aeson.Success reference -> ExecutionRoute reference
+    Aeson.Error _ -> RouteError "execution job reference is invalid"
   ConversationWorkflowRoute ->
     case Aeson.fromJSON ((.triggerPayload) job) of
       Aeson.Success addressed -> ConversationRoute addressed
@@ -241,6 +250,12 @@ dispatchRunJob env job = do
   case route of
     ConversationRoute addressed -> runConversationAgent env job addressed
     AgentRunRoute -> runOneAgent env job
+    ExecutionRoute reference ->
+      Executor.executeAcceptedAttempt (AgentWorkflow.executionRuntime (agentRunDeps env)) job.identity reference >>= \case
+        Right Executor.ExecutorDone -> pure Done
+        Right (Executor.ExecutorWait seconds) -> pure (Retry (RetryDelay (fromIntegral seconds)))
+        Right Executor.ExecutorInvalidReference -> pure (routeErrorJobOutcome "execution job reference is unavailable")
+        _ -> pure RetryDefault
     RouteError detail -> do
       runMetric Metrics.recordRunFailed env job
       runMetric Metrics.recordRunDeadLettered env job

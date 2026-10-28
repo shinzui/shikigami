@@ -6,12 +6,12 @@ import Baikai.Evidence qualified as Evidence
 import Baikai.Model qualified as Model
 import Baikai.Models.Generated (allModels)
 import Baikai.Options qualified as Options
-import Baikai.Response (responseError)
+import Baikai.Response (Response (..), responseError)
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh, ThinkingLow, ThinkingMedium))
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
-import Data.Aeson (Value, eitherDecode, encode, object, (.=))
+import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
@@ -20,27 +20,41 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff)
-import Keiro.Workflow (PatchId (..), StepName (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
+import Keiro.Workflow (PatchId (..), StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
+import Keiro.Workflow.Awakeable (AwakeableId (..))
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
+import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Network.HTTP.Types (status200)
+import Kiroku.Store.Transaction (runTransaction)
+import Network.HTTP.Types (status200, status500)
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
+import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
+import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Policy (ModelOperationInput (..), selectContextView)
+import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), defaultHarnessPolicy)
 import Shikigami.Execution.Request
 import Shikigami.Execution.Resources
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime
+import Shikigami.Execution.Store qualified as Durable
+import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..))
@@ -48,6 +62,7 @@ import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
+import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
@@ -93,6 +108,105 @@ tests fixture =
           snapshot.active @?= 0
           Map.lookup ModelAttempts snapshot.usage.settled @?= Just 3
           assertBool "different selection identities share one root" (all ((== Just root) . (.rootId)) selections),
+      testCase "an accepted prepared HTTP attempt commits replay and accounting together once" $
+        withRuntime fixture \app store base -> withHttp \bindings observed -> do
+          now <- getCurrentTime
+          root <- seed app now []
+          session <- genSessionId
+          let catalog = mustRight (modelCatalog bindings)
+              selection = select now root catalog "coordinator"
+              selectedRuntime = runtime app store base catalog
+              execution = Replay.executionIdFor selection.assignmentId
+              snapshot = Replay.ExecutionSnapshot 1 execution "prepared-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy []
+              operationId = Replay.operationIdFor execution 0
+              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
+              context = systemUser "system" "marker"
+          _ <- expectRight =<< run app Catalog.registerProjectionCatalog
+          run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
+          access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
+          _ <- expectRight =<< run app (Durable.acceptOperation access 0 specification (toJSON context))
+          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "prepared-http-attempt") context Nothing
+          let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+              reference = Attempt.JobReference 1 execution operationId request.attemptId
+          (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access 1 submission (\_ -> pure ()))
+          claim <-
+            run app (Durable.claimExecutionAttempt access 2 reference "prepared-http-owner" 60) >>= \case
+              Right (Attempt.ClaimGranted granted) -> pure granted
+              other -> assertFailure (show other) >> fail "claim"
+          run app (Durable.startExecutionAttempt access 3 claim) >>= (@?= Right Accepted)
+          receipt <- maybe (assertFailure "missing reserved call" >> fail "receipt") pure attempt.call
+          let commit _ accounting response = case response of
+                Nothing -> assertFailure "expected terminal response"
+                Just actual -> do
+                  let outcome = Replay.ModelReturned (Replay.captureAssistant actual) (toJSON <$> actual.evidence)
+                  ref <- expectRight (Durable.outcomeReference outcome)
+                  run app (Durable.completeExecutionAttempt access 4 claim (Attempt.AttemptResult outcome (Replay.NeedValidation ref) (Just accounting))) >>= (@?= Right Accepted)
+          selected <- expectRight =<< buildPreparedExecutionEnv selectedRuntime selection (PreparedSelectionCall receipt commit)
+          response <- completeBehaviorRequest selected selected.model context selected.options
+          responseError response @?= Nothing
+          duplicate <- completeBehaviorRequest selected selected.model context selected.options
+          assertBool "one prepared attempt cannot dispatch twice" (responseError duplicate /= Nothing)
+          bodies <- observed
+          length bodies @?= 1
+          lookupField "model" (head bodies) @?= Just selection.descriptor.modelId
+          (_, state) <- expectRight =<< run app (Durable.loadExecution access)
+          state.cursor @?= 1
+          rootState <- expectRight =<< run app (Roots.inspectRoot root)
+          rootState.active @?= 0
+          Map.lookup ModelAttempts rootState.usage.settled @?= Just 1,
+      testCase "executor restart repairs a lost wake without repeating the HTTP call" $
+        withRuntime fixture \app store base -> withHttp \bindings observed -> do
+          now <- getCurrentTime
+          root <- seed app now []
+          session <- genSessionId
+          let catalog = mustRight (modelCatalog bindings)
+              selection = select now root catalog "coordinator"
+              selectedRuntime = runtime app store base catalog
+              execution = Replay.executionIdFor selection.assignmentId
+              snapshot = Replay.ExecutionSnapshot 1 execution "executor-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy []
+              operationId = Replay.operationIdFor execution 0
+              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
+              executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
+          _ <- expectRight =<< run app Catalog.registerProjectionCatalog
+          run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
+          access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
+          view <- expectRight (selectContextView snapshot.policy snapshot.initialContext)
+          let input = ModelOperationInput 1 view Nothing
+          (_, operation) <- expectRight =<< run app (Durable.acceptOperation access 0 specification (toJSON input))
+          context <- expectRight (Executor.modelContext snapshot operation input)
+          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "executor-http-attempt") context Nothing
+          let reference = Attempt.JobReference 1 execution operationId request.attemptId
+          _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access 1 (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
+          Executor.executeAcceptedAttempt (executor (pure (Right ()))) snapshot.identity reference >>= (@?= Left (Replay.ExecutionPolicyRefused "execution wake is unavailable"))
+          (_, committed) <- expectRight =<< run app (Durable.loadExecution access)
+          committed.cursor @?= 1
+          observed >>= (\bodies -> length bodies @?= 1)
+          run app (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (Replay.executionWorkflowId execution).unWorkflowId))
+          -- A committed outcome needs no current provider/credential or new
+          -- replay authorization to repair its already accepted wake.
+          Executor.executeAcceptedAttempt (executor (pure (Left "revoked after commit"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          observed >>= (\bodies -> length bodies @?= 1)
+          Just wake <- run app (lookupAwakeable UUID.nil)
+          wake.status @?= Awakeable.Completed
+          rootState <- expectRight =<< run app (Roots.inspectRoot root)
+          rootState.active @?= 0
+          Map.lookup ModelAttempts rootState.usage.settled @?= Just 1,
+      testCase "a terminal HTTP error releases transport capacity while retaining unknown billing" $
+        withRuntime fixture \app store base -> withHttpWithFailure True \bindings observed -> do
+          now <- getCurrentTime
+          root <- seed app now []
+          let catalog = mustRight (modelCatalog bindings)
+              selection = select now root catalog "coordinator"
+          selected <- expectRight =<< buildExecutionEnv (runtime app store base catalog) selection
+          response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") selected.options
+          assertBool "terminal provider error" (responseError response /= Nothing)
+          observed >>= (\bodies -> length bodies @?= 1)
+          rootState <- expectRight =<< run app (Roots.inspectRoot root)
+          rootState.active @?= 0
+          rootState.unknown @?= 1
+          Just (assignment, [call]) <- run app (Calls.inspectSelection selection.assignmentId)
+          assignment.active @?= 0
+          case call.outcome of Just outcome -> outcome.phase @?= Calls.CallTerminal; _ -> assertFailure "missing terminal call facts",
       testCase "fresh authority refusal after reservation sends no request" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
@@ -277,13 +391,16 @@ withRuntime fixture use = withShikigamiFreshDatabase fixture \connection -> with
   use (AppEnv (defaultConnectionSettings connection) tracer Nothing) store base
 
 withHttp :: ([ModelBinding] -> IO [Value] -> IO a) -> IO a
-withHttp use = do
+withHttp = withHttpWithFailure False
+
+withHttpWithFailure :: Bool -> ([ModelBinding] -> IO [Value] -> IO a) -> IO a
+withHttpWithFailure failResponse use = do
   requests <- newIORef []
   let application request respond = do
         body <- Wai.strictRequestBody request
         value <- expectRight (eitherDecode body)
         atomicModifyIORef' requests (\xs -> (xs <> [value], ()))
-        respond (Wai.responseLBS status200 [("Content-Type", "text/event-stream")] frames)
+        respond (if failResponse then Wai.responseLBS status500 [("Content-Type", "application/json")] "{\"error\":{\"message\":\"fixture failure\"}}" else Wai.responseLBS status200 [("Content-Type", "text/event-stream")] frames)
   testWithApplication (pure application) \port -> do
     let models = take 3 [m | m <- allModels, Model.api m == OpenAIResponses, Model.provider m == "openai", Model.reasoning m]
         bindings = zipWith3 (\alias model thinking -> mustRight (modelBinding (ModelAlias alias) "1" alias "1" (model & #baseUrl .~ ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")) (Options.emptyOptions & #thinking .~ Just thinking) (Just (opaqueCredential "fixture-secret")))) aliases models [ThinkingLow, ThinkingMedium, ThinkingHigh]

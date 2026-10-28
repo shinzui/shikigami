@@ -13,6 +13,13 @@ data RecoveryClass = RepeatableObservation | IdempotentEffect | UncertainEffect
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- Only a trusted factory for a local, non-invoiced operation can declare
+-- zero invoice cost. Other tools retain unknown billing and cannot satisfy a
+-- finite invoice ceiling through an inferred zero.
+data ToolInvoiceCost = NoInvoiceCost | UnreportedInvoiceCost
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
 data OutputRequirement = AnyReply | NonemptyReply | JsonFields ![Text]
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON, FromDhall)

@@ -61,6 +61,15 @@ Agent/operator wiring and recorded model-assisted summaries remain before this
 milestone can close. No production driver or recovery claim follows from this
 checkpoint.
 
+The next checkpoint implements the fenced submit/observe primitives and worker
+route: reservation plus queue acceptance, claim generation/expiry, conditional
+start, atomic outcome/cursor/accounting, pre-dispatch refusal with accounted retry,
+retained late receipts, partial-billing reconciliation and protected current-wake
+publication. The real HTTP and native-tool executor paths consume those primitives.
+Observation deadlines use the existing timer dispatcher and an explicit generation.
+The automatic driver, its run/conversation patch branches, recorded summaries and
+agent/operator configuration are still outstanding. Milestones 2 and 3 remain open.
+
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
 
@@ -82,6 +91,22 @@ and the separately affected EP-2 occurrence
 are resolved: the recipe comment no longer substitutes a command, and an isolated
 generation probe emits only SQL comments. Applied migration bytes were unchanged.
 
+
+The compatibility gate rejected adding an attempt table to the established
+projection group: changing its target set also changes persisted query and rebuild
+identities. Preserve those identities by adding a `dispatches` column to the
+already-owned operation table. Each logical operation stores at most 1,000 attempt
+records, indexed lookups project one record, and a nominal ReadCommitted transaction
+lock protects global attempt-id collision checks across roots. The original catalog
+read/write fence now covers attempts without another projection boundary. This is
+an implementation layout change, not a compatibility waiver.
+
+Generic tools cannot infer zero invoice cost from their recovery class. Their
+immutable binding defaults to unreported invoice cost, which stays unknown and
+cannot satisfy a finite invoice ceiling. A trusted non-invoiced factory may declare
+zero. Tool model-token usage is enforced at zero by refusing nested LLM operations
+through a global provider registry. Rich tool results preserve structured data and
+opaque extensions, including accepted-message references, before lease cleanup.
 
 ## Decision Log
 
@@ -106,6 +131,19 @@ child and opaque-token library path. Additive optional policy/snapshot/operation
 fields omit absent values so format-1 payload digests and old journal bytes stay
 stable. Required compaction content refuses overflow instead of truncating signed
 continuations or orphaning tool observations. ADR 0053 records these constraints.
+
+2026-10-28: Keep dispatch state under the original operation target rather than
+changing persisted catalog identities. A safe pre-dispatch retry keeps the logical
+operation key and spends a fresh actual attempt. An expired dispatched claim holds
+its cursor and unknown effect; late receipts are fenced observations and only
+explicit retained-receipt reconciliation advances it. Prepared blocking/streaming
+handlers share an atomic terminal hook and admit one invocation. Actual terminal
+HTTP errors release active capacity while retaining unknown billing. Current wake
+publication is separate from the immutable attempt fingerprint and observation
+timers append only to their recorded generation. Technical driver ids use stable
+UUIDv5 values instead of resource keys containing Keiro separators. These decisions
+and the remaining production-driver boundary are recorded in
+[ADR 0054](../adr/0054-execution-attempts-own-dispatch-fences-and-generation-wakes.md).
 
 ## Outcomes & Retrospective
 
@@ -154,6 +192,28 @@ policy overrides and context compaction. Both typed and dynamic leased tools
 retain fresh exact-action guards. The complete gate against `1d79998` passed with
 no findings and `breaking: false`. This is partial milestone-2 evidence;
 agent/operator configuration and recorded summaries still remain.
+
+The full build and migration schema isolation pass. The fenced executor checkpoint
+passed 490 core, 294 PostgreSQL, 37 agent,
+63 server and 98 worker cases. The complete gate against `93829c4` passes with
+`breaking: false`. Its one advisory fold warning is the new unresolved-observation
+self-transition; regeneration changes the fold fingerprint so cached snapshots are
+invalidated automatically. Generated behavioral witnesses and historical fixture
+suites pass. The registered execution projection/query identities are unchanged.
+
+New evidence covers actual queue acceptance rollback, racing attempt ids across
+different roots, one claim/start under duplicate delivery, expiry before and after
+dispatch, late receipts, retained-fact reconciliation, no double billing/counters,
+real HTTP prepared dispatch, a lost wake repaired after restart/revocation without
+another request, native rich output committed before cleanup, unknown tool invoice
+cost versus an explicit no-invoice declaration, finite invoice refusal before queue
+acceptance, current-wake rotation and an old observation timer that cannot journal
+into its successor. Queue v4 has frozen v1–v3 readers and refuses historical route
+escalation. Runtime and operator output do not expose wake tokens or replay bodies.
+
+These are executor primitives and explicit-route evidence. The production driver,
+parent workflow patches, output-summary integration, class-specific recovery wiring
+and configuration remain open; neither milestone 2 nor 3 is marked complete.
 
 ## Context and Orientation
 

@@ -190,6 +190,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleUnresolved x MarkExecutionUnresolved: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-17a2351316f155d6"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "MarkExecutionUnresolved"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 0))
+      , target = Just ExecutionLifecycleUnresolved
+      , eventKinds = ["ExecutionBecameUnresolved"]
+      }
   , -- ExecutionLifecycleSucceeded x AdvanceExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-1f0be78923d30882"
@@ -210,7 +222,7 @@ behaviorRequirements =
       , guardCoverage = GuardUnknown
       , source = ExecutionLifecycleUnresolved
       , commandName = "ReconcileExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 0))
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 1))
       , target = Just ExecutionLifecycleActive
       , eventKinds = ["ExecutionReconciled"]
       }
@@ -658,18 +670,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x MarkExecutionUnresolved: required rejection
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-cb256cfc5fb49774"
-      , kind = RequiredRejection
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardNotApplicable
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "MarkExecutionUnresolved"
-      , expectedEdge = Nothing
-      , target = Nothing
-      , eventKinds = []
-      }
   , -- ExecutionLifecycleActive x FailExecution: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-ce201ad2b78fa328"
@@ -726,7 +726,7 @@ behaviorRequirements =
       , guardCoverage = GuardUnknown
       , source = ExecutionLifecycleUnresolved
       , commandName = "CancelExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 2))
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 3))
       , target = Just ExecutionLifecycleCancelled
       , eventKinds = ["ExecutionCancelled"]
       }
@@ -870,7 +870,7 @@ behaviorRequirements =
       , guardCoverage = GuardUnknown
       , source = ExecutionLifecycleUnresolved
       , commandName = "FailExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 1))
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 2))
       , target = Just ExecutionLifecycleFailed
       , eventKinds = ["ExecutionFailed"]
       }

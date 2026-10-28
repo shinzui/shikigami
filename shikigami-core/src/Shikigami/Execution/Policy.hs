@@ -4,6 +4,7 @@ module Shikigami.Execution.Policy
     validateToolInvocation,
     validateExecutionGate,
     ContextView (..),
+    ModelOperationInput (..),
     selectContextView,
     module Shikigami.Execution.Policy.Types,
   )
@@ -71,6 +72,22 @@ validateTerminalOutput policy assistant = do
       Right (Aeson.Object value) -> unless (all (\key -> KeyMap.member (Key.fromText key) value) fields) (Left ExecutionOutputInvalid)
       _ -> Left ExecutionOutputInvalid
   pure (Aeson.object ["reply" Aeson..= reply])
+
+data ModelOperationInput = ModelOperationInput
+  { format :: !Int,
+    view :: !ContextView,
+    maxOutputTokens :: !(Maybe Int)
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON)
+
+instance Show ModelOperationInput where show _ = "ModelOperationInput <protected>"
+
+instance FromJSON ModelOperationInput where
+  parseJSON value = do
+    input <- Aeson.genericParseJSON Aeson.defaultOptions value
+    unless (input.format == 1 && maybe True (\n -> n >= 1 && n <= 32768) input.maxOutputTokens) (fail "unsupported model operation input")
+    pure input
 
 -- The complete transcript remains authoritative. This value is a protected
 -- model-facing view with reproducible provenance, never a replacement history.

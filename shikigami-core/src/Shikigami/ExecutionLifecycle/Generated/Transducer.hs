@@ -145,6 +145,18 @@ executionLifecycleTransducer =
           })
         B.goto ExecutionLifecycleCancelled
     B.from ExecutionLifecycleUnresolved do
+      B.onCmd inCtorMarkExecutionUnresolved $ \d -> B.do
+        B.requireGuard $
+          (d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionBecameUnresolved (ExecutionBecameUnresolvedTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleUnresolved
       B.onCmd inCtorReconcileExecution $ \d -> B.do
         B.requireGuard $
           (d.executionId .== B.reg @"executionId"
@@ -189,7 +201,7 @@ executionLifecycleTransducer =
     _ -> False
 
 executionLifecycleFoldFingerprint :: Text
-executionLifecycleFoldFingerprint = "e05b73dbbca455bc4a9a106c3ba61811"
+executionLifecycleFoldFingerprint = "9d6f82502d6fd8fb108de6d78e5fa0f2"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -202,15 +214,16 @@ executionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition2ActiveAdvanceExecution" GeneratedOwned ExecutionLifecycleActive 0
   , verifyTransition "transition3ActiveParkExecution" GeneratedOwned ExecutionLifecycleActive 1
   , verifyTransition "transition5ActiveMarkExecutionUnresolved" GeneratedOwned ExecutionLifecycleActive 2
-  , verifyTransition "transition7ActiveFinishExecution" GeneratedOwned ExecutionLifecycleActive 3
-  , verifyTransition "transition8ActiveFailExecution" GeneratedOwned ExecutionLifecycleActive 4
-  , verifyTransition "transition9ActiveCancelExecution" GeneratedOwned ExecutionLifecycleActive 5
+  , verifyTransition "transition8ActiveFinishExecution" GeneratedOwned ExecutionLifecycleActive 3
+  , verifyTransition "transition9ActiveFailExecution" GeneratedOwned ExecutionLifecycleActive 4
+  , verifyTransition "transition10ActiveCancelExecution" GeneratedOwned ExecutionLifecycleActive 5
   , verifyTransition "transition4ParkedResumeExecution" GeneratedOwned ExecutionLifecycleParked 0
-  , verifyTransition "transition10ParkedFailExecution" GeneratedOwned ExecutionLifecycleParked 1
-  , verifyTransition "transition11ParkedCancelExecution" GeneratedOwned ExecutionLifecycleParked 2
-  , verifyTransition "transition6UnresolvedReconcileExecution" GeneratedOwned ExecutionLifecycleUnresolved 0
-  , verifyTransition "transition12UnresolvedFailExecution" GeneratedOwned ExecutionLifecycleUnresolved 1
-  , verifyTransition "transition13UnresolvedCancelExecution" GeneratedOwned ExecutionLifecycleUnresolved 2
+  , verifyTransition "transition11ParkedFailExecution" GeneratedOwned ExecutionLifecycleParked 1
+  , verifyTransition "transition12ParkedCancelExecution" GeneratedOwned ExecutionLifecycleParked 2
+  , verifyTransition "transition6UnresolvedMarkExecutionUnresolved" GeneratedOwned ExecutionLifecycleUnresolved 0
+  , verifyTransition "transition7UnresolvedReconcileExecution" GeneratedOwned ExecutionLifecycleUnresolved 1
+  , verifyTransition "transition13UnresolvedFailExecution" GeneratedOwned ExecutionLifecycleUnresolved 2
+  , verifyTransition "transition14UnresolvedCancelExecution" GeneratedOwned ExecutionLifecycleUnresolved 3
   ]
  where
   verifyTransition label owner source edgeIndex =

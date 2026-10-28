@@ -135,6 +135,18 @@ queueTests =
       testCase "production decoder accepts the literal envelope" do
         value <- decodeOrFail @Value currentRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "historical v3 jobs preserve their complete selection envelope" do
+        value <- decodeOrFail @Value preExecutionRunJobEnvelope
+        RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "historical queue versions cannot acquire the accepted-operation route" do
+        for_ [preResourceRunJobEnvelope, preSelectionRunJobEnvelope, preExecutionRunJobEnvelope] \bytes -> do
+          value <- decodeOrFail @Value bytes
+          let forged = case value of
+                Object envelope -> case KeyMap.lookup "data" envelope of
+                  Just (Object fields) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "routeKind" (Aeson.String "ExecutionOperationRoute") fields)) envelope)
+                  _ -> value
+                _ -> value
+          case RunJobs.decodeRunJob forged of Left _ -> pure (); Right _ -> assertFailure "historical input granted a new executor route",
       testCase "v2 resource inputs retain their root and gain no selection permission" do
         value <- decodeOrFail @Value preSelectionRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
@@ -397,7 +409,10 @@ identityBoundaryTests =
     ]
 
 currentRunJobEnvelope :: ByteString
-currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":3}"
+currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":4}"
+
+preExecutionRunJobEnvelope :: ByteString
+preExecutionRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":3}"
 
 preResourceRunJobEnvelope :: ByteString
 preResourceRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"activityId\":\"act_1\"}},\"t\":\"RunJobMessage\",\"v\":1}"

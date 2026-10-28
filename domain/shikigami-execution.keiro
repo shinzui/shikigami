@@ -104,6 +104,12 @@ aggregate ExecutionLifecycle
     emit ExecutionBecameUnresolved
     goto Unresolved
 
+  Unresolved -- MarkExecutionUnresolved -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionBecameUnresolved
+    goto Unresolved
+
   Unresolved -- ReconcileExecution -->
     guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
     write revision := cmd.revision

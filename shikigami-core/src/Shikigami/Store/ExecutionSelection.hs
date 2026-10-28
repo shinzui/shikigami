@@ -10,6 +10,7 @@ import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Time (addUTCTime)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -19,6 +20,8 @@ import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts)
+import Shikigami.Attestation.Profile qualified as Profile
+import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
 import Shikigami.Execution.Selection (ExecutionSelection (..))
@@ -34,6 +37,21 @@ data CallLimits = CallLimits
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+callLimitsFor :: ExecutionSelection -> Maybe ResolvedProfile -> CallLimits
+callLimitsFor selection profile =
+  CallLimits
+    { calls = toInteger <$> (profile >>= (\p -> p.profile.limits.maxCalls)),
+      retries = toInteger <$> (profile >>= (\p -> p.profile.limits.maxRetries)),
+      concurrency = toInteger <$> (profile >>= (\p -> p.profile.limits.maxConcurrency)),
+      cutoff = case maybe [] pure ((\seconds -> addUTCTime (fromIntegral seconds) selection.admittedAt) <$> (profile >>= (\p -> p.profile.limits.maxDurationSeconds))) <> maybe [] pure (profile >>= (\p -> p.profile.validUntil)) of [] -> Nothing; deadlines -> Just (minimum deadlines),
+      tokens = toInteger <$> (profile >>= (\p -> p.profile.limits.maxTokens))
+    }
+
+callLimitsWithin :: CallLimits -> CallLimits -> Bool
+callLimitsWithin proposed admitted = and [within proposed.calls admitted.calls, within proposed.retries admitted.retries, within proposed.concurrency admitted.concurrency, within proposed.tokens admitted.tokens, within proposed.cutoff admitted.cutoff]
+  where
+    within wanted maximumValue = maybe True (\bound -> maybe False (<= bound) wanted) maximumValue
 
 data Assignment = Assignment
   { selection :: !ExecutionSelection,
@@ -203,6 +221,47 @@ finishSelectionCallTx receipt outcome = do
                         Tx.statement (receipt.assignmentId, current & #active .~ active & #usage .~ usage & #unknown .~ (current.unknown + if outcome.phase == CallTransportUnknown || not (null outcome.missing) then 1 else 0)) updateAssignment
                       writeCall (SelectionCall receipt (Just outcome))
                       pure (Right Accepted)
+
+-- Reconcile retained terminal evidence without replacing any previously known
+-- measurement or observed identity. Active work is released only once.
+reconcileSelectionCallTx :: CallReceipt -> CallOutcome -> Transaction (Either CallAdmissionFailure Admission)
+reconcileSelectionCallTx receipt outcome = do
+  root <- traverse Resources.inspectRootTx receipt.rootId
+  case sequence root of
+    Left err -> pure (Left (CallResourcesRefused err))
+    Right _ -> do
+      assignment <- Tx.statement receipt.assignmentId lockAssignment
+      stored <- readCall receipt.request.attemptId
+      case (assignment, stored) of
+        (Just current, Just call)
+          | call.receipt /= receipt -> pure (Left CallIdentityConflict)
+          | call.outcome == Just outcome -> pure (Right AlreadyAccepted)
+          | Just previous <- call.outcome -> case reconcileUsage current previous of
+              Left err -> pure (Left err)
+              Right (usage, active, unknown, settlement) -> do
+                reconciled <- case receipt.rootId of Nothing -> pure (Right Accepted); Just rootId -> Resources.reconcileSettlementTx rootId receipt.request.attemptId settlement
+                case reconciled of
+                  Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
+                  Right _ -> do
+                    Tx.statement (receipt.assignmentId, current & #usage .~ usage & #active .~ active & #unknown .~ unknown) updateAssignment
+                    writeCall (SelectionCall receipt (Just outcome))
+                    pure (Right Accepted)
+        _ -> pure (Left CallMissing)
+  where
+    reconcileUsage assignment previous = do
+      let fromUnknown = previous.phase == CallTransportUnknown
+          refused = outcome.phase == CallRefused
+          measured = if refused then Map.fromList [(Tokens, 0), (CostMicroUsd, 0)] else outcome.known
+      unless (outcome.phase /= CallTransportUnknown && previous.phase /= CallRefused && (fromUnknown || not (null previous.missing)) && (not refused || (fromUnknown && null outcome.missing && Map.null outcome.known))) (Left CallIdentityConflict)
+      unless (all (\(dimension, amount) -> Map.lookup dimension measured == Just amount) (Map.toList previous.known) && preserves previous.reportedModel outcome.reportedModel && preserves previous.providerCallId outcome.providerCallId && preserves previous.compliance outcome.compliance) (Left CallIdentityConflict)
+      let settlement = if null outcome.missing then KnownUsage measured else PartialUsage measured outcome.missing "terminal billing facts unavailable"
+      unless (fromUnknown || null outcome.missing) (Left CallIdentityConflict)
+      let reservation = if fromUnknown then receipt.request.quantities else Map.filterWithKey (\dimension _ -> dimension `elem` previous.missing) receipt.request.quantities
+          newlyKnown = if fromUnknown then measured else Map.filterWithKey (\dimension _ -> dimension `elem` previous.missing) measured
+      unless (fromUnknown || all (`Map.member` measured) previous.missing) (Left CallIdentityConflict)
+      usage <- either (Left . CallResourcesRefused) Right (if fromUnknown then settleAssignment reservation settlement assignment.usage else settleUsage reservation newlyKnown assignment.usage)
+      pure (usage, assignment.active - if fromUnknown then 1 else 0, assignment.unknown - if null outcome.missing then 1 else 0, settlement)
+    preserves old new = maybe True (\value -> new == Just value) old
 
 assignmentLimits :: CallLimits -> Limits
 assignmentLimits limits =

@@ -1,5 +1,6 @@
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
+    executionRuntime,
     AgentRunFailure (..),
     agentRunFailureDetail,
     -- | The journaled step value that carries a kioku refusal. Exported so
@@ -117,10 +118,13 @@ import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources (ResourceError)
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
+import Shikigami.Execution.Tools qualified as ExecutionTools
+import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement
   ( ApprovalAcknowledgementFailed (..),
@@ -443,6 +447,30 @@ selectionRefusalDetail deps job decl profile selected refusal =
         Just permission ->
           let alias = fromMaybe permission.defaultAlias (job.executionRequest >>= (.alias))
            in maybe alias (.modelId) (find (\d -> d.alias == DecisionContract.ModelAlias alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
+
+-- The queue executor and the future driver share these process-owned
+-- dependencies. No live function or credential enters an execution snapshot.
+executionRuntime :: AgentRunDeps -> Executor.ExecutionRuntime
+executionRuntime deps =
+  Executor.ExecutionRuntime
+    { appEnv = deps.appEnv,
+      replayAuthority = Directory.identityLifecycleAdmission (depsDirectory deps),
+      authorize = authority,
+      selectionRuntime = \snapshot ->
+        SelectionRuntime.SelectionRuntime
+          { catalog = deps.decisions.catalog,
+            profile = snapshot.sanctionedProfile,
+            providers = deps.decisions.providers,
+            baseEnv = deps.behaviorEnv,
+            runId = runCorrelationId snapshot.runId,
+            authorize = authority snapshot,
+            transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
+          },
+      withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (ExecutionTools.staticNativeTools deps.behaviorEnv.tools),
+      timeoutSeconds = fromInteger (max 1 (min 3500 (floor deps.runTimeout)))
+    }
+  where
+    authority (snapshot :: Execution.ExecutionSnapshot) = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
 
 selectionRuntime :: AgentRunDeps -> RunJob -> Maybe ResolvedProfile -> SelectionRuntime.SelectionRuntime
 selectionRuntime deps job profile =

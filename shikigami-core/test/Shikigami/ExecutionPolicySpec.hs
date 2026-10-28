@@ -8,6 +8,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
+import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Transcript
 import Test.Tasty (TestTree, testGroup)
@@ -17,7 +18,16 @@ tests :: TestTree
 tests =
   testGroup
     "ExecutionPolicy"
-    [ testCase "old policy bytes and empty snapshots keep their digest inputs" do
+    [ testCase "technical execution workflow identity has a stable separator-safe vector" do
+        let workflow = executionWorkflowId (ExecutionId "execution:fixture")
+        workflow.unWorkflowId @?= "89a70fa2-523e-5bf7-908c-2bdeb675badb"
+        mkWorkflowId workflow.unWorkflowId @?= Right workflow,
+      testCase "historical tool bindings retain unknown invoice cost and identical JSON" do
+        let legacy = "{\"name\":\"observe\",\"revision\":\"1\",\"schemaDigest\":\"schema-digest\",\"recovery\":\"RepeatableObservation\"}"
+        Aeson.eitherDecode @ToolBinding legacy @?= Right binding
+        Aeson.eitherDecode @Aeson.Value legacy @?= Right (Aeson.toJSON binding)
+        assertBool "a zero-invoice declaration changes immutable scope" (toolScopeDigest binding /= toolScopeDigest (binding & #invoiceCost .~ NoInvoiceCost)),
+      testCase "old policy bytes and empty snapshots keep their digest inputs" do
         let policy = defaultHarnessPolicy
         Aeson.eitherDecode (Aeson.encode policy) @?= Right policy
         case Aeson.toJSON policy of
@@ -81,7 +91,7 @@ tests =
     ]
 
 binding :: ToolBinding
-binding = ToolBinding "observe" "1" "schema-digest" RepeatableObservation
+binding = ToolBinding "observe" "1" "schema-digest" RepeatableObservation UnreportedInvoiceCost
 
 answer :: Text.Text -> ReplayAssistant
 answer text = ReplayAssistant 1 [TextBlock text] Stop Nothing Nothing (Aeson.object []) Nothing

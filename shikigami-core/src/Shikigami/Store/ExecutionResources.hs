@@ -10,6 +10,7 @@ module Shikigami.Store.ExecutionResources
     settleAttemptTx,
     reconcileAttempt,
     reconcileAttemptTx,
+    reconcileSettlementTx,
     narrowAllocation,
     setRootControl,
     inspectRoot,
@@ -130,6 +131,13 @@ reconcileAttempt root attempt measured = runTransaction (reconcileAttemptTx root
 reconcileAttemptTx :: ExecutionRootId -> AttemptId -> Quantities -> Transaction (Either ResourceError Admission)
 reconcileAttemptTx root attempt = recordSettlement True root attempt . KnownUsage
 
+-- Transport recovery may establish that a call stopped while billing remains
+-- partial. Preserve the unresolved billing hold without charging counters twice.
+reconcileSettlementTx :: ExecutionRootId -> AttemptId -> Settlement -> Transaction (Either ResourceError Admission)
+reconcileSettlementTx root attempt outcome = case outcome of
+  UnknownUsage _ -> pure (Left SettlementConflict)
+  _ -> recordSettlement True root attempt outcome
+
 recordSettlement :: Bool -> ExecutionRootId -> AttemptId -> Settlement -> Transaction (Either ResourceError Admission)
 recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
   stored <- readAttempt root attemptId
@@ -139,6 +147,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
       | attempt.outcome == Just outcome -> pure (Right AlreadyAccepted)
       | isJust attempt.outcome && not (reconcile && wasUncertain attempt) -> pure (Left SettlementConflict)
       | reconcile && not (wasUncertain attempt) -> pure (Left SettlementConflict)
+      | reconcile && wasPartial attempt, PartialUsage {} <- outcome -> pure (Left SettlementConflict)
       | otherwise -> case outcome of
           UnknownUsage reason
             | Text.null reason || Text.length reason > 512 -> pure (Left (InvalidResourceRequest "unknown reason must contain 1..512 characters"))
@@ -197,7 +206,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                         let counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) knownReservation
                             exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault 0 d knownReservation) (Map.toList measured)
                         writeAttempt root (Attempt attempt.request (Just outcome))
-                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + 1) & #known .~ add state.known (add counters measured) & #overage .~ (state.overage || exceeded))
+                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + if wasUncertain attempt then 0 else 1) & #known .~ add state.known (add counters measured) & #overage .~ (state.overage || exceeded))
                         pure (Right Accepted)
   where
     wasUncertain attempt = case attempt.outcome of

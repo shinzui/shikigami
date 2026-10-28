@@ -90,7 +90,9 @@ library
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.Execution.Admission
+    Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
+    Shikigami.Execution.Executor
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
     Shikigami.Execution.Policy
@@ -101,6 +103,8 @@ library
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
     Shikigami.Execution.Store
+    Shikigami.Execution.Timer
+    Shikigami.Execution.Tools
     Shikigami.Execution.Transcript
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
