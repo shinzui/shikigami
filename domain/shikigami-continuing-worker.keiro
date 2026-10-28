@@ -1,0 +1,17 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+workflow ContinuingWorker
+  name "shikigami.worker-session"
+  in WorkerSessionStart { sessionId:Id }
+  out WorkerSessionClosed
+  id from input.sessionId via sessionWorkflowId
+  body
+    step ingest-session -> WorkerSessionStart
+    await session-changed -> WorkerSessionId
+    step observe-session -> SessionState
+    step select-assignment -> SessionAction
+    step record-assignment-result -> ResultReceipt
+    child agent-run id input via assignmentChildWorkflowId -> AgentRunOutcome
+    continueAsNew WorkerSessionSeed

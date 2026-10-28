@@ -1,9 +1,10 @@
-module Shikigami.WorkerSessionStoreSpec (tests) where
+module Shikigami.WorkerSessionStoreSpec (tests, withFixture, checkpointVersion, fixtureCheckpoints) where
 
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
+import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
@@ -30,6 +31,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Store.ExecutionResources qualified as Roots
+import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
@@ -187,6 +189,47 @@ tests fixture =
           (_, first) <- accept env access 0 "send" (instruction "one")
           run env (Store.closeSession access 1 0 (OperationId "close") AssignmentFailed) >>= (@?= Left AssignmentStillActive)
           run env (Store.nextAssignment access) >>= (@?= Right (Just first)),
+      testCase "checkpoint intent survives a lost external acknowledgement and deduplicates on restart" $
+        withFixture fixture \env admission access -> do
+          (_, first) <- accept env access 0 "send" (instruction "one")
+          _ <- expectRight =<< run env (Store.startAssignment access 1 0 (OperationId "start") first.assignmentId)
+          _ <- expectRight =<< run env (Store.recordResult access 2 0 (OperationId "finish") (resultFor first "retained finding"))
+          version <- checkpointVersion admission
+          (provider, count) <- fixtureCheckpoints version True
+          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access 3 0 (OperationId "checkpoint") version 0 3)
+          provider.commit intent >>= (@?= Checkpoint.CheckpointUnresolved)
+          (_, pending) <- current env admission
+          pending.checkpointIntent @?= Just (OperationId "checkpoint")
+          pending.consumedCursor @?= 0
+          run env (Store.prepareCheckpoint access 4 0 (OperationId "overlap") version 0 3) >>= (@?= Left AssignmentConflict)
+          run env (Store.consumeEventsWith access 4 0 (OperationId "bypass") 0 3 (error "pending checkpoint bypass")) >>= (@?= Left AssignmentConflict)
+          restarted <- expectRight =<< run env (Store.authorizeSession pending.sessionId admission.context.identity (pure (Right ())))
+          recovered <- expectRight =<< run env (Store.readCheckpointIntent restarted (OperationId "checkpoint"))
+          recovered @?= intent
+          Checkpoint.CheckpointAccepted receipt <- provider.commit recovered
+          run env (Store.acceptCheckpointWith restarted 4 0 (OperationId "checkpoint-ack") recovered.operationId receipt (pure (Right ()))) >>= (@?= Right (Accepted, 3))
+          run env (Store.acceptCheckpointWith restarted 4 0 (OperationId "checkpoint-ack") recovered.operationId receipt (error "duplicate checkpoint integration")) >>= (@?= Right (AlreadyAccepted, 3))
+          count >>= (@?= 1)
+          (_, integrated) <- current env admission
+          integrated.consumedCursor @?= 3
+          integrated.checkpointIntent @?= Nothing,
+      testCase "checkpoint conflicts and local faults preserve the exact pending intent" $
+        withFixture fixture \env admission access -> do
+          _ <- accept env access 0 "send" (instruction "one")
+          version <- checkpointVersion admission
+          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access 1 0 (OperationId "checkpoint") version 0 1)
+          (provider, count) <- fixtureCheckpoints version False
+          provider.commit (intent & #expected . #revision .~ 99) >>= (@?= Checkpoint.CheckpointConflict)
+          Checkpoint.CheckpointAccepted receipt <- provider.commit intent
+          let ack value hook = run env (Store.acceptCheckpointWith access 2 0 (OperationId "ack") intent.operationId value hook)
+          ack (receipt & #fingerprint .~ "forged") (error "forged receipt integration") >>= (@?= Left AssignmentConflict)
+          ack receipt (pure (Left (SessionInputRefused "integration fault"))) >>= (@?= Left (SessionInputRefused "integration fault"))
+          (_, pending) <- current env admission
+          pending.revision @?= 2
+          pending.consumedCursor @?= 0
+          pending.checkpointIntent @?= Just intent.operationId
+          ack receipt (pure (Right ())) >>= (@?= Right (Accepted, 1))
+          count >>= (@?= 1),
       testCase "oversized instruction refuses before changing session progress" $
         withFixture fixture \env admission access -> do
           run env (Store.acceptMessage access 0 0 (OperationId "large") (instruction (Text.replicate 1048576 "x"))) >>= (@?= Left SessionPayloadTooLarge)
@@ -197,6 +240,28 @@ tests fixture =
 
 instruction :: Text -> Instruction
 instruction text = Instruction 1 FollowUp text 1 1 1 Nothing
+
+checkpointVersion :: SessionAdmission -> IO Checkpoint.ObjectiveVersion
+checkpointVersion admission = do
+  now <- getCurrentTime
+  root <- maybe (assertFailure "fixture root missing" >> fail "fixture root missing") pure admission.context.executionRootId
+  pure (Checkpoint.ObjectiveVersion 1 1 1 0 admission.identity True root (addUTCTime 3600 now))
+
+-- A test-only external owner: its transaction commits before the optional
+-- first acknowledgement is lost. Deduplication precedes optimistic validation.
+fixtureCheckpoints :: Checkpoint.ObjectiveVersion -> Bool -> IO (Checkpoint.CheckpointProvider, IO Int)
+fixtureCheckpoints initial loseFirst = do
+  storage <- newIORef (Map.empty, initial, 0 :: Int)
+  let commit intent = atomicModifyIORef' storage \stored@(receipts, version, count) ->
+        case Map.lookup intent.operationId receipts of
+          Just (original, receipt) | original == intent -> (stored, Checkpoint.CheckpointAccepted receipt)
+          Just _ -> (stored, Checkpoint.CheckpointConflict)
+          Nothing | intent.expected /= version -> (stored, Checkpoint.CheckpointConflict)
+          Nothing ->
+            let receipt = Checkpoint.CheckpointReceipt 1 intent.objective intent.operationId (Checkpoint.intentFingerprint intent) (version.revision + 1)
+                updated = (Map.insert intent.operationId (intent, receipt) receipts, version & #revision .~ (version.revision + 1), count + 1)
+             in (updated, if loseFirst && count == 0 then Checkpoint.CheckpointUnresolved else Checkpoint.CheckpointAccepted receipt)
+  pure (Checkpoint.CheckpointProvider (\_ -> (\(_, version, _) -> Right version) <$> readIORef storage) commit, (\(_, _, count) -> count) <$> readIORef storage)
 
 resultFor :: MessageReceipt -> Text -> AssignmentResult
 resultFor message finding = AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing (object ["finding" .= finding]) ["opaque-artifact-reference"]

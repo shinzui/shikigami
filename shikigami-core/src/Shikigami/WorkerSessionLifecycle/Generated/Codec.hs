@@ -19,7 +19,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 workerSessionLifecycleEventTypes :: NonEmpty EventType
-workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
+workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
 
 workerSessionLifecycleCodec :: Codec WorkerSessionLifecycleEvent
 workerSessionLifecycleCodec =
@@ -34,6 +34,8 @@ workerSessionLifecycleCodec =
         SessionResultRecorded{} -> EventType "SessionResultRecorded"
         SessionBecameUnresolved{} -> EventType "SessionBecameUnresolved"
         SessionAssignmentReconciled{} -> EventType "SessionAssignmentReconciled"
+        WorkerSessionObserved{} -> EventType "WorkerSessionObserved"
+        SessionCheckpointPrepared{} -> EventType "SessionCheckpointPrepared"
         SessionEventsConsumed{} -> EventType "SessionEventsConsumed"
         WorkerSessionFailed{} -> EventType "WorkerSessionFailed"
         WorkerSessionCancelled{} -> EventType "WorkerSessionCancelled"
@@ -96,6 +98,20 @@ encodeWorkerSessionLifecycleEvent = \case
   SessionAssignmentReconciled payload ->
     object
       [ "kind" .= ("SessionAssignmentReconciled" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  WorkerSessionObserved payload ->
+    object
+      [ "kind" .= ("WorkerSessionObserved" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  SessionCheckpointPrepared payload ->
+    object
+      [ "kind" .= ("SessionCheckpointPrepared" :: Text)
       , "sessionId" .= payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
@@ -178,6 +194,20 @@ parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (wi
         "SessionAssignmentReconciled" ->
           SessionAssignmentReconciled
             <$> ( SessionAssignmentReconciledData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "WorkerSessionObserved" ->
+          WorkerSessionObserved
+            <$> ( WorkerSessionObservedData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionCheckpointPrepared" ->
+          SessionCheckpointPrepared
+            <$> ( SessionCheckpointPreparedData
                     <$> o .: "sessionId"
                     <*> o .: "expected"
                     <*> o .: "revision"

@@ -79,6 +79,8 @@ aggregate WorkerSessionLifecycle
   command RecordSessionResult { sessionId:Text expected:Int revision:Int }
   command MarkSessionUnresolved { sessionId:Text expected:Int revision:Int }
   command ReconcileSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command ObserveWorkerSession { sessionId:Text expected:Int revision:Int }
+  command PrepareSessionCheckpoint { sessionId:Text expected:Int revision:Int }
   command ConsumeSessionEvents { sessionId:Text expected:Int revision:Int }
   command FailWorkerSession { sessionId:Text expected:Int revision:Int }
   command CancelWorkerSession { sessionId:Text expected:Int revision:Int }
@@ -90,6 +92,8 @@ aggregate WorkerSessionLifecycle
   event SessionResultRecorded = fields(RecordSessionResult)
   event SessionBecameUnresolved = fields(MarkSessionUnresolved)
   event SessionAssignmentReconciled = fields(ReconcileSessionAssignment)
+  event WorkerSessionObserved = fields(ObserveWorkerSession)
+  event SessionCheckpointPrepared = fields(PrepareSessionCheckpoint)
   event SessionEventsConsumed = fields(ConsumeSessionEvents)
   event WorkerSessionFailed = fields(FailWorkerSession)
   event WorkerSessionCancelled = fields(CancelWorkerSession)
@@ -159,6 +163,66 @@ aggregate WorkerSessionLifecycle
     write revision := cmd.revision
     emit SessionEventsConsumed
     goto Cancelled
+
+  Idle -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Idle
+
+  Active -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Active
+
+  Parked -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Parked
+
+  Unresolved -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Unresolved
+
+  Failed -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Failed
+
+  Cancelled -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Cancelled
+
+  Idle -- ObserveWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionObserved
+    goto Idle
+
+  Active -- ObserveWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionObserved
+    goto Active
+
+  Parked -- ObserveWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionObserved
+    goto Parked
+
+  Unresolved -- ObserveWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionObserved
+    goto Unresolved
 
   Idle -- StartSessionAssignment -->
     guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision

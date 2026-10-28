@@ -178,10 +178,13 @@ library
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
     Shikigami.WorkerSession.Catalog
+    Shikigami.WorkerSession.Checkpoint
     Shikigami.WorkerSession.Identity
+    Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
     Shikigami.WorkerSession.Store
     Shikigami.WorkerSession.Types
+    Shikigami.WorkerSession.Workflow
     Shikigami.Workflow.Registry
     Shikigami.Workflow.Versioning
 
@@ -195,6 +198,8 @@ library
     Shikigami.AgentRun.Generated.WorkflowRuntime
     Shikigami.Approval.Generated.WorkflowFacts
     Shikigami.Approval.Generated.WorkflowRuntime
+    Shikigami.ContinuingWorker.Generated.WorkflowFacts
+    Shikigami.ContinuingWorker.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
     Shikigami.ExecutionLifecycle.BehaviorHoles
@@ -435,6 +440,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.RunEvidenceSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.WorkerSessionSpec
     Shikigami.WorkerSessionStoreSpec
     Shikigami.WorkflowVersioningSpec
 

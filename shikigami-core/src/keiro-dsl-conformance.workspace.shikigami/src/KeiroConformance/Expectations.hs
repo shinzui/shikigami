@@ -26,5 +26,11 @@ expectedServiceConformanceFacts =
     ("workflow/ExecutionDriver/idField", "executionId"),
     ("workflow/ExecutionDriver/idVia", "executionWorkflowId"),
     ("workflow/ExecutionDriver/name", "shikigami.execution"),
-    ("workflow/ExecutionDriver/patches", "[]")
+    ("workflow/ExecutionDriver/patches", "[]"),
+    ("workflow/ContinuingWorker/awaits", "[\"session-changed\"]"),
+    ("workflow/ContinuingWorker/body", "[\"step:ingest-session\",\"await:session-changed\",\"step:observe-session\",\"step:select-assignment\",\"step:record-assignment-result\",\"child:agent-run\",\"continueAsNew:WorkerSessionSeed\"]"),
+    ("workflow/ContinuingWorker/idField", "sessionId"),
+    ("workflow/ContinuingWorker/idVia", "sessionWorkflowId"),
+    ("workflow/ContinuingWorker/name", "shikigami.worker-session"),
+    ("workflow/ContinuingWorker/patches", "[]")
   ]

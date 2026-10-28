@@ -6,6 +6,7 @@ module Shikigami.Agent.Delegate
     DelegationBatchPreflightError (..),
     DelegationBatchFailure (..),
     delegate,
+    delegateAssignment,
     delegateBatch,
     preflightDelegationBatch,
     awaitDelegated,
@@ -35,6 +36,7 @@ import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), RouterPolicy (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
@@ -42,6 +44,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
@@ -104,7 +107,19 @@ delegate ::
   Text ->
   Aeson.Value ->
   Eff es (Delegated Aeson.Value)
-delegate declarations directory decl ctx delegationKey childAgent payload = do
+delegate = delegateWith Nothing Nothing
+
+-- | Continuing assignments pin the recorded target and carry the caller's
+-- explicit model requirements through the existing child admission boundary.
+delegateAssignment ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> Text -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+delegateAssignment identity request = delegateWith (Just identity) request
+
+delegateWith ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> Text -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+delegateWith expectedIdentity executionRequest declarations directory decl ctx delegationKey childAgent payload = do
   either throwIO pure (assertMayDelegate decl childAgent)
   either throwIO pure (checkCycle ctx childAgent)
   childCtx <- either throwIO pure (checkDepth ctx)
@@ -116,6 +131,7 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
   childIdentity <-
     liftIO (Directory.identityAdmission directory (declaredPrincipalId childDecl) childAgent)
       >>= either (throwIO . DelegationIdentityRefused) pure
+  unless (maybe True (== childIdentity) expectedIdentity) (throwIO (DelegationIdentityRefused "continuing worker identity changed"))
   let DelegateCtx
         { sessionId = currentCtxSessionId,
           lineage = currentLineage,
@@ -162,7 +178,7 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
             lineage = currentLineage <> [AgentName childAgent],
             delegationBudgetId = Just budgetId,
             executionRootId = ctx.executionRootId,
-            executionRequest = Nothing,
+            executionRequest,
             executionPermissions = ctx.executionPermissions
           }
   handle <-

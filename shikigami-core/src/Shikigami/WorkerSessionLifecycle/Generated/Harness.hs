@@ -23,6 +23,8 @@ harnessAssertions =
   , ("golden round-trip: SessionResultRecorded", roundTrips sampleEventSessionResultRecorded)
   , ("golden round-trip: SessionBecameUnresolved", roundTrips sampleEventSessionBecameUnresolved)
   , ("golden round-trip: SessionAssignmentReconciled", roundTrips sampleEventSessionAssignmentReconciled)
+  , ("golden round-trip: WorkerSessionObserved", roundTrips sampleEventWorkerSessionObserved)
+  , ("golden round-trip: SessionCheckpointPrepared", roundTrips sampleEventSessionCheckpointPrepared)
   , ("golden round-trip: SessionEventsConsumed", roundTrips sampleEventSessionEventsConsumed)
   , ("golden round-trip: WorkerSessionFailed", roundTrips sampleEventWorkerSessionFailed)
   , ("golden round-trip: WorkerSessionCancelled", roundTrips sampleEventWorkerSessionCancelled)
@@ -56,6 +58,12 @@ sampleEventSessionBecameUnresolved = SessionBecameUnresolved (SessionBecameUnres
 
 sampleEventSessionAssignmentReconciled :: WorkerSessionLifecycleEvent
 sampleEventSessionAssignmentReconciled = SessionAssignmentReconciled (SessionAssignmentReconciledData "sample-sessionId" 0 0)
+
+sampleEventWorkerSessionObserved :: WorkerSessionLifecycleEvent
+sampleEventWorkerSessionObserved = WorkerSessionObserved (WorkerSessionObservedData "sample-sessionId" 0 0)
+
+sampleEventSessionCheckpointPrepared :: WorkerSessionLifecycleEvent
+sampleEventSessionCheckpointPrepared = SessionCheckpointPrepared (SessionCheckpointPreparedData "sample-sessionId" 0 0)
 
 sampleEventSessionEventsConsumed :: WorkerSessionLifecycleEvent
 sampleEventSessionEventsConsumed = SessionEventsConsumed (SessionEventsConsumedData "sample-sessionId" 0 0)

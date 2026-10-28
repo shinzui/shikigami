@@ -135,7 +135,9 @@ both patched parent lifecycles, configured policies, ephemeral/durable one-off
 paths, safe uncertainty recovery, protected replay and bounded inspection. Final
 EP-3 evidence is 504 core, 311 PostgreSQL, 37 agent, 64 server and 99 worker cases,
 full build, migration isolation and compatible evolution/conformance. EP-4 is
-implementing its fixture-backed session/mailbox mechanics; EP-5 through EP-7 retain their child
+implementing its fixture-backed mechanics: ordered mailboxes and recoverable
+assignment/checkpoint-intent cycles pass, while handoff and command surfaces
+remain open. EP-5 through EP-7 retain their child
 start gates. External plans 73–76 have accepted evidence. A fresh prerequisite
 check still finds IR-11 and IR-13 proposed, without selected complete providers;
 these remain separately owned completion gates and cannot be closed by fixtures.

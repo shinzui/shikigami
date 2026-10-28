@@ -66,6 +66,20 @@ data ReconcileSessionAssignmentData = ReconcileSessionAssignmentData
   }
   deriving stock (Generic, Eq, Show)
 
+data ObserveWorkerSessionData = ObserveWorkerSessionData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data PrepareSessionCheckpointData = PrepareSessionCheckpointData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ConsumeSessionEventsData = ConsumeSessionEventsData
   { sessionId :: !Text
   , expected :: !Int
@@ -95,6 +109,8 @@ data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   | RecordSessionResult !RecordSessionResultData
   | MarkSessionUnresolved !MarkSessionUnresolvedData
   | ReconcileSessionAssignment !ReconcileSessionAssignmentData
+  | ObserveWorkerSession !ObserveWorkerSessionData
+  | PrepareSessionCheckpoint !PrepareSessionCheckpointData
   | ConsumeSessionEvents !ConsumeSessionEventsData
   | FailWorkerSession !FailWorkerSessionData
   | CancelWorkerSession !CancelWorkerSessionData
@@ -155,6 +171,20 @@ data SessionAssignmentReconciledData = SessionAssignmentReconciledData
   }
   deriving stock (Generic, Eq, Show)
 
+data WorkerSessionObservedData = WorkerSessionObservedData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SessionCheckpointPreparedData = SessionCheckpointPreparedData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data SessionEventsConsumedData = SessionEventsConsumedData
   { sessionId :: !Text
   , expected :: !Int
@@ -184,6 +214,8 @@ data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedD
   | SessionResultRecorded !SessionResultRecordedData
   | SessionBecameUnresolved !SessionBecameUnresolvedData
   | SessionAssignmentReconciled !SessionAssignmentReconciledData
+  | WorkerSessionObserved !WorkerSessionObservedData
+  | SessionCheckpointPrepared !SessionCheckpointPreparedData
   | SessionEventsConsumed !SessionEventsConsumedData
   | WorkerSessionFailed !WorkerSessionFailedData
   | WorkerSessionCancelled !WorkerSessionCancelledData

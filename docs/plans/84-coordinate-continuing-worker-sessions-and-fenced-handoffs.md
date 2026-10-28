@@ -47,7 +47,7 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 
 
 - [x] Milestone 1: Ordered mailbox, stable assignment identities, retained results/events and transactional cursors (2026-10-28).
-- [ ] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration.
+- [x] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration against deterministic adapters (2026-10-28); real IR-13 integration remains a completion gate.
 - [ ] Milestone 3: Fenced and reconciled ownership transfer.
 - [ ] Milestone 4: Governed Flow/Skill/operator commands and runtime qualification.
 
@@ -97,6 +97,27 @@ child identity separation, protected access, root cancellation, limits, parked
 and unresolved state, closure guards and atomic progress/cursor rollback.
 Runtime assignment, checkpoint, transfer and command-surface acceptance remain
 open in milestones 2–4.
+
+Milestone 2 implementation adds the checked `ContinuingWorker` family and a
+consumer checkpoint contract, described in
+[ADR 0062](../adr/0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md).
+Each generation admits/attaches one governed child or waits for a transactional
+mailbox wake. Start freezes a bounded selection of up to three retained
+findings. Checkpoint preparation fixes a batch of at most 100 events before the
+external call; lost acknowledgements retry that same intent. The local pending
+pointer, receipt acceptance and consumed cursor prevent overlapping integration.
+The adapter remains unconfigured for production pending IR-13. Fixture children
+exercise real delegated ingestion, descendant reservations and Keiro child
+completion; they do not claim coding or checkpoint-provider delivery.
+
+Milestone 2 checks pass: 504 core, 328 PostgreSQL (14 store plus three session
+workflow/integration cases), 37 agent, 64 server and 99 worker tests in
+`/tmp/shikigami-mp14-session-workflow-all-tests.log`. The ordinary gate against
+`c4c7d82` passes generated conformance with `breaking:false`
+(`/tmp/shikigami-mp14-session-workflow-gate.log`). Its aggregate-fold warning is
+expected: new observation/checkpoint self-edges change the generated fold
+fingerprint, automatically invalidating old snapshots; historical transitions
+and all behavior witnesses remain valid. The new workflow is additive.
 
 
 ## Context and Orientation

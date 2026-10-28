@@ -431,6 +431,7 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | `shikigami.danwa-conversation` | [Conversation](../domain/shikigami-conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
 | `shikigami.approval` | [Approval](../domain/shikigami-approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
 | `shikigami.execution` | [Execution driver](../domain/shikigami-execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
+| `shikigami.worker-session` | [Continuing worker](../domain/shikigami-continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval
@@ -497,6 +498,15 @@ Delegation derives child workflow identity from the parent workflow, target agen
 and caller-supplied stable key. The declaration-driven supervisor derives keys
 from the delegates stored in the journaled `lookup-agent` result, so later
 manifest edits cannot move an in-flight run's children.
+
+Continuing sessions introduce a new workflow family with no historical body.
+They restore a seed, publish a generation-owned mailbox wake, select at most one
+accepted assignment, await its governed child and retain its result before
+rotation. The session and assignment determine the child identity independently
+of coordinator rotation. Existing one-shot delegation retains its original
+request and step shape. Missing objective providers admit no new assignment.
+Future changes to this body follow the same patch and gate rules. See
+[ADR 0062](adr/0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md).
 
 
 Agent runs also declare `shikigami-durable-execution-v1`. Eligible fresh leaf

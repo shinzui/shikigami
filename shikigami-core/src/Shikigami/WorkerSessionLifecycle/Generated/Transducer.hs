@@ -59,6 +59,30 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleIdle
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleIdle
+      B.onCmd inCtorObserveWorkerSession $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireWorkerSessionObserved (WorkerSessionObservedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleIdle
       B.onCmd inCtorStartSessionAssignment $ \d -> B.do
         B.requireGuard $
           (d.sessionId .== B.reg @"sessionId"
@@ -115,6 +139,30 @@ workerSessionLifecycleTransducer =
           .&& d.revision .> B.reg @"revision"
         B.slot @"revision" =: d.revision
         B.emit wireSessionEventsConsumed (SessionEventsConsumedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleActive
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleActive
+      B.onCmd inCtorObserveWorkerSession $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireWorkerSessionObserved (WorkerSessionObservedTermFields
           { sessionId = d.sessionId
           , expected = d.expected
           , revision = d.revision
@@ -181,6 +229,30 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleParked
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleParked
+      B.onCmd inCtorObserveWorkerSession $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireWorkerSessionObserved (WorkerSessionObservedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleParked
       B.onCmd inCtorResumeSessionAssignment $ \d -> B.do
         B.requireGuard $
           (d.sessionId .== B.reg @"sessionId"
@@ -230,6 +302,30 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleUnresolved
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleUnresolved
+      B.onCmd inCtorObserveWorkerSession $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireWorkerSessionObserved (WorkerSessionObservedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleUnresolved
       B.onCmd inCtorReconcileSessionAssignment $ \d -> B.do
         B.requireGuard $
           (d.sessionId .== B.reg @"sessionId"
@@ -255,6 +351,18 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleFailed
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleFailed
     B.from WorkerSessionLifecycleCancelled do
       B.onCmd inCtorConsumeSessionEvents $ \d -> B.do
         B.requireGuard $
@@ -268,13 +376,25 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleCancelled
+      B.onCmd inCtorPrepareSessionCheckpoint $ \d -> B.do
+        B.requireGuard $
+          (d.sessionId .== B.reg @"sessionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointPrepared (SessionCheckpointPreparedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleCancelled
  where
   isTerminal = \case
 
     _ -> False
 
 workerSessionLifecycleFoldFingerprint :: Text
-workerSessionLifecycleFoldFingerprint = "a45e5e24d0f9529b0f625bede28f2cee"
+workerSessionLifecycleFoldFingerprint = "0e8475c4d1c2550ef85cf9acacf9779e"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -286,23 +406,33 @@ workerSessionLifecyclePredicateVerifications = sequence
   [ verifyTransition "transition1MissingAdmitWorkerSession" GeneratedOwned WorkerSessionLifecycleMissing 0
   , verifyTransition "transition2IdleAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleIdle 0
   , verifyTransition "transition6IdleConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleIdle 1
-  , verifyTransition "transition12IdleStartSessionAssignment" GeneratedOwned WorkerSessionLifecycleIdle 2
-  , verifyTransition "transition19IdleFailWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 3
-  , verifyTransition "transition20IdleCancelWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 4
+  , verifyTransition "transition12IdlePrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleIdle 2
+  , verifyTransition "transition18IdleObserveWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 3
+  , verifyTransition "transition22IdleStartSessionAssignment" GeneratedOwned WorkerSessionLifecycleIdle 4
+  , verifyTransition "transition29IdleFailWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 5
+  , verifyTransition "transition30IdleCancelWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 6
   , verifyTransition "transition3ActiveAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleActive 0
   , verifyTransition "transition7ActiveConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleActive 1
-  , verifyTransition "transition13ActiveParkSessionAssignment" GeneratedOwned WorkerSessionLifecycleActive 2
-  , verifyTransition "transition15ActiveRecordSessionResult" GeneratedOwned WorkerSessionLifecycleActive 3
-  , verifyTransition "transition16ActiveMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleActive 4
+  , verifyTransition "transition13ActivePrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleActive 2
+  , verifyTransition "transition19ActiveObserveWorkerSession" GeneratedOwned WorkerSessionLifecycleActive 3
+  , verifyTransition "transition23ActiveParkSessionAssignment" GeneratedOwned WorkerSessionLifecycleActive 4
+  , verifyTransition "transition25ActiveRecordSessionResult" GeneratedOwned WorkerSessionLifecycleActive 5
+  , verifyTransition "transition26ActiveMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleActive 6
   , verifyTransition "transition4ParkedAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleParked 0
   , verifyTransition "transition8ParkedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleParked 1
-  , verifyTransition "transition14ParkedResumeSessionAssignment" GeneratedOwned WorkerSessionLifecycleParked 2
-  , verifyTransition "transition17ParkedMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleParked 3
+  , verifyTransition "transition14ParkedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleParked 2
+  , verifyTransition "transition20ParkedObserveWorkerSession" GeneratedOwned WorkerSessionLifecycleParked 3
+  , verifyTransition "transition24ParkedResumeSessionAssignment" GeneratedOwned WorkerSessionLifecycleParked 4
+  , verifyTransition "transition27ParkedMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleParked 5
   , verifyTransition "transition5UnresolvedAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleUnresolved 0
   , verifyTransition "transition9UnresolvedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleUnresolved 1
-  , verifyTransition "transition18UnresolvedReconcileSessionAssignment" GeneratedOwned WorkerSessionLifecycleUnresolved 2
+  , verifyTransition "transition15UnresolvedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleUnresolved 2
+  , verifyTransition "transition21UnresolvedObserveWorkerSession" GeneratedOwned WorkerSessionLifecycleUnresolved 3
+  , verifyTransition "transition28UnresolvedReconcileSessionAssignment" GeneratedOwned WorkerSessionLifecycleUnresolved 4
   , verifyTransition "transition10FailedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleFailed 0
+  , verifyTransition "transition16FailedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleFailed 1
   , verifyTransition "transition11CancelledConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleCancelled 0
+  , verifyTransition "transition17CancelledPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleCancelled 1
   ]
  where
   verifyTransition label owner source edgeIndex =

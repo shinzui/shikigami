@@ -44,6 +44,7 @@ import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeO
 import Kioku.App (AppEnv (..))
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
+import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as ContinuingWorker
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Execution
 
@@ -70,6 +71,7 @@ shikigamiActivePatches =
     <> Approval.declaredPatches
     <> DanwaConversation.declaredPatches
     <> Execution.declaredPatches
+    <> ContinuingWorker.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions
