@@ -49,36 +49,19 @@ Resume a Skill or conversation from its accepted model/tool history after a cras
 - [x] Milestone 1: Versioned execution snapshots, protected payloads and atomic accepted operations. Sixteen PostgreSQL cases prove reconstruction, exact continuation/tool data, protected reads, bounded inspection, immutable retries, races, full transaction rollback, cancellation/unknown handling, terminal validation and catalog fencing. Full build and conformance pass.
 - [x] Milestone 2: Composed policies, individually accepted tools and bound durable permissions, including configured narrowing, recorded summaries/repairs and bounded safe recovery.
 - [x] Milestone 3: Resumable driver and fenced submit/observe executor integrated with runs, conversations and the durable one-off command. Real patch branches, actual-attempt fencing and independent late receipts pass full replay/conformance qualification.
-- [ ] Milestone 4: Recovery qualification and bounded operator inspection.
+- [x] Milestone 4: Recovery qualification, paged metadata-only operator inspection, policy operations guide and serving timer-claim recovery.
 
-Milestone 2 implements immutable tool bindings and response-position
-validation, monotonic policy composition, context views with provenance, accounted
-bounded repair operations, and parked permissions through the existing approval
-child are implemented. The runner prepares trusted operation coordinates and
-rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It does
-not dispatch without the fenced attempt boundary still owned by milestone 3.
-Recorded model-assisted summaries now consume ordinary accepted model attempts
-and retain source/outcome provenance across restart. Shared operator configuration
-and monotonic agent overrides feed new frozen admissions. Bounded repeatable and
-idempotent recovery spends new actual attempts while retaining old unknown holds;
-uncertain effects remain unresolved. Bounded operator inspection remains open.
+The child is Complete. New eligible Skill runs and conversation turns admit
+frozen protected assignments and await bounded execution children through real
+workflow patch branches. Actual model/tool attempts execute outside workflow
+leases, preserve accepted outcomes and resource holds, and apply class-specific
+recovery. Configuration, ephemeral recording, durable one-off driving, approvals,
+context summaries/repairs and bounded operator inspection are wired and qualified.
 
-The next checkpoint implements the fenced submit/observe primitives and worker
-route: reservation plus queue acceptance, claim generation/expiry, conditional
-start, atomic outcome/cursor/accounting, pre-dispatch refusal with accounted retry,
-retained late receipts, partial-billing reconciliation and protected current-wake
-publication. The real HTTP and native-tool executor paths consume those primitives.
-Observation deadlines use the existing timer dispatcher and an explicit generation.
-The automatic driver is now a callable, registered workflow with bounded decision
-generations, accepted-reference queue repair, replay-window reconstruction and
-the existing bound Approval child. The agent-run leaf Skill branch now admits and awaits this driver behind a real
-workflow patch. The conversation Skill branch now adopts the same child behind
-its own patch, with durable ingress acceptance and unchanged atomic reply ownership.
-The database-free command uses explicit ephemeral recording with the same pure
-policies. The durable one-off command drives only its accepted child through the
-fenced executor after releasing the parent lease.
-Recorded summaries are accepted and replayed through that driver. Milestones 2
-and 3 are complete; milestone 4 owns final inspection and remaining qualification.
+IR-14 acceptance 8 remains owned by plan 84's continuing-message integration.
+This child supplies and tests the harness seam with an accepted native message
+whose response is lost; it does not claim the separately gated real continuing
+session, workspace or objective providers.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
@@ -216,6 +199,24 @@ records these boundaries. Conversation and ephemeral/configuration/recovery work
 remain open.
 
 ## Outcomes & Retrospective
+
+
+Completed on 2026-10-28. The final accepted suite counts are 504 core, 311
+PostgreSQL, 37 agent, 64 server and 99 worker cases. The full build, migration
+schema-isolation check, executable inspection help and complete gate against
+`7dd4409` pass; this final gate has no findings and `breaking: false`.
+The 121-operation inspection fixture proves pagination beyond the old first-100
+window, separate active work, strict page bounds and absence of protected input
+or opaque tokens. Attempt summaries have explicit totals/truncation. The serving
+timer-pass fixture abandons a claimed observation, advances the maintenance clock,
+and verifies one original wake and no duplicate journal append.
+
+[FRIC-12](../friction-log/12-awakeable-repair-requires-an-explicit-publishing-generation-transaction.md)
+is accepted: public fixed-generation transaction composition is qualified; the
+released convenience signal's current-generation semantics remain unchanged.
+FRIC-10/FRIC-11 remain resolved by the earlier migration-recipe fix. Durable
+project context is distilled in ADRs 0053–0060 and the operations guide. The
+checkpoints below retain implementation evidence, not outstanding work.
 
 
 Milestone 1 establishes the storage contract consumed by the remaining runner and
@@ -436,3 +437,8 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 
 
 This plan owns execution transcript codecs, operation state, driver workflow, policy configuration and bounded executor submit/observe contract. It consumes root `OperationId`/`AttemptId` and settlement hooks from plan 81 and `ExecutionSelection` from plan 82. Expose `acceptOperation`, `recordOutcomeAndAdvance`, `loadExecution`, `reconcileOperation`, and `runExecution` with typed accepted/conflict/parked/unresolved/terminal results; no raw upstream Response decoder. Pending instruction references are opaque correlation until plan 84 resolves their mailbox authority. `docs/plans/75-persist-decision-call-evidence-across-retries-and-restarts.md` owns typed-decision evidence; integrate normalized compliance facts without replacing it. Plan 84 and plan 87 consume retained execution references. Mutating repository effects remain denied until independently owned IR-11 supplies an admitted recovery/fencing provider.
+
+
+2026-10-28 revision: Completed inspection and serving timer recovery qualification;
+closed all four milestones. The continuing-message, real workspace and checkpoint
+integration gates remain with plan 84 and their separate request owners.

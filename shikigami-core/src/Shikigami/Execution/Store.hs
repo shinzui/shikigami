@@ -11,6 +11,7 @@ module Shikigami.Execution.Store
     authorizeReplay,
     loadExecution,
     inspectExecution,
+    inspectExecutionPage,
     inspectOperation,
     readReplayPayload,
     acceptOperation,
@@ -48,13 +49,15 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Control.Exception (Exception, fromException, throw)
-import Control.Monad (foldM)
+import Control.Monad (foldM, join)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff, IOE, (:>))
@@ -217,6 +220,50 @@ inspectExecution :: (ExecutionReadEffects es) => ExecutionId -> Eff es (Either E
 inspectExecution execution = protected do
   existing <- Tx.statement execution.value selectExecution
   traverse (\(state, binding) -> (state,binding,) <$> Tx.statement execution.value listOperations) existing
+
+-- Operational JSON is assembled from typed metadata only. No payload body or
+-- wake is selected; active work stays visible even outside the history page.
+inspectExecutionPage :: (ExecutionReadEffects es) => ExecutionId -> Integer -> Int -> Eff es (Either ExecutionError (Maybe Aeson.Value))
+inspectExecutionPage execution after limit
+  | after < -1 || after > 10000 || limit < 1 || limit > 20 = pure (Left (ExecutionPolicyRefused "inspection page requires after -1..10000 and limit 1..20"))
+  | otherwise = protected do
+      stored <- Tx.statement execution.value selectExecution
+      forM stored \(state, binding) -> do
+        selected <- Tx.statement (execution.value, fromInteger after, fromIntegral (limit + 1)) operationPage
+        operations <- traverse operationView (take limit selected)
+        active <- traverse (\key -> Tx.statement (operationKey key) selectOperation >>= traverse operationView) state.activeOperation
+        resources <- traverse (\root -> Roots.inspectRootTx root >>= either (abort . ResourceAdmissionRefused . Text.pack . show) pure) binding.rootId
+        pure
+          ( Aeson.object
+              [ "schema" Aeson..= ("shikigami.execution-inspection/1" :: Text),
+                "executionId" Aeson..= execution,
+                "phase" Aeson..= state.phase,
+                "revision" Aeson..= state.revision,
+                "cursor" Aeson..= state.cursor,
+                "next" Aeson..= state.next,
+                "modelTurns" Aeson..= state.modelTurns,
+                "repairs" Aeson..= state.repairs,
+                "pendingReceipts" Aeson..= state.pendingReceipts,
+                "result" Aeson..= state.result,
+                "failure" Aeson..= state.failure,
+                "snapshot" Aeson..= state.snapshot,
+                "binding" Aeson..= binding,
+                "resources" Aeson..= resources,
+                "activeOperation" Aeson..= join active,
+                "operations" Aeson..= operations,
+                "nextAfter" Aeson..= (if length selected > limit then (.position) <$> listToMaybe (reverse (take limit selected)) else Nothing),
+                "limit" Aeson..= limit
+              ]
+          )
+  where
+    operationView :: Operation -> Transaction Aeson.Value
+    operationView operation = do
+      (total, unknown) <- Tx.statement (operationKey operation.specification.operationId) inspectionAttemptCounts
+      attempts <- Tx.statement (operationKey operation.specification.operationId) inspectionAttempts
+      let safeAttempt attempt = case toJSON attempt of
+            Aeson.Object fields -> Aeson.Object (KeyMap.delete "wake" fields)
+            value -> value
+      pure (Aeson.object ["operation" Aeson..= operation, "attemptCount" Aeson..= total, "unresolvedAttempts" Aeson..= unknown, "attempts" Aeson..= map safeAttempt attempts, "attemptsTruncated" Aeson..= (total > fromIntegral (length attempts))])
 
 inspectOperation :: (ExecutionReadEffects es) => OperationId -> Eff es (Either ExecutionError (Maybe Operation))
 inspectOperation operation = protected (Tx.statement (operationKey operation) selectOperation)
@@ -1136,6 +1183,15 @@ updateOperation = preparable "UPDATE shikigami.execution_transcript_operations S
 
 listOperations :: Statement Text [Operation]
 listOperations = preparable "SELECT state FROM shikigami.execution_transcript_operations WHERE execution_id=$1 ORDER BY position LIMIT 100" textParam (D.rowList jsonRow)
+
+operationPage :: Statement (Text, Int64, Int64) [Operation]
+operationPage = preparable "SELECT state FROM shikigami.execution_transcript_operations WHERE execution_id=$1 AND position>$2 ORDER BY position LIMIT $3" (contrazip3 textParam (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)
+
+inspectionAttempts :: Statement Text [Attempt.ExecutionAttempt]
+inspectionAttempts = preparable "SELECT value FROM shikigami.execution_transcript_operations,LATERAL jsonb_each(dispatches) WHERE operation_id=$1 ORDER BY CASE WHEN value->>'phase' IN ('AwaitingDispatch','Claimed','DispatchStarted','AttemptUncertain') THEN 0 WHEN value->>'phase'='AttemptSuperseded' AND value->'lateReceipt'='null'::jsonb THEN 1 ELSE 2 END,key LIMIT 10" textParam (D.rowList jsonRow)
+
+inspectionAttemptCounts :: Statement Text (Int64, Int64)
+inspectionAttemptCounts = preparable "SELECT count(*),count(*) FILTER (WHERE value->>'phase'='AttemptUncertain' OR (value->>'phase'='AttemptSuperseded' AND value->'lateReceipt'='null'::jsonb)) FROM shikigami.execution_transcript_operations,LATERAL jsonb_each(dispatches) WHERE operation_id=$1" textParam (D.singleRow ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
 
 currentTime :: Statement () UTCTime
 currentTime = preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))

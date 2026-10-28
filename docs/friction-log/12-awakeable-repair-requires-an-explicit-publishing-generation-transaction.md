@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-28T15:38:22Z"
 frictionId: FRIC-12
-status: logged
+status: "accepted"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "mori://shinzui/keiro/packages/keiro"
 affectedVersion: "0.18.0.0"
 plan: "docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md"
 workaround: "Compose prepareJournalAppend with the recorded generation and completeAwakeableTx in one transaction; carry an optional timer generation and verify legacy tokens against the live allocation."
+resolution: "Retain the public fixed-generation transaction composition; the released convenience signal chooses the current generation and its semantics remain unchanged."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-10-28T16:47:47Z"
+    change: "EP-3 qualifies generation-bound message and timer publication and accepts the composition cost."
 ---
 # Awakeable repair requires an explicit publishing-generation transaction
 

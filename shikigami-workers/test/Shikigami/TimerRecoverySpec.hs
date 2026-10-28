@@ -4,8 +4,9 @@ import Control.Concurrent (threadDelay)
 import Data.Aeson (object, (.=))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Time (UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
+import Effectful (Eff)
 import Hasql.Pool qualified as Pool
 import Keiro.Timer
   ( DeadTimerClaimRequest (..),
@@ -13,9 +14,10 @@ import Keiro.Timer
     TimerInspection (..),
     TimerRequest (..),
     TimerRow (..),
-    TimerStatus (Dead),
+    TimerStatus (Dead, Fired),
     cancelTimer,
     claimDeadTimer,
+    claimDueTimer,
     completeTimerResume,
     deadLetterTimer,
     lookupTimerInspection,
@@ -24,17 +26,24 @@ import Keiro.Timer
     resumeClaimLeaseUntil,
     scheduleTimerTx,
   )
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), currentRunGeneration, loadStepIndex, runWorkflowWith)
+import Keiro.Workflow.Awakeable (awakeableNamed)
+import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Execution.Attempt (ExecutionWake (..), JobReference (..))
+import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Timer (armObservation)
+import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed))
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..))
 import Shikigami.Trigger.Timer (runTimerPass)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -42,7 +51,37 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "Timer recovery"
-    [ testCase "serving pass recovers an expired guarded claim and fences its stale token" do
+    [ testCase "serving pass recovers an ordinary execution observation claimed before a crash" do
+        withShikigamiFreshDatabase fixture \connectionString ->
+          withStore (defaultConnectionSettings connectionString) \store -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv (defaultConnectionSettings connectionString) tracer Nothing
+                scheduler = testSchedulerEnv (StoreConnection.pool store)
+                name = WorkflowName "shikigami.execution"
+                workflowId = WorkflowId "timer-execution-fixture"
+                reference = JobReference 1 (ExecutionId "execution-fixture") (OperationId "operation-fixture") (AttemptId "attempt-fixture")
+                body :: Eff (Workflow : AppEffects) JobReference
+                body = do
+                  generation <- currentRunGeneration
+                  (token, await) <- awakeableNamed (StepName "observation")
+                  armObservation (ExecutionWake token generation) reference
+                  await
+                drive = runAppIO appEnv (runWorkflowWith (shikigamiWorkflowRunOptions appEnv) name workflowId body)
+            drive >>= assertEqual "workflow parks" (Right Suspended)
+            now <- getCurrentTime
+            captured <- runAppIO appEnv (claimDueTimer (addUTCTime 61 now))
+            claimed <- case captured of Right (Just row) -> pure row; other -> assertFailure (show other)
+            -- Drop the claimed row as a crashed timer process would. The real
+            -- serving pass applies Keiro's default stale-Firing recovery.
+            runTimerPass appEnv Nothing scheduler (addUTCTime 400 now) >>= assertEqual "stale observation fired once" (Right 1)
+            inspected <- runAppIO appEnv (lookupTimerInspection claimed.timerId)
+            case inspected of Right (Just row) -> assertEqual "observation terminal" Fired row.timer.status; other -> assertFailure (show other)
+            drive >>= assertEqual "original reference wakes the workflow" (Right (Completed reference))
+            before <- runAppIO appEnv (loadStepIndex name workflowId 0)
+            runTimerPass appEnv Nothing scheduler (addUTCTime 401 now) >>= assertEqual "repeat pass does no work" (Right 0)
+            after <- runAppIO appEnv (loadStepIndex name workflowId 0)
+            assertEqual "no duplicate wake journal" before after,
+      testCase "serving pass recovers an expired guarded claim and fences its stale token" do
         withShikigamiFreshDatabase fixture \connectionString ->
           withStore (defaultConnectionSettings connectionString) \store -> do
             tracer <- noopTracer

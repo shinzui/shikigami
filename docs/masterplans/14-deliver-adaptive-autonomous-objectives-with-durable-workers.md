@@ -71,7 +71,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Enforce root resource reservations across durable work | [docs/plans/81-enforce-root-resource-reservations-across-durable-work.md](../plans/81-enforce-root-resource-reservations-across-durable-work.md) | None | None | Complete |
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
-| EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | In Progress |
+| EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; completion gates IR-11 and IR-13 providers | None | Not Started |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Not Started |
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
@@ -130,7 +130,15 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-10-28: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies, individually accepted tools, bound permissions and fenced executor primitives are implemented checkpoints. The callable automatic driver is qualified independently; conversation adoption, policy configuration and remaining recovery work are still in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
+2026-10-28: EP-1 through EP-3 are Complete. The execution harness now includes
+both patched parent lifecycles, configured policies, ephemeral/durable one-off
+paths, safe uncertainty recovery, protected replay and bounded inspection. Final
+EP-3 evidence is 504 core, 311 PostgreSQL, 37 agent, 64 server and 99 worker cases,
+full build, migration isolation and compatible evolution/conformance. EP-4 is
+ready to start its fixture-backed mechanics; EP-5 through EP-7 retain their child
+start gates. External plans 73–76 have accepted evidence. A fresh prerequisite
+check still finds IR-11 and IR-13 proposed, without selected complete providers;
+these remain separately owned completion gates and cannot be closed by fixtures.
 
 
 ## Surprises & Discoveries
@@ -179,8 +187,9 @@ boundaries respectively. [ADR 0059](../adr/0059-harness-policy-is-frozen-at-admi
 records that shared contract. Safe recovery now spends fresh actual attempts
 under the existing logical key, retains unknown holds and accepts independent
 late receipts after logical completion; [ADR 0060](../adr/0060-safe-recovery-spends-new-attempts-and-retains-independent-receipts.md)
-records the consumer contract. Final inspection/qualification remain open, so EP-3 and its dependent-child start
-gates remain unchanged.
+records the consumer contract. Bounded inspection and the serving timer-recovery
+fixture complete EP-3. EP-4 may now start its mechanics; its real provider gates
+remain unchanged.
 
 ## Decision Log
 

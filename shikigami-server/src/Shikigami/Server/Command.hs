@@ -56,6 +56,7 @@ import Shikigami.App.Version (versionOption)
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
+import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
 import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
@@ -152,8 +153,20 @@ adminSubcommands =
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
     ("runs", command "runs" runsInfo),
-    ("resources", command "resources" resourcesInfo)
+    ("resources", command "resources" resourcesInfo),
+    ("executions", command "executions" executionsInfo)
   ]
+
+executionsInfo :: ParserInfo AdminAction
+executionsInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect accepted execution progress without replay payloads")
+  where
+    inspectInfo = info (parser <**> helper) (progDesc "Show bounded operations, actual attempts, pending receipts and resource holds")
+    parser =
+      (\execution after limit asJson -> (runExecutionsInspect execution after limit asJson, []))
+        <$> strArgument (metavar "EXECUTION" <> help "Accepted execution id")
+        <*> option auto (long "after" <> metavar "POSITION" <> value (-1) <> help "Operations after this cursor position (default -1)")
+        <*> option auto (long "limit" <> metavar "COUNT" <> value 10 <> help "Operation page size (1-20)")
+        <*> switch (long "json" <> help "Emit machine-readable JSON")
 
 resourcesInfo :: ParserInfo AdminAction
 resourcesInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect a durable execution resource root")

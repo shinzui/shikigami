@@ -308,6 +308,33 @@ tests fixture =
           run env (Store.submitExecutionAttemptWith access 1 submission enqueue) >>= (@?= Right (R.AlreadyAccepted, attempt))
           queueCount env >>= (@?= 1)
           assertBool "opaque wake token absent from metadata" (not ("00000000-0000-0000-0000-000000000000" `Text.isInfixOf` Text.pack (show (Aeson.encode attempt)))),
+      testCase "operator pages retain active work beyond the first hundred operations without exposing replay" $
+        withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #maxModelTurns .~ 200) \env snapshot access -> do
+          mapM_
+            ( \cursor -> do
+                (_, operation) <- expectRight =<< run env (Store.acceptOperation access (2 * cursor) (spec snapshot cursor) secretInput)
+                run env (Store.recordOutcomeAndAdvance access (2 * cursor + 1) operation.specification.operationId (OperationDenied "bounded fixture refusal") NeedModel Nothing) >>= (@?= Right R.Accepted)
+            )
+            [0 .. 119]
+          (_, active) <- expectRight =<< run env (Store.acceptOperation access 240 (spec snapshot 120) secretInput)
+          let submitted = modelSubmission active
+          _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 241 submitted (\_ -> pure ()))
+          Just first <- expectRight =<< run env (Store.inspectExecutionPage snapshot.executionId (-1) 2)
+          Just latest <- expectRight =<< run env (Store.inspectExecutionPage snapshot.executionId 117 2)
+          case (first, latest) of
+            (Aeson.Object initial, Aeson.Object page) -> do
+              KeyMap.lookup "nextAfter" initial @?= Just (toJSON (1 :: Int))
+              KeyMap.lookup "nextAfter" page @?= Just (toJSON (119 :: Int))
+              KeyMap.lookup "cursor" initial @?= Just (toJSON (120 :: Int))
+              case KeyMap.lookup "operations" page of
+                Just (Aeson.Array operations) -> Vector.length operations @?= 2
+                _ -> assertFailure "missing operation page"
+              assertBool "active work is present outside the page" (KeyMap.lookup "activeOperation" initial /= Just Aeson.Null)
+            _ -> assertFailure "expected inspection objects"
+          let rendered = Text.pack (show (Aeson.encode first))
+          mapM_ (\private -> assertBool "protected input and wake tokens absent" (not (private `Text.isInfixOf` rendered))) ["PRIVATE_REPLAY_MARKER", "00000000-0000-0000-0000-000000000000", "execution-wake"]
+          run env (Store.inspectExecutionPage snapshot.executionId (-2) 2) >>= (@?= Left (ExecutionPolicyRefused "inspection page requires after -1..10000 and limit 1..20"))
+          run env (Store.inspectExecutionPage snapshot.executionId 0 21) >>= (@?= Left (ExecutionPolicyRefused "inspection page requires after -1..10000 and limit 1..20")),
       testCase "racing tool attempt identities across distinct roots admit one owner" $
         withConfiguredFixture fixture toolConfiguration \env first firstAccess -> do
           now <- getCurrentTime

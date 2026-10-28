@@ -97,3 +97,25 @@ A replacement can finish while an older actual attempt still awaits a receipt.
 actual accounting without replacing the chosen output or advancing the cursor.
 Partial invoice uncertainty remains visible in the resource ledger. Duplicate
 queue delivery or receipt publication never authorizes another physical effect.
+
+Inspect accepted work without acquiring replay-body access:
+
+```bash
+shikigami executions inspect EXECUTION --json
+shikigami executions inspect EXECUTION --json --after 19 --limit 10
+```
+
+The versioned JSON includes the observed phase/revision, logical cursor, model
+turns/repairs, pending receipts, public selection binding, protected payload
+references and resource holds. It pages operations in ascending position, with
+at most 20 per page and 10 attempt summaries per operation. `nextAfter` continues
+history pagination; active work appears separately even when it is outside the
+page. Attempt counts and `attemptsTruncated` make truncation explicit, with live
+and unresolved attempts prioritized. Snapshot/input/output bodies, arguments,
+credentials and wake tokens are excluded. Inspection is observational; a displayed
+revision does not authorize dispatch or mutation.
+
+Observation timers use the serving process's existing bounded timer pass. Keiro
+requeues an ordinary timer left `Firing` for five minutes, and the generation-bound
+handler repairs the original wake idempotently. A stale generation is cancelled
+without appending to a successor journal. No second timer loop is required.

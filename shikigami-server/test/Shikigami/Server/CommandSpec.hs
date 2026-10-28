@@ -47,8 +47,13 @@ tests =
                 "grants",
                 "agents",
                 "runs",
-                "resources"
+                "resources",
+                "executions"
               ],
+      testCase "executions inspect accepts bounded history pagination" do
+        case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of
+          Success (chosen, _) -> assertBool "execution action selected" (not (isNothing chosen))
+          _ -> assertBool "executions did not parse" False,
       testCase "resources inspect accepts a root and JSON output" do
         case execParserPure adminPrefs adminInfo ["resources", "inspect", "root-1", "--json"] of
           Success (chosen, _) -> assertBool "resources action selected" (not (isNothing chosen))
