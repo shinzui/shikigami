@@ -6,888 +6,460 @@ kind: exec-plan
 created_at: 2026-06-27T17:57:56Z
 intention: "intention_01kx1tyzqcerzv4ysbktgr9sw9"
 master_plan: "docs/masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T18:49:50Z
+      mode: "update"
+      note: "Apply overlay scope transfer and refresh MCP release, discovery authorization, schema binding and durable execution acceptance."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T18:49:50Z
+      verdict: "comments"
+      note: "Author self-review: common foundations exist; released MCP adapter and consumer qualification remain required."
 ---
 
-# Per-agent MCP server declaration in Agent.dhall
+# MCP provider integration for declared capability overlays
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-
+The historical filename and frontmatter title identify this plan. Its effective
+scope changed on 2026-08-22 and is reconciled throughout this body on 2026-10-28.
+It does not add `mcpServers` to Agent.dhall. Implementation of the surviving
+MCP-specific scope remains Not Started.
 
 ## Purpose / Big Picture
 
-Today a `shikigami` agent can only call tools that someone hand-wrote in Haskell and
-compiled into the runtime. There is no way for an agent author to say "this agent may also
-use the GitHub tool server" or "this agent may read from the Notion server" without writing
-bespoke Haskell glue for each one. **MCP** (the *Model Context Protocol*) is the
-industry-standard way that external "tool servers" publish callable tools over HTTP; this
-plan lets an agent reach that whole ecosystem through one line of declaration.
+Let an agent request an operator-approved remote observation capability through
+its existing `capabilityOverlays` list. The runtime connects to an MCP server,
+discovers only a verified tool catalog, invokes authorized tools through the existing
+model/execution machinery, and releases resources on every exit. MCP means Model
+Context Protocol, the remote tool transport owned upstream; a capability overlay
+is Shikigami's additive, operator-selected tool bundle.
 
-After this change, an agent author writes, in the agent's Dhall file (for example
-`agents/triage-note.dhall`), a new `mcpServers` field naming the MCP servers that agent may
-use:
+For the hermetic proof, an agent requests a capability such as `mcp.echo`. The
+operator catalog binds that id to an immutable descriptor/revision and a provider
+factory with a local stub endpoint. The model sees the existing overlay namespace,
+for example `overlay__mcp-echo__echo`, calls the observation, and incorporates its
+result. The test proves authorization before connect, discovery and invocation,
+correct remote method/name/schema, bounded execution, cleanup and durable replay.
+Agent files contain no endpoint, credential reference, transport or provider handle.
 
-```dhall
-, mcpServers =
-    [ A.McpServer::{ name = "github", url = "https://mcp.example.com/github" } ]
-```
-
-When that agent runs, the runtime connects to each declared server authorized for the run's
-principal, asks it what tools it
-offers, and registers those tools into the same tool registry the agent already uses — under
-stable, collision-free names of the form `mcp__<server>__<tool>` (e.g.
-`mcp__github__create_issue`). The agent's language model then sees and can call those tools
-mid-run exactly as if they had been written by hand, and the connections are closed when the
-run finishes. The observable win: an operator can add a remote capability to an agent by
-editing one Dhall list and re-running it — no recompilation of a new tool, no code change.
-The declaration is a request, not authority: before any connection or tool dispatch, the
-runtime checks the upstream per-action authorization policy for the run's authenticated
-principal, server, and tool. Agent files may contain credential references only; secret
-material is resolved at the plan 37 Settei composition root and never rendered, logged, or
-returned through a tool/API result.
-
-This is the **integration capstone** (plan C6) of the cross-repo MasterPlan
-`shinzui/baikai:docs/masterplans/6-mcp-support-across-the-agent-stack.md`. It consumes
-machinery built by upstream plans (see Interfaces and Dependencies) and is the only plan in
-that initiative that touches a user-facing configuration schema.
-
+This is the surviving integration capstone of
+`mori://shinzui/baikai/masterplans/6-mcp-support-across-the-agent-stack`, coordinated
+locally by MasterPlan 7. Its original schema/registry/loop work was superseded by
+[MasterPlan 11](../masterplans/11-add-agent-scoped-capability-overlays-without-changing-base-capabilities.md).
+Do not repeat that work or treat it as evidence that MCP already runs.
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
-
-- [ ] M1 — Schema field: add `McpServer`/`McpTransport`/`McpAuth` and an `mcpServers` list to
-  `schema/Agent.dhall`; `McpAuth` contains only `None` or a credential reference. Mirror them
-  on `Shikigami.Api.Agent`; confirm the loader parses them without secret material.
-- [ ] M1 — Example: add an `mcpServers` entry to one example agent and a new
-  `agents/proof/mcp-echo.dhall` declaring a stub server.
-- [ ] M2 — Build wiring: add `shikumi-tools` to `cabal.project` and to
-  `shikigami-core.cabal` build-depends; select coherent published baikai/shikumi releases
-  verified against their registries and upstream tags.
-- [ ] M2 — Registry seam: give `BehaviorEnv` a `tools :: ToolRegistry` field
-  (default empty) and thread it into `runBehavior`.
-- [ ] Prerequisites — plans 36 and 37 have landed; baikai C1/C2, shikumi C5, and the upstream
-  per-action authorization seam tracked by Kikan-En IR-3 are released and
-  verified through Mori plus authoritative registry/tags. Baikai C3 is
-  additionally required for non-`None` authentication.
-- [ ] **Re-verified 2026-08-10: all three upstream contracts are still absent.** Baikai has no
-  `Baikai.Mcp.*` module as of `baikai 0.5.0.0` — that release added `Baikai.Agent` and
-  `Baikai.Evidence`, not MCP. The shikumi package set (`shikumi`, `-cache`, `-cache-postgres`,
-  `-cache-redis`, `-cli`, `-compile`, `-eval`, `-jitsurei`, `-okf`, `-optimize`, `-tools`,
-  `-trace`, all at the 2026-08-07 tags) contains no MCP adapter. Kikan-En IR-3 remains
-  `proposed`. **Re-check all three before scheduling M3–M5 rather than trusting this line** —
-  it is a snapshot, and the whole point of recording the date is that it goes stale.
-- [ ] M1–M2 are startable now and do not depend on any of the above: the schema field, its
-  mirror, the loader proof, the example agents, and the `ToolRegistry` seam on `BehaviorEnv` are
-  all local. Only the live connect/invoke path in M3–M5 is gated.
-- [ ] M3 — Run lifecycle: add `withAgentMcpTools` (connect + register + bracket-close) in
-  `Shikigami/Agent/Run.hs`; wrap the `runBehavior` call in `runAgentWithMemory` with it.
-- [ ] M4 — Skill loop: replace the single-completion `runSkill` with a bounded tool loop that
-  surfaces the registry's `mcp__` tools to the model and dispatches tool calls.
-- [ ] M4 — ShikumiProgram arm: hand the registry to `Shikumi.Agent.ReAct.react` so program
-  behaviors also see the `mcp__` tools.
-- [ ] M5 — End-to-end: a stub MCP server agent runs, its `mcp__` tools appear in the
-  registry, the agent invokes one, and the connection is closed afterward.
-
+- [x] (2026-10-28) Planning refresh reconciles the August scope amendment with the
+  current schema, providers, C13 authorizer and durable execution tools.
+- [x] Existing prerequisites supplied by plans 56–59: capability declaration,
+  immutable catalog, additive registry, acquisition/release, bounded Skill tool
+  loop, durable descriptor pinning and one-off harness integration.
+- [x] Existing generic authorization: `Action/Authorization.hs` and
+  `Capability/Provider.hs` check connection and each exact tool invocation.
+  This is not MCP discovery integration or release/deployment qualification.
+- [ ] M1: implement the selected pure binding contract and fake-lease fixtures; verify the released transport/adapter/auth handoff.
+- [ ] M2: implement the bounded MCP provider and discovery/invocation adapter
+  using existing exact-revision leases and C13.
+- [ ] M3: wire the provider at supported composition roots and prove current
+  durable execution, pinned evidence, cancellation and replay behavior.
+- [ ] M4: hermetic end-to-end proof, failure/security matrix, operator docs and
+  final accepted dependency/deployment evidence.
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
+The old plan's main body contradicted its own August amendment: it still asked
+for agent-authored server configuration and a second `ToolRegistry`/model loop.
+Those common features now exist in `Capability/*`, `Behavior/*` and
+`Execution/Tools.hs`. The actual declaration mirror is `Shikigami.Agent.Decl`.
 
-(None yet.)
+C13 is implemented locally. The Kikan-En request document still says proposed;
+that stale label cannot establish absence of the connection/invocation boundary.
+However, the provider wrapper has no separate discovery callback today. Live MCP
+`tools/list` introduces real IO that must receive its own fresh
+`DiscoverCapabilityTools` decision, as ADR 0036 requires.
 
+Release verification on 2026-10-28 used Hackage version metadata, downloaded source
+archives and upstream peeled tags. `baikai 0.10.0.0` at
+`03140cf60381ac154ebfa86d3bb2208d7df8626c` and `shikumi-tools 0.4.1.1` at
+`db4eb373803552762edc9e86a231dfb529f8105b` still contain no MCP source modules.
+Their owner requests remain proposed:
+`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-2` and
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-1`.
+The selected project uses older Baikai 0.7.2.0 and Shikumi Tools 0.4.0.0.
+Updating a pin alone cannot provide the missing contracts.
+
+`Shikumi.Tool` already supports dynamic tools, and Shikigami composes them. The
+remaining adapter contract is remote protocol/schema/error mapping, not inventing
+a new downstream dynamic-tool sum type. Likewise, closing a connection does not
+undo a remote mutation or make retries safe.
 
 ## Decision Log
 
-Record every decision made while working on the plan.
+- 2026-10-28 follow-up: Adopt ADR 0065's content-derived MCP revision, explicit
+  remote/logical mapping, approved schema contract, per-page discovery authority,
+  protocol ceilings and supported execution matrix. M1 now implements and verifies
+  these decisions instead of choosing them later.
 
-- Decision: `mcpServers` is a flat list of `McpServer` records `{ name, url, transport, auth }`
-  on the agent, defaulting to `[]`.
-  Rationale: It mirrors how `sinks` is already modeled on the agent (`sinks : List Sink`,
-  `default = []`), so an agent that declares no MCP servers is byte-compatible with today's
-  files and needs no migration. The four fields map one-to-one onto baikai's
-  `Baikai.Mcp.Client.McpServerConfig` (name, url, transport, auth), so the loader's job is a
-  pure structural translation with no invented vocabulary.
-  Date: 2026-06-27
-
-- Decision: Connect MCP servers **per run** (connect at the start of a run, close at the end),
-  not via a long-lived pool.
-  Rationale: shikigami runs are short-lived behavior executions dispatched off a queue; a run
-  is already wrapped in a kioku session lifecycle in `runAgentWithMemory`. Per-run connect
-  keeps the lifetime identical to the session, makes cleanup a simple `bracket`, and avoids
-  introducing shared mutable connection state and its concurrency hazards. A pool can be added
-  later as an optimization behind the same `withAgentMcpTools` seam without changing callers.
-  Date: 2026-06-27
-
-- Decision: Cleanup uses `Control.Exception.bracket` so connections close even when the
-  behavior throws or the run fails.
-  Rationale: The run can fail (the `Left runErr` arm of `runAgentWithMemory` already exists);
-  a non-bracket close would leak sockets on every failed run. `bracket` guarantees
-  `closeMcp` runs on both the success and exception paths.
-  Date: 2026-06-27
-
-- Decision: Authorization of *which* MCP servers and tools an agent may use is a **hard
-  prerequisite** for live wiring, owned by the per-action authorization seam in `shinzui/en` /
-  `shinzui/shomei` (plan `shinzui/en:docs/plans/27-per-action-authorization-for-agent-tool-and-sink-dispatch.md`,
-  the "C13" seam referenced in
-  `shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` gap
-  #7). Kikan-En IR-3,
-  `mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`, is the
-  canonical request for exposing that seam to Shikigami MCP connection and
-  exact tool invocation.
-  Rationale: Treating a manifest declaration as permission would let an agent expand its own
-  authority. M1/M2 may establish inert schema and seams, but M3–M5 must not connect, expose,
-  or invoke a server until authorization is available. Check server access before connect and
-  tool access again at dispatch so discovery cannot bypass per-action policy.
-  Date: 2026-07-22
-
-- Decision: Authenticated servers are a conditional hard dependency on
-  baikai C3 (`shinzui/baikai:docs/plans/32-mcp-authentication-headers-tokens-and-oauth.md`).
-  `McpAuth` is declaration-safe: `None | CredentialRef {reference : Text}`. The reference is
-  resolved through plan 37's Settei configuration at the executable composition root into an
-  opaque credential value with no `Show`, `ToJSON`, or `FromJSON` instance. Raw bearer
-  tokens, headers, refresh tokens, and OAuth client secrets are forbidden in Dhall and public
-  API records.
-  Rationale: Unauthenticated servers can be delivered without C3, but a non-`None` reference
-  must fail validation until a released C3 resolver exists. Separating references from secret
-  values prevents agent manifests, logs, validation output, and tool results from exfiltrating
-  credentials.
-  Date: 2026-07-22
-
+- 2026-10-28: Apply the existing plan-56/57 ownership transfer throughout the plan.
+  Retain the historical file/id and local MasterPlan parent; replace the obsolete
+  schema, duplicate registry and single-completion-loop instructions.
+- 2026-10-28: Consume current C13 connection/invocation checks and explicitly gate
+  discovery IO. Keep upstream request reconciliation distinct from proof that an
+  immutable deployable dependency closure and an MCP client exist.
+- 2026-10-28: Preserve ADR 0025's final overlay naming and observation-only durable
+  policy. The adapter maps upstream/native MCP names explicitly; no second final
+  namespace or silent operation-class weakening is introduced.
+- 2026-08-22: Plans 56–59 supersede `mcpServers` with provider-neutral capability
+  requests, operator-owned configuration, common registry, loop and leases. This
+  plan retains MCP transport integration and its authorization/credential proof.
+- 2026-06-27/07-22 (retained intent): bracket remote resources, keep secrets out of
+  agent/journal data, and require per-action authorization. The original per-agent
+  server schema and stand-alone completion loop are superseded.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
-
-(To be filled during and after implementation.)
-
+No MCP transport implementation or runtime test was performed in this refresh.
+The common foundations are delivered elsewhere; this child cannot complete until
+released upstream contracts and the consumer acceptance matrix are demonstrated.
+The local naming, schema binding, authority sequence, limits and supported-mode
+decisions are selected in ADR 0065. Publication of the corresponding upstream
+contracts and consumer acceptance remain delivery gates.
 
 ## Context and Orientation
 
-This section assumes no prior knowledge of this repository. Read it fully before editing.
+An `AgentDecl` in `shikigami-core/src/Shikigami/Agent/Decl.hs` requests stable
+`capabilityOverlays` ids. `Capability/Overlay.hs` defines immutable public descriptor
+values, and `Capability/Catalog.hs` resolves requests against operator policy.
+`Capability/Provider.hs` owns factories keyed by exact capability/revision, concrete
+leases and LIFO cleanup; `Capability/Tools.hs` prevents base-tool replacement and
+maps logical names into the final `overlay__*` namespace.
 
-**What shikigami is.** `shinzui/shikigami` (this repo, at
-`/Users/shinzui/Keikaku/bokuno/shikigami`) is a *declarative agent runtime*: you describe an
-agent in a Dhall file, and when a trigger fires the runtime runs the agent's declared
-*behavior* and sends the result to *sinks*. "Dhall" is a small typed configuration language;
-an agent file is a Dhall value that conforms to a schema. The schema lives at
-`schema/Agent.dhall`.
+A provider returns a descriptor, its tools and a release action. Live endpoint,
+transport, credentials and resources remain behind its factory. The provider must
+match the pinned descriptor; dynamic remote discovery is not permission to alter
+that descriptor. `Behavior/Run.hs` and `Behavior/Skill.hs` already consume a derived
+registry. Do not replace their model loop or widen support to ShikumiProgram/Flow
+by changing behavior dispatch.
 
-**The agent schema (`schema/Agent.dhall`).** This file defines the record types an agent file
-uses. The top-level `Agent` record currently has exactly five fields:
+`Execution/Tools.hs` is also a required consumer: new durable Skill execution
+pins tool bindings/schema digests, reacquires only needed providers, and uses
+accepted tool results after recovery. Existing older workflow branches still use
+the behavior attempt. Both must be qualified; a one-off echo command alone proves
+neither durable adoption nor replay safety. Read current plans
+[82](82-pin-governed-execution-settings-for-agent-assignments.md) and
+[83](83-recover-durable-model-and-tool-turns-with-composed-policies.md) before
+changing this interface, preserving their in-progress work.
 
-```dhall
-let Agent =
-      { Type =
-          { name : Text
-          , description : Text
-          , trigger : Trigger
-          , behavior : Behavior
-          , sinks : List Sink
-          }
-      , default = { description = "", sinks = [] : List Sink }
-      }
-```
+`Action/Authorization.hs` wraps Kikan-En's proof-verifying client.
+`Capability/Provider.hs` authorizes `ConnectCapability` before acquisition and
+`InvokeCapabilityTool` before each logical tool callback. Extend through the same
+authority for discovery; transport credentials never substitute for authorization.
+The project currently includes local Kikan-En contract/client packages. See
+[the dependency cohort](../dependency-cohort.md) for the immutable-closure gap.
 
-`Behavior` is a union with three arms: `Deterministic` (a named rule — not executed by the
-runner today), `ShikumiProgram` (runs a registered typed program), and `Skill` (loads a
-`SKILL.md` and runs a language-model completion). `Sink` is a union of output destinations.
-Example agent files live under `agents/` (e.g. `agents/triage-note.dhall`,
-`agents/proof/heartbeat.dhall`); each begins `let A = ../schema/Agent.dhall` and builds
-`A.Agent::{ ... }`.
-
-**The Haskell mirror (`shikigami-api/src/Shikigami/Api/Agent.hs`).** Every Dhall type in the
-schema has a matching Haskell type in this module, each deriving `FromDhall` (so Dhall values
-decode straight into Haskell). The top-level Haskell record is `AgentDecl` with fields
-`name, description, trigger, behavior, sinks`. **If you add a field to the Dhall `Agent`
-record you must add the same field to `AgentDecl`, or decoding fails at runtime.**
-
-**The loader (`shikigami-core/src/Shikigami/Agent/Loader.hs`).** `loadAgent :: FilePath -> IO
-(Either LoadError AgentDecl)` calls Dhall's `inputFile auto path`. It is fully generic over
-`AgentDecl`'s `FromDhall` instance — it needs **no change** when fields are added, but it is
-where a malformed `mcpServers` value surfaces as a typed `LoadError`.
-
-**The behavior runner (`shikigami-core/src/Shikigami/Behavior/Run.hs`).** This is where a
-behavior actually executes. `BehaviorEnv` is the bundle of things a run needs, built once by
-`newBehaviorEnv :: IO BehaviorEnv`:
-
-```haskell
-data BehaviorEnv = BehaviorEnv
-  { runtime :: !Runtime   -- a handan program runtime
-  , model   :: !Model     -- the baikai model the Skill arm completes with
-  }
-```
-
-The current source still spells these `behaviorRuntime`/`behaviorModel`; plan 13's
-`BehaviorEnv` migration and this plan's registry edit rename them to the direct fields above
-in the same constructor-breaking change. Do not preserve the prefixed accessors in the target
-interface.
-
-`runBehavior :: BehaviorEnv -> AgentDecl -> Value -> IO (Either RunError Value)` dispatches on
-`behavior decl`: the `ShikumiProgram` arm looks up and runs a typed program; the `Skill` arm
-calls `runSkill`; the `Deterministic` arm is unsupported. **There is no tool registry here
-today** — this is the seam we extend.
-
-**The skill arm (`shikigami-core/src/Shikigami/Behavior/Skill.hs`).** `runSkill :: Model ->
-SkillDir -> Value -> IO (Either RunError Value)` reads a `SKILL.md`, builds a baikai `Context`
-with `tools = V.empty`, runs **one** completion via `Baikai.Provider.Registry.completeRequest`,
-and returns the assistant's first text block as `{"reply": <text>}`. **It does not loop and it
-offers the model no tools** — both must change for MCP tools to be callable.
-
-**The run lifecycle (`shikigami-core/src/Shikigami/Agent/Run.hs`).** `runAgentWithMemory ::
-AppEnv -> BehaviorEnv -> AgentDecl -> Value -> IO (Either Text AgentRunResult)` is the run
-seam: it opens a kioku session, recalls prior learnings, calls `runBehavior`, records the
-output as a memory, and completes (or fails) the session. **This is where the MCP
-connect/register/close bracket belongs**, wrapping the `runBehavior` call so connections live
-exactly as long as the run.
-
-**Callers of these seams.** `BehaviorEnv` is constructed by `newBehaviorEnv` in three places:
-`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs` (the queue worker),
-`shikigami-cli/src/Shikigami/Cli/Commands/RunBehavior.hs` (the `run-behavior` CLI command,
-which does **not** need a database — useful for validation), and
-`shikigami-cli/src/Shikigami/Cli/Commands/AgentRun.hs` (the `agent-run` CLI command, which
-goes through `runAgentWithMemory` and needs a Postgres `AppEnv`). The CLI subcommands are
-wired in `shikigami-cli/src/Shikigami/Cli.hs` (`run-behavior --agent FILE [--payload JSON]`
-and `agent-run --agent NAME|FILE`).
-
-**What "tool registry" means and where it lives.** A *tool* is a named function the model can
-ask to run mid-conversation; a *tool registry* is a name-keyed collection of them. shikigami
-does not own this abstraction — it lives in the `shikumi-tools` package of the sibling repo
-`shinzui/shikumi` (at `/Users/shinzui/Keikaku/bokuno/shikumi`), in module `Shikumi.Tool`:
-
-```haskell
-data Tool i o = Tool { ... }          -- a typed tool
-data SomeTool = ...                    -- existential wrapper hiding i/o
-type ToolRegistry                      -- name-keyed map of SomeTool
-mkRegistry      :: [SomeTool] -> ToolRegistry
-registryLookup  :: Text -> ToolRegistry -> Maybe SomeTool
-registryBaikai  :: ToolRegistry -> Vector Baikai.Tool   -- lower to wire tools for a Context
-registryTools   :: ToolRegistry -> [SomeTool]
-runToolCall     :: ... -> ToolRegistry -> Baikai.ToolCall -> Eff es ...   -- dispatch one call
-```
-
-`registryBaikai` is exactly what converts registered tools into the `Vector Baikai.Tool` that
-a baikai `Context`'s `tools` field expects — this is how MCP tools become visible to the model
-in the Skill arm. The ReAct agent loop is in `Shikumi.Agent.ReAct` (`react`,
-`reactWithTrajectory`, `ReActConfig`).
-
-**Important build fact — restated 2026-08-10, because the shape of it changed.** This paragraph
-previously described shikumi and baikai as `source-repository-package` commit pins. That is no
-longer true: `docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md`
-moved the whole co-developed cohort onto Hackage versions selected by a `constraints:` block, and
-`docs/dependency-cohort.md` is now the contract. So the instruction "do not guess a newer commit
-hash" has become "do not add a `source-repository-package` stanza at all" — a co-developed
-dependency is selected by released version, and a stanza is admissible only for a package with no
-release.
-
-What remains true is the gap itself. `shikigami-core.cabal` depends on `shikumi` but not
-`shikumi-tools`, and the constraints block names `shikumi` but not `shikumi-tools`, so this plan
-must add the package to both and give it a version bound consistent with the rest of the cohort.
-As of 2026-08-10 the shikumi family is released at the 2026-08-07 tags (`shikumi 0.3.0.2`,
-`shikumi-tools 0.3.0.2`), and `kioku-core 0.3.0.0` requires `shikumi ^>=0.3.0.1`, so a
-`shikumi-tools` bound in that line is coherent.
-
-The baikai half of the gap is unchanged in substance and worse in specificity than it looks:
-there is no `Baikai.Mcp.*` module in any released baikai, including `0.5.0.0`. That release added
-`Baikai.Agent` and `Baikai.Evidence` — neither is MCP. So there is no version to bump *to*, and
-this is a missing contract rather than a stale pin. Wait for baikai C1/C2 (and C3 for
-authenticated servers) and select the release that carries them, verified against the registry and
-upstream tags, exactly as `docs/dependency-cohort.md` requires.
-
-**The cross-repo surfaces this wires together** (full signatures in Interfaces and
-Dependencies):
-
-- baikai `Baikai.Mcp.Client` — `McpServerConfig`, `McpConnection`, `connectMcp`, `closeMcp`
-  (defined by C1: `shinzui/baikai:docs/plans/30-mcp-transport-and-json-rpc-client-core.md`).
-- baikai `Baikai.Mcp.Tool` — `listTools`, `callTool`, `McpTool` (defined by C2:
-  `shinzui/baikai:docs/plans/31-mcp-tool-discovery-and-invocation.md`).
-- baikai `Baikai.Mcp.Auth` — `McpAuth` credential vocabulary (defined by C3:
-  `shinzui/baikai:docs/plans/32-mcp-authentication-headers-tokens-and-oauth.md`).
-- shikumi adapter — `mcpTools` / `registerMcpTools`, which consume an `McpConnection` and
-  produce `SomeTool`s named `mcp__<server>__<tool>` in a `ToolRegistry` (defined by C5:
-  `shinzui/shikumi:docs/plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry.md`).
-
-**Shared integration contract (normative, from the MasterPlan).** The surfaced tools must be
-named `mcp__<server>__<tool>` where `<server>` is the `name` from `McpServerConfig` and
-`<tool>` is the MCP tool name; the adapter produces these into shikumi's **existing**
-`ToolRegistry`; `connectMcp :: McpServerConfig -> ... -> m McpConnection` is the entry point.
-This plan must match those names exactly so it composes with C5 without renegotiation.
-
+Read [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md),
+[ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md),
+[ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md),
+[ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md),
+[ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md)
+and [workflow versioning](../workflow-versioning.md). These own the existing durable boundary. ADR 0065 adds the selected MCP binding
+contract without changing historical generic descriptor bytes.
 
 ## Plan of Work
 
-The work proceeds in five milestones. M1–M2 are additive and verifiable before any baikai/
-shikumi MCP code exists (they compile against today's pins, with `mcpServers` simply parsed
-and ignored). M3–M5 require the upstream MCP modules and deliver the live behavior. Because
-the upstream plans carry **deferred** intentions, M1–M2 may be implemented now and M3–M5
-unblocked only when C1/C2/C5 and per-action authorization land (plus C3 for authenticated
-servers); the milestones are sequenced so the plan never regresses.
+### M1 — Accept the released producer/consumer contract
 
-### Milestone 1 — The `mcpServers` schema field (Dhall + Haskell mirror + example)
+Use Mori to locate Baikai, Shikumi and Kikan-En source/docs. Verify authoritative
+package metadata, source archives and upstream tags before choosing bounds. Record
+actual public module/signature names here once released; do not compile against
+the old hypothetical `Baikai.Mcp.Client`/`registerMcpTools` sketches or write a
+private downstream JSON-RPC client to bypass the missing owner.
 
-Scope: extend the declaration surface so an agent file *can carry* MCP server declarations and
-the loader decodes them, with no runtime behavior yet. At the end, `schema/Agent.dhall`
-exports `McpServer`, `McpTransport`, and `McpAuth`; the `Agent` record has
-`mcpServers : List McpServer` defaulting to `[]`; `Shikigami.Api.Agent` has the mirrored
-Haskell types and an `mcpServers` field on `AgentDecl`; and an example agent declaring a
-server type-checks and loads.
+The required producer contracts are initialized connection lifecycle, bounded
+transport/protocol failures, discovery and invocation including native remote
+names, dynamic JSON schemas/results and opaque credential resolution. Authenticated
+server support requires the corresponding released auth contract. The current
+request handles are Baikai IR-2, Shikumi IR-1 and
+`mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`.
+Test the real C13 action contract, including `DiscoverCapabilityTools`, rather than
+waiting on or declaring completion from request metadata.
 
-In `schema/Agent.dhall`, add three new definitions before `let Agent`:
+Use the selected binding contract in
+[ADR 0065](../adr/0065-mcp-provider-revisions-bind-the-approved-tool-contract.md).
+Add `Capability/Mcp/Binding.hs` for a pure, versioned `McpBinding` with direct fields:
+capability id, non-secret server id, transport kind, endpoint binding id and a
+sorted list of approved tools. Each approved tool has an explicit `remoteName`,
+`logicalName`, operator-authored description, input JSON schema, optional output
+schema and `Observation` operation class. Endpoint binding ids resolve through
+operator configuration; credentials and live URLs/handles never enter the agent
+or durable snapshot. Changing endpoint identity requires a new endpoint binding
+id and revision; rotating a secret behind the same reference does not. Make the
+endpoint binding id content-derived from the canonical non-secret endpoint/transport
+configuration and verify it when constructing the factory. Reject credentials in
+URLs. A mutable alias resolving to a different endpoint under the same id must
+fail startup, rather than silently redirect a pinned tool to another server.
 
-```dhall
-let McpTransport = < StreamableHttp | Sse >
+For the proof, capability `mcp.echo` maps native remote name `echo` to logical
+`echo`, producing final name `overlay__mcp-echo__echo`. Never split a constructed
+`mcp__*` string to recover names. Require the released adapter to expose native
+name/schema metadata, or a supplied explicit mapping; this is a Shikumi IR-1
+acceptance requirement. Logical names match `[a-z][a-z0-9_-]{0,63}`; enforce unique
+remote/logical names and common final-name collision checks. Unapproved remote
+tools may be discovered but are never exposed or called. Missing approved tools,
+duplicate native names or changed approved input/output schemas fail acquisition.
+Remote descriptions never replace the pinned operator-authored descriptions.
 
-let McpAuth =
-      < None
-      | CredentialRef : { reference : Text }
-      >
+Derive the immutable capability revision as `mcp-v1-` plus the existing
+`Decision.Contract.versionedDigest` over the domain `shikigami.mcp-binding/1` and
+the complete public binding (including limits). Use the existing canonical encoder,
+sort the tool list by logical name, preserve JSON schema arrays and do not invent
+semantic schema equivalence. Reordered object keys compare equal through canonical
+encoding; any other schema difference requires a new binding revision. The existing
+CapabilityDescriptor pins this content-derived revision, so no generic descriptor
+field or old JSON codec changes are needed. Resolve only the exact stored binding;
+recompute its digest at startup and refuse an edited revision. Retain historical
+bindings for pending accepted work. `Execution/Tools.hs` continues deriving its
+existing per-tool schema digest from this same approved schema.
 
-let McpServer =
-      { Type =
-          { name : Text
-          , url : Text
-          , transport : McpTransport
-          , auth : McpAuth
-          }
-      , default = { transport = McpTransport.StreamableHttp, auth = McpAuth.None }
-      }
-```
+Discovery is once per successful acquisition, never an in-place refresh. The
+provider factory captures the current `ActionAuthorizer`; after connection and
+immediately before each list request/page it requests `DiscoverCapabilityTools`
+for the same capability/revision/principal used at Connect. Invocation uses the
+existing wrapper and the logical name. Every network-visible retry repeats the
+appropriate fresh authorization; no token/allow decision is cached in the binding.
+Only the separately resolved operator credential is supplied to the transport.
 
-Then add `mcpServers : List McpServer.Type` to the `Agent` record `Type`, add
-`mcpServers = [] : List McpServer.Type` to the `Agent` `default`, and export the three new
-names in the final record literal. This is deliberately not a mirror of baikai's resolved
-authentication vocabulary: public agent declarations carry references, while the executable
-composition root resolves those references into C3's secret-bearing request configuration.
+The V1 ceilings are 32 approved tools per binding, 128 discovered tools over at
+most 8 pages, 64 KiB per schema and 1 MiB total discovery bytes, 64 KiB arguments,
+256 KiB tool results, 10 seconds each for connect and complete discovery, 30 seconds
+per invocation, and 5 seconds per release. These ceilings are validated operator
+settings that may be lowered; raising them changes the binding format/revision.
+No silent truncation and no adapter-level automatic invocation retry: execution
+policy owns retry/accounting. Overall execution/provider budgets may be tighter.
+Use bounded cancellation with a transport abort action on release timeout; the
+upstream transport must supply this resource-ownership contract before adoption.
 
-In `shikigami-api/src/Shikigami/Api/Agent.hs`, add the mirrored types and field. Each derives
-`FromDhall` (and `ToJSON`/`FromJSON`, matching the module's convention):
+M1 can implement this pure binding validation, digest/name mapping and fake-lease
+fixtures immediately. Record missing releases in
+`docs/evidence/mcp-provider/contracts.md` during implementation: Baikai IR-2 must
+supply lifecycle, bounded transport/auth and abort; Shikumi IR-1 must supply native
+mapping, dynamic schemas and error classification; the existing Kikan-En contract
+must pass connect/discovery/invoke revocation fixtures. These are concrete producer
+handoffs, not permission to implement or send requests to another repository here.
 
-```haskell
-data McpTransport = StreamableHttp | Sse
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
+The early proof is a hermetic provider plus existing overlay/execution consumer:
+connect, authorize discovery, list, validate binding, authorize invocation, call,
+release. This resolves naming/schema/auth/effect-error questions before multiplying
+servers or transports. Until upstream transport/adapter release gates clear, M1
+may produce fixtures and the concrete contract, but M2–M4 may not wire live MCP.
+Coordinate new package adoption with
+[plan 92](92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md);
+require an accepted solve/migration/package-closure handoff before consuming APIs
+outside the current cohort, without blocking independent contract work.
 
-data McpAuth
-  = None
-  | CredentialRef {reference :: !Text}
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
+### M2 — Implement an MCP-backed provider
 
-data McpServer = McpServer
-  { name :: !Text,
-    url :: !Text,
-    transport :: !McpTransport,
-    auth :: !McpAuth
-  }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
-```
+Implement the accepted adapter as a provider factory at the package boundary that
+owns its runtime resources. Reuse generic `CapabilityProvider`/`CapabilityLease`;
+keep transport setup in operator composition/configuration, not AgentDecl. A
+missing or invalid credential reference fails before connection. Resolved secrets
+and proof tokens have no public JSON/Show/journal representation.
 
-Add `mcpServers :: ![McpServer]` to `AgentDecl` and add `McpServer (..)`, `McpTransport (..)`,
-`McpAuth (..)` to the module export list. Note the field name collision: `McpServer.name`
-clashes with `AgentDecl.name`. The module already lives with such overlaps (`Trigger`,
-`Behavior`, `Sink`, `AgentDecl` all use record field selectors via `DuplicateRecordFields`,
-which the existing `Behavior`/`Sink` records rely on); keep using qualified access or
-`OverloadedRecordDot` as the surrounding code does. Verify the file still has
-`DuplicateRecordFields`/`OverloadedRecordDot` enabled (the existing `Behavior` and `Sink`
-unions share field names like `source` and `topic`, so it does).
+The common wrapper authorizes connection before acquisition. The MCP acquisition
+path must additionally obtain a fresh discovery decision immediately before
+`tools/list`, including any later authorized discovery/refresh. Construct logical
+tools only after verifying the remote catalog against the immutable binding.
+Preserve original remote call names and schemas; use the common exact invocation
+authorizer on every tool call, including after an earlier allow or discovery.
 
-The loader (`Shikigami/Agent/Loader.hs`) needs no edit — it is generic over `AgentDecl`.
-`McpAuth` is safe to render only because it contains a reference, never a secret. The
-internal resolved credential/configuration type belongs below plan 37's composition root and
-must intentionally omit `Show`, `ToJSON`, and `FromJSON`; error messages mention the
-reference name and server name, not credential contents.
+Enforce M1's explicit connection/discovery/invocation, pagination, schema and byte ceilings. Fail explicitly on truncation
+that would alter semantics. Bound error messages and do not expose raw protocol
+bodies, credentials or tool inputs/results in logs, validation, public errors or
+ordinary audit coordinates. Protected execution payload storage follows its own
+existing access/retention contract; do not forbid necessary accepted tool-result
+storage or copy it into public logs.
 
-Add a server to one existing example and add a new stub example. In
-`agents/triage-note.dhall` add (after `sinks`):
+Acquisition owns cleanup until a valid lease has been returned. If connection
+succeeds but discovery/auth/catalog validation fails, close that resource locally:
+the outer disposal stack has no successful lease to release yet. Once returned,
+release belongs to the common bracket. Handle exceptions/cancellation during each
+stage, and ensure one bad release does not prevent other leases being released.
+Classify model-visible tool errors separately from infrastructure failures using
+the released adapter, preserving current retry/permanent-denial semantics.
 
-```dhall
-, mcpServers =
-    [ A.McpServer::{ name = "echo", url = "http://127.0.0.1:8765/mcp" } ]
-```
+### M3 — Integrate supported execution paths
 
-Create `agents/proof/mcp-echo.dhall` — a minimal Skill agent declaring one unauthenticated
-server, used by the M5 end-to-end test:
+Install the provider in the worker/durable and one-off composition roots using
+validated operator configuration. Follow the existing exact-revision registry and
+secret resolution patterns; do not hardcode a test server into production defaults.
+Keep denied/unconfigured production behavior fail-closed. Use the existing Skill
+loop and `Execution/Tools.hs`, including selection/admission and bound schema digest.
 
-```dhall
-let A = ../../schema/Agent.dhall
-in  A.Agent::{
-    , name = "mcp-echo"
-    , behavior = A.Behavior.Skill { path = "agents/skills/mcp-echo" }
-    , trigger = A.Trigger.Event { eventType = "mcp.demo" }
-    , mcpServers =
-        [ A.McpServer::{ name = "echo", url = "http://127.0.0.1:8765/mcp" } ]
-    }
-```
+The supported matrix is fixed: one-off Skill and fresh durable Skill executions
+that use the accepted execution child. Old patch snapshots with no overlay
+resolution remain on their old path and do not gain MCP. A retained behavior-attempt
+branch may use MCP only if it already pinned the exact overlay; qualify its
+at-least-once observation behavior separately. The new conversation execution-child
+path is supported once it carries the same pinned binding. Legacy conversation
+branches without overlay resolution, Flow and ShikumiProgram refuse a nonempty MCP
+request at admission. Test each refusal rather than silently omitting tools.
 
-Acceptance: `cabal build all` succeeds; `cabal run shikigami-run-behavior -- --agent
-agents/proof/mcp-echo.dhall` loads the manifest without a parse/type error (it may then fail
-later for lack of a live server — that is expected at M1 and proves the field parsed). A unit
-test in `shikigami-core/test/Main.hs` loads `agents/proof/mcp-echo.dhall` and asserts
-`mcpServers` has one entry whose `name == "echo"`.
+Put binding types and the reusable client/provider adapter in core under
+`Capability/Mcp/Binding.hs` and `Capability/Mcp/Provider.hs`. The factory accepts
+already resolved configuration and authorization functions; it never reads process
+configuration. Both `shikigami-workers` and `shikigami-agent` construct it at their
+composition roots, preserving the existing seven-package dependency arrows.
+Add a default-empty MCP binding catalog to those composition roots; do not duplicate
+factories in the binaries. The source dependency and immutable packaging update is
+owned jointly with plan 92 and the final packaging owner.
 
-### Milestone 2 — Build wiring and the registry seam on `BehaviorEnv`
+Durable providers expose observations only. Reject remote mutations/emissions
+rather than relabeling them safe because sockets close or tool IDs exist. Changes
+to tool schemas/meaning require a new immutable revision and retention of old
+bindings while unfinished accepted work references them. Completed accepted tool
+results must replay without requiring a live server or re-invoking the remote
+observation; pending calls must reacquire the exact binding or fail visibly.
 
-Scope: make `shikumi-tools` and an MCP-capable `baikai` available to `shikigami-core`, and add
-an (initially empty) `ToolRegistry` to `BehaviorEnv` threaded through `runBehavior`. At the
-end the runtime *carries* a tool registry even though nothing populates it yet.
+Any durable body change must follow `docs/workflow-versioning.md`, with real patch
+guards where required, checked DSL/generated updates and retained old result
+codecs. Do not add journal steps simply to manage ephemeral connections: use the
+established attempt/acquisition boundary. Preserve base tools, model policy,
+resource accounting and context/output recovery. Extending a generic registry
+must not bypass the durable execution attempt ledger.
 
-Use `mori registry show`/`docs` to inspect the exact released baikai and shikumi APIs and
-their source. Then verify the chosen release versions against the authoritative package
-registry and upstream release tags. Edit the project/package dependency declarations to use
-the first coherent released versions that contain `Baikai.Mcp.*`, `shikumi-tools`, and the
-adapter; choose bounds from those releases rather than guessing a commit pin from a stale
-local corpus. If those releases do not exist, M3–M5 remain blocked instead of consuming an
-unreleased or mismatched API.
+### M4 — Prove and document the integration
 
-Edit `shikigami-core/shikigami-core.cabal`: add `shikumi-tools` to the library
-`build-depends` (alphabetically near the existing `shikumi`).
+Add a local scripted MCP server using the released supported transport, plus a
+scripted model that calls the observation once. The proof agent requests only the
+capability id; a separate operator fixture configures the endpoint and non-secret
+credential reference. Assert the final overlay name, exact remote invocation,
+echoed reply and release. Keep the tests hermetic; live service credentials are
+not acceptance prerequisites.
 
-Edit `shikigami-core/src/Shikigami/Behavior/Run.hs`:
+Extend `CapabilityProviderSpec`/`CapabilityOverlaySpec` and execution PostgreSQL
+fixtures, or add clearly named `McpProvider` suites where protocol tests need their
+own fixture. Required cases are denied connect (zero network calls), denied
+discovery (no list call), revoked invocation after discovery (no tool call),
+authorizer outage/proof mismatch, missing credentials, unknown/colliding names,
+same-name schema drift, unknown pinned revision, oversize data, timeout,
+partial acquisition, cancellation and release failure. Sentinel secrets and tool
+payloads must not appear in captured public diagnostics.
 
-- Import `Shikumi.Tool (ToolRegistry, mkRegistry)`.
-- Coordinate with plan 13 so the final record uses direct `runtime`, `model`, `options`,
-  `traces`, and `tools` fields; remove the current `behaviorRuntime`/`behaviorModel` names.
-- Add `tools :: !ToolRegistry` to `BehaviorEnv`.
-- In `newBehaviorEnv`, initialize it to `mkRegistry []` (empty) so existing callers are
-  unaffected.
-- In `runBehavior`, pass `tools env` into the `Skill` arm (`runSkill`) and the
-  `ShikumiProgram` arm (see M4). Provide a helper to build a *per-run* `BehaviorEnv` whose
-  `tools` is replaced — `withTools :: ToolRegistry -> BehaviorEnv -> BehaviorEnv` —
-  so M3 can inject the MCP-populated registry without mutating the shared env.
+The durable test accepts a tool result, interrupts/restarts the consumer and proves
+no repeated call for that result; a pending result with a missing or changed
+provider must refuse rather than silently use the current revision. Run two agents
+with different overlays concurrently to prove no shared mutable tool registry or
+lease leakage. Include resource/attempt accounting assertions on the current
+execution path and unchanged empty-overlay/base-tool behavior.
 
-Acceptance: `cabal build all` succeeds with the new dependency; existing tests still pass
-(`cabal test shikigami-core`); behavior is unchanged because the registry is empty.
-
-### Milestone 3 — Connect, register, and close in the run lifecycle (bracket)
-
-Scope: at run time, connect each declared MCP server, register its tools into the run's
-`ToolRegistry`, run the behavior with that registry, and close every connection afterward —
-even on failure. At the end, an agent declaring a (reachable) server has that server's
-`mcp__<server>__<tool>` tools present in the registry the behavior runs against, and the
-connections are closed when the run returns.
-
-This milestone starts only after the authorization seam is available. Resolve the run's
-authenticated principal and authorize each `(principal, server)` before connecting. After
-discovery, retain authorization metadata with each registered tool and check
-`(principal, server, tool)` again immediately before invocation. Denial is a typed run error,
-does not call the remote server, and is recorded without request arguments or credentials.
-Resolve `CredentialRef` through plan 37's Settei-owned resolver at the application boundary;
-do not pass the agent declaration directly to a function that can read environment variables.
-
-Add to `shikigami-core/src/Shikigami/Agent/Run.hs`:
-
-```haskell
--- Connect every declared and authorized MCP server, register its tools into a fresh registry,
--- run the action with a BehaviorEnv carrying that registry, then close all
--- connections (via bracket, so they close on success and on exception alike).
-withAgentMcpTools :: McpRuntime -> Principal -> BehaviorEnv -> AgentDecl -> (BehaviorEnv -> IO a) -> IO a
-withAgentMcpTools runtime principal behEnv decl action =
-  bracket
-    (traverse connectOne (mcpServers decl))      -- acquire: [McpConnection]
-    (traverse_ closeMcp)                          -- release: close each
-    ( \conns -> do
-        reg <- foldM registerMcpTools (mkRegistry []) conns   -- C5 adapter
-        action (withTools reg behEnv)
-    )
-  where
-    connectOne server = do
-      authorizeServer runtime principal server
-      credential <- resolveCredential runtime (auth server)
-      connectMcp runtime (toServerConfig server credential)
-```
-
-`toServerConfig` consumes the public `McpServer` plus a separately resolved opaque
-credential. It copies `name`/`url`, maps `McpTransport`, and hands C3 only the resolved
-authentication value; it never accepts raw `Text` secret material. `registerMcpTools` is the
-C5 adapter that lists the connection's tools and folds them
-into the registry under the `mcp__<server>__<tool>` naming contract.
-
-`McpRuntime` has strict direct fields and owns the Settei-backed credential resolver,
-authorization function, and released baikai client. It has no `Show`/JSON instances. In
-`runAgentWithMemory`, wrap the existing `runBehavior` call so the registry is live only for
-the behavior execution and is torn down with the run:
-
-```haskell
-behaviorE <- withAgentMcpTools mcpRuntime principal behEnv decl (\behEnv' -> runBehavior behEnv' decl payload)
-```
-
-The surrounding session open/recall/record/complete logic is unchanged; only the
-`runBehavior behEnv decl payload` line is replaced. Because `withAgentMcpTools` brackets the
-connections around `runBehavior`, both the success arm (`Right output`) and the failure arm
-(`Left runErr`) of `runAgentWithMemory` run after the connections are already closed.
-
-Also wrap the `run-behavior` command component assigned to `shikigami-workers` by plan 36 in
-`withAgentMcpTools` so MCP tools are exercisable without a database (this is the M5 validation
-path). Note in the Decision Log that the same bracket is reused in both entry points.
-
-Acceptance: with a stub MCP server running (see Concrete Steps), `cabal run shikigami --
-run-behavior --agent agents/proof/mcp-echo.dhall` logs that it connected to `echo` and
-registered N tools, and (with a debug log or the M5 test) `registryNames` includes
-`mcp__echo__<tool>`. Killing the run mid-flight or pointing at an unreachable URL closes/does
-not leak connections (verify the bracket release runs; a failed connect surfaces as a run
-error, not a hang).
-
-### Milestone 4 — Surface `mcp__` tools to the behavior's tool loop
-
-Scope: make the registered tools actually callable by the model. The `Skill` arm currently
-runs a single completion with no tools; replace it with a bounded tool loop that offers the
-registry's tools and dispatches the model's tool calls. The `ShikumiProgram` arm hands the
-registry to the ReAct loop. At the end, an agent's model can request `mcp__echo__<tool>` and
-the result flows back into the conversation.
-
-In `shikigami-core/src/Shikigami/Behavior/Skill.hs`, change `runSkill` to take the registry
-and loop. Signature becomes `runSkill :: Model -> ToolRegistry -> SkillDir -> Value -> IO
-(Either RunError Value)`. Build the `Context` with `tools = registryBaikai reg` (instead of
-`V.empty`). Then loop: run `completeRequest`; if the response contains tool-call blocks, for
-each `ToolCall` use `Shikumi.Tool.runToolCall reg` to execute it, append the result to the
-messages (baikai's `appendToolResult`), and complete again; stop when the model returns text
-with no tool calls, or after a fixed maximum number of iterations (e.g. 8) to bound runaway
-loops. Return the final assistant text as `{"reply": <text>}` as today. `runToolCall` runs in
-shikumi's effect row (`Eff` with `LLM` and `Error ShikumiError`); run it with shikumi's
-`runProgram`/runner to get back `IO` — match whatever discharge `shikumi-tools`'
-`Shikumi.Agent.ReAct` uses (read `Shikumi.Agent.ReAct.react` for the exact runner).
-The registry wrapper checks authorization immediately before `runToolCall`; a previously
-authorized connection does not imply permission for every advertised tool. Bound both the
-number of iterations and tool-result/request sizes using validated domain values. Logs carry
-server/tool names, outcome, duration, and correlation ids only—never tool arguments/results,
-authorization headers, credentials, or arbitrary response bodies.
-
-In `shikigami-core/src/Shikigami/Behavior/Run.hs`, update the `Skill` arm to pass
-`tools env` and the `ShikumiProgram` arm: if the registry is non-empty, run the
-program task via `Shikumi.Agent.ReAct.react` (or `reactWithTrajectory`) configured with the
-registry so the program sees the `mcp__` tools; otherwise keep the current `runProgramTask`
-path. (The current `ShikumiProgram` arm runs a handan task with a stub; threading the registry
-here is the minimal change that makes MCP tools available to program behaviors per the SCOPE's
-"and the ShikumiProgram arm where applicable" clause.)
-
-Acceptance: the M5 end-to-end scenario — a `run-behavior` against `agents/proof/mcp-echo.dhall`
-with a stub MCP server whose single tool echoes its input, where the (stub or real) model
-issues one `mcp__echo__echo` call — returns a `reply` that contains the echoed value, proving
-the tool was actually invoked, not merely listed.
-
-### Milestone 5 — End-to-end demonstration and tests
-
-Scope: prove the whole path with an observable scenario and a regression test. At the end
-there is a repeatable command that starts a stub MCP server, runs the agent, and shows an
-`mcp__` tool being called, plus a test in `shikigami-core/test/Main.hs` that asserts the
-registry contains the surfaced tool name and (against an in-memory fake connection) that
-`withAgentMcpTools` registers and then closes.
-
-Author a tiny stub MCP server for the test (the simplest streamable-HTTP endpoint that
-answers `initialize`, `tools/list` with one `echo` tool, and `tools/call` by echoing) — or, if
-baikai C2 ships an in-memory fake `McpConnection` for its own tests, reuse it to drive
-`registerMcpTools` directly without a socket. Prefer the in-memory fake for the unit test
-(fast, hermetic) and a real stub server for the manual end-to-end transcript.
-
-Acceptance criteria (all observable):
-1. `registryNames` of the run's registry includes `mcp__echo__echo`.
-2. Running `mcp-echo` produces a `reply` containing the echoed payload (tool invoked).
-3. After the run returns, the stub server has received a `close`/the connection is shut (no
-   leaked socket) — assert the bracket release ran (e.g. a counter the fake increments on
-   close, asserted `== 1`).
-
+Document supported modes, observation-only policy, immutable revision upgrades,
+credential setup, C13 configuration, protocol limits, failures and cleanup. Record
+actual release/solve/package evidence and sanitized proof output in this plan.
+A production claim also requires a deployable immutable Kikan-En dependency closure,
+not just sibling packages available on one developer machine.
 
 ## Concrete Steps
 
-All commands run from the repo root `/Users/shinzui/Keikaku/bokuno/shikigami` unless noted.
-shikigami uses a Nix dev shell (see `flake.nix`) that provides `ghc-9.12.4`, `cabal`,
-`psql`/`createdb`, and `just`. Enter it first if your shell is not already inside it.
-
-Step 1 — confirm the baseline builds and the current schema loads:
+Run from the repository root. Inspect current status/cohort before edits and keep
+existing execution/worker-session work intact. Locate dependency owners first:
 
 ```bash
-cabal build all
-cabal run shikigami-run-behavior -- --agent agents/proof/heartbeat.dhall
+mori registry search baikai
+mori registry show shinzui/baikai --full
+mori registry docs shinzui/baikai
+mori registry show shinzui/shikumi --full
+mori registry show shinzui/kikan-en --full
 ```
 
-Expected: a JSON result value printed (the heartbeat program's output), proving the toolchain
-and loader work before any edits.
-
-Step 2 — after the M1 edits, type-check the new schema and example without building Haskell.
-If the `dhall` CLI is on PATH (it is a build dependency, so available in the dev shell):
+Baseline and focused suites use the current Cabal component names:
 
 ```bash
-dhall type --file agents/proof/mcp-echo.dhall
+nix develop --command cabal build all
+nix develop --command cabal test shikigami-core:shikigami-core-test
+nix develop --command cabal test shikigami-core:shikigami-core-postgres-test --test-options='--num-threads=1'
 ```
 
-Expected: the inferred record type prints, including `mcpServers : List …` — no type error.
-If `dhall` is not on PATH, instead run the loader path:
+After M2 adds an `McpProvider` group, target it with:
 
 ```bash
-cabal run shikigami-run-behavior -- --agent agents/proof/mcp-echo.dhall
+nix develop --command cabal test shikigami-core:shikigami-core-test --test-options='--pattern McpProvider'
 ```
 
-Expected at M1: the manifest parses (no `LoadError`); it then fails later because no server is
-running — that downstream failure still proves `mcpServers` decoded.
-
-Step 3 — after M2, rebuild with the new deps and run the existing tests:
+Register fixture modules in the owning package's descriptor/Main and run that
+package's tests if the adapter belongs outside core. Use the actual supported CLI
+and startup configuration in the recorded M4 transcript; the old invented
+`shikigami-mcp-stub` executable is not present and is not a prerequisite.
+At final implementation qualification:
 
 ```bash
-cabal build all
-cabal test shikigami-core
+nix develop --command cabal test all --test-options='--num-threads=1'
+just keiro-gate <pre-change-commit>
+git diff --check
 ```
 
-Expected: build succeeds with `shikumi-tools` now a dependency; all existing tests pass
-(behavior unchanged, registry empty).
-
-Step 4 — after M3–M4, run the end-to-end scenario. In one terminal start the stub MCP server
-(the test helper from M5; adjust the launch command to whatever the helper exposes):
-
-```bash
-cabal run shikigami-mcp-stub -- --port 8765    # the M5 stub server (name it in the .cabal)
-```
-
-In a second terminal run the agent against it:
-
-```bash
-cabal run shikigami-run-behavior -- --agent agents/proof/mcp-echo.dhall \
-  --payload '{"text":"hello mcp"}'
-```
-
-Expected transcript (shape):
-
-```text
-connected mcp server: echo (http://127.0.0.1:8765/mcp)
-registered 1 mcp tool(s): mcp__echo__echo
-{"reply":"echo: hello mcp"}
-closed mcp server: echo
-```
-
-Step 5 — run the regression test:
-
-```bash
-cabal test shikigami-core
-```
-
-Expected: the new `Mcp` test group passes — registry contains `mcp__echo__echo`, the run
-returns the echoed reply, and the fake connection's close-counter is `1`.
-
+The gate is required for durable/domain changes, with the real pre-change commit,
+not an arbitrary HEAD comparison that misses the implementation. This planning
+refresh does not claim any of those runtime checks have passed.
 
 ## Validation and Acceptance
 
-The change is validated by behavior, not compilation. The acceptance scenario:
-
-Given `agents/proof/mcp-echo.dhall` declaring one MCP server `echo` with a single `echo`
-tool, an explicit test grant for the run principal, and the stub MCP server running on
-`127.0.0.1:8765`, when an operator runs
-`cabal run shikigami-run-behavior -- --agent agents/proof/mcp-echo.dhall --payload
-'{"text":"hello mcp"}'`, then:
-
-- the runtime connects to `echo` and registers its tool as `mcp__echo__echo` (observable in
-  the log line and assertable via `registryNames`);
-- the model issues a `mcp__echo__echo` tool call and the run's final output
-  `{"reply": …}` contains the echoed text `hello mcp`, proving the tool was *invoked*, not
-  merely advertised;
-- after the command returns, the stub reports the connection closed (close-counter `== 1`),
-  proving the bracket released even though the run was a normal success; and a second run
-  against an **unreachable** URL fails cleanly with a run error and still closes/never opens a
-  leaked connection.
-
-Automated checks (exact commands): `cabal build all`; `cabal test shikigami-core` (the new
-`Mcp` test group asserts the three criteria in M5 against an in-memory fake `McpConnection`,
-so the suite is hermetic and needs no network). The pre/post contrast that proves
-effectiveness: before this plan, `runSkill` builds a `Context` with `tools = V.empty` and runs
-a single completion, so no MCP tool can ever appear or be called; after it, the same agent's
-registry contains `mcp__echo__echo` and the reply embeds the tool's output.
-
-Security acceptance is explicit: a declared-but-unauthorized server is never connected; an
-unauthorized tool is never invoked even if discovery advertises it; a missing credential
-reference fails before connect; and captured logs, JSON encodings, validation output, and run
-errors contain neither secret values nor tool arguments/results.
-
+Complete only when M1's released contracts, M2's protocol/provider checks, M3's
+supported execution paths and M4's security/recovery matrix pass. A registered name
+or successful standalone echo is insufficient. No `mcpServers` schema addition,
+second model loop, alternate final tool namespace or generic auth replacement is
+part of acceptance. Preserve the empty-overlay behavior and the established
+separation between capability requests and authority.
 
 ## Idempotence and Recovery
 
-The schema and Haskell edits are additive and idempotent: re-applying them is a no-op, and an
-agent file with no `mcpServers` field uses the `[]` default, so existing agents are unaffected
-and need no migration. Re-running `cabal build` / `cabal test` is always safe.
+Connections are ephemeral leases; remote tool effects are independent. Partial
+acquisition closes its own newly opened connection before returning failure;
+successful leases use existing LIFO cleanup on all exits. Durable accepted results
+replay from protected storage without reconnecting. Pending observations may retry
+only under the accepted execution policy and exact pinned binding; at-least-once
+observation is not exactly-once remote mutation.
 
-Connecting MCP servers is the only side-effecting step, and it is bracketed: a partial failure
-(some servers connect, one fails) tears down the already-opened connections via the `bracket`
-release before propagating the error, so no sockets leak and a retry starts from a clean
-state. A run that fails inside the behavior still closes connections (the failure arm runs
-after release). Re-running a failed agent run is safe — connections are per-run, so there is no
-stale shared state to reset; just fix the URL/credentials/stub and run again.
-
-Rollback: because the field defaults to `[]` and the registry defaults to empty, removing the
-`mcpServers` entry from an agent file (or reverting the M3/M4 wiring) returns the runtime to
-its prior single-completion behavior with no schema migration.
-
-
-## Portfolio Reconciliation (2026-07-30)
-
-This note supersedes older dependency-version and placeholder-API wording in this plan.
-
-- Startable slice: M1-M2 may land after plans 36, 37, and 47; follow plan 33's additive
-  declaration-field pattern when it is available.
-- Blocked slice: M3-M5 require Baikai IR-2, Shikumi IR-1, and Kikan-En IR-3
-  (`mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`). The current
-  released Baikai/Shikumi sources do not expose the named MCP modules, and a declaration is
-  never authorization.
-- Authenticated declarations carry only a Settei-resolved credential reference. Raw headers,
-  tokens, OAuth secrets, and authorization decisions never enter Dhall or journaled values.
-- Implement against the released upstream signatures after the requests land; illustrative
-  signatures earlier in this plan are not compatibility shims.
-
-
-## Portfolio Reconciliation (2026-08-05)
-
-The tool catalog this plan declares becomes audit evidence. `AgentArtifactSet` in
-`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` binds a run to a
-tool-catalog digest, and
-`docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` judges a run against it, so a
-verifier outside this system will later prove that the agent's tools were exactly these. A digest
-is only meaningful over a **stable canonical encoding**: the same declared catalog must serialise
-to the same bytes across processes, library upgrades, and map-ordering changes. This plan owns that
-encoding — commit to one explicitly rather than relying on whatever `toJSON` happens to emit, and
-treat a change to it as a wire-format change with a schema-version bump, not an edit. Nothing else
-about this plan changes.
-
+Removing a capability request affects future admission, not an already pinned
+run. Retain old provider revisions/codecs until their pending work is retired;
+revocation still applies freshly at IO boundaries. Roll forward across journal
+changes and do not promise a blind code rollback is safe after new admissions.
 
 ## Interfaces and Dependencies
 
-**Owned and defined by this plan (shikigami).**
+Plans 56–59 are satisfied whole-child prerequisites. They own declarations,
+descriptors, common leases, registry/loop behavior, durable pinning and one-off
+integration. Plan 12 owns the MCP provider, remote/native/logical name mapping,
+discovery binding/auth and producer/consumer proof. It consumes current execution
+bindings, canonical schema digests and C13 rather than defining competing owners.
 
-- `schema/Agent.dhall`: new `McpTransport`, `McpAuth`, `McpServer` types and an
-  `mcpServers : List McpServer.Type` field (default `[]`) on `Agent`, all exported.
-- `shikigami-api/src/Shikigami/Api/Agent.hs`: mirrored `McpTransport`, `McpAuth`, `McpServer`
-  Haskell types and `mcpServers :: ![McpServer]` on `AgentDecl`. Public `McpAuth` is
-  reference-only and may derive Dhall/JSON; the internal resolved credential does not derive
-  `Show` or JSON instances.
-- `shikigami-core/src/Shikigami/Behavior/Run.hs`: `BehaviorEnv` gains
-  `tools :: !ToolRegistry`; `withTools :: ToolRegistry -> BehaviorEnv -> BehaviorEnv`;
-  `newBehaviorEnv` initializes the registry to `mkRegistry []`.
-- `shikigami-core/src/Shikigami/Agent/Run.hs`:
-  `McpRuntime` (credential resolver, authorization, released client),
-  `withAgentMcpTools :: McpRuntime -> Principal -> BehaviorEnv -> AgentDecl ->
-  (BehaviorEnv -> IO a) -> IO a`, and
-  `toServerConfig :: McpServer -> ResolvedCredential -> McpServerConfig`;
-  `runAgentWithMemory`
-  wraps `runBehavior` in `withAgentMcpTools`.
-- `shikigami-core/src/Shikigami/Behavior/Skill.hs`: `runSkill :: Model -> ToolRegistry ->
-  SkillDir -> Value -> IO (Either RunError Value)` with a bounded tool loop using
-  `registryBaikai` (to offer tools) and `runToolCall` (to dispatch).
-- The worker, `run-behavior`, and `agent-run` executable components live in
-  `shikigami-workers` after plan 36; legacy `shikigami-cli` paths in Context describe the
-  starting tree only and are not target locations.
+Baikai IR-2 supplies transport/discovery/invocation/auth; Shikumi IR-1 supplies the
+public MCP/dynamic-tool adapter. These released contracts gate M2–M4. Kikan-En IR-3
+is retained as coordination lineage; current connection/invocation code exists,
+while discovery integration and immutable deployment evidence still need proof.
+The upstream plan artifacts are
+`mori://shinzui/baikai/plans/30-mcp-transport-and-json-rpc-client-core`,
+`mori://shinzui/baikai/plans/31-mcp-tool-discovery-and-invocation`,
+`mori://shinzui/baikai/plans/32-mcp-authentication-headers-tokens-and-oauth`, and
+`mori://shinzui/shikumi/plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry`.
+Their implementation details must be rechecked against released contracts.
 
-**Consumed from baikai (hard dep C1+C2; C3 hard for authenticated servers).** Module
-namespace `Baikai.Mcp`, using a coherent published release verified against the package
-registry and upstream tags after inspecting its source/docs through Mori:
+## Revision Notes
 
-- `Baikai.Mcp.Client` — `data McpServerConfig` (`name`, `url`, `transport`, `auth`),
-  `data McpConnection`, `connectMcp :: McpServerConfig -> … -> m McpConnection`,
-  `closeMcp :: McpConnection -> … -> m ()`. Source of truth:
-  `shinzui/baikai:docs/plans/30-mcp-transport-and-json-rpc-client-core.md` (C1).
-- `Baikai.Mcp.Tool` — `data McpTool`, `listTools :: McpConnection -> m [McpTool]`,
-  `callTool :: McpConnection -> McpToolCall -> m McpToolResult`. Source of truth:
-  `shinzui/baikai:docs/plans/31-mcp-tool-discovery-and-invocation.md` (C2, hard).
-- `Baikai.Mcp.Auth` — `data McpAuth` credential vocabulary (static headers/tokens, OAuth).
-  Source of truth: `shinzui/baikai:docs/plans/32-mcp-authentication-headers-tokens-and-oauth.md`
-  C3 is required before any declaration using `CredentialRef` can run; `McpAuth.None`
-  supports the unauthenticated proof only.
+- 2026-10-28 follow-up: Resolve the review holes with an immutable operator binding,
+  concrete name/schema/auth mapping, finite protocol limits, package ownership and
+  execution-mode rules; retain explicit upstream publication and proof gates.
 
-**Consumed from shikumi (hard dep C5).** Package `shikumi-tools` (add to `cabal.project`
-subdir list and to `shikigami-core.cabal` build-depends):
-
-- `Shikumi.Tool` — `type ToolRegistry`, `mkRegistry :: [SomeTool] -> ToolRegistry`,
-  `registryBaikai :: ToolRegistry -> Vector Baikai.Tool`,
-  `registryLookup :: Text -> ToolRegistry -> Maybe SomeTool`,
-  `registryNames :: ToolRegistry -> [Text]`, `runToolCall :: …`.
-- The C5 adapter — `registerMcpTools :: ToolRegistry -> McpConnection -> IO ToolRegistry`
-  (and/or `mcpTools :: McpConnection -> IO [SomeTool]`), producing tools named
-  `mcp__<server>__<tool>` per the MasterPlan contract. Source of truth:
-  `shinzui/shikumi:docs/plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry.md`.
-  (Match the adapter's final signature when C5 lands; the fold in `withAgentMcpTools` adapts
-  to either the registry-threading or list form.)
-
-**Hard prerequisite for M3–M5.** Authorization of which MCP servers/tools an agent may use
-flows through the per-action authz seam owned by `shinzui/en` /
-`shinzui/shomei` — plan
-`shinzui/en:docs/plans/27-per-action-authorization-for-agent-tool-and-sink-dispatch.md`, the
-"C13" seam recorded in
-`shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md` (gap #7), exposed
-to this runtime through Kikan-En IR-3 at
-`mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-3`. Check the
-server before connection and each tool before dispatch. A manifest declaration never grants
-authority.
-
-**Local platform prerequisites.** HARD depends on
-docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md for API,
-application, infrastructure, and executable ownership. HARD depends on
-docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md for a single startup
-configuration and secret/reference resolution boundary; no library module calls
-`lookupEnv` or stores raw credentials in a public record.
-
-**Build/test toolchain.** Nix dev shell from `flake.nix` (`ghc-9.12.4`, `cabal`, `dhall`,
-`just`, Postgres client). Build: `cabal build all`. Test: `cabal test shikigami-core`. Manual
-end-to-end: `cabal run shikigami-run-behavior -- --agent <file> [--payload <json>]` (no DB
-required) or `cabal run shikigami-agent-run -- --agent <name>` (DB-backed via `just
-create-database` first). Dhall type-check: `dhall type --file <agent>.dhall`.
-
-
----
-
-Revision note (2026-06-27): Initial authoring of this ExecPlan as MasterPlan child C6.
-Sections filled from the current shikigami working tree (schema/Agent.dhall five-field `Agent`
-record; `BehaviorEnv`/`runBehavior` with no registry; `runSkill` single completion;
-`runAgentWithMemory` run lifecycle), the MasterPlan
-`shinzui/baikai:docs/masterplans/6-mcp-support-across-the-agent-stack.md` integration contract
-(the `mcp__<server>__<tool>` naming, `connectMcp`/`McpServerConfig`, `Baikai.Mcp.*` layout),
-and the gap analysis `shinzui/kikan:docs/architecture/evolution/agent-infrastructure-gaps.md`
-(gap #6 places per-agent MCP declaration here; gap #7 originally deferred authz). The
-2026-07-22 review makes that authorization seam a hard live-wiring prerequisite. Key grounded discovery
-recorded as a build fact: shikigami currently pins `shikumi` without `shikumi-tools` and
-`baikai` at a pre-`Baikai.Mcp` commit, so M2 must add `shikumi-tools` and move to a verified
-coherent published release.
-Frontmatter left untouched per instruction.
-
-Revision note (2026-07-22): Made upstream authorization a hard prerequisite for live MCP
-wiring, replaced manifest secrets with Settei-resolved credential references, prohibited
-secret rendering/JSON/logging, and required released dependency verification via Mori plus
-authoritative registries/tags. Added plans 36/37 package and configuration prerequisites.
-
-Revision note (2026-07-30): Repointed the live authorization prerequisite to
-Kikan-En IR-3, the current OKF-profile request for per-action MCP connection
-and exact tool invocation. M1–M2 remain startable; M3–M5 remain blocked.
-
-Revision note (2026-08-10): Re-verified the three upstream gates and corrected a build fact that
-had gone stale.
-
-All three gates are still closed, and the check is recorded with its date so the next reader
-re-checks rather than trusts it. Baikai has no `Baikai.Mcp.*` module in any released version
-including `0.5.0.0` — that release added `Baikai.Agent` and `Baikai.Evidence`, neither of which is
-MCP — so this is a missing contract, not a stale pin, and there is no version to bump to. The
-shikumi package set at its 2026-08-07 tags contains no MCP adapter. Kikan-En IR-3 remains
-`proposed`. M1–M2 stay startable and are now called out as such explicitly, since nothing local
-depends on any of the three.
-
-The build fact was rewritten because the repository changed underneath it. It described shikumi
-and baikai as `source-repository-package` commit pins and told the implementer not to guess a
-newer commit hash. Plan 47 moved the entire co-developed cohort onto Hackage versions selected by
-a `constraints:` block, with `docs/dependency-cohort.md` as the contract, so the correct
-instruction is now not to add a `source-repository-package` stanza at all. The underlying gap is
-unchanged: `shikumi-tools` is in neither the constraints block nor `shikigami-core.cabal`, and
-this plan must add it — at a bound coherent with the released family, which as of 2026-08-10 is
-`0.3.0.2` and satisfies `kioku-core 0.3.0.0`'s `shikumi ^>=0.3.0.1`.
-
-Revision note (2026-08-22): Plan 56 supersedes the proposed agent-authored `mcpServers`
-field with the provider-neutral `capabilityOverlays : List Text` request field. An agent now
-names a stable capability only. MCP endpoint, transport, authentication reference, immutable
-provider revision, and connection factory belong to the operator-owned provider registry;
-none belongs in `schema/Agent.dhall`.
-
-The generic descriptor/catalog vocabulary is owned by
-`docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md`, and
-the shared `ToolRegistry`, bounded model/tool loop, provider registry, acquisition bracket,
-and cleanup rules move to
-`docs/plans/57-acquire-and-release-overlay-leases-around-one-behavior-run.md`. This plan keeps
-the MCP-specific transport adapter, server/tool authorization checks, credential resolution,
-and `mcp__*` naming work. Those live MCP prerequisites remain incomplete; this revision does
-not change the plan's MasterPlan parent and does not claim transport or per-action
-authorization has landed.
+- 2026-10-28: Rebuilt the unfinished scope around delivered overlays/C13 and current
+  durable execution. Removed obsolete schema/registry/loop work; verified remaining
+  released MCP gaps; added explicit discovery, schema/name binding, cleanup,
+  bounded protocol, replay and immutable-closure gates.
+- 2026-08-22: Transferred generic work to plans 56–59; retained MCP-specific scope.
+- 2026-08-05/10: Recorded canonical tool-catalog evidence and checked upstream gaps;
+  the current owners and release snapshot above supersede those historical details.
+- 2026-06-27/07-22/30: Initial C6 plan, credential-reference and authorization gates;
+  historical ownership is preserved without restoring superseded agent-authored
+  server configuration.
