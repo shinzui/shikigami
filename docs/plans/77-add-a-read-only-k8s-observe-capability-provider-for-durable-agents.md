@@ -10,6 +10,23 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-02T19:17:42Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T18:05:24Z
+      verdict: "changes-requested"
+      note: "Review found stale durable execution coverage, missing request confinement and bounded pagination contracts, incorrect rollout completion, and incomplete live validation instructions."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T18:11:46Z
+      verdict: "approved"
+      note: "Post-update review: findings addressed; current execution/provider seams, bounded request/result contracts, acceptance consistency, local links and shell syntax checked. Implementation and live validation remain outstanding."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T18:08:00Z
+      mode: "update"
+      note: "Apply review findings to current durable execution, request confinement, bounded observation semantics, rollout correctness, and reproducible acceptance."
 ---
 
 # Add a read-only k8s.observe capability provider for durable agents
@@ -33,7 +50,8 @@ an agent with `capabilityOverlays = [ "k8s.observe" ]`. When that agent runs as 
 (scheduled, stream, or addressed) run, its model can call seven read-only tools: list workloads,
 describe a rollout, list pods, read pod resource usage, list jobs and cron jobs, list events, and
 read a bounded, redacted slice of a pod's logs. Every tool refuses namespaces the operator did not
-allow, every answer is size-bounded, secrets and environment values are never read, and every call
+allow, every answer is size-bounded, Secret resources are never requested and environment fields
+are never returned, and every call
 still passes Shikigami's fresh per-action authorization check before it touches the API server.
 
 The motivating scenario is recorded as the Kikan use case
@@ -63,6 +81,12 @@ pods of a demo namespace.
 
 ## Surprises & Discoveries
 
+- Observation (2026-10-28 review): fresh leaf Skills now freeze tool bindings at admission and
+  run an execution child; the plan's original single-step-only description is stale.
+  Evidence: `runDurableSkillStep` in `shikigami-core/src/Shikigami/Agent/Workflow.hs` and the fresh
+  overlay case in `shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs`. Milestone 5 now
+  covers that production path as well as the retained legacy fixture.
+
 - Observation (found while writing this plan): the durable worker hard-codes an empty capability
   runtime, so no durable agent can use any overlay today, including `workspace.read`.
   Evidence: `shikigami-workers/src/Shikigami/Workers/Config.hs`, function `agentRunDeps`, sets
@@ -74,9 +98,11 @@ pods of a demo namespace.
 - Decision: Implement a narrow, hand-written Kubernetes REST client on `http-client` and
   `http-client-tls` that decodes only the fields the tools return, instead of depending on the
   generated `kubernetes-api` packages (`mori://codedownio/kubernetes-api`).
-  Rationale: seven read-only GET endpoints do not justify a generated client covering the whole
+  Rationale: seven read-only operations over a fixed set of GET endpoints do not justify a generated client covering the whole
   API, its compile time, or its version-per-cluster package scheme. Decoding only named fields also
-  guarantees that secret-bearing fields such as container `env` values are never materialized.
+  keeps secret-bearing fields such as container `env` out of tool results. Kubernetes still sends
+  full resource objects, and Aeson's JSON parser may materialize omitted fields while decoding;
+  narrow result types are not a claim that those bytes never enter process memory.
   Date: 2026-10-02
 
 - Decision: The provider runs in-process in the same cluster as the services it observes,
@@ -123,6 +149,14 @@ pods of a demo namespace.
   model should be able to say "metrics unavailable" and continue with the other tools.
   Date: 2026-10-02
 
+- Decision: Exercise both the current execution-child path and the retained coarse-step path,
+  with no workflow-body change planned. Confine requests to validated resource names at one HTTPS
+  origin, refuse redirects, and bound both upstream bodies and final encoded tool results.
+  Rationale: the 2026-10-28 review found stale integration guidance and underspecified bounds.
+  A bounded first page is sufficient for V1 when incompleteness is explicit; it must never be
+  presented as a complete namespace inventory or global newest-event ordering.
+  Date: 2026-10-28
+
 
 ## Outcomes & Retrospective
 
@@ -145,7 +179,8 @@ described in [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additiv
 In plain terms: the agent declaration lists capability names it wants
 (`capabilityOverlays = [ "workspace.read" ]`); an operator-owned **catalog** decides whether that
 name exists and is allowed; a **provider** turns the allowed name into live tools for the length of
-one run (a **lease**) and cleans up afterwards. The public, serializable description of a
+one bracketed use (a **lease**) and cleans up afterwards. That use is a whole legacy behavior
+attempt or a fresh execution's menu/dispatch phase. The public, serializable description of a
 capability is a `CapabilityDescriptor`: a capability id (lowercase dotted, for example
 `k8s.observe`), an immutable revision word (for example `1`), and a list of logical tool names,
 each tagged with an operation class: `Observation`, `IdempotentMutation`, or `IrreversibleEmission`.
@@ -184,14 +219,21 @@ with `throwError (ProviderFailure text)` from `Shikumi.Error`.
 
 The durable path is in `shikigami-core/src/Shikigami/Agent/Workflow.hs`.
 `resolveCapabilitiesForRun` resolves the declaration's overlays against `(.capabilities) deps` with
-`mode = Durable`. `runSessionedAgent` then runs a `Skill` behavior inside the single journaled step
-`run-behavior-v2`, calling `runBehaviorWithCapabilities`, which calls `withCapabilityOverlays`.
-Because the whole behavior is one journaled step, tool calls are not repeated when a completed run
-replays; they may be repeated only if the process dies mid-step and the step is retried, which is
-harmless for read-only tools. The `AgentRunDeps` value is built in
+`mode = Durable`. Eligible fresh leaf Skills use the `shikigami-durable-execution-v1` branch:
+`runDurableSkillStep` freezes the resolved overlays and tool bindings in `admit-skill-execution`
+and awaits the execution child. `shikigami-core/src/Shikigami/Execution/Tools.hs` uses
+`describeExecutionTools` to acquire and release a menu lease at admission, then
+`withExecutionTools` reacquires the exact provider for unfinished tool dispatch. An observation
+may be repeated during recovery; an accepted completed result is read without invoking the
+provider again. Old patch snapshots retain `run-behavior-v2` and its whole-behavior lease bracket.
+Neither acquisition nor menu description may issue a Kubernetes request: only an authorized tool
+callback does so. The `AgentRunDeps` value is built in
 `shikigami-workers/src/Shikigami/Workers/Config.hs` by `agentRunDeps`, which currently passes
-`emptyCapabilityRuntime`. `WorkerEnv` (same file, around line 88) is constructed in
-`shikigami-workers/src/Shikigami/Workers/Command/Worker.hs` (around line 161).
+`emptyCapabilityRuntime`. `WorkerEnv` (same file) is constructed in
+`shikigami-workers/src/Shikigami/Workers/Command/Worker.hs`. Provider wiring needs no new workflow
+step. Any implementation that does change a workflow body must first follow
+[workflow versioning](../workflow-versioning.md), declare the required real patch in `domain/`,
+and pass `just keiro-gate`; do not disable the current execution branch to make the proof pass.
 
 **Authorization.** `Shikigami.Action.Authorization`
 (`shikigami-core/src/Shikigami/Action/Authorization.hs`) provides `ActionAuthorizer`,
@@ -245,10 +287,12 @@ credentials stay opaque and are never logged or journaled; the token is read int
 value and never shown.
 [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md), summarized
 above. [ADR 0003](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md), summarized in
-the Decision Log.
+the Decision Log. [ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md)
+requires frozen admission bindings and provider-free reads of completed results, as described above.
 
 **Related plans and requests.** `docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md`
-(not started) owns packaging; this plan assumes an operator can already run `shikigami-worker` in a
+owns packaging and has delivered role builds while host acceptance remains open; this plan assumes
+an operator can already run `shikigami-worker` in a
 pod and does not build images or manifests beyond the RBAC example. IR-2,
 `docs/improvement-requests/authorized-cross-cluster-diagnostic-tools.md`, owns the cross-cluster
 variant.
@@ -271,11 +315,13 @@ Create `shikigami-core/src/Shikigami/Capability/Kubernetes/Client.hs`. Define a
 `KubernetesEndpoint` record with `apiServerUrl :: !Text`, `tokenFile :: !FilePath`, and
 `caFile :: !FilePath`, and a function `inClusterEndpoint :: IO (Either KubernetesClientError
 KubernetesEndpoint)` that reads `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT` and uses
-the standard service-account paths. Define `newKubernetesClient :: KubernetesEndpoint -> Int -> IO
+the standard service-account paths (bracket an IPv6 host when constructing its URL). Define
+`newKubernetesClient :: KubernetesEndpoint -> Int -> IO
 (Either KubernetesClientError KubernetesClient)` (the `Int` is the request timeout in seconds). It
 reads the CA file with `Data.X509.CertificateStore.readCertificateStore` (package
-`crypton-x509-store`), builds `Network.TLS.ClientParams` whose `clientShared` uses that store as
-`sharedCAStore` and whose `clientSupported` keeps the library defaults, wraps them as
+`crypton-x509-store`), builds verified `Network.TLS.ClientParams` whose `clientShared` uses that
+store as `sharedCAStore` and whose `clientSupported` uses the library's recommended cipher/version
+configuration (verify the constructor's defaults rather than assuming they are populated), wraps them as
 `Network.Connection.TLSSettings` (package `crypton-connection`), and creates one `Manager` with
 `Network.HTTP.Client.TLS.mkManagerSettings` and `newTlsManagerWith`. The build plan already
 resolves `crypton-connection` 0.4.6, `crypton-x509-store` 1.9.0, `tls` 2.4.4, and `data-default`
@@ -288,20 +334,52 @@ HTTP 401, 403, 404, timeouts, TLS failures, and decode failures to distinct
 `KubernetesClientError` constructors. The token value must never appear in a `Show` instance, log
 line, or error text; give the token a newtype without `Show` or with a redacting `Show`.
 
+Validate the endpoint before reading credentials: HTTPS only, a non-empty host and valid port,
+and no userinfo, query, fragment, or non-root path. All requests use that origin, method GET,
+and fixed resource-path builders. Disable redirects (`redirectCount = 0`) and automatic status
+exceptions; classify status codes explicitly. Use bounded streaming reads (4 MiB per JSON body)
+with an overall request deadline including body consumption; a chunked or slowly trickling body
+must not evade the byte or time limit. Close the response on all paths, propagate asynchronous
+cancellation, and sanitize errors to fixed categories rather than rendering requests, exceptions,
+remote bodies, or decoder excerpts. See the corresponding policy in
+`shikigami-core/src/Shikigami/Sink/Http.hs` and ADR 0026. Missing, empty, or unreadable token files
+fail without issuing an anonymous request; trim the mounted token's trailing newline.
+
+Use Mori to inspect `mori://snoyberg/http-client/packages/http-client-tls` and the TLS/connection
+dependencies before implementing the custom-CA constructor. Preserve certificate-chain and
+hostname verification and a supported cipher configuration; prove this with successful trusted-CA
+and failing wrong-CA/wrong-host tests. The versions above are existing `cabal.project` pins, not a
+claim about latest releases. Before changing any pin or adding a compatibility workaround, compare
+the authoritative Hackage release and upstream tags; this plan does not require a cohort upgrade.
+
+Add a test-only client construction seam for a loopback Warp server using synthetic credentials;
+it must not be selectable through production configuration. Use it for transport/status tests,
+including a redirect to a second server that receives zero requests, token rotation between two
+requests, body overflow, timeout, and cancellation. Test HTTPS verification separately with a
+local TLS fixture or the cluster proof. Do not make production `explicit` mode accept HTTP merely
+to reuse `testWithApplication`.
+
 Add an administrative verb in `shikigami-server/src/Shikigami/Server/Command.hs` (and a module
-`shikigami-server/src/Shikigami/Server/Command/K8sObserve.hs`), following how the existing `grants`
+`shikigami-server/src/Shikigami/Server/Command/K8sObserve.hs`, registered in
+`shikigami-server/shikigami-server.cabal`), following how the existing `grants`
 verbs are structured: `shikigami k8s-observe check` loads configuration (Milestone 4 adds the keys;
 for this milestone accept the explicit endpoint through the same environment variables Milestone 4
 will bind, listed under Interfaces), builds the client, and for each allowed namespace performs
-`GET /api/v1/namespaces/<ns>/pods?limit=1`, printing one line per namespace. Prove it on `kind` as
-shown in Concrete Steps. If custom-CA TLS cannot be made to work with these libraries, record the
+`GET /api/v1/namespaces/<ns>/pods?limit=1`, printing one line per namespace without claiming a
+total pod count. This is an explicit operator credential check, not an agent tool, and uses
+Kubernetes RBAC without a Kikan decision. It checks pod-list access only, not metrics or every
+tool permission. Print all namespace results; exit 0 only if all succeed, 1 for a probe failure,
+and 2 for invalid or disabled configuration. Write the example RBAC manifest during this milestone,
+before its first use in Concrete Steps. Prove it on `kind` as shown there. Once Milestone 4 lands,
+remove the temporary environment parser and use the same resolved Settei configuration as the
+worker. If custom-CA TLS cannot be made to work with these libraries, record the
 evidence in Surprises & Discoveries and stop; do not fall back to disabling certificate
 verification.
 
 
 ### Milestone 2: Typed, bounded observations
 
-At the end of this milestone, pure Haskell functions return small, model-friendly summaries of
+At the end of this milestone, typed Haskell IO functions return small, model-friendly summaries of
 cluster state, and tests prove the bounds, the namespace allow-list, and log redaction without any
 cluster.
 
@@ -309,18 +387,33 @@ Create `shikigami-core/src/Shikigami/Capability/Kubernetes/Observe.hs`. Define a
 `KubernetesObserveScope` record holding the `KubernetesClient`, the allowed namespaces as a
 `Set Text`, and the limits (`maxLogLines`, `maxLogBytes`, `maxItems`). Every function first checks
 the namespace against the allow-list and returns `NamespaceNotAllowed ns` before any HTTP call.
+Validate namespace and container names as Kubernetes DNS labels and pod/deployment names as DNS
+subdomains before building paths. Reject slash, backslash, percent escapes, dot segments, query
+and fragment delimiters, control characters, and oversized names rather than interpolating them
+into a URL. Query parameters use the HTTP library's encoder, never text concatenation. Bound
+selectors to 4096 UTF-8 bytes; require positive `tailLines`, clamp it to `maxLogLines`, and accept
+`sinceMinutes` only in 1..1440 so conversion to seconds cannot overflow. Test invalid inputs at
+the observation boundary as well as through tools, with zero requests recorded.
 Define one function per observation:
 
 `listWorkloads` reads `GET /apis/apps/v1/namespaces/<ns>/deployments` and `.../statefulsets` and
 returns, per workload: kind, name, desired, ready, updated and available replicas, container
 images, `metadata.generation` versus `status.observedGeneration`, and the `Available` and
-`Progressing` condition statuses and reasons.
+`Progressing` condition statuses and reasons where the resource supplies them. Use optional
+fields for unsupported status information, especially StatefulSet conditions; absence is not
+evidence that a workload is healthy or unhealthy.
 
 `describeRollout` reads one deployment and the replica sets selected by its
-`spec.selector.matchLabels` (`GET .../replicasets?labelSelector=...`) and returns the revision
+full `spec.selector` (both `matchLabels` and `matchExpressions`, encoded as a label selector),
+then filters them by the deployment UID in their controller `ownerReferences`. It returns the revision
 (annotation `deployment.kubernetes.io/revision`), images, and ready counts of each replica set,
-newest first, plus whether the rollout is complete (updated equals desired, available equals
-desired, and observed generation is current).
+newest first using numeric revisions, plus whether the rollout is complete: observed generation
+is current, updated and available replicas equal desired, and total replicas equal updated replicas
+(no old replicas remain). Missing replica counters mean zero; an unobserved generation never
+counts as complete. Include deadline-exceeded and paused state in the summary. Cover a surge
+where updated and available equal desired but total is larger, overlapping selectors owned by
+another deployment, expression selectors, and a scaled-to-zero deployment. This matches the
+[Kubernetes completion conditions](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#complete-deployment).
 
 `listPods` reads `GET /api/v1/namespaces/<ns>/pods` with an optional `labelSelector` and returns,
 per pod: name, phase, node, start time, and per container: name, image, ready, restart count,
@@ -329,7 +422,10 @@ and resource requests and limits. Never decode `env`, `envFrom`, `volumes`, or a
 
 `podMetrics` reads `GET /apis/metrics.k8s.io/v1beta1/namespaces/<ns>/pods` and returns CPU (in
 millicores) and memory (in MiB) per container. A 404 or 403 becomes `available = False` with a
-reason, as recorded in the Decision Log.
+reason, as recorded in the Decision Log. Forward the optional label selector. Parse Kubernetes
+quantity suffixes with exact decimal/rational arithmetic before conversion; fixtures must include
+CPU `n`, `u`, `m`, and whole cores, and memory plain bytes, decimal units and binary `Ki`/`Mi`/`Gi`.
+Never interpret an unrecognized quantity as zero; return a bounded decode failure.
 
 `listJobs` reads `GET /apis/batch/v1/namespaces/<ns>/cronjobs` and `.../jobs` and returns, per
 cron job: schedule, suspend flag, last schedule time, last successful time, and active count; per
@@ -338,14 +434,36 @@ counts, and the `Complete` or `Failed` condition with reason.
 
 `listEvents` reads `GET /api/v1/namespaces/<ns>/events` (with `fieldSelector=type=Warning` when
 `warningsOnly` is set) and returns type, reason, message, involved object kind and name, count, and
-last timestamp, filtered to the last `sinceMinutes` (default 60) and sorted newest first.
+last timestamp (prefer `series.lastObservedTime`, then `lastTimestamp`, `eventTime`, and
+`metadata.creationTimestamp`), filtered to the last `sinceMinutes` (default 60) and sorted newest
+first among the fetched items. Inject the observation time into filtering tests for determinism.
 
 `readLogs` reads `GET /api/v1/namespaces/<ns>/pods/<pod>/log` with `container`, `tailLines`
 (clamped to `maxLogLines`), `sinceSeconds`, `previous`, and `limitBytes` (set to `maxLogBytes`),
-then applies `redactLogText` and returns the lines plus a `truncated` flag.
+then applies `redactLogText` and returns the lines plus a `truncated` flag. Never set `follow`.
+Enforce the byte limit locally as well as in the query: the
+[log API](https://kubernetes.io/docs/reference/kubernetes-api/core/pod-v1/#read-log)
+may return slightly more or fewer bytes than requested and can cut a final line. Decode UTF-8
+without exposing raw decode errors, discard an incomplete boundary line before redaction, and
+reapply the byte bound after redaction, which can expand text. Mark `truncated` conservatively
+when the byte/line ceiling is reached or a boundary line is discarded; it means the excerpt may
+be incomplete, not that the client proved how many older lines exist.
 
-Every list result is capped at `maxItems` entries with a `truncated` flag, and each returned record
-type derives `ToJSON`. Put the redaction rules in
+Every collection request asks for `limit=maxItems`; V1 fetches one page per endpoint and never
+follows `metadata.continue`. A non-empty continuation token or local item removal sets
+`truncated = True`, even when fewer than `maxItems` items survive filtering. Multi-resource
+answers have one combined item budget, preserve resource kind, and OR their truncation flags.
+Events and replica sets are sorted only within this bounded sample; do not describe them as a
+complete cluster history. A server that ignores `limit` still faces the 4 MiB streaming bound and
+local item cap. The optional metrics API is subject to these same local bounds. See
+[Kubernetes pagination](https://kubernetes.io/docs/reference/using-api/api-concepts/#retrieving-large-results-sets-in-chunks).
+
+Each returned record type derives `ToJSON`; final encoded results, including nested containers,
+messages and JSON escaping, must fit a fixed 128 KiB ceiling, matching the existing workspace
+provider's response budget. Drop whole list entries or complete redacted log lines with
+`truncated = True` until the result fits; if an indivisible result cannot fit, return a stable
+bounded response-too-large error. Do not slice encoded JSON. These constants are V1 semantics,
+not agent-controlled limits. Put the redaction rules in
 `shikigami-core/src/Shikigami/Capability/Kubernetes/Redact.hs` as `redactLogText :: Text -> Text`.
 It replaces the password part of URLs with credentials (`scheme://user:secret@host` becomes
 `scheme://user:[REDACTED]@host`), values after `password=`, `passwd=`, `secret=`, `token=`, and
@@ -361,6 +479,13 @@ that serves the fixtures and records request paths, and assert: a disallowed nam
 request; `tailLines` is clamped; `maxItems` truncation sets the flag; metrics 404 yields
 `available = False`; a 403 maps to the forbidden error; and each redaction rule works.
 
+Also cover continuation with a short page, servers ignoring `limit`, combined-list and encoded
+byte ceilings, nested container arrays, partial UTF-8/log lines, redaction expansion, and the
+rollout and quantity cases above. Include synthetic statefulset, replica-set, metrics and log
+fixtures where the minimal cluster does not supply them. Register new test modules in the Cabal
+suite and `shikigami-core/test/Main.hs` under a `Kubernetes` group, and add fixtures to
+`extra-source-files` so source distributions retain them.
+
 
 ### Milestone 3: The k8s.observe capability
 
@@ -375,7 +500,9 @@ has id `k8s.observe`, revision `1`, and seven `Observation` tools named `list_wo
 built with `mkTool`, one per Milestone 2 function, each with a precise description that names the
 namespace requirement and the limits, and whose `release` is `pure (Right ())` because the HTTP
 manager is shared for the life of the process. `acquire` checks only that the token and CA files
-are still readable and otherwise returns `CapabilityAcquireError` with a bounded message. Tool
+are still readable and otherwise returns `CapabilityAcquireError` with a bounded message. It
+performs no HTTP probe. The process composition root brackets the manager and closes it after
+worker loops drain; provider lease release does not close the shared manager. Tool
 handlers map `NamespaceNotAllowed` and bad input to `ValidationFailure` and transport, 401, 403, and
 5xx failures to `ProviderFailure`, mirroring `runWorkspaceTool` in `Workspace.hs`.
 
@@ -393,7 +520,8 @@ case that composes the overlay through `withCapabilityOverlays` using
 `overlay__k8s-observe__list_pods` with `{"namespace": "demo"}` against the Warp fake API server,
 and asserts that the tool result contains the fixture's pod names. Add a second case that uses an
 `ActionAuthorizer` returning `ActionPolicyDenied` for `InvokeCapabilityTool` and asserts that the
-fake server receives no request. Add a lease-validation case to `CapabilityProviderSpec.hs`
+fake server receives no request. Also deny `ConnectCapability` and prove acquisition is never
+entered. Add a lease-validation case to `CapabilityProviderSpec.hs`
 asserting the lease's tool names equal the descriptor's.
 
 
@@ -412,6 +540,7 @@ a non-empty `namespaces` list. Limits have defaults: `max_log_lines` 200 (range 
 `request_timeout_seconds` 10 (range 1 to 60). Partial configuration (for example `explicit` without
 `ca_file`) must fail configuration resolution with a clear message, as authorization configuration
 already does. The exact keys and environment variables are listed under Interfaces.
+Trim and validate each namespace, reject empty elements and wildcard names, and remove duplicates.
 
 In `shikigami-workers/src/Shikigami/Workers/Config.hs`, add a field `capabilities ::
 !CapabilityRuntime` to `WorkerEnv`, add an accessor `envCapabilities` in the same style as the
@@ -444,28 +573,40 @@ Extend `shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs` with a dura
 declaration equivalent to the proof agent, using the stub or scripted model provider, the Warp fake
 API server, and `allowAllActionAuthorizerForTests`. Assert the run succeeds, the
 `resolve-capability-overlays` step journaled a resolved set containing `k8s.observe` revision `1`,
-and the fake server saw exactly one pods request.
+and the fake server saw exactly one pods request in a successful no-retry run. Follow the existing
+fresh-overlay case: register the execution projection catalog, ensure the run queue, observe the
+parent suspend, drive the execution child using `driveExecutionChild` from
+`shikigami-core/test-postgres/Shikigami/ExecutionSelectionWorkflowSpec.hs`, then resume the parent.
+Use a scripted model that actually calls `list_pods`; a generic stub returning text is insufficient.
+Assert the fresh journal has `admit-skill-execution` and no `run-behavior-v2`. After completion,
+resume with the provider removed and assert the accepted result remains readable with no further
+HTTP request. Separately use the existing `runLegacyAgentRunWorkflow` fixture for a retained
+coarse-step run. Keep all new PostgreSQL test names under a `k8s` group so the focused command
+below selects real tests. No workflow body edits should be necessary.
 
 Write `docs/operations/k8s-observe.md`. It must contain: what the capability can and cannot see;
 the RBAC manifest from Interfaces with an explanation of why it excludes Secrets and `pods/exec`
 and must not be a wildcard; the configuration keys; the Kikan-En policy relationships required
 (connect `k8s.observe`/`1`, invoke each of the seven tools) with a pointer to
 `docs/operations/action-authorization.md`; the warning that log lines are sent to the model
-provider and redaction is best-effort; and a troubleshooting table mapping `check` output (401,
-403, TLS failure, metrics unavailable) to causes. Link it from `README.md`'s documentation list and
-from `docs/user/` where overlays are described.
+provider and redaction is best-effort (event messages and other free text can also contain
+application data); and a troubleshooting table distinguishing `check` failures (401, 403, TLS)
+from tool results such as metrics unavailable. Link it from `README.md`'s documentation list and
+`docs/user/skills.md`. Preserve that user-document bundle's metadata/log conventions when editing.
 
 Run the live `kind` validation in Concrete Steps. If a Kikan-En and Shomei instance is available,
 run the proof agent through `shikigami-worker` with `authorization.actions.mode = kikan` and record
-the transcript. If not, record in Surprises & Discoveries that the live durable path was proven only
-through `shikigami k8s-observe check` plus the PostgreSQL test, and leave a Progress item for the
-Kikan-backed run.
+the transcript. If not, record the unavailable prerequisites in Surprises & Discoveries and leave
+Milestone 5 incomplete with a handoff note. A live credential check plus a fake-server PostgreSQL
+test proves two components separately; it does not prove a live authorized durable run. Do not mark
+the use-case feature delivered before that remaining acceptance is met.
 
 
 ### Completion
 
-Write `docs/adr/0039-kubernetes-observation-is-a-same-cluster-read-only-overlay.md` in the existing
-ADR format, capturing: same-cluster, in-process observation bounded by RBAC and a namespace
+Create the Kubernetes observation ADR using the next unused filename number at implementation
+time, following `docs/adr/README.md`; `0039` already belongs to deployment packaging. This is a
+plain Markdown corpus, not a profiled OKF bundle. Capture same-cluster, in-process observation bounded by RBAC and a namespace
 allow-list; no Secrets, exec, or arbitrary paths; narrow hand-written client; structured
 metrics-unavailable answers; and IR-2 as the cross-cluster path. Update the roadmap
 `docs/roadmap.md` open-plan table, and update the `k8s-observe-capability` feature status in
@@ -475,10 +616,11 @@ metrics-unavailable answers; and IR-2 as the cross-cluster path. Update the road
 ## Concrete Steps
 
 All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/shikigami` inside the
-development shell (`nix develop`) unless stated otherwise. The co-developed Kikan-En checkout must
-exist at `../kikan-project/kikan-en`, as `cabal.project` requires.
+development shell (`nix develop`) unless stated otherwise. The co-developed checkout for
+`mori://shinzui/kikan-en` must exist at `../kikan-project/kikan-en`, as `cabal.project` requires.
 
-Build and run the fast tests after each milestone:
+Build and run the applicable focused tests at each milestone boundary; the new Kubernetes test
+group exists from Milestone 1 onward, and a zero-test selection is not a pass:
 
 ```bash
 cabal build all
@@ -490,19 +632,24 @@ Milestone 1 and 5 local cluster setup. `kind` and `kubectl` are not in the devel
 a temporary Nix shell. Docker (or a compatible runtime) must be running.
 
 ```bash
-nix shell nixpkgs#kind nixpkgs#kubectl
-kind create cluster --name shikigami-observe
+nix shell nixpkgs#kind nixpkgs#kubectl --command zsh
+umask 077
+export K8S_OBSERVE_PROOF_DIR="$(mktemp -d)"
+export KUBECONFIG="$K8S_OBSERVE_PROOF_DIR/kubeconfig"
+kind create cluster --name shikigami-observe --kubeconfig "$KUBECONFIG"
 kubectl create namespace demo
 kubectl -n demo create deployment web --image=nginx:1.27 --replicas=2
 kubectl -n demo create cronjob tick --image=busybox:1.36 --schedule='*/1 * * * *' -- sh -c 'echo tick; date'
+kubectl -n demo rollout status deployment/web --timeout=120s
+kubectl -n demo create job tick-proof --from=cronjob/tick
 kubectl -n demo create serviceaccount shikigami-observer
 kubectl apply -f docs/operations/k8s-observe-rbac.example.yaml   # the Role/RoleBinding from Interfaces, namespace demo
-kubectl -n demo create token shikigami-observer --duration=1h > /tmp/k8s-observe-token
-kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-shikigami-observe")].cluster.certificate-authority-data}' | base64 -d > /tmp/k8s-observe-ca.crt
+kubectl -n demo create token shikigami-observer --duration=1h > "$K8S_OBSERVE_PROOF_DIR/token"
+kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-shikigami-observe")].cluster.certificate-authority-data}' | base64 -d > "$K8S_OBSERVE_PROOF_DIR/ca.crt"
 export SHIKIGAMI_K8S_OBSERVE_MODE=explicit
 export SHIKIGAMI_K8S_OBSERVE_API_SERVER_URL="$(kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-shikigami-observe")].cluster.server}')"
-export SHIKIGAMI_K8S_OBSERVE_TOKEN_FILE=/tmp/k8s-observe-token
-export SHIKIGAMI_K8S_OBSERVE_CA_FILE=/tmp/k8s-observe-ca.crt
+export SHIKIGAMI_K8S_OBSERVE_TOKEN_FILE="$K8S_OBSERVE_PROOF_DIR/token"
+export SHIKIGAMI_K8S_OBSERVE_CA_FILE="$K8S_OBSERVE_PROOF_DIR/ca.crt"
 export SHIKIGAMI_K8S_OBSERVE_NAMESPACES=demo,kube-system
 cabal run shikigami -- k8s-observe check
 ```
@@ -511,15 +658,21 @@ Expected output (`kube-system` is configured but not granted, which proves the R
 
 ```text
 k8s.observe  mode=explicit  server=https://127.0.0.1:<port>
-demo         ok          list pods allowed (2 pods)
+demo         ok          list pods allowed
 kube-system  forbidden   the service account cannot list pods in this namespace (HTTP 403)
 ```
 
-Capture fixtures for Milestone 2 from the same cluster, then scrub them:
+The expected command exit status is 1 because one namespace is forbidden. The dedicated
+`KUBECONFIG` confines every command to the disposable cluster. For a second all-success check,
+set `SHIKIGAMI_K8S_OBSERVE_NAMESPACES=demo`; expect exit 0. Capture fixtures for Milestone 2 from
+the same cluster, then scrub them:
 
 ```bash
+mkdir -p shikigami-core/test/fixtures/k8s
 kubectl get --raw /api/v1/namespaces/demo/pods > shikigami-core/test/fixtures/k8s/pods.json
 kubectl get --raw /apis/apps/v1/namespaces/demo/deployments > shikigami-core/test/fixtures/k8s/deployments.json
+kubectl get --raw /apis/apps/v1/namespaces/demo/replicasets > shikigami-core/test/fixtures/k8s/replicasets.json
+kubectl get --raw /apis/apps/v1/namespaces/demo/statefulsets > shikigami-core/test/fixtures/k8s/statefulsets.json
 kubectl get --raw /apis/batch/v1/namespaces/demo/cronjobs > shikigami-core/test/fixtures/k8s/cronjobs.json
 kubectl get --raw /apis/batch/v1/namespaces/demo/jobs > shikigami-core/test/fixtures/k8s/jobs.json
 kubectl get --raw /api/v1/namespaces/demo/events > shikigami-core/test/fixtures/k8s/events.json
@@ -528,7 +681,7 @@ kubectl get --raw /api/v1/namespaces/demo/events > shikigami-core/test/fixtures/
 Milestone 4 configuration check:
 
 ```bash
-cabal run shikigami-worker -- --explain-config | grep k8s_observe
+cabal run shikigami-worker -- --explain-config | rg k8s_observe
 ```
 
 Expected: one line per `capabilities.k8s_observe.*` key with its source; no token value appears.
@@ -539,11 +692,41 @@ Milestone 5 PostgreSQL suite (starts its own temporary PostgreSQL):
 cabal test shikigami-core-postgres-test --test-options='-p k8s'
 ```
 
+For the live durable proof, use a migrated PostgreSQL with the worker's normal resume/execution
+loops enabled, a real tool-capable model provider (the default `stub` does not call these tools),
+and the complete Kikan/Shomei configuration from `docs/operations/action-authorization.md`.
+The proof declaration must contain the actual principal granted the capability relationships;
+when directory enforcement is enabled, that principal must also be admitted there. Save these
+deployment-specific settings in an operator-owned `worker-proof.yaml` outside the repository;
+the path below is an example. In both terminals inherit the explicit cluster settings above and
+set the agent directory to the proof directory:
+
+```bash
+export SHIKIGAMI_AGENTS_DIRECTORY=agents/proof
+export SHIKIGAMI_K8S_OBSERVE_NAMESPACES=demo
+cabal run shikigami-worker -- --check-config --config /path/to/worker-proof.yaml
+cabal run shikigami-worker -- --config /path/to/worker-proof.yaml
+```
+
+From the second terminal at the repository root, enqueue one addressed run:
+
+```bash
+cabal run shikigami -- enqueue-run k8s-observe --payload '{"namespace":"demo"}' --key k8s-observe-proof-1 --config /path/to/worker-proof.yaml
+```
+
+Expect the worker's successful run and recorded session output to name the demo pods, together
+with allowed connection/invocation audit events. Inspect the run through `shikigami runs show`
+as documented in `docs/operations/operator-cli.md`, recording its workflow id and the bounded
+summary, never credentials. Repeating the same key tests deduplication; use a new key for a fresh
+observation. Record missing external prerequisites rather than substituting an allow-all authorizer.
+
 Tear down the local cluster when finished:
 
 ```bash
 kind delete cluster --name shikigami-observe
-rm -f /tmp/k8s-observe-token /tmp/k8s-observe-ca.crt
+rm -f "$K8S_OBSERVE_PROOF_DIR/token" "$K8S_OBSERVE_PROOF_DIR/ca.crt" "$K8S_OBSERVE_PROOF_DIR/kubeconfig"
+rmdir "$K8S_OBSERVE_PROOF_DIR"
+unset KUBECONFIG K8S_OBSERVE_PROOF_DIR SHIKIGAMI_K8S_OBSERVE_MODE SHIKIGAMI_K8S_OBSERVE_API_SERVER_URL SHIKIGAMI_K8S_OBSERVE_TOKEN_FILE SHIKIGAMI_K8S_OBSERVE_CA_FILE SHIKIGAMI_K8S_OBSERVE_NAMESPACES SHIKIGAMI_AGENTS_DIRECTORY
 ```
 
 
@@ -563,7 +746,14 @@ fixture line containing `postgres://app:hunter2@db:5432/x` to
 `{"available": false, ...}`.
 
 `cabal test shikigami-core-postgres-test` passes, including a durable run that resolves
-`k8s.observe` revision `1` and calls the fake API server once.
+`k8s.observe` revision `1`, uses the current execution child, and calls the fake API server once.
+Completed replay with the provider removed makes no new request; the legacy fixture also passes.
+
+The client and observation tests cover the explicit Milestone 1 and 2 contracts: HTTPS and
+credential confinement, redirects, path/query injection, rotation, byte/time limits, pagination,
+rollout ownership/completion, quantity conversion, and log-boundary redaction. Each focused test
+command reports a nonzero test count. The live authorized durable proof described above succeeds;
+until its external prerequisites are available, Milestone 5 and overall completion remain open.
 
 `cabal test shikigami-workers-test` passes, including the test that the default configuration
 installs an empty catalog. Before this plan, a durable agent declaring
@@ -573,15 +763,25 @@ this plan, with the mode enabled, it resolves.
 `cabal build all` succeeds with no new warnings in the touched modules, and the full test suites
 that passed before the change still pass.
 
+At final acceptance run the full affected suites once, in addition to the focused commands:
+
+```bash
+cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test
+git diff --check
+```
+
 
 ## Idempotence and Recovery
 
 All code changes are additive. The `disabled` default means a deployment that does not set
 `capabilities.k8s_observe.mode` behaves exactly as before, so the change is safe to ship before any
 operator configures it. To roll back an enabled deployment, set the mode back to `disabled` and
-restart the worker; durable runs already journaled with a resolved `k8s.observe` overlay will then
-fail at provider acquisition with `CapabilityProviderUnavailable`, which is the existing, typed
-behavior for a missing provider and does not corrupt the journal.
+restart the worker. New overlay requests then fail resolution. Old coarse-step runs still needing
+the provider fail acquisition with `CapabilityProviderUnavailable`; fresh execution-child runs
+with unfinished tools fail exact binding checks (currently surfaced as an `ExecutionPolicyRefused`
+by `Execution/Tools.hs`). Completed accepted results remain readable without provider lookup.
+Disabling is therefore an emergency stop, not a transparent rollback for unfinished work. Keep
+revision `1` installed until its pending runs drain when uninterrupted completion is required.
 
 The `kind` steps are repeatable: `kind create cluster` fails harmlessly if the cluster exists (run
 `kind delete cluster --name shikigami-observe` first to start clean), and `kubectl apply` is
@@ -606,8 +806,9 @@ New modules, all registered in `shikigami-core/shikigami-core.cabal`:
 data KubernetesEndpoint = KubernetesEndpoint
   { apiServerUrl :: !Text, tokenFile :: !FilePath, caFile :: !FilePath }
 data KubernetesClient            -- opaque: Manager, endpoint, timeout
-data KubernetesClientError       -- Unauthorized | Forbidden | NotFound | Timeout | TlsFailure Text
-                                 -- | HttpStatus Int | ResponseTooLarge | DecodeFailure Text | TokenUnreadable
+data KubernetesClientError       -- Unauthorized | Forbidden | NotFound | Timeout | TlsFailure
+                                 -- | HttpStatus Int | ResponseTooLarge | DecodeFailure | TokenUnreadable
+                                 -- | InvalidEndpoint | InvalidRequest | CaUnreadable
 inClusterEndpoint :: IO (Either KubernetesClientError KubernetesEndpoint)
 newKubernetesClient :: KubernetesEndpoint -> Int -> IO (Either KubernetesClientError KubernetesClient)
 getJson :: FromJSON a => KubernetesClient -> Text -> [(ByteString, Maybe ByteString)] -> IO (Either KubernetesClientError a)
@@ -617,7 +818,8 @@ getText :: KubernetesClient -> Text -> [(ByteString, Maybe ByteString)] -> IO (E
 data KubernetesObserveScope = KubernetesObserveScope
   { client :: !KubernetesClient, namespaces :: !(Set Text)
   , maxLogLines :: !Int, maxLogBytes :: !Int, maxItems :: !Int }
-data ObserveError = NamespaceNotAllowed !Text | ObserveClientError !KubernetesClientError
+data ObserveError = NamespaceNotAllowed !Text | InvalidObserveInput !Text
+                  | ObserveClientError !KubernetesClientError
 listWorkloads   :: KubernetesObserveScope -> Text -> IO (Either ObserveError WorkloadList)
 describeRollout :: KubernetesObserveScope -> Text -> Text -> IO (Either ObserveError RolloutSummary)
 listPods        :: KubernetesObserveScope -> Text -> Maybe Text -> IO (Either ObserveError PodList)
@@ -698,3 +900,8 @@ subjects:
 External services: a Kubernetes API server reachable from the worker; for live tool calls,
 Kikan-En and Shomei configured as in `docs/operations/action-authorization.md`. Optional:
 metrics-server for `pod_metrics`.
+
+Revision note (2026-10-28): reviewed against the current worker, execution-child integration,
+provider boundary, existing HTTP policy, Cabal suites and ADR corpus. Updated stale durable/recovery
+guidance, closed request and result-bound gaps, corrected rollout semantics and secret-handling
+claims, and made cluster/proof acceptance reproducible without treating partial evidence as delivery.
