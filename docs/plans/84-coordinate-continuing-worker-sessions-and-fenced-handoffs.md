@@ -49,7 +49,7 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 - [x] Milestone 1: Ordered mailbox, stable assignment identities, retained results/events and transactional cursors (2026-10-28).
 - [x] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration against deterministic adapters (2026-10-28); real IR-13 integration remains a completion gate.
 - [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
-- [ ] Milestone 4: Governed Flow/Skill/operator commands and runtime qualification.
+- [ ] Milestone 4: Governed Flow/Skill/operator command mechanics qualified against deterministic adapters (2026-10-28); real-provider runtime qualification remains open.
 
 Implementation started after plan 83 completed at `a0d6f2a`. IR-11 and IR-13
 remain proposed with no selected complete providers as of 2026-10-28. Build
@@ -67,6 +67,23 @@ derive from the retained session and assignment rather than the coordinator's
 current workflow ID. Successful store fixtures establish persistence mechanics,
 not the separately owned objective or workspace providers.
 
+2026-10-28: A `Skill` with delegates already selects a fixed supervisor. Adaptive
+model-tool control therefore uses an explicit `CoordinatingSkill` arm, requiring
+an admitted durable scope before model dispatch. Parent rotation may narrow
+model permissions but cannot replace the original delegation depth, lineage,
+budget or root. Command replay repairs the gap between retained mailbox
+acceptance and resume-driver registration through the public journal API.
+
+2026-10-28: The expanded rank-n Flow capability dictionary triggered a native
+GC crash under GHC 9.12.4, including a fresh build and single RTS capability.
+Narrower optimization exclusions passed isolated tests but failed the complete
+capability population. A module-local `-O0` in `Shikigami.Agent.Workflow` passes
+all 12 command/capability cases with explicit collection at suspension/resume;
+other modules retain normal optimization. No compiler pin changed.
+[FRIC-13](../friction-log/13-expanded-flow-registry-crashes-during-garbage-collection-under-ghc-worker-wrapper.md)
+records the investigation. Requalify that regression before removing the
+workaround, and measure scheduling throughput in plan 85's capacity acceptance.
+
 
 ## Decision Log
 
@@ -77,6 +94,12 @@ not the separately owned objective or workspace providers.
 records ordered assignment identities, protected payloads, immutable command
 receipts, and local transactional cursor integration. Logical closure permits
 only final event acknowledgement, and cannot discard queued or unresolved work.
+
+2026-10-28: [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md)
+records retained coordination scopes, fresh exact action authorization, explicit
+coordinator behavior, bounded protected tools/inspection, transactional Flow
+wakes and replay repair. Flow, Skill and operator paths share one command owner.
+Production composition stays unconfigured for the separately owned providers.
 
 
 ## Outcomes & Retrospective
@@ -133,6 +156,58 @@ invalidates snapshots after the additive transfer states/edges. No actual
 repository or task provider is implemented by these fixtures. Real process
 restart, late workspace writes and authoritative checkpoint integration remain
 required before this child can be Complete.
+
+Milestone 4 consumer mechanics now include closed commands, a Flow Workers
+effect, an admitted native tool with harness-owned operation coordinates, and
+operator inspection/control parsers. Agent-run patch
+`shikigami-worker-coordination-v1` retains the real old Flow/Skill branches;
+new Flows journal only a bounded policy reference or refusal. All five workflow
+families use the common serving registry. Event listeners are generation-owned,
+bounded to 32, and completed in the event-acceptance transaction. Conflicting
+already-present wake payloads roll back the event and wake together. Session
+facts remain available after listener/driver journal GC.
+
+The new command fixtures exercise scope/target revocation, parent rotation,
+retained scope replay, trusted operation coordinates, permission narrowing,
+scope-count conservation, bounded inspection, original driver-input repair,
+actual coordinator admission and old/new deployment branches. Session fixtures
+also repair a registered child missing its input and acknowledge a result
+committed before handoff without consulting a replacement owner.
+
+Completion remains explicitly gated on a real IR-13 current-objective and
+checkpoint/ownership provider, a trusted retained coordination association
+source, and real IR-11 workspace/process fencing with late-write/restart
+qualification. The requests remain proposed with no selected implementation
+owners. This plan does not supply a task store or repository provider. Plan 85
+requires this whole child Complete, so it and its dependents cannot start at
+this checkpoint.
+
+FRIC-13 records the compiler workaround and forced-GC regression. It is not
+evidence of an independently identified upstream issue or of a fix in an
+untested compiler release.
+
+Milestone 4 consumer acceptance passes: 504 core, 350 PostgreSQL, 37 agent,
+67 server and 99 worker cases. The PostgreSQL population includes 12 new
+capability cases, six session workflow cases and seven handoff cases. The final
+command uses the dependency project described in plan 83, a fresh build directory
+and serial PostgreSQL cases:
+
+```bash
+nix develop --no-write-lock-file -c cabal test \
+  --project-file=.dev/mp13.cabal.project --builddir=.dev/mp14-clean-dist \
+  shikigami-core-test shikigami-core-postgres-test shikigami-agent-test \
+  shikigami-server-test shikigami-workers-test \
+  --test-show-details=direct --test-options='--num-threads=1'
+```
+
+Evidence is `/tmp/shikigami-mp14-workers-accepted-all-tests.log`. Full build
+passes (`/tmp/shikigami-mp14-workers-accepted-build.log`). The ordinary keiro gate
+against `8d75942` passes generated conformance with `breaking:false`
+(`/tmp/shikigami-mp14-workers-accepted-gate.log`): findings are additive
+declarations, the expected aggregate-fold fingerprint invalidation and the real
+workflow evolution guard. Migration schema isolation passes with its existing
+immutable historical exception; all seven worker subcommands render help.
+FRIC-13 is triaged as accepted with the tested module-local workaround.
 
 
 ## Context and Orientation

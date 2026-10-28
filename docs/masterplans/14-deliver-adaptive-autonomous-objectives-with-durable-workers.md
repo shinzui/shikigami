@@ -133,14 +133,22 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 2026-10-28: EP-1 through EP-3 are Complete. The execution harness now includes
 both patched parent lifecycles, configured policies, ephemeral/durable one-off
 paths, safe uncertainty recovery, protected replay and bounded inspection. Final
-EP-3 evidence is 504 core, 311 PostgreSQL, 37 agent, 64 server and 99 worker cases,
-full build, migration isolation and compatible evolution/conformance. EP-4 is
-implementing its fixture-backed mechanics: ordered mailboxes and recoverable
-assignment/checkpoint-intent cycles pass, while handoff and command surfaces
-remain open. EP-5 through EP-7 retain their child
-start gates. External plans 73–76 have accepted evidence. A fresh prerequisite
-check still finds IR-11 and IR-13 proposed, without selected complete providers;
-these remain separately owned completion gates and cannot be closed by fixtures.
+EP-3 evidence is retained in its child. EP-4's ordered mailboxes, recoverable
+assignment/checkpoint-intent cycles, fenced handoff mechanics and governed
+Flow/Skill/operator commands pass against deterministic adapters. Current checks
+pass 504 core, 350 PostgreSQL, 37 agent, 67 server and 99 worker cases, full build,
+migration isolation, CLI help and compatible evolution/conformance. Runtime
+qualification includes a forced-GC deployment regression; plan 84 records the
+accepted module-local GHC optimization workaround and throughput qualification
+limit in FRIC-13.
+
+EP-4 remains In Progress solely at its real-provider qualification boundary:
+IR-11 workspace/process fences and IR-13 authoritative objective/checkpoint
+ownership and retained coordination associations are unselected. A fresh check
+still finds both requests proposed with no complete providers. EP-5 requires
+the whole EP-4 Complete; EP-6 and EP-7 depend on EP-5. No other child can start
+within this MasterPlan's declared order. External plans 73–76 have accepted
+evidence, but fixtures cannot close the remaining separately owned gates.
 
 
 ## Surprises & Discoveries

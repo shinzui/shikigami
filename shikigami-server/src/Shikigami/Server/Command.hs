@@ -45,6 +45,7 @@ import Data.Text qualified as Text
 import Options.Applicative
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, sinksDanwaBaseUrlKey)
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
@@ -67,6 +68,10 @@ import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
+import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
+import Shikigami.WorkerSession.Capability (WorkerCommand (..))
+import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
+import Shikigami.WorkerSession.Types (WorkerSessionId (..))
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
@@ -154,8 +159,39 @@ adminSubcommands =
     ("agents", command "agents" agentsInfo),
     ("runs", command "runs" runsInfo),
     ("resources", command "resources" resourcesInfo),
-    ("executions", command "executions" executionsInfo)
+    ("executions", command "executions" executionsInfo),
+    ("workers", command "workers" workersInfo)
   ]
+
+workersInfo :: ParserInfo AdminAction
+workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuing workers and issue scoped, explicitly keyed commands")
+  where
+    commands =
+      command "inspect" (info (inspect <**> helper) (progDesc "Show bounded session, assignment and handoff metadata"))
+        <> command "send" (info (send <**> helper) (progDesc "Queue a follow-up; requires an authoritative objective provider"))
+        <> command "interrupt" (info (interrupt <**> helper) (progDesc "Request interruption of one exact active assignment"))
+        <> command "cancel" (info (cancel <**> helper) (progDesc "Close an idle worker with no queued or unresolved work"))
+        <> command "transfer" (info (transfer <**> helper) (progDesc "Request transfer; requires real workspace and objective ownership providers"))
+        <> command "reconcile" (info (reconcile <**> helper) (progDesc "Reconcile the retained transfer without replacing its operation"))
+        <> command "integrate" (info (integrate <**> helper) (progDesc "Integrate retained events through the authoritative checkpoint owner"))
+    session = strArgument (metavar "SESSION" <> help "Retained worker session id")
+    operation = strOption (long "operation" <> metavar "KEY" <> help "Stable caller operation key; reuse it after a lost acknowledgement")
+    revision = option auto (long "expected-revision" <> metavar "REVISION" <> help "Expected session revision")
+    epoch = option auto (long "epoch" <> metavar "EPOCH" <> help "Expected owner epoch")
+    instruction = strOption (long "instruction-file" <> metavar "PATH" <> help "Bounded WorkerInstruction JSON: text, objectiveRevision, assignmentRevision, criteriaRevision and optional selection")
+    action function = (function, [])
+    inspect =
+      (\key after limit json -> action (runWorkersInspect key after limit json))
+        <$> session
+        <*> option auto (long "after" <> value (-1) <> metavar "SEQUENCE")
+        <*> option auto (long "limit" <> value 10 <> metavar "COUNT" <> help "Assignment page size (1-20)")
+        <*> switch (long "json")
+    send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
+    interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
+    cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (WorkerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
+    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (WorkerSessionId key) rev owner (WorkspaceRef provider resource) (AgentName target)))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> strOption (long "target" <> metavar "AGENT")
+    reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (WorkerSessionId key)))) <$> session <*> operation
+    integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (WorkerSessionId key)))) <$> session <*> operation
 
 executionsInfo :: ParserInfo AdminAction
 executionsInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect accepted execution progress without replay payloads")

@@ -92,16 +92,29 @@ data SessionState = SessionState
     checkpointIntent :: !(Maybe OperationId),
     wake :: !(Maybe PayloadRef),
     worker :: !(Maybe AgentName),
-    handoff :: !(Maybe HandoffProgress)
+    handoff :: !(Maybe HandoffProgress),
+    listeners :: ![PayloadRef]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
-    state <- SessionState <$> fields Aeson..: "format" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "revision" <*> fields Aeson..: "phase" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "activeAssignment" <*> fields Aeson..: "nextSequence" <*> fields Aeson..: "eventCursor" <*> fields Aeson..: "consumedCursor" <*> fields Aeson..:? "checkpointIntent" <*> fields Aeson..:? "wake" <*> fields Aeson..:? "worker" <*> fields Aeson..:? "handoff"
-    unless (state.format == 1 && all (>= 0) [state.revision, state.epoch, state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.nextSequence <= 10000) (fail "unsupported worker session state")
+    state <- SessionState <$> fields Aeson..: "format" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "revision" <*> fields Aeson..: "phase" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "activeAssignment" <*> fields Aeson..: "nextSequence" <*> fields Aeson..: "eventCursor" <*> fields Aeson..: "consumedCursor" <*> fields Aeson..:? "checkpointIntent" <*> fields Aeson..:? "wake" <*> fields Aeson..:? "worker" <*> fields Aeson..:? "handoff" <*> (fields Aeson..:? "listeners" Aeson..!= [])
+    unless (state.format == 1 && all (>= 0) [state.revision, state.epoch, state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.eventCursor <= 100000 && state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
+
+data SessionListener = SessionListener
+  { token :: !AwakeableId,
+    generation :: !Int,
+    ownerName :: !Text,
+    ownerId :: !Text,
+    after :: !Integer
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance Show SessionListener where show _ = "SessionListener <protected>"
 
 data SessionWake = SessionWake {token :: !AwakeableId, generation :: !Int}
   deriving stock (Eq, Generic)
@@ -164,7 +177,8 @@ data MessageReceipt = MessageReceipt
     phase :: !AssignmentPhase,
     childWorkflowId :: !(Maybe Text),
     executionId :: !(Maybe ExecutionId),
-    context :: !(Maybe PayloadRef)
+    context :: !(Maybe PayloadRef),
+    permittedAliases :: !(Maybe [Text])
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
@@ -172,7 +186,8 @@ data MessageReceipt = MessageReceipt
 instance FromJSON MessageReceipt where
   parseJSON = Aeson.withObject "MessageReceipt" \fields -> do
     context <- fields Aeson..:? "context"
-    message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields))
+    aliases <- fields Aeson..:? "permittedAliases"
+    message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [Text])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
     unless (message.format == 1 && message.sequence >= 0 && message.sequence < 10000 && message.assignmentRevision >= 0 && message.epoch >= 0 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")
@@ -183,6 +198,18 @@ data RetainedFinding = RetainedFinding {receipt :: !ResultReceipt, output :: !(M
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show RetainedFinding where show _ = "RetainedFinding <protected>"
+
+data SessionInspection = SessionInspection
+  { state :: !SessionState,
+    binding :: !SessionBinding,
+    messages :: ![MessageReceipt],
+    active :: !(Maybe MessageReceipt),
+    results :: ![ResultReceipt],
+    nextCursor :: !Integer,
+    truncated :: !Bool
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data ResultDisposition = AssignmentSucceeded | AssignmentFailed | AssignmentCancelled
   deriving stock (Eq, Show, Generic)
@@ -214,7 +241,7 @@ data ResultReceipt = ResultReceipt
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase | TransferStatusChanged !OperationId !HandoffStage
+data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase | TransferStatusChanged !OperationId !HandoffStage | SessionClosedEvent !SessionPhase
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

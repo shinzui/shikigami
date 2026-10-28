@@ -28,6 +28,7 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracingNoop)
+import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
@@ -60,6 +61,7 @@ import Shikigami.Flow.Capability
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -68,6 +70,7 @@ import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
+import Shikigami.WorkerSession.Capability (CoordinatorRun (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -547,6 +550,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . runSink sinkEnv
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
+            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun "disabled-flow-fixture" (compatibilityIdentity flowAgent) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,

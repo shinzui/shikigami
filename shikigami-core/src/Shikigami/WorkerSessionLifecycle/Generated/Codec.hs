@@ -19,7 +19,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 workerSessionLifecycleEventTypes :: NonEmpty EventType
-workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionTransferRequested", EventType "SessionTransferReconciled", EventType "SessionOwnerEstablished", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
+workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionTransferRequested", EventType "SessionTransferReconciled", EventType "SessionOwnerEstablished", EventType "SessionEventsSubscribed", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
 
 workerSessionLifecycleCodec :: Codec WorkerSessionLifecycleEvent
 workerSessionLifecycleCodec =
@@ -37,6 +37,7 @@ workerSessionLifecycleCodec =
         SessionTransferRequested{} -> EventType "SessionTransferRequested"
         SessionTransferReconciled{} -> EventType "SessionTransferReconciled"
         SessionOwnerEstablished{} -> EventType "SessionOwnerEstablished"
+        SessionEventsSubscribed{} -> EventType "SessionEventsSubscribed"
         WorkerSessionObserved{} -> EventType "WorkerSessionObserved"
         SessionCheckpointPrepared{} -> EventType "SessionCheckpointPrepared"
         SessionEventsConsumed{} -> EventType "SessionEventsConsumed"
@@ -122,6 +123,13 @@ encodeWorkerSessionLifecycleEvent = \case
   SessionOwnerEstablished payload ->
     object
       [ "kind" .= ("SessionOwnerEstablished" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  SessionEventsSubscribed payload ->
+    object
+      [ "kind" .= ("SessionEventsSubscribed" :: Text)
       , "sessionId" .= payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
@@ -239,6 +247,13 @@ parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (wi
         "SessionOwnerEstablished" ->
           SessionOwnerEstablished
             <$> ( SessionOwnerEstablishedData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionEventsSubscribed" ->
+          SessionEventsSubscribed
+            <$> ( SessionEventsSubscribedData
                     <$> o .: "sessionId"
                     <*> o .: "expected"
                     <*> o .: "revision"

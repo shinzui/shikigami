@@ -87,6 +87,13 @@ data EstablishSessionOwnerData = EstablishSessionOwnerData
   }
   deriving stock (Generic, Eq, Show)
 
+data SubscribeSessionEventsData = SubscribeSessionEventsData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ObserveWorkerSessionData = ObserveWorkerSessionData
   { sessionId :: !Text
   , expected :: !Int
@@ -133,6 +140,7 @@ data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   | RequestSessionTransfer !RequestSessionTransferData
   | ReconcileSessionTransfer !ReconcileSessionTransferData
   | EstablishSessionOwner !EstablishSessionOwnerData
+  | SubscribeSessionEvents !SubscribeSessionEventsData
   | ObserveWorkerSession !ObserveWorkerSessionData
   | PrepareSessionCheckpoint !PrepareSessionCheckpointData
   | ConsumeSessionEvents !ConsumeSessionEventsData
@@ -216,6 +224,13 @@ data SessionOwnerEstablishedData = SessionOwnerEstablishedData
   }
   deriving stock (Generic, Eq, Show)
 
+data SessionEventsSubscribedData = SessionEventsSubscribedData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data WorkerSessionObservedData = WorkerSessionObservedData
   { sessionId :: !Text
   , expected :: !Int
@@ -262,6 +277,7 @@ data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedD
   | SessionTransferRequested !SessionTransferRequestedData
   | SessionTransferReconciled !SessionTransferReconciledData
   | SessionOwnerEstablished !SessionOwnerEstablishedData
+  | SessionEventsSubscribed !SessionEventsSubscribedData
   | WorkerSessionObserved !WorkerSessionObservedData
   | SessionCheckpointPrepared !SessionCheckpointPreparedData
   | SessionEventsConsumed !SessionEventsConsumedData

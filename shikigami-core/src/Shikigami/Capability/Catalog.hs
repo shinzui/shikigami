@@ -194,4 +194,5 @@ behaviorKindText = \case
   Deterministic {} -> "Deterministic"
   ShikumiProgram {} -> "ShikumiProgram"
   Skill {} -> "Skill"
+  CoordinatingSkill {} -> "Skill"
   Flow {} -> "Flow"

@@ -43,6 +43,7 @@ import Shikigami.Flow.OpenTelemetryPracticeReview
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.ShikumiDecisionExample (exampleSlots, shikumiDecisionExample)
+import Shikigami.Flow.Workers (Workers)
 import Shikigami.PracticeReview.Capability
   ( ExecutionContext,
     PracticeReviewAttention,
@@ -79,6 +80,7 @@ type FlowEffects es =
     Activity :> es,
     Acknowledgement :> es,
     Delegate :> es,
+    Workers :> es,
     Routing :> es,
     Decision :> es,
     ExecutionContext :> es,

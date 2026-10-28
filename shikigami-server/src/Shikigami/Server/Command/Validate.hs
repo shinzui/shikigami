@@ -52,8 +52,12 @@ runValidate path = do
           traverse_ (\err -> hPutStrLn stderr ("validate: " <> Text.unpack err)) errors
           exitFailure
         [] -> pure ()
-      case (.behavior) decl of
-        Skill {path = skillDir} -> do
+      let skillPath = case (.behavior) decl of
+            Skill {path = skillDir} -> Just skillDir
+            CoordinatingSkill {path = skillDir} -> Just skillDir
+            _ -> Nothing
+      case skillPath of
+        Just skillDir -> do
           let skillDir' = Text.unpack skillDir
           skillResult <- validateSkill skillDir'
           case skillResult of

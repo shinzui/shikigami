@@ -11,6 +11,7 @@ module Shikigami.WorkerSession.Workflow
     sessionWorkflow,
     selectAssignment,
     sessionAccess,
+    currentAssignmentAuthority,
   )
 where
 
@@ -20,16 +21,17 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, raise, (:>))
 import Effectful.Exception (throwIO, trySync)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, currentRunGeneration, currentWorkflow, restoreSeed, step)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, currentRunGeneration, currentWorkflow, loadStepIndex, restoreSeed, step)
 import Keiro.Workflow.Awakeable (cancelAwakeable)
 import Keiro.Workflow.Child (ChildHandle (..), WorkflowChildCancelled, WorkflowChildFailed, awaitChild)
 import Keiro.Workflow.Child qualified as Child
 import Keiro.Workflow.Child.Schema (ChildRow (..), lookupChild)
+import Keiro.Workflow.Child.Schema qualified as ChildSchema
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects, AppEnv)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate (Delegated (..), delegateAssignment)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
@@ -125,7 +127,10 @@ sessionWorkflow runtime initial = do
         Just row -> do
           let WorkflowName parentName = Generated.workflowName
           unless (row.parentName == parentName && row.parentId == accepted.sessionId.value) (throwIO (userError "assignment child parent changed"))
-          finish accepted message access (ChildHandle agentRunWorkflowName childId)
+          entries <- loadStepIndex agentRunWorkflowName childId 0
+          if row.status == ChildSchema.Running && Map.notMember "ingest-job" entries
+            then spawnAssignment accepted message childId access admission instruction findings
+            else finish accepted message access (ChildHandle agentRunWorkflowName childId)
         Nothing -> do
           state <- currentState accepted.sessionId
           current <- liftIO (currentAssignmentAuthority runtime admission state instruction)
@@ -133,15 +138,27 @@ sessionWorkflow runtime initial = do
             Left _ -> do
               _ <- Store.setAssignmentStatus access state.revision state.epoch (OperationId ("unresolved:" <> message.assignmentId.value)) message.assignmentId AssignmentUnresolved >>= require
               continueAsNew (WorkerSessionSeed (Just accepted))
-            Right () -> do
-              Delegated handle <- delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator admission.context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" Aeson..= instruction.text, "assignmentId" Aeson..= message.assignmentId, "objective" Aeson..= admission.objective, "retainedFindings" Aeson..= findings])
-              finish accepted message access handle
+            Right () -> spawnAssignment accepted message childId access admission instruction findings
   where
     waitAndRotate accepted awaitHint = do
       hint <- awaitHint
       unless (hint == accepted.sessionId) (throwIO (userError "session wake identity mismatch"))
       continueAsNew (WorkerSessionSeed (Just accepted))
     currentState session = Store.inspectSession session >>= require >>= maybe (throwIO (userError "session disappeared")) (pure . fst)
+    spawnAssignment accepted message childId access admission instruction findings = do
+      state <- currentState accepted.sessionId
+      let permissions = case (admission.context.executionPermissions, message.permittedAliases) of
+            (Nothing, additional) -> additional
+            (existing, Nothing) -> existing
+            (Just existing, Just additional) -> Just (filter (`elem` existing) additional)
+          context = admission.context & #executionPermissions .~ permissions
+      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" Aeson..= instruction.text, "assignmentId" Aeson..= message.assignmentId, "objective" Aeson..= admission.objective, "retainedFindings" Aeson..= findings]))
+      case spawned of
+        Right (Delegated handle) -> finish accepted message access handle
+        Left err
+          | isJust (fromException @DelegationError err) ->
+              retainResult accepted message childId AssignmentFailed (Aeson.object ["failure" Aeson..= ("governed delegation refused before input admission" :: Text)])
+        Left err -> throwIO err
     finish accepted message _ handle = do
       completed <- trySync (awaitChild handle :: Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult))
       let (disposition, output) = case completed of
@@ -153,16 +170,22 @@ sessionWorkflow runtime initial = do
       case completed of
         Left err | isNothing (fromException @WorkflowChildCancelled err) && isNothing (fromException @WorkflowChildFailed err) -> throwIO err
         _ -> pure ()
+      retainResult accepted message handle.childWfId disposition output
+    retainResult accepted message childId disposition output = do
       _ <- step (StepName "record-assignment-result") do
         access <- raise (sessionAccess runtime accepted.sessionId) >>= require
-        state <- currentState accepted.sessionId
-        let executionId = executionIdFor (Selection.assignmentIdFor handle.childWfId.unWorkflowId)
-        metadata <- Execution.inspectExecution executionId
-        reference <- case metadata of
-          Right (Just (_, binding, _)) | binding.identity == state.owner -> pure (Just executionId)
-          Right Nothing -> pure Nothing
-          _ -> throwIO (userError "assignment execution reference is unavailable")
-        snd <$> (Store.recordResult access state.revision state.epoch (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId disposition reference output []) >>= require)
+        recorded <- Store.readResult access message.assignmentId >>= require
+        case recorded of
+          Just (receipt, _) -> pure receipt
+          Nothing -> do
+            state <- currentState accepted.sessionId
+            let executionId = executionIdFor (Selection.assignmentIdFor childId.unWorkflowId)
+            metadata <- Execution.inspectExecution executionId
+            reference <- case metadata of
+              Right (Just (_, binding, _)) | binding.identity == state.owner -> pure (Just executionId)
+              Right Nothing -> pure Nothing
+              _ -> throwIO (userError "assignment execution reference is unavailable")
+            snd <$> (Store.recordResult access state.revision message.epoch (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId disposition reference output []) >>= require)
       continueAsNew (WorkerSessionSeed (Just accepted))
 
 selectAssignment :: SessionRuntime -> WorkerSessionId -> Eff AppEffects (Either SessionError SessionAction)

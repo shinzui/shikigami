@@ -5,9 +5,12 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
+import Data.Time (addUTCTime)
 import Effectful (Eff)
-import Keiro.Workflow (Workflow, WorkflowId (..), WorkflowOutcome (Completed, ContinuedAsNew, Suspended), currentGeneration, loadStepIndex, runWorkflowWith)
-import Keiro.Workflow.Child (runChildWorkflow)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowOutcome (Completed, ContinuedAsNew, Suspended), currentGeneration, loadStepIndex, runWorkflowWith)
+import Keiro.Workflow.Awakeable (awakeableNamed)
+import Keiro.Workflow.Child (runChildWorkflow, spawnChild)
+import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kioku.Id (genSessionId)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -15,13 +18,19 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure)
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity qualified as Identity
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
+import Shikigami.RouterWorkflowSpec qualified as Fixture
+import Shikigami.Store.DelegationBudget (delegationBudgetIdFor, reserveEnrolledDelegationSlots)
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity
@@ -87,6 +96,73 @@ tests fixture =
           root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           ledger <- expectRight =<< run env (Roots.inspectRoot root)
           Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just 2,
+      testCase "a registered child with missing input is repaired through governed delegation without another reservation" $
+        withFixture fixture \env admission access -> do
+          version <- checkpointVersion admission
+          (provider, _) <- fixtureCheckpoints version False
+          behavior <- newBehaviorEnv
+          let worker = Fixture.successSpecialist "worker"
+              runtime = Session.SessionRuntime env [worker] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+              session = sessionIdFor admission
+              parentId = sessionWorkflowId session
+              options = shikigamiWorkflowRunOptions env
+              dependencies = Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) [worker]
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (Instruction 1 FollowUp "recover input" 1 1 1 Nothing))
+          (_, started) <- expectRight =<< run env (Store.startAssignment access 1 0 (OperationId "start") message.assignmentId)
+          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
+          root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
+          now <- getCurrentTime
+          _ <- expectRight =<< run env (reserveEnrolledDelegationSlots root (delegationBudgetIdFor parentId) (Just (parentId, admission.context.budgetLimit)) (child :| []) now)
+          let crashWindow = do
+                _ <- spawnChild agentRunWorkflowName child (pure ())
+                (_, wait) <- awakeableNamed (StepName "fixture-crash-window")
+                wait :: Eff (Workflow : AppEffects) ()
+          run env (runWorkflowWith options sessionWorkflowName parentId crashWindow) >>= (@?= Suspended)
+          run env (loadStepIndex agentRunWorkflowName child 0) >>= (@?= Map.empty)
+          let drive = run env (runWorkflowWith options sessionWorkflowName parentId (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart session))))
+          drive >>= (@?= Suspended)
+          job <- childJob env child
+          job.identity @?= admission.identity
+          job.executionRootId @?= admission.context.executionRootId
+          result <- run env (runChildWorkflow options agentRunWorkflowName child (Agent.agentRunWorkflow dependencies Nothing))
+          case result of Completed (Right _) -> pure (); _ -> assertFailure (show result)
+          drive >>= (@?= ContinuedAsNew)
+          stored <- expectRight =<< run env (Store.readResult access message.assignmentId)
+          case stored of Just (_, value) -> value.disposition @?= AssignmentSucceeded; _ -> assertFailure "result lost"
+          ledger <- expectRight =<< run env (Roots.inspectRoot root)
+          Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just 1,
+      testCase "a pre-spawn root refusal becomes one retained failure and creates no child" $
+        withFixture fixture \env admission _ -> do
+          now <- getCurrentTime
+          let root = Identity.ExecutionRootId "exhausted-session-root"
+              limited = admission & #scope . #parent .~ "limited-coordinator" & #objective . #key .~ "limited-objective" & #context . #executionRootId .~ Just root
+          _ <- expectRight =<< run env (Roots.enrollRoot root (Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 0)) (addUTCTime 3600 now)))
+          _ <- expectRight =<< run env (Store.openSession limited)
+          access <- expectRight =<< run env (Store.authorizeSession (sessionIdFor limited) limited.context.identity (pure (Right ())))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (Instruction 1 FollowUp "no capacity" 1 1 1 Nothing))
+          version <- checkpointVersion limited
+          (provider, _) <- fixtureCheckpoints version False
+          let runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker"] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId (sessionIdFor limited)) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart (sessionIdFor limited))))) >>= (@?= ContinuedAsNew)
+          stored <- expectRight =<< run env (Store.readResult access message.assignmentId)
+          case stored of Just (_, value) -> value.disposition @?= AssignmentFailed; _ -> assertFailure "refusal not retained"
+          let child = assignmentChildWorkflowId (sessionIdFor limited) limited.worker message.assignmentId
+          run env (loadStepIndex agentRunWorkflowName child 0) >>= (@?= Map.empty),
+      testCase "closed retained events remain acknowledgeable after session journal GC" $
+        withFixture fixture \env admission access -> do
+          version <- checkpointVersion admission
+          (provider, _) <- fixtureCheckpoints version False
+          let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+              session = sessionIdFor admission
+              drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart session))))
+          drive >>= (@?= Suspended)
+          _ <- expectRight =<< run env (Store.closeSession access 1 0 (OperationId "close") AssignmentCancelled)
+          drive >>= (@?= ContinuedAsNew)
+          result <- drive
+          case result of Completed _ -> pure (); _ -> assertFailure (show result)
+          now <- getCurrentTime
+          _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
+          run env (Store.consumeEventsWith access 2 0 (OperationId "final-ack") 0 1 (pure (Right ()))) >>= (@?= Right (Resources.Accepted, 1)),
       testCase "checkpoint runtime retries an accepted unknown request before preparing another batch" $
         withFixture fixture \env admission access -> do
           _ <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "first") (Instruction 1 FollowUp "first" 1 1 1 Nothing))

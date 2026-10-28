@@ -18,7 +18,7 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Skill))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
@@ -144,6 +144,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
             AgentWorkflow.actionAuthorizer = denyAllActionAuthorizer,
             AgentWorkflow.capabilities = capabilities,
+            AgentWorkflow.coordination = Nothing,
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,
             AgentWorkflow.kawa = kawaConfig,
@@ -172,7 +173,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
           }
   ensureRunQueue pool >>= either (dieAgentRun . Text.pack . show) pure
   let runParent = AgentWorkflow.runAgentRunWorkflow deps job
-      eligible = case decl of AgentDecl {behavior = Skill {}, delegates = [], routing = Nothing} -> True; _ -> False
+      eligible = case decl of AgentDecl {behavior = Skill {}, delegates = [], routing = Nothing} -> True; AgentDecl {behavior = CoordinatingSkill {}, routing = Nothing} -> True; _ -> False
       execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
       finish = \case
         Left err -> dieAgentRun ("workflow store failure: " <> Text.pack (show err))

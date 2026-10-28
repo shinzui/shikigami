@@ -24,7 +24,7 @@ from a config file, `--set database.connection_string=…`, or the
 
 Two halves, and it matters which is which when something behaves unexpectedly.
 
-**Shikigami's own**: `agents`, `runs`, and the pre-existing `validate`,
+**Shikigami's own**: `agents`, `runs`, `resources`, `executions`, `workers`, and `validate`,
 `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
 `danwa-spike`, and `grants`. These are defined in this repository.
 
@@ -147,6 +147,62 @@ The session half reports one of four things, and they mean different things:
 
 For the workflow half alone, `wf show` reports more — children and awakeables —
 and `wf journal` and `wf steps` decode what the run actually recorded.
+
+**"What has this continuing worker accepted, and who owns it?"** — `workers inspect`.
+
+```bash
+cabal run shikigami -- workers inspect <session-id> --json --after -1 --limit 10
+```
+
+The bounded page contains session phase, owner epoch, assignment/result references,
+event and consumed cursors, and pending checkpoint/handoff metadata. Page sizes
+are 1–20. An active assignment stays visible outside the requested history page.
+Instruction bodies, delegation snapshots and wake tokens are protected and are
+not returned by inspection. Session facts outlive terminal workflow journals.
+
+Control commands use the accepted parent identity, original root and fresh exact
+action authorization. Stable operation keys identify the intended command:
+
+```bash
+cabal run shikigami -- workers send <session-id> --operation follow-up-2 \
+  --expected-revision 7 --epoch 0 --instruction-file instruction.json
+cabal run shikigami -- workers interrupt <session-id> --operation interrupt-2 \
+  --expected-revision 7 --epoch 0 --assignment <assignment-id> \
+  --instruction-file instruction.json
+cabal run shikigami -- workers cancel <session-id> --operation close-2 \
+  --expected-revision 7 --epoch 0
+cabal run shikigami -- workers transfer <session-id> --operation handoff-2 \
+  --expected-revision 7 --epoch 0 --workspace-provider <provider> \
+  --workspace-resource <resource> --target <declared-agent>
+cabal run shikigami -- workers reconcile <session-id> --operation reconcile-2
+cabal run shikigami -- workers integrate <session-id> --operation checkpoint-2
+```
+
+An instruction file is a closed JSON object, at most 1 MiB:
+
+```json
+{
+  "text": "Check the retained finding against the current criteria.",
+  "objectiveRevision": 3,
+  "assignmentRevision": 2,
+  "criteriaRevision": 1,
+  "selection": null
+}
+```
+
+Send queues a separate assignment; interruption names one exact assignment and
+waits for reconciliation. Cancel closes only an idle session with no queued or
+unresolved work. Reuse the original operation key and input after a lost
+acknowledgement. Conflicting reuse or stale revisions refuse; retry never creates
+a replacement root. Reconcile continues the retained handoff operation.
+
+The default CLI has no selected IR-13 objective/checkpoint provider or IR-11
+workspace/ownership provider. New send/interrupt/integrate and transfer work
+therefore refuses until those separately owned integrations are supplied and
+qualified. Deterministic provider fixtures establish consumer mechanics only.
+Inspection and authorized idle closure remain available. Flows, admitted
+`CoordinatingSkill` tools and qualified operator hosts use the same command owner;
+declaration text alone supplies no control authority.
 
 **"How do I answer a human approval request?"** — `resolve-approval`.
 

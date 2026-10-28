@@ -1,0 +1,117 @@
+-- | A dedicated admitted coordination tool, separate from mutation overlays.
+-- Its pinned revision identifies the retained scope. Model arguments cannot
+-- supply an actor, root, scope grant or durable operation key.
+module Shikigami.WorkerSession.Tools (coordinationTools, appendNativeFactory, coordinatorRunFor) where
+
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as Lazy
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Effectful (Eff)
+import Effectful.Dispatch.Static (unsafeEff_)
+import Kioku.App (AppEffects, runAppIO)
+import Shikigami.Action.Authorization (ActionAuthorizer)
+import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Executor (BoundTool (..))
+import Shikigami.Execution.Policy.Types (RecoveryClass (IdempotentEffect), ToolInvoiceCost (NoInvoiceCost))
+import Shikigami.Execution.Runner (OperationContext (..))
+import Shikigami.Execution.Selection (ExecutionSelection (..))
+import Shikigami.Execution.Tools (NativeToolFactory (..))
+import Shikigami.Execution.Transcript (ExecutionError (..), ExecutionSnapshot (..), ToolBinding (..))
+import Shikigami.Prelude
+import Shikigami.WorkerSession.Capability
+import Shikigami.WorkerSession.Handoff (TransferServices (..))
+import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
+import Shikumi.Tool (SomeTool (..), ToolError (..))
+import Shikumi.Tool.Output (ToolOutput (..), textToolOutput)
+
+coordinatorRunFor :: ExecutionSnapshot -> CoordinatorRun
+coordinatorRunFor snapshot = CoordinatorRun snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just snapshot.selection.permittedAliases)
+
+coordinationTools :: Maybe CoordinationHost -> ActionAuthorizer -> NativeToolFactory
+coordinationTools Nothing _ = NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
+coordinationTools (Just host) authorizer =
+  NativeToolFactory
+    { describe = \snapshot -> do
+        granted <- owned (resolveGrant host authorizer (coordinatorRunFor snapshot) Nothing)
+        pure (fmap (maybe [] (\grant -> [bound grant Nothing | grantSupportsSkill grant])) granted),
+      prepare = \snapshot context requested ->
+        if maybe False (/= name) requested
+          then pure (Right [])
+          else case filter ((== name) . (.name)) snapshot.toolBindings of
+            [] -> pure (Right [])
+            [binding] -> case Text.stripPrefix prefix binding.revision of
+              Nothing -> pure (Left (ExecutionPolicyRefused "unsupported coordination binding"))
+              Just pinned -> do
+                granted <- owned (resolveGrant host authorizer (coordinatorRunFor snapshot) (Just pinned))
+                pure do
+                  permit <- granted >>= maybe (Left (ExecutionPolicyRefused "pinned coordination scope unavailable")) Right
+                  unless (grantSupportsSkill permit) (Left (ExecutionPolicyRefused "scope does not admit Skill coordination"))
+                  let tool = bound permit (Just context)
+                  unless (tool.binding == binding) (Left (ExecutionPolicyRefused "coordination binding changed"))
+                  pure [tool]
+            _ -> pure (Left (ExecutionPolicyRefused "ambiguous coordination binding"))
+    }
+  where
+    name = "workers"
+    prefix = "worker-coordination/1:"
+    owned :: Eff AppEffects (Either e a) -> IO (Either ExecutionError a)
+    owned action =
+      runAppIO host.services.sessions.appEnv action <&> \case
+        Right (Right result) -> Right result
+        _ -> Left (ExecutionPolicyRefused "admitted coordination authority unavailable")
+    bound grant context =
+      BoundTool
+        (ToolBinding name (prefix <> grantFingerprint grant) (versionedDigest "shikigami.tool-schema/1" schema) IdempotentEffect NoInvoiceCost)
+        ( DynTool name "Control only the continuing workers admitted for this assignment. Stable operation identity is supplied by the durable harness. Results contain bounded metadata and accepted findings." schema \arguments ->
+            case (context, Aeson.fromJSON arguments) of
+              (Nothing, _) -> pure (Left (ToolRunFailed name "description does not authorize execution"))
+              (_, Aeson.Error _) -> pure (Left (ToolArgsInvalid name "invalid closed worker command"))
+              (Just accepted, Aeson.Success command) -> do
+                result <- unsafeEff_ (runAppIO host.services.sessions.appEnv (executeCommand host authorizer grant accepted.operationId command))
+                pure case result of
+                  Right response ->
+                    let value = toJSON response
+                        output = textToolOutput (Text.decodeUtf8 (Lazy.toStrict (Aeson.encode value)))
+                     in Right (output {structuredContent = Just value})
+                  Left _ -> Left (ToolRunFailed name "worker command store unavailable")
+        )
+
+appendNativeFactory :: NativeToolFactory -> NativeToolFactory -> NativeToolFactory
+appendNativeFactory base extra =
+  NativeToolFactory
+    { describe = \snapshot -> do
+        left <- base.describe snapshot
+        right <- extra.describe snapshot
+        pure ((<>) <$> left <*> right),
+      prepare = \snapshot context requested -> do
+        left <- base.prepare snapshot context requested
+        right <- extra.prepare snapshot context requested
+        pure ((<>) <$> left <*> right)
+    }
+
+-- A closed top-level envelope; the typed decoder also rejects unknown fields.
+schema :: Aeson.Value
+schema =
+  Aeson.object
+    [ "type" Aeson..= ("object" :: Text),
+      "additionalProperties" Aeson..= False,
+      "properties"
+        Aeson..= Aeson.object
+          [ "tag" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "enum" Aeson..= (["FindWorker", "SendWorker", "InspectWorker", "ReadWorkerEvents", "ReadWorkerResult", "InterruptWorker", "CancelWorker", "TransferWorker", "ReconcileWorker", "IntegrateWorkerEvents"] :: [Text])],
+            "workerKey" Aeson..= string,
+            "sessionId" Aeson..= string,
+            "expectedRevision" Aeson..= integer,
+            "epoch" Aeson..= integer,
+            "instruction" Aeson..= Aeson.object ["type" Aeson..= ("object" :: Text), "description" Aeson..= ("text, objectiveRevision, assignmentRevision, criteriaRevision, selection (null or declared alias requirements). Actor, operation, kind and root are supplied by the runtime." :: Text)],
+            "assignmentId" Aeson..= string,
+            "after" Aeson..= integer,
+            "limit" Aeson..= integer,
+            "workspace" Aeson..= Aeson.object ["type" Aeson..= ("object" :: Text), "description" Aeson..= ("operator-owned provider and resource identities" :: Text)],
+            "target" Aeson..= string
+          ],
+      "required" Aeson..= (["tag"] :: [Text])
+    ]
+  where
+    string = Aeson.object ["type" Aeson..= ("string" :: Text)]
+    integer = Aeson.object ["type" Aeson..= ("integer" :: Text)]

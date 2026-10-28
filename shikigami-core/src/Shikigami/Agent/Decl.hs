@@ -236,6 +236,7 @@ data Behavior
         enabledBy :: !(Maybe Text)
       }
   | Skill {path :: !Text}
+  | CoordinatingSkill {path :: !Text}
   | Flow {name :: !Text}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)

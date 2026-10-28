@@ -48,12 +48,29 @@ tests =
                 "agents",
                 "runs",
                 "resources",
-                "executions"
+                "executions",
+                "workers"
               ],
       testCase "executions inspect accepts bounded history pagination" do
         case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of
           Success (chosen, _) -> assertBool "execution action selected" (not (isNothing chosen))
           _ -> assertBool "executions did not parse" False,
+      testCase "workers inspect accepts bounded assignment pagination" do
+        case execParserPure adminPrefs adminInfo ["workers", "inspect", "session-1", "--json", "--after", "20", "--limit", "5"] of
+          Success (chosen, _) -> assertBool "worker action selected" (not (isNothing chosen))
+          _ -> assertBool "workers did not parse" False,
+      testCase "worker sends require a stable operation key and expected ownership" do
+        let args = ["workers", "send", "session-1", "--operation", "send-1", "--expected-revision", "3", "--epoch", "0", "--instruction-file", "instruction.json"]
+        case execParserPure adminPrefs adminInfo args of
+          Success (chosen, _) -> assertBool "worker send selected" (not (isNothing chosen))
+          _ -> assertBool "worker send did not parse" False
+        case execParserPure adminPrefs adminInfo ["workers", "send", "session-1", "--instruction-file", "instruction.json"] of
+          Failure _ -> pure ()
+          _ -> assertBool "missing operation and revision admitted" False,
+      testCase "worker commands cannot choose a replacement resource root" do
+        case execParserPure adminPrefs adminInfo ["workers", "cancel", "session-1", "--operation", "cancel-1", "--expected-revision", "3", "--epoch", "0", "--root", "replacement"] of
+          Failure _ -> pure ()
+          _ -> assertBool "replacement root admitted" False,
       testCase "resources inspect accepts a root and JSON output" do
         case execParserPure adminPrefs adminInfo ["resources", "inspect", "root-1", "--json"] of
           Success (chosen, _) -> assertBool "resources action selected" (not (isNothing chosen))

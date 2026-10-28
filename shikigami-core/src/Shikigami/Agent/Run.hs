@@ -95,6 +95,7 @@ behaviorKindText :: Behavior -> Text
 behaviorKindText b = case b of
   ShikumiProgram {} -> "ShikumiProgram"
   Skill {} -> "Skill"
+  CoordinatingSkill {} -> "CoordinatingSkill"
   Deterministic {} -> "Deterministic"
   Flow {} -> "Flow"
 

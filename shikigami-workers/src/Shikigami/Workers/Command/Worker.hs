@@ -11,12 +11,10 @@ import Data.Foldable (traverse_)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
-import Kikan.En.Client (newActionProofVerifier, newKikanEnClient)
 import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
-import Network.HTTP.Client.TLS (newTlsManager)
-import Servant.Client (mkClientEnv, parseBaseUrl)
-import Shikigami.Action.Authorization (ActionAuthorizer, denyAllActionAuthorizer, newKikanActionAuthorizer, shomeiClientCredentialsToken)
+import Shikigami.Action.Authorization (ActionAuthorizer)
+import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -214,19 +212,7 @@ refuseInvalidSinkHttp logger failure = do
 
 buildActionAuthorizer :: Log.Logger -> AppConfig -> IO ActionAuthorizer
 buildActionAuthorizer logger config =
-  case (.actionAuthorization) config of
-    Config.ActionAuthorizationDisabled -> pure denyAllActionAuthorizer
-    Config.KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId} -> do
-      kikanBase <- either (refuse "Kikan-En" kikanBaseUrl) pure (parseBaseUrl (Text.unpack kikanBaseUrl))
-      shomeiBase <- either (refuse "Shomei" shomeiBaseUrl) pure (parseBaseUrl (Text.unpack shomeiBaseUrl))
-      manager <- newTlsManager
-      let verifier = newActionProofVerifier issuerPublicKeys acceptedSchemaHashes (const (pure False))
-          client = newKikanEnClient (mkClientEnv manager kikanBase) verifier
-          tokenSource = shomeiClientCredentialsToken (mkClientEnv manager shomeiBase) shomeiClientId (Config.revealSecretText shomeiClientSecret)
-      pure (newKikanActionAuthorizer logger callerId ((.kawaSourceSegment) config) client tokenSource)
-  where
-    refuse serviceName baseUrl _ =
-      Exit.die ("shikigami-worker: invalid " <> Text.unpack serviceName <> " authorization base URL: " <> Text.unpack baseUrl)
+  buildConfiguredActionAuthorizer logger config >>= either (Exit.die . Text.unpack) pure
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.

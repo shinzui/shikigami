@@ -464,7 +464,7 @@ preserve and therefore no legacy branch to model. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
 
-The active application patch is `shikigami-flow-decisions-v1`. Its real runtime
+The typed-decision application patch is `shikigami-flow-decisions-v1`. Its real runtime
 guard enables the finite typed Decision capability; an old patch snapshot keeps
 the disabled interpreter and makes no `decision-policy` lookup. Existing flows
 have no decision slots and add no decision steps. The checked segment declares:
@@ -516,6 +516,24 @@ Flows retain their existing orchestration. A completed accepted result is read
 from protected storage without looking up a live provider. Session, memory and
 sink ownership and step codecs are unchanged. Preserve both branches and roll
 forward across this patch introduction. See [ADR 0057](adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md).
+
+Agent runs also declare `shikigami-worker-coordination-v1`. Old Flow journals
+keep the disabled Workers interpreter and make no coordination-policy lookup.
+New Flows journal `worker-coordination-policy`, a bounded scope fingerprint or
+refusal. Each command reacquires that retained scope and fresh exact authority.
+Future registered callers must declare their concrete `workers-command-<label>`,
+`workers-state-<label>`, `workers-subscribe-<label>` and `workers-read-<label>`
+steps and generation-owned event waits. Event acceptance and wake completion
+share a transaction; notifications target only their publishing generation.
+
+Old Skills retain their original static menu branch. The explicit new
+`CoordinatingSkill` behavior requires the new patch and an admitted worker tool
+before model dispatch. Ordinary fixed supervisors retain their old behavior;
+conversations and ephemeral execution do not admit this coordinator behavior.
+Accepted execution snapshots retain their original bindings. Session replay
+repairs missing child input and acknowledges an already retained result under
+the existing labels and codecs. These repairs add no parent journal step.
+See [ADR 0066](adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md).
 
 ## Undeclarable label families
 

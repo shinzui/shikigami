@@ -5,27 +5,35 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Effectful (Eff)
+import Keiro.Workflow (WorkflowOutcome (Completed, ContinuedAsNew, Suspended), runWorkflowWith)
+import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
+import Shikigami.Agent.Run (AgentRunResult (..))
+import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Resources (Admission (..), Root (..))
 import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
+import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
-import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId)
+import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow qualified as Session
 import Shikigami.WorkerSessionStoreSpec (checkpointVersion, withConfiguredFixture)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -98,6 +106,34 @@ tests fixture =
           reader <- expectRight =<< run env (Store.authorizeSession (sessionIdFor admission) successor (pure (Right ())))
           result <- expectRight =<< run env (Store.readResult reader message.assignmentId)
           ((.cursor) . fst <$> result) @?= Just receipt.cursor,
+      testCase "a result committed before handoff replays its old acknowledgement after the owner changes" $
+        withTransferFixture fixture False \env admission access owner -> do
+          behavior <- newBehaviorEnv
+          let runtime = owner.services.sessions
+              session = sessionIdFor admission
+              options = shikigamiWorkflowRunOptions env
+              dependencies = Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) runtime.agents
+              drive = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart session))))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (instruction 1))
+          drive >>= (@?= Suspended)
+          started <- expectRight =<< run env (Store.readAssignment access message.assignmentId)
+          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
+          completed <- run env (runChildWorkflow options Agent.agentRunWorkflowName child (Agent.agentRunWorkflow dependencies Nothing))
+          output <- case completed of Completed (Right result) -> pure result.behaviorOutput; _ -> assertFailure (show completed) >> fail "child failed"
+          pending <- current env admission
+          -- Simulate the store commit succeeding just before the parent step's
+          -- journal acknowledgement is lost.
+          _ <- expectRight =<< run env (Store.recordResult access pending.revision 0 (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing output []))
+          recorded <- current env admission
+          _ <- expectRight =<< requestAt env admission owner recorded.revision
+          writeIORef owner.inFlight False
+          run env (Handoff.resumeHandoff owner.services session) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
+          drive >>= (@?= ContinuedAsNew)
+          final <- current env admission
+          final.owner @?= successor
+          final.epoch @?= 1
+          events <- expectRight =<< run env (Store.readEvents access 0 100)
+          length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 1,
       testCase "missing execution evidence keeps a settled workspace handoff unresolved" $
         withTransferFixture fixture False \env admission access owner -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (instruction 1))
@@ -214,7 +250,7 @@ withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture
               pure (if intent.expected /= version then Checkpoint.CheckpointConflict else Checkpoint.CheckpointUnavailable)
           )
       workspace = WorkspaceProvider reconcile admitWrite
-      runtime = Session.SessionRuntime env [admission.delegator & #name .~ "successor" & #delegates .~ []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
+      runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker", Fixture.successSpecialist "successor"] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   callback env admission access (Owners (Handoff.TransferServices runtime (Just workspace) (Just ownership)) workspace ownership checkpoints inFlight writes ownershipUpdates)
 
 current :: AppEnv -> SessionAdmission -> IO SessionState

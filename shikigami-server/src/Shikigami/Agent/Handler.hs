@@ -74,6 +74,7 @@ agentView env decl = do
           Decl.Deterministic {} -> "deterministic"
           Decl.ShikumiProgram {} -> "shikumi_program"
           Decl.Skill {} -> "skill"
+          Decl.CoordinatingSkill {} -> "coordinating_skill"
           Decl.Flow {} -> "flow",
         sinks = fmap sinkKind decl.sinks,
         delegates = decl.delegates,

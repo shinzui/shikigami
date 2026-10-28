@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Behaviors — what an agent does"
-description: "Compare deterministic, ShikumiProgram, Skill, and Flow behavior declarations."
+description: "Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, and Flow behavior declarations."
 docId: "DOC-5"
 tags: ["behaviors"]
 generated:
@@ -11,8 +11,8 @@ generated:
 
 # Behaviors — *what* an agent does
 
-A behavior is the work an agent performs when its trigger fires. It is a **union** of four
-arms — not everything needs a typed program or a model call:
+A behavior is the work an agent performs when its trigger fires. Its declaration
+has five arms:
 
 ```dhall
 let Behavior =
@@ -22,6 +22,7 @@ let Behavior =
           { task : Text, preferEnrichment : Bool
           , grounding : Optional Text, enabledBy : Optional Text }
       | Skill : { path : Text }
+      | CoordinatingSkill : { path : Text }
       | Flow : { name : Text }
       >
 ```
@@ -31,6 +32,7 @@ let Behavior =
 | **Deterministic** | schema only; runner returns `UnsupportedBehavior` | — | reserved rule declaration |
 | **ShikumiProgram** | `mori://shinzui/handan` + `mori://shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
 | **Skill** | `mori://shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
+| **CoordinatingSkill** | admitted durable execution | When the selected provider requires one | instructions controlling a bounded set of continuing workers |
 | **Flow** | `mori://shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
 
 Supported behaviors return JSON to the shared session, memory, and sink lifecycle.
@@ -102,6 +104,25 @@ model key — exactly as `noop-summary` does. See **[Skills](./skills.md)** for 
 > `scripts/` (arbitrary executable code) needs a sandbox and is **not** run by this runtime —
 > a deferred concern.
 
+## CoordinatingSkill — admitted worker control
+
+```dhall
+behavior = A.Behavior.CoordinatingSkill { path = "agents/skills/coordinator" }
+```
+
+This arm uses the durable Skill harness and requires an operator-admitted
+coordination scope before any model call. The scope fixes the parent, root,
+delegation limits, permitted models and finite worker slots. The dedicated
+`workers` tool shares the governed command owner with Flows and operator commands.
+Instructions and `delegates` request capabilities; they do not grant control.
+
+An ordinary `Skill` with delegates continues to use the existing fixed supervisor.
+`CoordinatingSkill` cannot run through `shikigami-run-behavior`, conversation
+fallback, or a routed declaration. Production coordination remains unavailable
+until the separately owned objective/checkpoint and workspace providers are
+configured and qualified. See [worker operations](../operations/operator-cli.md)
+for command semantics and the current provider gates.
+
 ## Flow — the durable lifecycle path
 
 ```dhall
@@ -141,5 +162,6 @@ quickest way to iterate on what an agent produces.
 | a clear rule over structured fields | a registered `ShikumiProgram` |
 | a typed pipeline you want to evaluate/optimize | `ShikumiProgram` |
 | natural-language instructions, optionally with tools | `Skill` |
+| instructions controlling admitted continuing workers | `CoordinatingSkill` after provider qualification |
 | a durable process that must wait or resume | `Flow` |
 | typed decisions that branch into governed actions and survive restart | `Flow` with the `Decision` capability |

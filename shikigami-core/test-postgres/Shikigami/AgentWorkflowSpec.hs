@@ -1749,8 +1749,8 @@ tests databaseFixture =
 
                 let registry = Registry.workflowRegistry deps (testConversationEnv appEnv behaviorEnv [conversationDecl])
                 assertEqual
-                  "production registry covers all four families"
-                  ["shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation", "shikigami.execution"]
+                  "production registry covers all five families"
+                  ["shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation", "shikigami.execution", "shikigami.worker-session"]
                   (map unWorkflowName (Map.keys registry))
                 driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables
@@ -2026,6 +2026,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       decisions = FlowDecision.emptyDecisionServices,
       actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
+      coordination = Nothing,
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
@@ -2060,6 +2061,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       decisions = FlowDecision.emptyDecisionServices,
       actionAuthorizer = allowAllActionAuthorizerForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
+      coordination = Nothing,
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},

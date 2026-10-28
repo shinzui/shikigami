@@ -206,6 +206,7 @@ agentRunDeps env =
       AgentWorkflow.decisions = (.decisions) env,
       AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
       AgentWorkflow.capabilities = emptyCapabilityRuntime,
+      AgentWorkflow.coordination = Nothing,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,

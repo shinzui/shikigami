@@ -82,6 +82,7 @@ aggregate WorkerSessionLifecycle
   command RequestSessionTransfer { sessionId:Text expected:Int revision:Int }
   command ReconcileSessionTransfer { sessionId:Text expected:Int revision:Int }
   command EstablishSessionOwner { sessionId:Text expected:Int revision:Int }
+  command SubscribeSessionEvents { sessionId:Text expected:Int revision:Int }
   command ObserveWorkerSession { sessionId:Text expected:Int revision:Int }
   command PrepareSessionCheckpoint { sessionId:Text expected:Int revision:Int }
   command ConsumeSessionEvents { sessionId:Text expected:Int revision:Int }
@@ -98,6 +99,7 @@ aggregate WorkerSessionLifecycle
   event SessionTransferRequested = fields(RequestSessionTransfer)
   event SessionTransferReconciled = fields(ReconcileSessionTransfer)
   event SessionOwnerEstablished = fields(EstablishSessionOwner)
+  event SessionEventsSubscribed = fields(SubscribeSessionEvents)
   event WorkerSessionObserved = fields(ObserveWorkerSession)
   event SessionCheckpointPrepared = fields(PrepareSessionCheckpoint)
   event SessionEventsConsumed = fields(ConsumeSessionEvents)
@@ -349,5 +351,47 @@ aggregate WorkerSessionLifecycle
     write revision := cmd.revision
     emit SessionTransferRequested
     goto Transferring
+
+  Idle -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Idle
+
+  Active -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Active
+
+  Parked -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Parked
+
+  Unresolved -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Unresolved
+
+  Transferring -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Transferring
+
+  Failed -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Failed
+
+  Cancelled -- SubscribeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsSubscribed
+    goto Cancelled
 
   wire kind=ctorName fields=camelCase schemaVersion=1

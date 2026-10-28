@@ -178,6 +178,8 @@ runBehavior env decl input
           (completeBehaviorRequest env)
       Flow {} ->
         pure (Left (UnsupportedBehavior "Flow"))
+      CoordinatingSkill {} ->
+        pure (Left (UnsupportedBehavior "CoordinatingSkill requires an admitted durable coordination scope"))
       Deterministic {} ->
         -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
         pure (Left (UnsupportedBehavior "Deterministic"))

@@ -7,14 +7,19 @@ module Shikigami.WorkerSession.Store
     SessionEffects,
     SessionReadEffects,
     openSession,
+    openSessionWithLimit,
+    ensureSessionDriver,
     authorizeSession,
     inspectSession,
+    inspectSessionPage,
     loadAdmission,
     readInstruction,
     readAssignment,
     readAssignmentContext,
     nextAssignment,
     acceptMessage,
+    acceptScopedMessage,
+    readMessageAcceptance,
     startAssignment,
     setAssignmentStatus,
     closeSession,
@@ -26,6 +31,7 @@ module Shikigami.WorkerSession.Store
     readCheckpointIntent,
     acceptCheckpointWith,
     observeSession,
+    subscribeEvents,
     requestTransfer,
     readTransferIntent,
     readTransferOperation,
@@ -45,6 +51,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.Maybe (catMaybes, listToMaybe)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff, IOE, (:>))
@@ -61,7 +68,7 @@ import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
 import Keiro.Workflow (JournalAppendOutcome (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), awakeableStepPrefix, currentGeneration, prepareJournalAppend)
 import Keiro.Workflow.Awakeable (awakeableIdText, awakeableIdToUuid)
-import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (Completed), completeAwakeableTx, lookupAwakeable, lookupAwakeableStatusTx)
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (Completed, Pending), completeAwakeableTx, lookupAwakeable, lookupAwakeableStatusTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
@@ -136,13 +143,17 @@ readPayload session kind ref = do
     _ -> abort (SessionInputRefused "session payload is unavailable")
 
 openSession :: (SessionEffects es) => SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
-openSession admission = guarded do
+openSession = openSessionWithLimit 128
+
+openSessionWithLimit :: (SessionEffects es) => Int -> SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
+openSessionWithLimit maximumSessions admission = guarded do
+  unless (maximumSessions >= 1 && maximumSessions <= 128) (throwIO (SessionAbort SessionLimitExceeded))
   either (throwIO . SessionAbort) pure (validateAdmission admission)
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
   let session = sessionIdFor admission
       root = fromMaybe (error "validated session root missing") admission.context.executionRootId
       binding = SessionBinding session (scopeDigestFor admission) admission.scope admission.objective admission.context.identity admission.identity root ref
-      initial = SessionState 1 session 0 Idle admission.identity 0 Nothing 0 0 0 Nothing Nothing Nothing Nothing
+      initial = SessionState 1 session 0 Idle admission.identity 0 Nothing 0 0 0 Nothing Nothing Nothing Nothing []
       matching = \case
         Just (state, existing) | existing == binding -> Right (AlreadyAccepted, state)
         Just _ -> Left SessionBindingConflict
@@ -153,6 +164,11 @@ openSession admission = guarded do
     Nothing -> do
       result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session.value ref.digest)) do
         validateRoot True root
+        void (Tx.statement (versionedDigest "shikigami.worker-session-scope-lock/1" (toJSON (admission.scope.parent, admission.context.identity))) lockScope)
+        existingScope <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
+        when (maybe False ((/= root) . (.rootId)) existingScope) (abort SessionBindingConflict)
+        count <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) countScopeSessions
+        when (count >= fromIntegral maximumSessions) (abort SessionLimitExceeded)
         collision <- Tx.statement session.value selectSession
         when (isJust collision) (abort SessionBindingConflict)
         Tx.statement (session.value, scopeDigestFor admission, initial, binding) insertSession
@@ -166,6 +182,23 @@ openSession admission = guarded do
   where
     encoded = body "session-admission" admission
 
+-- | Register only the original input. The public journal API atomically creates
+-- the resume instance; an existing generation/input is never reset. A command
+-- retry repairs a crash after mailbox acceptance but before this registration.
+ensureSessionDriver :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError ())
+ensureSessionDriver access@(SessionAccess session _ _) = guarded do
+  now <- liftIO getCurrentTime
+  let input = Aeson.object ["sessionId" Aeson..= session]
+  append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) 0 (StepRecorded "ingest-session" input now)
+  protected do
+    (state, binding) <- getSession session
+    checkAccess access state binding
+    unless (state.phase `elem` [Failed, Cancelled]) do
+      append >>= \case
+        JournalAppended {} -> pure ()
+        JournalAlreadyPresent original | original == input -> pure ()
+        _ -> abort SessionStorageUnavailable
+
 authorizeSession :: (SessionReadEffects es) => WorkerSessionId -> AgentIdentity -> IO (Either Text ()) -> Eff es (Either SessionError SessionAccess)
 authorizeSession session actor authorize = guarded do
   current <- metadata (Tx.statement session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
@@ -177,6 +210,17 @@ authorizeSession session actor authorize = guarded do
 
 inspectSession :: (SessionReadEffects es) => WorkerSessionId -> Eff es (Either SessionError (Maybe (SessionState, SessionBinding)))
 inspectSession session = protected (Tx.statement session.value selectSession)
+
+inspectSessionPage :: (SessionReadEffects es) => WorkerSessionId -> Integer -> Int -> Eff es (Either SessionError (Maybe SessionInspection))
+inspectSessionPage session after limit
+  | after < -1 || after >= 10000 || limit < 1 || limit > 20 = pure (Left (SessionInputRefused "invalid assignment cursor or page limit"))
+  | otherwise = protected do
+      Tx.statement session.value selectSession >>= traverse \(state, binding) -> do
+        messages <- Tx.statement (session.value, fromInteger after, fromIntegral limit) pageMessages
+        active <- traverse (getAssignment session) state.activeAssignment
+        results <- catMaybes <$> traverse (\message -> Tx.statement (session.value, message.assignmentId.value) selectResult) messages
+        let next = maybe after (.sequence) (listToMaybe (reverse messages))
+        pure (SessionInspection state binding messages active results next (next + 1 < state.nextSequence))
 
 loadAdmission :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError SessionAdmission)
 loadAdmission access@(SessionAccess session _ _) = protected do
@@ -213,16 +257,21 @@ nextAssignment access@(SessionAccess session _ _) = protected do
 -- Expected assignment revision is immutable input. Optimistic session revision
 -- is not part of the fingerprint, so a refused race can retry the same key.
 acceptMessage :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
-acceptMessage access expected epoch operation instruction = guarded do
+acceptMessage access expected epoch operation instruction = acceptScopedMessage access expected epoch operation Nothing instruction
+
+acceptScopedMessage :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> Maybe [Text] -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
+acceptScopedMessage access expected epoch operation permissions instruction = guarded do
   either (throwIO . SessionAbort) pure (validateInstruction instruction)
+  unless (maybe True (\aliases -> not (null aliases) && length aliases <= 128 && all (\alias -> not (Text.null alias) && Text.length alias <= 256) aliases) permissions) (throwIO (SessionAbort SessionOwnerRefused))
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
+  let commandInput = maybe (toJSON (epoch, ref)) (\aliases -> toJSON (epoch, ref, aliases)) permissions
   mutate
     access
     expected
     epoch
     operation
     "accept"
-    (toJSON (epoch, ref))
+    commandInput
     True
     (\session revision -> Generated.AcceptSessionMessage (Generated.AcceptSessionMessageData session revision (revision + 1)))
     \state _ admission -> do
@@ -235,13 +284,24 @@ acceptMessage access expected epoch operation instruction = guarded do
         Interrupt assignment -> unless (state.activeAssignment == Just assignment) (abort InterruptTargetChanged)
       actual <- writePayload state.sessionId encoded
       unless (actual == ref) (abort SessionBindingConflict)
-      let fingerprint = commandFingerprint "accept" (toJSON (epoch, ref))
-          message = MessageReceipt 1 state.sessionId state.nextSequence (assignmentIdFor state.sessionId state.nextSequence operation) operation fingerprint instruction.kind ref instruction.assignmentRevision state.epoch Queued Nothing Nothing Nothing
+      let fingerprint = commandFingerprint "accept" commandInput
+          message = MessageReceipt 1 state.sessionId state.nextSequence (assignmentIdFor state.sessionId state.nextSequence operation) operation fingerprint instruction.kind ref instruction.assignmentRevision state.epoch Queued Nothing Nothing Nothing permissions
       Tx.statement (state.sessionId.value, fromInteger state.nextSequence, message.assignmentId.value, operationKey operation, message) insertMessage
       appendEvent state (MessageAccepted message)
       pure (message, state & #nextSequence .~ (state.nextSequence + 1) & #eventCursor .~ (state.eventCursor + 1))
   where
     encoded = body "session-instruction" instruction
+
+readMessageAcceptance :: (SessionReadEffects es) => SessionAccess -> OperationId -> Eff es (Either SessionError (Maybe MessageReceipt))
+readMessageAcceptance access@(SessionAccess session _ _) operation = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  stored <- Tx.statement (session.value, operationKey operation) selectCommand
+  case stored of
+    Nothing -> pure Nothing
+    Just (_, value) -> case Aeson.fromJSON value of
+      Aeson.Success receipt | receipt.sessionId == session && receipt.operationId == operation -> pure (Just receipt)
+      _ -> abort MessageConflict
 
 -- The child mapping is fixed before any spawn. A second assignment receives a
 -- distinct deterministic mapping under the same continuing session.
@@ -335,7 +395,8 @@ closeSession access expected epoch operation disposition =
         \state _ _ -> do
           queued <- Tx.statement state.sessionId.value countQueued
           unless (state.phase == Idle && isNothing state.activeAssignment && queued == 0) (abort AssignmentStillActive)
-          let next = state & #phase .~ phase & #revision .~ (expected + 1)
+          appendEvent state (SessionClosedEvent phase)
+          let next = state & #phase .~ phase & #revision .~ (expected + 1) & #eventCursor .~ (state.eventCursor + 1)
           pure (next, next)
 
 recordResult :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> AssignmentResult -> Eff es (Either SessionError (Admission, ResultReceipt))
@@ -472,6 +533,63 @@ observeSession access@(SessionAccess session _ _) expected epoch operation wake 
       ref <- writePayload session (body "session-wake" wake)
       let next = state & #wake .~ Just ref & #revision .~ (expected + 1)
       pure (next, next)
+
+subscribeEvents :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> SessionListener -> Eff es (Either SessionError (Admission, Integer))
+subscribeEvents access@(SessionAccess session _ _) expected epoch operation listener = guarded do
+  unless (listener.after >= 0 && listener.after <= 100000 && listener.generation >= 0) (throwIO (SessionAbort SessionBindingConflict))
+  _ <- validateListener listener
+  existing <- metadata do
+    (state, binding) <- getSession session
+    checkAccess access state binding
+    forM state.listeners \ref -> do
+      current <- readPayload @SessionListener session "session-listener" ref
+      status <- lookupAwakeableStatusTx (awakeableIdToUuid current.token)
+      pure (ref, current, status == Just Pending)
+  live <- fmap catMaybes $ forM existing \(ref, current, pending) -> do
+    generation <- currentGeneration (WorkflowName current.ownerName) (WorkflowId current.ownerId)
+    pure (if pending && generation == current.generation then Just ref else Nothing)
+  notify <- prepareListenerNotification session listener
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "subscribe"
+    (toJSON (epoch, listener))
+    False
+    (\key revision -> Generated.SubscribeSessionEvents (Generated.SubscribeSessionEventsData key revision (revision + 1)))
+    \state _ _ -> do
+      ref <- writePayload session (body "session-listener" listener)
+      let retained = filter (/= ref) live <> [ref]
+      when (length retained > 32) (abort SessionLimitExceeded)
+      when (state.eventCursor > listener.after) notify
+      pure (state.eventCursor, state & #listeners .~ retained)
+
+validateListener :: (SessionReadEffects es) => SessionListener -> Eff es AwakeableRow
+validateListener listener = do
+  row <- lookupAwakeable (awakeableIdToUuid listener.token) >>= maybe (throwIO (SessionAbort SessionBindingConflict)) pure
+  generation <- currentGeneration (WorkflowName listener.ownerName) (WorkflowId listener.ownerId)
+  unless (row.ownerWorkflowName == listener.ownerName && row.ownerWorkflowId == listener.ownerId && listener.generation == generation) (throwIO (SessionAbort SessionBindingConflict))
+  pure row
+
+prepareListenerNotification :: (SessionReadEffects es) => WorkerSessionId -> SessionListener -> Eff es (Transaction ())
+prepareListenerNotification session listener = do
+  generation <- currentGeneration (WorkflowName listener.ownerName) (WorkflowId listener.ownerId)
+  row <- lookupAwakeable (awakeableIdToUuid listener.token)
+  if generation /= listener.generation || isNothing row
+    then pure (pure ())
+    else do
+      _ <- validateListener listener
+      now <- liftIO getCurrentTime
+      append <- prepareJournalAppend (WorkflowName listener.ownerName) (WorkflowId listener.ownerId) listener.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
+      pure do
+        transitioned <- completeAwakeableTx (awakeableIdToUuid listener.token) (toJSON session) now
+        status <- lookupAwakeableStatusTx (awakeableIdToUuid listener.token)
+        when (transitioned || status == Just Completed) do
+          append >>= \case
+            JournalAppendConflict {} -> abort SessionStorageUnavailable
+            JournalAlreadyPresent stored | stored /= toJSON session -> abort SessionStorageUnavailable
+            _ -> pure ()
 
 requestTransfer :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> ObjectiveVersion -> WorkspaceRef -> AgentName -> AgentIdentity -> Eff es (Either SessionError (Admission, TransferIntent))
 requestTransfer access expected epoch operation version workspace target successor = guarded $
@@ -611,30 +729,41 @@ validateWake session wake = do
 
 -- Prepared outside the checked writer, completed inside it. A message cannot
 -- commit while losing its published wake. Rotation never redirects an old wake.
-prepareNotification :: (SessionReadEffects es) => SessionAccess -> Eff es (Maybe PayloadRef, Transaction ())
+prepareNotification :: (SessionReadEffects es) => SessionAccess -> Eff es (Maybe PayloadRef, [PayloadRef], SessionState -> Transaction ())
 prepareNotification access@(SessionAccess session _ _) = do
-  (reference, wake) <- metadata do
+  (reference, wake, references, listeners) <- metadata do
     (state, binding) <- getSession session
     checkAccess access state binding
     decoded <- traverse (readPayload session "session-wake") state.wake
-    pure (state.wake, decoded)
+    listeners <- traverse (readPayload session "session-listener") state.listeners
+    pure (state.wake, decoded, state.listeners, listeners)
+  notifications <- forM listeners \listener -> (listener.after,) <$> prepareListenerNotification session listener
   generation <- currentGeneration sessionWorkflowName (sessionWorkflowId session)
-  case wake of
+  driver <- case wake of
     Just published | published.generation == generation -> do
-      _ <- validateWake session published
-      now <- liftIO getCurrentTime
-      append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) published.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText published.token) (toJSON session) now)
-      pure
-        ( reference,
-          do
+      row <- lookupAwakeable (awakeableIdToUuid published.token)
+      case row of
+        Nothing -> pure (pure ()) -- A retained session can outlive journal GC.
+        Just _ -> do
+          _ <- validateWake session published
+          now <- liftIO getCurrentTime
+          append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) published.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText published.token) (toJSON session) now)
+          pure do
             transitioned <- completeAwakeableTx (awakeableIdToUuid published.token) (toJSON session) now
             status <- lookupAwakeableStatusTx (awakeableIdToUuid published.token)
             when (transitioned || status == Just Completed) do
               append >>= \case
                 JournalAppendConflict {} -> abort SessionStorageUnavailable
+                JournalAlreadyPresent stored | stored /= toJSON session -> abort SessionStorageUnavailable
                 _ -> pure ()
-        )
-    _ -> pure (reference, pure ())
+    _ -> pure (pure ())
+  pure
+    ( reference,
+      references,
+      \state -> do
+        driver
+        forM_ notifications \(after, notify) -> when (state.eventCursor > after) notify
+    )
 
 mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> Integer -> Integer -> OperationId -> Text -> Aeson.Value -> Bool -> (Text -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
 mutate access@(SessionAccess session actor _) expected epoch operation kind input fresh command action = do
@@ -650,7 +779,7 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
   case old of
     Just _ -> pure (decodeStored old)
     Nothing -> do
-      notification <- if kind == "observe" then pure Nothing else Just <$> prepareNotification access
+      notification <- if kind `elem` ["observe", "subscribe"] then pure Nothing else Just <$> prepareNotification access
       result <- persist session (command session.value (fromInteger expected)) do
         validateRoot fresh binding.rootId
         (state, actualBinding) <- getSession session
@@ -659,9 +788,9 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
         unless (state.revision == expected && expected >= 0 && expected < toInteger (maxBound :: Int)) (abort SessionRevisionConflict)
         admission <- readPayload session "session-admission" actualBinding.admission
         (value, next) <- action state actualBinding admission
-        forM_ notification \(reference, notify) -> do
-          unless (reference == state.wake) (abort SessionRevisionConflict)
-          notify
+        forM_ notification \(reference, listeners, notify) -> do
+          unless (reference == state.wake && listeners == state.listeners) (abort SessionRevisionConflict)
+          notify next
         saveSession (next & #revision .~ (expected + 1))
         Tx.statement (session.value, operationKey operation, fingerprint, toJSON value) insertCommand
       stored <- metadata (Tx.statement (session.value, operationKey operation) selectCommand)
@@ -745,6 +874,18 @@ jsonRow = D.column (D.nonNullable (D.refine (\value -> case Aeson.fromJSON value
 selectSession, lockSession :: Statement Text (Maybe (SessionState, SessionBinding))
 selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
 lockSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1 FOR UPDATE" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
+
+countScopeSessions :: Statement (Text, Aeson.Value) Int64
+countScopeSessions = preparable "SELECT count(*) FROM shikigami.worker_sessions WHERE binding->'scope'->>'parent'=$1 AND binding->'parentIdentity'=$2" (contrazip2 textParam jsonParam) (D.singleRow (D.column (D.nonNullable D.int8)))
+
+lockScope :: Statement Text Int
+lockScope = preparable "SELECT 1::int4 FROM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1,0))" textParam (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int4)))
+
+selectScopeBinding :: Statement (Text, Aeson.Value) (Maybe SessionBinding)
+selectScopeBinding = preparable "SELECT binding FROM shikigami.worker_sessions WHERE binding->'scope'->>'parent'=$1 AND binding->'parentIdentity'=$2 ORDER BY session_id LIMIT 1" (contrazip2 textParam jsonParam) (D.rowMaybe jsonRow)
+
+pageMessages :: Statement (Text, Int64, Int64) [MessageReceipt]
+pageMessages = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3" (contrazip3 textParam (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)
 
 insertSession :: Statement (Text, Text, SessionState, SessionBinding) ()
 insertSession = preparable "INSERT INTO shikigami.worker_sessions(session_id,scope_digest,state,binding) VALUES ($1,$2,$3,$4)" (contrazip4 textParam textParam jsonParam jsonParam) D.noResult

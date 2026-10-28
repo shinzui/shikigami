@@ -33,6 +33,7 @@ library
   other-modules: Paths_shikigami_core
   exposed-modules:
     Shikigami.Action.Authorization
+    Shikigami.Action.Authorization.Config
     Shikigami.Activity
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.Notification
@@ -123,6 +124,7 @@ library
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
+    Shikigami.Flow.Workers
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Id.Name
@@ -177,6 +179,7 @@ library
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
+    Shikigami.WorkerSession.Capability
     Shikigami.WorkerSession.Catalog
     Shikigami.WorkerSession.Checkpoint
     Shikigami.WorkerSession.Handoff
@@ -184,6 +187,7 @@ library
     Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
     Shikigami.WorkerSession.Store
+    Shikigami.WorkerSession.Tools
     Shikigami.WorkerSession.Transfer
     Shikigami.WorkerSession.Types
     Shikigami.WorkerSession.Workflow
@@ -442,6 +446,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.RunEvidenceSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec
     Shikigami.WorkerSessionStoreSpec

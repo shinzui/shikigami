@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-10-28
+* **Update**: FRIC-13 accepted: Accept the qualified module-local O0 workaround after all 1057 tests, full build, compatible evolution/conformance and schema isolation passed.
+* **Update**: FRIC-13 logged: Replace the disproven narrow transform workaround with the module-local unoptimized boundary that passed the complete capability group; full-suite qualification pending.
+* **Update**: FRIC-13 logged: Full-suite recurrence invalidated acceptance of the provisional transform exclusion; reopen investigation.
+* **Update**: FRIC-13 accepted: Accept the narrow compiler workaround after clean-build failure and passing controlled transform-disabled replay.
+* **Addition**: FRIC-13 records detour tooling friction with https://www.haskell.org/ghc/: Expanded Flow registry crashes during garbage collection under GHC worker-wrapper
 * **Update**: FRIC-12 accepted: EP-3 qualifies generation-bound message and timer publication and accepts the composition cost.
 * **Addition**: FRIC-12 records detour interface friction with mori://shinzui/keiro/packages/keiro: Awakeable repair requires an explicit publishing-generation transaction
 * **Update**: FRIC-11 resolved: Record the separately affected EP-2 occurrence after the producer was identified during EP-3.

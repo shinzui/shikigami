@@ -1,6 +1,14 @@
+{-# OPTIONS_GHC -O0 #-}
+
+-- GHC 9.12.4 at -O1 crashes in GC after the expanded Flow interpreter suspends,
+-- including a fresh build. Keep this boundary unoptimized until a compiler
+-- upgrade passes the forced-GC replay regression (FRIC-13). Model/tool execution
+-- and the remaining modules retain their ordinary optimization settings.
+
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
     executionRuntime,
+    workerSessionRuntime,
     AgentRunFailure (..),
     agentRunFailureDetail,
     -- | The journaled step value that carries a kioku refusal. Exported so
@@ -139,6 +147,7 @@ import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
+import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
@@ -167,6 +176,10 @@ import Shikigami.Sink.Intent
 import Shikigami.Sink.Permission (SinkKind, sinkKindText)
 import Shikigami.Store.ExecutionResources qualified as ExecutionResources
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
+import Shikigami.WorkerSession.Capability qualified as WorkerCapability
+import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
+import Shikigami.WorkerSession.Tools qualified as WorkerTools
+import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
 data AgentRunDeps = AgentRunDeps
@@ -179,6 +192,8 @@ data AgentRunDeps = AgentRunDeps
     -- | Operator-owned overlay catalog, policy, and exact-revision provider
     -- factories. Only its pure resolution result crosses the journal boundary.
     capabilities :: !CapabilityRuntime,
+    -- | No production scope/provider is selected until IR-11/IR-13 deliver it.
+    coordination :: !(Maybe WorkerCapability.CoordinationHost),
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -226,6 +241,7 @@ data AgentRunDeps = AgentRunDeps
     resolveRunProfile ::
       !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile))
   }
+  deriving stock (Generic)
 
 data AgentRunHooks = AgentRunHooks
   { beforeStepBody :: !(StepName -> IO ()),
@@ -424,6 +440,7 @@ runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
 durableSkill :: AgentDecl -> Bool
 durableSkill decl = case decl.behavior of
   Skill {} -> null decl.delegates && isNothing decl.routing
+  CoordinatingSkill {} -> isNothing decl.routing
   _ -> False
 
 resolveRunSelection :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> UTCTime -> Either Selection.ExecutionSelectionFailure (Maybe Selection.ExecutionSelection)
@@ -435,6 +452,7 @@ resolveRunSelection deps job decl profile now
 usesDefaultModel :: AgentDecl -> Bool
 usesDefaultModel decl = case decl.behavior of
   Skill {} -> null decl.delegates || isJust decl.routing
+  CoordinatingSkill {} -> True
   Flow {name} -> maybe True (.requiresDefaultModel) (Flow.lookupFlow name)
   _ -> isJust decl.routing
 
@@ -483,11 +501,20 @@ executionRuntime deps =
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
           },
-      withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (ExecutionTools.staticNativeTools deps.behaviorEnv.tools),
+      withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (executionTools deps),
       timeoutSeconds = fromInteger (max 1 (min 3500 (floor deps.runTimeout)))
     }
   where
     authority (snapshot :: Execution.ExecutionSnapshot) = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
+
+executionTools :: AgentRunDeps -> ExecutionTools.NativeToolFactory
+-- Accepted execution bindings determine which coordination scope is reacquired.
+executionTools deps = WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools deps.behaviorEnv.tools) (WorkerTools.coordinationTools deps.coordination deps.actionAuthorizer)
+
+workerSessionRuntime :: AgentRunDeps -> WorkerSession.SessionRuntime
+workerSessionRuntime deps = case deps.coordination of
+  Just host -> host.services.sessions
+  Nothing -> WorkerSession.SessionRuntime deps.appEnv deps.agents deps.directory (Directory.identityLifecycleAdmission deps.directory) Nothing
 
 selectionRuntime :: AgentRunDeps -> RunJob -> Maybe ResolvedProfile -> SelectionRuntime.SelectionRuntime
 selectionRuntime deps job profile =
@@ -507,6 +534,8 @@ behaviorEnvForProfile ::
   BehaviorEnv ->
   Either ProfileViolation BehaviorEnv
 behaviorEnvForProfile AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
+  constrainBehaviorEnv resolvedProfile
+behaviorEnvForProfile AgentDecl {behavior = CoordinatingSkill {}} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
 behaviorEnvForProfile AgentDecl {behavior = Flow {name}} (Just resolvedProfile) =
   case Flow.lookupFlow name of
@@ -563,6 +592,10 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText ((.behavior) decl))
       case (.behavior) decl of
+        CoordinatingSkill {path}
+          | Just selection <- durableSelection ->
+              first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
+          | otherwise -> pure (Left (PermanentAgentRunFailure "coordinating Skills require compatible durable execution and no routing policy"))
         Skill {path}
           | Just selection <- durableSelection ->
               first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
@@ -607,8 +640,18 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- owners and step labels below.
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
+  coordinationEnabled <- Workflow.patch (PatchId "shikigami-worker-coordination-v1")
   let runtime = executionRuntime deps
-      describe = ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (ExecutionTools.staticNativeTools deps.behaviorEnv.tools)
+      coordinating = case decl.behavior of CoordinatingSkill {} -> True; _ -> False
+      factory = if coordinationEnabled then executionTools deps else ExecutionTools.staticNativeTools deps.behaviorEnv.tools
+      describe snapshot
+        | coordinating && (not coordinationEnabled || isNothing deps.coordination) = pure (Left (Execution.ExecutionPolicyRefused "coordinating Skill authority is unavailable"))
+        | otherwise = do
+            menu <- ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers factory snapshot
+            pure do
+              admitted <- menu
+              when (coordinating && not (any (\binding -> binding.name == "workers") admitted.toolBindings)) (Left (Execution.ExecutionPolicyRefused "coordinating Skill scope was not admitted"))
+              pure admitted
       assignment =
         ExecutionStart.SkillAssignment
           { runId = (runJobWorkflowId job).unWorkflowId,
@@ -921,7 +964,6 @@ openSession deps recordedIdentity job decl = liftIO do
 -- memories the original attempt did. The step's name and result shape are
 -- unchanged — only what the body is given.
 runBehaviorStep ::
-  (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
   Maybe ResolvedProfile ->
@@ -931,7 +973,7 @@ runBehaviorStep ::
   AgentDecl ->
   RunJob ->
   [MemoryRecord] ->
-  Eff es (Either Text Value)
+  Eff (Workflow : AppEffects) (Either Text Value)
 runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName
@@ -944,7 +986,6 @@ runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
             )
 
 runFlowBehavior ::
-  (Workflow :> es, Store :> es, Tracing :> es, IOE :> es) =>
   AgentRunDeps ->
   BehaviorEnv ->
   Maybe ResolvedProfile ->
@@ -954,13 +995,19 @@ runFlowBehavior ::
   AgentDecl ->
   RunJob ->
   Text ->
-  Eff es (Either Text Value)
+  Eff (Workflow : AppEffects) (Either Text Value)
 runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName =
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just flow@Flow.FlowDef {Flow.run} -> do
       decisionsEnabled <- Workflow.patch (PatchId "shikigami-flow-decisions-v1")
+      coordinationEnabled <- Workflow.patch (PatchId "shikigami-worker-coordination-v1")
       (_, childWorkflowId) <- currentWorkflow
+      let coordinator = WorkerCapability.CoordinatorRun childWorkflowId.unWorkflowId job.identity sid job.executionRootId job.executionPermissions
+      coordinationPolicy <-
+        if coordinationEnabled
+          then step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
+          else pure (Right Nothing)
       let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
             | null flow.decisionSlots || not decisionsEnabled = FlowDecision.runDecisionDisabled action
@@ -986,6 +1033,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runMemory memoryEnv
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
+              . FlowWorkers.runWorkers (if coordinationEnabled then deps.coordination else Nothing) deps.actionAuthorizer coordinator coordinationPolicy
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter
               . acknowledgementInterpreter

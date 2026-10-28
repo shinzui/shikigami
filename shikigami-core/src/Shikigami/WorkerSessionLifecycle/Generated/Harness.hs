@@ -26,6 +26,7 @@ harnessAssertions =
   , ("golden round-trip: SessionTransferRequested", roundTrips sampleEventSessionTransferRequested)
   , ("golden round-trip: SessionTransferReconciled", roundTrips sampleEventSessionTransferReconciled)
   , ("golden round-trip: SessionOwnerEstablished", roundTrips sampleEventSessionOwnerEstablished)
+  , ("golden round-trip: SessionEventsSubscribed", roundTrips sampleEventSessionEventsSubscribed)
   , ("golden round-trip: WorkerSessionObserved", roundTrips sampleEventWorkerSessionObserved)
   , ("golden round-trip: SessionCheckpointPrepared", roundTrips sampleEventSessionCheckpointPrepared)
   , ("golden round-trip: SessionEventsConsumed", roundTrips sampleEventSessionEventsConsumed)
@@ -70,6 +71,9 @@ sampleEventSessionTransferReconciled = SessionTransferReconciled (SessionTransfe
 
 sampleEventSessionOwnerEstablished :: WorkerSessionLifecycleEvent
 sampleEventSessionOwnerEstablished = SessionOwnerEstablished (SessionOwnerEstablishedData "sample-sessionId" 0 0)
+
+sampleEventSessionEventsSubscribed :: WorkerSessionLifecycleEvent
+sampleEventSessionEventsSubscribed = SessionEventsSubscribed (SessionEventsSubscribedData "sample-sessionId" 0 0)
 
 sampleEventWorkerSessionObserved :: WorkerSessionLifecycleEvent
 sampleEventWorkerSessionObserved = WorkerSessionObserved (WorkerSessionObservedData "sample-sessionId" 0 0)

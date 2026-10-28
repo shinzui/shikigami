@@ -36,6 +36,7 @@ let Behavior =
           , enabledBy : Optional Text
           }
       | Skill : { path : Text }
+      | CoordinatingSkill : { path : Text }
       | Flow : { name : Text }
       >
 

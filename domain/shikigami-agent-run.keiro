@@ -37,6 +37,9 @@ workflow AgentRun
       step decision-result-investigate -> DecisionOutcome
     }
     step route-catalog-architecture-practice -> CandidateCatalog
+    patch shikigami-worker-coordination-v1 {
+      step worker-coordination-policy -> CoordinationPolicyResolution
+    }
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning

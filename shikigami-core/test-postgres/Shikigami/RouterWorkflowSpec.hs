@@ -333,6 +333,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
       AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
+      AgentWorkflow.coordination = Nothing,
       AgentWorkflow.agents,
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
       AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
