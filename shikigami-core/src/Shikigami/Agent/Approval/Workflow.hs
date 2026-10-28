@@ -12,6 +12,7 @@ module Shikigami.Agent.Approval.Workflow
     approvalWorkflow,
     approvalRegistry,
     requestApproval,
+    requestBoundApproval,
   )
 where
 
@@ -147,7 +148,16 @@ requestApproval requestKey sessionId request deadline = do
   (parentName, parentId) <- currentWorkflow
   generation <- currentRunGeneration
   let reviewRequestId = reviewRequestIdFor parentName parentId generation requestKey
-      childId = approvalWorkflowId reviewRequestId
+  requestBoundApproval reviewRequestId sessionId request deadline
+
+-- A caller that has already persisted the immutable permission binding keeps
+-- its review identity across driver rotations. Child labels and codecs are the
+-- same as the original approval path.
+requestBoundApproval ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  ReviewRequestId -> SessionId -> ApprovalRequest -> NominalDiffTime -> Eff es ApprovalWorkflowResult
+requestBoundApproval reviewRequestId sessionId request deadline = do
+  let childId = approvalWorkflowId reviewRequestId
       input = ApprovalWorkflowInput {reviewRequestId, sessionId, request, deadline}
   child <-
     spawnChild

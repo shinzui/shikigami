@@ -42,6 +42,7 @@ import Shikigami.Log qualified as Log
 import Shikumi.Error (ShikumiError (BudgetExceeded))
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), ToolRegistry, mkRegistry, mkTool, registryNames)
+import Shikumi.Tool.Output (textToolOutput)
 import Streamly.Data.Fold qualified as Fold
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -250,8 +251,11 @@ bracketedTraceTest =
     length [() | CallFinished {} <- observedTrace] @?= 2
 
 toolInvocationAuthorizationTest :: TestTree
-toolInvocationAuthorizationTest =
-  testCase "a denied exact tool action never runs the leased tool callback" do
+toolInvocationAuthorizationTest = testGroup "exact leased tool authorization" [toolInvocationAuthorizationCase False, toolInvocationAuthorizationCase True]
+
+toolInvocationAuthorizationCase :: Bool -> TestTree
+toolInvocationAuthorizationCase dynamic =
+  testCase (if dynamic then "dynamic callback is denied" else "typed callback is denied") do
     root <- repositoryRoot
     invocations <- newIORef (0 :: Int)
     authorizations <- newIORef ([] :: [AgentAction])
@@ -267,11 +271,22 @@ toolInvocationAuthorizationTest =
               kawaSource = "fixture"
             }
         guardedTool =
-          SomeTool
-            ( mkTool "read" "Record and return the supplied value." \ToolInput {value} -> do
-                unsafeEff_ (modifyIORef' invocations (+ 1))
-                pure ToolOutput {answer = "saw " <> value}
-            )
+          if dynamic
+            then
+              DynTool
+                "read"
+                "Dynamic read."
+                (object [])
+                ( \_ -> do
+                    unsafeEff_ (modifyIORef' invocations (+ 1))
+                    pure (Right (textToolOutput "dynamic result"))
+                )
+            else
+              SomeTool
+                ( mkTool "read" "Record and return the supplied value." \ToolInput {value} -> do
+                    unsafeEff_ (modifyIORef' invocations (+ 1))
+                    pure ToolOutput {answer = "saw " <> value}
+                )
         provider =
           CapabilityProvider
             { descriptor = readDescriptor,

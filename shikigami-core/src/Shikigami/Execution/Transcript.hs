@@ -7,15 +7,17 @@ import Baikai.Content qualified as Content
 import Baikai.Context qualified as Context
 import Baikai.Error qualified as Error
 import Baikai.Message qualified as Message
-import Baikai.Model qualified as Model
 import Baikai.Response qualified as Response
 import Baikai.StopReason (StopReason (..))
 import Baikai.Usage (zeroUsage)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
+import Data.List (nub)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Kioku.Id (SessionId)
+import Shikigami.Agent.Approval (ReviewRequestId)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Attestation.Envelope (profileDigest)
@@ -135,6 +137,44 @@ data SkillInstructions = SkillInstructions
 
 instance Show SkillInstructions where show _ = "SkillInstructions <protected>"
 
+data ToolBinding = ToolBinding
+  { name :: !Text,
+    revision :: !Text,
+    schemaDigest :: !Text,
+    recovery :: !RecoveryClass
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data ToolOperationInput = ToolOperationInput
+  { response :: !PayloadRef,
+    position :: !Int,
+    invocation :: !ToolInvocation,
+    binding :: !ToolBinding
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance Show ToolOperationInput where show _ = "ToolOperationInput <protected>"
+
+toolScopeDigest :: ToolBinding -> Text
+toolScopeDigest = versionedDigest "shikigami.execution-tool-scope/1" . toJSON
+
+data PermissionResolution = PermissionApproved | PermissionDenied | PermissionExpired
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data PermissionBinding = PermissionBinding
+  { reviewRequestId :: !ReviewRequestId,
+    fingerprint :: !Text,
+    scopeDigest :: !Text,
+    policyDigest :: !Text,
+    expiresAt :: !UTCTime,
+    resolution :: !(Maybe PermissionResolution)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
 data ExecutionSnapshot = ExecutionSnapshot
   { format :: !Int,
     executionId :: !ExecutionId,
@@ -148,19 +188,27 @@ data ExecutionSnapshot = ExecutionSnapshot
     initialContext :: !ReplayContext,
     capabilities :: !ResolvedCapabilitySet,
     offeredTools :: !Aeson.Value,
-    policy :: !HarnessPolicy
+    policy :: !HarnessPolicy,
+    toolBindings :: ![ToolBinding]
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON ExecutionSnapshot where
+  toJSON snapshot = case Aeson.genericToJSON Aeson.defaultOptions snapshot of
+    Aeson.Object fields | null snapshot.toolBindings -> Aeson.Object (KeyMap.delete "toolBindings" fields)
+    value -> value
 
 instance Show ExecutionSnapshot where show snapshot = "ExecutionSnapshot " <> show snapshot.executionId <> " <protected>"
 
 instance FromJSON ExecutionSnapshot where
-  parseJSON value = do
-    snapshot <- Aeson.genericParseJSON Aeson.defaultOptions value
+  parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
+    snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields))
     unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == ((.ref) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     unless (maybe True (\resolved -> resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile) snapshot.sanctionedProfile) (fail "execution profile content differs from its immutable reference")
+    unless (length snapshot.toolBindings <= 128 && length (nub (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings)) == length snapshot.toolBindings && all validBinding snapshot.toolBindings) (fail "invalid immutable tool bindings")
     pure snapshot
+    where
+      validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [binding.name, binding.revision, binding.schemaDigest]
 
 validateSnapshot :: ExecutionSnapshot -> Either ExecutionError ()
 validateSnapshot snapshot = case Aeson.fromJSON (toJSON snapshot) of
@@ -197,7 +245,7 @@ instance FromJSON ExecutionState where
     unless (state.format == 1 && state.revision >= 0 && state.cursor >= 0 && state.cursor <= 10000) (fail "unsupported execution state version or cursor")
     pure state
 
-data OperationKind = ModelTurn | ToolOperation | ModelSummary
+data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -222,14 +270,19 @@ data Operation = Operation
     input :: !PayloadRef,
     outcome :: !(Maybe PayloadRef),
     continuation :: !(Maybe NextWork),
-    uncertain :: !Bool
+    uncertain :: !Bool,
+    permission :: !(Maybe PermissionBinding)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON Operation where
+  toJSON operation = case Aeson.genericToJSON Aeson.defaultOptions operation of
+    Aeson.Object fields | isNothing operation.permission -> Aeson.Object (KeyMap.delete "permission" fields)
+    value -> value
 
 instance FromJSON Operation where
-  parseJSON value = do
-    operation <- Aeson.genericParseJSON Aeson.defaultOptions value
+  parseJSON = Aeson.withObject "Operation" \fields -> do
+    operation <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "permission" fields then fields else KeyMap.insert "permission" Aeson.Null fields))
     unless (operation.format == 1 && operation.position >= 0 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
     pure operation
 
@@ -260,6 +313,7 @@ data ExecutionError
   | ProjectionUnavailable
   | ExecutionCommandRefused
   | ExecutionOutputInvalid
+  | ExecutionPolicyRefused !Text
   | ExecutionStorageUnavailable
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

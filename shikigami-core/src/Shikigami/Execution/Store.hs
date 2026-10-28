@@ -14,6 +14,8 @@ module Shikigami.Execution.Store
     inspectOperation,
     readReplayPayload,
     acceptOperation,
+    parkOperationPermission,
+    resolveOperationPermission,
     recordOutcomeAndAdvance,
     recordOutcomeAndAdvanceWith,
     finishExecution,
@@ -29,7 +31,6 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
-import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff, IOE, (:>))
@@ -44,14 +45,16 @@ import Keiro.Command (CommandError (CommandRejected, RetryExhausted, StoreFailed
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
+import Keiro.Workflow (WorkflowId (..), WorkflowName (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Agent.Approval (ApprovalDecision (..), ReviewRequestId, reviewRequestIdFor)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
-import Shikigami.Execution.Policy (validateTerminalOutput)
+import Shikigami.Execution.Policy (validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -220,7 +223,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
       Left err -> pure (Left err)
       Right ref -> do
         let fingerprint = versionedDigest "shikigami.execution-operation-request/1" (toJSON (specification, ref, binding.snapshotDigest))
-            operation = Operation 1 execution state.cursor specification fingerprint ref Nothing Nothing False
+            operation = Operation 1 execution state.cursor specification fingerprint ref Nothing Nothing False Nothing
         old <- findOperation specification.operationId
         case old of
           Just previous -> pure (duplicate fingerprint previous)
@@ -235,12 +238,16 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
               require (validateOperation specification)
               unless (specification.policyDigest == actualBinding.policyDigest) (abort OperationConflict)
               snapshot <- readPayload access actualBinding "snapshot" current.snapshot
-              when (specification.kind `elem` [ModelTurn, ModelSummary] && current.modelTurns >= (snapshot :: ExecutionSnapshot).policy.maxModelTurns) (abort (ResourceAdmissionRefused "model-turn limit exhausted"))
+              let modelOperation = specification.kind `elem` [ModelTurn, ModelSummary, ModelRepair]
+              when (modelOperation && current.modelTurns >= (snapshot :: ExecutionSnapshot).policy.maxModelTurns) (abort (ResourceAdmissionRefused "model-turn limit exhausted"))
+              when (specification.kind == ModelRepair && current.repairs >= snapshot.policy.outputRepairs) (abort ExecutionOutputInvalid)
+              when (specification.kind == ModelSummary && isNothing snapshot.policy.summaryTokens) (abort (ExecutionPolicyRefused "model summaries are disabled"))
+              validateOperationInput access actualBinding current snapshot specification input
               validateAdmissionRoot actualBinding.rootId
               actual <- writePayload execution body
               unless (actual == ref) (abort CorruptReplay)
               Tx.statement (operationKey specification.operationId, execution.value, fromInteger current.cursor, operation) insertOperation
-              saveExecution (current & #revision .~ (expected + 1) & #activeOperation .~ Just specification.operationId & #modelTurns .~ (current.modelTurns + if specification.kind `elem` [ModelTurn, ModelSummary] then 1 else 0))
+              saveExecution (current & #revision .~ (expected + 1) & #activeOperation .~ Just specification.operationId & #modelTurns .~ (current.modelTurns + if modelOperation then 1 else 0) & #repairs .~ (current.repairs + if specification.kind == ModelRepair then 1 else 0))
             case result of
               Right () -> pure (Right (Accepted, operation))
               Left EventRejected -> do
@@ -252,6 +259,93 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
     duplicate fingerprint operation
       | operation.executionId == execution && operation.fingerprint == fingerprint = Right (AlreadyAccepted, operation)
       | otherwise = Left OperationConflict
+
+-- Park the accepted tool itself. No new logical/model turn is allocated.
+-- The review identity is independent of driver generation and wake tokens.
+parkOperationPermission :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> Eff es (Either ExecutionError PermissionBinding)
+parkOperationPermission access@(ReplayAccess execution _ _) expected operationId = catchExecutionWith id do
+  operation <- findOperation operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
+  if operation.executionId /= execution
+    then pure (Left OperationConflict)
+    else case operation.permission of
+      Just binding -> pure (Right binding)
+      Nothing -> do
+        (_, binding) <- readMetadata (getExecution execution)
+        result <- persist execution (Generated.ParkExecution (Generated.ParkExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))) do
+          lockRoot binding.rootId
+          validateAdmissionRoot binding.rootId
+          (state, actualBinding) <- getExecution execution
+          _ <- checkAccess access actualBinding
+          checkRevision expected state
+          unless (state.phase == Active && state.activeOperation == Just operationId) (abort OperationConflict)
+          current <- Tx.statement (operationKey operationId) lockOperation >>= maybe (abort OperationMissing) pure
+          unless (current == operation && isNothing current.outcome) (abort OperationConflict)
+          snapshot <- readPayload access actualBinding "snapshot" state.snapshot
+          unless (operation.specification.kind == ToolOperation && operation.specification.name `elem` (snapshot :: ExecutionSnapshot).policy.humanTools && operation.specification.name `notElem` snapshot.policy.deniedTools) (abort (ExecutionPolicyRefused "tool permission is outside the pinned policy"))
+          now <- Tx.statement () currentTime
+          let review = reviewRequestIdFor (WorkflowName "shikigami.execution") (WorkflowId execution.value) 0 (operationKey operationId <> ":" <> operation.fingerprint)
+              permission = PermissionBinding review operation.fingerprint operation.specification.scopeDigest operation.specification.policyDigest (addUTCTime (fromIntegral snapshot.policy.permissionSeconds) now) Nothing
+          Tx.statement (operationKey operationId, current & #permission .~ Just permission) updateOperation
+          saveExecution (state & #revision .~ (expected + 1) & #phase .~ Parked)
+        case result of
+          Left (CheckFailed err) -> pure (Left err)
+          _ -> do
+            stored <- findOperation operationId
+            pure (maybe (Left ExecutionRevisionConflict) Right (stored >>= (.permission)))
+
+-- Only the approval child result enters here; the opaque token is resolved by
+-- the existing approval library. A review id alone never supplies a decision.
+resolveOperationPermission :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
+resolveOperationPermission access@(ReplayAccess execution _ _) expected operationId review decision = catchExecutionWith id do
+  operation <- findOperation operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
+  permission <- maybe (throwIO (ExecutionAbort OperationConflict)) pure operation.permission
+  unless (operation.executionId == execution && permission.reviewRequestId == review && permission.fingerprint == operation.fingerprint && permission.scopeDigest == operation.specification.scopeDigest && permission.policyDigest == operation.specification.policyDigest) (throwIO (ExecutionAbort OperationConflict))
+  let resolution = case decision of Approved _ -> PermissionApproved; Rejected _ -> PermissionDenied; TimedOut -> PermissionExpired
+  case permission.resolution of
+    Just previous -> pure (if previous == resolution then Right AlreadyAccepted else Left OperationConflict)
+    Nothing -> do
+      (_, binding) <- readMetadata (getExecution execution)
+      result <- persist execution (Generated.ResumeExecution (Generated.ResumeExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))) do
+        lockRoot binding.rootId
+        (state, actualBinding) <- getExecution execution
+        _ <- checkAccess access actualBinding
+        checkRevision expected state
+        unless (state.phase == Parked && state.activeOperation == Just operationId) (abort OperationConflict)
+        current <- Tx.statement (operationKey operationId) lockOperation >>= maybe (abort OperationMissing) pure
+        unless (current == operation && isNothing current.outcome) (abort OperationConflict)
+        now <- Tx.statement () currentTime
+        when (now >= permission.expiresAt && resolution /= PermissionExpired) (abort (ExecutionPolicyRefused "tool permission expired"))
+        when (now < permission.expiresAt && resolution == PermissionExpired) (abort (ExecutionPolicyRefused "tool permission deadline has not elapsed"))
+        Tx.statement (operationKey operationId, current & #permission .~ Just (permission & #resolution .~ Just resolution)) updateOperation
+        saveExecution (state & #revision .~ (expected + 1) & #phase .~ Active)
+      case result of
+        Right () -> pure (Right Accepted)
+        Left (CheckFailed err) -> pure (Left err)
+        Left EventRejected -> do
+          stored <- findOperation operationId
+          pure (if (stored >>= (.permission) >>= (.resolution)) == Just resolution then Right AlreadyAccepted else Left OperationConflict)
+
+validateOperationInput :: ReplayAccess -> ExecutionBinding -> ExecutionState -> ExecutionSnapshot -> OperationSpec -> Aeson.Value -> Transaction ()
+validateOperationInput access binding state snapshot specification input = case specification.kind of
+  ToolOperation -> do
+    tool <- decode @ToolOperationInput input
+    unless (state.next == NeedTool tool.response tool.position && specification.responsePosition == Just tool.position && specification.name == tool.invocation.name && specification.name == tool.binding.name && specification.recovery == tool.binding.recovery && specification.scopeDigest == toolScopeDigest tool.binding) (abort OperationConflict)
+    outcome <- readPayload access binding "operation-outcome" tool.response
+    case outcome of
+      ModelReturned assistant _ -> do
+        _ <- require (validateToolInvocation snapshot.policy snapshot.toolBindings snapshot.toolBindings assistant tool.position)
+        unless (take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation] && tool.binding `elem` snapshot.toolBindings) (abort OperationConflict)
+      _ -> abort OperationConflict
+  ModelRepair -> case state.next of
+    NeedValidation response -> do
+      outcome <- readPayload access binding "operation-outcome" response
+      case outcome of
+        ModelReturned assistant _ -> case validateTerminalOutput snapshot.policy assistant of
+          Left ExecutionOutputInvalid -> pure ()
+          _ -> abort OperationConflict
+        _ -> abort OperationConflict
+    _ -> abort OperationConflict
+  _ -> unless (state.next == NeedModel) (abort OperationConflict)
 
 recordOutcomeAndAdvance :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Eff es (Either ExecutionError Admission)
 recordOutcomeAndAdvance access revision operation outcome next accounting = recordOutcomeAndAdvanceWith access revision operation outcome next accounting (pure (Right ()))
@@ -287,6 +381,13 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
                 forM_ accounting \(receipt, terminal) -> do
                   unless (receipt.request.operationId == operationId && receipt.rootId == actualBinding.rootId && receipt.assignmentId == actualBinding.assignmentId) (abort OperationConflict)
                   Calls.finishSelectionCallTx receipt terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+                case outcome of
+                  ModelReturned {} -> unless (actualOperation.specification.kind `elem` [ModelTurn, ModelRepair, ModelSummary]) (abort OperationConflict)
+                  ToolReturned {} -> do
+                    unless (actualOperation.specification.kind == ToolOperation && isNothing accounting) (abort OperationConflict)
+                    forM_ actualOperation.permission \permission -> unless (permission.resolution == Just PermissionApproved) (abort (ExecutionPolicyRefused "tool permission was not approved"))
+                  TerminalResult {} -> abort OperationConflict
+                  _ -> pure ()
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
                 Tx.statement (operationKey operationId, operation & #outcome .~ Just ref & #continuation .~ Just next & #uncertain .~ unresolved) updateOperation

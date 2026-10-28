@@ -97,6 +97,7 @@ library
     Shikigami.Execution.Policy.Types
     Shikigami.Execution.Request
     Shikigami.Execution.Resources
+    Shikigami.Execution.Runner
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
     Shikigami.Execution.Store
@@ -302,6 +303,7 @@ test-suite shikigami-core-test
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec
     Shikigami.EnqueueHardeningSpec
+    Shikigami.ExecutionPolicySpec
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionSpec
     Shikigami.Fixture.KawaStub

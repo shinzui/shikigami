@@ -376,6 +376,17 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
             Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
             Left failure -> throwError (ProviderFailure (authorizationFailureDetail failure))
       }
+guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (DynTool name description schema run) =
+  DynTool name description schema \input -> do
+    authorization <-
+      unsafeEff_
+        case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
+          Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
+          Right target -> authorize principal (InvokeCapabilityTool target)
+    case authorization of
+      Right _ -> run input
+      Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
+      Left failure -> throwError (ProviderFailure (authorizationFailureDetail failure))
 
 acquireErrorDetail :: CapabilityAcquireError -> Text
 acquireErrorDetail (CapabilityAcquireError detail) = boundedBehaviorDetail detail

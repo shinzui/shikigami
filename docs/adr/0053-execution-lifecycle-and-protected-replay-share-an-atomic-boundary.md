@@ -1,6 +1,6 @@
 # 0053. Execution lifecycle and protected replay share an atomic boundary
 
-Date: 2026-10-27
+Date: 2026-10-28
 
 Status: accepted
 
@@ -60,6 +60,27 @@ invented at the terminal write boundary. Unknown effects retain their reservatio
 and cursor and require explicit reconciliation. Payloads and deduplication facts
 have no automatic deletion path; workflow GC cannot release their retention.
 
+Tool bindings pin a name, revision, schema digest and trusted recovery class.
+An accepted tool input names the committed model response and position within it;
+its immutable fingerprint covers the exact invocation and scope. Cut-off argument
+strings cannot dispatch. A permission parks that same operation through the
+checked lifecycle, and its row binds the operation fingerprint, scope, policy
+and absolute expiry to one existing approval child review id. The child keeps
+its opaque-token authorization path. Repeated equal decisions converge and
+conflicting or expired approvals refuse. Human approval never replaces fresh
+external action authorization. The driver reuses the bound review id across
+generations; it does not derive a new review from its current generation.
+
+Policy overrides narrow operator ceilings and add restrictions. Output repairs
+and model summaries count as ordinary model turns and actual accounted attempts;
+repairs additionally consume the immutable repair allowance. An invalid terminal
+reply cannot bypass that allowance by requesting an ordinary next model turn.
+Compaction creates a bounded model-facing view with source digest and retained /
+omitted message positions. It retains the initial user anchor, recent complete
+assistant/tool groups, pending calls and signed provider continuation facts.
+Required content that exceeds the ceiling refuses; accepted history and resource
+usage remain unchanged. Model summaries are disabled unless explicitly admitted.
+
 ## Alternatives rejected
 
 Upstream-shaped decoders would invent an unsupported compatibility contract.
@@ -71,8 +92,9 @@ or replacing unrelated projection sets would split ownership.
 ## Consequences
 
 The execution runner must consume this storage boundary and account each actual
-attempt separately. Policies, permission binding, executor claims and queue-driven
-recovery are the remaining consumers in plan 83. This storage acceptance does
+attempt separately. Policies, individually accepted tools and permission bindings
+now consume the boundary. Operator/agent wiring, recorded summaries, executor
+claims and queue-driven recovery remain in plan 83. This storage acceptance does
 not establish production model/tool recovery by itself. The resource owner's
 `execution_operations` table remains separate from the transcript owner's
 `execution_transcript_operations`; they correlate by logical operation identity.

@@ -51,6 +51,16 @@ Resume a Skill or conversation from its accepted model/tool history after a cras
 - [ ] Milestone 3: Resumable driver and fenced submit/observe executor integrated with runs and conversations.
 - [ ] Milestone 4: Recovery qualification and bounded operator inspection.
 
+Milestone 2 is partially implemented: immutable tool bindings and response-position
+validation, monotonic policy composition, context views with provenance, accounted
+bounded repair operations, and parked permissions through the existing approval
+child are implemented. The runner prepares trusted operation coordinates and
+rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It does
+not dispatch without the fenced attempt boundary still owned by milestone 3.
+Agent/operator wiring and recorded model-assisted summaries remain before this
+milestone can close. No production driver or recovery claim follows from this
+checkpoint.
+
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
 
@@ -87,6 +97,15 @@ model outcome. A known transport stop with unknown billing keeps the EP-1 partia
 settlement semantics. Unknown execution effects retain their cursor and active
 reservation. Terminal success validates the accepted reply against pinned policy.
 
+
+2026-10-28: Keep permission state on its existing accepted operation row, within
+the execution catalog target and checked Park/Resume command transaction. No
+second approval scheduler/table is needed. The persisted public review id is
+stable across driver generations and resolves only through the existing approval
+child and opaque-token library path. Additive optional policy/snapshot/operation
+fields omit absent values so format-1 payload digests and old journal bytes stay
+stable. Required compaction content refuses overflow instead of truncating signed
+continuations or orphaning tool observations. ADR 0053 records these constraints.
 
 ## Outcomes & Retrospective
 
@@ -125,6 +144,16 @@ settlement writes. It proves all of those writes and the lifecycle append roll
 back, then the same expected revision succeeds. FRIC-10/FRIC-11 are resolved by
 the recipe fix and isolated generation probe; no applied SQL was edited.
 
+
+The policy/tool checkpoint passed the complete suites: 485 core, 281 PostgreSQL,
+37 agent, 63 server and 98 worker cases. The new cases cover immutable individual
+tool acceptance and duplicate outcomes, the real approval child/token resolution
+path with conflicting/wrong tokens, fresh authorization refusal after approval,
+permission timeout and expiry at preparation, accounted repair exhaustion, strict
+policy overrides and context compaction. Both typed and dynamic leased tools
+retain fresh exact-action guards. The complete gate against `1d79998` passed with
+no findings and `breaking: false`. This is partial milestone-2 evidence;
+agent/operator configuration and recorded summaries still remain.
 
 ## Context and Orientation
 
