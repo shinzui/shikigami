@@ -49,6 +49,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle)
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
@@ -343,6 +344,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+      AgentWorkflow.harness = Harness.defaultHarnessPolicy,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,
       AgentWorkflow.grants = StaticGrants defaultGrantTable,
@@ -397,6 +399,7 @@ routerDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Just routerPolicy
     }
@@ -440,6 +443,7 @@ specialist specialistName specialistBehavior =
       enabled = True,
       expertise = [expertiseEntry],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

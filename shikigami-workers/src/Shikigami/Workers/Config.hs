@@ -54,6 +54,7 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
+import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
@@ -98,6 +99,7 @@ data WorkerEnv = WorkerEnv
     decisions :: !FlowDecision.DecisionServices,
     actionAuthorizer :: !ActionAuthorizer,
     runTimeout :: !NominalDiffTime,
+    harness :: !HarnessPolicy,
     delegationBudget :: !DelegationBudget,
     approvalDeadline :: !NominalDiffTime,
     approvalPolicy :: !Approval.ApprovalPolicySnapshot,
@@ -215,6 +217,7 @@ agentRunDeps env =
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.runTimeout = envRunTimeout env,
+      AgentWorkflow.harness = (.harness) env,
       AgentWorkflow.delegationBudget = envDelegationBudget env,
       AgentWorkflow.logger = envLogger env,
       AgentWorkflow.grants = envGrants env,
@@ -240,6 +243,7 @@ conversationEnv env =
       Conversation.deliveryPool = Just (envPool env),
       Conversation.resolveRunProfile = (agentRunDeps env).resolveRunProfile,
       Conversation.runTimeout = envRunTimeout env,
+      Conversation.harness = (.harness) env,
       Conversation.idleTimeout = envConversationIdleTimeout env,
       Conversation.danwa = (.danwa) env,
       Conversation.agents = (.agents) env,

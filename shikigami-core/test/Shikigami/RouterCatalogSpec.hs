@@ -197,6 +197,7 @@ routerDeclarationFixture delegates =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing =
         Just
@@ -235,6 +236,7 @@ specialistWithDescription description name enabled declaredPrincipal =
             }
         ],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

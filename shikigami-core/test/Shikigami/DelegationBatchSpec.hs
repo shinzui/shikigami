@@ -126,6 +126,7 @@ routerDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Just routerPolicy
     }

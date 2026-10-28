@@ -56,6 +56,7 @@ import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -99,6 +100,7 @@ surfaceTests =
                 "authorization.actions.shomei.client_id",
                 "behavior.base_url",
                 "behavior.decisionModels",
+                "behavior.harness",
                 "behavior.model",
                 "behavior.options.cache_retention",
                 "behavior.options.frequency_penalty",
@@ -194,6 +196,7 @@ surfaceTests =
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "approval.deadline_seconds"),
               ("SHIKIGAMI_APPROVAL_REQUIRE", "approval.require"),
               ("SHIKIGAMI_BEHAVIOR_DECISION_MODELS", "behavior.decisionModels"),
+              ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
@@ -293,7 +296,19 @@ precedenceTests :: TestTree
 precedenceTests =
   testGroup
     "precedence"
-    [ testCase "the environment beats a configuration file" do
+    [ testCase "harness options resolve through file environment and CLI with bounded validation" do
+        config <-
+          resolveOrFail
+            (optionsWith [] [cliOverride behaviorHarnessKey "{\"maxModelTurns\":3,\"outputRepairs\":1,\"output\":{\"tag\":\"NonemptyReply\"}}"])
+            [yaml "file" "behavior:\n  harness:\n    maxModelTurns: 7\n"]
+            [("SHIKIGAMI_BEHAVIOR_HARNESS", "{\"maxModelTurns\":5}")]
+        config.harness.maxModelTurns @?= 3
+        config.harness.outputRepairs @?= 1
+        config.harness.output @?= Harness.NonemptyReply
+        mapM_
+          (\invalid -> assertBool "invalid harness configuration refused" ((runWith (optionsWith [] [cliOverride behaviorHarnessKey invalid]) [] []).exitCode /= 0))
+          ["{\"contextBytes\":10}", "{\"maxModelTurns\":0}", "{\"permissionSeconds\":999999}", "{\"grantTool\":true}"],
+      testCase "the environment beats a configuration file" do
         config <-
           resolveOrFail
             (optionsWith [] [])

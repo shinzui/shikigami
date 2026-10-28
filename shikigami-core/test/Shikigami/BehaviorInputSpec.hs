@@ -320,6 +320,7 @@ triageDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -347,6 +348,7 @@ heartbeatDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

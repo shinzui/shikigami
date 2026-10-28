@@ -207,6 +207,7 @@ declForIdentity identity capabilityOverlays =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

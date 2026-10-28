@@ -106,6 +106,33 @@ let RouterPolicy =
 
 let Execution = { defaultAlias : Text, permittedAliases : List Text }
 
+let OutputRequirement = < AnyReply | NonemptyReply | JsonFields : List Text >
+
+let Harness =
+      { Type =
+          { maxModelTurns : Optional Natural
+          , outputRepairs : Optional Natural
+          , contextBytes : Optional Natural
+          , keepRecentMessages : Optional Natural
+          , deniedTools : List Text
+          , humanTools : List Text
+          , permissionSeconds : Optional Natural
+          , output : Optional OutputRequirement
+          , summaryTokens : Optional Natural
+          }
+      , default =
+          { maxModelTurns = None Natural
+          , outputRepairs = None Natural
+          , contextBytes = None Natural
+          , keepRecentMessages = None Natural
+          , deniedTools = [] : List Text
+          , humanTools = [] : List Text
+          , permissionSeconds = None Natural
+          , output = None OutputRequirement
+          , summaryTokens = None Natural
+          }
+      }
+
 let Agent =
       { Type =
           { name : Text
@@ -115,6 +142,7 @@ let Agent =
           , sinks : List Sink
           , delegates : List Text
           , execution : Optional Execution
+          , harness : Optional Harness.Type
           , decisionModels : List Text
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
@@ -130,6 +158,7 @@ let Agent =
           , sinks = [] : List Sink
           , delegates = [] : List Text
           , execution = None Execution
+          , harness = None Harness.Type
           , decisionModels = [] : List Text
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
@@ -160,5 +189,7 @@ in  { SignalType
     , AmbiguousPolicy
     , RouterPolicy
     , Execution
+    , Harness
+    , OutputRequirement
     , Agent
     }

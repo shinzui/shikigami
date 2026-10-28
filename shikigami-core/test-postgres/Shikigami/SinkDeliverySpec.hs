@@ -61,6 +61,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -555,6 +556,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
                 AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
                 AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+                AgentWorkflow.harness = Harness.defaultHarnessPolicy,
                 AgentWorkflow.delegationBudget = defaultDelegationBudget,
                 AgentWorkflow.grants = DbGrants pool,
                 AgentWorkflow.directory = disabledDirectoryHandle,
@@ -633,6 +635,7 @@ agentDeclaration sinks =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

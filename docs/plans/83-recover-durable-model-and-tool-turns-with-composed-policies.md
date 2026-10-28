@@ -58,8 +58,9 @@ child are implemented. The runner prepares trusted operation coordinates and
 rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It does
 not dispatch without the fenced attempt boundary still owned by milestone 3.
 Recorded model-assisted summaries now consume ordinary accepted model attempts
-and retain source/outcome provenance across restart. Agent/operator wiring
-remains before this milestone can close. Full production recovery qualification remains open.
+and retain source/outcome provenance across restart. Shared operator configuration
+and monotonic agent overrides now feed new frozen admissions. Class-specific
+uncertainty recovery and full production qualification remain open.
 
 The next checkpoint implements the fenced submit/observe primitives and worker
 route: reservation plus queue acceptance, claim generation/expiry, conditional
@@ -72,7 +73,9 @@ generations, accepted-reference queue repair, replay-window reconstruction and
 the existing bound Approval child. The agent-run leaf Skill branch now admits and awaits this driver behind a real
 workflow patch. The conversation Skill branch now adopts the same child behind
 its own patch, with durable ingress acceptance and unchanged atomic reply ownership.
-Agent/operator configuration and the ephemeral path are still outstanding.
+The database-free command uses explicit ephemeral recording with the same pure
+policies. The durable one-off command drives only its accepted child through the
+fenced executor after releasing the parent lease.
 Recorded summaries are accepted and replayed through that driver. Milestones 2
 and 3 remain open.
 
@@ -115,6 +118,15 @@ through a global provider registry. Rich tool results preserve structured data a
 opaque extensions, including accepted-message references, before lease cleanup.
 
 ## Decision Log
+
+2026-10-28: One Settei harness setting feeds workers, conversations and one-off
+commands. Agent overrides remain optional and historical JSON omits their absent
+default. New admission narrows and freezes policy; matching snapshots bypass
+new policy evaluation. Database-free execution shares pure policy rules and has
+an explicitly nonresumable in-memory recording. Foreground durable execution
+drives a single accepted child and never drains another run's queue messages.
+[ADR 0059](../adr/0059-harness-policy-is-frozen-at-admission-and-shared-with-ephemeral-execution.md)
+and the [operations guide](../operations/durable-execution.md) record the contract.
 
 2026-10-28: Conversation ingress acknowledges a matching durable admission or
 recorded next-message wake separately from reply completion. Duplicate current
@@ -308,6 +320,17 @@ adoption, class-specific recovery and operator inspection remain open; milestone
 2 and 3 are not complete. The full build passes. The complete gate against
 `7c3ed06` passes with one additive `WorkflowEvolutionGuardAdded` finding and
 `breaking: false`.
+
+The policy/one-off checkpoint passes 503 core, 303 PostgreSQL and 37 agent cases;
+the unchanged server and worker suites pass 63 and 98 cases. Configuration
+fixtures qualify file/environment/CLI precedence, strict bounds, Dhall overrides
+and omitted historical defaults. Ephemeral fixtures cover bounded repair, rich
+tool observations, denied/human callbacks, an uncertain effect invoked once, and
+ordinary model ceilings. The real parent/HTTP fixture now uses the production
+foreground driver. Snapshot reuse ignores a newly invalid process policy and
+does not reload input or tools. The full build and complete gate against
+`c8561ae` pass; the gate reports no findings and `breaking: false`. Remaining
+class-specific recovery and inspection prevent milestone completion.
 
 ## Context and Orientation
 

@@ -9,7 +9,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Time (getCurrentTime)
-import Keiro.Workflow (WorkflowOutcome (..))
+import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.App (AppEnv (..), noopTracer)
 import Kioku.Id (genSessionId, idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
@@ -18,13 +18,13 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Skill))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (RunKey (..))
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
@@ -32,6 +32,10 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Execution.Driver (ExecutionStart (..))
+import Shikigami.Execution.Foreground (driveExecutionForeground)
+import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
+import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -40,6 +44,7 @@ import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
+import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -150,6 +155,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy ((.approvalDeadline) config),
             AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
             AgentWorkflow.runTimeout = (.runTimeout) config,
+            AgentWorkflow.harness = (.harness) config,
             AgentWorkflow.delegationBudget = (.delegationBudget) config,
             AgentWorkflow.grants = DbGrants pool,
             AgentWorkflow.directory = disabledDirectoryHandle,
@@ -164,14 +170,31 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
               now <- getCurrentTime
               Profile.resolveProfile (Profile.postgresProfileStore pool) now profileId version
           }
-  AgentWorkflow.runAgentRunWorkflow deps job >>= \case
-    Left err -> dieAgentRun ("workflow store failure: " <> Text.pack (show err))
-    Right (Completed (Left failure)) -> dieAgentRun (AgentWorkflow.agentRunFailureDetail failure)
-    Right (Completed (Right result)) -> renderRunResult decl result
-    Right Suspended -> dieAgentRun "workflow suspended; a worker must resume it after its wake condition"
-    Right Cancelled -> dieAgentRun "workflow was cancelled"
-    Right Failed -> dieAgentRun "workflow journal carries a terminal failure"
-    Right ContinuedAsNew -> dieAgentRun "workflow continued as new; a worker must resume its next generation"
+  ensureRunQueue pool >>= either (dieAgentRun . Text.pack . show) pure
+  let runParent = AgentWorkflow.runAgentRunWorkflow deps job
+      eligible = case decl of AgentDecl {behavior = Skill {}, delegates = [], routing = Nothing} -> True; _ -> False
+      execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
+      finish = \case
+        Left err -> dieAgentRun ("workflow store failure: " <> Text.pack (show err))
+        Right (Completed (Left failure)) -> dieAgentRun (AgentWorkflow.agentRunFailureDetail failure)
+        Right (Completed (Right result)) -> renderRunResult decl result
+        Right Suspended -> do
+          Log.logInfo logger "execution.durable.accepted" ["workflowId" Aeson..= (runJobWorkflowId job).unWorkflowId]
+          putStrLn "Agent run accepted; a durable wake is pending."
+        Right Cancelled -> dieAgentRun "workflow was cancelled"
+        Right Failed -> dieAgentRun "workflow journal carries a terminal failure"
+        Right ContinuedAsNew -> dieAgentRun "parent advance requires a worker resume"
+  initial <- runParent
+  case initial of
+    Right Suspended | eligible -> do
+      -- The parent has released its workflow lease. Only its accepted child
+      -- can perform local work, through the same fenced executor as a worker.
+      result <- driveExecutionForeground (AgentWorkflow.executionRuntime deps) (ExecutionStart execution) 10000
+      case result of
+        Right (Just _) -> runParent >>= finish
+        Right Nothing -> finish initial
+        Left err -> dieAgentRun ("accepted execution requires recovery: " <> Text.pack (show err))
+    _ -> finish initial
 
 renderRunResult :: AgentDecl -> AgentRunResult -> IO ()
 renderRunResult decl result = do

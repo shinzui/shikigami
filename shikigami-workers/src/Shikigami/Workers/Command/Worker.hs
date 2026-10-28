@@ -168,6 +168,7 @@ runWorkerCmdWith resumeBudget config = do
                 decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
                 actionAuthorizer,
                 runTimeout = (.runTimeout) config,
+                harness = (.harness) config,
                 delegationBudget = (.delegationBudget) config,
                 approvalDeadline = (.approvalDeadline) config,
                 approvalPolicy = policy,

@@ -51,6 +51,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -635,6 +636,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+      AgentWorkflow.harness = Harness.defaultHarnessPolicy,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,
       AgentWorkflow.grants = StaticGrants (Map.singleton reviewerAgent (Set.fromList [SKawaDigest, SKizashiSignal])),
@@ -858,6 +860,7 @@ reviewerDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

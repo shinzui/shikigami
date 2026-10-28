@@ -10,6 +10,7 @@ import Baikai.Message (Message (ToolResultMessage), ToolResultPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Options (Options, emptyOptions)
 import Baikai.Provider (apiProviderWith, registerApiProvider)
+import Baikai.Provider.Registry (newProviderRegistryFrom)
 import Baikai.Response (Response (..), emptyResponse)
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
@@ -38,6 +39,8 @@ import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
+import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
+import Shikigami.Execution.Policy.Types
 import Shikigami.Log qualified as Log
 import Shikumi.Error (ShikumiError (BudgetExceeded))
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
@@ -68,8 +71,86 @@ tests =
       toolLoopTests,
       overlayEnvironmentTests,
       bracketedTraceTest,
-      toolInvocationAuthorizationTest
+      toolInvocationAuthorizationTest,
+      ephemeralTests
     ]
+
+ephemeralTests :: TestTree
+ephemeralTests =
+  testGroup
+    "ephemeral harness"
+    [ testCase "output repair consumes ordinary model turns and retains observations" do
+        calls <- newIORef (0 :: Int)
+        (env, decl) <- ephemeralFixture (mkRegistry []) \_ _ _ -> do
+          position <- next calls
+          pure (textResponse (if position == 0 then "" else "accepted"))
+        let policy = defaultHarnessPolicy & #output .~ NonemptyReply & #outputRepairs .~ 1
+        result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
+        case result of
+          Right accepted -> do
+            accepted.output @?= object ["reply" .= ("accepted" :: Text)]
+            accepted.modelCalls @?= 2
+            accepted.toolCalls @?= 0
+          Left err -> assertFailure (show err)
+        readIORef calls >>= (@?= 2),
+      testCase "tool observations reach the next model turn through the same context codec" do
+        calls <- newIORef (0 :: Int)
+        seen <- newIORef []
+        (env, decl) <- ephemeralFixture namespacedRegistry \_ context _ -> do
+          modifyIORef' seen (<> [context])
+          position <- next calls
+          pure (if position == 0 then toolResponse (call "ephemeral-call" namespacedRead (object ["value" .= ("ephemeral" :: Text)])) else textResponse "done")
+        result <- runEphemeralBehavior 30 defaultHarnessPolicy env decl (triggerOnly Aeson.Null)
+        case result of
+          Right accepted -> accepted.toolCalls @?= 1
+          Left err -> assertFailure (show err)
+        contexts <- readIORef seen
+        case contexts of
+          [_, second] -> case toolObservations second of
+            (_, _, observation, False) : _ -> observation @?= "{\"answer\":\"saw ephemeral\"}"
+            _ -> assertFailure "tool observation missing"
+          _ -> assertFailure "expected two model calls",
+      testCase "tool denial and human permission stop before the callback" do
+        invocations <- newIORef (0 :: Int)
+        let registry = mkRegistry [SomeTool (mkTool namespacedRead "Count callbacks." \ToolInput {value} -> unsafeEff_ (modifyIORef' invocations (+ 1)) >> pure (ToolOutput value))]
+        (env, decl) <- ephemeralFixture registry (\_ _ _ -> pure (toolResponse (call "held" namespacedRead (object ["value" .= ("private" :: Text)]))))
+        mapM_
+          ( \policy -> do
+              result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
+              case result of Left HarnessPolicyRefused {} -> pure (); _ -> assertFailure "expected permanent policy refusal"
+          )
+          [defaultHarnessPolicy & #deniedTools .~ [namespacedRead], defaultHarnessPolicy & #humanTools .~ [namespacedRead]]
+        readIORef invocations >>= (@?= 0),
+      testCase "an uncertain native effect is invoked once without automatic retry" do
+        invocations <- newIORef (0 :: Int)
+        let registry =
+              mkRegistry
+                [ SomeTool
+                    ( mkTool namespacedRead "Uncertain callback." \ToolInput {value} -> do
+                        unsafeEff_ (modifyIORef' invocations (+ 1) >> ioError (userError "receipt lost"))
+                        pure (ToolOutput value)
+                    )
+                ]
+        (env, decl) <- ephemeralFixture registry (\_ _ _ -> pure (toolResponse (call "uncertain" namespacedRead (object ["value" .= ("private" :: Text)]))))
+        result <- runEphemeralBehavior 30 defaultHarnessPolicy env decl (triggerOnly Aeson.Null)
+        case result of Left HarnessPolicyRefused {} -> pure (); _ -> assertFailure "expected uncertain outcome refusal"
+        readIORef invocations >>= (@?= 1),
+      testCase "a repair cannot exceed the model ceiling" do
+        calls <- newIORef (0 :: Int)
+        (env, decl) <- ephemeralFixture (mkRegistry []) (\_ _ _ -> modifyIORef' calls (+ 1) >> pure (textResponse ""))
+        let policy = defaultHarnessPolicy & #maxModelTurns .~ 1 & #outputRepairs .~ 2 & #output .~ NonemptyReply
+        result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
+        result @?= Left (SkillToolTurnLimitExceeded 1)
+        readIORef calls >>= (@?= 1)
+    ]
+
+ephemeralFixture :: ToolRegistry -> (Model -> Context -> Options -> IO Response) -> IO (BehaviorEnv, AgentDecl)
+ephemeralFixture registry complete = do
+  root <- repositoryRoot
+  let api = Custom "shikigami-ephemeral-fixture"
+  providers <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream complete) complete]
+  base <- newBehaviorEnv
+  pure (base & #model .~ toolModel api & #providerRegistry .~ Just providers & #tools .~ registry, declFor [] (Skill (Text.pack (root </> "agents" </> "skills" </> "triage-note"))))
 
 emptyRegistryTests :: TestTree
 emptyRegistryTests =
@@ -428,6 +509,7 @@ declFor capabilityOverlays behavior =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

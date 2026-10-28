@@ -21,6 +21,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), R
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
@@ -63,11 +64,19 @@ tests =
         assertBool "run permission grants no decision model" (isLeft (resolveModel catalog runOnly Nothing (ModelAlias "worker-a")))
         assertBool "decision alias does not grant whole-run selection" (isLeft (resolveExecutionSelection "assignment-test" catalog (Right fallback) decisionOnly.execution (Just (ExecutionRequest (Just "worker-a") Nothing Nothing)) Nothing Nothing Nothing fixedTime))
         assertBool "invalid unused whole-run default does not deny a decision alias" (not (isLeft (resolveModel catalog (decisionOnly & #execution .~ Just (ExecutionPolicy "unknown" [])) Nothing (ModelAlias "worker-a")))),
+      testCase "Dhall agent harness narrows the shared policy and survives JSON replay" do
+        declaration <- mustRight <$> loadAgent "test/fixtures/harness-agent.dhall"
+        policy <- pure (mustRight (Harness.narrowHarnessPolicy Harness.defaultHarnessPolicy declaration.harness))
+        policy.maxModelTurns @?= 2
+        policy.deniedTools @?= ["write"]
+        policy.output @?= Harness.NonemptyReply
+        Aeson.eitherDecode (Aeson.encode declaration) @?= Right declaration,
       testCase "historical declarations omit the new default and recover it on decode" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
         declaration.execution @?= Nothing
+        declaration.harness @?= Nothing
         case Aeson.toJSON declaration of
-          Aeson.Object fields -> assertBool "no new default key" (not (KeyMap.member "execution" fields))
+          Aeson.Object fields -> assertBool "no new default keys" (all (not . (`KeyMap.member` fields)) ["execution", "harness"])
           _ -> assertFailure "declaration must be an object"
         Aeson.eitherDecode (Aeson.encode declaration) @?= Right declaration,
       testCase "inbound provider flags have no authority" do

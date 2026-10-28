@@ -94,7 +94,9 @@ library
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
     Shikigami.Execution.Driver
+    Shikigami.Execution.Ephemeral
     Shikigami.Execution.Executor
+    Shikigami.Execution.Foreground
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
     Shikigami.Execution.Policy

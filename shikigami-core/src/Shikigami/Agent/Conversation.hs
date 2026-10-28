@@ -138,6 +138,7 @@ data ConversationEnv = ConversationEnv
     deliveryPool :: !(Maybe Pool),
     resolveRunProfile :: !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile)),
     runTimeout :: !NominalDiffTime,
+    harness :: !Harness.HarnessPolicy,
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch. This is the /between-turns/ window; 'runTimeout' bounds
     -- a turn. There is deliberately no rotation cadence beside it: the journal
@@ -934,7 +935,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
             selection,
             sanctionedProfile = profile,
             capabilities = emptyResolvedCapabilitySet,
-            policy = Harness.defaultHarnessPolicy,
+            policy = Harness.narrowHarnessPolicy env.harness decl.harness,
             skillDir = SkillDir (Text.unpack path),
             input = do
               prior <- loadTurns env sid

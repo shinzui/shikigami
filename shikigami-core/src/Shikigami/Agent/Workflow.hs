@@ -195,6 +195,7 @@ data AgentRunDeps = AgentRunDeps
     -- agent-run workflow. The value itself never crosses a journal boundary.
     approvalWorkflow :: !ApprovalWorkflow.ApprovalWorkflowEnv,
     runTimeout :: !NominalDiffTime,
+    harness :: !Harness.HarnessPolicy,
     -- | Root-run descendant limit used when an agent declaration leaves its
     -- own delegation budget absent.
     delegationBudget :: !DelegationBudget,
@@ -605,7 +606,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- The terminal body is a protected read; memory and sinks retain their existing
 -- owners and step labels below.
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
-runDurableSkillStep deps profile overlays job _decl sid prior selection path = do
+runDurableSkillStep deps profile overlays job decl sid prior selection path = do
   let runtime = executionRuntime deps
       describe = ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (ExecutionTools.staticNativeTools deps.behaviorEnv.tools)
       assignment =
@@ -617,7 +618,7 @@ runDurableSkillStep deps profile overlays job _decl sid prior selection path = d
             selection,
             sanctionedProfile = profile,
             capabilities = overlays,
-            policy = Harness.defaultHarnessPolicy,
+            policy = Harness.narrowHarnessPolicy deps.harness decl.harness,
             skillDir = SkillDir (Text.unpack path),
             input = pure (Right (ExecutionStart.SkillInput (BehaviorInput job.triggerPayload prior) []))
           }

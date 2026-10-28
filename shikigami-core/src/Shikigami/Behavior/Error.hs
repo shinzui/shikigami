@@ -54,6 +54,7 @@ data RunError
     CapabilityOverlayMismatch ![CapabilityId] ![CapabilityId]
   | -- | A behavior arm not implemented by this plan (e.g. Deterministic, owned by EP-6).
     UnsupportedBehavior !Text
+  | HarnessPolicyRefused !Text
   deriving stock (Eq, Show, Generic)
 
 -- | A retryable behavior failure that must escape a workflow step before Keiro
@@ -77,6 +78,7 @@ classifyRunError = \case
   ProviderFailed retryable _ -> if retryable then Transient else Permanent
   CapabilityOverlayMismatch {} -> Permanent
   UnsupportedBehavior {} -> Permanent
+  HarnessPolicyRefused {} -> Permanent
 
 renderRunError :: RunError -> Text
 renderRunError =
@@ -96,6 +98,7 @@ renderRunError =
         <> " active="
         <> renderCapabilities active
     UnsupportedBehavior behavior -> "unsupported behavior: " <> behavior
+    HarnessPolicyRefused reason -> "harness policy refused: " <> reason
 
 renderCapabilities :: [CapabilityId] -> Text
 renderCapabilities = ("[" <>) . (<> "]") . Text.intercalate "," . sort . fmap capabilityIdText

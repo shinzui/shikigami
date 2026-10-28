@@ -173,7 +173,10 @@ Conversation adoption now shares that driver behind a separate real patch,
 retains the atomic reply owner, and distinguishes accepted ingress from completed
 replies. [ADR 0058](../adr/0058-conversation-acceptance-and-wakes-retain-their-generation.md)
 records generation-bound wakes and the explicit compactable request context.
-Configuration/ephemeral policy and remaining recovery
+Shared configuration and agent overrides now freeze policy at new admission;
+ephemeral and durable one-off commands use the same policy and fenced-child
+boundaries respectively. [ADR 0059](../adr/0059-harness-policy-is-frozen-at-admission-and-shared-with-ephemeral-execution.md)
+records that shared contract. Remaining recovery
 qualification are not yet accepted, so EP-3 and its dependent-child start
 gates remain unchanged.
 

@@ -113,6 +113,7 @@ module Shikigami.App.Config
     behaviorProviderKey,
     behaviorModelKey,
     behaviorDecisionModelsKey,
+    behaviorHarnessKey,
     anthropicApiKeyKey,
     openaiApiKeyKey,
     actionAuthorizationModeKey,
@@ -188,6 +189,7 @@ import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias (..))
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
     emptyAttentionRecipientMap,
@@ -482,6 +484,7 @@ data AppConfig = AppConfig
     -- than something every consumer has to re-check.
     behaviorProvider :: !ProviderSelection,
     decisionModelCatalog :: !(Either DecisionFailure Decision.ModelCatalog),
+    harness :: !Harness.HarnessPolicy,
     actionAuthorization :: !ActionAuthorizationConfig
   }
   deriving stock (Generic, Eq)
@@ -537,6 +540,7 @@ appConfig =
     <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
     <*> decisionModelsConfig
+    <*> withDefault harnessSetting (constant "default-harness" "Bound Skill execution policy" Harness.defaultHarnessPolicy)
     <*> actionAuthorizationConfig
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
@@ -622,6 +626,13 @@ instance Aeson.FromJSON DecisionModelSpec where
     if all validWord [alias, version, bindingId, bindingVersion]
       then pure DecisionModelSpec {alias, version, bindingId, bindingVersion, model, options}
       else fail "invalid decision model identity"
+
+harnessSetting :: Setting Harness.HarnessPolicy
+harnessSetting = publicSettingWithRenderer behaviorHarnessKey "Skill harness ceilings and restrictions" checked renderJson
+  where
+    checked = decoder \key raw -> do
+      options <- runDecoder jsonDecoder key raw
+      either (Left . decodeFailure key) Right (Harness.applyHarnessOptions Harness.defaultHarnessPolicy options)
 
 decisionModelsConfig :: Config (Either DecisionFailure Decision.ModelCatalog)
 decisionModelsConfig =
@@ -1372,6 +1383,9 @@ sinksReiBaseUrlKey = stableKey "sinks.rei.base_url"
 behaviorProviderKey :: Key
 behaviorProviderKey = stableKey "behavior.provider"
 
+behaviorHarnessKey :: Key
+behaviorHarnessKey = stableKey "behavior.harness"
+
 behaviorDecisionModelsKey :: Key
 behaviorDecisionModelsKey = stableKey "behavior.decisionModels"
 
@@ -1490,6 +1504,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
+          binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
           binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,

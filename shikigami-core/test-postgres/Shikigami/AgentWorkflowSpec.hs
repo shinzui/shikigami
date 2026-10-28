@@ -105,6 +105,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript qualified as Replay
@@ -2036,6 +2037,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       runTimeout = secondsToNominalDiffTime 300,
+      harness = Harness.defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
@@ -2074,6 +2076,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
           },
       approvalWorkflow = approvalWorkflowFromLegacy approval,
       runTimeout = secondsToNominalDiffTime 300,
+      harness = Harness.defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
       grants = StaticGrants defaultGrantTable,
@@ -2216,6 +2219,7 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.deliveryPool = Nothing,
       Conversation.resolveRunProfile = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks conversationAgents).resolveRunProfile,
       Conversation.runTimeout = secondsToNominalDiffTime 300,
+      Conversation.harness = Harness.defaultHarnessPolicy,
       Conversation.idleTimeout = idleWindow,
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       Conversation.agents = conversationAgents,
@@ -2584,6 +2588,7 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2667,6 +2672,7 @@ decl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2694,6 +2700,7 @@ missingTaskDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2726,6 +2733,7 @@ profiledDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2752,6 +2760,7 @@ profiledSkillDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2773,6 +2782,7 @@ flowDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2805,6 +2815,7 @@ flowDelegationDecl =
       enabled = True,
       expertise = [],
       execution = Nothing,
+      harness = Nothing,
       decisionModels = [],
       routing = Nothing
     }

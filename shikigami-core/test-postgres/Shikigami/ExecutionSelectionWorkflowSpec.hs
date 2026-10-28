@@ -53,9 +53,11 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
+import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy (ModelOperationInput (..), selectContextView)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), defaultHarnessPolicy)
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
 import Shikigami.Execution.Resources
 import Shikigami.Execution.Selection
@@ -295,7 +297,7 @@ tests fixture =
           Agent.runAgentRunWorkflow dependencies request >>= (@?= Right Suspended)
           let retained = mustRight (retainModelBindings (mustRight (modelCatalog [])) bindings)
               replacement = workflowDeps app store (base & #model . #modelId .~ "changed-process-default") retained workerDecl
-          completed <- driveExecutionChild app (Agent.executionRuntime replacement) execution 20
+          Just completed <- expectRight =<< driveExecutionForeground (Agent.executionRuntime replacement) (Driver.ExecutionStart execution) 20
           completed.phase @?= Replay.Succeeded
           observed >>= (\values -> length values @?= 1)
           let retired = workflowDeps app store (base & #model . #modelId .~ "changed-default") (mustRight (modelCatalog [])) workerDecl
@@ -384,6 +386,7 @@ tests fixture =
                     deliveryPool = Just store.pool,
                     resolveRunProfile = dependencies.resolveRunProfile,
                     runTimeout = 30,
+                    harness = Harness.defaultHarnessPolicy,
                     idleTimeout = 1800,
                     danwa = DanwaConfig "http://localhost:1" "participant",
                     agents = [declaration],
