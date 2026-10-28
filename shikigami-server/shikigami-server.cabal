@@ -44,6 +44,7 @@ library
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.RenderLifecycle
     Shikigami.Server.Command.ResolveApproval
+    Shikigami.Server.Command.Resources
     Shikigami.Server.Command.Runs
     Shikigami.Server.Command.StubKanmon
     Shikigami.Server.Command.StubKawa

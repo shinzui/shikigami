@@ -365,6 +365,7 @@ agentRunSpecialistTests databaseFixture =
                   parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
                   delegationDepth = Just (DelegationDepth 1),
                   lineage = map AgentName ["architecture-practice-router", reviewerAgent],
+                  executionRootId = Nothing,
                   delegationBudgetId = Nothing
                 }
         first <- AgentWorkflow.runAgentRunWorkflow deps job

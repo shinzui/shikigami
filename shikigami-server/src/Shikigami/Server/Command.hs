@@ -61,6 +61,7 @@ import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
+import Shikigami.Server.Command.Resources (runResourcesInspect)
 import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
@@ -150,8 +151,18 @@ adminSubcommands =
     ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
-    ("runs", command "runs" runsInfo)
+    ("runs", command "runs" runsInfo),
+    ("resources", command "resources" resourcesInfo)
   ]
+
+resourcesInfo :: ParserInfo AdminAction
+resourcesInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect a durable execution resource root")
+  where
+    inspectInfo = info (parser <**> helper) (progDesc "Show limits, held and unknown usage, cutoff and refusal categories")
+    parser =
+      (\root asJson -> (runResourcesInspect root asJson, []))
+        <$> strArgument (metavar "ROOT" <> help "Admitted execution root id")
+        <*> switch (long "json" <> help "Emit machine-readable JSON")
 
 -- | @runs@ is the join across keiro and kioku that neither library can perform.
 --

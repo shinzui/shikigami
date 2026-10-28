@@ -52,6 +52,7 @@ import Shikigami.Store.DelegationBudget
     delegationBudgetIdFor,
     reserveDelegationSlot,
     reserveDelegationSlots,
+    reserveEnrolledDelegationSlots,
   )
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
@@ -136,10 +137,13 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
             let created = delegationBudgetIdFor parentWorkflowId
              in (created, Just (parentWorkflowId, currentBudgetLimit))
   now <- liftIO getCurrentTime
-  reserved <- reserveDelegationSlot budgetId seed childWorkflowId now
+  reserved <- case ctx.executionRootId of
+    Nothing -> reserveDelegationSlot budgetId seed childWorkflowId now
+    Just root -> fmap (fmap toSingle) (reserveEnrolledDelegationSlots root budgetId seed (childWorkflowId :| []) now)
   case reserved of
     Left (DelegationBudgetLedgerMissing missing) ->
       throwIO (DelegationBudgetUnavailable (Text.pack (show missing)))
+    Left (DelegationResourceRefused refusal) -> throwIO (DelegationBudgetUnavailable (Text.pack (show refusal)))
     Right DelegationSlotsExhausted -> throwIO DelegationBudgetExhausted
     Right DelegationSlotReserved -> pure ()
     Right DelegationSlotAlreadyReserved -> pure ()
@@ -156,7 +160,8 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
             parentRunWorkflowId = Just parentWorkflowId,
             delegationDepth = Just childDepth,
             lineage = currentLineage <> [AgentName childAgent],
-            delegationBudgetId = Just budgetId
+            delegationBudgetId = Just budgetId,
+            executionRootId = ctx.executionRootId
           }
   handle <-
     spawnChild
@@ -172,6 +177,10 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
         recordedAt = now
       }
   pure (Delegated handle)
+  where
+    toSingle DelegationBatchExhausted = DelegationSlotsExhausted
+    toSingle (DelegationBatchReserved 1 _) = DelegationSlotReserved
+    toSingle (DelegationBatchReserved _ _) = DelegationSlotAlreadyReserved
 
 -- | Validate and identify every child without touching durable state.
 --
@@ -265,10 +274,13 @@ delegateBatch declarations directory decl ctx catalog requests = do
             let created = delegationBudgetIdFor parentWorkflowId
              in (created, Just (parentWorkflowId, currentBudgetLimit))
   now <- liftIO getCurrentTime
-  reserved <- reserveDelegationSlots budgetId seed ((.childWorkflowId) <$> prepared) now
+  reserved <- case ctx.executionRootId of
+    Nothing -> reserveDelegationSlots budgetId seed ((.childWorkflowId) <$> prepared) now
+    Just root -> reserveEnrolledDelegationSlots root budgetId seed ((.childWorkflowId) <$> prepared) now
   case reserved of
     Left (DelegationBudgetLedgerMissing missing) ->
       throwIO (DelegationBudgetUnavailable (Text.pack (show missing)))
+    Left (DelegationResourceRefused refusal) -> throwIO (DelegationBudgetUnavailable (Text.pack (show refusal)))
     Right DelegationBatchExhausted -> throwIO DelegationBudgetExhausted
     Right (DelegationBatchReserved _ _) -> pure ()
   traverse spawnPrepared prepared

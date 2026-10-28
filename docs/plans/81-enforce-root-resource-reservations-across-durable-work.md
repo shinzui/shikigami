@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-22T01:19:09Z
       verdict: "approved"
       note: "DelegationBudget, Delegate context and spec paths verified; no hard child deps; acceptance observable"
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-28T03:46:48Z
+      mode: "implement"
+      note: "Begin root resource admission and durable attempt accounting"
 ---
 
 # Enforce root resource reservations across durable work
@@ -35,13 +41,21 @@ Give every descendant, resumed assignment and recurring cycle one durable resour
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-10-27) Milestone 1: Atomic resource admission and exclusive narrowed allocations. PostgreSQL tests prove all-dimension and batch atomicity, last-slot competition, key conflicts, bounded units and root conservation.
+- [x] (2026-10-27) Milestone 2: Durable attempts, settlement and conservative unknown usage. Fresh connections, racing settlement, explicit reconciliation, cutoff/cancellation, reduced active capacity and overage cases pass.
+- [x] (2026-10-27) Milestone 3: Delegation integration, compatible v1/v2 job transport, explicit root enrollment and bounded `resources inspect` output. Full PostgreSQL suite: 250 cases pass, including production delegation propagation and 20 resource-store cases. Core unit suite: 464 pass; server suite: 63 pass; worker suite: 98 pass. The workflow gate against the implementation baseline passes with one additive patch, no breaking change and generated conformance green.
+
+Implementation baseline: `4ff109c7f6e9156fc948046e3e2aca3b40978e70`.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The generated queue admits only required structural fields, including nullable ones. Adding a root field would reject retained jobs. The application now uses the public Keiro codec with version 2 and a v1 upcaster, carrying resource metadata inside the existing opaque trigger payload and restoring the original domain input on decode. Literal v1 fixtures remain accepted and cannot grant enrollment. See FRIC-9 in `docs/friction-log/`. The current Hackage keiro-dsl release (0.22.0.0, upstream tag verified) retains this required-field policy; no dependency bound changed.
+
+The default baseline build cannot resolve two local Kikan packages. Validation uses the pre-existing `.dev/mp13.cabal.project` and isolated upstream checkout; FRIC-8 in `docs/friction-log/` records this occurrence.
+
+A delegation budget must bind to its enrolled resource root. Checking only the new root reservation lets a descendant strip or replace its reference and spend through another path. Both paths now verify the binding; failure rolls both ledgers back.
 
 
 ## Decision Log
@@ -50,10 +64,20 @@ None recorded during implementation.
 2026-10-10: Separate resource accounting from adaptive scheduling: atomic store tests can establish conservation before any model controls work. Extend the existing descendant ledger transactionally for enrolled roots and preserve legacy behavior for unenrolled jobs.
 
 
+2026-10-27: Use normalized operation/attempt/allocation rows plus one bounded aggregate root, locking the root first for every mutation. Allocations exclusively hold finite capacity in their parent. Cancellation and cutoff stop admission while settlement remains available. The accepted storage and transport constraints are distilled in [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md).
+
+2026-10-27: Enrollment is explicit through `Execution.Admission.enrollRootRun`, which rejects descendants and deterministically derives the root from the stable run identity. Historical producers remain unenrolled. The new root-validation step uses a real `shikigami-execution-resources-v1` patch branch. Queue v2 is application-owned; retain the generated structural payload and a literal v1 upcaster instead of adding a required field.
+
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+The shared root ledger, explicit enrollment boundary, actual-attempt accounting, settlement/reconciliation hooks, exclusive allocations, atomic delegation integration and operator inspection are delivered. Unknown usage survives fresh connections; refusal leaves both ledgers untouched; replay repairs accepted reservations without new spending. Historical journal omission and literal v1 queue fixtures preserve unenrolled behavior.
+
+Validation used `nix develop --no-write-lock-file -c cabal` with `--project-file=.dev/mp13.cabal.project`: `build all`, the complete core/PostgreSQL/server/worker suites, and a focused rerun of the 20 resource cases after the final admission-policy change. `just migration-schema-isolation` and `git diff --check` pass. `just keiro-gate 4ff109c7f6e9156fc948046e3e2aca3b40978e70` used a temporary Cabal wrapper pointing to that same isolated project; check/inspect/scaffold/diff/conformance pass. The hand-owned conformance expectations accept only the new root-validation patch.
+
+[ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md) and [the operations guide](../operations/execution-resources.md) preserve the identity, conservation, retention and rollout constraints. FRIC-8 is accepted with the isolated dependency-source workaround; FRIC-9 is accepted with the versioned application codec. No entries remain logged under this plan.
+
+This closes EP-1 only. Plan 82 consumes selection/accounting hooks, plan 83 enforces transport ceilings and durable execution, and plan 85 owns real progress and fairness. This does not establish full IR-16 or finite-delivery qualification.
 
 
 ## Context and Orientation

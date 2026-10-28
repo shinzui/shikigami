@@ -20,6 +20,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Agent.Run.Key (RunKey, runKeyText)
+import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
@@ -54,6 +55,7 @@ data RunJob = RunJob
     parentRunWorkflowId :: !(Maybe WorkflowId),
     delegationDepth :: !(Maybe DelegationDepth),
     lineage :: ![AgentName],
+    executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     routeKind :: !RunRouteKind
   }
@@ -74,6 +76,7 @@ instance ToJSON RunJob where
         "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) job.parentRunWorkflowId,
         "delegationDepth" Aeson..= job.delegationDepth,
         "lineage" Aeson..= job.lineage,
+        "executionRootId" Aeson..= job.executionRootId,
         "delegationBudgetId" Aeson..= job.delegationBudgetId,
         "routeKind" Aeson..= job.routeKind
       ]
@@ -93,9 +96,10 @@ instance FromJSON RunJob where
     parentRunWorkflowId <- value Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
     delegationDepth <- value Aeson..: "delegationDepth"
     lineage <- value Aeson..: "lineage"
+    executionRootId <- value Aeson..:? "executionRootId"
     delegationBudgetId <- value Aeson..: "delegationBudgetId"
     routeKind <- value Aeson..: "routeKind"
-    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, routeKind}
+    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal
 -- separators become deterministic UUIDv5 technical identities; they are not

@@ -650,6 +650,7 @@ testJob label =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 

@@ -15,4 +15,6 @@ okf_version: "0.2"
 - [Parallel PostgreSQL suite exhausts ephemeral connection capacity](5-parallel-postgresql-suite-exhausts-ephemeral-connection-capacity.md) - The full core PostgreSQL test suite hits the ephemeral database connection limit with default concurrency.
 - [Keiro scaffold drift check includes hand-owned core edits](6-keiro-scaffold-drift-check-includes-hand-owned-core-edits.md) - The keiro-scaffold recipe checks all core source changes rather than only generated files.
 - [Automatic PGMQ exhaustion bypasses the domain disposition hook](7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md) - Keiro dead-letters exhausted messages before the domain handler and exposes no terminal callback to persist an HTTP receipt.
+- [Resource-ledger baseline needs isolated Kikan sources](8-resource-ledger-baseline-needs-isolated-kikan-sources.md) - The default Cabal project still names two absent local Kikan packages and requires the existing isolated validation project.
+- [Queue payload additions have no optional compatibility policy](9-queue-payload-additions-have-no-optional-compatibility-policy.md) - The queue generator requires every new field and rejects omission defaults, so resource metadata needs a versioned application codec.
 

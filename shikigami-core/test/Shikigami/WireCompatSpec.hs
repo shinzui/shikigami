@@ -4,12 +4,14 @@
 -- remains a rejection fixture; other protocol fixtures retain their contracts.
 module Shikigami.WireCompatSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Foldable (for_)
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
@@ -35,6 +37,7 @@ import Shikigami.Capability.Overlay
     mkCapabilityRevision,
     mkResolvedCapabilitySet,
   )
+import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
@@ -131,6 +134,24 @@ queueTests =
       testCase "production decoder accepts the literal envelope" do
         value <- decodeOrFail @Value currentRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "v1 jobs default to unenrolled without changing input" do
+        value <- decodeOrFail @Value preResourceRunJobEnvelope
+        RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "v1 input resembling resource metadata is never reinterpreted" do
+        value <- decodeOrFail @Value preResourceRunJobEnvelope
+        let input = Aeson.object ["executionRootId" Aeson..= ("forged" :: Text), "input" Aeson..= triggerPayloadValue]
+            historical = case value of
+              Object outer -> case KeyMap.lookup "data" outer of
+                Just (Object payload) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "triggerPayload" input payload)) outer)
+                _ -> value
+              _ -> value
+        RunJobs.decodeRunJob historical @?= Right (sampleRunJob & #triggerPayload .~ input),
+      testCase "enrolled jobs retain the root through the v2 queue envelope" do
+        let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1")
+        RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
+      testCase "historical journal omission remains unenrolled" do
+        let value = case toJSON sampleRunJob of Object o -> Object (KeyMap.delete "executionRootId" o); other -> other
+        Aeson.fromJSON @RunJob value @?= Aeson.Success sampleRunJob,
       testCase "the old bare payload is rejected" do
         value <- decodeOrFail @Value preUpgradeRunJob
         case RunJobs.decodeRunJob value of
@@ -161,6 +182,7 @@ sampleRunJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -359,4 +381,7 @@ identityBoundaryTests =
     ]
 
 currentRunJobEnvelope :: ByteString
-currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"activityId\":\"act_1\"}},\"t\":\"RunJobMessage\",\"v\":1}"
+currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"}}},\"t\":\"RunJobMessage\",\"v\":2}"
+
+preResourceRunJobEnvelope :: ByteString
+preResourceRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"activityId\":\"act_1\"}},\"t\":\"RunJobMessage\",\"v\":1}"

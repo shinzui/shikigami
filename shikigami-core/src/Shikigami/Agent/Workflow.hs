@@ -115,6 +115,7 @@ import Shikigami.Decision.Contract (renderDecisionFailure)
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Resources (ResourceError)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement
   ( ApprovalAcknowledgementFailed (..),
@@ -151,6 +152,7 @@ import Shikigami.Sink.Intent
     preparedSinkResult,
   )
 import Shikigami.Sink.Permission (SinkKind, sinkKindText)
+import Shikigami.Store.ExecutionResources qualified as ExecutionResources
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
@@ -267,6 +269,22 @@ agentRunWorkflow ::
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps ingestJobStepName (ingestJob mJob)
+  resourcesEnabled <- Workflow.patch (PatchId "shikigami-execution-resources-v1")
+  admission <-
+    if resourcesEnabled
+      then runStep deps (StepName "validate-execution-root") (validateExecutionRoot job)
+      else pure (Right ())
+  case admission of
+    Left refusal -> pure (Left (PermanentAgentRunFailure (Text.pack (show refusal))))
+    Right () -> runAdmittedAgent deps job
+
+validateExecutionRoot :: (Store :> es) => RunJob -> Eff es (Either ResourceError ())
+validateExecutionRoot job = case job.executionRootId of
+  Nothing -> pure (Right ())
+  Just root -> fmap (fmap (const ())) (ExecutionResources.inspectRoot root)
+
+runAdmittedAgent :: AgentRunDeps -> RunJob -> Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
+runAdmittedAgent deps job = do
   mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== (agentNameText ((.agentName) job))) . agentDeclName) ((.agents) deps)))
   case mDecl of
     Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (agentNameText ((.agentName) job)))))
@@ -946,7 +964,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
     )
 
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
-delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId} =
+delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId} =
   DelegateCtx
     { depth = fromMaybe (DelegationDepth 0) delegationDepth,
       identity,
@@ -955,6 +973,7 @@ delegateContext deps decl currentSession RunJob {agentName, identity, parentSess
       parentRunWorkflowId,
       lineage = if null lineage then [agentName] else lineage,
       delegationBudgetId,
+      executionRootId,
       budgetLimit = fromMaybe (depsDelegationBudget deps) (declDelegationBudget decl)
     }
 

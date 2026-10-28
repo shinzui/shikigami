@@ -9,6 +9,9 @@ workflow AgentRun
   id from input via runJobWorkflowId
   body
     step ingest-job -> RunJob
+    patch shikigami-execution-resources-v1 {
+      step validate-execution-root -> ResourceAdmission
+    }
     step lookup-agent -> AgentDecl
     step resolve-profile -> ProfileResolution
     step resolve-capability-overlays -> CapabilityOverlayResolution

@@ -36,7 +36,7 @@ awaitLabels :: [Text]
 awaitLabels = []
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList [PatchId "shikigami-flow-decisions-v1"]
+declaredPatches = Set.fromList [PatchId "shikigami-execution-resources-v1", PatchId "shikigami-flow-decisions-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

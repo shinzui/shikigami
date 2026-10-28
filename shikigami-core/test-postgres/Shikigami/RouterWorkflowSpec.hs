@@ -374,6 +374,7 @@ routerJob key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["router"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 

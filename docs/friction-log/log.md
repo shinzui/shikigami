@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-10-28
+* **Update**: FRIC-9 accepted: Accept the versioned codec solution and document the worker-before-producer rollout in ADR 0051.
+* **Update**: FRIC-8 accepted: Retain the validated isolated-source workaround.
+* **Addition**: FRIC-9 records detour interface friction with mori://shinzui/keiro/packages/keiro-dsl: Queue payload additions have no optional compatibility policy
+* **Addition**: FRIC-8 records detour environment friction with mori://shinzui/kikan-en: Resource-ledger baseline needs isolated Kikan sources
+
 ## 2026-10-26
 * **Update**: FRIC-7 resolved: Resolved the handler-hook gap using existing released APIs; no owner callback or release is required. ADR 0050 records the retention condition.
 

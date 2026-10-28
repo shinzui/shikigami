@@ -10,15 +10,22 @@
 -- spawning, and the rendered help text is available to assert on.
 module Shikigami.Server.CommandSpec (tests) where
 
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString.Lazy qualified as Lazy
 import Data.List (isInfixOf)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isNothing)
 import Data.Text qualified as Text
+import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText)
 import Options.Applicative
 import Shikigami.Agent.Approval (ApprovalDecision (..))
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
+import Shikigami.Server.Command.Resources (resourceView)
 import System.Exit (ExitCode (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -39,8 +46,26 @@ tests =
                 "danwa-spike",
                 "grants",
                 "agents",
-                "runs"
+                "runs",
+                "resources"
               ],
+      testCase "resources inspect accepts a root and JSON output" do
+        case execParserPure adminPrefs adminInfo ["resources", "inspect", "root-1", "--json"] of
+          Success (chosen, _) -> assertBool "resources action selected" (not (isNothing chosen))
+          _ -> assertBool "resources did not parse" False,
+      testCase "resource JSON distinguishes held unknown usage from measured consumption" do
+        let now = UTCTime (fromGregorian 2026 10 27) 0
+            envelope = Resources.Envelope (Map.singleton Resources.Tokens (Resources.Limited 100)) now
+            usage = Resources.Usage (Map.singleton Resources.Tokens 3) (Map.singleton Resources.Tokens 10)
+            root = Resources.Root envelope 0 False Nothing False 1 1 (Map.singleton Resources.Tokens 3) usage
+            result = resourceView now root
+        case result of
+          Aeson.Object fields -> do
+            KeyMap.lookup "unknownAttempts" fields @?= Just (Aeson.Number 1)
+            KeyMap.lookup "measuredUsage" fields @?= Just (Aeson.toJSON root.known)
+            KeyMap.lookup "heldIncludingAllocations" fields @?= Just (Aeson.toJSON usage.held)
+            assertBool "one bounded payload-free summary" (Lazy.length (Aeson.encode result) < 4096)
+          _ -> assertBool "resource summary must be an object" False,
       testCase "shikigami --help lists every command" do
         let rendered = helpTextOf ["--help"]
         assertBool ("no usage line:\n" <> rendered) ("Usage:" `isInfixOf` rendered)

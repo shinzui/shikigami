@@ -52,6 +52,7 @@ ctxAt depth =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["root", "lead"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }

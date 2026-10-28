@@ -103,6 +103,7 @@ delegateCtx =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["router"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }

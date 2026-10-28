@@ -594,6 +594,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = map AgentName [flowAgent],
+                executionRootId = Nothing,
                 delegationBudgetId = Nothing,
                 budgetLimit = defaultDelegationBudget
               },

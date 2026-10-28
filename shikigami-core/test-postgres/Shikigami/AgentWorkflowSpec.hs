@@ -100,6 +100,9 @@ import Shikigami.Capability.Overlay qualified as CapabilityOverlay
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Admission (enrollRootRun)
+import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -118,6 +121,7 @@ import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Store.ExecutionResources qualified as Resources
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Workflow.Registry qualified as Registry
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
@@ -1323,7 +1327,52 @@ tests databaseFixture =
         ],
       testGroup
         "Delegate"
-        [ testCase "parent suspends awaiting delegated child and resumes with child output" do
+        [ testCase "an explicitly enrolled root keeps one envelope and rejects descendant enrollment" do
+            withShikigamiFreshDatabase databaseFixture \connStr -> do
+              tracer <- noopTracer
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+              now <- getCurrentTime
+              let envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
+              first <- runAppIO appEnv (enrollRootRun envelope (capabilityJob "heartbeat" "new-root"))
+              job <- case first of
+                Right (Right admitted) -> pure admitted
+                other -> assertFailure (show other)
+              replay <- runAppIO appEnv (enrollRootRun envelope job)
+              assertEqual "root admission is idempotent" (Right (Right job)) replay
+              descendant <- runAppIO appEnv (enrollRootRun envelope (job & #parentRunWorkflowId .~ Just (WorkflowId "parent")))
+              case descendant of
+                Right (Left (Resources.InvalidResourceRequest _)) -> pure ()
+                other -> assertFailure ("descendant enrollment should fail: " <> show other),
+          testCase "resource-enrolled delegation journals the inherited root and denial creates no child" do
+            withShikigamiFreshDatabase databaseFixture \connStr -> do
+              tracer <- noopTracer
+              parentSession <- genSessionId
+              now <- getCurrentTime
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                  root = ExecutionRootId "delegation-resource-root"
+                  envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
+                  parentName = WorkflowName "shikigami.test-resource-parent"
+                  parentId = WorkflowId "resource-parent"
+                  childId = delegatedWorkflowId parentId "heartbeat" "first"
+                  deniedId = delegatedWorkflowId (WorkflowId "other-parent") "heartbeat" "second"
+                  supervisor = decl & #delegates .~ ["heartbeat"]
+                  ctx = parentDelegateContext parentSession & #executionRootId .~ Just root
+                  body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx key "heartbeat" (object []))
+              runAppIO appEnv (Resources.enrollRoot root envelope) >>= assertEqual "explicit root admitted" (Right (Right Resources.Accepted))
+              runAppIO appEnv (runWorkflow parentName parentId (body "first")) >>= assertEqual "child spawned" (Right (Completed ()))
+              recorded <- runAppIO appEnv (loadStepIndex agentRunWorkflowName childId 0)
+              case fmap (Map.lookup "ingest-job") recorded of
+                Right (Just value) -> case fromJSON @RunJob value of
+                  Success child -> assertEqual "child inherits root" (Just root) child.executionRootId
+                  Error err -> assertFailure err
+                other -> assertFailure ("child ingestion absent: " <> show other)
+              -- A different parent workflow still spends the same resource root.
+              denied <- try @DelegationError (runAppIO appEnv (runWorkflow parentName (WorkflowId "other-parent") (body "second")))
+              case denied of
+                Left (DelegationBudgetUnavailable _) -> pure ()
+                other -> assertFailure ("resource exhaustion should deny: " <> show other)
+              runAppIO appEnv (lookupInstance agentRunWorkflowName deniedId) >>= assertEqual "no child created on denial" (Right Nothing),
+          testCase "parent suspends awaiting delegated child and resumes with child output" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
@@ -1370,6 +1419,7 @@ tests databaseFixture =
                           parentSessionId = Nothing,
                           parentRunWorkflowId = Nothing,
                           lineage = map AgentName ["test-parent", "heartbeat"],
+                          executionRootId = Nothing,
                           delegationBudgetId = Nothing,
                           budgetLimit = defaultDelegationBudget
                         }
@@ -1921,6 +1971,7 @@ parentDelegateContext currentSession =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["test-parent"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
     }
@@ -2501,6 +2552,7 @@ capabilityJob agentName key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2513,6 +2565,8 @@ expectedLifecycleSteps :: Set.Set Text
 expectedLifecycleSteps =
   Set.fromList
     [ "ingest-job",
+      "patch:shikigami-execution-resources-v1",
+      "validate-execution-root",
       "lookup-agent",
       "resolve-profile",
       "resolve-capability-overlays",
@@ -2795,6 +2849,7 @@ job =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2812,6 +2867,7 @@ retryVersioningJob key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2832,6 +2888,7 @@ permanentFailureJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2849,6 +2906,7 @@ crashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2866,6 +2924,7 @@ profileRefusalJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2883,6 +2942,7 @@ profilePinningJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -2900,6 +2960,7 @@ profileViolationJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3064,6 +3125,7 @@ recordBeforeCompleteCrashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3081,6 +3143,7 @@ flowJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3100,6 +3163,7 @@ flowMemoryJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3209,6 +3273,7 @@ approvalJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3226,6 +3291,7 @@ rejectedJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3243,6 +3309,7 @@ timeoutJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3260,6 +3327,7 @@ answeredBeforeDeadlineJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3277,6 +3345,7 @@ researchSupervisorJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["research-supervisor"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 
@@ -3294,6 +3363,7 @@ flowDelegationJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["flow-delegation-supervisor"],
+      executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
 

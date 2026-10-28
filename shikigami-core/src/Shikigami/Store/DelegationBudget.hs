@@ -13,6 +13,7 @@ module Shikigami.Store.DelegationBudget
     delegationBudgetIdFor,
     reserveDelegationSlot,
     reserveDelegationSlots,
+    reserveEnrolledDelegationSlots,
   )
 where
 
@@ -20,6 +21,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
@@ -34,8 +36,11 @@ import Kiroku.Store.Transaction (runTransaction)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
+import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
+import Shikigami.Store.ExecutionResources qualified as Resources
 
 data ReservationResult
   = DelegationSlotReserved
@@ -53,6 +58,7 @@ data BatchReservationResult
 
 data BudgetReservationError
   = DelegationBudgetLedgerMissing !DelegationBudgetId
+  | DelegationResourceRefused !Resources.ResourceError
   deriving stock (Eq, Show)
 
 -- | The deterministic ledger identity for a root workflow instance.
@@ -106,30 +112,71 @@ reserveDelegationSlots ::
   UTCTime ->
   Eff es (Either BudgetReservationError BatchReservationResult)
 reserveDelegationSlots budgetId seed childWorkflowIds now =
-  runTransaction do
-    traverse_ (\(rootWorkflowId, limit) -> Tx.statement (budgetId, rootWorkflowId, limit, now) insertBudgetStatement) seed
-    Tx.statement budgetId lockBudgetStatement >>= \case
-      Nothing -> pure (Left (DelegationBudgetLedgerMissing budgetId))
-      Just (limit, consumed) -> do
-        reservationStates <-
-          traverse
-            (\childWorkflowId -> (childWorkflowId,) <$> Tx.statement (budgetId, childWorkflowId) reservationExistsStatement)
-            uniqueChildWorkflowIds
-        let newChildWorkflowIds = [childWorkflowId | (childWorkflowId, False) <- reservationStates]
-            existingCount = length reservationStates - length newChildWorkflowIds
-            newCount = length newChildWorkflowIds
-        if consumed + newCount > limit
-          then pure (Right DelegationBatchExhausted)
-          else do
-            traverse_ (\childWorkflowId -> Tx.statement (budgetId, childWorkflowId, now) insertReservationStatement) newChildWorkflowIds
-            when (newCount > 0) do
-              Tx.statement (budgetId, newCount, now) incrementBudgetStatement
-            pure
-              ( Right
-                  (DelegationBatchReserved (fromIntegral newCount) (fromIntegral existingCount))
-              )
+  runTransaction (reserveDelegationSlotsTx Nothing budgetId seed childWorkflowIds now)
+
+reserveDelegationSlotsTx :: Maybe ExecutionRootId -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> NonEmpty WorkflowId -> UTCTime -> Tx.Transaction (Either BudgetReservationError BatchReservationResult)
+reserveDelegationSlotsTx enrolled budgetId seed childWorkflowIds now = do
+  traverse_ (\(rootWorkflowId, limit) -> Tx.statement (budgetId, rootWorkflowId, limit, now) insertBudgetStatement) seed
+  Tx.statement budgetId lockBudgetStatement >>= \case
+    Nothing -> pure (Left (DelegationBudgetLedgerMissing budgetId))
+    Just (_, _, Just bound) | enrolled /= Just (ExecutionRootId bound) -> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
+    Just (_, _, Nothing) | isJust enrolled && isNothing seed -> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
+    Just (limit, consumed, _) -> do
+      reservationStates <-
+        traverse
+          (\childWorkflowId -> (childWorkflowId,) <$> Tx.statement (budgetId, childWorkflowId) reservationExistsStatement)
+          uniqueChildWorkflowIds
+      let newChildWorkflowIds = [childWorkflowId | (childWorkflowId, False) <- reservationStates]
+          existingCount = length reservationStates - length newChildWorkflowIds
+          newCount = length newChildWorkflowIds
+      if consumed + newCount > limit
+        then pure (Right DelegationBatchExhausted)
+        else do
+          traverse_ (\childWorkflowId -> Tx.statement (budgetId, childWorkflowId, now) insertReservationStatement) newChildWorkflowIds
+          when (newCount > 0) do
+            Tx.statement (budgetId, newCount, now) incrementBudgetStatement
+          pure
+            ( Right
+                (DelegationBatchReserved (fromIntegral newCount) (fromIntegral existingCount))
+            )
   where
     uniqueChildWorkflowIds = NonEmpty.toList (NonEmpty.nub childWorkflowIds)
+
+-- | Acquire the resource root first, then the historical ledger. Failure at
+-- either ceiling rolls both owners back before any child can be spawned.
+reserveEnrolledDelegationSlots :: (Store :> es) => ExecutionRootId -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> NonEmpty WorkflowId -> UTCTime -> Eff es (Either BudgetReservationError BatchReservationResult)
+reserveEnrolledDelegationSlots root@(ExecutionRootId rootKey) budgetId seed childIds now = runTransaction do
+  inspected <- Resources.inspectRootTx root
+  case inspected of
+    Left err -> pure (Left (DelegationResourceRefused err))
+    Right state -> do
+      admitted <- Resources.reserveOperationsTx root state.revision (request <$> NonEmpty.toList childIds) now
+      case admitted of
+        Left err -> pure (Left (DelegationResourceRefused err))
+        Right _ -> do
+          result <- reserveDelegationSlotsTx (Just root) budgetId seed childIds now
+          case result of
+            Left _ -> Tx.condemn >> pure result
+            Right DelegationBatchExhausted -> Tx.condemn >> pure result
+            Right _ -> do
+              bound <- Tx.statement (budgetId, rootKey, isJust seed) bindRootStatement
+              if bound
+                then pure result
+                else Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
+  where
+    request (WorkflowId child) = Resources.OperationRequest (OperationId ("delegate:" <> child)) Nothing Resources.ChildOperation (Map.singleton Resources.LifetimeDescendants 1) "delegation-v1"
+
+bindRootStatement :: Statement (DelegationBudgetId, Text, Bool) Bool
+bindRootStatement =
+  preparable
+    """
+    UPDATE shikigami.delegation_budgets
+    SET execution_root_id=$2
+    WHERE budget_id=$1 AND (execution_root_id=$2 OR (execution_root_id IS NULL AND $3))
+    RETURNING true
+    """
+    (contrazip3 ((\(DelegationBudgetId v) -> v) >$< Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.bool)))
+    (fromMaybe False <$> Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
 
 insertBudgetStatement :: Statement (DelegationBudgetId, WorkflowId, DelegationBudget, UTCTime) ()
 insertBudgetStatement =
@@ -148,20 +195,21 @@ insertBudgetStatement =
     )
     Decoders.noResult
 
-lockBudgetStatement :: Statement DelegationBudgetId (Maybe (Int, Int))
+lockBudgetStatement :: Statement DelegationBudgetId (Maybe (Int, Int, Maybe Text))
 lockBudgetStatement =
   preparable
     """
-    SELECT maximum, consumed
+    SELECT maximum, consumed, execution_root_id
     FROM shikigami.delegation_budgets
     WHERE budget_id = $1
     FOR UPDATE
     """
     ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
     ( Decoders.rowMaybe
-        ( (,)
+        ( (,,)
             <$> Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))
             <*> Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))
+            <*> Decoders.column (Decoders.nullable Decoders.text)
         )
     )
 
