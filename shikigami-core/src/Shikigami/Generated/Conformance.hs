@@ -6,8 +6,10 @@ module Shikigami.Generated.Conformance
 
 import Shikigami.ExecutionLifecycle.Generated.Harness qualified as ExecutionLifecycle
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
+import Shikigami.WorkerSessionLifecycle.Generated.Harness qualified as WorkerSessionLifecycle
 import Shikigami.ExecutionLookup.Generated.ReadModelHarness qualified as ExecutionLookup
 import Shikigami.RunEvidenceLookup.Generated.ReadModelHarness qualified as RunEvidenceLookup
+import Shikigami.WorkerSessionLookup.Generated.ReadModelHarness qualified as WorkerSessionLookup
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
@@ -18,8 +20,10 @@ runServiceConformanceChecks =
   pure (
     [("aggregate/ExecutionLifecycle/" <> fact, passed) | (fact, passed) <- ExecutionLifecycle.harnessAssertions]
     <> [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
+    <> [("aggregate/WorkerSessionLifecycle/" <> fact, passed) | (fact, passed) <- WorkerSessionLifecycle.harnessAssertions]
     <> [("readmodel/execution_lookup/" <> fact, passed) | (fact, passed) <- ExecutionLookup.readModelFactResults]
     <> [("readmodel/run_evidence_lookup/" <> fact, passed) | (fact, passed) <- RunEvidenceLookup.readModelFactResults]
+    <> [("readmodel/worker_session_lookup/" <> fact, passed) | (fact, passed) <- WorkerSessionLookup.readModelFactResults]
   )
 
 serviceConformanceFacts :: [(String, String)]

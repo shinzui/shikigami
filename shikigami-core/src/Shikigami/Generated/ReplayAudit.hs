@@ -10,6 +10,7 @@ module Shikigami.Generated.ReplayAudit (auditTargets) where
 
 import Shikigami.ExecutionLifecycle.Generated.EventStream qualified as ExecutionLifecycle
 import Shikigami.RunEvidence.Generated.EventStream qualified as RunEvidence
+import Shikigami.WorkerSessionLifecycle.Generated.EventStream qualified as WorkerSessionLifecycle
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
 import Keiro.Stream qualified as Stream
 
@@ -26,5 +27,11 @@ auditTargets =
         { eventStream = RunEvidence.runEvidenceEventStream
         , category = Stream.categoryText RunEvidence.runEvidenceCategory
         , mkStream = streamInCategory (Stream.categoryText RunEvidence.runEvidenceCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = WorkerSessionLifecycle.workerSessionLifecycleEventStream
+        , category = Stream.categoryText WorkerSessionLifecycle.workerSessionLifecycleCategory
+        , mkStream = streamInCategory (Stream.categoryText WorkerSessionLifecycle.workerSessionLifecycleCategory)
         }
   ]

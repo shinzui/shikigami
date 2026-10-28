@@ -10,20 +10,26 @@ module Shikigami.Generated.ProjectionCatalog
   , registerProjectionCatalog
   , runEvidenceWriterProjectionSet
   , executionWriterProjectionSet
+  , workerSessionWriterProjectionSet
   , runEvidenceWriterInlineProjections
   , executionWriterInlineProjections
+  , workerSessionWriterInlineProjections
   , executionLifecycleInlineProjections
   , runEvidenceInlineProjections
+  , workerSessionLifecycleInlineProjections
   , executionStoreRebuildGroupId
   , startExecutionStoreRebuild
   , runEvidenceStoreRebuildGroupId
   , startRunEvidenceStoreRebuild
+  , workerSessionStoreRebuildGroupId
+  , startWorkerSessionStoreRebuild
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Effectful (Eff, IOE, (:>))
 import Shikigami.RunEvidence.Generated.Domain qualified as RunEvidenceDomain
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as ExecutionLifecycleDomain
+import Shikigami.WorkerSessionLifecycle.Generated.Domain qualified as WorkerSessionLifecycleDomain
 import Keiro.Projection (InlineProjection (..))
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.ReadModel.Rebuild qualified as Rebuild
@@ -32,6 +38,7 @@ import Kiroku.Store.Types qualified as Kiroku
 import Shikigami.ProjectionCatalog.ProjectionCatalogHoles qualified as Holes
 import Shikigami.ExecutionLookup.Generated.ReadModel qualified as RMExecutionLookup
 import Shikigami.RunEvidenceLookup.Generated.ReadModel qualified as RMRunEvidenceLookup
+import Shikigami.WorkerSessionLookup.Generated.ReadModel qualified as RMWorkerSessionLookup
 
 must :: Show error => Either error value -> value
 must = either (error . show) id
@@ -70,24 +77,44 @@ executionWriterProjectionSet =
 executionWriterInlineProjections :: [InlineProjection ExecutionLifecycleDomain.ExecutionLifecycleEvent]
 executionWriterInlineProjections = Catalog.typedInlineProjections validatedProjectionCatalog executionWriterProjectionSet
 
+workerSessionWriterProjectionSet :: Catalog.ProjectionSet WorkerSessionLifecycleDomain.WorkerSessionLifecycleEvent
+workerSessionWriterProjectionSet =
+  Catalog.ProjectionSet
+    (must (Catalog.mkSourceId "aggregate:WorkerSessionLifecycle"))
+    (Catalog.ProjectionDefinition
+      (must (Catalog.mkProjectionId "worker_session_writer"))
+      (must (Catalog.mkRebuildGroupId "worker_session_store"))
+      ((must (Catalog.mkTargetId "worker_session_rows")) :| [(must (Catalog.mkTargetId "worker_session_payloads")), (must (Catalog.mkTargetId "worker_session_messages")), (must (Catalog.mkTargetId "worker_session_results")), (must (Catalog.mkTargetId "worker_session_events")), (must (Catalog.mkTargetId "worker_session_commands"))])
+      (Catalog.LiveOnly (Catalog.LiveOnlyReason "Session admission, instructions and results require protected payloads"))
+      (Catalog.InlineHandler (InlineProjection "worker_session_writer" Holes.applyWorkerSessionWriterLive) (must (Catalog.mkClaimSite "projection-owner worker_session_writer inline-handler")) :| [])
+      (must (Catalog.mkClaimSite "projection-owner worker_session_writer"))
+      :| [])
+    (must (Catalog.mkClaimSite "projection-owner worker_session_writer source"))
+
+workerSessionWriterInlineProjections :: [InlineProjection WorkerSessionLifecycleDomain.WorkerSessionLifecycleEvent]
+workerSessionWriterInlineProjections = Catalog.typedInlineProjections validatedProjectionCatalog workerSessionWriterProjectionSet
+
 executionLifecycleInlineProjections :: [InlineProjection ExecutionLifecycleDomain.ExecutionLifecycleEvent]
 executionLifecycleInlineProjections = concat [executionWriterInlineProjections]
 
 runEvidenceInlineProjections :: [InlineProjection RunEvidenceDomain.RunEvidenceEvent]
 runEvidenceInlineProjections = concat [runEvidenceWriterInlineProjections]
 
+workerSessionLifecycleInlineProjections :: [InlineProjection WorkerSessionLifecycleDomain.WorkerSessionLifecycleEvent]
+workerSessionLifecycleInlineProjections = concat [workerSessionWriterInlineProjections]
+
 projectionCatalog :: Catalog.ProjectionCatalog
 projectionCatalog =
   Catalog.ProjectionCatalog
-    [Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:RunEvidence")) (Catalog.CategorySource (Kiroku.CategoryName "runEvidence")) "aggregate:RunEvidence/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:RunEvidence")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:ExecutionLifecycle")) (Catalog.CategorySource (Kiroku.CategoryName "executionLifecycle")) "aggregate:ExecutionLifecycle/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:ExecutionLifecycle"))]
-    [Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_rows")) (Catalog.QualifiedTable "shikigami" "executions") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target execution_rows")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_payloads")) (Catalog.QualifiedTable "shikigami" "execution_payloads") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "execution_rows"))] (must (Catalog.mkClaimSite "target execution_payloads")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_transcript_operations")) (Catalog.QualifiedTable "shikigami" "execution_transcript_operations") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_payloads"))] (must (Catalog.mkClaimSite "target execution_transcript_operations")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "run_evidence_rows")) (Catalog.QualifiedTable "shikigami" "run_evidence") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target run_evidence_rows")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "run_evidence_calls")) (Catalog.QualifiedTable "shikigami" "run_evidence_calls") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "run_evidence_rows"))] (must (Catalog.mkClaimSite "target run_evidence_calls"))]
-    [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "execution_store")) [(must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_payloads")), (must (Catalog.mkTargetId "execution_transcript_operations"))] [] (must (Catalog.mkClaimSite "rebuild-group execution_store")), Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "run_evidence_store")) [(must (Catalog.mkTargetId "run_evidence_rows")), (must (Catalog.mkTargetId "run_evidence_calls"))] [] (must (Catalog.mkClaimSite "rebuild-group run_evidence_store"))]
+    [Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:RunEvidence")) (Catalog.CategorySource (Kiroku.CategoryName "runEvidence")) "aggregate:RunEvidence/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:RunEvidence")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:ExecutionLifecycle")) (Catalog.CategorySource (Kiroku.CategoryName "executionLifecycle")) "aggregate:ExecutionLifecycle/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:ExecutionLifecycle")), Catalog.SourceDeclaration (must (Catalog.mkSourceId "aggregate:WorkerSessionLifecycle")) (Catalog.CategorySource (Kiroku.CategoryName "workerSessionLifecycle")) "aggregate:WorkerSessionLifecycle/generated-codec/v1" (must (Catalog.mkClaimSite "source aggregate:WorkerSessionLifecycle"))]
+    [Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_rows")) (Catalog.QualifiedTable "shikigami" "executions") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target execution_rows")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_payloads")) (Catalog.QualifiedTable "shikigami" "execution_payloads") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "execution_rows"))] (must (Catalog.mkClaimSite "target execution_payloads")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "execution_transcript_operations")) (Catalog.QualifiedTable "shikigami" "execution_transcript_operations") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_payloads"))] (must (Catalog.mkClaimSite "target execution_transcript_operations")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "run_evidence_rows")) (Catalog.QualifiedTable "shikigami" "run_evidence") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target run_evidence_rows")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "run_evidence_calls")) (Catalog.QualifiedTable "shikigami" "run_evidence_calls") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "run_evidence_rows"))] (must (Catalog.mkClaimSite "target run_evidence_calls")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_rows")) (Catalog.QualifiedTable "shikigami" "worker_sessions") Catalog.PreserveAndReconcile [] (must (Catalog.mkClaimSite "target worker_session_rows")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_payloads")) (Catalog.QualifiedTable "shikigami" "worker_session_payloads") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "worker_session_rows"))] (must (Catalog.mkClaimSite "target worker_session_payloads")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_messages")) (Catalog.QualifiedTable "shikigami" "worker_session_messages") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "worker_session_rows"))] (must (Catalog.mkClaimSite "target worker_session_messages")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_results")) (Catalog.QualifiedTable "shikigami" "worker_session_results") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "worker_session_rows")), (must (Catalog.mkTargetId "worker_session_messages"))] (must (Catalog.mkClaimSite "target worker_session_results")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_events")) (Catalog.QualifiedTable "shikigami" "worker_session_events") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "worker_session_rows"))] (must (Catalog.mkClaimSite "target worker_session_events")), Catalog.TargetDeclaration (must (Catalog.mkTargetId "worker_session_commands")) (Catalog.QualifiedTable "shikigami" "worker_session_commands") Catalog.PreserveAndReconcile [(must (Catalog.mkTargetId "worker_session_rows"))] (must (Catalog.mkClaimSite "target worker_session_commands"))]
+    [Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "execution_store")) [(must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_payloads")), (must (Catalog.mkTargetId "execution_transcript_operations"))] [] (must (Catalog.mkClaimSite "rebuild-group execution_store")), Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "run_evidence_store")) [(must (Catalog.mkTargetId "run_evidence_rows")), (must (Catalog.mkTargetId "run_evidence_calls"))] [] (must (Catalog.mkClaimSite "rebuild-group run_evidence_store")), Catalog.RebuildGroupDeclaration (must (Catalog.mkRebuildGroupId "worker_session_store")) [(must (Catalog.mkTargetId "worker_session_rows")), (must (Catalog.mkTargetId "worker_session_payloads")), (must (Catalog.mkTargetId "worker_session_messages")), (must (Catalog.mkTargetId "worker_session_results")), (must (Catalog.mkTargetId "worker_session_events")), (must (Catalog.mkTargetId "worker_session_commands"))] [] (must (Catalog.mkClaimSite "rebuild-group worker_session_store"))]
     []
     []
     []
     []
-    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "execution_lookup")) RMExecutionLookup.executionLookupReadModel (must (Catalog.mkRebuildGroupId "execution_store")) [(must (Catalog.mkTargetId "execution_payloads")), (must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_transcript_operations"))] (must (Catalog.mkClaimSite "readmodel execution_lookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "run_evidence_lookup")) RMRunEvidenceLookup.runEvidenceLookupReadModel (must (Catalog.mkRebuildGroupId "run_evidence_store")) [(must (Catalog.mkTargetId "run_evidence_calls")), (must (Catalog.mkTargetId "run_evidence_rows"))] (must (Catalog.mkClaimSite "readmodel run_evidence_lookup")))]
-    [Catalog.SomeProjectionSet runEvidenceWriterProjectionSet, Catalog.SomeProjectionSet executionWriterProjectionSet]
+    [Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "execution_lookup")) RMExecutionLookup.executionLookupReadModel (must (Catalog.mkRebuildGroupId "execution_store")) [(must (Catalog.mkTargetId "execution_payloads")), (must (Catalog.mkTargetId "execution_rows")), (must (Catalog.mkTargetId "execution_transcript_operations"))] (must (Catalog.mkClaimSite "readmodel execution_lookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "run_evidence_lookup")) RMRunEvidenceLookup.runEvidenceLookupReadModel (must (Catalog.mkRebuildGroupId "run_evidence_store")) [(must (Catalog.mkTargetId "run_evidence_calls")), (must (Catalog.mkTargetId "run_evidence_rows"))] (must (Catalog.mkClaimSite "readmodel run_evidence_lookup"))), Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding (must (Catalog.mkQueryModelId "worker_session_lookup")) RMWorkerSessionLookup.workerSessionLookupReadModel (must (Catalog.mkRebuildGroupId "worker_session_store")) [(must (Catalog.mkTargetId "worker_session_commands")), (must (Catalog.mkTargetId "worker_session_events")), (must (Catalog.mkTargetId "worker_session_messages")), (must (Catalog.mkTargetId "worker_session_payloads")), (must (Catalog.mkTargetId "worker_session_results")), (must (Catalog.mkTargetId "worker_session_rows"))] (must (Catalog.mkClaimSite "readmodel worker_session_lookup")))]
+    [Catalog.SomeProjectionSet runEvidenceWriterProjectionSet, Catalog.SomeProjectionSet executionWriterProjectionSet, Catalog.SomeProjectionSet workerSessionWriterProjectionSet]
 
 validatedProjectionCatalog :: Catalog.ValidatedProjectionCatalog
 validatedProjectionCatalog = case Catalog.validateProjectionCatalog projectionCatalog of
@@ -120,3 +147,9 @@ runEvidenceStoreRebuildGroupId = (must (Catalog.mkRebuildGroupId "run_evidence_s
 
 startRunEvidenceStoreRebuild :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)
 startRunEvidenceStoreRebuild = Rebuild.startCatalogRebuild validatedProjectionCatalog runEvidenceStoreRebuildGroupId
+
+workerSessionStoreRebuildGroupId :: Catalog.RebuildGroupId
+workerSessionStoreRebuildGroupId = (must (Catalog.mkRebuildGroupId "worker_session_store"))
+
+startWorkerSessionStoreRebuild :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)
+startWorkerSessionStoreRebuild = Rebuild.startCatalogRebuild validatedProjectionCatalog workerSessionStoreRebuildGroupId

@@ -1,0 +1,217 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+target worker_session_rows {
+  schema = "shikigami"
+  table = "worker_sessions"
+  reset = preserve
+}
+target worker_session_payloads {
+  schema = "shikigami"
+  table = "worker_session_payloads"
+  reset = preserve
+  depends-on = [ worker_session_rows ]
+}
+target worker_session_messages {
+  schema = "shikigami"
+  table = "worker_session_messages"
+  reset = preserve
+  depends-on = [ worker_session_rows ]
+}
+target worker_session_results {
+  schema = "shikigami"
+  table = "worker_session_results"
+  reset = preserve
+  depends-on = [ worker_session_rows worker_session_messages ]
+}
+target worker_session_events {
+  schema = "shikigami"
+  table = "worker_session_events"
+  reset = preserve
+  depends-on = [ worker_session_rows ]
+}
+target worker_session_commands {
+  schema = "shikigami"
+  table = "worker_session_commands"
+  reset = preserve
+  depends-on = [ worker_session_rows ]
+}
+rebuild-group worker_session_store {
+  targets = [ worker_session_rows worker_session_payloads worker_session_messages worker_session_results worker_session_events worker_session_commands ]
+  order = [ worker_session_rows worker_session_payloads worker_session_messages worker_session_results worker_session_events worker_session_commands ]
+}
+projection-owner worker_session_writer {
+  source = aggregate WorkerSessionLifecycle
+  delivery = inline
+  group = worker_session_store
+  targets = [ worker_session_rows worker_session_payloads worker_session_messages worker_session_results worker_session_events worker_session_commands ]
+  order = 30
+  replay = live-only "Session admission, instructions and results require protected payloads"
+}
+readmodel worker_session_lookup {
+  columns {
+    session_id text required
+    state jsonb required
+    binding jsonb required
+    updated_at timestamptz required
+  }
+  version = 1
+  shape = "fnv1a:a69c38a7b3b851c7"
+  freshness = immediate
+  group = worker_session_store
+  targets = [ worker_session_rows worker_session_payloads worker_session_messages worker_session_results worker_session_events worker_session_commands ]
+  backing = worker_session_rows
+}
+
+aggregate WorkerSessionLifecycle
+  regs
+    sessionId Text = ""
+    bindingDigest Text = ""
+    revision Int = 0
+  states Missing Idle Active Parked Unresolved Failed Cancelled
+
+  command AdmitWorkerSession { sessionId:Text bindingDigest:Text }
+  command AcceptSessionMessage { sessionId:Text expected:Int revision:Int }
+  command StartSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command ParkSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command ResumeSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command RecordSessionResult { sessionId:Text expected:Int revision:Int }
+  command MarkSessionUnresolved { sessionId:Text expected:Int revision:Int }
+  command ReconcileSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command ConsumeSessionEvents { sessionId:Text expected:Int revision:Int }
+  command FailWorkerSession { sessionId:Text expected:Int revision:Int }
+  command CancelWorkerSession { sessionId:Text expected:Int revision:Int }
+  event WorkerSessionAdmitted = fields(AdmitWorkerSession)
+  event SessionMessageAccepted = fields(AcceptSessionMessage)
+  event SessionAssignmentStarted = fields(StartSessionAssignment)
+  event SessionAssignmentParked = fields(ParkSessionAssignment)
+  event SessionAssignmentResumed = fields(ResumeSessionAssignment)
+  event SessionResultRecorded = fields(RecordSessionResult)
+  event SessionBecameUnresolved = fields(MarkSessionUnresolved)
+  event SessionAssignmentReconciled = fields(ReconcileSessionAssignment)
+  event SessionEventsConsumed = fields(ConsumeSessionEvents)
+  event WorkerSessionFailed = fields(FailWorkerSession)
+  event WorkerSessionCancelled = fields(CancelWorkerSession)
+
+  Missing -- AdmitWorkerSession -->
+    write sessionId := cmd.sessionId
+    write bindingDigest := cmd.bindingDigest
+    emit WorkerSessionAdmitted
+    goto Idle
+
+  Idle -- AcceptSessionMessage -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionMessageAccepted
+    goto Idle
+
+  Active -- AcceptSessionMessage -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionMessageAccepted
+    goto Active
+
+  Parked -- AcceptSessionMessage -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionMessageAccepted
+    goto Parked
+
+  Unresolved -- AcceptSessionMessage -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionMessageAccepted
+    goto Unresolved
+
+  Idle -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Idle
+
+  Active -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Active
+
+  Parked -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Parked
+
+  Unresolved -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Unresolved
+
+  Failed -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Failed
+
+  Cancelled -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Cancelled
+
+  Idle -- StartSessionAssignment -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionAssignmentStarted
+    goto Active
+
+  Active -- ParkSessionAssignment -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionAssignmentParked
+    goto Parked
+
+  Parked -- ResumeSessionAssignment -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionAssignmentResumed
+    goto Active
+
+  Active -- RecordSessionResult -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionResultRecorded
+    goto Idle
+
+  Active -- MarkSessionUnresolved -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionBecameUnresolved
+    goto Unresolved
+
+  Parked -- MarkSessionUnresolved -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionBecameUnresolved
+    goto Unresolved
+
+  Unresolved -- ReconcileSessionAssignment -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionAssignmentReconciled
+    goto Active
+
+  Idle -- FailWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionFailed
+    goto Failed
+
+  Idle -- CancelWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionCancelled
+    goto Cancelled
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T01:19:09Z
       mode: "update"
       note: "Cite ADR 0022 as precedent for result/event acknowledgement rows"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-28T16:49:51Z
+      mode: "implement"
+      note: "Start ordered continuing-session mechanics after EP-3; real IR-11 and IR-13 providers remain completion gates"
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -41,13 +46,26 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] Milestone 1: Ordered mailbox, stable assignment identities, retained results/events and transactional cursors (2026-10-28).
+- [ ] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration.
+- [ ] Milestone 3: Fenced and reconciled ownership transfer.
+- [ ] Milestone 4: Governed Flow/Skill/operator commands and runtime qualification.
+
+Implementation started after plan 83 completed at `a0d6f2a`. IR-11 and IR-13
+remain proposed with no selected complete providers as of 2026-10-28. Build
+mechanics against explicit deterministic adapters; preserve both real-provider
+acceptance gates and do not claim full IR-15 delivery from those fixtures.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+2026-10-28: The selected workflow ID type has no JSON instance. The protected
+delegation snapshot uses an explicit format-1 codec and validates workflow IDs
+as text; it does not introduce an orphan dependency instance. Child mappings
+derive from the retained session and assignment rather than the coordinator's
+current workflow ID. Successful store fixtures establish persistence mechanics,
+not the separately owned objective or workspace providers.
 
 
 ## Decision Log
@@ -55,11 +73,30 @@ None recorded during implementation.
 
 2026-10-10: Keep continuing worker sessions distinct from Kioku session history and Danwa lifecycle. Queue follow-ups at assignment boundaries; interrupt and ownership transfer are explicit reconciling operations. External workspace/checkpoint completion remains visible rather than being bundled into this plan.
 
+2026-10-28: [ADR 0061](../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md)
+records ordered assignment identities, protected payloads, immutable command
+receipts, and local transactional cursor integration. Logical closure permits
+only final event acknowledgement, and cannot discard queued or unresolved work.
+
 
 ## Outcomes & Retrospective
 
 
 To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+
+Milestone 1 acceptance: the full suites pass with 504 core, 323 PostgreSQL
+(including 12 new WorkerSessionStore cases), 37 agent, 64 server and 99 worker
+tests. Run with the local dependency project described in plan 83 and
+`--test-options='--num-threads=1'`; log
+`/tmp/shikigami-mp14-sessions-all-tests.log`. The ordinary keiro gate against
+`a0d6f2a` passes generated conformance and reports only additive declarations,
+with `breaking:false` (`/tmp/shikigami-mp14-sessions-gate.log`). Migration schema
+isolation passes with the existing immutable historical exception. Fixtures
+cover duplicate/concurrent commands, result/follow-up races, retained results,
+child identity separation, protected access, root cancellation, limits, parked
+and unresolved state, closure guards and atomic progress/cursor rollback.
+Runtime assignment, checkpoint, transfer and command-surface acceptance remain
+open in milestones 2–4.
 
 
 ## Context and Orientation

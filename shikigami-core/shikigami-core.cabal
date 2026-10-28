@@ -177,6 +177,11 @@ library
     Shikigami.Trigger.Enqueue
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
+    Shikigami.WorkerSession.Catalog
+    Shikigami.WorkerSession.Identity
+    Shikigami.WorkerSession.Live
+    Shikigami.WorkerSession.Store
+    Shikigami.WorkerSession.Types
     Shikigami.Workflow.Registry
     Shikigami.Workflow.Versioning
 
@@ -228,6 +233,18 @@ library
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy
     Shikigami.Sink.Auth.Internal
+    Shikigami.WorkerSessionLifecycle.BehaviorHoles
+    Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
+    Shikigami.WorkerSessionLifecycle.Generated.Codec
+    Shikigami.WorkerSessionLifecycle.Generated.Domain
+    Shikigami.WorkerSessionLifecycle.Generated.EventStream
+    Shikigami.WorkerSessionLifecycle.Generated.Harness
+    Shikigami.WorkerSessionLifecycle.Generated.Projection
+    Shikigami.WorkerSessionLifecycle.Generated.Transducer
+    Shikigami.WorkerSessionLookup.Generated.ReadModel
+    Shikigami.WorkerSessionLookup.Generated.ReadModelHarness
+    Shikigami.WorkerSessionLookup.Generated.ReadModelTable
+    Shikigami.WorkerSessionLookup.ReadModelHoles
 
   build-depends:
     aeson >=2.2,
@@ -418,6 +435,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.RunEvidenceSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.WorkerSessionStoreSpec
     Shikigami.WorkflowVersioningSpec
 
   hs-source-dirs:
