@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T01:19:09Z
       mode: "update"
       note: "Cite ADR 0030 for the approval child binding and ADR 0022 for the submit/observe receipt split"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-28T05:35:00Z
+      mode: "implement"
+      note: "Build durable accepted operations and recovery on the accepted root and selection boundaries"
 ---
 
 # Recover durable model and tool turns with composed policies
@@ -41,13 +46,31 @@ Resume a Skill or conversation from its accepted model/tool history after a cras
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] Milestone 1: Versioned execution snapshots, protected payloads and atomic accepted operations. Sixteen PostgreSQL cases prove reconstruction, exact continuation/tool data, protected reads, bounded inspection, immutable retries, races, full transaction rollback, cancellation/unknown handling, terminal validation and catalog fencing. Full build and conformance pass.
+- [ ] Milestone 2: Composed policies, individually accepted tools and bound durable permissions.
+- [ ] Milestone 3: Resumable driver and fenced submit/observe executor integrated with runs and conversations.
+- [ ] Milestone 4: Recovery qualification and bounded operator inspection.
+
+Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The catalog boundary supports captured live projection data and a registered
+immediate query over a process-local transaction. The execution store now binds
+both to the one generated catalog; its readers refuse an offline projection.
+The existing evidence factory was changed to preserve unrelated projection sets.
+The resource owner already has `execution_operations`; transcript operations use
+the distinct `execution_transcript_operations` table and correlate by operation id.
+
+The migration recipe itself executed backticks in an unquoted template comment,
+embedding schema-check output into SQL. This recurred after the EP-2 failure.
+[FRIC-10](../friction-log/10-migration-template-executes-the-schema-check-inside-sql.md)
+and the separately affected EP-2 occurrence
+[FRIC-11](../friction-log/11-selection-migration-inherited-executable-output-from-the-recipe-comment.md)
+are resolved: the recipe comment no longer substitutes a command, and an isolated
+generation probe emits only SQL comments. Applied migration bytes were unchanged.
 
 
 ## Decision Log
@@ -55,11 +78,52 @@ None recorded during implementation.
 
 2026-10-10: Use a separate checked execution authority with Shikigami-owned replay records and atomic outcome/progress/resource settlement. Keep the existing terminal memory/sink/reply owners. Long work uses durable submission and observation so workflow concurrency is not a proxy for executor capacity.
 
+2026-10-27: Establish the storage contract before wiring the policy/driver.
+Versioned payloads, identity-bound replay permits, catalog-fenced queries and the
+atomic acceptance boundary are recorded in
+[ADR 0053](../adr/0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md).
+The same normalized call facts used by selection/decision evidence accompany a
+model outcome. A known transport stop with unknown billing keeps the EP-1 partial
+settlement semantics. Unknown execution effects retain their cursor and active
+reservation. Terminal success validates the accepted reply against pinned policy.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+Milestone 1 establishes the storage contract consumed by the remaining runner and
+driver work. `Execution.Transcript`, `Execution.Store`, `Execution.Policy.Types`
+and the terminal validator own application codecs, protected payload admission,
+operation identity and atomic outcome/cursor/accounting. The checked
+`ExecutionLifecycle` and `execution_lookup` share the existing catalog. ADR 0053
+records the durable boundary. Production model/tool recovery remains in milestones
+2–4; the existing coarse Skill loop has not been replaced by this checkpoint.
+
+Validation from `a156a6f`, using the existing isolated Cabal project for the
+baseline Kikan paths, passed:
+
+```bash
+cabal build --project-file=.dev/mp13.cabal.project all
+cabal test --project-file=.dev/mp13.cabal.project shikigami-core-test shikigami-core-postgres-test shikigami-agent-test shikigami-server-test shikigami-workers-test --test-show-details=direct --test-options='--num-threads=1'
+cabal test --project-file=.dev/mp13.cabal.project shikigami-core-test shikigami-core-postgres-test --test-show-details=direct --test-options='--num-threads=1'
+just migration-schema-isolation
+just keiro-gate a156a6f
+git diff --check
+```
+
+The first full run passed 476 core, 276 PostgreSQL, 37 agent, 63 server and 98
+worker cases. After the fenced read boundary, the final affected suites passed
+476 core and 277 PostgreSQL cases, including all 16 transcript cases. The complete
+gate passed check, inspection, deterministic generation, generated behavioral
+witnesses/read-model conformance and diff: all 15 findings are additive and
+`breaking: false`. The full build passed after the final reader changes. No bounds
+or dependency pins changed; APIs were checked against the selected released
+Keiro 0.18.0.0 and Baikai 0.7.2.0 sources after Mori discovery.
+
+The rollback fixture refuses after protected outcome, cursor, call facts and root
+settlement writes. It proves all of those writes and the lifecycle append roll
+back, then the same expected revision succeeds. FRIC-10/FRIC-11 are resolved by
+the recipe fix and isolated generation probe; no applied SQL was edited.
 
 
 ## Context and Orientation

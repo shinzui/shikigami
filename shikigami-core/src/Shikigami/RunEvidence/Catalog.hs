@@ -53,4 +53,7 @@ withLiveEvidence apply =
             )
     catalog =
       Generated.projectionCatalog
-        & #projectionSets .~ [Catalog.SomeProjectionSet projectionSet]
+        & #projectionSets %~ map replaceEvidence
+    replaceEvidence original@(Catalog.SomeProjectionSet existing)
+      | existing.projectionSource == projectionSet.projectionSource = Catalog.SomeProjectionSet projectionSet
+      | otherwise = original

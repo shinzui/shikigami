@@ -117,7 +117,10 @@ cases, adding the old in-flight Skill and persisted inspection-secret assertions
 The gate used the same project through the existing local Cabal wrapper: check,
 inspect, deterministic regeneration, generated conformance and diff all passed.
 The diff reports exactly two additive `WorkflowEvolutionGuardAdded` findings and
-`breaking: false`. No new qualifying friction was recorded under this child.
+`breaking: false`. The migration detour was later traced to the producer recipe
+during EP-3 and recorded as
+[FRIC-11](../friction-log/11-selection-migration-inherited-executable-output-from-the-recipe-comment.md),
+resolved by the shared recipe fix and isolated generation probe.
 
 Call facts retain request digests and the shared versioned compliance records;
 the root owns conservative measured/unknown accounting. HTTP invoice ceilings

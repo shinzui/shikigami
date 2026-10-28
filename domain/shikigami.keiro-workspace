@@ -6,3 +6,4 @@ spec shikigami-approval.keiro
 spec shikigami-conversation.keiro
 spec shikigami-run-evidence.keiro
 spec shikigami-run-jobs.keiro
+spec shikigami-execution.keiro

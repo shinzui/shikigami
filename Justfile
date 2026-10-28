@@ -154,7 +154,7 @@ new-migration name="":
     -- Write idempotent DDL (CREATE ... IF NOT EXISTS) so re-application is safe.
 
     -- Qualify every persistent object with its owning schema. Migration SQL may
-    -- not mutate search_path; run `just migration-schema-isolation` before commit.
+    -- not mutate search_path. Validate with: just migration-schema-isolation.
     EOF
     printf '%s\n' "$file" >> "${dir}/manifest"
     echo "Created $dest and appended it to ${dir}/manifest"

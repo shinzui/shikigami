@@ -8,6 +8,7 @@
 --   * any non-zero audit exit blocks deployment.
 module Shikigami.Generated.ReplayAudit (auditTargets) where
 
+import Shikigami.ExecutionLifecycle.Generated.EventStream qualified as ExecutionLifecycle
 import Shikigami.RunEvidence.Generated.EventStream qualified as RunEvidence
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
 import Keiro.Stream qualified as Stream
@@ -15,6 +16,12 @@ import Keiro.Stream qualified as Stream
 auditTargets :: [SomeAuditTarget]
 auditTargets =
   [ SomeAuditTarget
+      AuditTarget
+        { eventStream = ExecutionLifecycle.executionLifecycleEventStream
+        , category = Stream.categoryText ExecutionLifecycle.executionLifecycleCategory
+        , mkStream = streamInCategory (Stream.categoryText ExecutionLifecycle.executionLifecycleCategory)
+        }
+  , SomeAuditTarget
       AuditTarget
         { eventStream = RunEvidence.runEvidenceEventStream
         , category = Stream.categoryText RunEvidence.runEvidenceCategory

@@ -1,0 +1,155 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+target execution_rows {
+  schema = "shikigami"
+  table = "executions"
+  reset = preserve
+}
+target execution_payloads {
+  schema = "shikigami"
+  table = "execution_payloads"
+  reset = preserve
+  depends-on = [ execution_rows ]
+}
+target execution_transcript_operations {
+  schema = "shikigami"
+  table = "execution_transcript_operations"
+  reset = preserve
+  depends-on = [ execution_rows execution_payloads ]
+}
+rebuild-group execution_store {
+  targets = [ execution_rows execution_payloads execution_transcript_operations ]
+  order = [ execution_rows execution_payloads execution_transcript_operations ]
+}
+projection-owner execution_writer {
+  source = aggregate ExecutionLifecycle
+  delivery = inline
+  group = execution_store
+  targets = [ execution_rows execution_payloads execution_transcript_operations ]
+  order = 20
+  replay = live-only "Execution snapshots and outcomes require protected application payloads"
+}
+
+readmodel execution_lookup {
+  columns {
+    execution_id text required
+    state jsonb required
+    binding jsonb required
+    updated_at timestamptz required
+  }
+  version = 1
+  shape = "fnv1a:4e813227de86c89d"
+  freshness = immediate
+  group = execution_store
+  targets = [ execution_rows execution_payloads execution_transcript_operations ]
+  backing = execution_rows
+}
+
+aggregate ExecutionLifecycle
+  regs
+    executionId Text = ""
+    snapshotDigest Text = ""
+    revision Int = 0
+  states Missing Active Parked Unresolved Succeeded! Failed! Cancelled!
+
+  command AdmitExecution { executionId:Text snapshotDigest:Text }
+  command AdvanceExecution { executionId:Text expected:Int revision:Int }
+  command ParkExecution { executionId:Text expected:Int revision:Int }
+  command ResumeExecution { executionId:Text expected:Int revision:Int }
+  command MarkExecutionUnresolved { executionId:Text expected:Int revision:Int }
+  command ReconcileExecution { executionId:Text expected:Int revision:Int }
+  command FinishExecution { executionId:Text expected:Int revision:Int }
+  command FailExecution { executionId:Text expected:Int revision:Int }
+  command CancelExecution { executionId:Text expected:Int revision:Int }
+
+  event ExecutionAdmitted = fields(AdmitExecution)
+  event ExecutionAdvanced = fields(AdvanceExecution)
+  event ExecutionParked = fields(ParkExecution)
+  event ExecutionResumed = fields(ResumeExecution)
+  event ExecutionBecameUnresolved = fields(MarkExecutionUnresolved)
+  event ExecutionReconciled = fields(ReconcileExecution)
+  event ExecutionFinished = fields(FinishExecution)
+  event ExecutionFailed = fields(FailExecution)
+  event ExecutionCancelled = fields(CancelExecution)
+
+  Missing -- AdmitExecution -->
+    write executionId := cmd.executionId
+    write snapshotDigest := cmd.snapshotDigest
+    emit ExecutionAdmitted
+    goto Active
+
+  Active -- AdvanceExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionAdvanced
+    goto Active
+
+  Active -- ParkExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionParked
+    goto Parked
+
+  Parked -- ResumeExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionResumed
+    goto Active
+
+  Active -- MarkExecutionUnresolved -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionBecameUnresolved
+    goto Unresolved
+
+  Unresolved -- ReconcileExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionReconciled
+    goto Active
+
+  Active -- FinishExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionFinished
+    goto Succeeded
+
+  Active -- FailExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionFailed
+    goto Failed
+
+  Active -- CancelExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionCancelled
+    goto Cancelled
+
+  Parked -- FailExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionFailed
+    goto Failed
+
+  Parked -- CancelExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionCancelled
+    goto Cancelled
+
+  Unresolved -- FailExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionFailed
+    goto Failed
+
+  Unresolved -- CancelExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ExecutionCancelled
+    goto Cancelled
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

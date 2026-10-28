@@ -71,7 +71,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Enforce root resource reservations across durable work | [docs/plans/81-enforce-root-resource-reservations-across-durable-work.md](../plans/81-enforce-root-resource-reservations-across-durable-work.md) | None | None | Complete |
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
-| EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Not Started |
+| EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | In Progress |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; completion gates IR-11 and IR-13 providers | None | Not Started |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Not Started |
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
@@ -130,7 +130,7 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; the remaining five children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 is the next eligible child. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
+2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies and the resumable executor remain in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
 
 
 ## Surprises & Discoveries
@@ -148,6 +148,13 @@ typed-decision root accounting. Finite invoice-cost ceilings cannot be enforced
 by the released HTTP APIs and refuse dispatch. Queue v3 retains v1/v2 readers
 without granting selection authority to historical metadata. The durable
 contract is [ADR 0052](../adr/0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md).
+
+
+The migration-template defect recurred across EP-2 and EP-3. FRIC-10 and FRIC-11
+in `docs/friction-log/` are resolved by the recipe fix and isolated probe. EP-3's
+storage boundary shares the existing catalog and retains explicit resource versus
+transcript ownership; [ADR 0053](../adr/0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md)
+records its protected replay and atomic outcome/cursor/accounting contract.
 
 
 ## Decision Log

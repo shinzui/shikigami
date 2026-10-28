@@ -90,11 +90,17 @@ library
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.Execution.Admission
+    Shikigami.Execution.Catalog
     Shikigami.Execution.Identity
+    Shikigami.Execution.Live
+    Shikigami.Execution.Policy
+    Shikigami.Execution.Policy.Types
     Shikigami.Execution.Request
     Shikigami.Execution.Resources
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
+    Shikigami.Execution.Store
+    Shikigami.Execution.Transcript
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
@@ -174,6 +180,18 @@ library
     Shikigami.Approval.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
+    Shikigami.ExecutionLifecycle.BehaviorHoles
+    Shikigami.ExecutionLifecycle.Generated.BehaviorContract
+    Shikigami.ExecutionLifecycle.Generated.Codec
+    Shikigami.ExecutionLifecycle.Generated.Domain
+    Shikigami.ExecutionLifecycle.Generated.EventStream
+    Shikigami.ExecutionLifecycle.Generated.Harness
+    Shikigami.ExecutionLifecycle.Generated.Projection
+    Shikigami.ExecutionLifecycle.Generated.Transducer
+    Shikigami.ExecutionLookup.Generated.ReadModel
+    Shikigami.ExecutionLookup.Generated.ReadModelHarness
+    Shikigami.ExecutionLookup.Generated.ReadModelTable
+    Shikigami.ExecutionLookup.ReadModelHoles
     Shikigami.Generated.BehaviorSourceMap
     Shikigami.Generated.Nominals
     Shikigami.Generated.Nominals.Internal
@@ -374,6 +392,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.DirectoryStoreSpec
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionWorkflowSpec
+    Shikigami.ExecutionTranscriptSpec
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.FlowLifecycleSpec
