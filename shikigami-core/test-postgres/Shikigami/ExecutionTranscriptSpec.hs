@@ -16,11 +16,13 @@ import Control.Monad (void, when)
 import Data.Aeson (Value, object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Functor ((<&>))
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
@@ -60,6 +62,7 @@ import Shikigami.Execution.Catalog qualified as ExecutionCatalog
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Policy (ContextProvenance (..), ModelOperationInput (..), SummaryReference (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.Runner qualified as Runner
@@ -141,6 +144,49 @@ tests fixture =
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
           Map.lookup R.ToolAttempts root.usage.settled @?= Just 2,
+      testCase "recorded context summary survives restart and consumes an ordinary model attempt" $
+        withConfiguredResourceFixture fixture summaryConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          (executor, calls, _) <- driverRuntime env False
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+          drive >>= (@?= ContinuedAsNew)
+          drive >>= (@?= Suspended)
+          reference <- pendingReference env snapshot
+          Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          -- The process stops after accepting the summary. Its successor must
+          -- reuse that result rather than spend another summary attempt.
+          drive >>= (@?= ContinuedAsNew)
+          drive >>= (@?= ContinuedAsNew)
+          calls >>= (\values -> length values @?= 1)
+          result <- pumpDriver env executor snapshot 12
+          result.phase @?= Succeeded
+          observed <- calls
+          map (Vector.length . (.tools)) observed @?= [0, 1]
+          Just (state, _, operations) <- inspect env snapshot.executionId
+          state.modelTurns @?= 2
+          case operations of
+            [summary, regular] -> do
+              map (\operation -> operation.specification.kind) operations @?= [ModelSummary, ModelTurn]
+              summaryInput <- expectRight =<< run env (Store.readReplayPayload @ModelOperationInput access "operation-input" summary.input)
+              regularInput <- expectRight =<< run env (Store.readReplayPayload @ModelOperationInput access "operation-input" regular.input)
+              summaryInput.maxOutputTokens @?= Just 128
+              ((regularInput.provenance >>= (.summary)) <&> (.operationId)) @?= Just summary.specification.operationId
+              ((regularInput.provenance >>= (.summary)) <&> (.outcome)) @?= summary.outcome
+              assertBool "raw summary source provenance retained" (isJust (summaryInput.provenance >>= (.summarizes)))
+            _ -> assertFailure "summary was resampled after restart"
+          root <- expectRight =<< run env (Roots.inspectRoot rootId)
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2,
+      testCase "a summary cannot authorize tool work or trigger an unbounded resample" $
+        withConfiguredResourceFixture fixture summaryConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
+          (executor, calls, toolCalls) <- driverRuntime env True
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          result <- pumpDriver env executor snapshot 12
+          result.phase @?= Replay.Failed
+          result.failure @?= Just ExecutionOutputInvalid
+          calls >>= (\values -> length values @?= 1)
+          toolCalls >>= (@?= 0)
+          Just (_, _, operations) <- inspect env snapshot.executionId
+          map (\operation -> operation.specification.kind) operations @?= [ModelSummary],
       testCase "driver cancellation settles an undispatched reservation and never calls its provider" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
           (executor, calls, _) <- driverRuntime env False
@@ -661,6 +707,22 @@ tests fixture =
           run env (runTransaction (Tx.statement snapshot.executionId.value corruptPayload))
           run env (Store.loadExecution access) >>= (@?= Left CorruptReplay)
     ]
+
+summaryConfiguration :: ExecutionSnapshot -> ExecutionSnapshot
+summaryConfiguration snapshot =
+  toolConfiguration snapshot
+    & #policy
+    . #contextBytes
+    .~ 2300
+    & #policy
+    . #keepRecentMessages
+    .~ 1
+    & #policy
+    . #summaryTokens
+    .~ Just 128
+    & #initialContext
+    . #messages
+    .~ ([UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing] <> replicate 4 (UserTurn [TextBlock (Text.replicate 500 "x")] Nothing) <> [UserTurn [TextBlock "recent request"] Nothing])
 
 -- Every invocation opens fresh app/store effects; only the provider counters
 -- survive in the fixture. Production restarts reconstruct from the same rows.

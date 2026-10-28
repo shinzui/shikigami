@@ -57,8 +57,9 @@ bounded repair operations, and parked permissions through the existing approval
 child are implemented. The runner prepares trusted operation coordinates and
 rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It does
 not dispatch without the fenced attempt boundary still owned by milestone 3.
-Agent/operator wiring and recorded model-assisted summaries remain before this
-milestone can close. No production driver or recovery claim follows from this
+Recorded model-assisted summaries now consume ordinary accepted model attempts
+and retain source/outcome provenance across restart. Agent/operator wiring
+remains before this milestone can close. No production driver or recovery claim follows from this
 checkpoint.
 
 The next checkpoint implements the fenced submit/observe primitives and worker
@@ -69,8 +70,9 @@ publication. The real HTTP and native-tool executor paths consume those primitiv
 Observation deadlines use the existing timer dispatcher and an explicit generation.
 The automatic driver is now a callable, registered workflow with bounded decision
 generations, accepted-reference queue repair, replay-window reconstruction and
-the existing bound Approval child. Its run/conversation patch branches, recorded
-summaries and agent/operator configuration are still outstanding. Milestones 2
+the existing bound Approval child. Its run/conversation patch branches and agent/operator configuration are still
+outstanding. Recorded summaries are now accepted and replayed through that
+driver. Milestones 2
 and 3 remain open.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
@@ -158,6 +160,15 @@ or reconcile retained facts after revocation without exposing protected replay.
 [ADR 0055](../adr/0055-execution-drivers-rotate-around-accepted-work.md) records
 these constraints. Existing parent bodies have not yet adopted the driver.
 
+2026-10-28: Optional summaries are accepted `ModelSummary` operations, counted
+against the existing model-turn and actual-attempt allowances. Protected model
+inputs add optional predecessor/source/accepted-summary provenance without
+changing historical format-1 bytes. The driver reuses a committed summary for its
+exact source digest. Summary requests have no tools; invalid summary results fail
+without dispatching tools or resampling indefinitely. Required source overflow
+refuses explicitly. [ADR 0056](../adr/0056-context-summaries-are-accepted-accounted-model-operations.md)
+records the context-versus-authority boundary.
+
 ## Outcomes & Retrospective
 
 
@@ -237,6 +248,17 @@ new-workflow finding and unchanged stored-data replay. Parent patches, summaries
 configuration and class-specific recovery remain open; this checkpoint does not
 close milestone 3. The full build and complete suites pass: 490 core, 298
 PostgreSQL, 37 agent, 63 server and 98 worker cases.
+
+The summary checkpoint passes 492 core and 300 PostgreSQL cases, including
+restart immediately after summary acceptance, exact accepted-summary references,
+ordinary attempt accounting, a tool-requesting summary that dispatches no tool,
+historical model-input bytes, and explicit oversized-summary-source refusal.
+The complete gate against `d3f24e8` passes with no findings and `breaking: false`.
+A final provenance check also refuses an accepted summary with unsupported source
+provenance rather than resampling it; the affected execution suites pass after
+that change. The full build passes. This closes the recorded-summary portion of
+milestone 2; configuration, parent
+workflow adoption and remaining recovery qualification are still open.
 
 ## Context and Orientation
 

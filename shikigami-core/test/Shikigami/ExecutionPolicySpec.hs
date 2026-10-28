@@ -35,6 +35,26 @@ tests =
           _ -> assertFailure "expected object"
         Aeson.eitherDecode @HarnessOverrides "{}" @?= Right emptyHarnessOverrides
         assertBool "unknown policy options refused" (isLeft (Aeson.eitherDecode @HarnessOverrides "{\"grantTool\":true}")),
+      testCase "historical model input bytes omit the new provenance extension" do
+        context <- expectRight (selectContextView defaultHarnessPolicy (ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing]))
+        let legacy = Aeson.object ["format" Aeson..= (1 :: Int), "view" Aeson..= context, "maxOutputTokens" Aeson..= (Nothing :: Maybe Int)]
+            input = ModelOperationInput 1 context Nothing Nothing
+        Aeson.fromJSON legacy @?= Aeson.Success input
+        Aeson.toJSON input @?= legacy,
+      testCase "an enabled summary refuses a source it cannot faithfully include" do
+        let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+            source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
+        prepareModelOperationInput policy ModelTurn source Nothing Nothing @?= Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"),
+      testCase "an accepted summary with unsupported provenance is refused rather than resampled" do
+        let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+            source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
+            execution = ExecutionId "summary-fixture"
+            specification = OperationSpec (operationIdFor execution 0) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
+            ref = PayloadRef "payload" "digest" 1
+            operation = Operation 1 execution 0 specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+        selected <- expectRight (selectContextView policy source)
+        let old = ModelOperationInput 1 selected (Just 64) Nothing
+        prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, old, answer "accepted")) @?= Left UnsupportedReplay,
       testCase "declaration can only narrow operator ceilings and cannot enable summaries" do
         let base = defaultHarnessPolicy & #outputRepairs .~ 2 & #output .~ JsonFields ["accepted"] & #deniedTools .~ ["delete"]
             overrides = emptyHarnessOverrides & #maxModelTurns .~ Just 200 & #outputRepairs .~ Just 9 & #permissionSeconds .~ Just 1 & #output .~ Just AnyReply & #deniedTools .~ ["write"] & #summaryTokens .~ Just 50

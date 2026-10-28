@@ -171,7 +171,7 @@ tests fixture =
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
           view <- expectRight (selectContextView snapshot.policy snapshot.initialContext)
-          let input = ModelOperationInput 1 view Nothing
+          let input = ModelOperationInput 1 view Nothing Nothing
           (_, operation) <- expectRight =<< run app (Durable.acceptOperation access 0 specification (toJSON input))
           context <- expectRight (Executor.modelContext snapshot operation input)
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "executor-http-attempt") context Nothing

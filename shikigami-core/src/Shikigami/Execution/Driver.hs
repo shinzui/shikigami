@@ -250,11 +250,9 @@ decide runtime start wake = do
       Just permission -> pure (ReviewTool snapshot.sessionId operation.specification.name permission)
       Nothing -> throwError OperationConflict
     admitModel access snapshot state kind = do
-      (source, _, _) <- checked (owned (Store.loadModelReplayWindow access))
-      let context = if kind == ModelRepair then source & #messages %~ (<> [UserTurn [TextBlock "The accepted reply did not satisfy the required output format. Return a corrected reply."] Nothing]) else source
-      view <- either throwError pure (selectContextView snapshot.policy context)
-      let input = ModelOperationInput 1 view Nothing
-          spec = OperationSpec (operationIdFor start.executionId state.cursor) kind RepeatableObservation "model" (policyDigest snapshot) (versionedDigest "shikigami.execution-model-scope/1" (toJSON snapshot.selection)) Nothing
+      (source, predecessor, summary) <- checked (owned (Store.loadModelReplayWindow access))
+      (acceptedKind, input) <- either throwError pure (prepareModelOperationInput snapshot.policy kind source predecessor summary)
+      let spec = OperationSpec (operationIdFor start.executionId state.cursor) acceptedKind RepeatableObservation (if acceptedKind == ModelSummary then "summary" else "model") (policyDigest snapshot) (versionedDigest "shikigami.execution-model-scope/1" (toJSON snapshot.selection)) Nothing
       _ <- checked (owned (Store.acceptOperation access state.revision spec (toJSON input)))
       pure RotateExecution
     submit access snapshot state operation
