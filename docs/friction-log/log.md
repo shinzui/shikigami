@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-10-28
+* **Update**: FRIC-15 resolved: Isolate authorization fixture registry keys and verify the parallel core suite
+* **Addition**: FRIC-15 records detour tooling friction with mori://shinzui/shikigami: Authorization tests share a process-global model provider key
+* **Update**: FRIC-14 resolved: Restore upstream dependency source and verify the baseline core build
+* **Addition**: FRIC-14 records blocked environment friction with mori://shinzui/shikigami: Configured Kikan authorization packages are absent
 * **Update**: FRIC-13 accepted: Accept the qualified module-local O0 workaround after all 1057 tests, full build, compatible evolution/conformance and schema isolation passed.
 * **Update**: FRIC-13 logged: Replace the disproven narrow transform workaround with the module-local unoptimized boundary that passed the complete capability group; full-suite qualification pending.
 * **Update**: FRIC-13 logged: Full-suite recurrence invalidated acceptance of the provisional transform exclusion; reopen investigation.

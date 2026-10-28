@@ -72,6 +72,7 @@ import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
+import Shikigami.WorkspaceCatalogSpec qualified as WorkspaceCatalogSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
@@ -82,6 +83,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+          WorkspaceCatalogSpec.tests,
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
           AppConfigSpec.tests,

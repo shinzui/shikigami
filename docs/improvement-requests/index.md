@@ -27,7 +27,7 @@ individual requests.
 | [IR-8](expose-addressed-agent-runs-over-http.md) | Completed | [Plan 90](../plans/90-accept-addressed-agent-runs-over-http-with-server-owned-idempotency.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) |
 | [IR-10](expose-agent-run-status-over-http.md) | Completed | [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
-| [IR-11](provide-governed-mutable-repository-workspaces.md) | Proposed | None |
+| [IR-11](provide-governed-mutable-repository-workspaces.md) | In progress | [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) |
 | [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Completed | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76 |
 | [IR-13](support-optional-major-task-tracking.md) | Proposed | None |
 | [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) | Accepted | [Plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |

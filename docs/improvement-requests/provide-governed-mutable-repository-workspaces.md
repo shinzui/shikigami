@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Provide governed mutable repository workspaces for durable agent runs
 description: Let a declared durable agent resolve an operator-approved repository into an isolated worktree and use bounded read, edit, validation, and Git capabilities under exact per-action authorization, returning structured change evidence.
-timestamp: "2026-09-20T20:31:12Z"
+timestamp: "2026-10-28T20:16:48Z"
 generated:
   by: process:codex
   at: "2026-10-11T03:04:54Z"
 requestId: IR-11
-status: proposed
+status: in-progress
+targetPlan: docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md
 origin: mori://shinzui/mori
 reviews:
   - kind: model
@@ -26,7 +27,7 @@ reviews:
 
 ## Status
 
-**Proposed.** This request supplies the execution capability needed by the agent-driven upgrade
+**In progress under [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).** Repository catalog admission is implemented; durable workspace allocation, mutation providers, recovery and qualification remain outstanding. This request supplies the execution capability needed by the agent-driven upgrade
 portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2`. The existing one-off
 `workspace.read` overlay is observation-only, is currently blocked by a deny-all authorizer, and is
 not installed in the durable worker, whose capability runtime is empty. It therefore cannot bump a
@@ -37,8 +38,7 @@ It also supplies repository execution for
 [Plan 48](../plans/48-add-a-portable-one-off-repository-agent-harness.md) retains
 unimplemented edit, command, sandbox, and executable milestones; its delivered read-only
 slice in [plan 59](../plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md)
-does not implement this durable-run request. No accepted plan yet covers the complete
-durable mutable-workspace path.
+does not implement this durable-run request. Plan 96 owns the complete durable mutable-workspace path.
 
 [MasterPlan 14: Deliver adaptive autonomous objectives with durable workers](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md)
 consumes this request as a separately owned prerequisite. [Plan 84: Coordinate continuing worker sessions and fenced handoffs](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)

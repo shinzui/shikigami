@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-28
+* **Progress**: IR-11 selects plan 96 for its complete durable workspace contract. Repository catalog admission is implemented; allocation, mutation, process recovery, worker composition and real fencing/integration acceptance remain outstanding.
+
 ## 2026-10-26
 * **Completion**: Plan 91 and MasterPlan 15 complete: lifecycle/history HTTP and typed client, shared operator JSON, and automatic pre-workflow exhaustion reconciled transactionally through the released PGMQ API. Receipts survive DLQ cleanup; the runbook requires retention until reconciliation. All 930 package tests and the workflow gate pass.
 

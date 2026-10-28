@@ -382,7 +382,7 @@ toolInvocationAuthorizationCase dynamic =
                   )
             }
         providers = expectRight (mkCapabilityProviderRegistry [provider])
-        api = Custom "shikigami-behavior-tool-authorization"
+        api = Custom (if dynamic then "shikigami-behavior-tool-authorization-dynamic" else "shikigami-behavior-tool-authorization-typed")
         model = toolModel api
         handler _model _ctx _options = do
           turn <- next turns
