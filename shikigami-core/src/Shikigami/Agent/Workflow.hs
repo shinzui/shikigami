@@ -104,6 +104,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (.
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
+import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Capability.Catalog qualified as Capability
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Capability.Provider
@@ -118,11 +119,14 @@ import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Driver qualified as ExecutionDriver
 import Shikigami.Execution.Executor qualified as Executor
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources (ResourceError)
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
+import Shikigami.Execution.Start qualified as ExecutionStart
 import Shikigami.Execution.Tools qualified as ExecutionTools
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Flow qualified as Flow
@@ -385,6 +389,7 @@ runProfiledAgent ::
   ResolvedCapabilitySet ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
+  durable <- Workflow.patch (PatchId "shikigami-durable-execution-v1")
   enabled <- Workflow.patch (PatchId "shikigami-execution-selection-v1")
   selected <-
     if enabled
@@ -395,6 +400,12 @@ runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
   case selected of
     Left refusal -> pure (Left (PermanentAgentRunFailure (selectionRefusalDetail deps job decl resolvedProfile Nothing refusal)))
     Right Nothing -> runWith ((.behaviorEnv) deps) (if enabled then job & #executionPermissions .~ inheritedPermissions decl job else job)
+    Right (Just selection)
+      | durable && durableSkill decl ->
+          let permissions = case selection.source of
+                Selection.DeclaredAlias -> Just selection.permittedAliases
+                Selection.ProcessDefault -> inheritedPermissions decl job
+           in runProfiledAgentWith deps deps.behaviorEnv (Just selection) resolvedProfile resolvedOverlays (job & #executionPermissions .~ permissions) decl
     Right (Just selection) -> do
       built <- liftIO (SelectionRuntime.buildExecutionEnv (selectionRuntime deps job resolvedProfile) selection)
       case built of
@@ -407,7 +418,12 @@ runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
   where
     runWith active selectedJob = case behaviorEnvForProfile decl resolvedProfile active of
       Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
-      Right constrained -> runProfiledAgentWith deps constrained resolvedProfile resolvedOverlays selectedJob decl
+      Right constrained -> runProfiledAgentWith deps constrained Nothing resolvedProfile resolvedOverlays selectedJob decl
+
+durableSkill :: AgentDecl -> Bool
+durableSkill decl = case decl.behavior of
+  Skill {} -> null decl.delegates && isNothing decl.routing
+  _ -> False
 
 resolveRunSelection :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> UTCTime -> Either Selection.ExecutionSelectionFailure (Maybe Selection.ExecutionSelection)
 resolveRunSelection deps job decl profile now
@@ -502,12 +518,13 @@ behaviorEnvForProfile _decl _resolvedProfile = Right
 runProfiledAgentWith ::
   AgentRunDeps ->
   BehaviorEnv ->
+  Maybe Selection.ExecutionSelection ->
   Maybe ResolvedProfile ->
   ResolvedCapabilitySet ->
   RunJob ->
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgentWith deps activeBehaviorEnv resolvedProfile resolvedOverlays job decl =
+runProfiledAgentWith deps activeBehaviorEnv durableSelection resolvedProfile resolvedOverlays job decl =
   case resolveAgentIdentity (job ^. #identity) of
     Left problem -> pure (Left (PermanentAgentRunFailure problem))
     Right recordedIdentity -> runResolved recordedIdentity
@@ -523,12 +540,13 @@ runProfiledAgentWith deps activeBehaviorEnv resolvedProfile resolvedOverlays job
         -- kioku refused to open the session. The same command will be refused on
         -- every replay, so there is nothing to retry and the run is over.
         StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
-        StepProduced sid -> runSessionedAgent deps activeBehaviorEnv resolvedProfile resolvedOverlays approvalPolicyForRun recordedIdentity job decl sid
+        StepProduced sid -> runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolvedOverlays approvalPolicyForRun recordedIdentity job decl sid
 
 -- | The rest of one agent run, once its kioku session is open.
 runSessionedAgent ::
   AgentRunDeps ->
   BehaviorEnv ->
+  Maybe Selection.ExecutionSelection ->
   Maybe ResolvedProfile ->
   ResolvedCapabilitySet ->
   ApprovalPolicySnapshot ->
@@ -537,13 +555,16 @@ runSessionedAgent ::
   AgentDecl ->
   SessionId ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runSessionedAgent deps activeBehaviorEnv resolvedProfile resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
+runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolvedOverlays approvalPolicyForRun recordedIdentity job decl@AgentDecl {memory = MemoryPolicy {recallLimit = declaredRecallLimit}} sid = do
   prior <- runStep deps (StepName "recall") (liftIO (recallAgentLearnings ((.appEnv) deps) ((.deliveryPool) deps) declaredRecallLimit recordedIdentity (recallQuery decl (behaviorKindText ((.behavior) decl)) ((.triggerPayload) job))))
   behaviorE <-
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText ((.behavior) decl))
       case (.behavior) decl of
+        Skill {path}
+          | Just selection <- durableSelection ->
+              first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
         Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
         _
           | not (null ((.delegates) decl)) ->
@@ -578,11 +599,46 @@ runSessionedAgent deps activeBehaviorEnv resolvedProfile resolvedOverlays approv
                   )
   case behaviorE of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
-    Right output -> finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity job decl sid prior output
+    Right output -> finishSuccessfulRun deps (maybe (behaviorModelId activeBehaviorEnv) (\selection -> selection.descriptor.modelId) durableSelection) approvalPolicyForRun recordedIdentity job decl sid prior output
+
+-- The new branch journals admission metadata and awaits a registered child.
+-- The terminal body is a protected read; memory and sinks retain their existing
+-- owners and step labels below.
+runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
+runDurableSkillStep deps profile overlays job _decl sid prior selection path = do
+  let runtime = executionRuntime deps
+      describe = ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (ExecutionTools.staticNativeTools deps.behaviorEnv.tools)
+      assignment =
+        ExecutionStart.SkillAssignment
+          { runId = (runJobWorkflowId job).unWorkflowId,
+            agent = job.agentName,
+            identity = job.identity,
+            sessionId = sid,
+            selection,
+            sanctionedProfile = profile,
+            capabilities = overlays,
+            policy = Harness.defaultHarnessPolicy,
+            skillDir = SkillDir (Text.unpack path),
+            input = BehaviorInput job.triggerPayload prior
+          }
+  admitted <- runStep deps (StepName "admit-skill-execution") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
+  case admitted of
+    Left err -> pure (Left err)
+    Right start -> do
+      accepted <- ExecutionDriver.requestExecution runtime start
+      liftIO (ExecutionStart.readExecutionResult runtime job.identity accepted >>= executionResult)
+  where
+    executionResult :: Either Execution.ExecutionError a -> IO (Either Text a)
+    executionResult = \case
+      Left Execution.ExecutionStorageUnavailable -> throwIO (TransientBehaviorFailure "execution storage unavailable")
+      Left Execution.ProjectionUnavailable -> throwIO (TransientBehaviorFailure "execution projection unavailable")
+      Left Execution.ExecutionRevisionConflict -> throwIO (TransientBehaviorFailure "execution admission changed concurrently")
+      Left err -> pure (Left (boundedBehaviorDetail (Text.pack (show err))))
+      Right value -> pure (Right value)
 
 finishSuccessfulRun ::
   AgentRunDeps ->
-  BehaviorEnv ->
+  Text ->
   ApprovalPolicySnapshot ->
   ResolvedAgentIdentity ->
   RunJob ->
@@ -591,7 +647,7 @@ finishSuccessfulRun ::
   [MemoryRecord] ->
   Value ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity job decl sid prior output = do
+finishSuccessfulRun deps selectedModelId approvalPolicyForRun recordedIdentity job decl sid prior output = do
   approvalResult <- approveSinks deps approvalPolicyForRun sid job decl output
   case approvalResult of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
@@ -615,7 +671,7 @@ finishSuccessfulRun deps activeBehaviorEnv approvalPolicyForRun recordedIdentity
       case recorded of
         StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
         StepProduced mem -> do
-          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps activeBehaviorEnv recordedIdentity sid))
+          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps selectedModelId recordedIdentity sid))
           pure case completed of
             StepRefused detail -> Left (PermanentAgentRunFailure detail)
             StepProduced () ->
@@ -1426,8 +1482,8 @@ recordMemory deps recordedIdentity decl sid content' tags' = do
 -- This changes what the @complete@ step body writes, not the journal: the step
 -- name and its recorded result shape are untouched, so a workflow parked before
 -- this change still replays.
-completeSession :: (IOE :> es) => AgentRunDeps -> BehaviorEnv -> ResolvedAgentIdentity -> SessionId -> Eff es (Either StoreError (StepResult ()))
-completeSession deps activeBehaviorEnv recordedIdentity sid = liftIO do
+completeSession :: (IOE :> es) => AgentRunDeps -> Text -> ResolvedAgentIdentity -> SessionId -> Eff es (Either StoreError (StepResult ()))
+completeSession deps selectedModelId recordedIdentity sid = liftIO do
   completedAt' <- getCurrentTime
   kiokuWrite "completing the run's kioku session" $
     (fmap . fmap) void $
@@ -1438,7 +1494,7 @@ completeSession deps activeBehaviorEnv recordedIdentity sid = liftIO do
             memorySpaceId = shikigamiMemorySpace,
             actorPrincipal = agentActor recordedIdentity,
             completedAt = completedAt',
-            modelUsed = Just (behaviorModelId activeBehaviorEnv),
+            modelUsed = Just selectedModelId,
             summary = Just "agent-run completed"
           }
         & runKioku deps

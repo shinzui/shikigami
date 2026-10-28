@@ -38,7 +38,7 @@ import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), continueAsNew, currentRunGeneration, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNamed)
-import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), countPendingAwakeables, lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -46,15 +46,19 @@ import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
+import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (..))
+import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
+import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
+import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -68,11 +72,14 @@ import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (SelectionRuntime (..), selectionTransaction)
+import Shikigami.Execution.Start qualified as Start
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation, observationFireAction)
+import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -89,7 +96,36 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionTranscript"
-    [ testCase "driver generations repair lost queue delivery without another actual attempt" $
+    [ testCase "assignment admission freezes Skill and native menu once before starting its driver" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
+          (executor, _, _) <- driverRuntime env False
+          described <- newIORef (0 :: Int)
+          let snapshot = anotherSnapshot original "admitted-skill"
+              assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities snapshot.policy (SkillDir "test/fixtures/durable-skill") (triggerOnly (object ["private" .= ("PRIVATE_ASSIGNMENT_MARKER" :: Text)]))
+              tool = mkDynTool "observe" "Observe fixture." (object []) (\_ -> assertFailureTool)
+              assertFailureTool = unsafeEff_ (assertFailure "menu admission invoked a native callback") >> pure (Right (ToolOutput.textToolOutput "unused"))
+              factory =
+                Tools.NativeToolFactory
+                  { Tools.describe = \_ -> modifyIORef' described (+ 1) >> pure (Right [Executor.BoundTool observationBinding tool]),
+                    Tools.prepare = \_ _ _ -> assertFailure "menu description manufactured operation coordinates" >> pure (Right [])
+                  }
+              describe = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry factory
+          accepted <- expectRight =<< Start.admitSkillExecution executor describe assignment
+          accepted.executionId @?= snapshot.executionId
+          readIORef described >>= (@?= 1)
+          access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
+          (frozen, state) <- expectRight =<< run env (Store.loadExecution access)
+          state.cursor @?= 0
+          frozen.instructions.name @?= "durable-fixture"
+          frozen.toolBindings @?= [observationBinding]
+          case frozen.initialContext.messages of
+            [UserTurn [TextBlock text] Nothing] -> assertBool "trigger frozen with instructions" ("PRIVATE_ASSIGNMENT_MARKER" `Text.isInfixOf` text)
+            _ -> assertFailure "unexpected initial Skill context"
+          let retired = assignment & #skillDir .~ SkillDir "/missing-retired-skill" & #policy . #maxModelTurns .~ 1
+          Start.admitSkillExecution executor (\_ -> assertFailure "existing assignment reacquired its menu" >> pure (Left UnsupportedReplay)) retired >>= (@?= Right accepted)
+          readIORef described >>= (@?= 1)
+          Start.admitSkillExecution executor describe (retired & #runId .~ "different-run") >>= (@?= Left ExecutionIdentityConflict),
+      testCase "driver generations repair lost queue delivery without another actual attempt" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
@@ -114,7 +150,11 @@ tests fixture =
           Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           completed <- pumpDriver env executor snapshot 12
           completed.phase @?= Succeeded
+          run env countPendingAwakeables >>= (@?= 0)
           calls >>= (\values -> length values @?= 1)
+          let retiredBinding = executor {Executor.selectionRuntime = \_ -> error "completed result looked up a retired provider"}
+          result <- expectRight =<< Start.readExecutionResult retiredBinding snapshot.identity completed
+          assertBool "protected terminal result retained" (case result of Aeson.Object _ -> True; _ -> False)
           -- A completed driver returns metadata without a live provider binding.
           let unavailable = executor {Executor.replayAuthority = const (pure (Left "revoked")), Executor.authorize = const (pure (Left "retired"))}
           run env (runWorkflow DriverGenerated.workflowName workflow (Driver.executionWorkflow unavailable Nothing)) >>= (@?= Completed completed)

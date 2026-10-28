@@ -3,6 +3,7 @@ name: shikigami-core
 version: 0.1.0.0
 synopsis: Shikigami runtime core (loader, scope helper)
 build-type: Simple
+extra-source-files: test/fixtures/durable-skill/SKILL.md
 
 common common
   default-language: GHC2024
@@ -103,6 +104,7 @@ library
     Shikigami.Execution.Runner
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
+    Shikigami.Execution.Start
     Shikigami.Execution.Store
     Shikigami.Execution.Timer
     Shikigami.Execution.Tools

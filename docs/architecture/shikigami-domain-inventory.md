@@ -5,8 +5,9 @@ This census was refreshed on 2026-09-21 for
 plan 65 baseline at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
 It describes executed ownership and the reasons other surfaces remain hand-owned. A declaration
 counts only when its generated contract is used by production code (ADR 0001).
-The workspace currently contains five explicitly declared Language 6 members: agent-run, approval,
-conversation, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
+Execution ownership was refreshed on 2026-10-28 under [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md).
+The workspace contains seven explicitly declared Language 6 members: agent-run, approval,
+conversation, execution-driver, execution, RunEvidence and run-jobs. The evidence member also declares its catalog and query model.
 Keiro 0.18 is a released package family, while its language registry truthfully
 labels Language 6 as the opt-in `Candidate CandidateLanguage` contract; Language 5
 remains its stable published compatibility contract.
@@ -17,10 +18,11 @@ Paths in this section are relative to `shikigami-core/src/`.
 
 | Surface | Declaration and execution owner | Observable proof |
 |---|---|---|
-| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. The reviewed pre-v1 reset retired all historical application patch branches. |
+| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. The durable-execution patch preserves coarse Skill journals while new leaf Skills await execution children. |
 | `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
 | `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
+| `shikigami.execution` | `domain/shikigami-execution-driver.keiro`; `Shikigami/Execution/Driver.hs`; generated ExecutionDriver runtime | Transcript and selection workflow tests cover bounded generations, accepted-reference queue repair, protected replay, Approval, cancellation and parent completion after provider retirement. |
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
 | Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
@@ -51,8 +53,8 @@ TypeID-v7 domain through `typeIdV7Domain`; deterministic UUIDv5 workflow and
 deduplication identities are technical identities outside that declared domain. Their
 admission and durable bytes are unchanged by the release upgrade.
 
-`Shikigami.Workflow.Registry` in core composes agent runs, approval children and
-conversations. The worker consumes this exact registry; the approval integration
+`Shikigami.Workflow.Registry` in core composes agent runs, approval children,
+conversations and execution drivers. The worker consumes this exact registry; the approval integration
 case verifies all three names. Bounded resume stops on zero durable advances and
 exports all summary fields. Generated facts describe the current static workflow
 bodies; the synthetic versioning test preserves future patch-gate coverage.

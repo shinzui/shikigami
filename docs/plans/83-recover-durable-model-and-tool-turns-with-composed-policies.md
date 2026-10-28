@@ -59,8 +59,7 @@ rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It doe
 not dispatch without the fenced attempt boundary still owned by milestone 3.
 Recorded model-assisted summaries now consume ordinary accepted model attempts
 and retain source/outcome provenance across restart. Agent/operator wiring
-remains before this milestone can close. No production driver or recovery claim follows from this
-checkpoint.
+remains before this milestone can close. Full production recovery qualification remains open.
 
 The next checkpoint implements the fenced submit/observe primitives and worker
 route: reservation plus queue acceptance, claim generation/expiry, conditional
@@ -70,9 +69,9 @@ publication. The real HTTP and native-tool executor paths consume those primitiv
 Observation deadlines use the existing timer dispatcher and an explicit generation.
 The automatic driver is now a callable, registered workflow with bounded decision
 generations, accepted-reference queue repair, replay-window reconstruction and
-the existing bound Approval child. Its run/conversation patch branches and agent/operator configuration are still
-outstanding. Recorded summaries are now accepted and replayed through that
-driver. Milestones 2
+the existing bound Approval child. The agent-run leaf Skill branch now admits and awaits this driver behind a real
+workflow patch. Conversation adoption and agent/operator configuration are still
+outstanding. Recorded summaries are accepted and replayed through that driver. Milestones 2
 and 3 remain open.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
@@ -169,6 +168,17 @@ without dispatching tools or resampling indefinitely. Required source overflow
 refuses explicitly. [ADR 0056](../adr/0056-context-summaries-are-accepted-accounted-model-operations.md)
 records the context-versus-authority boundary.
 
+2026-10-28: New leaf Skill parents freeze assignment input/menu once and await
+the registered execution child behind `shikigami-durable-execution-v1`. A matching
+existing assignment bypasses Skill loading and menu description. Pending work
+requires its exact live binding; completed results read protected storage without
+provider lookup. Existing memory/session/sink owners retain their labels and
+codecs, and session completion records the pinned model id directly. Native menu
+description is separate from trusted accepted-operation preparation. Unused driver
+wakes are cancelled. [ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md)
+records these boundaries. Conversation and ephemeral/configuration/recovery work
+remain open.
+
 ## Outcomes & Retrospective
 
 
@@ -259,6 +269,19 @@ provenance rather than resampling it; the affected execution suites pass after
 that change. The full build passes. This closes the recorded-summary portion of
 milestone 2; configuration, parent
 workflow adoption and remaining recovery qualification are still open.
+
+The agent-parent checkpoint passes the complete suites: 493 core, 303 PostgreSQL,
+37 agent, 63 server and 98 worker cases. The full build passes. The complete gate
+against `d373cb3` reports one additive `WorkflowEvolutionGuardAdded` finding and
+`breaking: false`; the guard contains the entire declared body change. New cases
+qualify frozen Skill/menu admission, existing-snapshot reuse after Skill retirement,
+accepted output after provider retirement, a retained pending binding under changed
+defaults, refusal of a retired pending binding before IO, and menu-lease release
+before a no-tool model call. Driver completion leaves no unused pending awakeable.
+Five explicit old-patch fixtures retain coarse lease/retry and selection-step
+crash coverage; production options activate the new branch. Conversation adoption,
+configuration/ephemeral policy and recovery-class qualification still prevent
+milestones 2 and 3 from closing.
 
 ## Context and Orientation
 

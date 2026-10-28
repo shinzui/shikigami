@@ -25,6 +25,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
 import Effectful.Exception (throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowJournalEvent (..), appendJournalEntry, continueAsNew, currentRunGeneration, restoreSeed, step)
+import Keiro.Workflow.Awakeable (cancelAwakeable)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects)
@@ -95,13 +96,14 @@ executionWorkflow runtime initial = do
   let wake = Attempt.ExecutionWake token generation
   action <- step (StepName "advance-execution") (liftIO (advanceExecution runtime start wake) >>= require)
   case action of
-    ExecutionDone result -> pure result
-    RotateExecution -> continueAsNew (ExecutionSeed (Just start))
+    ExecutionDone result -> void (cancelAwakeable token) >> pure result
+    RotateExecution -> void (cancelAwakeable token) >> continueAsNew (ExecutionSeed (Just start))
     ObserveExecution reference -> do
       armObservation wake reference
       _ <- awaitObservation :: Eff (Workflow : AppEffects) Attempt.JobReference
       continueAsNew (ExecutionSeed (Just start))
     ReviewTool session tool permission -> do
+      void (cancelAwakeable token)
       now <- liftIO getCurrentTime
       decision <-
         Approval.requestBoundApproval

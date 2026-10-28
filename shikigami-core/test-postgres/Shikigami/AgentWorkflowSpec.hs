@@ -34,7 +34,7 @@ import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
 import Keiro.Outbox qualified as Outbox
 import Keiro.PGMQ qualified as Job
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
+import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId (..), signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
@@ -54,6 +54,7 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Error (StoreError)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -73,7 +74,7 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgen
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.AgentRun.Status qualified as RunStatus
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
@@ -101,8 +102,12 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Admission (enrollRootRun)
+import Shikigami.Execution.Driver (ExecutionDriverResult (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
+import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -115,6 +120,7 @@ import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.RunEvidence.Catalog qualified as ExecutionCatalog
 import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
@@ -124,7 +130,7 @@ import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Store.ExecutionResources qualified as Resources
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Workflow.Registry qualified as Registry
-import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, shikigamiWorkflowRunOptions, terminalWorkflowRetention)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), mkTool)
 import Streamly.Data.Fold qualified as Fold
@@ -173,7 +179,7 @@ tests databaseFixture =
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
             assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
             assertEqual "fresh journal resolves even the empty overlay set" (Right True) (Map.member "resolve-capability-overlays" <$> freshIndex),
-      testCase "an authorized overlay is acquired after recall and released before later lifecycle work" do
+      testCase "a legacy Skill overlay is acquired after recall and released before later lifecycle work" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
@@ -204,12 +210,29 @@ tests databaseFixture =
                     }
                 runJob = capabilityJob "overlay-lifecycle" "overlay-lifecycle:run"
 
-            result <- runAgentRunWorkflow deps runJob
+            result <- runLegacyAgentRunWorkflow deps runJob
             assertBool ("authorized overlay run completes: " <> show result) (isCompleted result)
             observed <- readIORef events
             assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "before:record", "before:complete"]
-            assertEqual "the lease is gone when the workflow returns" False =<< readIORef active,
-      testCase "a retry reacquires the journaled revision while a new run selects the new catalog revision" do
+            assertEqual "the lease is gone when the workflow returns" False =<< readIORef active
+            -- The fresh population freezes a menu lease, releases it, and
+            -- reacquires only tools actually requested by an unfinished call.
+            writeIORef events []
+            registered <- runAppIO appEnv ExecutionCatalog.registerProjectionCatalog
+            assertBool (show registered) (case registered of Right (Right _) -> True; _ -> False)
+            Enqueue.ensureRunQueue _kirokuStore.pool >>= assertEqual "execution queue ready" (Right ())
+            let newJob = runJob & #idempotencyKey .~ RunKey "overlay-lifecycle:durable"
+                execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId newJob).unWorkflowId)
+            runAgentRunWorkflow deps newJob >>= assertEqual "new parent releases its advance" (Right Suspended)
+            completed <- ExecutionFixture.driveExecutionChild appEnv (executionRuntime deps) execution 20
+            assertEqual "durable overlay run succeeds" Replay.Succeeded completed.phase
+            finished <- runAgentRunWorkflow deps newJob
+            assertBool (show finished) (isCompleted finished)
+            observedNew <- readIORef events
+            assertCapabilityEventOrder observedNew ["after:recall", "acquire:v1", "release:v1", "after:admit-skill-execution", "model", "before:record", "before:complete"]
+            assertEqual "a no-tool response needs only its admission lease" 1 (length (filter (== "acquire:v1") observedNew))
+            assertEqual "the new run leaves no provider lease" False =<< readIORef active,
+      testCase "a legacy retry reacquires the journaled revision while a second legacy run selects the new catalog revision" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
@@ -227,7 +250,7 @@ tests databaseFixture =
                 firstDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = unavailableV1}
                 resumedDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = replacementRuntime}
 
-            firstAttempt <- try @TransientBehaviorFailure (runAgentRunWorkflow firstDeps firstJob)
+            firstAttempt <- try @TransientBehaviorFailure (runLegacyAgentRunWorkflow firstDeps firstJob)
             case firstAttempt of
               Left _ -> pure ()
               Right outcome -> assertFailure ("missing v1 provider should be transient, got " <> show outcome)
@@ -240,7 +263,7 @@ tests databaseFixture =
             assertBool ("restoring v1 lets the same run finish: " <> show resumed) (isCompleted resumed)
             loadCapabilityResolution appEnv firstJob >>= assertEqual "catalog replacement cannot move the resumed run" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
 
-            fresh <- runAgentRunWorkflow resumedDeps freshJob
+            fresh <- runLegacyAgentRunWorkflow resumedDeps freshJob
             assertBool ("a fresh run selects v2: " <> show fresh) (isCompleted fresh)
             loadCapabilityResolution appEnv freshJob >>= assertEqual "the fresh journal pins v2" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV2]))
             readIORef events >>= assertEqual "only the exact pinned provider is acquired per run" ["acquire:v1", "release:v1", "acquire:v2", "release:v2"],
@@ -281,7 +304,7 @@ tests databaseFixture =
               assertEqual (Text.unpack label <> " journals the resolution refusal") (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
               assertEqual (Text.unpack label <> " never opens a session") (Right False) (Map.member "open-session" <$> stepIndex)
             assertEqual "no permanent refusal reaches provider acquisition" [] =<< readIORef events,
-      testCase "a release failure is transient and leaves the behavior result unjournaled" do
+      testCase "a legacy release failure is transient and leaves the behavior result unjournaled" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
@@ -295,7 +318,7 @@ tests databaseFixture =
                 deps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = runtime}
                 runJob = capabilityJob "overlay-release" "overlay-release:transient"
 
-            attempted <- try @TransientBehaviorFailure (runAgentRunWorkflow deps runJob)
+            attempted <- try @TransientBehaviorFailure (runLegacyAgentRunWorkflow deps runJob)
             case attempted of
               Left _ -> pure ()
               Right outcome -> assertFailure ("release failure should escape transiently, got " <> show outcome)
@@ -2579,6 +2602,7 @@ expectedLifecycleSteps =
       "resolve-profile",
       "resolve-capability-overlays",
       "patch:shikigami-execution-selection-v1",
+      "patch:shikigami-durable-execution-v1",
       "resolve-execution-selection",
       "resolve-approval-policy",
       "open-session",
@@ -3439,3 +3463,12 @@ expectedSupervisorOutput =
             "finding" .= ("The code path should spawn child workflows before awaiting their results." :: Text)
           ]
     ]
+
+-- These fixtures qualify the retained coarse Skill branch's whole-behavior
+-- lease/retry semantics. Record a real old patch set, then let ordinary service
+-- runs replay that population. New driver integration has separate fixtures.
+runLegacyAgentRunWorkflow :: AgentRunDeps -> RunJob -> IO (Either StoreError (WorkflowOutcome (Either AgentRunFailure AgentRunResult)))
+runLegacyAgentRunWorkflow deps job =
+  let app = deps.appEnv
+      options = shikigamiWorkflowRunOptions app
+   in runAppIO app (runWorkflowWith (options & #activePatches .~ Set.delete (PatchId "shikigami-durable-execution-v1") options.activePatches) agentRunWorkflowName (runJobWorkflowId job) (agentRunWorkflow deps (Just job)))

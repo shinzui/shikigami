@@ -6,9 +6,12 @@ module Shikigami.Execution.Tools
   ( NativeToolFactory (..),
     staticNativeTools,
     withExecutionTools,
+    ExecutionToolMenu (..),
+    describeExecutionTools,
   )
 where
 
+import Data.Aeson (Value)
 import Data.List (nub)
 import Data.Text qualified as Text
 import Shikigami.Action.Authorization (ActionAuthorizer)
@@ -24,33 +27,64 @@ import Shikigami.Execution.Runner (OperationContext)
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
-import Shikumi.Tool (ToolRegistry, mkRegistry, registryTools, someToolName, someToolSchema)
+import Shikumi.Tool (ToolRegistry, mkRegistry, registryBaikai, registryTools, someToolName, someToolSchema)
 
-newtype NativeToolFactory = NativeToolFactory
-  { prepare :: ExecutionSnapshot -> OperationContext -> Maybe Text -> IO (Either ExecutionError [BoundTool])
+-- Describing a menu cannot manufacture accepted operation coordinates. A
+-- trusted factory receives those coordinates only when preparing actual work.
+data NativeToolFactory = NativeToolFactory
+  { describe :: ExecutionSnapshot -> IO (Either ExecutionError [BoundTool]),
+    prepare :: ExecutionSnapshot -> OperationContext -> Maybe Text -> IO (Either ExecutionError [BoundTool])
   }
 
+data ExecutionToolMenu = ExecutionToolMenu
+  { offeredTools :: !Value,
+    toolBindings :: ![ToolBinding]
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance Show ExecutionToolMenu where show _ = "ExecutionToolMenu <protected>"
+
 staticNativeTools :: ToolRegistry -> NativeToolFactory
-staticNativeTools registry = NativeToolFactory \_ _ requested ->
-  pure (Right [BoundTool (ToolBinding (someToolName tool) "native/1" (versionedDigest "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost) tool | tool <- registryTools registry, maybe True (== someToolName tool) requested])
+staticNativeTools registry =
+  NativeToolFactory
+    { describe = \_ -> pure (Right tools),
+      prepare = \_ _ requested -> pure (Right (filter (\tool -> maybe True (== tool.binding.name) requested) tools))
+    }
+  where
+    tools = [BoundTool (ToolBinding (someToolName tool) "native/1" (versionedDigest "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost) tool | tool <- registryTools registry]
+
+describeExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)
+describeExecutionTools logger authorizer providers factory snapshot = do
+  described <- factory.describe snapshot
+  case described of
+    Left err -> pure (Left err)
+    Right tools -> withBoundTools logger authorizer providers snapshot Nothing tools \accepted ->
+      pure (ExecutionToolMenu (toJSON (registryBaikai (mkRegistry (map (.tool) accepted)))) (map (.binding) accepted))
 
 withExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> OperationContext -> Maybe Text -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
-withExecutionTools logger authorizer providers NativeToolFactory {prepare} snapshot context requested use = case resolveAgentIdentity snapshot.identity of
+withExecutionTools logger authorizer providers factory snapshot context requested use = do
+  native <- factory.prepare snapshot context requested
+  case native of
+    Left err -> pure (Left err)
+    Right tools -> withBoundTools logger authorizer providers snapshot requested tools use
+
+withBoundTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe Text -> [BoundTool] -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
+withBoundTools logger authorizer providers snapshot requested tools use = case resolveAgentIdentity snapshot.identity of
   Left _ -> pure (Left ExecutionIdentityConflict)
-  Right subject -> do
-    native <- prepare snapshot context requested
-    case native of
-      Left err -> pure (Left err)
-      Right tools
-        | not (validNative tools) -> pure (Left (ExecutionPolicyRefused "native tool factory differs from its binding"))
-        | any (any ((/= Observation) . (.operationClass)) . (.tools)) selected -> pure (Left (ExecutionPolicyRefused "durable mutation overlays are unavailable"))
-        | otherwise -> do
-            result <- withCapabilityOverlays logger authorizer providers (scope subject) (mkResolvedCapabilitySet selected) (mkRegistry (map (.tool) tools)) \registry _ ->
-              let bound tool = case [binding | BoundTool {binding} <- tools, binding.name == someToolName tool] of
-                    [binding] -> Right (BoundTool binding tool)
-                    _ -> (\binding -> BoundTool binding tool) <$> overlayBinding tool
-               in case traverse bound (registryTools registry) of Left err -> pure (Left err); Right accepted -> Right <$> use accepted
-            pure (either (const (Left (ExecutionPolicyRefused "exact capability lease is unavailable"))) id result)
+  Right subject
+    | not (validNative tools) -> pure (Left (ExecutionPolicyRefused "native tool factory differs from its binding"))
+    | any (any ((/= Observation) . (.operationClass)) . (.tools)) selected -> pure (Left (ExecutionPolicyRefused "durable mutation overlays are unavailable"))
+    | otherwise -> do
+        result <- withCapabilityOverlays logger authorizer providers (scope subject) (mkResolvedCapabilitySet selected) (mkRegistry (map (.tool) tools)) \registry _ ->
+          let bound tool = case [binding | BoundTool {binding} <- tools, binding.name == someToolName tool] of
+                [binding] -> Right (BoundTool binding tool)
+                _ -> (\binding -> BoundTool binding tool) <$> overlayBinding tool
+           in case traverse bound (registryTools registry) of
+                Left err -> pure (Left err)
+                Right accepted | length accepted <= 128 -> Right <$> use accepted
+                _ -> pure (Left (ExecutionPolicyRefused "offered tool menu exceeds its supported ceiling"))
+        pure (either (const (Left (ExecutionPolicyRefused "exact capability lease is unavailable"))) id result)
   where
     scope subject = CapabilityScope snapshot.runId (principalScopeText subject) Durable
     selected = filter needed (resolvedCapabilities snapshot.capabilities)

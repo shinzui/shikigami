@@ -21,6 +21,10 @@ workflow AgentRun
     step resolve-approval-policy -> ApprovalPolicySnapshot
     step open-session -> SessionId
     step recall -> RecalledLearnings
+    patch shikigami-durable-execution-v1 {
+      step admit-skill-execution -> ExecutionAdmissionResult
+      child execution id input via executionWorkflowId -> ExecutionDriverResult
+    }
     step run-behavior-v2 -> BehaviorOutput
     step classify -> RiskVerdict
     child approval id input via approvalWorkflowId -> ApprovalWorkflowResult

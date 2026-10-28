@@ -9,6 +9,7 @@ module Shikigami.Behavior.Skill
     loadSkillManifest,
     runSkill,
     runSkillWith,
+    skillRequestText,
   )
 where
 
@@ -126,7 +127,7 @@ runSkillWith ::
   BehaviorInput ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
-runSkillWith model options registry turnLimit dir BehaviorInput {payload, recalled} complete = do
+runSkillWith model options registry turnLimit dir input complete = do
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
@@ -136,13 +137,7 @@ runSkillWith model options registry turnLimit dir BehaviorInput {payload, recall
               & #systemPrompt .~ Just ((.description) manifest)
               & #messages
                 .~ V.singleton
-                  ( user
-                      ( (.body) manifest
-                          <> "\n\nTrigger payload: "
-                          <> renderPayload payload
-                          <> renderPriorLearnings recalled
-                      )
-                  )
+                  (user (skillRequestText manifest input))
               & #tools .~ V.empty
       if null (registryNames registry)
         then do
@@ -161,6 +156,12 @@ runSkillWith model options registry turnLimit dir BehaviorInput {payload, recall
                 registry
                 turnLimit
                 (ctx & #tools .~ registryBaikai registry)
+
+-- Shared by the frozen coarse path and durable snapshot admission. Keeping
+-- this rendering in one place preserves the original provider request bytes.
+skillRequestText :: SkillManifest -> BehaviorInput -> Text
+skillRequestText manifest BehaviorInput {payload, recalled} =
+  manifest.body <> "\n\nTrigger payload: " <> renderPayload payload <> renderPriorLearnings recalled
 
 runToolPath ::
   (Model -> Context -> Options -> IO Response) ->

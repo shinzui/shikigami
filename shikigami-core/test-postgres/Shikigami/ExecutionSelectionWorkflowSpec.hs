@@ -1,4 +1,4 @@
-module Shikigami.ExecutionSelectionWorkflowSpec (tests) where
+module Shikigami.ExecutionSelectionWorkflowSpec (tests, driveExecutionChild) where
 
 import Baikai.Api (Api (Custom, OpenAIResponses))
 import Baikai.Context (systemUser)
@@ -26,9 +26,11 @@ import Keiro.Workflow (PatchId (..), StepName (..), WorkflowId (..), WorkflowOut
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
+import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status500)
 import Network.Wai qualified as Wai
@@ -37,6 +39,7 @@ import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Agent.Run (AgentRunResult)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
@@ -45,6 +48,7 @@ import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy (ModelOperationInput (..), selectContextView)
@@ -55,6 +59,7 @@ import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..))
@@ -68,6 +73,7 @@ import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Store.ExecutionSelection qualified as Calls
+import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -276,14 +282,51 @@ tests fixture =
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
           Map.lookup ModelAttempts snapshot.usage.settled @?= Just 2
           Map.lookup Tokens snapshot.known @?= Just 6,
-      testCase "pending workflow retains selection across changed catalog and default" $
+      testCase "new Skill parent awaits the driver and completes after its provider binding is retired" $
+        withRuntime fixture \app store base -> withHttp \bindings observed -> do
+          _ <- expectRight =<< run app Catalog.registerProjectionCatalog
+          ensureRunQueue store.pool >>= expectRight
+          let request = Fixture.routerJob "durable-skill-parent"
+              dependencies = workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl
+              execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId request).unWorkflowId)
+          Agent.runAgentRunWorkflow dependencies request >>= (@?= Right Suspended)
+          let retained = mustRight (retainModelBindings (mustRight (modelCatalog [])) bindings)
+              replacement = workflowDeps app store (base & #model . #modelId .~ "changed-process-default") retained workerDecl
+          completed <- driveExecutionChild app (Agent.executionRuntime replacement) execution 20
+          completed.phase @?= Replay.Succeeded
+          observed >>= (\values -> length values @?= 1)
+          let retired = workflowDeps app store (base & #model . #modelId .~ "changed-default") (mustRight (modelCatalog [])) workerDecl
+          assertCompleted =<< Agent.runAgentRunWorkflow retired request
+          assertCompleted =<< Agent.runAgentRunWorkflow retired request
+          observed >>= (\values -> length values @?= 1)
+          index <- run app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
+          assertBool "new admission journaled" (Map.member "admit-skill-execution" index)
+          assertBool "coarse behavior branch unused" (Map.notMember "run-behavior-v2" index),
+      testCase "a new pending Skill refuses a retired binding before model dispatch" $
+        withRuntime fixture \app store base -> withHttp \bindings observed -> do
+          _ <- expectRight =<< run app Catalog.registerProjectionCatalog
+          ensureRunQueue store.pool >>= expectRight
+          let request = Fixture.routerJob "durable-skill-retired-before-dispatch"
+              dependencies = workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl
+              execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId request).unWorkflowId)
+              retired = workflowDeps app store base (mustRight (modelCatalog [])) workerDecl
+          Agent.runAgentRunWorkflow dependencies request >>= (@?= Right Suspended)
+          completed <- driveExecutionChild app (Agent.executionRuntime retired) execution 20
+          completed.phase @?= Replay.Failed
+          completed.failure @?= Just (Replay.ExecutionPolicyRefused "pinned execution binding is unavailable")
+          observed >>= (@?= [])
+          outcome <- Agent.runAgentRunWorkflow retired request
+          case outcome of
+            Right (Completed (Left _)) -> pure ()
+            other -> assertFailure (show other),
+      testCase "a legacy pending workflow retains selection across changed catalog and default" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           let catalog = mustRight (modelCatalog bindings)
               declaration = workerDecl
               request = Fixture.routerJob "selection-pinned"
           hooks <- crashBeforeBehavior
           let original = (workflowDeps app store base catalog declaration) {Agent.hooks = hooks}
-          first <- try @SomeException (Agent.runAgentRunWorkflow original request)
+          first <- try @SomeException (runLegacyAgentRunWorkflow original request)
           assertBool "crash before first model call" (either (const True) (const False) first)
           observed >>= (@?= [])
           let replacement = mustRight (modelCatalog [])
@@ -309,12 +352,12 @@ tests fixture =
           observed >>= (@?= [])
           index <- run app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
           assertBool "no selection admission in the old population" (not (Map.member "resolve-execution-selection" index)),
-      testCase "pending workflow refuses unavailable immutable binding" $
+      testCase "a legacy pending workflow refuses unavailable immutable binding" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           hooks <- crashBeforeBehavior
           let request = Fixture.routerJob "selection-unavailable"
               original = (workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl) {Agent.hooks = hooks}
-          _ <- try @SomeException (Agent.runAgentRunWorkflow original request)
+          _ <- try @SomeException (runLegacyAgentRunWorkflow original request)
           result <- Agent.runAgentRunWorkflow (workflowDeps app store base (mustRight (modelCatalog [])) workerDecl) request
           assertBool "named refusal" ("PinnedBindingUnavailable" `Text.isInfixOf` Text.pack (show result))
           observed >>= (@?= []),
@@ -430,6 +473,24 @@ crashBeforeBehavior = do
           when crash (ioError (userError "selection fixture crash"))
       }
 
+driveExecutionChild :: AppEnv -> Executor.ExecutionRuntime -> Replay.ExecutionId -> Int -> IO Driver.ExecutionDriverResult
+driveExecutionChild app executor execution remaining
+  | remaining <= 0 = assertFailure "execution child exceeded its bounded fixture" >> fail "driver child"
+  | otherwise = do
+      outcome <- run app (runChildWorkflow (shikigamiWorkflowRunOptions app) DriverGenerated.workflowName (Replay.executionWorkflowId execution) (Driver.executionWorkflow executor Nothing))
+      case outcome of
+        Completed value -> pure value
+        ContinuedAsNew -> driveExecutionChild app executor execution (remaining - 1)
+        Suspended -> do
+          Just (state, binding, _) <- expectRight =<< run app (Durable.inspectExecution execution)
+          operation <- maybe (assertFailure "driver suspended without active work" >> fail "operation") pure state.activeOperation
+          attempts <- expectRight =<< run app (Durable.inspectOperationAttempts operation)
+          case filter (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) attempts of
+            [attempt] -> Executor.executeAcceptedAttempt executor binding.identity (Attempt.JobReference 1 execution operation attempt.request.attemptId) >>= (@?= Right Executor.ExecutorDone)
+            _ -> assertFailure "driver child has no accepted attempt"
+          driveExecutionChild app executor execution (remaining - 1)
+        _ -> assertFailure (show outcome) >> fail "driver child outcome"
+
 assertCompleted :: (Show e, Show failure, Show a) => Either e (WorkflowOutcome (Either failure a)) -> IO ()
 assertCompleted (Right (Completed (Right _))) = pure ()
 assertCompleted other = assertFailure (show other)
@@ -442,3 +503,11 @@ expectRight = either (assertFailure . show) pure
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
+
+-- Preserve the selection-only population's original coarse-step crash surface.
+-- New Skill parents are qualified above with the deployment's full patch set.
+runLegacyAgentRunWorkflow :: Agent.AgentRunDeps -> RunJob -> IO (Either StoreError (WorkflowOutcome (Either Agent.AgentRunFailure AgentRunResult)))
+runLegacyAgentRunWorkflow dependencies request =
+  let app = dependencies.appEnv
+      options = shikigamiWorkflowRunOptions app
+   in runAppIO app (runWorkflowWith (options & #activePatches .~ Set.delete (PatchId "shikigami-durable-execution-v1") options.activePatches) Agent.agentRunWorkflowName (runJobWorkflowId request) (Agent.agentRunWorkflow dependencies (Just request)))

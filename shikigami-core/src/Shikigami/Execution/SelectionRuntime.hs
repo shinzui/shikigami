@@ -99,6 +99,7 @@ preparePinnedExecutionCall env@SelectionRuntime {transact} selection operation a
   Left _ -> pure (Left "pinned execution binding is unavailable")
   Right (_, selected) -> case narrowOutput selected.options maxOutput of
     Left err -> pure (Left err)
+    Right options | Left _ <- validateResponseRequest selected.model options context -> pure (Left "model request is incompatible with the pinned API")
     Right options -> do
       authority <- env.authorize
       case authority of

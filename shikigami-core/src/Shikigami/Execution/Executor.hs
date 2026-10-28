@@ -31,6 +31,7 @@ import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -190,6 +191,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
               Left _ -> denied access lease "pinned model binding is unavailable"
               Right selected -> case narrowOutput selected.options request.maxOutputTokens of
                 Left _ -> denied access lease "requested model output is outside the pinned ceiling"
+                Right options | Left _ <- validateResponseRequest selected.model options context -> denied access lease "model request is incompatible with the pinned API"
                 Right options -> completeBehaviorRequest selected selected.model context options >> pure (Right ())
           _ -> denied access lease "model replay or prepared receipt is unavailable"
         (Left _, _) -> denied access lease "model replay is unsupported"

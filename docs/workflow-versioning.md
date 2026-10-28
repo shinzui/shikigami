@@ -499,6 +499,14 @@ from the delegates stored in the journaled `lookup-agent` result, so later
 manifest edits cannot move an in-flight run's children.
 
 
+Agent runs also declare `shikigami-durable-execution-v1`. Eligible fresh leaf
+Skills journal `admit-skill-execution` and await the registered execution child.
+Old patch snapshots keep `run-behavior-v2`; fixed supervisors, routed Skills and
+Flows retain their existing orchestration. A completed accepted result is read
+from protected storage without looking up a live provider. Session, memory and
+sink ownership and step codecs are unchanged. Preserve both branches and roll
+forward across this patch introduction. See [ADR 0057](adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md).
+
 ## Undeclarable label families
 
 The checked specification cannot hold every name in the table above. A keiro-dsl

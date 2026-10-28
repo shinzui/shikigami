@@ -130,7 +130,7 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies, individually accepted tools, bound permissions and fenced executor primitives are implemented checkpoints. The callable automatic driver is qualified independently; parent workflow adoption, policy configuration and remaining recovery work are still in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
+2026-10-28: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies, individually accepted tools, bound permissions and fenced executor primitives are implemented checkpoints. The callable automatic driver is qualified independently; conversation adoption, policy configuration and remaining recovery work are still in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
 
 
 ## Surprises & Discoveries
@@ -167,8 +167,10 @@ records the cross-plan contract consumed by continuing assignments. The worker r
 bounded-generation and accepted-reference repair contract for later continuing
 assignments. Recorded summaries now use ordinary accepted attempts with protected source and
 outcome references; [ADR 0056](../adr/0056-context-summaries-are-accepted-accounted-model-operations.md)
-records that shared context contract. Parent workflow patches, configuration and
-remaining recovery qualification are not yet accepted, so EP-3 and its dependent-child start
+records that shared context contract. The agent-run leaf Skill patch is accepted: frozen assignment/menu admission
+and protected completed-result reads follow [ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md).
+Conversation adoption, configuration/ephemeral policy and remaining recovery
+qualification are not yet accepted, so EP-3 and its dependent-child start
 gates remain unchanged.
 
 ## Decision Log
