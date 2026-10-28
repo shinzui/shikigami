@@ -17,6 +17,17 @@ provenance:
       at: 2026-10-28T13:21:22Z
       mode: "update"
       note: "Complete source-grounded draft and link the requested Mina intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:33:35Z
+      mode: "update"
+      note: "Consume verified EP-1 baseline artifacts and qualify both typed and late-write refusals."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:29:30Z
+      verdict: "changes-requested"
+      note: "Make the captured pre-upgrade source and solve an explicit EP-1 handoff rather than capture dirty contents after upgrades."
 ---
 
 # Close the runtime pattern audit and qualify the Keiro 0.22 rollout
@@ -50,6 +61,8 @@ None yet.
 ## Decision Log
 
 
+2026-10-28 review revision: Consume and verify EP-1's pre-edit baseline handoff instead of attempting to capture old dirty contents after the upgrade. Qualify typed preconditions and retained late-write rollback separately.
+
 2026-10-28: Qualify retained data across independent old/new builds, not just with a new decoder's self-produced fixtures. Refresh the frozen Nix closure after all runtime adaptations so release artifacts cannot silently retain the 0.18 dependency graph.
 
 
@@ -78,7 +91,7 @@ Relevant local decisions are [ADR 0037](../adr/0037-adopt-the-released-keiro-con
 
 ### M1 — Compare independent builds and retained data
 
-Use the exact old application candidate and dependency graph recorded before the upgrade, including accepted execution work, in an isolated source/build directory. If that baseline included dirty files, preserve a source manifest and digest alongside its captured contents; HEAD alone is not its identity. Keep a distinct new source/build directory for the reconciled final candidate. Use disposable PostgreSQL and source-owned schema/fixtures; never point a destructive rehearsal at an ambient database.
+Consume the immutable pre-edit handoff from `docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md`, indexed by `docs/evidence/keiro-0.22/baseline.md`. Verify the captured tracked and required untracked contents against its digest manifest and use its old project inputs, successful solve and retained binaries in an isolated source/build directory. Rebuilding must reproduce the recorded dependency/source identities. Do not capture today's dirty tree as the old baseline or infer missing contents from HEAD. Missing or mismatched baseline artifacts reopen EP-1's acceptance and block this comparison; recover the original artifacts before proceeding. Keep a distinct new source/build directory for the reconciled final candidate. Use disposable PostgreSQL and source-owned schema/fixtures; never point a destructive rehearsal at an ambient database.
 
 Have the old build write representative RunEvidence and ExecutionLifecycle histories, valid and stale/corrupt snapshots, queued run inputs supported at the baseline, and suspended workflow journals. Include the three families agent-run, approval and Danwa conversation; pending/completed typed decisions; an execution outcome with accounting; pending/uncertain executor work; allocated awakeable IDs and rotation-carried seeds. Stop the old process, apply the new migration composition, and resume using the new build. A new reader accepting a fixture produced only by itself is insufficient.
 
@@ -128,7 +141,7 @@ Invoke `just keiro-gate` with the explicit baseline ref recorded in M1 in a revi
 
 No applicable audit row remains “pending”, “planned” or “needs evidence”. A justified non-applicability states the actual absent consumer or unsupported upstream capability; it is not a substitute for an implemented required fix. The final seven runtime/build-time Keiro packages select 0.22.0.0, the fixture bound relaxation is gone, no new runtime source/bounds escape appears, and every packaged role uses the final exported solve.
 
-Independent old/new comparisons show retained histories, queues, identities and protected payload references remain usable; valid idempotent retries converge and conflicting retries refuse. Expected relational refusals commit no participant or receipt. The actual final migration executable upgrades the old-schema fixture and succeeds idempotently on a second pass; incompatible startup refuses before intake. Aggregate inspection is useful and payload-safe. Specification, regression, migration and packaging gates pass with concise evidence. The runbook acknowledges the schema/writer compatibility boundary and gives a tested recovery path. Provider calls, a production rollout and a new public listener are not required to prove this dependency upgrade.
+The old build is traceable to the verified EP-1 pre-edit handoff, including dirty/untracked source and its old dependency solve. Independent old/new comparisons show retained histories, queues, identities and protected payload references remain usable; valid idempotent retries converge and conflicting retries refuse. Both typed precondition refusals and documented retained late-write refusals commit no participant or receipt. Qualification includes a late hook failure after tentative payload, cursor and accounting writes; that rollback must not be labelled `PreconditionRefused`. The actual final migration executable upgrades the old-schema fixture and succeeds idempotently on a second pass; incompatible startup refuses before intake. Aggregate inspection is useful and payload-safe. Specification, regression, migration and packaging gates pass with concise evidence. The runbook acknowledges the schema/writer compatibility boundary and gives a tested recovery path. Provider calls, a production rollout and a new public listener are not required to prove this dependency upgrade.
 
 
 ## Idempotence and Recovery

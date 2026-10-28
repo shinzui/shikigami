@@ -17,6 +17,17 @@ provenance:
       at: 2026-10-28T13:21:22Z
       mode: "update"
       note: "Complete source-grounded draft and link the requested Mina intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:33:35Z
+      mode: "update"
+      note: "Limit typed refusals to pre-inline checks and retain tested post-write exception rollback."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:29:30Z
+      verdict: "changes-requested"
+      note: "Specify how post-write finalCheck and accounting refusals fit the pre-inline guarded callback, or explicitly retain their rollback exception path."
 ---
 
 # Adopt guarded catalog commands and qualify current DSL consumer contracts
@@ -30,13 +41,13 @@ Record friction met while implementing in the friction-log bundle as it occurs (
 ## Purpose / Big Picture
 
 
-Make an execution's expected relational refusal a typed result from the released atomic command runner. A refused operation leaves no lifecycle event, payload, cursor movement, call settlement or accepted receipt. Accepted operations still commit those facts together. At the same boundary, qualify current generated consumers and replace only DSL adapters for which the released tool supplies an equivalent executed contract.
+Make execution admission checks that can run before inline writes return typed refusals from the released atomic command runner. Preserve exception rollback for late checks and write-time owner refusals that the pre-inline callback cannot represent. A refused operation leaves no lifecycle event, payload, cursor movement, call settlement or accepted receipt. Accepted operations still commit those facts together. At the same boundary, qualify current generated consumers and replace only DSL adapters for which the released tool supplies an equivalent executed contract.
 
 
 ## Progress
 
 
-- [ ] M1: One accepted execution outcome and one typed refused outcome prove the guarded catalog protocol with real PostgreSQL transactions and an active rebuild fence.
+- [ ] M1: An accepted outcome, typed precondition refusal, retained late-write refusal and active rebuild fence prove atomicity with real PostgreSQL transactions.
 - [ ] M2: All applicable execution persistence paths use the accepted protocol, preserving concurrent retry, accounting, permission and claim behavior.
 - [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and any adopted mapping passes historical replay qualification.
 
@@ -44,13 +55,15 @@ Make an execution's expected relational refusal a typed result from the released
 ## Surprises & Discoveries
 
 
-None yet.
+The released guarded runner calls its precondition after tentative append and catalog admission but before inline delivery. It has no post-inline typed-refusal callback. The existing `recordOutcomeAndAdvanceWith` hook runs after payload/cursor writes and accounting, so its rollback path is not superseded by this API.
 
 
 ## Decision Log
 
 
-2026-10-28: Adopt the released typed catalog precondition for expected execution business refusals. Keep rich payload writes in the live inline projection and preserve their atomicity. Do not call an asynchronous view command authority or make encode-only provider payloads replayable.
+2026-10-28 review revision: Narrow typed-refusal adoption to checks before inline delivery. Preserve the existing post-write hook and exception rollback for late/owner failures because the released guarded runner has no post-inline refusal callback; test both paths before expanding adoption.
+
+2026-10-28: Adopt the released typed catalog precondition for expected execution admission refusals that can be decided before inline delivery. Keep rich payload writes in the live inline projection and preserve their atomicity. Do not call an asynchronous view command authority or make encode-only provider payloads replayable.
 
 2026-10-28: Structural enum equality and mapped construction are adopted only where an actual consumer needs them. Existing queue enum spellings and v1/v2/v3 readers are durable contracts; replacing them solely to use new syntax is outside this upgrade's compatibility promise.
 
@@ -82,17 +95,19 @@ Relevant decisions are [ADR 0001](../adr/0001-declare-only-what-the-runtime-exec
 
 Begin with `recordOutcomeAndAdvanceWith` and its PostgreSQL transcript/selection tests, before converting all persistence operations. Adapt the generated validated stream to `DomainCommandHandler` with a total classifier. ExecutionLifecycle currently emits an event on every accepted edge; do not add fake silent edges, public reject payloads or a blanket normal no-op to evade rejection semantics. If a classifier is needed for an unreachable silent case, return a bounded explicit execution refusal; prove the current aggregate contains no silent live edge. Unmatched edges remain outer `CommandRejected`.
 
-Split expected relational admission checks from rich inline writes. The precondition performs minimal indexed identity/revision/permission/root/claim checks under the admitted catalog bindings and returns `Either ExecutionError ()`. Keep payload writes, outcome storage, cursor movement and accounting settlement inside the accepted command transaction's live projection. Where a late hook can refuse after tentative writes, prove the chosen supported callback arrangement rolls back every participant and does not convert the refusal to accepted work. Do not move accounting to a second transaction. Avoid mutable cross-callback cells; use transaction-local rereads under retained application row locks when values must be checked again. Keep one documented lock order across all participating application writers.
+Split expected relational admission checks from rich inline writes. The precondition performs minimal indexed identity/revision/permission/root/claim checks under the admitted catalog bindings and returns `Either ExecutionError ()`. Keep payload writes, outcome storage, cursor movement and accounting settlement inside the accepted command transaction's live projection. Keep the existing `recordOutcomeAndAdvanceWith` final transaction hook in its post-write position. The released guarded runner cannot translate a failure from inline delivery into `PreconditionRefused`: its callback has already returned by then. Retain `ExecutionAbort` and the surrounding `catchExecutionWith CheckFailed` path for this hook, accounting/settlement owner refusals and other write-time integrity failures. Let the exception escape the transaction so all tentative writes roll back before mapping it to the existing application error. Do not catch it inside the inline projection and return success.
+
+Move only checks whose answer can be established before inline delivery into the typed precondition. Acquire their application row locks in the existing order and retain them through inline writes; re-read under those locks where necessary. Do not move a hook merely because its type returns `Either`: it may observe tentative state or perform coupled writes. Preserve post-write hooks and write-time refusal paths unless a separate proof establishes equivalent semantics. Record each retained call site, error identity and rollback test in audit row K22-4. Do not move accounting to a second transaction. Avoid mutable cross-callback cells; use transaction-local rereads under retained application row locks when values must be checked again. Keep one documented lock order across all participating application writers.
 
 The upstream callback may be retried by Hasql. It must contain no provider/network effect, recursive append, extra stream/group lock, independent transaction/savepoint/isolation control, sequence, session lock or effect that survives rollback. Catalog serving bindings are valid only during this invocation; retaining their value retains no lock. Preserve typed infrastructure errors separately from business refusals. Catch asynchronous cancellation correctly; do not replace it with a successful refusal.
 
-Use the released same-database fixture to run the accepted outcome and a typed refusal on separate connections, then fence the execution rebuild group. Check the generated lifecycle stream and every application participant before and after. M1 succeeds only when accepted work commits once and a refused/fenced operation changes nothing, with no fabricated receipt or global position.
+Use the released same-database fixture to run the accepted outcome and a typed refusal on separate connections, then fence the execution rebuild group. Check the generated lifecycle stream and every application participant before and after. Also inject a refusal from the existing final hook after tentative payload, cursor and accounting writes, and assert the original application error and complete rollback. M1 succeeds only when accepted work commits once and typed-refused, late-refused and fenced operations change nothing, with no fabricated receipt or global position. The late case must exercise the retained exception path, not a precondition that refuses before writes.
 
 ### M2 — Integrate the accepted execution boundary
 
-Apply the proven split to admission, accepted operations, permissions, terminal transitions, executor claims, uncertain results and reconciliation wherever they use catalog commands. Preserve stable fingerprints, operation positions, owner/generation fences, late-receipt rules, original accounting and protected replay permits. Expected relational refusals must leave through `PreconditionRefused` and retain exact application error identities. Preserve stream rejection, retry exhaustion, catalog refusal, corrupt history and unexpected infrastructure failure as distinguishable operational outcomes.
+Apply the proven split to admission, accepted operations, permissions, terminal transitions, executor claims, uncertain results and reconciliation wherever they use catalog commands. Preserve stable fingerprints, operation positions, owner/generation fences, late-receipt rules, original accounting and protected replay permits. Admission checks moved before inline delivery must leave through `PreconditionRefused` and retain exact application error identities. Late-hook and write-time owner refusals remain exception-triggered transaction rollback mapped to `CheckFailed`; do not fabricate a guarded-runner outcome for them. Preserve stream rejection, retry exhaustion, catalog refusal, corrupt history and unexpected infrastructure failure as distinguishable operational outcomes.
 
-Retire exception-based expected-refusal plumbing at the migrated catalog boundary. Integrity checks in accepted writes and read-side decode/access errors are separate obligations; do not remove rollback protections merely to eliminate a helper name. If a remaining exception cannot be replaced by this API, document its exact scope and invariant in the audit. `Attestation.EvidenceStore` retains its justified rich inline projection; adopt the guarded runner there only if an actual relational precondition exists, not to rewrite an already correct upsert.
+Remove exception use only at the admission checks actually migrated to the typed callback. Retain the exception type and transaction-boundary handler for late hooks, write-time owner refusals and integrity failures; read-side decode/access errors remain a separate obligation. Document retained sites and their invariants in the audit. Completion means all applicable pre-inline checks are migrated and every retained rollback path is justified and tested, not that `ExecutionAbort` disappears. `Attestation.EvidenceStore` retains its justified rich inline projection; adopt the guarded runner there only if an actual relational precondition exists, not to rewrite an already correct upsert.
 
 Expand race tests to equal retries, conflicting immutable inputs, root cancellation, stale claim generation, permission expiry, injected failure after tentative work and rebuild-fence refusal. Update ADR 0053 with the supported typed refusal protocol and lock/atomicity constraints when accepted.
 
@@ -125,7 +140,7 @@ Run the direct pinned scaffold and `just keiro-diff` against the explicit pre-ch
 ## Validation and Acceptance
 
 
-Run the full core PostgreSQL suite serially because shared ephemeral connection budgets have previously failed under parallel suites. Strengthen existing `shikigami-core/test-postgres/Shikigami/ExecutionTranscriptSpec.hs` and `ExecutionSelectionWorkflowSpec.hs`, using separate connections for real concurrency. An accepted outcome, lifecycle append, call settlement and cursor advance are one fact. A relational refusal, a fenced group, a failed last check and a stale claim each leave every participant unchanged. A committed response loss followed by the same request converges; a changed request under the same identity refuses. Classifiers do not turn corrupt replay or ambiguity into business rejection. Read-side protection remains intact.
+Run the full core PostgreSQL suite serially because shared ephemeral connection budgets have previously failed under parallel suites. Strengthen existing `shikigami-core/test-postgres/Shikigami/ExecutionTranscriptSpec.hs` and `ExecutionSelectionWorkflowSpec.hs`, using separate connections for real concurrency. An accepted outcome, lifecycle append, call settlement and cursor advance are one fact. A typed precondition refusal, a fenced group, a post-write final-hook refusal and a stale claim each leave every participant unchanged. Assert the typed runner outcome only for the precondition case; assert the preserved application error through `CheckFailed` for the late case after verifying payload, cursor and accounting were tentatively written. A committed response loss followed by the same request converges; a changed request under the same identity refuses. Classifiers do not turn corrupt replay or ambiguity into business rejection. Read-side protection remains intact.
 
 Generated service conformance must pass with all required witnesses, including the updated behavior obligation reports from 0.21. A mapping adoption requires independent wire, fold, snapshot and replay evidence; no application mapper is removed based solely on successful compilation. The audit has a concrete disposition for each new DSL feature and every retained workaround. Missing optional queue fields remain a justified upstream limitation recorded in FRIC-9.
 

@@ -16,6 +16,17 @@ provenance:
       at: 2026-10-28T13:21:22Z
       mode: "update"
       note: "Complete source-grounded draft and link the requested Mina intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:33:35Z
+      mode: "update"
+      note: "Apply review: require pre-edit baseline handoff and preserve late-write rollback outside typed preconditions."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:29:30Z
+      verdict: "changes-requested"
+      note: "Capture the old source and solve before EP-1 edits; resolve EP-2 late-refusal callback semantics."
 ---
 
 # Upgrade Shikigami to Keiro 0.22 and retire superseded runtime workarounds
@@ -28,7 +39,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Vision & Scope
 
 
-Upgrade Shikigami's selected Keiro 0.18 runtime to the latest released Keiro family, verified on 2026-10-28 as 0.22.0.0. After completion, deployed roles use one reproducible released dependency cohort, existing histories and queued jobs remain readable, execution command refusals use supported atomic catalog preconditions, and operators can inspect application aggregates through bounded upstream APIs. The initiative also closes an evidence-backed audit against `mori://shinzui/keiro-runtime-patterns` at revision `62531b00b415785be61584a3c44b569fdfb35c4e`.
+Upgrade Shikigami's selected Keiro 0.18 runtime to the latest released Keiro family, verified on 2026-10-28 as 0.22.0.0. After completion, deployed roles use one reproducible released dependency cohort, existing histories and queued jobs remain readable, execution admission refusals use supported atomic catalog preconditions while late-write failures retain proven transaction rollback, and operators can inspect application aggregates through bounded upstream APIs. The initiative also closes an evidence-backed audit against `mori://shinzui/keiro-runtime-patterns` at revision `62531b00b415785be61584a3c44b569fdfb35c4e`.
 
 The initial findings and feature dispositions are in [the audit](../architecture/keiro-0.22-pattern-audit.md). Hackage reports all eight Keiro packages at 0.22.0.0; their peeled upstream tags share commit `b28201f2063fa4f6dcb724cbf474959107e36b74` in `mori://shinzui/keiro`. Seven existing packages must advance together. The eighth, `mori://shinzui/keiro/packages/keiro-ops-http`, remains optional because no operational HTTP listener is selected by this initiative. Recheck release evidence at implementation start; a newer major requires an explicit plan revision rather than silently changing this qualified target.
 
@@ -65,17 +76,17 @@ Status values are Not Started, In Progress, Complete and Cancelled. All hard dep
 
 Execute EP-1, EP-2, EP-3 and EP-4 in registry order by default. EP-1 must be Complete before EP-2 or EP-3 begins: both require the actual 0.22 public interfaces, regenerated consumers and accepted migration fixture. EP-2 and EP-3 are otherwise independently implementable; EP-3 benefits from EP-2's error mapping but has no hard dependency on it. Their integration dependency is the shared validated catalog and its safe operator display. EP-4 requires both complete because its old/new proof and packaged binaries must exercise the final runtime rather than an intermediate adaptation.
 
-Do not require all of MasterPlan 14 to finish before this upgrade. At EP-1 start, record the accepted execution baseline and preserve any uncommitted work. During EP-2 implementation, serialize edits to execution persistence with plan 83's owner. Resume qualification against the reconciled candidate if those contracts move; never resolve concurrent work by dropping its claims, accounting, continuation or wake behavior.
+Do not require all of MasterPlan 14 to finish before this upgrade. Before any EP-1 upgrade edit, capture and verify the accepted execution source (including required dirty/untracked contents), old solve and successful old build. EP-1 owns the immutable handoff indexed by `docs/evidence/keiro-0.22/baseline.md`; EP-4 consumes it. Preserve the working tree during capture and retain the artifacts through final acceptance. During EP-2 implementation, serialize edits to execution persistence with plan 83's owner. Resume qualification against the reconciled candidate if those contracts move; never resolve concurrent work by dropping its claims, accounting, continuation or wake behavior.
 
 
 ## Integration Points
 
 
-**Cohort and generated baseline — EP-1 owns.** `cabal.project`, all package descriptors, `mori.dhall`, initial regenerated files and build-time DSL pin define the released interface consumed by EP-2/EP-3. EP-1 performs only mandatory source adaptations and generation; EP-2 owns subsequent DSL semantic changes. EP-4 owns final `nix/qualification/cohort.json`, `metadata.tar.gz` and role validation. Match the compiled closure to the final Cabal solve rather than retaining the old deployment closure.
+**Cohort and generated baseline — EP-1 owns.** `cabal.project`, all package descriptors, `mori.dhall`, initial regenerated files and build-time DSL pin define the released interface consumed by EP-2/EP-3. EP-1 first preserves the pre-edit source/build handoff, with content digests, old project inputs, successful solve and retained migration/runtime artifacts for EP-4. A revision and dirty-path inventory alone do not satisfy this gate. EP-1 then performs only mandatory source adaptations and generation; EP-2 owns subsequent DSL semantic changes. EP-4 owns final `nix/qualification/cohort.json`, `metadata.tar.gz` and role validation. Match the compiled closure to the final Cabal solve rather than retaining the old deployment closure.
 
 **Migration composition — EP-1 owns; EP-4 rehearses final artifacts.** `shikigami-migrations/src/Shikigami/Migrations.hs`, its SQL manifest and startup verification include all upstream prerequisites. Shikigami currently vendors PGMQ SQL under its own historical migration, so upstream PGMQ migration 0007 needs an explicit ledger/schema bridge, not blind composition of a second baseline. Preserve applied names and checksums. EP-1 must prove old-schema upgrade and repeat application before downstream work expands.
 
-**Catalog command boundary — EP-2 owns.** `Shikigami.Execution.Store`, `Shikigami.Execution.Catalog`, generated `ExecutionLifecycle`, and existing resource/selection transaction hooks must agree on accepted versus rolled-back work. Its early producer/consumer proof is one execution outcome with accounting and cursor advancement, then a typed relational refusal and a rebuild fence from another connection. Expand across execution paths only after that proof. Preserve the RunEvidence projection set when capturing execution handlers and vice versa.
+**Catalog command boundary — EP-2 owns.** `Shikigami.Execution.Store`, `Shikigami.Execution.Catalog`, generated `ExecutionLifecycle`, and existing resource/selection transaction hooks must agree on accepted versus rolled-back work. Its early producer/consumer proof is one execution outcome with accounting and cursor advancement, a typed pre-inline refusal, a late-hook refusal after tentative writes, and a rebuild fence from another connection. Keiro's guarded callback runs before inline delivery; EP-2 retains exception rollback for post-write hooks and write-time owner failures, with exact application errors and no fabricated `PreconditionRefused`. Expand across execution paths only after that proof. Preserve the RunEvidence projection set when capturing execution handlers and vice versa.
 
 **Runtime and inspection — EP-3 owns.** `Shikigami.Runtime`, the shared workflow registry, worker assembly/health, and `Shikigami.Server.Command.Ops` consume the accepted cohort. EP-3 defines a small application-owned aggregate inspector catalog using generated event streams, with safe display encoders. It must not expose protected replay payloads or fabricate process-manager catalogs from ordinary workflows. EP-2 consumes this visibility without introducing a second registry. Mandatory compiling adaptations made by EP-1 are extended here, not redefined.
 
@@ -87,7 +98,7 @@ Durable ADR subjects are the supported relational-refusal boundary, the scope of
 ## Progress
 
 
-2026-10-28: Research and initial source audit are complete; four child ExecPlans are created and Not Started. The current working tree selects Keiro 0.18 and contains ongoing execution work. No dependency, runtime or migration implementation was changed in this planning session. Final integration gates remain the stopped-writer migration rehearsal, typed-refusal atomicity proof, retained-history comparison and matching Nix role closure.
+2026-10-28: Research and initial source audit are complete; four child ExecPlans are created and Not Started. The current working tree selects Keiro 0.18 and contains ongoing execution work. No dependency, runtime or migration implementation was changed in this planning session. Review corrections now require pre-edit baseline capture and separate typed/late-refusal proofs. Final integration gates remain the stopped-writer migration rehearsal, typed-refusal atomicity proof, retained-history comparison and matching Nix role closure.
 
 
 ## Surprises & Discoveries
@@ -99,13 +110,15 @@ The latest standalone Kiroku Store is 0.13.0.0, but released Keiro 0.22 and Kiok
 ## Decision Log
 
 
+2026-10-28 review revision: Resolve review findings by making the pre-edit old source/solve/build capture an EP-1 handoff required by EP-4, and limiting EP-2 typed refusals to the released pre-inline callback. Retain and separately test existing late-write exception rollback. Child count, hard dependencies and implementation status are unchanged; these are qualification/scope corrections preserving the existing atomicity contract.
+
 2026-10-28: Created and linked the user-requested Mina intention across this MasterPlan and all children.
 
 2026-10-28: Separate release/migration qualification, command semantics, runtime inspection and final integration because each has a different observable acceptance boundary. Preserve whole-child hard dependencies on the accepted cohort.
 
 2026-10-28: Select applicable 0.22 inspection through the existing embedded operator CLI. Operational HTTP and live feeds remain explicitly optional until a hosting requirement exists; their absence does not imply a runtime defect.
 
-2026-10-28: Treat every workaround individually. Remove the obsolete PostgreSQL fixture bound relaxation; replace execution business refusals with supported typed preconditions; retain historical queue readers and rich-payload adapters where upstream still lacks the required contract. Structural enum equality is a capability to apply only to a demonstrated consumer, not a reason to widen or rename existing queue enums.
+2026-10-28: Treat every workaround individually. Remove the obsolete PostgreSQL fixture bound relaxation; replace eligible pre-inline execution admission refusals with supported typed preconditions and retain justified late-write rollback; retain historical queue readers and rich-payload adapters where upstream still lacks the required contract. Structural enum equality is a capability to apply only to a demonstrated consumer, not a reason to widen or rename existing queue enums.
 
 
 ## Outcomes & Retrospective

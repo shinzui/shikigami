@@ -17,6 +17,17 @@ provenance:
       at: 2026-10-28T13:21:22Z
       mode: "update"
       note: "Complete source-grounded draft and link the requested Mina intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:33:35Z
+      mode: "update"
+      note: "Require verified old source, dependency solve and build artifacts before upgrade edits."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-28T13:29:30Z
+      verdict: "changes-requested"
+      note: "M1 must capture tracked and untracked baseline contents and the old solve before mutation for EP-4."
 ---
 
 # Resolve the released Keiro 0.22 cohort and rehearse the composed migration
@@ -36,7 +47,7 @@ Make Shikigami build and migrate against the released Keiro 0.22 family without 
 ## Progress
 
 
-- [ ] M1: A release-only solve selects the compatible 0.22 cohort, removes the superseded fixture relaxation and compiles the service and regenerated conformance package.
+- [ ] M1: A reproducible old source/build baseline is captured before edits, and a release-only solve selects the compatible 0.22 cohort, removes the superseded fixture relaxation and compiles the service and regenerated conformance package.
 - [ ] M2: Fresh and 0.18-baseline disposable databases reach the complete schema, preserve seeded data, verify startup, and accept a second migration pass without changes.
 
 
@@ -48,6 +59,8 @@ None yet.
 
 ## Decision Log
 
+
+2026-10-28 review revision: Make the old source contents, digest manifest, successful solve and build artifacts a pre-edit M1 handoff. Recording dirty paths cannot reconstruct the old candidate after the upgrade.
 
 2026-10-28: Target Keiro 0.22.0.0 with its compatible released substrate. Do not select Kiroku Store 0.13 merely because it is newer: published Keiro/Kioku bounds require 0.12. Preserve all historical application migration bytes, including the vendored PGMQ baseline.
 
@@ -77,7 +90,11 @@ Consult [ADR 0037](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) 
 
 ### M1 — One released build graph
 
-Record the current candidate revision and dirty paths, including any ignored `cabal.project.local` or `.dev` project. Use the existing isolation approach documented in `tools/qualification/README.md` and `docs/dependency-cohort.md`; do not qualify a sibling-checkout override as a released solve. Preserve the separately pinned Kikan source exception from ADR 0039 and record it explicitly; it does not justify source overrides for this upgrade's runtime dependencies.
+Before changing pins, descriptors, generated files or migrations, capture the old application in an isolated baseline directory. Record HEAD and dirty paths, and preserve the actual tracked working-tree contents, required untracked source/migrations, file modes and symlink targets. A Git revision or diff alone is insufficient. Include the old project, lock/index state, generated sources, migration manifest and frozen packaging inputs. Inventory ignored `cabal.project.local` and `.dev` overrides separately; exclude them from the released solve and keep any credential-bearing material private. Do not stage or commit another owner's work to create this snapshot.
+
+Create a content-digest manifest and verify the copied source against it before upgrade edits begin. Coordinate the capture with plan 83's owner so its files form one coherent candidate; if files change during capture, repeat it. Build the old candidate in that isolated directory against the old dependency graph, saving its successful `plan.json`, exact source/descriptor identities, flags, compiler and reproducible project inputs. Keep the old binaries and migration executable for M2 and the final qualification child. If the old candidate cannot build, resolve that baseline failure before upgrading; do not substitute a historical HEAD that omits accepted execution work.
+
+Publish the baseline identity, manifest, artifact locations, build command and result in `docs/evidence/keiro-0.22/baseline.md`. Retain source and dependency artifacts through EP-4 acceptance, with private material outside checked-in evidence. This handoff must exist before the following dependency edits; later source changes produce a separately identified candidate and never overwrite the baseline. Use the existing isolation approach documented in `tools/qualification/README.md` and `docs/dependency-cohort.md`; do not qualify a sibling-checkout override as a released solve. Preserve the separately pinned Kikan source exception from ADR 0039 and record it explicitly; it does not justify source overrides for this upgrade's runtime dependencies.
 
 Verify current Hackage metadata and upstream tags before editing dependency pins. Move the UTC index snapshot far enough to include the selected releases and revisions. Update explicit bounds in every affected `.cabal`, `cabal.project` and `mori.dhall` consistently, including Kioku and pg-migrate consumers. Remove only `pg-migrate-test-support:ephemeral-pg`: released 1.2.0.0 admits `ephemeral-pg >=0.3.1 && <0.4`. Evaluate the unrelated `claude:http-client-tls` exception separately, retaining it unless published metadata actually fixes it. Do not broaden `allow-newer` to suppress runtime major bounds.
 
@@ -85,13 +102,13 @@ Compile and adapt mandatory API changes using Mori-resolved released source. Def
 
 Regenerate all six current workspace members with the pinned DSL. Update whole-logical-name queue/query symbols and every generated aggregate `BehaviorContract` consumer for the 0.21 changes. Preserve create-once holes and real history-backed witnesses. Update the generated Cabal fragment/module list and compile generated service conformance. Take a second generated-tree snapshot and prove identical bytes on another scaffold. Do not require zero whole-tree Git diff when unrelated hand-owned execution edits are present; FRIC-6 documents that recipe limitation. Keep gate strength by comparing the reviewed candidate index or an isolated candidate snapshot.
 
-M1 accepts a clean released solve, a successful all-package build and generated service conformance, with recorded selected versions and no new solver relaxation.
+M1 accepts the verified pre-edit source/build handoff recorded in `docs/evidence/keiro-0.22/baseline.md`, a clean released solve, a successful all-package build and generated service conformance, with recorded selected versions and no new solver relaxation.
 
 ### M2 — Fresh and retained-schema migration
 
 Extend the composed migration path and tests for every intervening upstream prerequisite. Resolve the historical PGMQ ownership explicitly: prove the current vendored schema/ledger state, use the owning package's supported adoption path if available, otherwise add a new application migration containing the required forward delta with attribution and invariant checks. Never edit the old snapshot/checksum or apply a second fresh baseline over existing objects. Record the chosen ownership in ADR 0038 and the audit.
 
-Use disposable PostgreSQL fixtures to apply the old qualified 0.18 composed plan, seed representative event streams, workflow rows, queue messages and live-only evidence/execution rows, then stop all old writers and apply the new composition. Preserve subscription checkpoint meaning, retained queue bodies and protected payload references. Include Kioku registry reconciliation through its released API. On large stores, the runbook must budget the category backfill and index lock and schedule the documented post-migration VACUUM outside a transaction.
+Use the captured old migration executable and disposable PostgreSQL fixtures to apply the old qualified 0.18 composed plan, seed representative event streams, workflow rows, queue messages and live-only evidence/execution rows, then stop all old writers and apply the new composition. Preserve subscription checkpoint meaning, retained queue bodies and protected payload references. Include Kioku registry reconciliation through its released API. On large stores, the runbook must budget the category backfill and index lock and schedule the documented post-migration VACUUM outside a transaction.
 
 Prove fresh application, retained-schema application, read-only startup refusal before migration, success afterwards, and a no-op second application. The upstream count of 48 migrations describes its own composition, not Shikigami's total. Assert component identities and order rather than copying that count. No production database is touched by this plan.
 
@@ -124,7 +141,7 @@ Expected results: seven existing Keiro packages and the DSL are exactly 0.22.0.0
 ## Validation and Acceptance
 
 
-M1 proves that generated runtime consumers and real service packages compile together, not just the upstream tool. Compare wire/replay diagnostics against the recorded pre-upgrade application revision and report source-only churn separately. M2's upgrade fixture must actually begin from the old schema; fresh migrations alone do not prove upgrade safety. Seeded data and checkpoints survive, missing schema refuses startup before intake, the second pass writes no migrations, and schema isolation passes. Failure or an incompatible published dependency is recorded as a concrete blocker with evidence, not bypassed with `allow-newer`. Final retained-history and Nix qualification remain separately owned by `docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md`.
+M1 first proves that the retained old source matches its digest manifest and builds using its recorded old solve. The source includes required dirty/untracked execution work; the final qualification child can reconstruct the old build without the current working tree. M1 also proves that generated runtime consumers and real service packages compile together, not just the upstream tool. Compare wire/replay diagnostics against the recorded pre-upgrade application revision and report source-only churn separately. M2's upgrade fixture must actually begin from the old schema; fresh migrations alone do not prove upgrade safety. Seeded data and checkpoints survive, missing schema refuses startup before intake, the second pass writes no migrations, and schema isolation passes. Failure or an incompatible published dependency is recorded as a concrete blocker with evidence, not bypassed with `allow-newer`. Final retained-history and Nix qualification remain separately owned by `docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md`.
 
 
 ## Idempotence and Recovery
@@ -136,4 +153,4 @@ Dependency edits, compilation and scaffold are repeatable against the candidate.
 ## Interfaces and Dependencies
 
 
-This child has no hard predecessor. It owns the released dependency selection, mandatory compile adaptations, generated baseline and composed migration path. `docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md` and `docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md` cannot begin until this whole child is Complete. Their consumer interfaces are the real 0.22 Keiro command/catalog/inspection modules, 0.12 Shibuya and Kiroku lifecycle types, current generated symbols and passing migration fixtures. The final packaging child consumes the recorded solve; it owns re-exporting the final runtime closure after later changes.
+This child has no hard predecessor. It owns the released dependency selection, mandatory compile adaptations, generated baseline and composed migration path. `docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md` and `docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md` cannot begin until this whole child is Complete. Their consumer interfaces are the real 0.22 Keiro command/catalog/inspection modules, 0.12 Shibuya and Kiroku lifecycle types, current generated symbols and passing migration fixtures. The final packaging child consumes both the pre-edit source/build handoff in `docs/evidence/keiro-0.22/baseline.md` and the recorded new solve; it owns re-exporting the final runtime closure after later changes.
