@@ -118,6 +118,7 @@ let Harness =
           , humanTools : List Text
           , permissionSeconds : Optional Natural
           , output : Optional OutputRequirement
+          , recoveryAttempts : Optional Natural
           , summaryTokens : Optional Natural
           }
       , default =
@@ -129,6 +130,7 @@ let Harness =
           , humanTools = [] : List Text
           , permissionSeconds = None Natural
           , output = None OutputRequirement
+          , recoveryAttempts = None Natural
           , summaryTokens = None Natural
           }
       }

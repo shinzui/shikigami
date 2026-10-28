@@ -37,7 +37,7 @@ driveExecutionForeground runtime start allowance = drive (max 0 (min 10000 allow
                 attempts <- runExecutionStore runtime (Store.inspectOperationAttempts operation)
                 case attempts of
                   Left err -> pure (Left err)
-                  Right values -> case filter (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) values of
+                  Right values -> case filter Attempt.logicalAttempt values of
                     [attempt] | attempt.phase /= Attempt.AttemptUncertain -> do
                       result <- executeAcceptedAttempt runtime binding.identity (Attempt.JobReference 1 start.executionId operation attempt.request.attemptId)
                       case result of

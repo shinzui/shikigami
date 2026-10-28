@@ -176,8 +176,10 @@ records generation-bound wakes and the explicit compactable request context.
 Shared configuration and agent overrides now freeze policy at new admission;
 ephemeral and durable one-off commands use the same policy and fenced-child
 boundaries respectively. [ADR 0059](../adr/0059-harness-policy-is-frozen-at-admission-and-shared-with-ephemeral-execution.md)
-records that shared contract. Remaining recovery
-qualification are not yet accepted, so EP-3 and its dependent-child start
+records that shared contract. Safe recovery now spends fresh actual attempts
+under the existing logical key, retains unknown holds and accepts independent
+late receipts after logical completion; [ADR 0060](../adr/0060-safe-recovery-spends-new-attempts-and-retains-independent-receipts.md)
+records the consumer contract. Final inspection/qualification remain open, so EP-3 and its dependent-child start
 gates remain unchanged.
 
 ## Decision Log

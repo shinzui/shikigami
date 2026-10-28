@@ -35,6 +35,15 @@ tests =
           _ -> assertFailure "expected object"
         Aeson.eitherDecode @HarnessOverrides "{}" @?= Right emptyHarnessOverrides
         assertBool "unknown policy options refused" (isLeft (Aeson.eitherDecode @HarnessOverrides "{\"grantTool\":true}")),
+      testCase "historical policy bytes do not gain recovery authority" do
+        let legacy = defaultHarnessPolicy & #recoveryAttempts .~ 0
+        case Aeson.toJSON legacy of
+          Aeson.Object fields -> assertBool "absent recovery authority omitted" (not (KeyMap.member "recoveryAttempts" fields))
+          _ -> assertFailure "expected policy object"
+        Aeson.eitherDecode (Aeson.encode legacy) @?= Right legacy
+        narrowed <- expectRight (narrowHarnessPolicy defaultHarnessPolicy (Just (emptyHarnessOverrides & #recoveryAttempts .~ Just 100)))
+        narrowed.recoveryAttempts @?= 2
+        assertBool "unbounded recovery refused" (isLeft (applyHarnessOptions defaultHarnessPolicy (emptyHarnessOverrides & #recoveryAttempts .~ Just 101))),
       testCase "historical model input bytes omit the new provenance extension" do
         context <- expectRight (selectContextView defaultHarnessPolicy (ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing]))
         let legacy = Aeson.object ["format" Aeson..= (1 :: Int), "view" Aeson..= context, "maxOutputTokens" Aeson..= (Nothing :: Maybe Int)]

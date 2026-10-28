@@ -11,7 +11,7 @@ module Shikigami.ExecutionLifecycle.Generated.Transducer
 import Shikigami.ExecutionLifecycle.Generated.Domain
 import Data.Text (Text)
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, SymTransducer, (.==), (.>), (.&&))
+import Keiki.Core (HsPred, SymTransducer, (.+), (.-), (.==), (.>), (.&&))
 import Keiki.Core qualified as K
 import Keiki.Symbolic qualified as S
 import Keiki.Builder ((=:))
@@ -107,6 +107,61 @@ executionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto ExecutionLifecycleCancelled
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          (((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleActive
+      B.onCmd inCtorFinishExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleSucceededPendingReceipts
+      B.onCmd inCtorFailExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleFailedPendingReceipts
+      B.onCmd inCtorCancelExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleCancelledPendingReceipts
     B.from ExecutionLifecycleParked do
       B.onCmd inCtorResumeExecution $ \d -> B.do
         B.requireGuard $
@@ -144,6 +199,48 @@ executionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto ExecutionLifecycleCancelled
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          (((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleParked
+      B.onCmd inCtorFailExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleFailedPendingReceipts
+      B.onCmd inCtorCancelExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleCancelledPendingReceipts
     B.from ExecutionLifecycleUnresolved do
       B.onCmd inCtorMarkExecutionUnresolved $ \d -> B.do
         B.requireGuard $
@@ -193,6 +290,166 @@ executionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto ExecutionLifecycleCancelled
+      B.onCmd inCtorRetryExecution $ \d -> B.do
+        B.requireGuard $
+          (d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: (B.reg @"pendingReceipts" .+ K.lit (1 :: Integer))
+        B.emit wireExecutionRetried (ExecutionRetriedTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleActive
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          (((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleUnresolved
+      B.onCmd inCtorFailExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleFailedPendingReceipts
+      B.onCmd inCtorCancelExecutionPendingReceipts $ \d -> B.do
+        B.requireGuard $
+          ((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.emit wireExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto ExecutionLifecycleCancelledPendingReceipts
+    B.from ExecutionLifecycleSucceededPendingReceipts do
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleSucceededPendingReceipts
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .== K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptsClosed (ExecutionReceiptsClosedTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleSucceeded
+    B.from ExecutionLifecycleFailedPendingReceipts do
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleFailedPendingReceipts
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .== K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptsClosed (ExecutionReceiptsClosedTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleFailed
+    B.from ExecutionLifecycleCancelledPendingReceipts do
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .> K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptSettled (ExecutionReceiptSettledTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleCancelledPendingReceipts
+      B.onCmd inCtorSettleExecutionReceipt $ \d -> B.do
+        B.requireGuard $
+          ((((d.executionId .== B.reg @"executionId"
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision")
+          .&& B.reg @"pendingReceipts" .> K.lit (0 :: Integer))
+          .&& d.remaining .== B.reg @"pendingReceipts" .- K.lit (1 :: Integer))
+          .&& d.remaining .== K.lit (0 :: Integer)
+        B.slot @"revision" =: d.revision
+        B.slot @"pendingReceipts" =: d.remaining
+        B.emit wireExecutionReceiptsClosed (ExecutionReceiptsClosedTermFields
+          { executionId = d.executionId
+          , expected = d.expected
+          , revision = d.revision
+          , remaining = d.remaining
+          })
+        B.goto ExecutionLifecycleCancelled
  where
   isTerminal = \case
     ExecutionLifecycleSucceeded -> True
@@ -201,7 +458,7 @@ executionLifecycleTransducer =
     _ -> False
 
 executionLifecycleFoldFingerprint :: Text
-executionLifecycleFoldFingerprint = "9d6f82502d6fd8fb108de6d78e5fa0f2"
+executionLifecycleFoldFingerprint = "d9b386f684c3d919158fdf52161374a3"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -217,13 +474,30 @@ executionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition8ActiveFinishExecution" GeneratedOwned ExecutionLifecycleActive 3
   , verifyTransition "transition9ActiveFailExecution" GeneratedOwned ExecutionLifecycleActive 4
   , verifyTransition "transition10ActiveCancelExecution" GeneratedOwned ExecutionLifecycleActive 5
+  , verifyTransition "transition16ActiveSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleActive 6
+  , verifyTransition "transition19ActiveFinishExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleActive 7
+  , verifyTransition "transition22ActiveFailExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleActive 8
+  , verifyTransition "transition27ActiveCancelExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleActive 9
   , verifyTransition "transition4ParkedResumeExecution" GeneratedOwned ExecutionLifecycleParked 0
   , verifyTransition "transition11ParkedFailExecution" GeneratedOwned ExecutionLifecycleParked 1
   , verifyTransition "transition12ParkedCancelExecution" GeneratedOwned ExecutionLifecycleParked 2
+  , verifyTransition "transition17ParkedSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleParked 3
+  , verifyTransition "transition23ParkedFailExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleParked 4
+  , verifyTransition "transition28ParkedCancelExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleParked 5
   , verifyTransition "transition6UnresolvedMarkExecutionUnresolved" GeneratedOwned ExecutionLifecycleUnresolved 0
   , verifyTransition "transition7UnresolvedReconcileExecution" GeneratedOwned ExecutionLifecycleUnresolved 1
   , verifyTransition "transition13UnresolvedFailExecution" GeneratedOwned ExecutionLifecycleUnresolved 2
   , verifyTransition "transition14UnresolvedCancelExecution" GeneratedOwned ExecutionLifecycleUnresolved 3
+  , verifyTransition "transition15UnresolvedRetryExecution" GeneratedOwned ExecutionLifecycleUnresolved 4
+  , verifyTransition "transition18UnresolvedSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleUnresolved 5
+  , verifyTransition "transition24UnresolvedFailExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleUnresolved 6
+  , verifyTransition "transition29UnresolvedCancelExecutionPendingReceipts" GeneratedOwned ExecutionLifecycleUnresolved 7
+  , verifyTransition "transition20SucceededPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleSucceededPendingReceipts 0
+  , verifyTransition "transition21SucceededPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleSucceededPendingReceipts 1
+  , verifyTransition "transition25FailedPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleFailedPendingReceipts 0
+  , verifyTransition "transition26FailedPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleFailedPendingReceipts 1
+  , verifyTransition "transition30CancelledPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleCancelledPendingReceipts 0
+  , verifyTransition "transition31CancelledPendingReceiptsSettleExecutionReceipt" GeneratedOwned ExecutionLifecycleCancelledPendingReceipts 1
   ]
  where
   verifyTransition label owner source edgeIndex =

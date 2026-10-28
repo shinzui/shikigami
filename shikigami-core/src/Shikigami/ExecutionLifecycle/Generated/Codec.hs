@@ -19,7 +19,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 executionLifecycleEventTypes :: NonEmpty EventType
-executionLifecycleEventTypes = EventType "ExecutionAdmitted" :| [EventType "ExecutionAdvanced", EventType "ExecutionParked", EventType "ExecutionResumed", EventType "ExecutionBecameUnresolved", EventType "ExecutionReconciled", EventType "ExecutionFinished", EventType "ExecutionFailed", EventType "ExecutionCancelled"]
+executionLifecycleEventTypes = EventType "ExecutionAdmitted" :| [EventType "ExecutionAdvanced", EventType "ExecutionParked", EventType "ExecutionResumed", EventType "ExecutionBecameUnresolved", EventType "ExecutionReconciled", EventType "ExecutionFinished", EventType "ExecutionFailed", EventType "ExecutionCancelled", EventType "ExecutionRetried", EventType "ExecutionReceiptSettled", EventType "ExecutionReceiptsClosed", EventType "ExecutionFinishedPendingReceipts", EventType "ExecutionFailedPendingReceipts", EventType "ExecutionCancelledPendingReceipts"]
 
 executionLifecycleCodec :: Codec ExecutionLifecycleEvent
 executionLifecycleCodec =
@@ -35,6 +35,12 @@ executionLifecycleCodec =
         ExecutionFinished{} -> EventType "ExecutionFinished"
         ExecutionFailed{} -> EventType "ExecutionFailed"
         ExecutionCancelled{} -> EventType "ExecutionCancelled"
+        ExecutionRetried{} -> EventType "ExecutionRetried"
+        ExecutionReceiptSettled{} -> EventType "ExecutionReceiptSettled"
+        ExecutionReceiptsClosed{} -> EventType "ExecutionReceiptsClosed"
+        ExecutionFinishedPendingReceipts{} -> EventType "ExecutionFinishedPendingReceipts"
+        ExecutionFailedPendingReceipts{} -> EventType "ExecutionFailedPendingReceipts"
+        ExecutionCancelledPendingReceipts{} -> EventType "ExecutionCancelledPendingReceipts"
     , schemaVersion = 1
     , encode = encodeExecutionLifecycleEvent
     , decode = parseExecutionLifecycleEvent
@@ -105,6 +111,50 @@ encodeExecutionLifecycleEvent = \case
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
+  ExecutionRetried payload ->
+    object
+      [ "kind" .= ("ExecutionRetried" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  ExecutionReceiptSettled payload ->
+    object
+      [ "kind" .= ("ExecutionReceiptSettled" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      , "remaining" .= payload.remaining
+      ]
+  ExecutionReceiptsClosed payload ->
+    object
+      [ "kind" .= ("ExecutionReceiptsClosed" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      , "remaining" .= payload.remaining
+      ]
+  ExecutionFinishedPendingReceipts payload ->
+    object
+      [ "kind" .= ("ExecutionFinishedPendingReceipts" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  ExecutionFailedPendingReceipts payload ->
+    object
+      [ "kind" .= ("ExecutionFailedPendingReceipts" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  ExecutionCancelledPendingReceipts payload ->
+    object
+      [ "kind" .= ("ExecutionCancelledPendingReceipts" :: Text)
+      , "executionId" .= payload.executionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
 
 parseExecutionLifecycleEvent :: EventType -> Value -> Either Text ExecutionLifecycleEvent
 parseExecutionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withObject "ExecutionLifecycleEvent" go)
@@ -169,6 +219,50 @@ parseExecutionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ExecutionCancelled" ->
           ExecutionCancelled
             <$> ( ExecutionCancelledData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "ExecutionRetried" ->
+          ExecutionRetried
+            <$> ( ExecutionRetriedData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "ExecutionReceiptSettled" ->
+          ExecutionReceiptSettled
+            <$> ( ExecutionReceiptSettledData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                    <*> o .: "remaining"
+                )
+        "ExecutionReceiptsClosed" ->
+          ExecutionReceiptsClosed
+            <$> ( ExecutionReceiptsClosedData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                    <*> o .: "remaining"
+                )
+        "ExecutionFinishedPendingReceipts" ->
+          ExecutionFinishedPendingReceipts
+            <$> ( ExecutionFinishedPendingReceiptsData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "ExecutionFailedPendingReceipts" ->
+          ExecutionFailedPendingReceipts
+            <$> ( ExecutionFailedPendingReceiptsData
+                    <$> o .: "executionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "ExecutionCancelledPendingReceipts" ->
+          ExecutionCancelledPendingReceipts
+            <$> ( ExecutionCancelledPendingReceiptsData
                     <$> o .: "executionId"
                     <*> o .: "expected"
                     <*> o .: "revision"

@@ -24,6 +24,12 @@ harnessAssertions =
   , ("golden round-trip: ExecutionFinished", roundTrips sampleEventExecutionFinished)
   , ("golden round-trip: ExecutionFailed", roundTrips sampleEventExecutionFailed)
   , ("golden round-trip: ExecutionCancelled", roundTrips sampleEventExecutionCancelled)
+  , ("golden round-trip: ExecutionRetried", roundTrips sampleEventExecutionRetried)
+  , ("golden round-trip: ExecutionReceiptSettled", roundTrips sampleEventExecutionReceiptSettled)
+  , ("golden round-trip: ExecutionReceiptsClosed", roundTrips sampleEventExecutionReceiptsClosed)
+  , ("golden round-trip: ExecutionFinishedPendingReceipts", roundTrips sampleEventExecutionFinishedPendingReceipts)
+  , ("golden round-trip: ExecutionFailedPendingReceipts", roundTrips sampleEventExecutionFailedPendingReceipts)
+  , ("golden round-trip: ExecutionCancelledPendingReceipts", roundTrips sampleEventExecutionCancelledPendingReceipts)
   , ("accepts AdmitExecution from ExecutionLifecycleMissing", acceptAdmitExecution)
   ]
   ++ forwardReplayAdmitExecution
@@ -58,6 +64,24 @@ sampleEventExecutionFailed = ExecutionFailed (ExecutionFailedData "sample-execut
 sampleEventExecutionCancelled :: ExecutionLifecycleEvent
 sampleEventExecutionCancelled = ExecutionCancelled (ExecutionCancelledData "sample-executionId" 0 0)
 
+sampleEventExecutionRetried :: ExecutionLifecycleEvent
+sampleEventExecutionRetried = ExecutionRetried (ExecutionRetriedData "sample-executionId" 0 0)
+
+sampleEventExecutionReceiptSettled :: ExecutionLifecycleEvent
+sampleEventExecutionReceiptSettled = ExecutionReceiptSettled (ExecutionReceiptSettledData "sample-executionId" 0 0 0)
+
+sampleEventExecutionReceiptsClosed :: ExecutionLifecycleEvent
+sampleEventExecutionReceiptsClosed = ExecutionReceiptsClosed (ExecutionReceiptsClosedData "sample-executionId" 0 0 0)
+
+sampleEventExecutionFinishedPendingReceipts :: ExecutionLifecycleEvent
+sampleEventExecutionFinishedPendingReceipts = ExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsData "sample-executionId" 0 0)
+
+sampleEventExecutionFailedPendingReceipts :: ExecutionLifecycleEvent
+sampleEventExecutionFailedPendingReceipts = ExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsData "sample-executionId" 0 0)
+
+sampleEventExecutionCancelledPendingReceipts :: ExecutionLifecycleEvent
+sampleEventExecutionCancelledPendingReceipts = ExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsData "sample-executionId" 0 0)
+
 acceptAdmitExecution :: Bool
 acceptAdmitExecution =
   case step executionLifecycleTransducer (ExecutionLifecycleMissing, initialExecutionLifecycleRegs) (AdmitExecution (AdmitExecutionData "sample-executionId" "sample-snapshotDigest")) of
@@ -81,6 +105,7 @@ forwardReplayAdmitExecution =
               , (prefix <> "register executionId", (replayRegs ! #executionId) == (forwardRegs ! #executionId))
               , (prefix <> "register snapshotDigest", (replayRegs ! #snapshotDigest) == (forwardRegs ! #snapshotDigest))
               , (prefix <> "register revision", (replayRegs ! #revision) == (forwardRegs ! #revision))
+              , (prefix <> "register pendingReceipts", (replayRegs ! #pendingReceipts) == (forwardRegs ! #pendingReceipts))
               ]
   where
     prefix = "forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- "

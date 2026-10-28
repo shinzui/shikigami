@@ -79,7 +79,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
     (Right (Just (state, binding, _)), Right (Just current))
       | binding.identity /= identity -> pure (Right ExecutorInvalidReference)
       | current.executionId /= reference.executionId || current.operationId /= reference.operationId || reference.format /= 1 -> pure (Right ExecutorInvalidReference)
-      | current.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptAbandoned, Attempt.AttemptUncertain] -> publish
+      | current.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptAbandoned, Attempt.AttemptUncertain, Attempt.AttemptSuperseded] -> publish
       | current.phase == Attempt.DispatchStarted ->
           if maybe False (now >=) current.expiresAt
             then runExecutionStore env (Store.markExpiredExecutionAttemptUncertain identity state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
@@ -146,7 +146,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
         Right (_, state) -> do
           result <- owned (Store.inspectExecutionAttempt reference.attemptId)
           case result of
-            Right (Just current) | current.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptUncertain] -> pure (Right ())
+            Right (Just current) | current.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptUncertain, Attempt.AttemptSuperseded] -> pure (Right ())
             Right _ -> owned (Store.markExecutionAttemptUncertain access state.revision lease) <&> fmap (const ())
             Left err -> pure (Left err)
         Left err -> pure (Left err)

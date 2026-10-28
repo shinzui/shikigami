@@ -8,7 +8,7 @@ import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data ExecutionLifecycleVertex = ExecutionLifecycleMissing | ExecutionLifecycleActive | ExecutionLifecycleParked | ExecutionLifecycleUnresolved | ExecutionLifecycleSucceeded | ExecutionLifecycleFailed | ExecutionLifecycleCancelled
+data ExecutionLifecycleVertex = ExecutionLifecycleMissing | ExecutionLifecycleActive | ExecutionLifecycleParked | ExecutionLifecycleUnresolved | ExecutionLifecycleSucceededPendingReceipts | ExecutionLifecycleFailedPendingReceipts | ExecutionLifecycleCancelledPendingReceipts | ExecutionLifecycleSucceeded | ExecutionLifecycleFailed | ExecutionLifecycleCancelled
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data AdmitExecutionData = AdmitExecutionData
@@ -73,6 +73,42 @@ data CancelExecutionData = CancelExecutionData
   }
   deriving stock (Generic, Eq, Show)
 
+data RetryExecutionData = RetryExecutionData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SettleExecutionReceiptData = SettleExecutionReceiptData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  , remaining :: !Integer
+  }
+  deriving stock (Generic, Eq, Show)
+
+data FinishExecutionPendingReceiptsData = FinishExecutionPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data FailExecutionPendingReceiptsData = FailExecutionPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data CancelExecutionPendingReceiptsData = CancelExecutionPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ExecutionLifecycleCommand = AdmitExecution !AdmitExecutionData
   | AdvanceExecution !AdvanceExecutionData
   | ParkExecution !ParkExecutionData
@@ -82,6 +118,11 @@ data ExecutionLifecycleCommand = AdmitExecution !AdmitExecutionData
   | FinishExecution !FinishExecutionData
   | FailExecution !FailExecutionData
   | CancelExecution !CancelExecutionData
+  | RetryExecution !RetryExecutionData
+  | SettleExecutionReceipt !SettleExecutionReceiptData
+  | FinishExecutionPendingReceipts !FinishExecutionPendingReceiptsData
+  | FailExecutionPendingReceipts !FailExecutionPendingReceiptsData
+  | CancelExecutionPendingReceipts !CancelExecutionPendingReceiptsData
   deriving stock (Generic, Eq, Show)
 
 data ExecutionAdmittedData = ExecutionAdmittedData
@@ -146,6 +187,50 @@ data ExecutionCancelledData = ExecutionCancelledData
   }
   deriving stock (Generic, Eq, Show)
 
+data ExecutionRetriedData = ExecutionRetriedData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ExecutionReceiptSettledData = ExecutionReceiptSettledData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  , remaining :: !Integer
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ExecutionReceiptsClosedData = ExecutionReceiptsClosedData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  , remaining :: !Integer
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ExecutionFinishedPendingReceiptsData = ExecutionFinishedPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ExecutionFailedPendingReceiptsData = ExecutionFailedPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ExecutionCancelledPendingReceiptsData = ExecutionCancelledPendingReceiptsData
+  { executionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ExecutionLifecycleEvent = ExecutionAdmitted !ExecutionAdmittedData
   | ExecutionAdvanced !ExecutionAdvancedData
   | ExecutionParked !ExecutionParkedData
@@ -155,19 +240,27 @@ data ExecutionLifecycleEvent = ExecutionAdmitted !ExecutionAdmittedData
   | ExecutionFinished !ExecutionFinishedData
   | ExecutionFailed !ExecutionFailedData
   | ExecutionCancelled !ExecutionCancelledData
+  | ExecutionRetried !ExecutionRetriedData
+  | ExecutionReceiptSettled !ExecutionReceiptSettledData
+  | ExecutionReceiptsClosed !ExecutionReceiptsClosedData
+  | ExecutionFinishedPendingReceipts !ExecutionFinishedPendingReceiptsData
+  | ExecutionFailedPendingReceipts !ExecutionFailedPendingReceiptsData
+  | ExecutionCancelledPendingReceipts !ExecutionCancelledPendingReceiptsData
   deriving stock (Generic, Eq, Show)
 
 type ExecutionLifecycleRegs =
   '[ '("executionId", Text)
    , '("snapshotDigest", Text)
    , '("revision", Int)
+   , '("pendingReceipts", Integer)
    ]
 
 initialExecutionLifecycleRegs :: RegFile ExecutionLifecycleRegs
 initialExecutionLifecycleRegs =
   RCons (Proxy @"executionId") "" $
   RCons (Proxy @"snapshotDigest") "" $
-  RCons (Proxy @"revision") 0 RNil
+  RCons (Proxy @"revision") 0 $
+  RCons (Proxy @"pendingReceipts") 0 RNil
 
 $(deriveAggregateCtorsAll ''ExecutionLifecycleCommand ''ExecutionLifecycleRegs)
 

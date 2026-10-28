@@ -22,7 +22,7 @@ import Data.Time (diffUTCTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Effectful (Eff, IOE, runEff)
-import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
+import Effectful.Error.Static (Error, runErrorNoCallStack, throwError, tryError)
 import Effectful.Exception (throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowJournalEvent (..), appendJournalEntry, continueAsNew, currentRunGeneration, restoreSeed, step)
 import Keiro.Workflow.Awakeable (cancelAwakeable)
@@ -187,13 +187,13 @@ decide runtime start wake = do
             Just operationId -> do
               operation <- checked (owned (Store.inspectOperation operationId)) >>= maybe (throwError OperationMissing) pure
               attempts <- checked (owned (Store.inspectOperationAttempts operationId))
-              case find (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) attempts of
+              case find Attempt.logicalAttempt attempts of
                 Just attempt -> observe binding.identity current attempt
                 Nothing -> do
                   (access, snapshot, fresh) <- replay binding.identity
                   authority <- liftIO (runtime.authorize snapshot)
                   either (const (throwError (ExecutionPolicyRefused "fresh execution authority refused"))) pure authority
-                  if fresh.phase == Parked then permissionAction snapshot operation else submit access snapshot fresh operation
+                  if fresh.phase == Parked then permissionAction snapshot operation else submit Nothing access snapshot fresh operation
             Nothing -> do
               (access, snapshot, fresh) <- replay binding.identity
               authority <- liftIO (runtime.authorize snapshot)
@@ -236,7 +236,7 @@ decide runtime start wake = do
             then do
               _ <- checked (owned (Store.reconcileExecutionControlAttempt identity start.executionId state.revision attempt.request.attemptId))
               pure RotateExecution
-            else pure (ObserveExecution reference)
+            else recover reference identity attempt
         Attempt.DispatchStarted | maybe False (now >=) attempt.expiresAt -> do
           _ <- checked (owned (Store.markExpiredExecutionAttemptUncertain identity state.revision reference))
           pure RotateExecution
@@ -248,6 +248,20 @@ decide runtime start wake = do
             (_, binding, _) <- metadata
             checked (owned (Right <$> runTransaction (enqueue now binding.identity "execution" reference)))
           pure (ObserveExecution reference)
+    recover reference identity attempt = do
+      proposed <- tryError @ExecutionError do
+        (access, snapshot, state) <- replay identity
+        operation <- checked (owned (Store.inspectOperation attempt.operationId)) >>= maybe (throwError OperationMissing) pure
+        unless (operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect] && snapshot.policy.recoveryAttempts > 0) (throwError UnresolvedOperation)
+        authority <- liftIO (runtime.authorize snapshot)
+        either (const (throwError (ExecutionPolicyRefused "fresh recovery authority refused"))) pure authority
+        submit (Just attempt.request.attemptId) access snapshot state operation
+      case proposed of
+        Right action -> pure action
+        Left (_, err) | err `elem` [ExecutionStorageUnavailable, ProjectionUnavailable, ExecutionRevisionConflict] -> throwError err
+        -- Refused recovery preserves the original unknown effect and hold.
+        -- Observation remains available for a later real receipt or authority.
+        Left _ -> pure (ObserveExecution reference)
     permissionAction snapshot operation = case operation.permission of
       Just permission -> pure (ReviewTool snapshot.sessionId operation.specification.name permission)
       Nothing -> throwError OperationConflict
@@ -257,7 +271,7 @@ decide runtime start wake = do
       let spec = OperationSpec (operationIdFor start.executionId state.cursor) acceptedKind RepeatableObservation (if acceptedKind == ModelSummary then "summary" else "model") (policyDigest snapshot) (versionedDigest "shikigami.execution-model-scope/1" (toJSON snapshot.selection)) Nothing
       _ <- checked (owned (Store.acceptOperation access state.revision spec (toJSON input)))
       pure RotateExecution
-    submit access snapshot state operation
+    submit retired access snapshot state operation
       | operation.specification.kind == ToolOperation && operation.specification.name `elem` snapshot.policy.humanTools && isNothing operation.permission = do
           permission <- checked (owned (Store.parkOperationPermission access state.revision operation.specification.operationId))
           pure (ReviewTool snapshot.sessionId operation.specification.name permission)
@@ -275,7 +289,7 @@ decide runtime start wake = do
                 (request, prepared) <- either (throwError . ExecutionPolicyRefused) pure result
                 pure (request, Just prepared)
           now <- liftIO getCurrentTime
-          (_, accepted) <- checked (owned (Store.submitExecutionAttemptWith access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity (agentNameText snapshot.agent))))
+          (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity (agentNameText snapshot.agent))))
           pure (ObserveExecution (Attempt.JobReference 1 start.executionId accepted.operationId accepted.request.attemptId))
     enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (RunKey ("execution:" <> versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
     policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)

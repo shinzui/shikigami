@@ -52,7 +52,8 @@ aggregate ExecutionLifecycle
     executionId Text = ""
     snapshotDigest Text = ""
     revision Int = 0
-  states Missing Active Parked Unresolved Succeeded! Failed! Cancelled!
+    pendingReceipts Integer = 0
+  states Missing Active Parked Unresolved SucceededPendingReceipts FailedPendingReceipts CancelledPendingReceipts Succeeded! Failed! Cancelled!
 
   command AdmitExecution { executionId:Text snapshotDigest:Text }
   command AdvanceExecution { executionId:Text expected:Int revision:Int }
@@ -64,6 +65,16 @@ aggregate ExecutionLifecycle
   command FailExecution { executionId:Text expected:Int revision:Int }
   command CancelExecution { executionId:Text expected:Int revision:Int }
 
+  command RetryExecution { executionId:Text expected:Int revision:Int }
+
+  command SettleExecutionReceipt { executionId:Text expected:Int revision:Int remaining:Integer }
+
+  command FinishExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+
+  command FailExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+
+  command CancelExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+
   event ExecutionAdmitted = fields(AdmitExecution)
   event ExecutionAdvanced = fields(AdvanceExecution)
   event ExecutionParked = fields(ParkExecution)
@@ -73,6 +84,17 @@ aggregate ExecutionLifecycle
   event ExecutionFinished = fields(FinishExecution)
   event ExecutionFailed = fields(FailExecution)
   event ExecutionCancelled = fields(CancelExecution)
+
+  event ExecutionRetried = fields(RetryExecution)
+
+  event ExecutionReceiptSettled = fields(SettleExecutionReceipt)
+  event ExecutionReceiptsClosed = fields(SettleExecutionReceipt)
+
+  event ExecutionFinishedPendingReceipts = fields(FinishExecutionPendingReceipts)
+
+  event ExecutionFailedPendingReceipts = fields(FailExecutionPendingReceipts)
+
+  event ExecutionCancelledPendingReceipts = fields(CancelExecutionPendingReceipts)
 
   Missing -- AdmitExecution -->
     write executionId := cmd.executionId
@@ -156,6 +178,118 @@ aggregate ExecutionLifecycle
     guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
     write revision := cmd.revision
     emit ExecutionCancelled
+    goto Cancelled
+
+  Unresolved -- RetryExecution -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    write pendingReceipts := reg.pendingReceipts + 1
+    emit ExecutionRetried
+    goto Active
+
+  Active -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto Active
+
+  Parked -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto Parked
+
+  Unresolved -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto Unresolved
+
+  Active -- FinishExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionFinishedPendingReceipts
+    goto SucceededPendingReceipts
+
+  SucceededPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining > 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto SucceededPendingReceipts
+
+  SucceededPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining == 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptsClosed
+    goto Succeeded
+
+  Active -- FailExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionFailedPendingReceipts
+    goto FailedPendingReceipts
+
+  Parked -- FailExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionFailedPendingReceipts
+    goto FailedPendingReceipts
+
+  Unresolved -- FailExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionFailedPendingReceipts
+    goto FailedPendingReceipts
+
+  FailedPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining > 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto FailedPendingReceipts
+
+  FailedPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining == 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptsClosed
+    goto Failed
+
+  Active -- CancelExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionCancelledPendingReceipts
+    goto CancelledPendingReceipts
+
+  Parked -- CancelExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionCancelledPendingReceipts
+    goto CancelledPendingReceipts
+
+  Unresolved -- CancelExecutionPendingReceipts -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0
+    write revision := cmd.revision
+    emit ExecutionCancelledPendingReceipts
+    goto CancelledPendingReceipts
+
+  CancelledPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining > 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptSettled
+    goto CancelledPendingReceipts
+
+  CancelledPendingReceipts -- SettleExecutionReceipt -->
+    guard cmd.executionId == reg.executionId && cmd.expected == reg.revision && cmd.revision > reg.revision && reg.pendingReceipts > 0 && cmd.remaining == reg.pendingReceipts - 1 && cmd.remaining == 0
+    write revision := cmd.revision
+    write pendingReceipts := cmd.remaining
+    emit ExecutionReceiptsClosed
     goto Cancelled
 
   wire kind=ctorName fields=camelCase schemaVersion=1

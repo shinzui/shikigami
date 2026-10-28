@@ -47,11 +47,11 @@ Resume a Skill or conversation from its accepted model/tool history after a cras
 
 
 - [x] Milestone 1: Versioned execution snapshots, protected payloads and atomic accepted operations. Sixteen PostgreSQL cases prove reconstruction, exact continuation/tool data, protected reads, bounded inspection, immutable retries, races, full transaction rollback, cancellation/unknown handling, terminal validation and catalog fencing. Full build and conformance pass.
-- [ ] Milestone 2: Composed policies, individually accepted tools and bound durable permissions.
-- [ ] Milestone 3: Resumable driver and fenced submit/observe executor integrated with runs and conversations.
+- [x] Milestone 2: Composed policies, individually accepted tools and bound durable permissions, including configured narrowing, recorded summaries/repairs and bounded safe recovery.
+- [x] Milestone 3: Resumable driver and fenced submit/observe executor integrated with runs, conversations and the durable one-off command. Real patch branches, actual-attempt fencing and independent late receipts pass full replay/conformance qualification.
 - [ ] Milestone 4: Recovery qualification and bounded operator inspection.
 
-Milestone 2 is partially implemented: immutable tool bindings and response-position
+Milestone 2 implements immutable tool bindings and response-position
 validation, monotonic policy composition, context views with provenance, accounted
 bounded repair operations, and parked permissions through the existing approval
 child are implemented. The runner prepares trusted operation coordinates and
@@ -59,8 +59,9 @@ rechecks live tool bindings, expiry, stop/cutoff and fresh authorization. It doe
 not dispatch without the fenced attempt boundary still owned by milestone 3.
 Recorded model-assisted summaries now consume ordinary accepted model attempts
 and retain source/outcome provenance across restart. Shared operator configuration
-and monotonic agent overrides now feed new frozen admissions. Class-specific
-uncertainty recovery and full production qualification remain open.
+and monotonic agent overrides feed new frozen admissions. Bounded repeatable and
+idempotent recovery spends new actual attempts while retaining old unknown holds;
+uncertain effects remain unresolved. Bounded operator inspection remains open.
 
 The next checkpoint implements the fenced submit/observe primitives and worker
 route: reservation plus queue acceptance, claim generation/expiry, conditional
@@ -77,7 +78,7 @@ The database-free command uses explicit ephemeral recording with the same pure
 policies. The durable one-off command drives only its accepted child through the
 fenced executor after releasing the parent lease.
 Recorded summaries are accepted and replayed through that driver. Milestones 2
-and 3 remain open.
+and 3 are complete; milestone 4 owns final inspection and remaining qualification.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
@@ -118,6 +119,15 @@ through a global provider registry. Rich tool results preserve structured data a
 opaque extensions, including accepted-message references, before lease cleanup.
 
 ## Decision Log
+
+2026-10-28: Safe uncertainty recovery atomically retires the unknown attempt,
+reserves/enqueues a fresh actual attempt and reopens its original logical work.
+Unknown accounting remains held. A late superseded receipt settles only its own
+actual attempt, including after logical success; it never changes the chosen
+result or cursor. New internal pending-receipt states preserve historical
+terminal states. Distinct final-closure events make the new edges replay-safe.
+Historical policies retain zero recovery authority. [ADR 0060](../adr/0060-safe-recovery-spends-new-attempts-and-retains-independent-receipts.md)
+records these constraints. No dependency bounds or catalog identities change.
 
 2026-10-28: One Settei harness setting feeds workers, conversations and one-off
 commands. Agent overrides remain optional and historical JSON omits their absent
@@ -331,6 +341,19 @@ foreground driver. Snapshot reuse ignores a newly invalid process policy and
 does not reload input or tools. The full build and complete gate against
 `c8561ae` pass; the gate reports no findings and `breaking: false`. Remaining
 class-specific recovery and inspection prevent milestone completion.
+
+The safe-recovery checkpoint passes 504 core, 310 PostgreSQL, 37 agent, 63 server
+and 98 worker cases. Seven new PostgreSQL cases qualify automatic model recovery,
+old/new actual accounting, capacity-refusal rollback, late receipts during active
+progress and after success, trusted observation/idempotent tool response loss
+under one logical key, and an uncertain effect invoked once. The chosen output
+and cursor remain unchanged by late receipts. Held versus settled actual attempt
+counts are asserted separately. Historical policy JSON preserves a zero allowance.
+The complete gate against `b1f7b73` passes. Its additive command/event/register
+findings and `AggFoldSurfaceChanged` warning are explained by the new pending
+counter and transitions: regenerated fold fingerprints invalidate old snapshots,
+all historical event fixtures replay, and every new behavior cell has an
+application-owned witness. `breaking: false`. Inspection remains open.
 
 ## Context and Orientation
 

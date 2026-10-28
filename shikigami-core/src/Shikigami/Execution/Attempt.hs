@@ -48,7 +48,7 @@ data AttemptSubmission = AttemptSubmission
 
 instance Show AttemptSubmission where show _ = "AttemptSubmission <protected>"
 
-data AttemptPhase = AwaitingDispatch | Claimed | DispatchStarted | AttemptCommitted | AttemptAbandoned | AttemptUncertain
+data AttemptPhase = AwaitingDispatch | Claimed | DispatchStarted | AttemptCommitted | AttemptAbandoned | AttemptUncertain | AttemptSuperseded
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -76,7 +76,7 @@ instance FromJSON ExecutionAttempt where
     attempt <- genericParseJSON defaultOptions value
     unless (attempt.format == 1 && attempt.request.operationId == attempt.operationId && attempt.generation >= 0 && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
     unless (maybe True (\receipt -> receipt.request == attempt.request) attempt.call) (fail "execution call receipt differs from its attempt")
-    when (attempt.phase `elem` [Claimed, DispatchStarted, AttemptUncertain]) do
+    when (attempt.phase `elem` [Claimed, DispatchStarted, AttemptUncertain, AttemptSuperseded]) do
       unless (attempt.generation > 0 && maybe False (\owner -> not (Text.null owner) && Text.length owner <= 256) attempt.owner && isJust attempt.expiresAt) (fail "execution claim has no owner")
     pure attempt
 
@@ -101,3 +101,8 @@ data AttemptResult = AttemptResult
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show AttemptResult where show _ = "AttemptResult <protected>"
+
+-- Superseded transport attempts retain their unknown accounting and claims,
+-- but another explicitly admitted attempt owns logical progress.
+logicalAttempt :: ExecutionAttempt -> Bool
+logicalAttempt attempt = attempt.phase `notElem` [AttemptAbandoned, AttemptSuperseded]

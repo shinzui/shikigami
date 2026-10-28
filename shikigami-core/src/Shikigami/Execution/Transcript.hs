@@ -280,19 +280,20 @@ data ExecutionState = ExecutionState
     repairs :: !Int,
     modelTurns :: !Int,
     wake :: !(Maybe PayloadRef),
-    failure :: !(Maybe ExecutionError)
+    failure :: !(Maybe ExecutionError),
+    pendingReceipts :: !Integer
   }
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON ExecutionState where
   toJSON state = case Aeson.genericToJSON Aeson.defaultOptions state of
-    Aeson.Object fields -> Aeson.Object (if isNothing state.failure then KeyMap.delete "failure" (if isNothing state.wake then KeyMap.delete "wake" fields else fields) else if isNothing state.wake then KeyMap.delete "wake" fields else fields)
+    Aeson.Object raw -> let fields = if state.pendingReceipts == 0 then KeyMap.delete "pendingReceipts" raw else raw in Aeson.Object (if isNothing state.failure then KeyMap.delete "failure" (if isNothing state.wake then KeyMap.delete "wake" fields else fields) else if isNothing state.wake then KeyMap.delete "wake" fields else fields)
     value -> value
 
 instance FromJSON ExecutionState where
   parseJSON = Aeson.withObject "ExecutionState" \fields -> do
-    state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (foldr (\key current -> if KeyMap.member key current then current else KeyMap.insert key Aeson.Null current) fields ["wake", "failure"]))
-    unless (state.format == 1 && state.revision >= 0 && state.cursor >= 0 && state.cursor <= 10000) (fail "unsupported execution state version or cursor")
+    state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (foldr (\key current -> if KeyMap.member key current then current else KeyMap.insert key Aeson.Null current) (if KeyMap.member "pendingReceipts" fields then fields else KeyMap.insert "pendingReceipts" (toJSON (0 :: Int)) fields) ["wake", "failure"]))
+    unless (state.format == 1 && state.revision >= 0 && state.cursor >= 0 && state.cursor <= 10000 && state.pendingReceipts >= 0 && state.pendingReceipts <= 1000000) (fail "unsupported execution state version or cursor")
     pure state
 
 data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair
